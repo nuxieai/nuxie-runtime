@@ -2517,7 +2517,11 @@ status = "pending"
 upstream = "src/shapes/path.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/path.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+  "crates/nuxie-runtime/src/artboard.rs",
+]
 dynamically_reached = true
 status = "pending"
 
@@ -2525,7 +2529,11 @@ status = "pending"
 upstream = "src/shapes/path_composer.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/path_composer.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+  "crates/nuxie-runtime/src/artboard.rs",
+]
 dynamically_reached = true
 status = "pending"
 
@@ -2576,7 +2584,11 @@ status = "pending"
 upstream = "src/shapes/shape.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/shape.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+  "crates/nuxie-runtime/src/artboard.rs",
+]
 dynamically_reached = true
 status = "pending"
 
@@ -3256,13 +3268,13 @@ rust_file = "crates/nuxie-runtime/src/components.rs"
 rust_anchor = "pub struct ComponentDirt"
 status = "faithful"
 [member.lifecycle]
-construct = ["cpp:src/artboard.cpp:846-855", "rust:crates/nuxie-runtime/src/components.rs:1861-1883"]
-retain = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/components.rs:1831-1857"]
+construct = ["cpp:src/artboard.cpp:846-855", "rust:crates/nuxie-runtime/src/components.rs:1391-1414"]
+retain = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/components.rs:1361-1388"]
 dirty = ["cpp:src/component.cpp:32-54", "rust:crates/nuxie-runtime/src/component.rs:153-190"]
 update = ["cpp:src/artboard.cpp:1204-1242", "rust:crates/nuxie-runtime/src/artboard.rs:7730-7815"]
 advance = ["cpp:src/artboard.cpp:1463-1480", "rust:crates/nuxie-runtime/src/artboard.rs:5615-5665"]
 draw = ["cpp:src/artboard.cpp:1613-1652", "rust:crates/nuxie-runtime/src/draw.rs:4210-4265"]
-clone = ["cpp:src/artboard.cpp:1038-1057", "rust:crates/nuxie-runtime/src/components.rs:1920-1943"]
+clone = ["cpp:src/artboard.cpp:1038-1057", "rust:crates/nuxie-runtime/src/components.rs:1442-1457"]
 drop = ["cpp:src/artboard.cpp:79-140", "rust:crates/nuxie-runtime/src/objects.rs:135-153"]
 
 [[member]]

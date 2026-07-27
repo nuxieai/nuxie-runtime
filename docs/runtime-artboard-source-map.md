@@ -68,11 +68,37 @@ remain valid for behavior-preserving file moves.
 | `solo.hpp`, `solo.cpp` | `solo.rs` | solo mapping, active child, and collapse propagation | extracted |
 | `weight.hpp`, `weight.cpp` | `bones/weight.rs` | retained weight state, `onAddedDirty`, and `Weight::deform` | extracted |
 | `cubic_weight.hpp` | `bones/cubic_weight.rs` | independent in/out retained translations | retained state extracted |
+| `shapes/path.hpp`, `shapes/path.cpp` plus generated `path_base.hpp` | `shapes/path.rs` | occurrence state and flags; Shape attachment; deferred dirt/re-arm; retained RawPath owner; update/collapse forwarding; live path queries | partial: direct state, clone, clean lifecycle, authored Shape membership, defer/update orchestration, and retained FollowPath access are extracted; `artboard.rs` still invokes the captured deferred-dirt `onDirty` re-arm, while `draw.rs` still owns RuntimeShapeList path-owner allocation/clone/membership/cache dirt plus geometry/vertex/render-path adapters; generated `isHole` callback parity remains for FL-E |
+| `shapes/shape.hpp`, `shapes/shape.cpp` plus generated `shape_base.hpp/.cpp` | `shapes/shape.rs` | ordered Path membership; embedded composer ownership; flags/deformer; dirt, collapse, opacity, bounds/length, hit, and draw delegation | partial: direct state types, embedded-composer lifecycle, ordered Path membership, defer policy, and cached length are extracted; RuntimeShapeList allocation/clone/cache plumbing, paint/effect storage, bounds/hit/draw, deformer discovery, and renderer traversal remain in `draw.rs` or thin Artboard dispatch until their FL-E closure |
+| `shapes/path_composer.hpp`, `shapes/path_composer.cpp` | `shapes/path_composer.rs` | embedded occurrence lifecycle; Shape/Path dependency edges; retained local/local-clockwise/world paths; deferral and collapse dirt fanout | partial: direct embedded attachment, dependency selection, dirty/collapse fanout, and update orchestration are extracted; `draw.rs` retains RuntimeShapeList cache dirt and renderer-facing path construction helpers, and the missing retained `m_deferredPathDirt`/`onDirty` lifecycle remains an explicit FL-E semantic gap |
+| `shapes/points_common_path.hpp`, `shapes/points_common_path.cpp` | `shapes/points_common_path.rs` | closed/counter-clockwise generated state and direction helpers | queued after the core; current callbacks/geometry helpers remain mixed in `artboard.rs` and `draw.rs` |
+| `shapes/points_path.hpp`, `shapes/points_path.cpp` | `shapes/points_path.rs` | Skin dependency, weighted-path transform/deformation, direction, and Path override lifecycle | queued after PointsCommonPath; current ownership is split across `artboard.rs`, `components.rs`, and `draw.rs` |
+| `shapes/parametric_path.hpp`, `shapes/parametric_path.cpp` | `shapes/parametric_path.rs` | width/height/origin callbacks, hosting-layout dirt, controlled geometry, and intrinsic measurement | queued for the Path/geometry wave; current controlled-size/geometry implementation remains in `draw.rs` and the missing callbacks are an explicit semantic gap |
+| `shapes/ellipse.hpp`, `shapes/ellipse.cpp` | `shapes/ellipse.rs` | concrete parametric ellipse construction | queued after ParametricPath; current command construction remains in `draw.rs` |
+| `shapes/rectangle.hpp`, `shapes/rectangle.cpp` | `shapes/rectangle.rs` | linked/independent radii callbacks and concrete rectangle construction | queued after ParametricPath; current command construction remains in `draw.rs` |
+| `shapes/polygon.hpp`, `shapes/polygon.cpp` | `shapes/polygon.rs` | points/corner callbacks and concrete polygon construction | queued after ParametricPath; current command construction remains in `draw.rs` |
+| `shapes/star.hpp`, `shapes/star.cpp` | `shapes/star.rs` | inner-radius/points/corner callbacks and concrete star construction | queued after ParametricPath; current command construction remains in `draw.rs` |
+| `shapes/triangle.hpp`, `shapes/triangle.cpp` | `shapes/triangle.rs` | concrete triangle construction | queued after ParametricPath; current command construction remains in `draw.rs` |
 | `path_vertex.hpp`, `path_vertex.cpp` | `shapes/path_vertex.rs` | authored-order parent registration and parent-owned Skin/Path geometry dirt bridge | partial: relation and geometry dirt extracted; render-path construction remains in `draw.rs` |
 | `vertex.hpp`, `vertex.cpp` | `shapes/vertex.rs` | weight-backed deformation, x/y callback, and render translation | partial: weight lookup/deformation and x/y callback extracted through `shapes/path_vertex.rs`; retained weight storage/clone remains in `components.rs`, attachment remains in `bones/weight.rs`, and render translation remains in `draw.rs` |
 | `cubic_vertex.hpp`, `cubic_vertex.cpp` | `shapes/cubic_vertex.rs` | x/y super dispatch, in/out point cache, and cubic deformation dispatch | partial: x/y super dispatch and weighted in/out deformation extracted; Rust still computes points on demand, while point/render selection remains in `draw.rs` |
 | `mesh_vertex.hpp`, `mesh_vertex.cpp` | `shapes/mesh_vertex.rs` | authored-order Mesh registration and exact-type x/y geometry dirt | partial: relation and existing property callback extracted; inherited callback parity and render geometry remain for the FL-E semantic wave |
 | `contour_mesh_vertex.hpp` (generated base + behaviorless concrete subclass) | `shapes/mesh_vertex.rs` | inherits `MeshVertex::onAddedDirty`; pinned C++ also inherits `markGeometryDirty` | generated/helper boundary: registration uses schema inheritance instead of duplicating an empty module; inherited x/y dirt is a recorded FL-E semantic gap because frozen Rust base dispatches only exact `MeshVertex` |
+| `shapes/mesh.hpp`, `shapes/mesh.cpp` | `shapes/mesh.rs` | Skin/vertex membership, dependency order, geometry dirt/update, retained vertex/index buffers, and draw delegation | queued after the core Path/Shape owners; current state and backend buffers remain split across `components.rs`, `artboard.rs`, and `draw.rs` |
+| `shapes/clipping_shape.hpp`, `shapes/clipping_shape.cpp` | `shapes/clipping_shape.rs` | source Shape membership/flags, retained clip path, update, hidden override, collapse, hit, and clip traversal | queued after the core composer; current behavior remains split across `artboard.rs` and `draw.rs`, including the known virtual-hidden semantic gap |
+| `text/text_follow_path_modifier.hpp`, `text/text_follow_path_modifier.cpp` | `text/text_follow_path_modifier.rs` | target resolution/flags, path measure, modify/transform, dirt, and dependency lifecycle | queued after the core composer and before the complete text family; current behavior remains split across `artboard.rs` and `draw.rs` |
+| `shapes/image.hpp`, `shapes/image.cpp` | `shapes/image.rs` | retained asset owner, mesh/slicer relation, layout/update, hit, and draw delegation | queued; current occurrence and renderer state remain split across `artboard.rs`, `components.rs`, and `draw.rs` |
+| `assets/image_asset.hpp`, `assets/image_asset.cpp` | `assets/image_asset.rs` | file asset identity, embedded bytes, renderer realization, dimensions, and occurrence consumers | queued; current retained catalog/late backend realization remains in `artboard.rs` and `draw.rs` |
+| `assets/font_asset.hpp`, `assets/font_asset.cpp` | `assets/font_asset.rs` | file asset identity, embedded font bytes, decode/axis metadata, and live font consumers | queued for the text/asset family; current catalog/override state remains split across `artboard.rs`, `text.rs`, and `draw.rs` |
+| `shapes/paint/solid_color.hpp`, `shapes/paint/solid_color.cpp` | `shapes/paint/solid_color.rs` | live color/opacity callbacks and retained RenderPaint mutation | queued; current callbacks/revisions remain in `artboard.rs` and renderer state in `draw.rs` |
+| `shapes/paint/gradient_stop.hpp`, `shapes/paint/gradient_stop.cpp` | `shapes/paint/gradient_stop.rs` | parent Gradient relation and color/position dirt callbacks | queued; current relation/property dispatch remains mixed in `artboard.rs` and `draw.rs` |
+| `shapes/paint/linear_gradient.hpp`, `shapes/paint/linear_gradient.cpp` | `shapes/paint/linear_gradient.rs` | stop ownership, start/end callbacks, shader dirt/update, and retained gradient state | queued; current implementation remains in `draw.rs` with generic Artboard callbacks |
+| `shapes/paint/shape_paint.hpp`, `shapes/paint/shape_paint.cpp` | `shapes/paint/shape_paint.rs` | Shape attachment, visibility/opacity, path selection, renderer paint ownership, and effect lifecycle | queued after Shape; current ownership remains concentrated in `draw.rs` |
+| `shapes/paint/fill.hpp`, `shapes/paint/fill.cpp` | `shapes/paint/fill.rs` | fill-rule path flags and paint behavior | queued after ShapePaint; current implementation remains in `draw.rs` |
+| `shapes/paint/stroke.hpp`, `shapes/paint/stroke.cpp` | `shapes/paint/stroke.rs` | thickness/cap/join/transform callbacks, effect path, and stroke draw behavior | queued after ShapePaint; current implementation remains in `draw.rs` |
+| `draw_rules.hpp`, `draw_rules.cpp` | `draw_rules.rs` | generated DrawTarget callback and Artboard draw-order dirt | queued small owner; current callback is one branch in `artboard.rs` |
+| `draw_target.hpp`, `draw_target.cpp` | `draw_target.rs` | placement callback and Artboard draw-order dirt | queued small owner; current callback is one branch in `artboard.rs` |
+| `layout/axis.hpp`, `layout/axis.cpp` | `layout/axis.rs` | axis parent relation and min/max/axis callbacks | queued for the layout family; current callbacks remain mixed in `artboard.rs` |
 | `straight_vertex.hpp`, `straight_vertex.cpp` | `shapes/straight_vertex.rs` | radius callback | partial: callback extracted; point construction remains in `draw.rs` |
 | `cubic_mirrored_vertex.hpp`, `cubic_mirrored_vertex.cpp` | `shapes/cubic_mirrored_vertex.rs` | rotation/distance callbacks | partial: callbacks extracted; `computeIn`/`computeOut` remain in `draw.rs` |
 | `cubic_asymmetric_vertex.hpp`, `cubic_asymmetric_vertex.cpp` | `shapes/cubic_asymmetric_vertex.rs` | rotation/inDistance/outDistance callbacks | partial: callbacks extracted; `computeIn`/`computeOut` remain in `draw.rs` |
@@ -145,16 +171,24 @@ can pass structural acceptance.
 
 ## Extraction order
 
-1. File-disjoint mechanical moves: Solo, Joystick, the Artboard-owned
-   Weight/CubicWeight shards,
-   AdvancingComponent, ResettingComponent, VirtualizingComponent,
-   LinearAnimationInstance, TextValueRun, and TextVariationHelper.
-2. Integrate the active listener/action family, then extract Event,
-   ComponentList, NestedInput/NestedArtboard, scripted owners, focus fragments,
-   and the StateMachineInstance facade.
-3. Extract layout/text owners before their semantic owner-family port.
-4. Reduce `artboard.rs` to Artboard-owned state and orchestration, then enforce
-   source-file correspondence in the structural checker.
+1. Complete the file-disjoint mechanical base moves: Component/Container,
+   Constraint/Targeted/IK/FollowPath/ListFollowPath, Bone/Skin/Tendon/Weight,
+   Solo, Joystick, advancing/resetting/virtualizing owners, focused
+   layout/text shims, and the already-landed small owner files.
+2. Extract the coupled Path + Shape + embedded PathComposer lifecycle as one
+   base-first batch; then split PointsCommonPath/PointsPath,
+   ParametricPath/concrete leaves, Mesh, ClippingShape, and
+   TextFollowPathModifier in that dependency order.
+3. At the listener/action family freeze, integrate its semantic Artboard
+   baseline once, then extract the collision set: Event, ComponentList,
+   nested-animation/input/artboard owners, scripted owners, focus fragments,
+   TextInput, and the StateMachineInstance facade.
+4. Extract complete layout/text and paint/asset owners before their semantic
+   owner-family ports so those ports compare file-to-file rather than adding
+   more warehouse code.
+5. Reduce `artboard.rs` to Artboard-owned state and authored-order
+   orchestration, dissolve mixed classifiers during their owning waves, then
+   enforce source-file correspondence in the structural checker.
 
 Each extraction branch starts at a frozen base, changes no behavior, runs its
 focused tests, and lands independently. Direct file paths are reconciled on

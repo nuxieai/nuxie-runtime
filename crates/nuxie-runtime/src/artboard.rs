@@ -45,9 +45,9 @@ use crate::bones::bone;
 use crate::bones::skin;
 use crate::components::{
     ComponentDirt, ComponentHandle, Mat2D, RuntimeComponent, RuntimeConstrainableListState,
-    RuntimeIkChainLink, TransformComponents,
-    UpdateComponentsReport, retain_runtime_component_layout_topology,
-    retain_runtime_layout_component_styles, retain_runtime_text_input_scroll_constraints,
+    RuntimeIkChainLink, TransformComponents, TransformProperty, UpdateComponentsReport,
+    retain_runtime_component_layout_topology, retain_runtime_layout_component_styles,
+    retain_runtime_text_input_scroll_constraints,
 };
 use crate::constraints::{
     apply_scroll_offset_changed, component_list_virtualization, retain_runtime_scroll_constraints,

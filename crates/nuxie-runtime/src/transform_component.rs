@@ -450,7 +450,7 @@ impl ArtboardInstance {
     /// is gated by the transition that newly adds Transform dirt. Repeating a
     /// transform setter while Transform is already pending must not re-dirty a
     /// clean dependent subtree (`src/transform_component.cpp:54-61`).
-    pub(super) fn mark_transform_dirty_handle(&mut self, handle: ComponentHandle) -> bool {
+    pub(crate) fn mark_transform_dirty_handle(&mut self, handle: ComponentHandle) -> bool {
         if !self.add_component_dirt(handle, ComponentDirt::TRANSFORM, false) {
             return false;
         }

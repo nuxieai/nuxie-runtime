@@ -194,7 +194,11 @@ id = "fed.loc_012.backend_raster_decomposition"
 defect_id = "LOC-012"
 kind = "browser-renderer"
 status = "registered"
-driver = "pending:F-ED-10"
+driver = '''CI=1 pnpm --dir apps/nuxie-dashboard exec playwright test -c playwright.published-rive-conformance.config.ts --grep 'visual-view-contract \[auto\]' --workers=1'''
+stimulus_files = [
+  { root = "editor", path = "tools/rive-compiler/fixtures/publish-path/visual-view-contract.json", sha256 = "0a41a13dde2a7ba9cf96c29ed2b587f48c4fbb7b4e41b0c42306419d65c2fca7" },
+  { root = "editor", path = "apps/nuxie-dashboard/tests/visual/published-rive-conformance/baselines/visual-view-contract.png", sha256 = "975eddce6caedf1c43d885e7996cc5cd746cc748ff652e964f056eb264661e96" },
+]
 
 [[fixture]]
 id = "fed.loc_013.variable_font_pipeline"

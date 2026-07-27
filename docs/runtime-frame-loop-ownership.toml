@@ -2552,7 +2552,11 @@ status = "pending"
 upstream = "src/shapes/points_common_path.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/points_common_path.rs",
+  "crates/nuxie-runtime/src/shapes/path.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = true
 status = "pending"
 
@@ -2560,7 +2564,13 @@ status = "pending"
 upstream = "src/shapes/points_path.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/points_path.rs",
+  "crates/nuxie-runtime/src/shapes/path.rs",
+  "crates/nuxie-runtime/src/bones/skin.rs",
+  "crates/nuxie-runtime/src/artboard.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = true
 status = "pending"
 

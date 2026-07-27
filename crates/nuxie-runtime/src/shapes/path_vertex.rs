@@ -2,7 +2,26 @@
 //! and `src/shapes/path_vertex.cpp`.
 
 use crate::ArtboardInstance;
-use crate::components::ComponentDirt;
+use crate::components::{ComponentDirt, ComponentHandle};
+use crate::objects::InstanceObjectArena;
+
+/// Direct `PathVertex::onAddedDirty`: register this occurrence on its retained
+/// parent Path in authored object order.
+pub(crate) fn on_added_dirty(objects: &mut InstanceObjectArena, handle: ComponentHandle) -> bool {
+    if !objects.component(handle).is_some_and(|component| {
+        matches!(
+            component.type_name,
+            "StraightVertex"
+                | "CubicMirroredVertex"
+                | "CubicAsymmetricVertex"
+                | "CubicDetachedVertex"
+        )
+    }) {
+        return false;
+    }
+    super::vertex::register_on_parent_skinnable(objects, handle);
+    true
+}
 
 /// Literal `PathVertex::markGeometryDirty`: dirty the optional retained Skin,
 /// then the owning Path.

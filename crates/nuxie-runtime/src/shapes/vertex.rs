@@ -3,7 +3,25 @@
 
 use crate::ArtboardInstance;
 use crate::bones::weight::{RuntimeWeightState, deform_point_from_skin};
+use crate::components::ComponentHandle;
+use crate::objects::InstanceObjectArena;
 use crate::properties::property_key_for_name;
+
+pub(super) fn register_on_parent_skinnable(
+    objects: &mut InstanceObjectArena,
+    handle: ComponentHandle,
+) {
+    let parent = objects
+        .component(handle)
+        .and_then(|component| component.parent);
+    if let Some(skinnable) = parent.and_then(|parent| {
+        objects
+            .component_mut(parent)
+            .and_then(|parent| parent.concrete.skinnable.as_mut())
+    }) {
+        skinnable.vertices.push(handle);
+    }
+}
 
 fn is_path_vertex(type_name: Option<&str>) -> bool {
     matches!(

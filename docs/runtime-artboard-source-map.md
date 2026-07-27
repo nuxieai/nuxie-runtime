@@ -66,9 +66,10 @@ remain valid for behavior-preserving file moves.
 | `solo.hpp`, `solo.cpp` | `solo.rs` | solo mapping, active child, and collapse propagation | extracted |
 | `weight.hpp`, `weight.cpp` | `bones/weight.rs` | retained weight state, `onAddedDirty`, and `Weight::deform` | extracted |
 | `cubic_weight.hpp` | `bones/cubic_weight.rs` | independent in/out retained translations | retained state extracted |
-| `path_vertex.hpp`, `path_vertex.cpp` | `shapes/path_vertex.rs` | parent-owned Skin/Path geometry dirt bridge | partial: geometry dirt extracted; shape lookup and render-path construction remain in `draw.rs` |
+| `path_vertex.hpp`, `path_vertex.cpp` | `shapes/path_vertex.rs` | authored-order parent registration and parent-owned Skin/Path geometry dirt bridge | partial: relation and geometry dirt extracted; render-path construction remains in `draw.rs` |
 | `vertex.hpp`, `vertex.cpp` | `shapes/vertex.rs` | weight attachment, x/y callback, render translation, base deformation dispatch | partial: weight lookup/deformation and x/y callback extracted through `shapes/path_vertex.rs`; render translation remains in `draw.rs` |
 | `cubic_vertex.hpp`, `cubic_vertex.cpp` | `shapes/cubic_vertex.rs` | x/y super dispatch, in/out point cache, and cubic deformation dispatch | partial: x/y super dispatch and weighted in/out deformation extracted; Rust still computes points on demand, while point/render selection remains in `draw.rs` |
+| `mesh_vertex.hpp`, `mesh_vertex.cpp` | `shapes/mesh_vertex.rs` | authored-order Mesh registration and x/y geometry dirt | partial: relation and property callbacks extracted; render geometry remains in `draw.rs` |
 | `straight_vertex.hpp`, `straight_vertex.cpp` | `shapes/straight_vertex.rs` | radius callback | partial: callback extracted; point construction remains in `draw.rs` |
 | `cubic_mirrored_vertex.hpp`, `cubic_mirrored_vertex.cpp` | `shapes/cubic_mirrored_vertex.rs` | rotation/distance callbacks | partial: callbacks extracted; `computeIn`/`computeOut` remain in `draw.rs` |
 | `cubic_asymmetric_vertex.hpp`, `cubic_asymmetric_vertex.cpp` | `shapes/cubic_asymmetric_vertex.rs` | rotation/inDistance/outDistance callbacks | partial: callbacks extracted; `computeIn`/`computeOut` remain in `draw.rs` |

@@ -2311,7 +2311,10 @@ status = "pending"
 upstream = "src/shapes/mesh_vertex.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/mesh_vertex.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = false
 status = "pending"
 

@@ -1245,18 +1245,8 @@ impl ArtboardInstance {
                 if !objects.link_parent(handle, parent) {
                     anyhow::bail!("Component parent link could not be retained");
                 }
-                let is_vertex = objects
-                    .component(handle)
-                    .is_some_and(|component| component.concrete.vertex.is_some());
-                if is_vertex
-                    && let Some(skinnable) = objects
-                        .component_mut(parent)
-                        .and_then(|parent| parent.concrete.skinnable.as_mut())
-                {
-                    // Vertex::onAddedDirty registers on Path/Mesh in authored
-                    // object order. Keep that exact owner list for Skin
-                    // deformation; no graph vertex scan is needed at update.
-                    skinnable.vertices.push(handle);
+                if !crate::shapes::path_vertex::on_added_dirty(objects, handle) {
+                    crate::shapes::mesh_vertex::on_added_dirty(objects, handle);
                 }
             }
             if let Some(composer) = objects.path_composer_handle(component.local_id) {
@@ -7625,6 +7615,11 @@ impl ArtboardInstance {
             local_id,
             type_name,
             property_key,
+        ) || crate::shapes::mesh_vertex::apply_position_property_changed(
+            self,
+            local_id,
+            type_name,
+            property_key,
         ) {
             return true;
         }
@@ -7663,30 +7658,6 @@ impl ArtboardInstance {
                 // `text_style.cpp:22-34`).
                 self.component_parent_local(local_id)
                     .is_some_and(|style| self.add_dirt(style, ComponentDirt::TEXT_SHAPE, false))
-            }
-            Some("MeshVertex")
-                if property_key_for_name("Vertex", "x") == Some(property_key)
-                    || property_key_for_name("Vertex", "y") == Some(property_key) =>
-            {
-                // `MeshVertex::markGeometryDirty` calls its parent Mesh's
-                // `markDrawableDirty`, which pushes Vertices dirt
-                // (`src/shapes/mesh_vertex.cpp:5-8`,
-                // `src/shapes/mesh.cpp:14-23`).
-                let Some(mesh_local) = self.component_parent_local(local_id) else {
-                    return false;
-                };
-                let Some(mesh) = self.component_handle(mesh_local) else {
-                    return false;
-                };
-                if let Some(skin) = self
-                    .objects
-                    .component(mesh)
-                    .and_then(|component| component.concrete.skinnable.as_ref())
-                    .and_then(|skinnable| skinnable.skin)
-                {
-                    self.add_component_dirt(skin, ComponentDirt::SKIN, false);
-                }
-                self.add_component_dirt(mesh, ComponentDirt::VERTICES, false)
             }
             Some("AxisX" | "AxisY")
                 if property_key_for_name("Axis", "offset") == Some(property_key) =>
@@ -14289,6 +14260,91 @@ mod tests {
                 .expect("StraightVertex component")
                 .dirt
                 .contains(ComponentDirt::PATH)
+        );
+    }
+
+    #[test]
+    fn path_and_mesh_vertex_registration_stays_owner_specific_and_authored_ordered() {
+        // Pinned C++ gives PathVertex and MeshVertex distinct onAddedDirty
+        // overrides, each appending to its concrete parent owner.
+        let path = synthetic_component_for_type(0, "PointsPath");
+        let straight = synthetic_component_for_type(1, "StraightVertex");
+        let cubic = synthetic_component_for_type(2, "CubicDetachedVertex");
+        let mesh = synthetic_component_for_type(3, "Mesh");
+        let mesh_vertex = synthetic_component_for_type(4, "MeshVertex");
+        let mut instance = synthetic_instance(
+            vec![path, straight, cubic, mesh, mesh_vertex],
+            vec![0, 1, 2, 3, 4],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 0);
+        synthetic_link_parent(&mut instance, 4, 3);
+        let straight = instance.component_handle(1).expect("StraightVertex");
+        let cubic = instance.component_handle(2).expect("CubicVertex");
+        let mesh_vertex = instance.component_handle(4).expect("MeshVertex");
+
+        assert!(crate::shapes::path_vertex::on_added_dirty(
+            &mut instance.objects,
+            straight,
+        ));
+        assert!(crate::shapes::path_vertex::on_added_dirty(
+            &mut instance.objects,
+            cubic,
+        ));
+        assert!(crate::shapes::mesh_vertex::on_added_dirty(
+            &mut instance.objects,
+            mesh_vertex,
+        ));
+        assert_eq!(
+            instance
+                .component(0)
+                .and_then(|path| path.concrete.skinnable.as_ref())
+                .map(|path| path.vertices.as_slice()),
+            Some([straight, cubic].as_slice())
+        );
+        assert_eq!(
+            instance
+                .component(3)
+                .and_then(|mesh| mesh.concrete.skinnable.as_ref())
+                .map(|mesh| mesh.vertices.as_slice()),
+            Some([mesh_vertex].as_slice())
+        );
+    }
+
+    #[test]
+    fn mesh_vertex_position_callback_dirties_skin_then_mesh() {
+        // MeshVertex::markGeometryDirty reaches the retained Mesh owner, whose
+        // drawable dirt also invalidates its optional Skin deformation.
+        let skin = synthetic_component_for_type(0, "Skin");
+        let mesh = synthetic_component_for_type(1, "Mesh");
+        let vertex = synthetic_component_for_type(2, "MeshVertex");
+        let mut instance = synthetic_instance(vec![skin, mesh, vertex], vec![0, 1, 2]);
+        synthetic_link_parent(&mut instance, 2, 1);
+        let skin = instance.component_handle(0).expect("Skin");
+        instance
+            .component_mut(1)
+            .and_then(|mesh| mesh.concrete.skinnable.as_mut())
+            .expect("Mesh skinnable")
+            .skin = Some(skin);
+        instance.clear_component_dirt(0);
+        instance.clear_component_dirt(1);
+        instance.clear_component_dirt(2);
+        let vertex_x = property_key_for_name("Vertex", "x").expect("Vertex.x");
+
+        assert!(instance.set_keyed_double_property(2, vertex_x, 14.0));
+        assert!(
+            instance
+                .component(0)
+                .expect("Skin")
+                .dirt
+                .contains(ComponentDirt::SKIN)
+        );
+        assert!(
+            instance
+                .component(1)
+                .expect("Mesh")
+                .dirt
+                .contains(ComponentDirt::VERTICES)
         );
     }
 

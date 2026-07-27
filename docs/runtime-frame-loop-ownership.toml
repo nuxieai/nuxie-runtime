@@ -2322,7 +2322,11 @@ status = "pending"
 upstream = "src/shapes/ellipse.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/ellipse.rs",
+  "crates/nuxie-runtime/src/shapes/parametric_path.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = true
 status = "pending"
 
@@ -2509,7 +2513,10 @@ status = "pending"
 upstream = "src/shapes/parametric_path.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/parametric_path.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = false
 status = "pending"
 
@@ -2578,7 +2585,11 @@ status = "pending"
 upstream = "src/shapes/polygon.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/polygon.rs",
+  "crates/nuxie-runtime/src/shapes/parametric_path.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = true
 status = "pending"
 
@@ -2586,7 +2597,11 @@ status = "pending"
 upstream = "src/shapes/rectangle.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/rectangle.rs",
+  "crates/nuxie-runtime/src/shapes/parametric_path.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = true
 status = "pending"
 
@@ -2622,7 +2637,12 @@ status = "pending"
 upstream = "src/shapes/star.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/star.rs",
+  "crates/nuxie-runtime/src/shapes/polygon.rs",
+  "crates/nuxie-runtime/src/shapes/parametric_path.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = true
 status = "pending"
 
@@ -2641,7 +2661,11 @@ status = "pending"
 upstream = "src/shapes/triangle.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/triangle.rs",
+  "crates/nuxie-runtime/src/shapes/parametric_path.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = true
 status = "pending"
 

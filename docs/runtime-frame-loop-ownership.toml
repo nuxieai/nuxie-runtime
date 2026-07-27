@@ -2226,7 +2226,10 @@ status = "pending"
 upstream = "src/shapes/cubic_asymmetric_vertex.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/cubic_asymmetric_vertex.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = true
 status = "pending"
 
@@ -2234,7 +2237,10 @@ status = "pending"
 upstream = "src/shapes/cubic_detached_vertex.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/cubic_detached_vertex.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = true
 status = "pending"
 
@@ -2242,7 +2248,10 @@ status = "pending"
 upstream = "src/shapes/cubic_mirrored_vertex.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/cubic_mirrored_vertex.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = true
 status = "pending"
 
@@ -2553,7 +2562,10 @@ status = "pending"
 upstream = "src/shapes/straight_vertex.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/shapes/straight_vertex.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = false
 status = "pending"
 

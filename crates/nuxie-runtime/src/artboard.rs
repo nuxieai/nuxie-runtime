@@ -7605,7 +7605,22 @@ impl ArtboardInstance {
             local_id,
             type_name,
             property_key,
-        ) || crate::shapes::path_vertex::apply_derived_property_changed(
+        ) || crate::shapes::straight_vertex::apply_double_property_changed(
+            self,
+            local_id,
+            type_name,
+            property_key,
+        ) || crate::shapes::cubic_mirrored_vertex::apply_double_property_changed(
+            self,
+            local_id,
+            type_name,
+            property_key,
+        ) || crate::shapes::cubic_asymmetric_vertex::apply_double_property_changed(
+            self,
+            local_id,
+            type_name,
+            property_key,
+        ) || crate::shapes::cubic_detached_vertex::apply_double_property_changed(
             self,
             local_id,
             type_name,
@@ -14275,6 +14290,51 @@ mod tests {
                 .dirt
                 .contains(ComponentDirt::PATH)
         );
+    }
+
+    #[test]
+    fn derived_vertex_callbacks_dirty_the_parent_path_from_each_direct_owner() {
+        // Each concrete derived callback delegates to
+        // PathVertex::markGeometryDirty in its own C++ owner file.
+        for (type_name, property_name) in [
+            ("StraightVertex", "radius"),
+            ("CubicMirroredVertex", "rotation"),
+            ("CubicMirroredVertex", "distance"),
+            ("CubicAsymmetricVertex", "rotation"),
+            ("CubicAsymmetricVertex", "inDistance"),
+            ("CubicAsymmetricVertex", "outDistance"),
+            ("CubicDetachedVertex", "inRotation"),
+            ("CubicDetachedVertex", "inDistance"),
+            ("CubicDetachedVertex", "outRotation"),
+            ("CubicDetachedVertex", "outDistance"),
+        ] {
+            let property_key =
+                property_key_for_name(type_name, property_name).expect("derived vertex property");
+            let mut path = synthetic_component(0, 0);
+            path.type_name = "PointsPath";
+            path.capabilities = RuntimeComponentCapabilities::default();
+            let mut vertex = synthetic_component(1, 1);
+            vertex.type_name = type_name;
+            vertex.capabilities = RuntimeComponentCapabilities::default();
+            let mut instance = synthetic_instance(vec![path, vertex], vec![0, 1]);
+            synthetic_link_parent(&mut instance, 1, 0);
+            instance.clear_component_dirt(0);
+            instance.clear_component_dirt(1);
+            instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
+
+            assert!(
+                instance.set_keyed_double_property(1, property_key, 14.0),
+                "{type_name}.{property_name}"
+            );
+            assert!(
+                instance
+                    .component(0)
+                    .expect("PointsPath component")
+                    .dirt
+                    .contains(ComponentDirt::PATH),
+                "{type_name}.{property_name}"
+            );
+        }
     }
 
     #[test]

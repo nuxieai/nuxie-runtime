@@ -4638,9 +4638,9 @@ impl ArtboardInstance {
     }
 
     fn runtime_shape_path_is_visible(&self, path_local: usize, graph: &ArtboardGraph) -> bool {
-        let Some(path) = graph.paths.iter().find(|path| path.local_id == path_local) else {
+        if !graph.paths.iter().any(|path| path.local_id == path_local) {
             return false;
-        };
+        }
         let imported_hidden = graph
             .path_composers
             .iter()
@@ -4648,13 +4648,7 @@ impl ArtboardInstance {
             .find(|path| path.local_id == path_local)
             .is_some_and(|path| path.is_hidden);
         let default_flags = u64::from(imported_hidden);
-        let path_flags = runtime_path_uint_property(
-            self,
-            path_local,
-            path.type_name,
-            "pathFlags",
-            default_flags,
-        );
+        let path_flags = crate::shapes::path::path_flags(self, path_local, default_flags);
         path_flags & 1 == 0 && !self.runtime_component_is_collapsed_for_draw(path_local)
     }
 
@@ -7629,11 +7623,16 @@ impl ArtboardInstance {
                 graph,
                 layout_bounds,
             );
-            let path_transform = if path_frame.has_weighted_context {
-                Mat2D::IDENTITY
-            } else {
-                path_world
-            };
+            let path_transform = self
+                .component_handle(*path_local)
+                .map(|path_handle| {
+                    crate::shapes::points_path::path_transform(
+                        &self.objects,
+                        path_handle,
+                        path_world,
+                    )
+                })
+                .unwrap_or(path_world);
             let transform = match path_kind {
                 ShapePaintPathKind::World => path_transform,
                 ShapePaintPathKind::Local | ShapePaintPathKind::LocalClockwise => {
@@ -7723,15 +7722,7 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> RuntimeOwnedPath {
         let runtime_path = self.runtime_path_geometry_with_layout_control(path, layout_bounds);
-        if self.runtime_skinnable_handle_has_skin(path_handle) {
-            for vertex in &runtime_path.vertices {
-                self.deform_runtime_vertex_weight(
-                    vertex.local_id,
-                    vertex_translation(vertex),
-                    cubic_vertex_points(vertex),
-                );
-            }
-        }
+        crate::shapes::points_path::deform_owned_geometry(self, path_handle, &runtime_path);
         let weighted_context = self
             .runtime_skinnable_handle_has_skin(path_handle)
             .then_some(WeightedPathContext { instance: self });
@@ -7746,6 +7737,20 @@ impl ArtboardInstance {
             path: Arc::new(runtime_path),
             raw_path: Arc::new(runtime_raw_path_from_commands(&commands)),
             has_weighted_context: weighted_context.is_some(),
+        }
+    }
+
+    /// Narrow renderer/vertex adapter used by concrete
+    /// `PointsPath::update`. PointsPath owns the decision to deform; Vertex
+    /// owners retain the resulting translations and this draw module keeps
+    /// only the graph-to-geometry projection.
+    pub(crate) fn deform_runtime_points_path_vertices(&mut self, path: &PathGeometryNode) {
+        for vertex in &path.vertices {
+            self.deform_runtime_vertex_weight(
+                vertex.local_id,
+                vertex_translation(vertex),
+                cubic_vertex_points(vertex),
+            );
         }
     }
 
@@ -23783,11 +23788,12 @@ pub(crate) fn runtime_path_geometry_commands(
         .component_handle(path.local_id)
         .filter(|handle| artboard.runtime_skinnable_handle_has_skin(*handle))
         .map(|_| WeightedPathContext { instance: artboard });
-    let path_transform = if weighted_context.is_some() {
-        Mat2D::IDENTITY
-    } else {
-        transform
-    };
+    let path_transform = artboard
+        .component_handle(path.local_id)
+        .map(|path_handle| {
+            crate::shapes::points_path::path_transform(&artboard.objects, path_handle, transform)
+        })
+        .unwrap_or(transform);
     let mut commands = path_commands(
         &path,
         ShapePaintPathKind::World,
@@ -23800,11 +23806,10 @@ pub(crate) fn runtime_path_geometry_commands(
 
 fn runtime_path_geometry(artboard: &ArtboardInstance, path: &PathGeometryNode) -> PathGeometryNode {
     let mut path = path.clone();
-    path.is_closed = runtime_path_bool_property(
+    path.is_closed = crate::shapes::points_common_path::is_closed(
         artboard,
         path.local_id,
         path.type_name,
-        "isClosed",
         path.is_closed,
     );
     path.is_hole = runtime_path_bool_property(
@@ -23814,7 +23819,8 @@ fn runtime_path_geometry(artboard: &ArtboardInstance, path: &PathGeometryNode) -
         "isHole",
         path.is_hole,
     );
-    path.is_clockwise = runtime_path_is_clockwise(artboard, path.local_id, path.is_clockwise);
+    path.is_clockwise =
+        crate::shapes::points_common_path::is_clockwise(artboard, path.local_id, path.is_clockwise);
     path.parametric = runtime_parametric_path(artboard, &path);
 
     if let Some(vertices) = runtime_retained_path_vertices(artboard, path.local_id) {
@@ -24563,12 +24569,6 @@ fn runtime_path_uint_property(
     runtime_path_property_key_for_name(type_name, property_name)
         .and_then(|key| artboard.uint_property(local_id, key))
         .unwrap_or(default)
-}
-
-fn runtime_path_is_clockwise(artboard: &ArtboardInstance, local_id: usize, default: bool) -> bool {
-    let default_flags = if default { 0 } else { 1 << 1 };
-    let flags = runtime_path_uint_property(artboard, local_id, "Path", "pathFlags", default_flags);
-    flags & (1 << 1) == 0
 }
 
 fn points_path_commands(

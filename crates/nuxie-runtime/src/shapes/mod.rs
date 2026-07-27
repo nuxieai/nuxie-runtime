@@ -6,6 +6,8 @@ pub(crate) mod mesh_vertex;
 pub(crate) mod path;
 pub(crate) mod path_composer;
 pub(crate) mod path_vertex;
+pub(crate) mod points_common_path;
+pub(crate) mod points_path;
 pub(crate) mod shape;
 pub(crate) mod straight_vertex;
 pub(crate) mod vertex;

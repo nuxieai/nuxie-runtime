@@ -171,7 +171,7 @@ impl ArtboardInstance {
             .map(|skinnable| skinnable.kind)
         {
             Some(RuntimeSkinnableKind::PointsPath) => {
-                self.add_component_dirt(skinnable, ComponentDirt::PATH, false);
+                crate::shapes::points_path::mark_skin_dirty(self, skinnable);
             }
             Some(RuntimeSkinnableKind::Mesh) => {
                 self.add_component_dirt(skinnable, ComponentDirt::VERTICES, false);

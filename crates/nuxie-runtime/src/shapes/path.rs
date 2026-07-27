@@ -10,6 +10,8 @@ use crate::ArtboardInstance;
 use crate::components::{ComponentDirt, ComponentHandle};
 use crate::draw::RuntimeLayoutBounds;
 use crate::objects::InstanceObjectArena;
+use crate::properties::cached_property_key_for_name;
+use std::sync::OnceLock;
 
 /// Runtime-only fields owned by C++ `Path`.
 ///
@@ -92,6 +94,14 @@ pub(crate) fn retained_follow_path_source(
     ))
 }
 
+/// Generated `PathBase::pathFlags` storage read from the live occurrence.
+pub(crate) fn path_flags(artboard: &ArtboardInstance, local_id: usize, default: u64) -> u64 {
+    static KEY: OnceLock<Option<u16>> = OnceLock::new();
+    cached_property_key_for_name(&KEY, "Path", "pathFlags")
+        .and_then(|key| artboard.uint_property(local_id, key))
+        .unwrap_or(default)
+}
+
 /// Direct `Path::onAddedClean` ownership: find the live Shape ancestor, retain
 /// it, then register this exact Path occurrence on that Shape in authored
 /// order (`src/shapes/path.cpp:76-96`).
@@ -163,6 +173,15 @@ pub(crate) fn dirt_affects_path_epoch(dirt: ComponentDirt) -> bool {
             | ComponentDirt::LAYOUT_STYLE
             | ComponentDirt::N_SLICER))
         .is_empty()
+}
+
+/// Direct base `Path::markPathDirty` dirt publication.
+///
+/// Shape/PathComposer propagation remains attached to the ordinary Component
+/// on-dirty dispatch, preserving the existing occurrence schedule
+/// (`src/shapes/path.cpp:327-334`).
+pub(crate) fn mark_path_dirty(artboard: &mut ArtboardInstance, handle: ComponentHandle) {
+    artboard.add_component_dirt(handle, ComponentDirt::PATH, false);
 }
 
 /// Direct port of pinned C++ `Path::update`

@@ -1424,18 +1424,7 @@ impl ArtboardInstance {
             // PointsPath::buildDependencies calls Super first and then adds
             // its retained Skin dependency (`src/shapes/points_path.cpp:
             // 12-19`), the opposite relative position from Mesh.
-            if component.type_name == "PointsPath" {
-                let path = objects
-                    .component_handle(component.local_id)
-                    .context("PointsPath handle is missing during dependency construction")?;
-                if let Some(skin) = objects
-                    .component(path)
-                    .and_then(|component| component.concrete.skinnable.as_ref())
-                    .and_then(|skinnable| skinnable.skin)
-                {
-                    objects.add_dependent(skin, path);
-                }
-            }
+            crate::shapes::points_path::build_dependencies(objects, handle)?;
         }
         for edge_index in 0..graph.dependency_node_edges_in_insertion_order.len() {
             push_edge(edge_index);
@@ -6080,13 +6069,21 @@ impl ArtboardInstance {
                             root_transform,
                         );
                         if let Some((graphs, graph_index)) = graph_owner.as_ref() {
-                            crate::shapes::path::update(
+                            if !crate::shapes::points_path::update(
                                 self,
                                 component_handle,
                                 dirt,
                                 &graphs[*graph_index],
                                 layout_bounds.as_deref(),
-                            );
+                            ) {
+                                crate::shapes::path::update(
+                                    self,
+                                    component_handle,
+                                    dirt,
+                                    &graphs[*graph_index],
+                                    layout_bounds.as_deref(),
+                                );
+                            }
                             self.update_runtime_clipping_shape_owner(local_id, dirt);
                             self.update_runtime_artboard_render_paths(
                                 local_id,

@@ -170,6 +170,7 @@ struct RuntimePointerInput {
 
 struct RuntimeStateMachineListenerActionExecutor<'a> {
     data_bind_graph: &'a mut RuntimeDataBindGraph,
+    data_bind_facilities_ready: bool,
     owned_view_model_context: Option<&'a mut RuntimeOwnedViewModelInstance>,
     owned_data_context: Option<RuntimeOwnedDataContext>,
     file_data_context_instance: Option<RuntimeViewModelInstanceCells>,
@@ -232,6 +233,9 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
         value: &RuntimeListenerViewModelChangeValue,
         mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
     ) -> bool {
+        if !self.data_bind_facilities_ready {
+            return false;
+        }
         let artboard_value = match value {
             RuntimeListenerViewModelChangeValue::Number(value) => {
                 RuntimeDataBindGraphValue::Number(*value)
@@ -516,11 +520,17 @@ impl RuntimeScheduledListenerActionExecutor for RuntimeStateMachineListenerActio
     }
 
     fn retained_view_model_source(&self, bindable_global_id: u32) -> Option<RuntimeViewModelCell> {
+        if !self.data_bind_facilities_ready {
+            return None;
+        }
         self.data_bind_graph
             .retained_source_for_bindable_target(bindable_global_id)
     }
 
     fn fire_view_model_trigger(&mut self, path: &RuntimeStateMachineFireTriggerPath) -> bool {
+        if !self.data_bind_facilities_ready {
+            return false;
+        }
         if let Some(data_context) = self.owned_data_context.as_ref()
             && data_context.fire_trigger(&path.file, &path.source_path, path.is_relative)
         {
@@ -1125,6 +1135,14 @@ impl StateMachineInstance {
             let result = {
                 let mut executor = RuntimeStateMachineListenerActionExecutor {
                     data_bind_graph: &mut self.data_bind_graph,
+                    // C++ runs each layer's entry callbacks before cloning
+                    // state-machine DataBinds and building the bindable lookup
+                    // maps. Keep those later facilities unavailable even
+                    // though Rust must allocate the graph field before
+                    // constructing `Self`
+                    // (`state_machine_instance.cpp:1747-1754`;
+                    // `listener_viewmodel_change.cpp:42-80`).
+                    data_bind_facilities_ready: false,
                     owned_view_model_context: None,
                     owned_data_context: self.owned_data_context.clone(),
                     file_data_context_instance: file_data_context_instance.clone(),
@@ -1347,6 +1365,7 @@ impl StateMachineInstance {
         {
             let mut executor = RuntimeStateMachineListenerActionExecutor {
                 data_bind_graph: &mut self.data_bind_graph,
+                data_bind_facilities_ready: true,
                 owned_view_model_context: None,
                 owned_data_context: self.owned_data_context.clone(),
                 file_data_context_instance: file_data_context_instance.clone(),
@@ -6271,6 +6290,7 @@ impl StateMachineInstance {
         {
             let mut executor = RuntimeStateMachineListenerActionExecutor {
                 data_bind_graph: &mut self.data_bind_graph,
+                data_bind_facilities_ready: true,
                 owned_view_model_context: None,
                 owned_data_context: self.owned_data_context.clone(),
                 file_data_context_instance: file_data_context_instance.clone(),
@@ -6393,6 +6413,7 @@ impl StateMachineInstance {
         {
             let mut executor = RuntimeStateMachineListenerActionExecutor {
                 data_bind_graph: &mut self.data_bind_graph,
+                data_bind_facilities_ready: true,
                 owned_view_model_context: owned_context.as_deref_mut(),
                 owned_data_context: self.owned_data_context.clone(),
                 file_data_context_instance: file_data_context_instance.clone(),

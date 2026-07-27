@@ -7,6 +7,10 @@ fn retain_random_waiting_for_exit(waiting_for_exit: &mut bool, allowance: Transi
     }
 }
 
+fn clear_waiting_for_exit_after_selected_transition(waiting_for_exit: &mut bool) {
+    *waiting_for_exit = false;
+}
+
 #[cfg(test)]
 thread_local! {
     static LAYER_CONSTRUCTION_NUMBER_SNAPSHOTS: std::cell::RefCell<Vec<Vec<Option<f32>>>> =
@@ -381,7 +385,7 @@ impl StateMachineLayerInstance {
                 layer_index,
                 self.view_model_trigger_layer_id,
             );
-            self.change_state(
+            let change_result = self.change_state(
                 artboard,
                 layer,
                 key_frame_data_bind_graphs,
@@ -390,7 +394,13 @@ impl StateMachineLayerInstance {
                 state_to_index,
                 targets,
                 executor,
-            )?;
+            );
+            // Pinned C++ retains `m_waitingForExit` while it evaluates every
+            // weighted candidate, then clears the latch after a selected
+            // transition has changed state and before returning
+            // (`state_machine_instance.cpp:412-468,528-627`).
+            clear_waiting_for_exit_after_selected_transition(&mut self.waiting_for_exit);
+            change_result?;
             return Ok(true);
         }
 
@@ -951,13 +961,18 @@ impl StateMachineLayerInstance {
 
 #[cfg(test)]
 mod tests {
-    use super::{TransitionAllowance, retain_random_waiting_for_exit};
+    use super::{
+        TransitionAllowance, clear_waiting_for_exit_after_selected_transition,
+        retain_random_waiting_for_exit,
+    };
 
     #[test]
-    fn selected_random_candidate_cannot_clear_an_earlier_exit_wait() {
+    fn random_scan_retains_wait_then_successful_selection_clears_it() {
         let mut waiting_for_exit = false;
         retain_random_waiting_for_exit(&mut waiting_for_exit, TransitionAllowance::WaitingForExit);
         retain_random_waiting_for_exit(&mut waiting_for_exit, TransitionAllowance::Yes);
         assert!(waiting_for_exit);
+        clear_waiting_for_exit_after_selected_transition(&mut waiting_for_exit);
+        assert!(!waiting_for_exit);
     }
 }

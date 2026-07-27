@@ -78,8 +78,9 @@ Every item below is mandatory even though the private C++ class shares
   occurrence-mediated `RandomProvider` seam, preserves authored candidate
   order, and accumulates both total and evaluated weights with exact C++
   `uint32_t` wrapping arithmetic. A waiting-for-exit result remains latched
-  even when a later weighted candidate is selected; only `updateState` clears
-  the latch before the complete Any/current search.
+  while the complete weighted candidate scan runs, but a later selected
+  transition clears it after changing state and before returning, exactly as
+  `StateMachineLayerInstance::tryChangeState` does.
 - [x] The empty `AnyState` occurrence is retained and probed before current
   state on every eligible update; Rust must delete its current
   `!transitions.is_empty()` shortcut.
@@ -137,7 +138,10 @@ Every item below is mandatory even though the private C++ class shares
   cold null occurrence.
 - [x] Weighted random selection: injected nonzero draws can select later
   candidates, draw consumption is exact, and overflowing weights wrap as
-  C++ `uint32_t` before selection.
+  C++ `uint32_t` before selection. A wait-then-selected live differential and
+  focused latch test prove the scan retains the wait while the successful
+  state change clears it before returning
+  (`state_machine_instance.cpp:412-468,528-627`).
 - [x] Browser random boundary: the Rust browser target does not call
   unavailable libc symbols. Its target adapter reproduces Emscripten 3.1.61's
   exact 32-bit-unsigned seed subtraction before widening, wrapping LCG, shift,
@@ -163,6 +167,14 @@ Every item below is mandatory even though the private C++ class shares
   `layer_state.cpp:62-66`, and `state_instance.cpp:4-8` establishes that the
   pinned Any/Entry constructors retain definitions only and do not themselves
   consume state-machine inputs.
+- [x] Constructor facility order: entry callbacks run before C++ clones
+  state-machine DataBinds and populates bindable lookup maps. Rust's
+  constructor-phase executor therefore exposes inputs and reports but makes
+  DataBind-backed ViewModel changes and triggers unavailable until layer
+  initialization completes. The live differential proves an entry
+  `ListenerViewModelChange` leaves the dormant source and bindable occurrence
+  unchanged (`state_machine_instance.cpp:1747-1754,3189-3198`;
+  `listener_viewmodel_change.cpp:42-80`).
 - [x] Nested focus and pointer forwarding: shared focus manager is installed
   before tree sync; hit/pointer/drag calls return the child result or the
   pinned empty result.
@@ -218,6 +230,10 @@ The candidate checker must have injected negative controls for:
     Unix/WASI `CLOCK_MONOTONIC` source, or Windows' performance-counter API.
 19. introducing `panic!`, `unwrap`, or `expect` into the native random/clock
     adapter instead of using the non-unwinding deterministic fallback.
+20. returning from a successful weighted transition without clearing a wait
+    latched by an earlier candidate.
+21. exposing DataBind-backed ViewModel facilities to entry callbacks before
+    the constructor reaches C++'s DataBind-cloning phase.
 
 The checker evaluates every ratchet against the complete source file, not one
 line at a time. A dedicated multi-line mutation test prevents formatted Rust
@@ -279,7 +295,7 @@ replacement candidate has the following gate receipt:
   with scripting, both below the 9 MiB limit;
 - Apple XCFramework build/package/ABI/header/C/Swift checks, checksum
   `363d426a4687ce984a25d9356ed332830a3e038b63b747c32011e778d1547976`;
-- structural checker 37 / 37 and all 19 injected negative controls.
+- structural checker 39 / 39 and all 21 injected negative controls.
 
 Ordinary and scripted golden were rerun serially after a discarded concurrent
 harness build replaced their shared executable. Native Apple was rerun with a

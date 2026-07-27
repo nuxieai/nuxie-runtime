@@ -13,9 +13,11 @@ use nuxie_graph::{AdvancingComponentKind, ArtboardGraph, DependencyNode, Depende
 use nuxie_render_api::Factory as RenderFactory;
 use nuxie_schema::definition_by_name;
 
+#[cfg(test)]
+use crate::animation::RuntimeLinearAnimationHandle;
 use crate::animation::{
     LinearAnimationInstance, RuntimeInterpolator, RuntimeKeyedCallback, RuntimeLinearAnimation,
-    RuntimeLinearAnimationHandle, build_linear_animations,
+    build_linear_animations,
 };
 use crate::artboard_data_bind::{
     RuntimeArtboardAuthoredDataBindStates, RuntimeArtboardContextSourceValue,
@@ -4120,102 +4122,6 @@ impl ArtboardInstance {
         animation.apply(self, seconds, mix)
     }
 
-    pub fn linear_animation_instance(&self, index: usize) -> Option<LinearAnimationInstance> {
-        self.linear_animation_instance_with_speed(index, 1.0)
-    }
-
-    pub fn linear_animation_instance_with_speed(
-        &self,
-        index: usize,
-        speed_multiplier: f32,
-    ) -> Option<LinearAnimationInstance> {
-        let animation = self.linear_animation(index)?;
-        Some(LinearAnimationInstance::new(
-            RuntimeLinearAnimationHandle::new(index),
-            animation,
-            speed_multiplier,
-        ))
-    }
-
-    pub fn advance_linear_animation_instance(
-        &self,
-        instance: &mut LinearAnimationInstance,
-        elapsed_seconds: f32,
-    ) -> bool {
-        let Some(animation) = instance
-            .animation_handle()
-            .resolve(&self.linear_animations, &self.empty_linear_animation)
-        else {
-            return false;
-        };
-        instance.advance(animation, elapsed_seconds)
-    }
-
-    pub fn advance_linear_animation_instance_with_events(
-        &mut self,
-        instance: &mut LinearAnimationInstance,
-        elapsed_seconds: f32,
-        reported_events: &mut Vec<StateMachineReportedEvent>,
-    ) -> bool {
-        let (mut changed, keyed_callbacks) = {
-            let Some(animation) = instance
-                .animation_handle()
-                .resolve(&self.linear_animations, &self.empty_linear_animation)
-            else {
-                return false;
-            };
-            if !animation.has_keyed_callbacks {
-                return instance.advance(animation, elapsed_seconds);
-            }
-            let mut keyed_callbacks = Vec::new();
-            let changed = instance.advance_with_events(
-                animation,
-                elapsed_seconds,
-                reported_events,
-                &mut keyed_callbacks,
-            );
-            (changed, keyed_callbacks)
-        };
-        for callback in keyed_callbacks {
-            changed |= self.apply_keyed_callback(callback);
-        }
-        changed
-    }
-
-    pub fn apply_linear_animation_instance(
-        &mut self,
-        instance: &LinearAnimationInstance,
-        mix: f32,
-    ) -> bool {
-        instance.apply(self, mix)
-    }
-
-    pub fn linear_animation_instance_keep_going(&self, instance: &LinearAnimationInstance) -> bool {
-        let Some(animation) = instance
-            .animation_handle()
-            .resolve(&self.linear_animations, &self.empty_linear_animation)
-        else {
-            return false;
-        };
-        instance.keep_going(animation)
-    }
-
-    pub(crate) fn linear_animation_instance_definition(
-        &self,
-        instance: &LinearAnimationInstance,
-    ) -> Option<&RuntimeLinearAnimation> {
-        instance
-            .animation_handle()
-            .resolve(&self.linear_animations, &self.empty_linear_animation)
-    }
-
-    pub(crate) fn linear_animation_definition(
-        &self,
-        handle: RuntimeLinearAnimationHandle,
-    ) -> Option<&RuntimeLinearAnimation> {
-        handle.resolve(&self.linear_animations, &self.empty_linear_animation)
-    }
-
     pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
         let definitions = Arc::clone(&self.state_machines);
         let state_machine = definitions.get(index)?;
@@ -8043,7 +7949,7 @@ impl ArtboardInstance {
         changed
     }
 
-    fn apply_keyed_callback(&mut self, callback: RuntimeKeyedCallback) -> bool {
+    pub(crate) fn apply_keyed_callback(&mut self, callback: RuntimeKeyedCallback) -> bool {
         let _seconds_delay = callback.seconds_delay;
         match self
             .slot(callback.target_local_id)

@@ -190,6 +190,45 @@ impl ArtboardInstance {
         true
     }
 
+    /// Direct base `Component::collapse` ownership: publish the Collapsed bit
+    /// before callbacks, notify the Artboard, then update every retained
+    /// collapsable in registration order (`src/component.cpp:76-95,117-127`).
+    pub(super) fn collapse_component_base(
+        &mut self,
+        handle: ComponentHandle,
+        collapsed: bool,
+    ) -> bool {
+        let Some(component) = self.objects.component(handle) else {
+            return false;
+        };
+        if component.is_collapsed() == collapsed {
+            return false;
+        }
+
+        let accumulated = {
+            let component = self
+                .objects
+                .component_mut(handle)
+                .expect("component handle was resolved above");
+            if collapsed {
+                component.dirt |= ComponentDirt::COLLAPSED;
+            } else {
+                component.dirt &= !ComponentDirt::COLLAPSED;
+            }
+            component.dirt
+        };
+        self.dispatch_component_on_dirty(handle, accumulated);
+        self.on_component_dirty_handle(handle);
+        let collapsable_count = self.objects.collapsable_len(handle);
+        for index in 0..collapsable_count {
+            let Some(data_bind) = self.objects.collapsable_at(handle, index) else {
+                continue;
+            };
+            self.collapse_artboard_authored_data_bind(data_bind, collapsed);
+        }
+        true
+    }
+
     /// C++ `Component::hitTestPoint` walks to the concrete parent while
     /// preserving `skipOnUnclipped` and clearing the primary-hit marker
     /// (`src/component.cpp:97-105`).

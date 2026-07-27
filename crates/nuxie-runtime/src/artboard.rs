@@ -5820,37 +5820,8 @@ impl ArtboardInstance {
     }
 
     fn collapse_component_handle(&mut self, handle: ComponentHandle, collapsed: bool) -> bool {
-        let Some(component) = self.objects.component(handle) else {
+        if !self.collapse_component_base(handle, collapsed) {
             return false;
-        };
-
-        if component.is_collapsed() == collapsed {
-            return false;
-        }
-
-        let accumulated = {
-            let component = self
-                .objects
-                .component_mut(handle)
-                .expect("component handle was resolved above");
-            if collapsed {
-                component.dirt |= ComponentDirt::COLLAPSED;
-            } else {
-                component.dirt &= !ComponentDirt::COLLAPSED;
-            }
-            component.dirt
-        };
-        // Component::collapse publishes its new mask to the concrete virtual
-        // owner before Artboard and collapsable notifications
-        // (`src/component.cpp:76-95`).
-        self.dispatch_component_on_dirty(handle, accumulated);
-        self.on_component_dirty_handle(handle);
-        let collapsable_count = self.objects.collapsable_len(handle);
-        for index in 0..collapsable_count {
-            let Some(data_bind) = self.objects.collapsable_at(handle, index) else {
-                continue;
-            };
-            self.collapse_artboard_authored_data_bind(data_bind, collapsed);
         }
 
         // Shape owns an embedded PathComposer and forwards collapse after its

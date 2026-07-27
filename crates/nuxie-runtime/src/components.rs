@@ -1,5 +1,6 @@
 use crate::animation::RuntimeInterpolator;
 use crate::artboard::{RuntimeComponentListItemInstance, RuntimeComponentListLogicalItem};
+use crate::bones::bone::RuntimeBoneState;
 use crate::bones::weight::RuntimeWeightState;
 use crate::draw::RuntimePathMeasure;
 use crate::objects::{InstanceObjectArena, InstanceSlot};
@@ -362,29 +363,6 @@ impl RuntimeNodeState {
             self.computed_local_transform.set(local);
         }
         self.computed_local_transform.get()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeBoneState {
-    /// Concrete C++ subtype identity used by the `Bone::x/y` versus
-    /// `RootBoneBase::x/y` virtual dispatch.
-    pub(crate) is_root: bool,
-    pub(crate) child_bones: Vec<ComponentHandle>,
-    pub(crate) peer_constraints: Vec<ComponentHandle>,
-}
-
-impl RuntimeBoneState {
-    fn new(is_root: bool) -> Self {
-        Self {
-            is_root,
-            child_bones: Vec::new(),
-            peer_constraints: Vec::new(),
-        }
-    }
-
-    fn clone_for_occurrence(&self) -> Self {
-        Self::new(self.is_root)
     }
 }
 

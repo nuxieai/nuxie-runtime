@@ -41,6 +41,7 @@ use crate::artboard_data_bind::{
     build_nested_host_view_model_instance_locals,
     reunite_artboard_shared_data_bind_converter_states,
 };
+use crate::bones::bone;
 use crate::components::{
     AuthoredTransform, ComponentDirt, ComponentHandle, Mat2D, RuntimeComponent,
     RuntimeConstrainableListState, RuntimeIkChainLink, RuntimeSkinnableKind, TransformComponents,
@@ -1495,17 +1496,7 @@ impl ArtboardInstance {
                 .and_then(|component| component.concrete.bone.as_ref())
                 .is_some_and(|bone| !bone.is_root);
             if is_non_root_bone {
-                let parent = objects
-                    .component(handle)
-                    .and_then(|component| component.parent)
-                    .context("Bone is missing its parent Component")?;
-                let Some(parent_bone) = objects
-                    .component_mut(parent)
-                    .and_then(|parent| parent.concrete.bone.as_mut())
-                else {
-                    anyhow::bail!("Bone parent is not a Bone");
-                };
-                parent_bone.child_bones.push(handle);
+                bone::on_added_clean(objects, handle)?;
             } else if component.type_name == "Tendon" {
                 let parent = objects
                     .component(handle)
@@ -1557,19 +1548,7 @@ impl ArtboardInstance {
                     }
                     remaining -= 1;
                     bone = parent;
-                    let peers = &mut objects
-                        .component_mut(bone)
-                        .expect("IK ancestor Bone was validated")
-                        .concrete
-                        .bone
-                        .as_mut()
-                        .expect("IK ancestor owns Bone state")
-                        .peer_constraints;
-                    assert!(
-                        !peers.contains(&handle),
-                        "C++ Bone::addPeerConstraint requires unique IK registration"
-                    );
-                    peers.push(handle);
+                    bone::add_peer_constraint(objects, bone, handle);
                     reverse_chain.push(bone);
                 }
 
@@ -5977,27 +5956,16 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn authored_transform(&self, local_id: usize) -> AuthoredTransform {
-        let component = self.component(local_id);
-        let (x, y) = if component
-            .and_then(|component| component.concrete.bone.as_ref())
-            .is_some_and(|bone| !bone.is_root)
-        {
-            let parent_length = self
-                .component_handle(local_id)
-                .and_then(|handle| self.objects.component(handle))
-                .and_then(|component| component.parent)
-                .and_then(|parent| self.objects.component_local_id(parent))
-                .and_then(|parent_local| self.bone_length(parent_local))
-                .unwrap_or(0.0);
-            (parent_length, 0.0)
-        } else {
-            (
-                self.transform_property(local_id, TransformProperty::X)
-                    .unwrap_or_else(|| TransformProperty::X.default_value()),
-                self.transform_property(local_id, TransformProperty::Y)
-                    .unwrap_or_else(|| TransformProperty::Y.default_value()),
-            )
-        };
+        let (x, y) = self
+            .runtime_bone_authored_translation(local_id)
+            .unwrap_or_else(|| {
+                (
+                    self.transform_property(local_id, TransformProperty::X)
+                        .unwrap_or_else(|| TransformProperty::X.default_value()),
+                    self.transform_property(local_id, TransformProperty::Y)
+                        .unwrap_or_else(|| TransformProperty::Y.default_value()),
+                )
+            });
 
         AuthoredTransform {
             x,
@@ -6015,13 +5983,6 @@ impl ArtboardInstance {
                 .transform_property(local_id, TransformProperty::Opacity)
                 .unwrap_or_else(|| TransformProperty::Opacity.default_value()),
         }
-    }
-
-    pub(crate) fn bone_length(&self, local_id: usize) -> Option<f32> {
-        self.component(local_id)?.concrete.bone.as_ref()?;
-        self.objects
-            .double_property_by_name(local_id, "length")
-            .or(Some(0.0))
     }
 
     pub(crate) fn runtime_skinnable_handle_has_skin(&self, handle: ComponentHandle) -> bool {
@@ -6411,7 +6372,7 @@ impl ArtboardInstance {
     /// is gated by the transition that newly adds Transform dirt. Repeating a
     /// transform setter while Transform is already pending must not re-dirty a
     /// clean dependent subtree (`src/transform_component.cpp:54-61`).
-    fn mark_transform_dirty_handle(&mut self, handle: ComponentHandle) -> bool {
+    pub(crate) fn mark_transform_dirty_handle(&mut self, handle: ComponentHandle) -> bool {
         if !self.add_component_dirt(handle, ComponentDirt::TRANSFORM, false) {
             return false;
         }
@@ -8139,31 +8100,7 @@ impl ArtboardInstance {
         {
             return self.mark_constraint_parent_transform_dirty(local_id);
         }
-        if self
-            .component(local_id)
-            .and_then(|component| component.concrete.bone.as_ref())
-            .is_some()
-            && property_key_for_name("Bone", "length") == Some(property_key)
-        {
-            let Some(handle) = self.component_handle(local_id) else {
-                return false;
-            };
-            let child_count = self
-                .objects
-                .component(handle)
-                .and_then(|component| component.concrete.bone.as_ref())
-                .map_or(0, |bone| bone.child_bones.len());
-            for index in 0..child_count {
-                let child = self
-                    .objects
-                    .component(handle)
-                    .and_then(|component| component.concrete.bone.as_ref())
-                    .and_then(|bone| bone.child_bones.get(index))
-                    .copied();
-                if let Some(child) = child {
-                    self.mark_transform_dirty_handle(child);
-                }
-            }
+        if self.apply_bone_double_property_changed(local_id, property_key) {
             return true;
         }
         if path_vertex_property_affects_geometry(type_name, property_key) {

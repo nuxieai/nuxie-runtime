@@ -1234,7 +1234,10 @@ status = "faithful"
 upstream = "src/component.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/component.rs",
+  "crates/nuxie-runtime/src/components.rs",
+]
 dynamically_reached = true
 status = "faithful"
 
@@ -1813,7 +1816,10 @@ status = "pending"
 upstream = "src/drawable.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/drawable.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = true
 status = "faithful"
 
@@ -1965,7 +1971,10 @@ status = "pending"
 upstream = "src/layout_component.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/layout_component.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+]
 dynamically_reached = true
 status = "pending"
 

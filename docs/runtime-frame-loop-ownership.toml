@@ -10,36 +10,48 @@ provisional_fl_b_tip = "0b08970fccc42ff3677534d4dcece0f05f69a0bc"
 fl_b_verification = "pending-reacceptance"
 
 [active_owner_family]
-id = "FL-C3-layer-state-occurrences"
-checklist = "docs/runtime-frame-loop-fl-c3-closure.md"
-checklist_state = "candidate"
+id = "FL-C4-listener-actions-events-dispatch"
+checklist = "docs/runtime-frame-loop-fl-c4-closure.md"
+checklist_state = "planning"
 cpp_files = [
-  "src/animation/layer_state.cpp",
-  "src/animation/state_instance.cpp",
-  "src/animation/state_machine_layer.cpp",
-  "src/animation/system_state_instance.cpp",
-  "src/animation/nested_state_machine.cpp",
-  "src/math/random.cpp",
+  "src/animation/focus_action_clear.cpp",
+  "src/animation/focus_action_target.cpp",
+  "src/animation/focus_action_traversal.cpp",
+  "src/animation/focus_listener_group.cpp",
+  "src/animation/gamepad_listener_group.cpp",
+  "src/animation/keyboard_listener_group.cpp",
+  "src/animation/listener_action.cpp",
+  "src/animation/listener_align_target.cpp",
+  "src/animation/listener_bool_change.cpp",
+  "src/animation/listener_fire_event.cpp",
+  "src/animation/listener_input_change.cpp",
+  "src/animation/listener_invocation.cpp",
+  "src/animation/listener_number_change.cpp",
+  "src/animation/listener_trigger_change.cpp",
+  "src/animation/listener_viewmodel_change.cpp",
+  "src/animation/semantic_listener_group.cpp",
+  "src/animation/state_machine_fire_action.cpp",
+  "src/animation/state_machine_fire_trigger.cpp",
 ]
 required_adversarial = [
-  "Missing required system state",
-  "Duplicate system states",
-  "Nullable/unknown state",
-  "Bad transition target",
-  "Empty AnyState",
-  "Same-state target",
-  "Transition interruption",
-  "Reset aliases",
-  "Zero-time and same-frame chaining",
-  "Nested input ordering",
-  "Missing/out-of-range nested animationId",
-  "Weighted random selection",
-  "Multi-layer initialization",
-  "Constructor facility order",
-  "Constructor focus topology order",
-  "Nested focus and pointer forwarding",
-  "Nested context lifecycle",
-  "Clone/remount isolation",
+  "Parent-kind import ownership",
+  "Authored FIFO with duplicates",
+  "Malformed input actions",
+  "Bool and number edge values",
+  "Trigger callback identity",
+  "All invocation alternatives",
+  "Owned invocation payloads",
+  "Align target matrix",
+  "Focus target and traversal",
+  "Keyboard dispatch precedence",
+  "Gamepad dispatch precedence",
+  "Semantic queue constraints",
+  "ViewModel bind pairing",
+  "Reported-event ownership",
+  "Chained applyEvents completion",
+  "Deferred focus/semantic batches",
+  "Fire-trigger live path",
+  "Clone and teardown isolation",
   "Permanent structural ratchets",
 ]
 

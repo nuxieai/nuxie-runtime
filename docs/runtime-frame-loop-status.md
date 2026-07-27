@@ -782,10 +782,11 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Read the complete 18-file pinned-C++ listener-action/event/focus-dispatch
-   family and commit its closure checklist before production changes (FL-C4).
-   Close `state_machine.actions` and `state_machine.events` only after one
-   complete-family implementation and independent verdict.
+1. Port the complete 18-file pinned-C++ listener-action/event/focus-dispatch
+   family against `docs/runtime-frame-loop-fl-c4-closure.md`, then publish one
+   whole-family non-performance review packet (FL-C4). Close
+   `state_machine.actions` and `state_machine.events` only after one complete
+   implementation and independent verdict.
 2. Keep FL-B and FL-C1 rows pending until their independent acceptance.
    Performance remains verification evidence, never the source of a work
    slice.

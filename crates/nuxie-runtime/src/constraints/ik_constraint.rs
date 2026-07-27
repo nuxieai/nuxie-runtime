@@ -144,7 +144,7 @@ pub(crate) fn build_dependencies(objects: &mut InstanceObjectArena, handle: Comp
     if let Some(target) = objects
         .component(handle)
         .and_then(|component| component.concrete.constraint)
-        .and_then(|constraint| constraint.target)
+        .and_then(|constraint| constraint.target())
     {
         objects.add_dependent(target, handle);
     }
@@ -236,7 +236,7 @@ pub(super) fn apply(artboard: &mut ArtboardInstance, constraint: ComponentHandle
         .objects
         .component(constraint)
         .and_then(|component| component.concrete.constraint)
-        .and_then(|constraint| constraint.target)
+        .and_then(|constraint| constraint.target())
     else {
         return false;
     };

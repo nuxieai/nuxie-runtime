@@ -8,6 +8,9 @@ use crate::bones::skin::RuntimeSkinState;
 use crate::bones::tendon::RuntimeTendonState;
 use crate::bones::weight::RuntimeWeightState;
 use crate::constraints::ik_constraint::RuntimeIkState;
+use crate::constraints::targeted_constraint::{
+    RuntimeTargetedConstraintState, state_for_type as targeted_constraint_state_for_type,
+};
 use crate::draw::RuntimePathMeasure;
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::property_key_for_name;
@@ -241,13 +244,6 @@ impl RuntimeConstraintKind {
             "TranslationConstraint" => Self::Translation,
             _ => Self::Other,
         }
-    }
-
-    pub(crate) fn uses_targeted_base_dependencies(self) -> bool {
-        !matches!(
-            self,
-            Self::FollowPath | Self::ListFollowPath | Self::Other | Self::Scroll | Self::ScrollBar
-        )
     }
 }
 
@@ -1075,9 +1071,7 @@ impl RuntimeConstraintScratch {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RuntimeConstraintState {
     pub(crate) kind: RuntimeConstraintKind,
-    pub(crate) targeted: bool,
-    pub(crate) requires_target: bool,
-    pub(crate) target: Option<ComponentHandle>,
+    targeted: Option<RuntimeTargetedConstraintState>,
     pub(crate) scratch: RuntimeConstraintScratch,
 }
 
@@ -1086,22 +1080,32 @@ impl RuntimeConstraintState {
         let kind = RuntimeConstraintKind::for_type(type_name);
         Self {
             kind,
-            targeted: type_is_a(type_name, "TargetedConstraint"),
-            requires_target: !matches!(
-                type_name,
-                "RotationConstraint" | "ScaleConstraint" | "TranslationConstraint"
-            ),
-            target: None,
+            targeted: targeted_constraint_state_for_type(type_name),
             scratch: RuntimeConstraintScratch::for_kind(kind),
+        }
+    }
+
+    pub(crate) const fn targeted(self) -> Option<RuntimeTargetedConstraintState> {
+        self.targeted
+    }
+
+    pub(crate) fn target(self) -> Option<ComponentHandle> {
+        self.targeted
+            .and_then(RuntimeTargetedConstraintState::target)
+    }
+
+    pub(crate) fn set_target(&mut self, target: Option<ComponentHandle>) {
+        if let Some(targeted) = self.targeted.as_mut() {
+            targeted.set_target(target);
         }
     }
 
     fn clone_for_occurrence(&self) -> Self {
         Self {
             kind: self.kind,
-            targeted: self.targeted,
-            requires_target: self.requires_target,
-            target: None,
+            targeted: self
+                .targeted
+                .map(RuntimeTargetedConstraintState::clone_for_occurrence),
             scratch: RuntimeConstraintScratch::for_kind(self.kind),
         }
     }
@@ -1919,7 +1923,7 @@ mod constraint_state_tests {
         let mut state = RuntimeConcreteComponentState::for_type("RotationConstraint")
             .constraint
             .expect("rotation state");
-        state.target = Some(super::ComponentHandle::from_index(17));
+        state.set_target(Some(super::ComponentHandle::from_index(17)));
         state.scratch = RuntimeConstraintScratch::Rotation {
             components_a: TransformComponents {
                 rotation: 1.0,
@@ -1932,7 +1936,7 @@ mod constraint_state_tests {
         };
 
         let cloned = state.clone_for_occurrence();
-        assert_eq!(cloned.target, None);
+        assert_eq!(cloned.target(), None);
         match cloned.scratch {
             RuntimeConstraintScratch::Rotation {
                 components_a,

@@ -494,7 +494,7 @@ impl InstanceObjectArena {
                 component.constrained_layout_ancestor = None;
                 component.graph_order = None;
                 if let Some(constraint) = component.concrete.constraint.as_mut() {
-                    constraint.target = None;
+                    constraint.set_target(None);
                     constraint.scratch =
                         crate::components::RuntimeConstraintScratch::for_kind(constraint.kind);
                 }

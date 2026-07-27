@@ -18,6 +18,7 @@ use crate::text::static_text_constraint_bounds;
 use crate::{ArtboardInstance, Mat2D};
 
 pub(crate) mod ik_constraint;
+pub(crate) mod targeted_constraint;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeScrollProperty {
@@ -438,7 +439,6 @@ fn clamped_scroll_constraint_offsets(
 #[derive(Debug, Clone, Copy)]
 struct RuntimeConstraintPropertyKeys {
     strength: u16,
-    target_id: u16,
     source_space: u16,
     dest_space: u16,
     min_max_space: u16,
@@ -468,7 +468,6 @@ struct RuntimeConstraintPropertyKeys {
 const RUNTIME_CONSTRAINT_PROPERTY_KEYS: RuntimeConstraintPropertyKeys =
     RuntimeConstraintPropertyKeys {
         strength: 172,
-        target_id: 173,
         source_space: 179,
         dest_space: 180,
         min_max_space: 195,
@@ -792,10 +791,6 @@ impl crate::components::RuntimeElasticScrollPhysicsHelper {
         self.speed = -(snap_target + self.current) * self.friction;
         self.snap_target = -snap_target;
     }
-}
-
-pub(crate) fn targeted_constraint_target_id_property_key() -> Option<u16> {
-    Some(RUNTIME_CONSTRAINT_PROPERTY_KEYS.target_id)
 }
 
 pub(crate) fn constraint_double_change_marks_parent_dirty(
@@ -3423,7 +3418,7 @@ fn apply_distance_constraint(
     // Ported from C++ `src/constraints/distance_constraint.cpp`.
     let constraint_local = artboard.component_at(constraint).local_id;
     let keys = RUNTIME_CONSTRAINT_PROPERTY_KEYS;
-    let Some(target_index) = state.target else {
+    let Some(target_index) = state.target() else {
         return false;
     };
     if artboard.component_at(target_index).is_collapsed() {
@@ -3488,7 +3483,7 @@ fn apply_rotation_constraint(
     // Ported from C++ `src/constraints/rotation_constraint.cpp`.
     let constraint_local = artboard.component_at(constraint).local_id;
     let keys = RUNTIME_CONSTRAINT_PROPERTY_KEYS;
-    let target_index = state.target;
+    let target_index = state.target();
     if target_index.is_some_and(|index| artboard.component_at(index).is_collapsed()) {
         return false;
     }
@@ -3604,7 +3599,7 @@ fn apply_scale_constraint(
     // Ported from C++ `src/constraints/scale_constraint.cpp`.
     let constraint_local = artboard.component_at(constraint).local_id;
     let keys = RUNTIME_CONSTRAINT_PROPERTY_KEYS;
-    let target_index = state.target;
+    let target_index = state.target();
     if target_index.is_some_and(|index| artboard.component_at(index).is_collapsed()) {
         return false;
     }
@@ -3750,7 +3745,7 @@ fn apply_transform_constraint(
     // Ported from C++ `src/constraints/transform_constraint.cpp`.
     let constraint_local = artboard.component_at(constraint).local_id;
     let keys = RUNTIME_CONSTRAINT_PROPERTY_KEYS;
-    let Some(target_index) = state.target else {
+    let Some(target_index) = state.target() else {
         return false;
     };
     if artboard.component_at(target_index).is_collapsed() {
@@ -3798,7 +3793,7 @@ pub(crate) fn update_follow_path_constraint(
         .objects
         .component(constraint)
         .and_then(|component| component.concrete.constraint)
-        .and_then(|constraint| constraint.target)
+        .and_then(|constraint| constraint.target())
     else {
         return false;
     };
@@ -3873,7 +3868,7 @@ fn apply_follow_path_constraint(
         .objects
         .component(constraint)
         .and_then(|component| component.concrete.constraint)
-        .and_then(|constraint| constraint.target)
+        .and_then(|constraint| constraint.target())
     else {
         return false;
     };
@@ -3989,7 +3984,7 @@ fn apply_list_follow_path_constraint_to_transforms(
         .objects
         .component(constraint)
         .and_then(|component| component.concrete.constraint)
-        .and_then(|constraint| constraint.target);
+        .and_then(|constraint| constraint.target());
     let count = item_transforms.len();
     let distance = retained_constraint_double(
         artboard,
@@ -4191,7 +4186,7 @@ fn apply_translation_constraint(
     // Ported from C++ `src/constraints/translation_constraint.cpp`.
     let constraint_local = artboard.component_at(constraint).local_id;
     let keys = RUNTIME_CONSTRAINT_PROPERTY_KEYS;
-    let target_index = state.target;
+    let target_index = state.target();
     if target_index.is_some_and(|index| artboard.component_at(index).is_collapsed()) {
         return false;
     }
@@ -4589,6 +4584,7 @@ mod tests {
     use super::ik_constraint::{
         IK_INVERT_DIRECTION_PROPERTY_KEY, IK_PARENT_BONE_COUNT_PROPERTY_KEY,
     };
+    use super::targeted_constraint::TARGET_ID_PROPERTY_KEY;
     use super::{
         BONE_LENGTH_PROPERTY_KEY, FOLLOW_PATH_DISTANCE_PROPERTY_KEY,
         FOLLOW_PATH_OFFSET_PROPERTY_KEY, FOLLOW_PATH_ORIENT_PROPERTY_KEY,
@@ -4608,7 +4604,7 @@ mod tests {
         let keys = RUNTIME_CONSTRAINT_PROPERTY_KEYS;
         for (type_name, property_name, actual) in [
             ("Constraint", "strength", keys.strength),
-            ("TargetedConstraint", "targetId", keys.target_id),
+            ("TargetedConstraint", "targetId", TARGET_ID_PROPERTY_KEY),
             (
                 "TransformSpaceConstraint",
                 "sourceSpaceValue",

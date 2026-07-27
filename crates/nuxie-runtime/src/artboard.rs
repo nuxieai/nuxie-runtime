@@ -1199,10 +1199,11 @@ impl ArtboardInstance {
             if let Some(composer) = objects.path_composer_handle(component.local_id) {
                 objects.link_parent(composer, root);
             }
-            let constraint_state = objects
+            let is_constraint = objects
                 .component(handle)
-                .and_then(|component| component.concrete.constraint);
-            if let Some(constraint_state) = constraint_state {
+                .and_then(|component| component.concrete.constraint)
+                .is_some();
+            if is_constraint {
                 let parent = objects
                     .component(handle)
                     .and_then(|component| component.parent)
@@ -1215,42 +1216,11 @@ impl ArtboardInstance {
                 }
                 objects.add_constraint(parent, handle);
 
-                // TargetedConstraint::onAddedDirty resolves and validates its
-                // retained target after Constraint has registered on the
-                // constrained parent (`src/constraints/targeted_constraint.cpp:
-                // 23-39`). A missing target is legal only for the three
-                // concrete optional-target families.
-                if constraint_state.targeted {
-                    let target_local = constraint_state
-                        .targeted
-                        .then(crate::constraints::targeted_constraint_target_id_property_key)
-                        .flatten()
-                        .and_then(|key| objects.uint_property(component.local_id, key))
-                        .and_then(|target| usize::try_from(target).ok());
-                    let target = target_local.and_then(|local| objects.component_handle(local));
-                    if target_local.is_some_and(|local| objects.contains_object(local))
-                        && target.is_none_or(|target| {
-                            !objects
-                                .component(target)
-                                .is_some_and(|target| target.capabilities.transform)
-                        })
-                    {
-                        anyhow::bail!(
-                            "TargetedConstraint targetId does not resolve to a TransformComponent"
-                        );
-                    }
-                    if constraint_state.requires_target && target.is_none() {
-                        anyhow::bail!("TargetedConstraint is missing its required target");
-                    }
-                    objects
-                        .component_mut(handle)
-                        .expect("Constraint handle was validated")
-                        .concrete
-                        .constraint
-                        .as_mut()
-                        .expect("Constraint occurrence owns Constraint state")
-                        .target = target;
-                }
+                crate::constraints::targeted_constraint::on_added_dirty(
+                    objects,
+                    handle,
+                    component.local_id,
+                )?;
             }
         }
 
@@ -1475,23 +1445,7 @@ impl ArtboardInstance {
                 skin::build_dependencies(objects, skin);
             }
 
-            // Ordinary TargetedConstraint::buildDependencies makes the
-            // constrained parent update after the retained target. IK calls
-            // this base before adding its own target->constraint edge.
-            if let Some(constraint) = objects
-                .component(handle)
-                .and_then(|component| component.concrete.constraint)
-                && constraint.targeted
-                && constraint.kind.uses_targeted_base_dependencies()
-                && let (Some(target), Some(parent)) = (
-                    constraint.target,
-                    objects
-                        .component(handle)
-                        .and_then(|component| component.parent),
-                )
-            {
-                objects.add_dependent(target, parent);
-            }
+            crate::constraints::targeted_constraint::build_dependencies(objects, handle);
 
             if objects
                 .component(handle)
@@ -1501,7 +1455,7 @@ impl ArtboardInstance {
                 let target = objects
                     .component(handle)
                     .and_then(|component| component.concrete.constraint)
-                    .and_then(|constraint| constraint.target)
+                    .and_then(|constraint| constraint.target())
                     .context("FollowPathConstraint is missing its retained target")?;
                 let source = objects
                     .component(target)
@@ -2053,7 +2007,7 @@ impl ArtboardInstance {
                 .objects
                 .component(constraint)
                 .and_then(|component| component.concrete.constraint)
-                .and_then(|constraint| constraint.target)
+                .and_then(|constraint| constraint.target())
             else {
                 continue;
             };
@@ -12332,7 +12286,7 @@ mod tests {
             .constraint
             .as_mut()
             .unwrap()
-            .target = Some(shape_handle);
+            .set_target(Some(shape_handle));
         instance.runtime_shapes.seed_follow_path_source_for_test(
             1,
             2,
@@ -12392,6 +12346,7 @@ mod tests {
             "FollowPath reuses m_rawPath point storage across equal-size rewinds (`follow_path_constraint.cpp:137-145`)"
         );
 
+        let node_target = instance.component_handle(4).unwrap();
         instance
             .component_mut(3)
             .unwrap()
@@ -12399,7 +12354,7 @@ mod tests {
             .constraint
             .as_mut()
             .unwrap()
-            .target = Some(instance.component_handle(4).unwrap());
+            .set_target(Some(node_target));
         assert!(!crate::constraints::update_follow_path_constraint(
             &mut instance,
             constraint_handle
@@ -14082,7 +14037,7 @@ mod tests {
                 .concrete
                 .constraint
                 .expect("retained constraint state")
-                .target,
+                .target(),
             Some(first_target)
         );
         assert_eq!(
@@ -14101,7 +14056,7 @@ mod tests {
                 .concrete
                 .constraint
                 .expect("retained constraint state")
-                .target,
+                .target(),
             Some(first_target),
             "TargetedConstraintBase::targetIdChanged is intentionally empty; a live occurrence does not retarget (`generated/constraints/targeted_constraint_base.hpp`)"
         );
@@ -14120,7 +14075,7 @@ mod tests {
                 .concrete
                 .constraint
                 .expect("clone retained constraint state")
-                .target,
+                .target(),
             Some(second_target),
             "fresh clone onAddedDirty resolves the copied generated targetId (`src/constraints/targeted_constraint.cpp:23-39`)"
         );
@@ -14167,7 +14122,7 @@ mod tests {
                 .concrete
                 .constraint
                 .expect("constraint state")
-                .target,
+                .target(),
             None
         );
 

@@ -1,9 +1,10 @@
 name: Apple runtime release
 
 # The nuxie-macos runner group must separately allow this workflow at both the
-# exact release tag ref and refs/heads/main. GitHub evaluates that policy before
-# any job step can preflight it. The apple-runtime-release environment must
-# separately allow tag pattern apple-runtime-v* and branch main.
+# exact release tag ref and refs/heads/main. Its one Xcode-qualified release
+# host must carry the nuxie-release label. GitHub evaluates both runner policies
+# before any job step can preflight them. The apple-runtime-release environment
+# must separately allow tag pattern apple-runtime-v* and branch main.
 on:
   push:
     tags:
@@ -25,7 +26,7 @@ concurrency:
 jobs:
   release:
     name: Build and publish the Apple runtime
-    runs-on: [self-hosted, macOS, ARM64, nuxie-signoff]
+    runs-on: [self-hosted, macOS, ARM64, nuxie-signoff, nuxie-release]
     environment: apple-runtime-release
     env:
       DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
@@ -126,8 +127,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          test "$(xcodebuild -version | sed -n 's/^Xcode //p')" = "${NUX_APPLE_XCODE_VERSION}"
-          test "$(xcodebuild -version | sed -n 's/^Build version //p')" = "${NUX_APPLE_XCODE_BUILD}"
+          actual_xcode_version="$(xcodebuild -version | sed -n 's/^Xcode //p')"
+          actual_xcode_build="$(xcodebuild -version | sed -n 's/^Build version //p')"
+          if [[ "${actual_xcode_version}" != "${NUX_APPLE_XCODE_VERSION}" ||
+                "${actual_xcode_build}" != "${NUX_APPLE_XCODE_BUILD}" ]]; then
+            {
+              echo "release runner Xcode mismatch"
+              echo "expected=${NUX_APPLE_XCODE_VERSION} (${NUX_APPLE_XCODE_BUILD})"
+              echo "actual=${actual_xcode_version} (${actual_xcode_build})"
+            } >&2
+            exit 1
+          fi
 
       - name: Install pinned Rust toolchain and Apple targets
         run: |

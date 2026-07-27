@@ -14,11 +14,11 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle remains; #HD-3 closed by retiring WebGL2 |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.88 MiB OFF / 8.76 MiB ON vs user-approved 9 MiB budget (both variants green at `5901c1fe`) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 411/411, nuxie lib 167/167,
-C++ probe 721/721, both runtime golden gates 317/317 exact / 647/647 segments;
+Regression floor (must stay green): runtime lib 521/521, nuxie lib 146/146,
+C++ probe 745/745, both runtime golden gates 317/317 exact / 647/647 segments;
 ordinary and scripted both have zero failures. The workspace push gate is green
 as of 2026-07-22 and now builds/exports `RIVE_CPP_PROBE`, so its log contains
-the 721/721 probe run rather than silently skipping it. Every remaining RB-1
+the complete probe run rather than silently skipping it. Every remaining RB-1
 cut and every RB-1 push must run `make scripted-golden-compare` in addition to
 the ordinary gate. Review
 of e5(A) restored the distinction between raw `StateMachineInstance::advance`
@@ -1009,13 +1009,18 @@ historical unless it agrees with these sources.
 
 **Canonical NEXT:** publish the complete five-file layer/state-occurrence
 family implemented at semantic commit
-`93a902558ad9860e1ecaeeef8e710223841e2dca` against
+`0efeb8c709e3202237fe42371dbb2f63e4de4505` against
 `docs/runtime-frame-loop-fl-c3-closure.md` (FL-C3), then obtain one independent
 whole-family verdict before any FL-C4 production edit. The exact source walk,
-adversarial differentials, structural ratchets, and once-per-candidate
-non-performance battery are closed; no partial layer/nested/reset/interruption
-slice was submitted and no row is self-promoted. Active publication branch is
-`levi/fl-c`; there is no PR. Exact FL-C2 candidate
+adversarial differentials, 19 structural ratchets, and once-per-candidate
+non-performance battery are closed, including the rejected candidate's
+weighted-random, nullable-nested-owner, and serial-layer-initialization gaps.
+The source-bound trace is refreshed at
+`2b5c0be3d7bd2e03ebc1c9e6f224ffac3909fa7e`; no partial
+layer/nested/reset/interruption slice is submitted and no row is self-promoted.
+The next action is independent Standards and Spec review on the exact frozen
+candidate, followed by one whole-family acceptance request. Active publication
+branch is `levi/fl-c`; there is no PR. Exact FL-C2 candidate
 `7546f4f15b05e582c62aa52ecc93430a7048e143` passed independent Standards and
 Spec review with no findings; its 12 mapped frame-loop files, three importer
 rows, and two member rows are promoted by the dedicated reconciliation

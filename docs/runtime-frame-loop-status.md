@@ -65,8 +65,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   described the provisional stack base, not the active wave, and is no longer
   used for FL-C publication. There is no PR.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
-- File closure: 64 / 341. The 52 `component-update-graph` rows and all 12
-  FL-C2 transition/condition rows are `faithful`; the 277 later-wave rows
+- File closure: 63 / 341. The 51 `component-update-graph` rows and all 12
+  FL-C2 transition/condition rows are `faithful`; the 278 later-wave rows
   remain pending. The file-correspondence manifest additionally promotes the
   three accepted importer rows.
 - Member closure: 49 / 75 owner/member rows (41 imported runtime-drawing
@@ -80,24 +80,37 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   implementation provisionally under the coordinator override. FL-C2 is
   independently closed. The complete five-file layer/state family (FL-C3) is
   translated at semantic commit
-  `93a902558ad9860e1ecaeeef8e710223841e2dca` against
+  `0efeb8c709e3202237fe42371dbb2f63e4de4505` against
   `docs/runtime-frame-loop-fl-c3-closure.md`. C++'s ordered state-definition
   collection and the occurrence-owned `any`, `current`, and transition-source
-  triad now have direct Rust owners; interruption/reset/advance/nested
-  lifecycles and all eight structural negative controls are closed. The exact
-  next action is to publish one immutable proof packet and obtain one
+  triad now have direct Rust owners. The rejected candidate's three omissions
+  are closed: weighted transitions use the process-global target-specific
+  random provider with exact `uint32_t` arithmetic; a NestedStateMachine keeps
+  its authored owner and ordered inputs when the child occurrence is null; and
+  each layer constructs and runs entry callbacks before the next layer is
+  constructed. Interruption/reset/advance/nested lifecycles and all 19
+  structural negative controls are closed. The source-bound trace was
+  refreshed at `2b5c0be3d7bd2e03ebc1c9e6f224ffac3909fa7e` with candidate-source
+  SHA-256
+  `ae067fb9bc8402bb852e0e52cc787895fe3e444b87a82d0eea028a481b622534`.
+  The exact next action is to freeze and publish one immutable proof packet,
+  run independent Standards and Spec review on that exact SHA, and request one
   independent whole-family verdict. No FL-C3 row is promoted before that
   verdict, and no FL-C4 production edit begins before it.
-- FL-C3's once-per-candidate non-performance floor is green on exact semantic
-  commit `93a902558ad9860e1ecaeeef8e710223841e2dca`: runtime 514 / 514;
-  probe-armed workspace and pinned-C++ probes 742 / 742; ordinary and scripted
+- FL-C3's once-per-candidate non-performance floor is green on the corrected
+  semantic commit `0efeb8c709e3202237fe42371dbb2f63e4de4505`: runtime 521 / 521;
+  probe-armed workspace and pinned-C++ probes 745 / 745; ordinary and scripted
   golden each 317 / 317 entries and 647 / 647 segments with zero divergences;
   same-runner pixels 1,468 / 1,468 with 1,370 byte-exact and zero divergences;
-  C API, native Apple, lint, format, and diff checks; committed-tree size
-  8,034,424 bytes without scripting and 8,935,528 bytes with scripting, both
-  below 9 MiB; and the full Apple XCFramework build/package/ABI/header/C/Swift
-  floor with checksum
-  `a12debbaf9a81590bf7d79056018f3929c109c8c371dee3cf62352afa66935c5`.
+  C API, native Apple, browser build, lint, format, and diff checks; structural
+  checker 37 / 37; committed-tree size 8,034,536 bytes without scripting and
+  8,935,640 bytes with scripting, both below 9 MiB; and the full Apple
+  XCFramework build/package/ABI/header/C/Swift floor with checksum
+  `363d426a4687ce984a25d9356ed332830a3e038b63b747c32011e778d1547976`.
+  Ordinary and scripted golden were rerun serially after a discarded
+  concurrent harness build replaced the shared executable; native Apple was
+  rerun with a fully isolated stable toolchain after a discarded mixed-cache
+  run. No performance measurement was run.
 - FL-C1 input ownership is now source-corresponding: `state_machine_input.rs`
   owns the authored definition and `state_machine_input_instance.rs` owns the
   mutable occurrence. Each occurrence retains a handle into the one authored
@@ -754,11 +767,12 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Port the complete five-file pinned-C++ layer/state-occurrence family
-   against `docs/runtime-frame-loop-fl-c3-closure.md`, including the private
-   `StateMachineLayerInstance` lifecycle subsection, focused filename
-   correspondence, adversarial differentials, and structural ratchets. Do not
-   publish a partial layer/nested/reset/interruption slice.
+1. Freeze and publish the corrected complete five-file pinned-C++
+   layer/state-occurrence family against
+   `docs/runtime-frame-loop-fl-c3-closure.md`, run independent Standards and
+   Spec review on the exact immutable SHA, then request one whole-family
+   acceptance verdict. Do not promote a row or begin FL-C4 production before
+   that verdict.
 2. Keep FL-B and FL-C1 rows pending until their independent acceptance.
    Performance remains verification evidence, never the source of a work
    slice.

@@ -1007,9 +1007,10 @@ milestone; the current subplan status selects its exact wave/lane; executable
 ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
-**Canonical NEXT:** read the complete 18-file pinned-C++ listener-action,
-event, and focus-dispatch family and commit its closure checklist before
-production changes (FL-C4). Exact FL-C3 candidate
+**Canonical NEXT:** port the complete 18-file pinned-C++ listener-action,
+event, and focus-dispatch family against the committed closure checklist in
+`docs/runtime-frame-loop-fl-c4-closure.md`, then publish one whole-family
+non-performance review packet (FL-C4). Exact FL-C3 candidate
 `975962ccb22c3089620ab1f4a735e502e51d7ef1` passed independent production
 review and is promoted by the dedicated reconciliation commit. Candidate
 `b8d1fd6f7222fcdf3f520896f1dc8e9423d69bb8` was rejected because it built

@@ -1,10 +1,46 @@
 use std::collections::BTreeSet;
 
 use super::ArtboardInstance;
-use crate::components::{ComponentHandle, RuntimeComponent};
+use super::advancing_component::RuntimeAdvancingComponent;
+use crate::components::{ComponentDirt, ComponentHandle, RuntimeComponent};
 use crate::properties::layout_component_style_display_value_property_key;
 
 impl ArtboardInstance {
+    /// Behavior-preserving extraction of the existing Rust
+    /// `LayoutComponent::advance` interpolation adapter. Pinned C++ applies
+    /// the retained interpolation, propagates size, and dirties the concrete
+    /// layout/world owner (`src/layout_component.cpp:1329-1401`).
+    pub(super) fn advance_layout_component_entry(
+        &mut self,
+        entry: RuntimeAdvancingComponent,
+        elapsed_seconds: f32,
+        new_frame: bool,
+    ) -> bool {
+        if !new_frame {
+            return false;
+        }
+        let Some(component) = entry.component else {
+            return false;
+        };
+        let Some(advance) = self.objects.component(component).and_then(|component| {
+            (!component.is_collapsed())
+                .then(|| component.concrete.layout.as_ref())
+                .flatten()
+                .map(|layout| layout.advance_interpolation(elapsed_seconds, true))
+        }) else {
+            return false;
+        };
+        if advance.size_changed {
+            self.add_dirt(entry.local_id, ComponentDirt::PATH, false);
+        }
+        if advance.layout_changed {
+            self.add_dirt(entry.local_id, ComponentDirt::WORLD_TRANSFORM, true);
+            self.layout_epoch = self.layout_epoch.wrapping_add(1);
+            self.runtime_drawables.mark_layout_resources_dirty();
+        }
+        advance.keep_going
+    }
+
     /// Behavior-preserving extraction of the existing Rust
     /// `LayoutComponent::hitTestPoint` branch. Its local-bounds check delegates
     /// to `Drawable::hitTestPoint` with `skipOnUnclipped=true`

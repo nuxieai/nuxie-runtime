@@ -5217,40 +5217,6 @@ impl ArtboardInstance {
         Ok(changed)
     }
 
-    fn advance_layout_component_entry(
-        &mut self,
-        entry: RuntimeAdvancingComponent,
-        elapsed_seconds: f32,
-        new_frame: bool,
-    ) -> bool {
-        if !new_frame {
-            return false;
-        }
-        let Some(component) = entry.component else {
-            return false;
-        };
-        let Some(advance) = self.objects.component(component).and_then(|component| {
-            (!component.is_collapsed())
-                .then(|| component.concrete.layout.as_ref())
-                .flatten()
-                .map(|layout| layout.advance_interpolation(elapsed_seconds, true))
-        }) else {
-            return false;
-        };
-        if advance.size_changed {
-            self.add_dirt(entry.local_id, ComponentDirt::PATH, false);
-        }
-        if advance.layout_changed {
-            // `LayoutComponent::applyInterpolation` writes `m_layout`, then
-            // propagates size and marks the exact owner world-transform dirty
-            // (`src/layout_component.cpp:1329-1401`).
-            self.add_dirt(entry.local_id, ComponentDirt::WORLD_TRANSFORM, true);
-            self.layout_epoch = self.layout_epoch.wrapping_add(1);
-            self.runtime_drawables.mark_layout_resources_dirty();
-        }
-        advance.keep_going
-    }
-
     fn advance_text_input_entry(
         &mut self,
         entry: RuntimeAdvancingComponent,

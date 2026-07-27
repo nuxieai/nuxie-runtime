@@ -3586,15 +3586,15 @@ note = "Consolidated Rust port for math."
 
 [[file]]
 upstream = "src/math/random.cpp"
-status = "faithful"
-verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/components.rs"
+status = "pending"
+verification = "pending-verification"
+rust_module = "crates/nuxie-runtime/src/math/random.rs; crates/nuxie-runtime/src/math/random/native.rs; crates/nuxie-runtime/src/math/random/wasm.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0298"
 b6_verdict = "ADAPTED"
 b6_cluster = "bones-math-components"
 audit_record = "docs/b6-audit/results/bones-math-components.md"
-note = "Consolidated Rust port for math."
+note = "FLR-18 direct RandomProvider correspondence added for the FL-C3 transition call site: random.rs owns one process-global mutex-serialized provider; math/random/native.rs calls native libc rand/srand; math/random/wasm.rs reproduces the pinned Emscripten 3.1.61 musl rand and monotonic-nanosecond seed because wasm32-unknown-unknown exposes no libc rand symbols. Deterministic layer seeding remains exact while removing C++'s data race. The counted TESTING FIFO is scoped and serialized per Rust differential because Rust tests share a parallel process; its FIFO, call-count, and exhausted-zero behavior remain exact without cross-test poisoning. Weighted-transition call order and uint32 overflow have live pinned-C++ differentials. The row remains pending because the later FL-D DataConverterFormula consumer still owns a separate legacy random source; FL-C3 does not falsely promote a whole-program RandomProvider closure."
 
 [[file]]
 upstream = "src/math/raw_path.cpp"

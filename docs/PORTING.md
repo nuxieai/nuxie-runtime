@@ -1315,3 +1315,56 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   keeps inseparable may remain shared, but the mapping must explain the
   exception in plain language. This rule is incremental: do not launch a
   whole-runtime file shuffle or delay the dependency-ready owner family.
+- **FLR-17 Move shared-definition scratch to the occurrence, preserving its
+  exact shape and read/write order.** Pinned C++ sometimes stores temporary
+  evaluation state on an authored definition even though multiple runtime
+  instances can share it. Safe Rust may move that scratch to the owning
+  occurrence to remove the data race, but it must retain the exact serialized
+  width, authored index order, reset/write sites, and second-pass read order;
+  it may not allocate a replacement candidate collection on every call or
+  change selection semantics. `StateTransition::evaluatedRandomWeight` is
+  therefore one reusable `Vec<u32>` on `StateMachineLayerInstance`, indexed
+  exactly like the retained transition vector
+  (`src/animation/state_machine_instance.cpp:412-468`;
+  `include/rive/animation/state_transition.hpp:38-43`).
+- **FLR-18 Serialize process-global C runtime state instead of localizing it.**
+  When pinned C++ deliberately uses one process-global C facility, safe Rust
+  retains that global identity and call order behind synchronization; it does
+  not create one generator per occurrence. `RandomProvider` remains one
+  process-global `rand`/`srand` provider. On C-runtime targets
+  `math/random/native.rs` calls platform `rand`/`srand` directly and seeds it
+  from the platform standard library's actual `high_resolution_clock`
+  source: Apple libc++ uses `CLOCK_MONOTONIC_RAW`; pinned Rive's default
+  Linux clang build uses libstdc++, where `high_resolution_clock` aliases
+  `system_clock`, so Linux uses `CLOCK_REALTIME`; Android/WASI and other
+  Unix libc++ targets use `CLOCK_MONOTONIC`; and Windows mirrors libc++'s
+  `QueryPerformanceCounter` integer conversion. Rust `SystemTime` and manual
+  Unix-epoch arithmetic are forbidden because they silently select a
+  different implementation on Apple. Supported operating systems guarantee
+  those clocks; if the platform API nevertheless fails,
+  Rust uses deterministic seed `1` instead of unwinding through an
+  embedder/FFI boundary. `panic!`, `unwrap`, and `expect` are forbidden in the
+  native adapter. The browser Rust
+  target is `wasm32-unknown-unknown` and has no libc `rand` exports, while the
+  pinned C++ build selects Emscripten 3.1.61. Therefore
+  `math/random/wasm.rs` reproduces that pinned toolchain's process-global musl
+  generator exactly (`seed = s - 1` at C `unsigned` width before widening,
+  wrapping multiplier `6364136223846793005`, result `seed >> 33`, and
+  `RAND_MAX = 0x7fffffff`) rather than substituting a JavaScript or Rust
+  generator. Its ordinary seed mirrors Emscripten's
+  `high_resolution_clock` path: `performance.now()` milliseconds multiplied
+  by `1000` twice in the same left-associated order, rounded to nanoseconds,
+  and narrowed to C++ `unsigned int`. The process-global
+  deterministic-mode switch selects seed `1`; ordinary mode narrows a current
+  nanosecond clock to C++'s `unsigned int` width. A mutex removes C++'s data
+  races while retaining one serialized production stream and the same
+  per-layer reseed boundary. C++ oracle processes are isolated, whereas Rust
+  integration cases share one parallel test process, so the counted TESTING
+  FIFO is a scoped, serialized, installing-thread harness adaptation: each
+  differential retains the exact FIFO/call-count/exhausted-zero behavior, and
+  dropping its guard cannot poison a later or concurrent test
+  (`include/rive/math/random.hpp:13-51`; `src/math/random.cpp:8-15`;
+  `src/animation/state_machine_instance.cpp:150-167,376,412-468`;
+  `build/build_rive.sh:277-287`;
+  [Emscripten 3.1.61 `rand.c`](https://github.com/emscripten-core/emscripten/blob/3.1.61/system/lib/libc/musl/src/prng/rand.c);
+  [Emscripten 3.1.61 clock shim](https://github.com/emscripten-core/emscripten/blob/3.1.61/src/library_wasi.js#L145-L165)).

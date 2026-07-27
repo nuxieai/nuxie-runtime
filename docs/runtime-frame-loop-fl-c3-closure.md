@@ -16,13 +16,25 @@ alias/deletion guards rather than inventing a prebuilt occurrence collection.
 
 ## Source-to-Rust closure
 
+The public layer/state family remains the five files below. Its rejected
+candidate also exposed that the previously accepted `src/math/random.cpp` row
+had been mapped to an unrelated consolidated module and was not actually
+reachable from Rust transitions. This replacement candidate therefore maps
+the transition call site directly to
+`crates/nuxie-runtime/src/math/random.rs`. The supporting row stays pending:
+pinned `DataConverterFormula` also calls the global provider, while its later
+FL-D Rust owner still uses a separate legacy stream. FL-C3 proves the complete
+layer consumer and records that dependent gap instead of falsely promoting the
+whole-program random owner.
+
 | Pinned C++ owner | Complete semantics | Focused Rust owner | Required evidence |
 | --- | --- | --- | --- |
 | `src/animation/layer_state.cpp` | one insertion-ordered transition-definition owner; dirty and clean finalization visit every transition in order and return the first failure; import requires the current layer importer; destruction deletes transitions in order; the base `makeInstance` creates a system/no-op occurrence | `crates/nuxie-runtime/src/state_machine/layer_state.rs` | ordered import/finalization structural proof; nullable generic-state differential; definition/occurrence identity test |
 | `src/animation/state_instance.cpp` | each occurrence retains exactly one immutable `LayerState` definition identity; the base owns no copied transition/animation payload; virtual destruction and default no-op lifecycle hooks remain explicit | `crates/nuxie-runtime/src/state_machine/state_instance.rs` | two occurrences share the definition but isolate mutable state; definition mutation is observed at the same C++ read sites; clone/remount proof |
 | `src/animation/state_machine_layer.cpp` | one insertion-ordered state-definition owner; dirty finalization visits states in order, resolves the last authored Any/Entry/Exit occurrence, and rejects a layer missing any required system state; clean finalization preserves order; import transfers unique layer ownership to the current state-machine importer; destruction deletes states in order | `crates/nuxie-runtime/src/state_machine/state_machine_layer.rs` | live malformed-layer differentials for missing Any, Entry, and Exit; duplicate-system-state ordering differential; nullable-state index and transition-target differential |
 | `src/animation/system_state_instance.cpp` | construction retains the exact definition; `advance` and `apply` are no-ops; `keepGoing` is always false | `crates/nuxie-runtime/src/state_machine/system_state_instance.rs` | live entry/exit/any/generic no-op differential; unchanged-frame keep-going proof |
-| `src/animation/nested_state_machine.cpp` | owns one optional child `StateMachineInstance` plus an insertion-ordered, non-owning NestedInput list; initializes by `animationId`; shares the parent focus manager before synchronizing the nested focus tree; applies authored bool/number inputs in order but not triggers; forwards advance, hit/pointer/drag, context binding, clear, and `tryChangeState`; index lookup is bounds-checked and name lookup is first-match; dependency release clears the state machine before the child Artboard dies; generated clone is cold and does not copy the live instance or input list | `crates/nuxie-runtime/src/state_machine/nested_state_machine.rs` | live initialization/input-order differential; pointer/hit forwarding differential; context attach/clear proof; cold-clone and teardown-order test |
+| `src/animation/nested_state_machine.cpp` | owns one optional child `StateMachineInstance` plus an insertion-ordered, non-owning NestedInput list; initializes by `animationId`; shares the parent focus manager before synchronizing the nested focus tree; applies authored bool/number inputs in order but not triggers; forwards advance, hit/pointer/drag, context binding, clear, and `tryChangeState`; index lookup is bounds-checked and name lookup is first-match, with an empty name for a missing child input; dependency release clears the state machine before the child Artboard dies; generated object clone is cold and the surrounding Artboard clone later rebuilds the authored input list | `crates/nuxie-runtime/src/state_machine/nested_state_machine.rs` | live initialization/input-order differential; missing-input empty-name proof; pointer/hit forwarding differential; context attach/clear proof; cold-clone and teardown-order test |
+| `src/math/random.cpp` plus `include/rive/math/random.hpp` (supporting row remains pending for FL-D consumer closure) | one process-global platform-C `rand` provider; each layer initialization reseeds it with `1` in deterministic mode and the target standard library's `high_resolution_clock` source otherwise; TESTING replaces draws with one counted FIFO and returns zero when exhausted; native Apple/Unix/Windows clock selection and the pinned browser build's Emscripten 3.1.61 musl algorithm/monotonic nanosecond seed are part of the platform boundary | `crates/nuxie-runtime/src/math/random.rs`, with native and Wasm target adapters in `math/random/native.rs` and `math/random/wasm.rs` | injected later-candidate differential; exact call count; `uint32_t` overflow selection edge; native deterministic reseed test and wall-clock ratchet; fixed pinned-Emscripten sequence; Apple plus `wasm32-unknown-unknown` runtime/browser-smoke builds; production provider/source audit; explicit pending DataConverterFormula consumer |
 
 Supporting oracle files are read as part of this family but are not promoted by
 this lane:
@@ -55,6 +67,19 @@ Every item below is mandatory even though the private C++ class shares
 
 - [x] Construction creates one `any` system occurrence, installs the retained
   layer definition, then changes to the entry state in that order.
+- [x] State-machine construction initializes one layer occurrence and runs
+  that layer's entry callbacks before initializing the next authored layer.
+  Pinned C++'s concrete Entry/Any `makeInstance` paths do not read
+  state-machine inputs, so this ordering is locked by the literal
+  `StateMachineLayerInstance::init` loop, a mutation-sensitive Rust
+  construction observer, and a same-artifact C++/Rust entry-effect
+  differential—not by inventing an input-consuming C++ constructor.
+- [x] Weighted transition selection consumes one value from a real,
+  occurrence-mediated `RandomProvider` seam, preserves authored candidate
+  order, and accumulates both total and evaluated weights with exact C++
+  `uint32_t` wrapping arithmetic. A waiting-for-exit result remains latched
+  even when a later weighted candidate is selected; only `updateState` clears
+  the latch before the complete Any/current search.
 - [x] The empty `AnyState` occurrence is retained and probed before current
   state on every eligible update; Rust must delete its current
   `!transitions.is_empty()` shortcut.
@@ -105,6 +130,39 @@ Every item below is mandatory even though the private C++ class shares
 - [x] Nested input ordering: duplicate names use first-match lookup; index
   lookup preserves authored slots; initialization applies bool/number and
   deliberately skips trigger.
+- [x] Missing/out-of-range nested animationId: retain the authored
+  NestedStateMachine and every ordered NestedInput with a null child
+  occurrence; advance, pointer/hit, context, and state-change forwarding
+  return the pinned empty results, and public clone reconstructs the same
+  cold null occurrence.
+- [x] Weighted random selection: injected nonzero draws can select later
+  candidates, draw consumption is exact, and overflowing weights wrap as
+  C++ `uint32_t` before selection.
+- [x] Browser random boundary: the Rust browser target does not call
+  unavailable libc symbols. Its target adapter reproduces Emscripten 3.1.61's
+  exact 32-bit-unsigned seed subtraction before widening, wrapping LCG, shift,
+  `RAND_MAX`, and monotonic-clock multiply/round/narrow evaluation order;
+  fixed-sequence unit coverage including seed zero and an FP-reassociation
+  discriminator plus the complete browser-smoke compile prevent a native-only
+  proof from being published again.
+- [x] Native clock boundary: ordinary layer construction samples the target
+  standard library's actual high-resolution clock source
+  (`CLOCK_MONOTONIC_RAW` for Apple libc++, `CLOCK_REALTIME` for pinned Rive's
+  default Linux clang+libstdc++ build, `CLOCK_MONOTONIC` for Android/WASI and
+  other Unix libc++ targets, and `QueryPerformanceCounter` on Windows); a
+  structural mutation rejects Rust `SystemTime` or manual Unix-epoch seeding.
+  An operating-system
+  clock failure uses deterministic seed `1` rather than unwinding through an
+  embedder/FFI boundary, and a focused test plus structural mutation lock that
+  safety adaptation.
+- [x] Multi-layer initialization: first-layer entry actions complete before
+  second-layer initialization. A test-only Rust observer proves the rejected
+  construct-all-first loop fails; the same artifact proves the C++/Rust entry
+  effect and first-advance consumer result match. Source proof at
+  `state_machine_instance.cpp:150-175,378-409,1747-1752`,
+  `layer_state.cpp:62-66`, and `state_instance.cpp:4-8` establishes that the
+  pinned Any/Entry constructors retain definitions only and do not themselves
+  consume state-machine inputs.
 - [x] Nested focus and pointer forwarding: shared focus manager is installed
   before tree sync; hit/pointer/drag calls return the child result or the
   pinned empty result.
@@ -135,6 +193,35 @@ The candidate checker must have injected negative controls for:
 7. reordering the current/mix/source/apply/chained-transition advance sequence.
 8. copying a live nested state-machine occurrence into a generated public
    Artboard clone instead of reconstructing it cold.
+9. a constant/random-transition fallback, saturating/widened weight
+   accumulation, or candidate reordering in place of `RandomProvider` plus
+   C++ `uint32_t` arithmetic;
+10. filtering a NestedStateMachine because its child occurrence is null, or
+    making the authored input list conditional on child creation;
+11. constructing all layer occurrences before running any authored layer's
+    entry callbacks.
+12. storing `RandomProvider` on a state-machine occurrence instead of
+    retaining C++'s process-global boundary.
+13. seeding every layer from the clock and omitting C++ deterministic mode.
+14. treating a missing child input name as absent instead of C++'s empty
+    string during first-match nested-input lookup.
+15. letting Rust's retained script-error surface abort construction of later
+    authored layer occurrences.
+16. clearing or overwriting the layer's waiting-for-exit latch inside the
+    weighted transition scan.
+17. calling libc `rand`/`srand` from the shared or Wasm provider instead of
+    isolating those symbols in the native target adapter.
+18. seeding the native provider from Rust `SystemTime` or manual Unix-epoch
+    arithmetic instead of the target C++ standard library's actual
+    `high_resolution_clock` source, including substitutions among Apple's
+    `CLOCK_MONOTONIC_RAW`, pinned Linux's `CLOCK_REALTIME`, the other
+    Unix/WASI `CLOCK_MONOTONIC` source, or Windows' performance-counter API.
+19. introducing `panic!`, `unwrap`, or `expect` into the native random/clock
+    adapter instead of using the non-unwinding deterministic fallback.
+
+The checker evaluates every ratchet against the complete source file, not one
+line at a time. A dedicated multi-line mutation test prevents formatted Rust
+from evading rules whose source/consumer spans several lines.
 
 ## Closed evidence
 
@@ -155,8 +242,8 @@ The candidate checker must have injected negative controls for:
   unique teardown; the checker rejects replacing those values with shared
   `Rc`/`Arc` aliases. The public snapshot clone is separately documented as a
   Rust API adaptation and refreshes layer occurrence identities.
-- Eight checker ratchets have injected negative controls for every forbidden
-  shape listed above. File and member rows remain pending verification until
+- Checker ratchets have injected negative controls for every forbidden shape
+  listed above. File and member rows remain pending verification until
   the immutable whole-family candidate receives independent acceptance.
 
 ## Publication boundary
@@ -170,9 +257,13 @@ floor is green. Publish one immutable SHA for one independent whole-family
 verdict; do not submit a partial layer, nested, reset, or
 transition-interruption slice.
 
-The complete semantic translation is
-`93a902558ad9860e1ecaeeef8e710223841e2dca`. Its once-per-candidate
-non-performance floor is green:
+The first semantic translation was
+`93a902558ad9860e1ecaeeef8e710223841e2dca`; immutable candidate
+`dbc57130dc23e93690dd7a9a9f500c8be699728c` was independently rejected
+despite its green floor because it used a constant transition draw, dropped
+null-child NestedStateMachine owners, and constructed every layer before
+running entry callbacks. Those three rows above are reopened. The replacement
+candidate will supersede the following historical gate receipt:
 
 - runtime 514 / 514;
 - probe-armed workspace and pinned-C++ probes 742 / 742;
@@ -188,5 +279,7 @@ non-performance floor is green:
 
 The review packet is this checklist plus its direct C++ citations, focused
 adversarial tests, structural ratchets, exact pushed candidate SHA, and the
-gate results above. All five file rows and `state_machine.layer` remain
-pending-verification until the independent verdict.
+gate results above. All five layer/state family rows and
+`state_machine.layer` remain pending-verification until the independent
+verdict. The supporting `src/math/random.cpp` row remains pending after that
+verdict until its FL-D formula consumer is routed through the same provider.

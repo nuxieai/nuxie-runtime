@@ -26,6 +26,16 @@ nuxie-schema = { path = "../nuxie-schema" }
 [dev-dependencies]
 png = "0.18"
 
+[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_Foundation", "Win32_System_Performance"] }
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+
 # Opt into the workspace panic-freedom clippy lints (root Cargo.toml).
 [lints]
 workspace = true

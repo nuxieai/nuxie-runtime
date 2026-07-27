@@ -9,7 +9,8 @@ use nuxie_runtime::{
     RuntimeShapePaintPathKind, RuntimeShapePaintState, RuntimeViewModelLinkError, ScriptError,
     ScriptHost, ScriptInstance, ScriptMethod, ScriptValue, StateMachineInputKind,
     StateMachineInstance, TransformProperty, bound_script_view_model_from_owned_context,
-    runtime_data_context_lookup_reports, script_view_model_from_owned,
+    runtime_data_context_lookup_reports, runtime_random_call_count, script_view_model_from_owned,
+    set_runtime_random_test_values,
 };
 use nuxie_schema::definition_by_name;
 use serde::Deserialize;
@@ -15132,6 +15133,122 @@ fn synthetic_state_machine_generic_system_state(file_id: u64) -> Vec<u8> {
         // blend state. Pinned C++ still retains its authored slot and creates
         // the base no-op SystemStateInstance for it.
         push_object_with_properties(bytes, "LayerState", |_| {});
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_weighted_random_transition(
+    file_id: u64,
+    first_weight: u64,
+    second_weight: u64,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_animation_for_single_node(bytes, 1, 40.0, 50.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+            push_uint_property(bytes, "LayerState", "flags", 1);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            push_uint_property(bytes, "StateTransition", "randomWeight", first_weight);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 4);
+            push_uint_property(bytes, "StateTransition", "randomWeight", second_weight);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 2);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_nested_state_machines_without_child_instances(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        push_object_with_properties(bytes, "NestedStateMachine", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "NestedBool", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_uint_property(bytes, "NestedInput", "inputId", 9);
+        });
+        push_object_with_properties(bytes, "NestedTrigger", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_uint_property(bytes, "NestedInput", "inputId", 9);
+        });
+        push_object_with_properties(bytes, "NestedStateMachine", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+            push_uint_property(bytes, "NestedAnimation", "animationId", 7);
+        });
+        push_object_with_properties(bytes, "NestedNumber", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 5);
+            push_uint_property(bytes, "NestedInput", "inputId", 3);
+        });
+        push_object_with_properties(bytes, "NestedTrigger", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 5);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+    })
+}
+
+fn synthetic_state_machine_serial_layer_entry_initialization(file_id: u64) -> Vec<u8> {
+    const STATE_AT_START: u64 = 2 << 1;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineNumber", |bytes| {
+            push_string_property(bytes, "StateMachineNumber", "name", "level");
+        });
+
+        push_object_with_properties(bytes, "StateMachineLayer", |bytes| {
+            push_string_property(bytes, "StateMachineLayer", "name", "producer");
+        });
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "ListenerNumberChange", |bytes| {
+            push_uint_property(bytes, "ListenerNumberChange", "inputId", 0);
+            push_uint_property(bytes, "ListenerNumberChange", "flags", STATE_AT_START);
+            push_f32_property(bytes, "ListenerNumberChange", "value", 7.0);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+
+        push_object_with_properties(bytes, "StateMachineLayer", |bytes| {
+            push_string_property(bytes, "StateMachineLayer", "name", "consumer");
+        });
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_synthetic_transition_condition(bytes, SyntheticInputTransitionKind::Number, 0);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
         push_object_with_properties(bytes, "ExitState", |_| {});
     })
 }
@@ -77732,6 +77849,250 @@ fn state_machine_generic_layer_state_occurrence_matches_cpp_probe() {
 }
 
 #[test]
+fn state_machine_weighted_random_selection_and_u32_overflow_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (label, bytes, draw, expected_animation, expected_calls) in [
+        (
+            "synthetic/runtime_state_machine_weighted_random_zero_draw_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(8278, 1, 3),
+            0.0_f32,
+            1_usize,
+            1_usize,
+        ),
+        (
+            "synthetic/runtime_state_machine_weighted_random_strict_boundary_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(8279, 1, 3),
+            0.25_f32,
+            2_usize,
+            1_usize,
+        ),
+        (
+            "synthetic/runtime_state_machine_weighted_random_later_candidate_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(8280, 1, 3),
+            0.75_f32,
+            2_usize,
+            1_usize,
+        ),
+        (
+            "synthetic/runtime_state_machine_weighted_random_one_draw_selects_none_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(8281, 1, 3),
+            1.0_f32,
+            0_usize,
+            1_usize,
+        ),
+        (
+            "synthetic/runtime_state_machine_weighted_random_zero_total_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(8282, 0, 0),
+            0.75_f32,
+            0_usize,
+            0_usize,
+        ),
+        (
+            "synthetic/runtime_state_machine_weighted_random_u32_wrap_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(
+                8283,
+                u64::from(u32::MAX),
+                u64::from(u32::MAX),
+            ),
+            0.75_f32,
+            1_usize,
+            1_usize,
+        ),
+    ] {
+        let args = counted_runtime_random_probe_args(
+            &[draw],
+            &[
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+            ],
+        );
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .expect("Rust state-machine instance");
+        let _random_values = set_runtime_random_test_values(&[draw]);
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+
+        let cpp_state_machine = cpp.artboards[0]
+            .runtime_state_machine_advances
+            .first()
+            .expect("C++ state-machine report");
+        compare_state_machine_advance(cpp_state_machine, &state_machine, advanced, label);
+        assert_eq!(
+            cpp_state_machine.random_total_calls, expected_calls,
+            "{label} C++ random draw count"
+        );
+        assert_eq!(
+            runtime_random_call_count(),
+            cpp_state_machine.random_total_calls,
+            "{label} Rust random-provider call count"
+        );
+        assert_eq!(
+            state_machine
+                .current_animation(0)
+                .map(|animation| animation.animation_index()),
+            Some(expected_animation),
+            "{label} selected animation"
+        );
+    }
+}
+
+#[test]
+fn nested_state_machine_missing_and_out_of_range_children_match_cpp_empty_owner_contract() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_nested_state_machine_empty_owner_cpp.riv";
+    let bytes = synthetic_nested_state_machines_without_child_instances(8281);
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &[]);
+    let nested = &cpp.artboards[0].nested_state_machines;
+    let runtime = read_runtime_file(&bytes).expect("Rust imports the same nested-owner bytes");
+    let graph = GraphFile::from_runtime_file(&runtime).expect("Rust graphs the nested-owner bytes");
+    let rust = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        graph.artboards.first().expect("parent artboard"),
+        &graph.artboards,
+    )
+    .expect("Rust mounts the child artboard from the same bytes");
+    let rust_nested = rust.runtime_nested_state_machine_reports();
+    let cloned_nested = rust.clone().runtime_nested_state_machine_reports();
+    assert_eq!(nested.len(), 2);
+    assert_eq!(
+        rust_nested, cloned_nested,
+        "cold clone preserves owner order"
+    );
+    assert_eq!(rust_nested.len(), nested.len());
+
+    for (owner, rust_owner, expected_local, expected_animation, expected_inputs) in [
+        (
+            &nested[0],
+            &rust_nested[0],
+            2_usize,
+            u32::MAX,
+            vec![9_u32, 9_u32],
+        ),
+        (
+            &nested[1],
+            &rust_nested[1],
+            5_usize,
+            7_u32,
+            vec![3_u32, u32::MAX],
+        ),
+    ] {
+        assert_eq!(owner.local_id, expected_local);
+        assert_eq!(owner.animation_id, expected_animation);
+        assert!(!owner.has_instance);
+        assert_eq!(owner.input_count, expected_inputs.len());
+        assert_eq!(owner.inputs.len(), expected_inputs.len());
+        for (index, expected_input) in expected_inputs.iter().copied().enumerate() {
+            assert_eq!(owner.inputs[index].index, index);
+            assert_eq!(owner.inputs[index].input_id, Some(expected_input));
+            assert_eq!(owner.inputs[index].name.as_deref(), Some(""));
+        }
+        assert_eq!(owner.empty_advance, Some(false));
+        assert_eq!(owner.empty_hit_test, Some(false));
+        assert_eq!(owner.empty_pointer_down, Some(true));
+        assert_eq!(owner.empty_pointer_move, Some(true));
+        assert_eq!(owner.empty_pointer_up, Some(true));
+        assert_eq!(owner.empty_pointer_exit, Some(true));
+        assert_eq!(owner.empty_drag_start, Some(true));
+        assert_eq!(owner.empty_drag_end, Some(true));
+        assert_eq!(owner.empty_try_change_state, Some(false));
+        assert_eq!(owner.empty_context_forwarding_completed, Some(true));
+
+        assert_eq!(rust_owner.local_id, owner.local_id);
+        assert_eq!(rust_owner.animation_id, owner.animation_id as usize);
+        assert_eq!(rust_owner.has_instance, owner.has_instance);
+        assert_eq!(
+            rust_owner.input_ids,
+            expected_inputs
+                .into_iter()
+                .map(|input| input as usize)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            rust_owner.input_names,
+            vec![String::new(); owner.input_count]
+        );
+        assert_eq!(rust_owner.empty_advance, owner.empty_advance.unwrap());
+        assert_eq!(rust_owner.empty_hit_test, owner.empty_hit_test.unwrap());
+        assert_eq!(
+            rust_owner.empty_pointer_down,
+            owner.empty_pointer_down.unwrap()
+        );
+        assert_eq!(
+            rust_owner.empty_pointer_move,
+            owner.empty_pointer_move.unwrap()
+        );
+        assert_eq!(rust_owner.empty_pointer_up, owner.empty_pointer_up.unwrap());
+        assert_eq!(
+            rust_owner.empty_pointer_exit,
+            owner.empty_pointer_exit.unwrap()
+        );
+        assert_eq!(rust_owner.empty_drag_start, owner.empty_drag_start.unwrap());
+        assert_eq!(rust_owner.empty_drag_end, owner.empty_drag_end.unwrap());
+        assert_eq!(
+            rust_owner.empty_try_change_state,
+            owner.empty_try_change_state.unwrap()
+        );
+        assert_eq!(
+            rust_owner.empty_context_forwarding_completed,
+            owner.empty_context_forwarding_completed.unwrap()
+        );
+    }
+}
+
+#[test]
+fn state_machine_layer_entry_effects_match_cpp_after_serial_initialization() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_serial_layer_entry_cpp.riv";
+    let bytes = synthetic_state_machine_serial_layer_entry_initialization(8282);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+
+    let cpp_state_machine = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("C++ state-machine report");
+    compare_state_machine_advance(cpp_state_machine, &state_machine, advanced, label);
+    assert_eq!(
+        state_machine
+            .input(0)
+            .and_then(|input| input.number_value()),
+        Some(7.0),
+        "the first authored layer's entry action runs during initialization"
+    );
+    assert_eq!(
+        state_machine
+            .current_animation(0)
+            .map(|animation| animation.animation_index()),
+        Some(0),
+        "the second layer consumes the initialized input on the first advance"
+    );
+}
+
+#[test]
 fn state_machine_transition_interruption_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -79130,6 +79491,36 @@ struct CppArtboard {
     runtime_state_machine_advances: Vec<CppRuntimeStateMachineAdvance>,
     #[serde(default, rename = "dataBinds")]
     data_binds: Vec<CppArtboardDataBind>,
+    #[serde(default, rename = "nestedStateMachines")]
+    nested_state_machines: Vec<CppNestedStateMachine>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppNestedStateMachine {
+    local_id: usize,
+    animation_id: u32,
+    has_instance: bool,
+    input_count: usize,
+    inputs: Vec<CppNestedStateMachineInput>,
+    empty_advance: Option<bool>,
+    empty_hit_test: Option<bool>,
+    empty_pointer_down: Option<bool>,
+    empty_pointer_move: Option<bool>,
+    empty_pointer_up: Option<bool>,
+    empty_pointer_exit: Option<bool>,
+    empty_drag_start: Option<bool>,
+    empty_drag_end: Option<bool>,
+    empty_try_change_state: Option<bool>,
+    empty_context_forwarding_completed: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppNestedStateMachineInput {
+    index: usize,
+    input_id: Option<u32>,
+    name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

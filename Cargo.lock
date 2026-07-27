@@ -1096,6 +1096,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "harfrust",
+ "js-sys",
+ "libc",
  "nuxie-binary",
  "nuxie-graph",
  "nuxie-image-codec",
@@ -1108,6 +1110,8 @@ dependencies = [
  "taffy",
  "unicode-properties",
  "unicode-script",
+ "wasm-bindgen",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

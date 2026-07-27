@@ -78,6 +78,8 @@ size_t randomProviderTotalCalls();
 #include "rive/animation/linear_animation_instance.hpp"
 #include "rive/animation/listener_action.hpp"
 #include "rive/animation/listener_fire_event.hpp"
+#include "rive/animation/nested_input.hpp"
+#include "rive/animation/nested_state_machine.hpp"
 #include "rive/animation/listener_types/listener_input_type.hpp"
 #include "rive/animation/listener_types/listener_input_type_viewmodel.hpp"
 #include "rive/animation/scripted_listener_action.hpp"
@@ -972,6 +974,80 @@ void write_runtime_update_component(std::ostream& out,
     else
     {
         out << "null";
+    }
+    out << '}';
+}
+
+void write_nested_state_machine(std::ostream& out,
+                                size_t localId,
+                                rive::NestedStateMachine* nested)
+{
+    const bool hasInstance = nested->stateMachineInstance() != nullptr;
+    out << "{\"localId\":" << localId;
+    out << ",\"animationId\":" << nested->animationId();
+    out << ",\"hasInstance\":" << (hasInstance ? "true" : "false");
+    out << ",\"inputCount\":" << nested->inputCount();
+    out << ",\"inputs\":[";
+    for (size_t i = 0; i < nested->inputCount(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        auto input = nested->input(i);
+        out << "{\"index\":" << i;
+        out << ",\"inputId\":";
+        if (input == nullptr)
+        {
+            out << "null";
+        }
+        else
+        {
+            out << input->inputId();
+        }
+        out << ",\"name\":";
+        if (input == nullptr)
+        {
+            out << "null";
+        }
+        else
+        {
+            write_json_string(out, input->name());
+        }
+        out << '}';
+    }
+    out << ']';
+    if (!hasInstance)
+    {
+        const rive::Vec2D point(0.0f, 0.0f);
+        out << ",\"emptyAdvance\":"
+            << (nested->advance(0.0f, true) ? "true" : "false");
+        out << ",\"emptyHitTest\":"
+            << (nested->hitTest(point) ? "true" : "false");
+        out << ",\"emptyPointerDown\":"
+            << (nested->pointerDown(point) == rive::HitResult::none ? "true"
+                                                                    : "false");
+        out << ",\"emptyPointerMove\":"
+            << (nested->pointerMove(point) == rive::HitResult::none ? "true"
+                                                                    : "false");
+        out << ",\"emptyPointerUp\":"
+            << (nested->pointerUp(point) == rive::HitResult::none ? "true"
+                                                                  : "false");
+        out << ",\"emptyPointerExit\":"
+            << (nested->pointerExit(point) == rive::HitResult::none ? "true"
+                                                                    : "false");
+        out << ",\"emptyDragStart\":"
+            << (nested->dragStart(point) == rive::HitResult::none ? "true"
+                                                                  : "false");
+        out << ",\"emptyDragEnd\":"
+            << (nested->dragEnd(point) == rive::HitResult::none ? "true"
+                                                                : "false");
+        out << ",\"emptyTryChangeState\":"
+            << (nested->tryChangeState() ? "true" : "false");
+        nested->bindViewModelInstance(nullptr);
+        nested->dataContext(nullptr);
+        nested->clearDataContext();
+        out << ",\"emptyContextForwardingCompleted\":true";
     }
     out << '}';
 }
@@ -11591,6 +11667,25 @@ void write_artboard(std::ostream& out,
         }
         first = false;
         write_component(out, localIds, i, object->as<rive::Component>());
+    }
+    out << ']';
+
+    out << ",\"nestedStateMachines\":[";
+    first = true;
+    for (size_t i = 0; i < objects.size(); ++i)
+    {
+        rive::Core* object = objects[i];
+        if (object == nullptr || !object->is<rive::NestedStateMachine>())
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        write_nested_state_machine(
+            out, i, object->as<rive::NestedStateMachine>());
     }
     out << ']';
 

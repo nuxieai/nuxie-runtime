@@ -6,6 +6,7 @@ mod constraints;
 mod data_bind_graph;
 mod draw;
 mod focus;
+mod math;
 mod objects;
 mod parent_traversal;
 mod project_data_converter;
@@ -53,6 +54,10 @@ pub use focus::{
     FocusBounds, FocusDirection, FocusEdgeBehavior, FocusEvent, FocusEventKind, FocusManager,
     FocusNode, FocusNodeId, FocusPoint,
 };
+pub use math::random::{
+    RuntimeRandomTestValuesGuard, runtime_random_call_count, set_runtime_deterministic_mode,
+    set_runtime_random_test_values,
+};
 pub use objects::InstanceSlot;
 pub use project_data_converter::{
     ProjectDataConverterCatalog, ProjectDataConverterCompileError, ProjectDataConverterContext,
@@ -78,10 +83,10 @@ pub use scripting::{
     script_view_models,
 };
 pub use state_machine::{
-    RuntimeLayerState, RuntimeStateMachine, RuntimeStateMachineInput, RuntimeStateMachineLayer,
-    ScriptListenerInvocation, ScriptPointerEventKind, StateMachineEventContext,
-    StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
-    StateMachineReportedEvent,
+    RuntimeLayerState, RuntimeNestedStateMachineReport, RuntimeStateMachine,
+    RuntimeStateMachineInput, RuntimeStateMachineLayer, ScriptListenerInvocation,
+    ScriptPointerEventKind, StateMachineEventContext, StateMachineInputInstance,
+    StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
 };
 pub(crate) use state_machine::{
     RuntimeTransitionInterpolator, StateMachineBindableArtboardInstance,

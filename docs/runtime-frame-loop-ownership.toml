@@ -19,6 +19,7 @@ cpp_files = [
   "src/animation/state_machine_layer.cpp",
   "src/animation/system_state_instance.cpp",
   "src/animation/nested_state_machine.cpp",
+  "src/math/random.cpp",
 ]
 required_adversarial = [
   "Missing required system state",
@@ -31,6 +32,9 @@ required_adversarial = [
   "Reset aliases",
   "Zero-time and same-frame chaining",
   "Nested input ordering",
+  "Missing/out-of-range nested animationId",
+  "Weighted random selection",
+  "Multi-layer initialization",
   "Nested focus and pointer forwarding",
   "Nested context lifecycle",
   "Clone/remount isolation",
@@ -130,10 +134,10 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 64
+faithful = 63
 adapted = 0
 divergent-by-decision = 0
-pending = 277
+pending = 278
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
@@ -2024,9 +2028,13 @@ status = "faithful"
 upstream = "src/math/random.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/components.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/math/random.rs",
+  "crates/nuxie-runtime/src/math/random/native.rs",
+  "crates/nuxie-runtime/src/math/random/wasm.rs",
+]
 dynamically_reached = false
-status = "faithful"
+status = "pending"
 
 [[file]]
 upstream = "src/math/raw_path.cpp"

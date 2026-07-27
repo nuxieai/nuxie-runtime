@@ -1,4 +1,27 @@
 use super::*;
+use crate::math::random::RuntimeRandomProvider;
+
+fn retain_random_waiting_for_exit(waiting_for_exit: &mut bool, allowance: TransitionAllowance) {
+    if allowance == TransitionAllowance::WaitingForExit {
+        *waiting_for_exit = true;
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static LAYER_CONSTRUCTION_NUMBER_SNAPSHOTS: std::cell::RefCell<Vec<Vec<Option<f32>>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(super) fn reset_layer_construction_number_snapshots() {
+    LAYER_CONSTRUCTION_NUMBER_SNAPSHOTS.with(|snapshots| snapshots.borrow_mut().clear());
+}
+
+#[cfg(test)]
+pub(super) fn layer_construction_number_snapshots() -> Vec<Vec<Option<f32>>> {
+    LAYER_CONSTRUCTION_NUMBER_SNAPSHOTS.with(|snapshots| snapshots.borrow().clone())
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct StateMachineLayerInstance {
@@ -18,6 +41,11 @@ pub(crate) struct StateMachineLayerInstance {
     transition_completed: bool,
     transition_animation_reset: Option<AnimationReset>,
     waiting_for_exit: bool,
+    /// C++ temporarily writes `evaluatedRandomWeight` onto shared
+    /// StateTransition definitions. Rust retains the same authored-order,
+    /// `uint32_t` scratch on the layer occurrence so concurrent instances do
+    /// not race through an immutable definition (FLR-17).
+    evaluated_random_weights: Vec<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +62,16 @@ impl StateMachineLayerInstance {
         bindable_numbers: &[StateMachineBindableNumberInstance],
         key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
     ) -> Self {
+        RuntimeRandomProvider::initialize_layer();
+        #[cfg(test)]
+        LAYER_CONSTRUCTION_NUMBER_SNAPSHOTS.with(|snapshots| {
+            snapshots.borrow_mut().push(
+                inputs
+                    .iter()
+                    .map(StateMachineInputInstance::number_value)
+                    .collect(),
+            );
+        });
         let mut any_state = layer.any_state_index.and_then(|state_index| {
             RuntimeStateInstance::make(layer, state_index, artboard, inputs, bindable_numbers)
         });
@@ -60,6 +98,7 @@ impl StateMachineLayerInstance {
             transition_completed: false,
             transition_animation_reset: None,
             waiting_for_exit: false,
+            evaluated_random_weights: Vec::new(),
         }
     }
 
@@ -426,10 +465,10 @@ impl StateMachineLayerInstance {
         inputs: &[StateMachineInputInstance],
         executor: &dyn RuntimeScheduledListenerActionExecutor,
     ) -> Option<(usize, usize)> {
-        let mut weighted_candidates = Vec::new();
-        let mut total_weight = 0_u64;
-        let mut waiting_for_exit = false;
-
+        self.evaluated_random_weights
+            .resize(state.transitions.len(), 0);
+        self.evaluated_random_weights.fill(0);
+        let mut total_weight = 0_u32;
         for (transition_index, transition) in state.transitions.iter().enumerate() {
             if !transition.is_simple_supported() {
                 continue;
@@ -458,40 +497,42 @@ impl StateMachineLayerInstance {
             match allowance {
                 TransitionAllowance::No => {}
                 TransitionAllowance::WaitingForExit => {
-                    waiting_for_exit = true;
+                    // `updateState` clears this latch once before probing
+                    // AnyState and then the current state. Each scan may set
+                    // it, but a later scan that finds no waiter must not erase
+                    // the earlier result (`state_machine_instance.cpp:
+                    // 282-296,412-468`).
+                    retain_random_waiting_for_exit(&mut self.waiting_for_exit, allowance);
                 }
                 TransitionAllowance::Yes => {
-                    total_weight = total_weight.saturating_add(transition.random_weight);
-                    weighted_candidates.push((
-                        transition_index,
-                        state_to_index,
-                        transition.random_weight,
-                    ));
+                    // Pinned C++ accumulates into `uint32_t`, including
+                    // ordinary unsigned wrap (`state_machine_instance.cpp:
+                    // 412-448`). Do not widen or saturate this sum.
+                    total_weight = total_weight.wrapping_add(transition.random_weight);
+                    self.evaluated_random_weights[transition_index] = transition.random_weight;
                 }
             }
         }
 
         if total_weight == 0 {
-            self.waiting_for_exit = waiting_for_exit;
             return None;
         }
 
-        let random_weight = Self::random_transition_value() * total_weight as f64;
+        let random_weight =
+            f64::from(RuntimeRandomProvider::generate_random_float()) * f64::from(total_weight);
         let mut current_weight = 0.0_f64;
-        for (transition_index, state_to_index, transition_weight) in weighted_candidates {
-            current_weight += transition_weight as f64;
-            if current_weight > random_weight {
-                self.waiting_for_exit = false;
-                return Some((transition_index, state_to_index));
+        for (transition_index, transition) in state.transitions.iter().enumerate() {
+            let transition_weight = self.evaluated_random_weights[transition_index];
+            let next_weight = current_weight + f64::from(transition_weight);
+            if next_weight > random_weight {
+                return transition
+                    .state_to_index
+                    .map(|state_to_index| (transition_index, state_to_index));
             }
+            current_weight = next_weight;
         }
 
-        self.waiting_for_exit = waiting_for_exit;
         None
-    }
-
-    fn random_transition_value() -> f64 {
-        0.0
     }
 
     fn current_transition_animation<'a>(
@@ -905,5 +946,18 @@ impl StateMachineLayerInstance {
         if let Some(state_from) = self.state_from.as_mut() {
             state_from.for_each_animation_instance_mut(&mut callback);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TransitionAllowance, retain_random_waiting_for_exit};
+
+    #[test]
+    fn selected_random_candidate_cannot_clear_an_earlier_exit_wait() {
+        let mut waiting_for_exit = false;
+        retain_random_waiting_for_exit(&mut waiting_for_exit, TransitionAllowance::WaitingForExit);
+        retain_random_waiting_for_exit(&mut waiting_for_exit, TransitionAllowance::Yes);
+        assert!(waiting_for_exit);
     }
 }

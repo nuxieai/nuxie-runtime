@@ -245,6 +245,12 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "active owner-family checklist omits C++ file", result.stderr
         )
 
+    def test_owner_family_missing_cpp_source_fails(self) -> None:
+        (self.upstream / "src/animation/linear_animation.cpp").unlink()
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cites missing C++ file", result.stderr)
+
     def test_owner_family_checklist_missing_adversarial_row_fails(self) -> None:
         checklist = self.repo / "docs/owner-family-closure.md"
         checklist.write_text("`src/animation/linear_animation.cpp`\n")
@@ -642,7 +648,13 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         cases = [
             (
                 "state_machine_per_advance_collection_rebuild",
-                r"let\s+(?:mut\s+)?(?:inputs|layers|transitions|conditions|listeners|actions)\s*=\s*[^;]*\.collect",
+                (
+                    r"fn\s+advance[^\{]*\{"
+                    r"(?:(?!\n\s*(?:pub(?:\([^)]*\))?\s+)?fn\s)[\s\S])"
+                    r"{0,8000}?let\s+(?:mut\s+)?"
+                    r"(?:inputs|layers|transitions|conditions|listeners|actions)"
+                    r"\s*=\s*[^;]*\.collect"
+                ),
                 "fn advance() { let transitions = source.iter().collect(); }\n",
                 0,
             ),
@@ -752,9 +764,13 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "state_machine_nested_owner_scan",
-                r"nested_artboards[^;]{0,400}find_map[^;]{0,400}RuntimeNestedAnimationInstance::StateMachine",
                 (
-                    "fn find() { nested_artboards.iter().find_map(|nested| "
+                    r"fn\s+from_imported[\s\S]{0,3000}"
+                    r"nested_artboards[^;]{0,400}find_map[^;]{0,400}"
+                    r"RuntimeNestedAnimationInstance::StateMachine"
+                ),
+                (
+                    "fn from_imported() { nested_artboards.iter().find_map(|nested| "
                     "matches!(nested, RuntimeNestedAnimationInstance::StateMachine(_)).then_some(nested)); }\n"
                 ),
             ),
@@ -780,6 +796,162 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 (
                     "impl Clone for RuntimeNestedArtboardInstance { fn clone(&self) -> Self { "
                     "Self { animations: self.animations.clone() } } }\n"
+                ),
+            ),
+            (
+                "state_machine_transition_random_constant",
+                (
+                    r"(?:(?:random_weight|random_value)\s*=\s*"
+                    r"0(?:\.0)?(?:_f(?:32|64))?"
+                    r"|fn\s+(?:random_transition_value|random_value)"
+                    r"\s*\([^)]*\)\s*->\s*f(?:32|64)\s*"
+                    r"\{\s*0(?:\.0)?(?:_f(?:32|64))?\s*\})"
+                ),
+                "fn random_transition_value() -> f64 { 0.0 }\n",
+            ),
+            (
+                "state_machine_transition_weight_widened_or_saturating",
+                r"(?:total_weight|evaluated_random_weight)[^\n]{0,120}(?:u64|saturating_add)",
+                "fn pick() { let total_weight: u64 = 0; }\n",
+            ),
+            (
+                "state_machine_transition_candidate_reorder",
+                (
+                    r"weighted_candidates\."
+                    r"(?:sort|sort_by|sort_by_key|sort_unstable|sort_unstable_by|sort_unstable_by_key)"
+                ),
+                "fn pick(weighted_candidates: &mut Vec<u32>) { weighted_candidates.sort(); }\n",
+            ),
+            (
+                "state_machine_occurrence_owned_random_provider",
+                r"random_provider\s*:\s*RuntimeRandomProvider",
+                "struct StateMachineInstance { random_provider: RuntimeRandomProvider }\n",
+            ),
+            (
+                "state_machine_random_time_only_seed",
+                (
+                    r"fn\s+initialize_layer\(\)"
+                    r"[\s\S]{0,240}let\s+seed\s*=\s*SystemTime"
+                ),
+                (
+                    "fn initialize_layer() { "
+                    "let seed = SystemTime::now().elapsed().unwrap().as_nanos(); }\n"
+                ),
+            ),
+            (
+                "state_machine_random_unconditional_libc",
+                r"libc::(?:rand|srand|RAND_MAX)",
+                "fn draw() -> f32 { unsafe { libc::rand() as f32 } }\n",
+            ),
+            (
+                "state_machine_random_native_rust_wall_clock_api",
+                r"(?:SystemTime|UNIX_EPOCH)",
+                "fn seed() { let _ = SystemTime::now(); }\n",
+            ),
+            (
+                "state_machine_random_linux_wrong_high_resolution_clock",
+                (
+                    r"LINUX_HIGH_RESOLUTION_CLOCK_ID"
+                    r"[^\n]{0,120}=\s*libc::CLOCK_MONOTONIC"
+                ),
+                (
+                    "const LINUX_HIGH_RESOLUTION_CLOCK_ID: libc::clockid_t "
+                    "= libc::CLOCK_MONOTONIC;\n"
+                ),
+            ),
+            (
+                "state_machine_random_apple_wrong_high_resolution_clock",
+                (
+                    r"APPLE_HIGH_RESOLUTION_CLOCK_ID"
+                    r"[^\n]{0,120}=\s*libc::"
+                    r"(?:CLOCK_REALTIME|CLOCK_MONOTONIC)(?:[^_]|$)"
+                ),
+                (
+                    "const APPLE_HIGH_RESOLUTION_CLOCK_ID: libc::clockid_t "
+                    "= libc::CLOCK_REALTIME;\n"
+                ),
+            ),
+            (
+                "state_machine_random_other_unix_wrong_high_resolution_clock",
+                (
+                    r"OTHER_UNIX_HIGH_RESOLUTION_CLOCK_ID"
+                    r"[^\n]{0,120}=\s*libc::"
+                    r"(?:CLOCK_REALTIME|CLOCK_MONOTONIC_RAW)"
+                ),
+                (
+                    "const OTHER_UNIX_HIGH_RESOLUTION_CLOCK_ID: libc::clockid_t "
+                    "= libc::CLOCK_MONOTONIC_RAW;\n"
+                ),
+            ),
+            (
+                "state_machine_random_windows_wrong_high_resolution_clock",
+                (
+                    r"(?:GetSystemTime|GetSystemTimePreciseAsFileTime"
+                    r"|GetTickCount|timeGetTime)"
+                ),
+                "fn seed() { let _ = GetTickCount(); }\n",
+            ),
+            (
+                "state_machine_random_native_panic",
+                r"(?:panic!|unwrap\(|expect\()",
+                "fn seed() { panic!(\"clock failed\"); }\n",
+            ),
+            (
+                "nested_state_machine_optional_owner_construction",
+                (
+                    r"(?:fn\s+(?:nested_state_machine_instance|from_imported)"
+                    r"[\s\S]{0,360}->\s*Option<(?:RuntimeNestedAnimationInstance|Self)>"
+                    r"|let\s+Some\([^)]*\)\s*=\s*nested_state_machine_instance)"
+                ),
+                (
+                    "fn nested_state_machine_instance() "
+                    "-> Option<RuntimeNestedAnimationInstance> { None }\n"
+                ),
+            ),
+            (
+                "nested_state_machine_missing_input_name_drop",
+                (
+                    r"fn\s+input_id_named[\s\S]{0,700}"
+                    r"(?:\.and_then\(\|input\|\s*input\.name\(\)\)"
+                    r"[\s\S]{0,80}==\s*Some\(name\)"
+                    r"|input\.name\.as_deref\(\)\s*==\s*Some\(name\))"
+                ),
+                (
+                    "fn input_id_named(name: &str) { "
+                    "input.name.as_deref() == Some(name); }\n"
+                ),
+            ),
+            (
+                "state_machine_all_layers_before_entry_actions",
+                (
+                    r"(?:let\s+layers\s*=\s*state_machine[\s\S]{0,700}\.collect\(\)"
+                    r"|initialize_layer_entry_actions)"
+                ),
+                "fn initialize_layer_entry_actions() {}\n",
+            ),
+            (
+                "state_machine_layer_init_error_drops_later_layers",
+                (
+                    r"fn\s+initialize_layers_in_authored_order"
+                    r"[\s\S]{0,3200}(?:if\s+let\s+Err\([^)]*\)"
+                    r"[\s\S]{0,120}\bbreak\s*;"
+                    r"|if\s+self\.script_error\.is_some\(\)\s*"
+                    r"\{\s*(?:continue|break)\s*;)"
+                ),
+                (
+                    "fn initialize_layers_in_authored_order() { "
+                    "if self.script_error.is_some() { continue; } }\n"
+                ),
+            ),
+            (
+                "state_machine_random_waiting_for_exit_overwrite",
+                (
+                    r"fn\s+find_random_transition[\s\S]{0,3600}"
+                    r"self\.waiting_for_exit\s*=\s*(?:false|waiting_for_exit)"
+                ),
+                (
+                    "fn find_random_transition() { "
+                    "self.waiting_for_exit = waiting_for_exit; }\n"
                 ),
             ),
         ]
@@ -810,6 +982,44 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     f"ratchet {ratchet_id} increased to 1 > 0",
                     result.stderr,
                 )
+
+    def test_ratchets_scan_complete_files_not_individual_lines(self) -> None:
+        gaps = self.gaps.read_text()
+        self.gaps.write_text(
+            gaps.replace(
+                "ratchet = []",
+                textwrap.dedent(
+                    r"""
+                    [[ratchet]]
+                    id = "multiline_regression"
+                    globs = ["crates/runtime/src/state_machine/instance.rs"]
+                    pattern = "fn\\s+advance[\\s\\S]{0,200}\\.collect"
+                    max_occurrences = 0
+                    """
+                ).strip(),
+            )
+        )
+        source = self.repo / "crates/runtime/src/state_machine/instance.rs"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text(
+            textwrap.dedent(
+                """
+                fn advance() {
+                    let transitions = source
+                        .iter()
+                        .collect::<Vec<_>>();
+                }
+                """
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "ratchet multiline_regression increased to 1 > 0",
+            result.stderr,
+        )
 
     def test_mechanism_input_hash_is_fail_closed(self) -> None:
         fixture = self.upstream / "tests/assets/scroll.riv"

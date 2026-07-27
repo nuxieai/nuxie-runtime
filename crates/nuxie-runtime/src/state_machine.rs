@@ -72,6 +72,7 @@ pub use layer_state::RuntimeLayerState;
 pub use listener_invocation::{ScriptListenerInvocation, ScriptPointerEventKind};
 pub(crate) use listener_types::RuntimeListenerType;
 pub(crate) use nested_state_machine::RuntimeNestedStateMachineInstance;
+pub use nested_state_machine::RuntimeNestedStateMachineReport;
 use scripted_transition_condition::RuntimeScriptedTransitionCondition;
 use state_instance::RuntimeStateInstance;
 use state_machine_input::runtime_state_machine_input;
@@ -388,7 +389,8 @@ pub(crate) fn build_state_machines<'a>(
                                                 random_weight: transition
                                                     .object
                                                     .uint_property("randomWeight")
-                                                    .unwrap_or(1),
+                                                    .unwrap_or(1)
+                                                    as u32,
                                                 conditions,
                                                 direct_input_conditions_only,
                                                 fire_actions: transition

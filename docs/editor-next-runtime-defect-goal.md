@@ -197,10 +197,17 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
 - Mapped runtime owner family: `LOC-001`, with `LOC-002` and `LOC-005` as
   duplicate acceptance cases under FL-D `viewmodel.owner`. The Scene-only
   candidate is quarantined diagnostic evidence: it proved retained identity
-  and generation matching are necessary, but in-place ViewModel schema
-  migration is an FL-D requirement while live `RuntimeFile` asset-catalog
-  extension is a separate lower-runtime dependency still pending exact
-  ownership mapping. No repair landed and no writer is active.
+  and generation matching are necessary, while in-place ViewModel schema
+  migration is an FL-D requirement. Exact pinned-C++ source disproves the
+  candidate's mutable `RuntimeFile` catalog: imported assets stay fixed, and
+  an image-valued ViewModel property owns the live image used as the binding
+  fallback. The original LOC-001 fixture already authors both images, so the
+  reported family has no second dependency. A distinct dynamic-image
+  source-level risk is retained in the deferred post-port list for one
+  identical C++/Rust/Editor stimulus, or an evidence-backed
+  Editor-not-applicable disposition, after FL-D `viewmodel.owner` plus
+  `databind.context`; it is not part of LOC-001 or a confirmed defect before
+  that differential. No repair landed and no writer is active.
 - Deferred post-port verification: `LOC-007` path dirt, `LOC-008` intrinsic
   text measurement, and ordinary layout/TextStyle execution. `LOC-008` is
   additionally `intake-needs-evidence` because its changed source record lacks
@@ -457,18 +464,25 @@ result after the relevant state-machine port wave lands.
 The quarantined Scene-only candidate proves that each authored
 `ViewModelInstanceId` needs one retained handle paired with the exact
 materialization generation, but it is not a faithful repair. A newly authored
-image is absent from the immutable `RuntimeFile` retained by live artboards,
-and `RuntimeOwnedViewModelInstance` has no atomic in-place schema migration
-that preserves compatible cells, child/list edges, aliases, and dependents.
-That schema dependency maps to FL-D `viewmodel.owner`. Retained
-`RuntimeFile` asset-catalog extension is not covered by that member and remains
-pending exact ownership mapping. The candidate's fallback remounted
-owner-sharing artboards/state machines and rejected retained schema changes
-that previously succeeded. Preserve its diagnostic identities and the
-unchanged `LOC-001`, `LOC-002`, and `LOC-005` acceptances; assign no writer.
-`LOC-002/005` rerun after FL-D `viewmodel.owner`, while complete LOC-001
-verification additionally waits for the separately mapped asset-catalog
-landing.
+image is not made visible by extending a live `RuntimeFile`: exact pinned C++
+keeps imported file assets fixed, gives every `ViewModelInstanceAssetImage` a
+private retained `ImageAsset`, and makes
+`DataBindContextValueAssetImage` fall back to that property-owned image.
+`RuntimeOwnedViewModelInstance` still lacks atomic in-place schema migration
+that preserves compatible cells, child/list edges, aliases, and dependents;
+that reported-family dependency maps to FL-D `viewmodel.owner`. The original
+LOC-001 fixture authors both image assets before initial materialization, so
+it does not depend on the separately observed live-image lifecycle. Preserve
+that observation in the canonical deferred post-port list and run one
+identical C++/Rust/Editor dynamic-image stimulus, or record an evidence-backed
+Editor-not-applicable disposition, after FL-D `viewmodel.owner` plus
+`databind.context` before classifying it as resolved or a confirmed defect. It
+is not part of LOC-001 and authorizes no writer. The candidate's
+fallback remounted owner-sharing artboards/state machines, rejected retained
+schema changes that previously succeeded, and invented append-only private
+catalogs/tombstones. Preserve its diagnostic identities and the unchanged
+`LOC-001`, `LOC-002`, and `LOC-005` acceptances; assign no writer. Rerun all
+three reported cases after FL-D `viewmodel.owner`.
 
 Retain `LOC-008` intrinsic text measurement as deferred post-port
 verification. After the relevant text-measurement wave lands, rerun the

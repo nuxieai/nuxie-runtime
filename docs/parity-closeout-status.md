@@ -1007,21 +1007,22 @@ milestone; the current subplan status selects its exact wave/lane; executable
 ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
-**Canonical NEXT:** publish the complete five-file layer/state-occurrence
-family implemented at semantic commit
-`57d08cfcdb8e870602544e30af9c53d6f7ac34b7` against
+**Canonical NEXT:** close and publish the complete five-file
+layer/state-occurrence family at semantic commit
+`78be55ef52ab77a0722074a5224581b4ab51fba1` against
 `docs/runtime-frame-loop-fl-c3-closure.md` (FL-C3), then obtain one independent
-whole-family verdict before any FL-C4 production edit. The exact source walk,
-adversarial differentials, 21 structural ratchets, and once-per-candidate
-non-performance battery are closed, including the rejected candidate's
-weighted-random, nullable-nested-owner, serial-layer-initialization,
-post-selection wait-latch, and entry-before-DataBind-construction gaps.
-The self-excluding trace file carries the exact candidate-source fingerprint
-and runner provenance; no partial layer/nested/reset/interruption slice is
-submitted and no row is self-promoted. The next action is independent
-Standards and Spec review on the exact frozen candidate, followed by one
-whole-family acceptance request. Active publication branch is `levi/fl-c`;
-there is no PR. Exact FL-C2 candidate
+whole-family verdict before any FL-C4 production edit. Candidate
+`b8d1fd6f7222fcdf3f520896f1dc8e9423d69bb8` was rejected because it built
+the complete focus topology before initial layer callbacks. The replacement
+retains only the manager identity and lazily requested unattached target nodes
+during those callbacks, builds the topology afterward, and carries live
+target-scope/traversal differentials plus 22 structural ratchets. The complete
+C++ constructor availability table now covers inputs, reports, DataBinds,
+listeners, scripts, focus, and hit facilities rather than validating another
+single symptom. The next action is one fresh non-performance battery, trace
+provenance refresh, immutable push, and independent review; no row is
+self-promoted. Active publication branch is `levi/fl-c`; there is no PR.
+Exact FL-C2 candidate
 `7546f4f15b05e582c62aa52ecc93430a7048e143` passed independent Standards and
 Spec review with no findings; its 12 mapped frame-loop files, three importer
 rows, and two member rows are promoted by the dedicated reconciliation

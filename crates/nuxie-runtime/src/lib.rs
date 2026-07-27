@@ -1,6 +1,7 @@
 mod animation;
 mod artboard;
 mod artboard_data_bind;
+mod bones;
 mod components;
 mod constraints;
 mod data_bind_graph;

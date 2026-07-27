@@ -25511,8 +25511,11 @@ impl WeightedPathContext<'_> {
     }
 
     fn cubic_translations(&self, vertex_local: usize) -> Option<((f32, f32), (f32, f32))> {
-        let state = self.instance.runtime_vertex_weight_state(vertex_local)?;
-        Some((state.in_translation, state.out_translation))
+        let cubic = self
+            .instance
+            .runtime_vertex_weight_state(vertex_local)?
+            .cubic?;
+        Some((cubic.in_translation, cubic.out_translation))
     }
 }
 

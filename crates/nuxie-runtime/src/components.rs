@@ -1,5 +1,6 @@
 use crate::animation::RuntimeInterpolator;
 use crate::artboard::{RuntimeComponentListItemInstance, RuntimeComponentListLogicalItem};
+use crate::bones::weight::RuntimeWeightState;
 use crate::draw::RuntimePathMeasure;
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{cached_property_key_for_name, property_key_for_name};
@@ -450,22 +451,6 @@ impl RuntimeSkinnableState {
     fn clone_for_occurrence(&self) -> Self {
         Self::new(self.kind)
     }
-}
-
-/// Runtime-only fields owned by C++ `Weight`/`CubicWeight`.
-///
-/// Packed values and indices remain in the occurrence's generated storage;
-/// only the settled deformation outputs live on the concrete owner
-/// (`include/rive/bones/weight.hpp:12-15`,
-/// `include/rive/bones/cubic_weight.hpp:9-15`).
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub(crate) struct RuntimeWeightState {
-    /// Concrete C++ subtype identity used to dispatch the extra
-    /// `CubicWeight::{in,out}Translation` members.
-    pub(crate) is_cubic: bool,
-    pub(crate) translation: (f32, f32),
-    pub(crate) in_translation: (f32, f32),
-    pub(crate) out_translation: (f32, f32),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1457,10 +1442,8 @@ impl RuntimeConcreteComponentState {
                 "Mesh" => Some(RuntimeSkinnableState::new(RuntimeSkinnableKind::Mesh)),
                 _ => None,
             },
-            weight: type_is_a(type_name, "Weight").then(|| RuntimeWeightState {
-                is_cubic: type_name == "CubicWeight",
-                ..RuntimeWeightState::default()
-            }),
+            weight: type_is_a(type_name, "Weight")
+                .then(|| RuntimeWeightState::new(type_name == "CubicWeight")),
             vertex: type_is_a(type_name, "Vertex").then(RuntimeVertexState::default),
             scripted: matches!(
                 type_name,
@@ -1524,10 +1507,10 @@ impl RuntimeConcreteComponentState {
                 .skinnable
                 .as_ref()
                 .map(RuntimeSkinnableState::clone_for_occurrence),
-            weight: self.weight.as_ref().map(|weight| RuntimeWeightState {
-                is_cubic: weight.is_cubic,
-                ..RuntimeWeightState::default()
-            }),
+            weight: self
+                .weight
+                .as_ref()
+                .map(|weight| RuntimeWeightState::new(weight.cubic.is_some())),
             vertex: self.vertex.as_ref().map(|_| RuntimeVertexState::default()),
             scripted: self
                 .scripted

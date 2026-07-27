@@ -8,9 +8,8 @@ use nuxie_schema::{
 };
 use std::collections::BTreeSet;
 
-use crate::components::{
-    ComponentHandle, DataBindHandle, GraphOrder, RuntimeComponent, RuntimeWeightState,
-};
+use crate::bones::weight::RuntimeWeightState;
+use crate::components::{ComponentHandle, DataBindHandle, GraphOrder, RuntimeComponent};
 
 mod generated_objects {
     include!(concat!(env!("OUT_DIR"), "/runtime_objects.rs"));
@@ -535,11 +534,8 @@ impl InstanceObjectArena {
                     skinnable.vertices.clear();
                 }
                 if let Some(weight) = component.concrete.weight.as_mut() {
-                    let is_cubic = weight.is_cubic;
-                    *weight = RuntimeWeightState {
-                        is_cubic,
-                        ..RuntimeWeightState::default()
-                    };
+                    let is_cubic = weight.cubic.is_some();
+                    *weight = RuntimeWeightState::new(is_cubic);
                 }
                 if let Some(vertex) = component.concrete.vertex.as_mut() {
                     *vertex = Default::default();

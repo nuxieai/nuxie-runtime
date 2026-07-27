@@ -3462,6 +3462,83 @@ class EditorNextRuntimeDefectCheckTest(unittest.TestCase):
             errors,
         )
 
+    def test_user_decided_verification_gap_is_a_no_repair_path(self) -> None:
+        row = {
+            "classification": "verification-gap",
+            "owner_class": "renderer",
+            "history": [
+                {"state": "reported"},
+                {"state": "reproduced"},
+                {"state": "user-decided", "actor": "user"},
+                {"state": "closed"},
+            ],
+        }
+        no_repair_path = CHECKER.is_no_repair_path(row)
+        self.assertTrue(no_repair_path)
+
+        errors: list[str] = []
+        CHECKER.validate_revision(
+            "RT-ED-004",
+            "merged_repair_sha",
+            {
+                "status": "pending",
+                "reason": "The support-matrix decision landed no repair.",
+            },
+            "closed",
+            no_repair_path,
+            errors,
+        )
+        self.assertEqual(errors, [])
+
+    def test_user_decided_no_repair_path_remains_fail_closed(self) -> None:
+        cases = (
+            {
+                "classification": "verification-gap",
+                "owner_class": "renderer",
+                "history": [{"state": "reported"}, {"state": "closed"}],
+            },
+            {
+                "classification": "structural-mistranslation",
+                "owner_class": "renderer",
+                "history": [
+                    {"state": "reported"},
+                    {"state": "user-decided"},
+                    {"state": "closed"},
+                ],
+            },
+            {
+                "classification": "verification-gap",
+                "owner_class": "renderer",
+                "history": [
+                    {"state": "reported"},
+                    {"state": "user-decided", "actor": "f-ed-executor"},
+                    {"state": "closed"},
+                ],
+            },
+        )
+        for row in cases:
+            with self.subTest(row=row):
+                no_repair_path = CHECKER.is_no_repair_path(row)
+                self.assertFalse(no_repair_path)
+
+                errors: list[str] = []
+                CHECKER.validate_revision(
+                    "RT-ED-004",
+                    "merged_repair_sha",
+                    {
+                        "status": "pending",
+                        "reason": "No qualifying no-repair disposition.",
+                    },
+                    "closed",
+                    no_repair_path,
+                    errors,
+                )
+                self.assertIn(
+                    "RT-ED-004 is closed but closure field "
+                    "revisions.merged_repair_sha is pending",
+                    errors,
+                )
+
     def test_closed_editor_consumed_path_still_requires_consumption_shas(
         self,
     ) -> None:

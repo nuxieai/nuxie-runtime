@@ -48,8 +48,30 @@ stimulus_files = [
 id = "fed.rt_ed_004.webgl2_rounded_clip_402x874_r57"
 defect_id = "RT-ED-004"
 kind = "historical"
-status = "historical"
-driver = "evidence-only:webgpu-only-product-decision"
+status = "qualified"
+evidence_only = true
+driver = "make renderer-golden-same-runner && make browser-webgpu-only-check"
+historical_reproduction_sha256 = "5267a1f0d056131b477e8854de6c33744648c9831f8ea393b22bc0390e810870"
+historical_frame_image_sha256 = "7bf9ee8cd4b22f7a66aca5411330c33b3ab7a31f7c50ac686611c00f84b87345"
+historical_command = "PLAYWRIGHT_START_WEB_SERVER=1 NUXIE_PLAYWRIGHT_WORKERS=1 pnpm --dir apps/nuxie-dashboard run test:editor selection-strategies.spec.ts --grep 'generated-style ScrollView and Button nodes expose selectable visual targets'"
+historical_failure = "frame.surface.finish_failed: unsupported renderer feature: WebGL2 clip layer allocation or path construction"
+stimulus_files = [
+  { root = "rive", path = "tests/gm/cubicpaths.cpp", sha256 = "046447626e7539a1e6eedb2be0805ef3a958f11f78c6ae6487b57dcae0979bcd" },
+  { root = "rive", path = "tests/gm/cliprects.cpp", sha256 = "73e9c5eb7309af05a9c13485bf4f1d546204ed062117325f918ccd96f5511458" },
+  { root = "rive", path = "tests/unit_tests/assets/circle_clips.riv", sha256 = "a5adb2a0b2115822239a8dc54a47b8aeae936e43f15a7bb24f92a540890f6866" },
+  { root = "rive", path = "tests/unit_tests/assets/clip_tests.riv", sha256 = "9caf73434bf75797837e18d73cb46b7994676dd49f96a81d8e1d4e06fe6598e9" },
+  { root = "repo", path = "fixtures/renderer/streams/gm/clippedcubic2.rive-stream", sha256 = "f70dc764d7c0863cd9730ba39994894af34b8130768999d6d02c7397d82cdc9a" },
+  { root = "repo", path = "fixtures/renderer/streams/gm/cliprects.rive-stream", sha256 = "30c6896f14c1ad499373a7657a77003a2d02224e41154528f3e84e212f0cd529" },
+  { root = "repo", path = "fixtures/renderer/streams/riv/circle_clips.rive-stream", sha256 = "cb8d34d6dce49d90afadee3e0b83f410fa81126394b0f6741fc3e46baa33a046" },
+  { root = "repo", path = "fixtures/renderer/streams/riv/clip_tests.rive-stream", sha256 = "da891729257ed1233f503ec08ebbee753c9236052068f1624947da1bbbcf0345" },
+  { root = "repo", path = "tools/browser-renderer-smoke/src/lib.rs", sha256 = "34ea7f6b7a054651f175754a7af2c840d69c99e0728562859f129786c8a8bbdc" },
+  { root = "repo", path = "tools/browser-renderer-smoke/run-browser.cjs", sha256 = "2b675923970f56dd0c881e4adb6acd8327ebae6e1325521db848e0cc281dbc57" },
+  { root = "editor", path = "apps/nuxie-dashboard/tests/e2e/project-editor/selection-strategies.spec.ts", sha256 = "427baa0ccd60b0855f3e86c0b1150bc5740551585c1061ed6448ac89d22d453b" },
+  { root = "editor", path = "apps/nuxie-dashboard/tests/e2e/project-editor/preview-interaction-alignment.spec.ts", sha256 = "446e411e7ca088d2afc0ef2a80c1caf553dd96b2354266412a5a4d8888903137" },
+  { root = "editor", path = "apps/nuxie-dashboard/tests/e2e/project-editor/device-frame-bezel-drag.spec.ts", sha256 = "ee55288587a89d2c18806590cce8eeef91333cb62ca993e8fbef550f25e02f50" },
+  { root = "editor", path = "apps/nuxie-dashboard/tests/e2e/project-editor/scroll-view-wheel.spec.ts", sha256 = "afa6fa63448613be40006477b20360b7130dc18345d7eaba2cc8216244d1757a" },
+  { root = "editor", path = "apps/nuxie-web/public/device-frames/catalog/assets/iphone-17-pro-deep-blue-portrait.png", sha256 = "7bf9ee8cd4b22f7a66aca5411330c33b3ab7a31f7c50ac686611c00f84b87345" },
+]
 
 [[fixture]]
 id = "fed.rt_ed_005.generic_visual_property_bind"
@@ -204,8 +226,17 @@ stimulus_files = [
 id = "fed.loc_013.variable_font_pipeline"
 defect_id = "LOC-013"
 kind = "three-layer"
-status = "registered"
-driver = "cpp_probe/registry.cpp"
+status = "qualified"
+driver = "tools/editor-next-runtime-defects/check-loc-013-variable-font.sh"
+stimulus_files = [
+  { root = "rive", path = "include/rive/text/font_hb.hpp", sha256 = "4f71687258fffef29fd171fe633cb64eb2bf3ceff498b0c59923a48af809549b" },
+  { root = "rive", path = "include/rive/text_engine.hpp", sha256 = "eb49ebd8be4972d82a2c57d8d1712b03a3920b183e4b5764750e992354dced13" },
+  { root = "rive", path = "src/text/font_hb.cpp", sha256 = "47022f2420e67e730766ae745aba9122ba20e02d6170a47d8ddd27dd377aa192" },
+  { root = "rive", path = "src/text/text_engine.cpp", sha256 = "14221c1d8614b073e31ffe707d4edb84760cb11b17a37e50f40b378d1053346a" },
+  { root = "repo", path = "crates/nuxie-runtime/src/text.rs", sha256 = "71e4d5b03bb0e462b93eccb9f45fd6d31fc8e916bff52eb774afacf951460653" },
+  { root = "repo", path = "crates/nuxie-renderer/src/lib.rs", sha256 = "7d6c60c9ebb2cacc2ea93c32920561f5f40d5ef1e9699ff5627032d77d390ec2" },
+  { root = "editor", path = "apps/nuxie-dashboard/tests/visual/style-parity/fonts/InterVariable.ttf", sha256 = "4989b125924991b90d05b2d16e0e388c48f7d5bb8b30539bbf9c755278d0ccaf" },
+]
 
 [[fixture]]
 id = "fed.loc_014.feather_owner"

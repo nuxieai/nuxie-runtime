@@ -189,8 +189,11 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
   patch has no landing claim. After the relevant state-machine port wave
   lands, Defects Fix reruns only the unchanged set → fire → `advance(0)`
   acceptance.
-- Historical WebGL2 evidence only, with no linked product child:
-  `RT-ED-004`.
+- Closed historical WebGL2 support-matrix row: `RT-ED-004` preserves the
+  original 402×874/radius-57 failure as true evidence, but the user-selected
+  WebGPU-only product has exact current clipping against pinned C++ and an
+  unchanged 21/21 P04-C01 result. Landing `95027109` removed the unsupported
+  backend from the support matrix; it did not repair or falsify WebGL2.
 - Mapped runtime owner family: `LOC-001`, with `LOC-002` and `LOC-005` as
   duplicate acceptance cases under FL-D `viewmodel.owner`. The Scene-only
   candidate is quarantined diagnostic evidence: it proved retained identity
@@ -204,7 +207,11 @@ The atlas contains 25 defect IDs plus the reserved `LOC-010` tombstone.
   a separately labeled full Editor SHA. These records make no direct
   implementation request or schedule. Escalate only an actual simultaneous
   file-writer collision or a safety/data-loss issue.
-- Open runtime/FL candidate: `LOC-013`.
+- Closed Editor-owned variable-font stale oracle: `LOC-013` has an executable
+  exact-font differential proving all four weights remain distinct and pinned
+  C++ Dawn plus Rust wgpu produce identical 240×112 MSAA pixels. The retired
+  WebGL2/old-baseline report creates no runtime owner or writer; `P08-C08`
+  remains historical linkage only.
 - Closed Editor-owned lowering defect: `LOC-011`; one identical explicit-empty
   source-first file is empty through encode, import, bind, shaping, and draw in
   pinned C++ and Rust, and reviewed Editor fix
@@ -303,12 +310,14 @@ Consequences for the defect program:
   runtime workaround is permitted;
 - historical WebGL2 rows and fixtures remain immutable evidence until their
   state transitions are recorded;
-- `RT-ED-004` remains historical-only. `LOC-012` has evidence-backed Editor
+- closed `RT-ED-004` remains historical-only and retains its exact old
+  WebGL2 failure without a repair claim. `LOC-012` has evidence-backed Editor
   stale-golden WebGPU evidence but remains open pending explicit user
-  acceptance of the changed expected image and COR-07 provenance; `LOC-014`
-  has an exact C++/Rust WebGPU-equivalent stale-oracle disposition, and
-  `LOC-006` completed as a no-repair stale characterization. Downstream Editor
-  reruns are tracked when available but do not gate a landed runtime repair;
+  acceptance of the changed expected image and COR-07 provenance; closed
+  `LOC-013` and `LOC-014` have exact C++/Rust WebGPU-equivalent stale-oracle
+  dispositions, and `LOC-006` completed as a no-repair stale
+  characterization. Downstream Editor reruns are tracked when available but
+  do not gate a landed runtime repair;
 - a surviving WebGPU failure is requalified against its real WebGPU/runtime
   owner. Retirement of WebGL2 is not evidence that the product scenario
   works;
@@ -377,15 +386,15 @@ closed and authorize no further production or promotion work. Current work is:
   ended without authoritative output. Preserve PR #54 at `7f1450dc` as
   historical evidence, but do not promote, close, or consume the row without
   a reviewed new production landing;
-- retain `RT-ED-004` / `F-ED-07` only as historical WebGL2 evidence. It has no
-  linked product scenario and authorizes no implementation. A current
-  rounded-clip claim exists only if an explicitly scheduled identical-input
-  pinned-C++ versus WebGPU proof creates one;
+- retain the closed `RT-ED-004` / `F-ED-07` row only as historical WebGL2
+  evidence. It has no linked product scenario or implementation: exact
+  same-runner and browser WebGPU clip proofs plus unchanged P04-C01 already
+  establish the supported path, while the original failure remains true;
 - retain the completed `LOC-006` / `F-ED-08`
   `reported -> reproduced -> stale-oracle -> closed` path as immutable
   no-repair evidence; and
-- qualify the remaining open renderer rows in Q5 without reopening the landed
-  `F-ED-06` implementation or discarding the historical `F-ED-11` repair
+- retain the completed no-repair renderer/text dispositions in Q5 without
+  reopening the landed `F-ED-06` implementation or discarding historical
   evidence.
 
 Runtime-side WebGPU work must keep `make browser-webgpu-only-check` green and
@@ -462,29 +471,33 @@ verification. After the relevant text-measurement wave lands, rerun the
 unchanged product acceptance and classify any surviving first divergence; do
 not request or schedule an implementation from this program.
 
-### Q4 — Absorb runtime-owner defects through FL
+### Q4 — Variable-font qualification (complete)
 
 For `LOC-013`:
 
-1. minimize the current failure;
-2. build the pinned C++ direct probe;
-3. identify the exact first differing owner/member/lifecycle;
-4. update the atlas and route the concrete overlap to the coordinator for
-   assignment to the active FL owner;
-5. let that sole writer port the complete family;
-6. independently rerun the direct fixture and full floors on the merged SHA;
-7. send the exact SHA and linked product command to the coordinator.
+1. the durable driver pins clean C++ `d788e8ec`, clean Editor checkpoint
+   `233552c1`, the exact 879,708-byte Inter font, the probe source, compiler,
+   archive, generated results, and replay binaries;
+2. pinned C++ and Rust match all 64 glyph IDs and 1,507 outline commands for
+   `wght` 400/500/600/700, with four distinct weight outline hashes;
+3. the generated 880,306-byte typed `.riv` produces the same 38-line renderer
+   program/order/resources in both runtimes; and
+4. C++ Dawn and Rust wgpu produce the same 240×112 MSAA PNG SHA-256
+   `8e54706fb740e462e58046a9b396cb535e335c454a1c1d06b2a6a814c8662287`
+   with zero differing pixels.
 
-No F-ED worktree patches reserved runtime files.
+No runtime or renderer divergence, owner-family port, production patch, or
+repair SHA exists. The retired WebGL2/old-baseline image is an Editor-owned
+stale oracle, and `P08-C08` remains historical candidate linkage only.
 
 ### Q5 — Close remaining renderer, text, and record candidates
 
 - `F-ED-09`: `LOC-011` is closed by Editor fix `fc1a7e40` after one identical
   explicit-empty file remained empty through the complete pinned-C++/Rust
   runtime chain. After the relevant text-measurement port wave, rerun
-  `LOC-008` as deferred post-port verification; split remaining
-  `LOC-013` at the first differing authored-value, bind, shaping, outline, or
-  pixel stage.
+  `LOC-008` as deferred post-port verification. `LOC-013` is independently
+  closed as a stale oracle after the exact Inter input matched pinned C++ at
+  the font, shaping, outline, stream, resource, and pixel stages.
 - `F-ED-10`: `LOC-012` has qualified Editor-owned required-WebGPU
   stale-golden evidence but remains open pending explicit user acceptance of
   the changed expected image. Keep P19-C08, the executable registered fixture,

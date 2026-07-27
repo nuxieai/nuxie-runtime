@@ -43,8 +43,10 @@ The target convention is:
 | `scripted_data_converter.hpp`, `scripted_data_converter.cpp` | `scripted/scripted_data_converter.rs` | retained converter occurrence and advance entry | active scripted-listener closure |
 | `joystick.hpp`, `joystick.cpp` | `joystick.rs` | runtime joystick definition, builder, apply, axis time | extracted |
 | `solo.hpp`, `solo.cpp` | `solo.rs` | solo mapping, active child, and collapse propagation | extracted |
-| `weight.hpp`, `weight.cpp` | `bones/weight.rs` | retained weight state and base vertex deformation | extracted |
-| `cubic_weight.hpp` and cubic-weight owners | `bones/cubic_weight.rs` | independent in/out cubic deformation | extracted |
+| `weight.hpp`, `weight.cpp` | `bones/weight.rs` | retained weight state and `Weight::deform` | state/deform extracted; `onAddedDirty` remains in Artboard construction |
+| `cubic_weight.hpp` | `bones/cubic_weight.rs` | independent in/out retained translations | retained state extracted |
+| `vertex.hpp`, `vertex.cpp` | `shapes/vertex.rs` | weight attachment, render translation, base deformation dispatch | ready |
+| `cubic_vertex.hpp`, `cubic_vertex.cpp` | `shapes/cubic_vertex.rs` | in/out point cache and cubic deformation dispatch | ready |
 | `transform_component.hpp`, `transform_component.cpp` | `transform_component.rs` | transform facade, dirtying, and concrete update | ready |
 | `node.hpp`, `node.cpp` | `node.rs` | computed local transform | ready |
 | `world_transform_component.hpp`, `world_transform_component.cpp` | `world_transform_component.rs` | world transform and render-opacity propagation | ready |
@@ -57,8 +59,8 @@ The target convention is:
 | `layout_component_style.hpp`, `layout_component_style.cpp` | `layout_component_style.rs` | style owner callbacks and interpolation | ready before its semantic port |
 | `text_input.hpp`, `text_input.cpp` | existing `text_input.rs` | move remaining Artboard advance/property/update fragments | ready |
 | `text_style.hpp`, `text_style.cpp` | `text/text_style.rs` | dependencies, font overrides, and shape dirt | ready before its semantic port |
-| `text_value_run.hpp`, `text_value_run.cpp` | `text/text_value_run.rs` | root run lookup/write and shape dirt | extracted |
-| `text_variation_helper.hpp`, `text_variation_helper.cpp` | `text/text_variation_helper.rs` | variation dependency and update helper | extracted |
+| `text_value_run.hpp`, `text_value_run.cpp` | `text/text_value_run.rs` | root run lookup/write and shape dirt | Artboard-facing shard extracted; full style/offset/hit owner remains for text wave |
+| `text_variation_helper.hpp`, `text_variation_helper.cpp` | `text/text_variation_helper.rs` | variation dependency and update helper | update extracted; authored-order construction/dependency insertion remains |
 | `linear_animation_instance.hpp`, `linear_animation_instance.cpp` | `animation/linear_animation_instance.rs` | instance construction, advance, apply, events | extracted |
 | `state_machine_instance.hpp`, `state_machine_instance.cpp` | existing `state_machine/instance.rs` | move Artboard facade/advance/apply fragments to the existing owner | active frame-loop work |
 | focus owner files | existing focused files under `state_machine/` and `focus.rs` | move remaining Artboard focus installation fragments by exact owner | active listener/focus work |
@@ -85,7 +87,8 @@ renamed into another warehouse file.
 
 ## Extraction order
 
-1. File-disjoint mechanical moves: Solo, Joystick, Weight/CubicWeight,
+1. File-disjoint mechanical moves: Solo, Joystick, the Artboard-owned
+   Weight/CubicWeight shards,
    AdvancingComponent, ResettingComponent, VirtualizingComponent,
    LinearAnimationInstance, TextValueRun, and TextVariationHelper.
 2. Integrate the active listener/action family, then extract Event,

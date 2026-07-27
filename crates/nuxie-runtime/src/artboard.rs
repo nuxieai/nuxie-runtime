@@ -93,6 +93,7 @@ use crate::{
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
     RuntimeOwnedViewModelInstance,
 };
+use crate::{draw_rules, draw_target};
 
 #[path = "advancing_component.rs"]
 mod advancing_component;
@@ -6440,20 +6441,8 @@ impl ArtboardInstance {
         {
             changed |= self.set_nested_artboard_artboard_id(local_id, value);
         }
-        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("DrawRules")
-            && property_key_for_name("DrawRules", "drawTargetId") == Some(property_key)
-        {
-            // C++ `DrawRules::drawTargetIdChanged` dirties the owning
-            // Artboard, not the non-Component DrawRules object.
-            changed |= self.add_dirt(0, ComponentDirt::DRAW_ORDER, false);
-        }
-        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("DrawTarget")
-            && property_key_for_name("DrawTarget", "placementValue") == Some(property_key)
-        {
-            // C++ `DrawTarget::placementValueChanged` dirties the owning
-            // Artboard, not the non-Component DrawTarget object.
-            changed |= self.add_dirt(0, ComponentDirt::DRAW_ORDER, false);
-        }
+        changed |= draw_rules::apply_uint_property_changed(self, local_id, property_key);
+        changed |= draw_target::apply_uint_property_changed(self, local_id, property_key);
         if solo_active_component_id_property_key() == Some(property_key) {
             if let Some(solo) = self.component_handle(local_id) {
                 changed |= self.propagate_solo_collapse(solo);

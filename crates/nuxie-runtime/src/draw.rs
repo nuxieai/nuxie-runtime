@@ -33,6 +33,7 @@ use crate::artboard::{
     RuntimeNestedArtboardLayoutOverrides,
 };
 use crate::components::ComponentHandle;
+use crate::draw_target::RuntimeDrawTarget;
 use crate::objects::InstanceObjectArena;
 use crate::properties::{
     RuntimeLayoutComputedProperty, artboard_index_for_graph, cached_property_key_for_name,
@@ -9118,14 +9119,6 @@ impl RuntimeDrawable {
     }
 }
 
-#[derive(Debug, Clone)]
-struct RuntimeDrawTarget {
-    local_id: usize,
-    drawable_local: Option<usize>,
-    first: Option<usize>,
-    last: Option<usize>,
-}
-
 /// Clone-owned counterpart of C++ `Artboard::m_Drawables`, `m_DrawTargets`,
 /// and `m_FirstDrawable`. Clip proxies are pooled by their owning clipping
 /// shape, matching `ClippingShape::resetDrawables/createProxyDrawable`.
@@ -9170,17 +9163,12 @@ impl RuntimeDrawableList {
         let draw_targets = graph
             .draw_targets
             .iter()
-            .map(|target| RuntimeDrawTarget {
-                local_id: target.local_id,
-                drawable_local: target.drawable_local,
-                first: None,
-                last: None,
-            })
+            .map(|target| RuntimeDrawTarget::new(target.local_id, target.drawable_local))
             .collect::<Vec<_>>();
         let draw_target_index_by_local = draw_targets
             .iter()
             .enumerate()
-            .map(|(index, target)| (target.local_id, index))
+            .map(|(index, target)| (target.local_id(), index))
             .collect();
         let initial_draw_targets = graph
             .draw_rules
@@ -9306,8 +9294,7 @@ impl RuntimeDrawableList {
             drawable.needs_save_operation = true;
         }
         for target in &mut self.draw_targets {
-            target.first = None;
-            target.last = None;
+            target.reset_drawables();
         }
 
         let mut last_main = None;
@@ -9327,14 +9314,11 @@ impl RuntimeDrawableList {
                 && let Some(target_index) =
                     self.draw_target_index_by_local.get(&target_local).copied()
             {
-                let previous = self.draw_targets[target_index].last;
+                let previous = self.draw_targets[target_index].append_drawable(drawable_index);
                 self.drawables[drawable_index].prev = previous;
                 if let Some(previous) = previous {
                     self.drawables[previous].next = Some(drawable_index);
-                } else {
-                    self.draw_targets[target_index].first = Some(drawable_index);
                 }
-                self.draw_targets[target_index].last = Some(drawable_index);
                 continue;
             }
 
@@ -9351,14 +9335,14 @@ impl RuntimeDrawableList {
             else {
                 continue;
             };
-            let Some(group_first) = self.draw_targets[target_index].first else {
+            let Some(group_first) = self.draw_targets[target_index].first() else {
                 continue;
             };
-            let Some(group_last) = self.draw_targets[target_index].last else {
+            let Some(group_last) = self.draw_targets[target_index].last() else {
                 continue;
             };
             let Some(target_drawable) = self.draw_targets[target_index]
-                .drawable_local
+                .drawable_local()
                 .and_then(|local| self.drawable_by_local.get(&local).copied())
             else {
                 continue;
@@ -9366,12 +9350,12 @@ impl RuntimeDrawableList {
             let placement = objects
                 .zip(placement_value_key)
                 .and_then(|(objects, key)| {
-                    objects.uint_property(self.draw_targets[target_index].local_id, key)
+                    objects.uint_property(self.draw_targets[target_index].local_id(), key)
                 })
                 .or_else(|| {
                     initial_placements.and_then(|placements| {
                         placements
-                            .get(&self.draw_targets[target_index].local_id)
+                            .get(&self.draw_targets[target_index].local_id())
                             .copied()
                     })
                 })

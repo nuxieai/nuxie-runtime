@@ -7,6 +7,8 @@ mod components;
 mod constraints;
 mod data_bind_graph;
 mod draw;
+mod draw_rules;
+mod draw_target;
 mod focus;
 mod joystick;
 mod math;

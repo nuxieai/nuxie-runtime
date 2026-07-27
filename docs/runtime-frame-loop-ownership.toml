@@ -1831,7 +1831,11 @@ status = "faithful"
 upstream = "src/draw_rules.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/artboard.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/draw_rules.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+  "crates/nuxie-runtime/src/artboard.rs",
+]
 dynamically_reached = true
 status = "pending"
 
@@ -1839,7 +1843,11 @@ status = "pending"
 upstream = "src/draw_target.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/artboard.rs"]
+rust_modules = [
+  "crates/nuxie-runtime/src/draw_target.rs",
+  "crates/nuxie-runtime/src/draw.rs",
+  "crates/nuxie-runtime/src/artboard.rs",
+]
 dynamically_reached = false
 status = "pending"
 

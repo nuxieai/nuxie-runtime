@@ -63,16 +63,34 @@ assets and existing pins are never edited in place.
 
 ## Release workflow
 
-The Apple runtime release workflow is intentionally tag-only. Before its first
+Apple runtime release artifacts are intentionally tag-sourced. A release can
+start from a matching tag push or from the bounded manual retry described
+below, but both paths build the exact existing tag. Before the workflow's first
 use, a repository administrator must:
 
 1. Enable release immutability for the repository in GitHub settings.
 2. Create a fine-grained token scoped to this repository with
    **Administration: read** permission.
-3. Create and protect the `apple-runtime-release` Actions environment, then
-   store that token in the environment as `NUXIE_RELEASE_ADMIN_TOKEN`.
+3. Create and protect the `apple-runtime-release` Actions environment. Its
+   deployment branch and tag policy must allow both:
+   - tag pattern `apple-runtime-v*`; and
+   - branch `main`.
+   Store the fine-grained token from step 2 in the environment as
+   `NUXIE_RELEASE_ADMIN_TOKEN`.
 4. Protect the `apple-runtime-v*` tag pattern so only release maintainers can
    create matching tags.
+5. Configure the `nuxie-macos` runner group's selected-workflow policy with
+   both exact entries:
+   - `nuxieai/nuxie-runtime/.github/workflows/apple-runtime-release.yml@refs/tags/apple-runtime-v0.2.0`
+   - `nuxieai/nuxie-runtime/.github/workflows/apple-runtime-release.yml@refs/heads/main`
+
+GitHub evaluates the runner-group workflow policy before a job starts and the
+environment deployment-ref policy before release steps run, so the workflow
+cannot preflight or repair either external configuration.
+The exact tag entry permits the current tag-push release; the `main` entry
+permits the bounded `workflow_dispatch` retry without granting other branch
+refs. Each future tag-push release requires adding that new exact tag ref to
+the selected-workflow policy before pushing the tag.
 
 The built-in `GITHUB_TOKEN` retains the narrower `contents: write` permission
 used to create the release. The administration token is exposed only to steps
@@ -89,6 +107,25 @@ compares both draft assets, rechecks that release immutability is enabled, and
 publishes. Finally, it downloads the public immutable assets without
 credentials and verifies their bytes, exact identity, public contract, and
 SwiftPM checksum.
+
+If the tag-triggered run cannot be scheduled because a trusted runner does not
+allow the tag workflow ref, retry the existing tag through
+`workflow_dispatch`:
+
+```sh
+gh workflow run apple-runtime-release.yml \
+  --ref main \
+  --field release_tag=apple-runtime-v<crate-version>
+```
+
+This retry must name an existing exact tag; it does not create, move, delete,
+or replace a tag. The required `--ref main` supplies only the reviewed workflow
+definition, and the workflow rejects a manual run from any other ref.
+Checkout, release-tag validation, artifact identity, and publication all use
+the supplied tag. The workflow fails unless that tag exactly matches the
+checked-out crate version, resolves to the checked-out commit, and is already
+reachable from `origin/main`. Artifact source is therefore always the immutable
+tag, never the workflow branch.
 
 The workflow fails rather than changing an existing release or attaching
 replacement assets. If a run fails after draft creation, inspect and delete

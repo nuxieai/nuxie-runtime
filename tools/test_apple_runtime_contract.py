@@ -1,8 +1,13 @@
+import re
 import unittest
+from pathlib import Path
 
 from tools.apple_runtime_contract import ContractError
 from tools.apple_runtime_contract import validate_metadata
 from tools.apple_runtime_contract import validate_symbols
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def valid_metadata() -> dict[str, object]:
@@ -16,8 +21,8 @@ def valid_metadata() -> dict[str, object]:
         "luaurVersion": "0.1.8",
         "buildProfile": "release-apple",
         "rustToolchain": "1.94.1",
-        "xcodeVersion": "26.2",
-        "xcodeBuild": "17C52",
+        "xcodeVersion": "26.6",
+        "xcodeBuild": "17F113",
         "iphoneOSSDKVersion": "26.2",
         "iphoneOSSDKBuild": "23C53",
         "iphoneSimulatorSDKVersion": "26.2",
@@ -97,6 +102,170 @@ void nux_operation_result_free(struct NuxOperationResult *result);
         symbols = self.SYMBOLS + "_nux_runtime_abi_minor\n"
         with self.assertRaisesRegex(ContractError, "removed client ABI identifiers"):
             validate_symbols(header, symbols)
+
+
+class ReleaseWorkflowSourcePolicyTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.release_workflow = (
+            REPO_ROOT / ".github/workflows/apple-runtime-release.yml"
+        ).read_text()
+        self.trusted_macos_workflow = (
+            REPO_ROOT / ".github/workflows/_trusted-macos.yml"
+        ).read_text()
+        self.release_documentation = (
+            REPO_ROOT / "docs/apple-runtime-release.md"
+        ).read_text()
+
+    def test_manual_release_dispatch_checks_out_the_supplied_tag(self) -> None:
+        self.assertRegex(
+            self.release_workflow,
+            re.compile(
+                r"workflow_dispatch:\s*\n"
+                r"\s+inputs:\s*\n"
+                r"\s+release_tag:\s*\n"
+                r"(?:\s+.*\n){0,5}"
+                r"\s+required:\s+true\s*\n"
+                r"\s+type:\s+string"
+            ),
+        )
+        self.assertIn(
+            "ref: ${{ github.event_name == 'workflow_dispatch' "
+            "&& format('refs/tags/{0}', inputs.release_tag) || github.ref }}",
+            self.release_workflow,
+        )
+        self.assertNotIn("ref: ${{ github.ref }}", self.release_workflow)
+        self.assertIn(
+            'if [[ "${GITHUB_REF}" != "refs/heads/main" ]]',
+            self.release_workflow,
+        )
+
+    def test_both_triggers_share_one_exact_release_tag(self) -> None:
+        normalized_tag = (
+            "${{ github.event_name == 'workflow_dispatch' "
+            "&& inputs.release_tag || github.ref_name }}"
+        )
+        self.assertIn(
+            'tags:\n      - "apple-runtime-v*"',
+            self.release_workflow,
+        )
+        self.assertIn(
+            f"group: apple-runtime-release-{normalized_tag}",
+            self.release_workflow,
+        )
+        self.assertIn(
+            f"NUX_RUNTIME_RELEASE_TAG: {normalized_tag}",
+            self.release_workflow,
+        )
+        self.assertIn(
+            'release_tag="${NUX_RUNTIME_RELEASE_TAG}"',
+            self.release_workflow,
+        )
+        self.assertIn(
+            'if [[ "${release_tag}" != "${expected_tag}" ]]',
+            self.release_workflow,
+        )
+        self.assertIn(
+            'tagged_revision="$(git rev-list -n 1 "refs/tags/${release_tag}")"',
+            self.release_workflow,
+        )
+        self.assertIn(
+            'test "${source_revision}" = "${tagged_revision}"',
+            self.release_workflow,
+        )
+        self.assertIn(
+            'git merge-base --is-ancestor "${source_revision}" '
+            "refs/remotes/origin/main",
+            self.release_workflow,
+        )
+
+    def test_self_hosted_xcode_pin_is_current_without_changing_fallback(self) -> None:
+        self.assertIn('NUX_APPLE_XCODE_VERSION: "26.6"', self.release_workflow)
+        self.assertIn('NUX_APPLE_XCODE_BUILD: "17F113"', self.release_workflow)
+        self.assertNotIn('NUX_APPLE_XCODE_VERSION: "26.2"', self.release_workflow)
+        self.assertNotIn('NUX_APPLE_XCODE_BUILD: "17C52"', self.release_workflow)
+
+        hosted = (
+            "inputs.force_hosted || (github.event_name == 'pull_request' "
+            "&& github.event.pull_request.head.repo.full_name != github.repository)"
+        )
+        version_mapping = (
+            "NUX_APPLE_XCODE_VERSION: "
+            f"${{{{ ({hosted}) && '15.4' || '26.6' }}}}"
+        )
+        build_mapping = (
+            "NUX_APPLE_XCODE_BUILD: "
+            f"${{{{ ({hosted}) && '15F31d' || '17F113' }}}}"
+        )
+        self.assertEqual(self.trusted_macos_workflow.count(version_mapping), 2)
+        self.assertEqual(self.trusted_macos_workflow.count(build_mapping), 2)
+        self.assertNotIn("'26.2'", self.trusted_macos_workflow)
+        self.assertNotIn("'17C52'", self.trusted_macos_workflow)
+
+    def test_apple_jobs_force_the_exact_rustup_toolchain_onto_path(self) -> None:
+        toolchain_bin = (
+            'toolchain_bin="$(dirname "$(rustup which '
+            '--toolchain 1.94.1 cargo)")"'
+        )
+        github_path = 'echo "${toolchain_bin}" >> "${GITHUB_PATH}"'
+        direct_path = 'export PATH="${toolchain_bin}:${PATH}"'
+        cargo_version = (
+            'test "$(cargo --version | awk \'{ print $2 }\')" = "1.94.1"'
+        )
+        rustc_version = (
+            'test "$(rustc --version | awk \'{ print $2 }\')" = "1.94.1"'
+        )
+
+        for source, expected_count in (
+            (self.release_workflow, 1),
+            (self.trusted_macos_workflow, 2),
+        ):
+            self.assertEqual(source.count(toolchain_bin), expected_count)
+            self.assertEqual(source.count(github_path), expected_count)
+            self.assertEqual(source.count(direct_path), expected_count)
+            self.assertEqual(source.count(cargo_version), expected_count)
+            self.assertEqual(source.count(rustc_version), expected_count)
+
+    def test_release_documents_both_required_runner_policy_refs(self) -> None:
+        self.assertIn(
+            "nuxieai/nuxie-runtime/.github/workflows/"
+            "apple-runtime-release.yml@refs/tags/apple-runtime-v0.2.0",
+            self.release_documentation,
+        )
+        self.assertIn(
+            "nuxieai/nuxie-runtime/.github/workflows/"
+            "apple-runtime-release.yml@refs/heads/main",
+            self.release_documentation,
+        )
+        self.assertIn(
+            "evaluates the runner-group workflow policy before a job starts",
+            self.release_documentation,
+        )
+        self.assertIn(
+            "future tag-push release requires adding that new exact tag ref",
+            self.release_documentation,
+        )
+
+    def test_release_documents_environment_ref_and_token_prerequisites(self) -> None:
+        self.assertIn(
+            "deployment branch and tag policy must allow both",
+            self.release_documentation,
+        )
+        self.assertIn(
+            "tag pattern `apple-runtime-v*`",
+            self.release_documentation,
+        )
+        self.assertIn(
+            "branch `main`",
+            self.release_documentation,
+        )
+        self.assertIn(
+            "**Administration: read** permission",
+            self.release_documentation,
+        )
+        self.assertIn(
+            "environment deployment-ref policy before release steps run",
+            self.release_documentation,
+        )
 
 
 if __name__ == "__main__":

@@ -982,6 +982,23 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     "perform_initial_entry_actions(executor); }\n"
                 ),
             ),
+            (
+                "state_machine_focus_tree_built_before_layer_entries",
+                (
+                    r"pub\(crate\)\s+fn\s+new\(\s*state_machine_index"
+                    r"[\s\S]{0,16000}"
+                    r"(?:RuntimeFocusTree::from_artboard"
+                    r"|focus\.sync\(artboard\)"
+                    r"|install_nested_external_focus_domain\([^)]*\))"
+                    r"[\s\S]{0,6000}initialize_layers_in_authored_order"
+                ),
+                (
+                    "pub(crate) fn new(state_machine_index: usize, "
+                    "artboard: &mut ArtboardInstance) { "
+                    "let focus = RuntimeFocusTree::from_artboard(artboard); "
+                    "initialize_layers_in_authored_order(); }\n"
+                ),
+            ),
         ]
         base_gaps = self.gaps.read_text()
 

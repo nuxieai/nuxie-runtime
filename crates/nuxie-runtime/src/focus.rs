@@ -859,17 +859,33 @@ impl Clone for RuntimeFocusTree {
 }
 
 impl RuntimeFocusTree {
-    pub(crate) fn from_artboard(artboard: &ArtboardInstance) -> Self {
-        let mut tree = Self {
+    /// Create the focus-manager identity used by one state-machine occurrence
+    /// without building the authored focus topology yet.
+    ///
+    /// Pinned C++ constructs `m_focusManager` with the
+    /// `StateMachineInstance`, runs every layer's initial entry callbacks, and
+    /// only then calls `Artboard::buildFocusTree`
+    /// (`state_machine_instance.cpp:1747-1752,2123-2127`). Entry-time focus
+    /// actions therefore see an empty manager. `FocusActionTarget` may still
+    /// lazily create its one target `FocusNode` through
+    /// `FocusData::focusNode`, but that node has no attached descendants until
+    /// the final build pass (`focus_action_target.cpp:14-40`;
+    /// `focus_data.cpp:55-69`).
+    pub(crate) fn new_unsynchronized(artboard: &ArtboardInstance) -> Self {
+        Self {
             owner_identity: artboard.instance_identity(),
             ..Self::default()
-        };
-        tree.sync(artboard);
+        }
+    }
+
+    /// Perform the first complete authored-tree build after initial layer
+    /// callbacks have finished.
+    pub(crate) fn synchronize_after_layer_initialization(&mut self, artboard: &ArtboardInstance) {
+        self.sync(artboard);
         // An empty projection cannot gain authored focus content later: lists
         // and data-bound nested hosts contribute persistent structural scopes
         // even while empty. Keep the common no-focus advance path O(1).
-        tree.inert = tree.nodes_by_key.is_empty();
-        tree
+        self.inert = self.nodes_by_key.is_empty();
     }
 
     /// Install the same manager used by the parent occurrence while retaining
@@ -1002,6 +1018,15 @@ impl RuntimeFocusTree {
         self.domain.borrow().manager.has_focusable_content()
     }
 
+    pub(crate) fn set_focus_target_before_topology(
+        &mut self,
+        artboard: &ArtboardInstance,
+        target_local: usize,
+    ) -> bool {
+        self.ensure_unattached_target(artboard, target_local);
+        self.set_focus_target(target_local)
+    }
+
     pub(crate) fn set_focus_target(&mut self, target_local: usize) -> bool {
         let mut domain = self.domain.borrow_mut();
         domain
@@ -1009,6 +1034,50 @@ impl RuntimeFocusTree {
             .get(&(self.owner_identity, target_local))
             .copied()
             .is_some_and(|node_id| domain.manager.set_focus(node_id))
+    }
+
+    /// Mirror the constructor-time `FocusData::focusNode()` path without
+    /// attaching any other authored node or descendant. The later full sync
+    /// reuses this exact occurrence identity and places it into the completed
+    /// tree.
+    fn ensure_unattached_target(&mut self, artboard: &ArtboardInstance, target_local: usize) {
+        let target = (self.owner_identity, target_local);
+        if self.domain.borrow().targets.contains_key(&target) {
+            return;
+        }
+
+        let mut descriptors = Vec::new();
+        let root_key = RuntimeFocusOccurrenceKey::root(artboard.graph_global_id);
+        collect_artboard_focus_descriptors(
+            artboard,
+            &root_key,
+            None,
+            Some(artboard.instance_identity()),
+            true,
+            Mat2D::IDENTITY,
+            &mut descriptors,
+        );
+        let Some(descriptor) = descriptors
+            .into_iter()
+            .find(|descriptor| descriptor.target == Some(target))
+        else {
+            return;
+        };
+
+        let node_id = match self.nodes_by_key.get(&descriptor.key).copied() {
+            Some(node_id) => node_id,
+            None => {
+                let node_id = self
+                    .domain
+                    .borrow_mut()
+                    .manager
+                    .create_node(descriptor.node);
+                self.nodes_by_key.insert(descriptor.key.clone(), node_id);
+                node_id
+            }
+        };
+        self.parents_by_key.insert(descriptor.key, None);
+        self.domain.borrow_mut().targets.insert(target, node_id);
     }
 
     pub(crate) fn clear_focus(&mut self) -> bool {

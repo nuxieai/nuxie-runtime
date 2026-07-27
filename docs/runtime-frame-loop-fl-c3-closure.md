@@ -108,6 +108,31 @@ Every item below is mandatory even though the private C++ class shares
   copied, owner-local ids are refreshed, and no C++ generated-clone claim is
   made for that snapshot behavior.
 
+### Constructor-phase availability audit
+
+This table is derived independently from the complete pinned
+`StateMachineInstance` constructor, rather than from Rust's field layout.
+Every facility an initial layer action can reach has an explicit phase
+postcondition:
+
+| facility during initial layer callbacks | pinned C++ state | Rust proof |
+|---|---|---|
+| state-machine input occurrences | available; constructed before the layer array | the retained input vector is passed to each serial layer initialization |
+| reported-event queue | available as occurrence state; an entry fire action may enqueue | the occurrence-owned queue exists before the first layer and is not delivered early |
+| state-machine DataBinds and bindable lookup maps | unavailable; cloned/populated only after every layer | constructor executor sets `data_bind_facilities_ready: false`; live ViewModel-change differential |
+| listener and listener-ViewModel occurrences | unavailable; constructed after DataBinds | no entry action receives the later listener collections; reports remain queued |
+| scripted-object occurrences | unavailable; cloned and initialized near constructor end | entry scripted lookup sees the empty occurrence map and cannot observe a later script instance |
+| focus-manager identity | available as the embedded manager | `RuntimeFocusTree::new_unsynchronized` retains the occurrence domain |
+| requested `FocusData::focusNode()` | lazily available only when `FocusActionTarget` requests it | `set_focus_target_before_topology` creates only the exact unattached target occurrence |
+| complete focus/nested topology and traversal roots | unavailable until the final `buildFocusTree` call | post-layer synchronization plus target/traversal live differentials and a fail-closed ratchet |
+| hit components, keyboard/gamepad/semantic groups | unavailable until their later constructor passes | no initial action path receives those later groups |
+
+The literal constructor timeline is therefore: inputs; serial
+layer-init/entry-callback pairs; DataBind clones/maps; listener/hit groups;
+nested forwarding; scripted objects/groups; hit sort; full focus-tree build.
+Any Rust allocation needed to satisfy ownership before `Self` exists must be
+gated so its behavior is unavailable until the corresponding C++ phase.
+
 ## Adversarial publication review
 
 - [x] Missing required system state: Any, Entry, and Exit are each rejected at
@@ -175,6 +200,16 @@ Every item below is mandatory even though the private C++ class shares
   `ListenerViewModelChange` leaves the dormant source and bindable occurrence
   unchanged (`state_machine_instance.cpp:1747-1754,3189-3198`;
   `listener_viewmodel_change.cpp:42-80`).
+- [x] Constructor focus topology order: the focus-manager identity exists for
+  entry callbacks, but the complete artboard/nested focus tree does not.
+  Entry `FocusActionTarget` lazily creates only its requested `FocusNode`, so a
+  scope has no attached descendants and retains primary focus; entry
+  `FocusActionTraversal` sees no registered traversal roots. The post-layer
+  build reuses that target occurrence and attaches the complete topology
+  (`state_machine_instance.cpp:1747-1752,2123-2127`;
+  `focus_action_target.cpp:14-40`; `focus_data.cpp:55-69`;
+  `artboard.cpp:1919-2027`). Live C++ differentials distinguish both actions
+  from the rejected prebuilt-tree behavior.
 - [x] Nested focus and pointer forwarding: shared focus manager is installed
   before tree sync; hit/pointer/drag calls return the child result or the
   pinned empty result.
@@ -234,6 +269,8 @@ The candidate checker must have injected negative controls for:
     latched by an earlier candidate.
 21. exposing DataBind-backed ViewModel facilities to entry callbacks before
     the constructor reaches C++'s DataBind-cloning phase.
+22. synchronizing the complete focus topology or nested focus domain before
+    every initial layer entry callback has finished.
 
 The checker evaluates every ratchet against the complete source file, not one
 line at a time. A dedicated multi-line mutation test prevents formatted Rust
@@ -283,11 +320,22 @@ running entry callbacks. Corrected semantic commit
 the next review's two lifecycle findings: a successful random selection now
 clears a previously retained wait latch after changing state, and initial
 entry callbacks cannot observe DataBind facilities before C++ constructs
-them. Live pinned-C++ differentials cover both lifecycle boundaries. The
-self-excluding `docs/runtime-frame-loop-trace.json` records the exact
+them. Live pinned-C++ differentials cover both lifecycle boundaries.
+Self-contained candidate
+`b8d1fd6f7222fcdf3f520896f1dc8e9423d69bb8` was then independently
+rejected because it still built the complete focus topology before those
+entry callbacks. The current correction keeps only the focus-manager identity
+and lazily requested target nodes available during layer initialization,
+defers the full topology until afterward, and adds live target-scope and
+traversal differentials plus the twenty-second structural ratchet. It is not
+publishable until its fresh non-performance floor, trace provenance, and
+immutable replacement SHA are recorded.
+
+The self-excluding `docs/runtime-frame-loop-trace.json` records the exact
 candidate-source fingerprint and runner provenance. Fingerprinted closure
 prose deliberately does not duplicate those self-referential values. The
-replacement candidate has the following gate receipt:
+following gate receipt belongs only to rejected candidate `b8d1fd6f` and is
+historical, not evidence for the current correction:
 
 - runtime 521 / 521;
 - probe-armed workspace and pinned-C++ probes 746 / 746;
@@ -312,9 +360,9 @@ passed the complete package verification. These are discarded
 environment/harness attempts, not product failures. No performance
 measurement was run.
 
-The review packet is this checklist plus its direct C++ citations, focused
-adversarial tests, structural ratchets, exact pushed candidate SHA, and the
-gate results above. All five layer/state family rows and
+The replacement review packet will be this checklist plus its direct C++
+citations, focused adversarial tests, 22 structural ratchets, exact pushed
+candidate SHA, and a fresh gate receipt. All five layer/state family rows and
 `state_machine.layer` remain pending-verification until the independent
 verdict. The supporting `src/math/random.cpp` row remains pending after that
 verdict until its FL-D formula consumer is routed through the same provider.

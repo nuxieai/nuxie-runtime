@@ -15295,6 +15295,71 @@ fn synthetic_state_machine_serial_layer_entry_initialization(file_id: u64) -> Ve
     })
 }
 
+#[derive(Clone, Copy)]
+enum SyntheticEntryFocusAction {
+    TargetScope,
+    TraverseNext,
+}
+
+fn synthetic_state_machine_entry_focus_before_tree(
+    file_id: u64,
+    action: SyntheticEntryFocusAction,
+) -> Vec<u8> {
+    const STATE_AT_START: u64 = 2 << 1;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        // Scope Node 1 owns FocusData 2. Its descendant Node 3 owns leaf
+        // FocusData 4. The focus transition below observes the leaf, so it
+        // distinguishes constructor-time focus resting on the unattached
+        // scope from focus descending through an incorrectly prebuilt tree.
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "FocusData", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+        });
+        push_transform_node(bytes, 1, 5.0, 7.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "FocusData", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 3);
+        });
+        push_animation_for_single_node(bytes, 3, 5.0, 15.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        match action {
+            SyntheticEntryFocusAction::TargetScope => {
+                push_object_with_properties(bytes, "FocusActionTarget", |bytes| {
+                    push_uint_property(bytes, "ListenerAction", "flags", STATE_AT_START);
+                    push_uint_property(bytes, "FocusActionTarget", "targetId", 1);
+                });
+            }
+            SyntheticEntryFocusAction::TraverseNext => {
+                push_object_with_properties(bytes, "FocusActionTraversal", |bytes| {
+                    push_uint_property(bytes, "ListenerAction", "flags", STATE_AT_START);
+                    push_uint_property(bytes, "FocusActionTraversal", "traversalKind", 0);
+                });
+            }
+        }
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "TransitionFocusCondition", |_| {});
+        push_object_with_properties(bytes, "TransitionPropertyComponentComparator", |bytes| {
+            push_uint_property(
+                bytes,
+                "TransitionPropertyComponentComparator",
+                "objectId",
+                3,
+            );
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_transition_interruption(file_id: u64) -> Vec<u8> {
     const ENABLE_EARLY_EXIT: u64 = 1 << 5;
 
@@ -78183,6 +78248,53 @@ fn state_machine_layer_entry_effects_match_cpp_after_serial_initialization() {
         Some(0),
         "the second layer consumes the initialized input on the first advance"
     );
+}
+
+#[test]
+fn state_machine_entry_focus_actions_run_before_the_focus_tree_is_built() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (offset, action, action_name) in [
+        (
+            0_u64,
+            SyntheticEntryFocusAction::TargetScope,
+            "target_scope",
+        ),
+        (
+            1_u64,
+            SyntheticEntryFocusAction::TraverseNext,
+            "traverse_next",
+        ),
+    ] {
+        let label =
+            format!("synthetic/runtime_state_machine_entry_focus_{action_name}_before_tree.riv");
+        let bytes = synthetic_state_machine_entry_focus_before_tree(8283 + offset, action);
+        let args = [
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ];
+        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .expect("Rust state-machine instance");
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+
+        let cpp_state_machine = cpp.artboards[0]
+            .runtime_state_machine_advances
+            .first()
+            .expect("C++ state-machine report");
+        compare_state_machine_advance(cpp_state_machine, &state_machine, advanced, &label);
+        assert_eq!(
+            state_machine.current_animation_count(),
+            0,
+            "{action_name}: constructor-time focus must not reach the leaf before the final tree build"
+        );
+    }
 }
 
 #[test]

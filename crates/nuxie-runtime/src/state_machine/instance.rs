@@ -596,7 +596,9 @@ impl RuntimeScheduledListenerActionExecutor for RuntimeStateMachineListenerActio
             }
             RuntimeScheduledListenerAction::FocusTarget {
                 target_local_id, ..
-            } => Ok(self.focus.set_focus_target(*target_local_id)),
+            } => Ok(self
+                .focus
+                .set_focus_target_before_topology(artboard, *target_local_id)),
             RuntimeScheduledListenerAction::FocusClear { .. } => Ok(self.focus.clear_focus()),
             RuntimeScheduledListenerAction::FocusTraversal { traversal_kind, .. } => {
                 Ok(self.focus.traverse(*traversal_kind))
@@ -1041,11 +1043,11 @@ impl StateMachineInstance {
                 )
             })
             .collect();
-        // Pinned C++ installs the parent's FocusManager on every mounted
-        // NestedStateMachine before synchronizing the nested tree
-        // (`nested_state_machine.cpp:26-57`).
-        let focus = RuntimeFocusTree::from_artboard(artboard);
-        artboard.install_nested_external_focus_domain(&focus);
+        // Pinned C++ retains the FocusManager identity during layer entry
+        // callbacks but does not build the complete artboard focus topology
+        // until every layer has initialized
+        // (`state_machine_instance.cpp:1747-1752,2123-2127`).
+        let focus = RuntimeFocusTree::new_unsynchronized(artboard);
         let mut instance = Self {
             state_machine_index,
             state_machine_definitions,
@@ -1099,6 +1101,14 @@ impl StateMachineInstance {
             view_model_listeners,
         };
         instance.initialize_layers_in_authored_order(artboard, state_machine);
+        instance
+            .focus
+            .synchronize_after_layer_initialization(artboard);
+        // `Artboard::buildFocusTree` installs the parent's manager while it
+        // visits nested artboards. Rust's retained projection is built above,
+        // then the nested state-machine occurrences are pointed at that same
+        // domain without copying manager state.
+        artboard.install_nested_external_focus_domain(&instance.focus);
         instance
     }
 

@@ -35,6 +35,8 @@ required_adversarial = [
   "Missing/out-of-range nested animationId",
   "Weighted random selection",
   "Multi-layer initialization",
+  "Constructor facility order",
+  "Constructor focus topology order",
   "Nested focus and pointer forwarding",
   "Nested context lifecycle",
   "Clone/remount isolation",

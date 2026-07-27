@@ -32,6 +32,7 @@ use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPa
 use std::collections::BTreeMap;
 
 pub(crate) mod text_style;
+pub(crate) mod text_style_axis;
 pub(crate) mod text_value_run;
 pub(crate) mod text_variation_helper;
 

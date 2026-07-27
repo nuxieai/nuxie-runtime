@@ -415,7 +415,7 @@ pub struct ArtboardInstance {
     pub(crate) artboard_data_bind_dirty_epoch: u64,
     pub(crate) artboard_data_bind_processed_epoch: u64,
     pub(crate) image_asset_overrides: BTreeMap<usize, Option<u32>>,
-    text_style_font_overrides: BTreeMap<usize, RuntimeFontAssetValue>,
+    pub(crate) text_style_font_overrides: BTreeMap<usize, RuntimeFontAssetValue>,
     has_legacy_image_layout_scales: Cell<bool>,
     legacy_image_layout_scales: RefCell<BTreeMap<usize, RuntimeLegacyImageLayoutScaleState>>,
     external_font_assets: Arc<BTreeMap<u32, Arc<[u8]>>>,
@@ -1510,42 +1510,7 @@ impl ArtboardInstance {
             }
         }
 
-        // TextStyle creates its optional helper inside that occurrence's
-        // onAddedClean, then immediately runs the helper's dirty/clean phases
-        // (`src/text/text_style.cpp:45-70`). Preserve that object-order
-        // construction point rather than pre-attaching every helper as a
-        // family batch.
-        for component in &graph.components {
-            let Some(helper) = graph
-                .text_variation_helpers
-                .iter()
-                .find(|helper| helper.text_style_local == component.local_id)
-            else {
-                continue;
-            };
-            let handle = if objects
-                .text_variation_helper_handle(helper.text_style_local)
-                .is_some()
-            {
-                objects
-                    .relink_text_variation_helper_owner(helper.text_style_local)
-                    .context("TextVariationHelper cannot retain its rebuilt TextStyle parent")?
-            } else {
-                objects
-                    .attach_text_variation_helper(
-                        helper.text_style_local,
-                        RuntimeComponent::embedded(
-                            helper.text_style_local,
-                            helper.text_style_global,
-                            "TextVariationHelper",
-                        ),
-                    )
-                    .context("TextStyle cannot own its TextVariationHelper")?
-            };
-            if !objects.link_parent(handle, root) {
-                anyhow::bail!("TextVariationHelper parent link could not be retained");
-            }
-        }
+        crate::text::text_variation_helper::attach_occurrences(objects, graph, root)?;
 
         // Consume the construction-only insertion blueprint once. Every edge
         // lands on the exact authored or embedded Component occurrence.
@@ -3491,41 +3456,6 @@ impl ArtboardInstance {
         self.mark_artboard_data_bind_work_dirty();
         self.mark_changed();
         self.mark_prepared_changed();
-        true
-    }
-
-    pub(crate) fn text_style_font_override(
-        &self,
-        local_id: usize,
-    ) -> Option<&RuntimeFontAssetValue> {
-        self.text_style_font_overrides.get(&local_id)
-    }
-
-    pub(crate) fn set_text_style_font_override(
-        &mut self,
-        local_id: usize,
-        value: RuntimeFontAssetValue,
-    ) -> bool {
-        let unchanged = self
-            .text_style_font_overrides
-            .get(&local_id)
-            .is_some_and(|current| {
-                current.file_asset_index() == value.file_asset_index()
-                    && match (current.live_font_bytes_arc(), value.live_font_bytes_arc()) {
-                        (Some(current), Some(next)) => {
-                            Arc::ptr_eq(current, next) || current.as_ref() == next.as_ref()
-                        }
-                        (None, None) => true,
-                        _ => false,
-                    }
-            });
-        if unchanged {
-            return false;
-        }
-        self.text_style_font_overrides.insert(local_id, value);
-        self.mark_text_style_shape_dirty(local_id);
-        self.mark_path_changed();
-        self.mark_layout_changed();
         true
     }
 
@@ -5751,14 +5681,6 @@ impl ArtboardInstance {
             self.add_component_dirt(handle, ComponentDirt::PATH, false);
         }
 
-        let text_variation_helper = accumulated
-            .contains(ComponentDirt::TEXT_SHAPE)
-            .then(|| self.objects.text_variation_helper_handle(local_id))
-            .flatten();
-        let text_style_parent = text_variation_helper
-            .and_then(|_| self.objects.component(handle))
-            .and_then(|component| component.parent);
-
         if !(accumulated
             & (ComponentDirt::TEXT_SHAPE
                 | ComponentDirt::WORLD_TRANSFORM
@@ -5801,18 +5723,7 @@ impl ArtboardInstance {
             }
         }
 
-        // Direct port of `TextStyle::onDirty`: shaping dirt first reaches the
-        // owning Text and then the style's embedded TextVariationHelper. The
-        // helper is an independent Component occurrence because its update
-        // must run in dependency order after Artboard and before Text
-        // (`src/text/text_style.cpp:22-34`,
-        // `src/text/text_variation_helper.cpp:7-17`).
-        if let Some(helper) = text_variation_helper {
-            if let Some(text) = text_style_parent {
-                self.add_component_dirt(text, ComponentDirt::TEXT_SHAPE, false);
-            }
-            self.add_component_dirt(helper, ComponentDirt::TEXT_SHAPE, false);
-        }
+        self.dispatch_text_style_on_dirty(handle, local_id, accumulated);
     }
 
     pub fn collapse_component(&mut self, local_id: usize, collapsed: bool) -> bool {
@@ -7222,18 +7133,16 @@ impl ArtboardInstance {
             }
             return true;
         }
+        if crate::text::text_style_axis::apply_double_property_changed(
+            self,
+            local_id,
+            type_name,
+            property_key,
+        ) {
+            return true;
+        }
 
-        match self.slot(local_id).and_then(|slot| slot.type_name) {
-            Some("TextStyleAxis")
-                if property_key_for_name("TextStyleAxis", "axisValue") == Some(property_key) =>
-            {
-                // `TextStyleAxis::axisValueChanged` dirties its TextStyle
-                // parent; TextStyle::onDirty then dirties Text and the
-                // embedded variation helper (`text_style_axis.cpp:27-30`,
-                // `text_style.cpp:22-34`).
-                self.component_parent_local(local_id)
-                    .is_some_and(|style| self.add_dirt(style, ComponentDirt::TEXT_SHAPE, false))
-            }
+        match type_name {
             Some("AxisX" | "AxisY")
                 if property_key_for_name("Axis", "offset") == Some(property_key) =>
             {

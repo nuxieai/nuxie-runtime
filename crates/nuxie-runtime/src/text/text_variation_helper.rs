@@ -1,12 +1,58 @@
 //! Direct Rust home for `include/rive/text/text_variation_helper.hpp` and
 //! `src/text/text_variation_helper.cpp`.
 //!
-//! Construction and dependency-edge insertion remain in the Artboard
-//! occurrence builder because they are interleaved with every Component's
-//! authored-order lifecycle. The helper's concrete update callback lives here.
+//! Artboard retains authored-order orchestration, while this module owns the
+//! helper's occurrence attachment and concrete update callback.
+
+use anyhow::{Context, Result};
+use nuxie_graph::ArtboardGraph;
 
 use crate::ArtboardInstance;
-use crate::components::{ComponentDirt, ComponentHandle};
+use crate::components::{ComponentDirt, ComponentHandle, RuntimeComponent};
+use crate::objects::InstanceObjectArena;
+
+/// Attach every TextVariationHelper at its owning TextStyle's authored
+/// `onAddedClean` point. The caller preserves the surrounding Component order;
+/// this delegate owns the concrete helper allocation/relink operation
+/// (`src/text/text_style.cpp:45-70`).
+pub(crate) fn attach_occurrences(
+    objects: &mut InstanceObjectArena,
+    graph: &ArtboardGraph,
+    root: ComponentHandle,
+) -> Result<()> {
+    for component in &graph.components {
+        let Some(helper) = graph
+            .text_variation_helpers
+            .iter()
+            .find(|helper| helper.text_style_local == component.local_id)
+        else {
+            continue;
+        };
+        let handle = if objects
+            .text_variation_helper_handle(helper.text_style_local)
+            .is_some()
+        {
+            objects
+                .relink_text_variation_helper_owner(helper.text_style_local)
+                .context("TextVariationHelper cannot retain its rebuilt TextStyle parent")?
+        } else {
+            objects
+                .attach_text_variation_helper(
+                    helper.text_style_local,
+                    RuntimeComponent::embedded(
+                        helper.text_style_local,
+                        helper.text_style_global,
+                        "TextVariationHelper",
+                    ),
+                )
+                .context("TextStyle cannot own its TextVariationHelper")?
+        };
+        if !objects.link_parent(handle, root) {
+            anyhow::bail!("TextVariationHelper parent link could not be retained");
+        }
+    }
+    Ok(())
+}
 
 pub(crate) fn update(instance: &mut ArtboardInstance, text: ComponentHandle, dirt: ComponentDirt) {
     if !dirt.contains(ComponentDirt::TEXT_SHAPE) {

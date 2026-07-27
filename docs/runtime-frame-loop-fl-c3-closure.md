@@ -328,8 +328,8 @@ entry callbacks. The current correction keeps only the focus-manager identity
 and lazily requested target nodes available during layer initialization,
 defers the full topology until afterward, and adds live target-scope and
 traversal differentials plus the twenty-second structural ratchet. It is not
-publishable until its immutable replacement SHA is recorded and explicitly
-pushed.
+blocked on further production or evidence work: the immutable replacement
+packet is published on `origin/levi/fl-c` and awaiting independent review.
 
 The self-excluding `docs/runtime-frame-loop-trace.json` records the exact
 candidate-source fingerprint and runner provenance. Fingerprinted closure

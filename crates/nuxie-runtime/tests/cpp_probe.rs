@@ -57681,6 +57681,9 @@ fn owned_view_model_links_reject_transitive_cycles_atomically() {
     let a = make_handle();
     let b = make_handle();
     let c = make_handle();
+    let authored_c_next = c
+        .linked_view_model_by_property_name_path("next")
+        .expect("generated ViewModel property starts with its concrete C++ child");
 
     assert_eq!(
         a.link_view_model_by_property_name_path("next", &b),
@@ -57694,7 +57697,11 @@ fn owned_view_model_links_reject_transitive_cycles_atomically() {
         c.link_view_model_by_property_name_path("next", &a),
         Err(RuntimeViewModelLinkError::Cycle)
     );
-    assert!(c.linked_view_model_by_property_name_path("next").is_none());
+    assert!(
+        c.linked_view_model_by_property_name_path("next")
+            .is_some_and(|linked| linked.ptr_eq(&authored_c_next)),
+        "rejected replacement preserves the concrete child created for the property (`file.cpp:1141-1200`)"
+    );
     assert!(
         a.linked_view_model_by_property_name_path("next")
             .is_some_and(|linked| linked.ptr_eq(&b))

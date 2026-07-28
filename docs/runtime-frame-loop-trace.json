@@ -18,7 +18,7 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "1786a9a128f70f3fb1b8ea1a40baa95aada80a2c996324ec9e7b8d30aea2fe15",
+    "cpp_binary_sha256": "5dba39e8c192ca2dc46057896399806b38fe351538f758617cb6086bec6e0e90",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
@@ -7524,14 +7524,14 @@
   "rust_candidate_source": {
     "file_count": 7238,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "49ffb5c11c30d34498ccf13382e802c4ebe12f18b085563690deee87bd5ddaec"
+    "sha256": "b73fd4f04f412fe0375d5d82e463b9997149e29b74708dd874c0299e08e3f47b"
   },
-  "rust_ref": "5022e5e5cabf67f4eb1a765da79dbc1858878692",
+  "rust_ref": "971c64081df2c4f4a9b227b4da00210702edac8f",
   "rust_runner_provenance": {
     "candidate_source": {
       "file_count": 7238,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "49ffb5c11c30d34498ccf13382e802c4ebe12f18b085563690deee87bd5ddaec"
+      "sha256": "b73fd4f04f412fe0375d5d82e463b9997149e29b74708dd874c0299e08e3f47b"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [

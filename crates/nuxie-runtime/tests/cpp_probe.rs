@@ -9234,6 +9234,29 @@ fn push_manifest_name_path_asset(bytes: &mut Vec<u8>, path_id: u32, name_id: u32
     push_manifest_name_path_asset_entries(bytes, &[(path_id, name_id, name)]);
 }
 
+fn push_manifest_unmapped_name_path_asset(bytes: &mut Vec<u8>, path_id: u32, name_id: u32) {
+    let manifest_names = vec![0];
+
+    let mut manifest_paths = Vec::new();
+    push_var_uint(&mut manifest_paths, 1);
+    push_var_uint(&mut manifest_paths, u64::from(path_id));
+    push_var_uint(&mut manifest_paths, 1);
+    push_var_uint(&mut manifest_paths, u64::from(name_id));
+
+    let mut manifest_bytes = Vec::new();
+    push_var_uint(&mut manifest_bytes, 0);
+    push_var_uint(&mut manifest_bytes, manifest_names.len() as u64);
+    manifest_bytes.extend_from_slice(&manifest_names);
+    push_var_uint(&mut manifest_bytes, 1);
+    push_var_uint(&mut manifest_bytes, manifest_paths.len() as u64);
+    manifest_bytes.extend_from_slice(&manifest_paths);
+
+    push_object_with_properties(bytes, "ManifestAsset", |_| {});
+    push_object_with_properties(bytes, "FileAssetContents", |bytes| {
+        push_bytes_property(bytes, "FileAssetContents", "bytes", &manifest_bytes);
+    });
+}
+
 fn push_manifest_name_path_asset_path(bytes: &mut Vec<u8>, path_id: u32, names: &[(u32, &[u8])]) {
     let mut manifest_names = Vec::new();
     push_var_uint(&mut manifest_names, names.len() as u64);
@@ -14243,6 +14266,41 @@ fn synthetic_relative_claimed_data_bind_path_view_model_listener(file_id: u64) -
     })
 }
 
+fn synthetic_unmapped_name_relative_claimed_data_bind_path_view_model_listener(
+    file_id: u64,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |_| {});
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_manifest_unmapped_name_path_asset(bytes, 79, 999);
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "observed");
+        });
+
+        let mut listener_path = Vec::new();
+        push_var_uint(&mut listener_path, 79);
+        push_object_with_properties(bytes, "DataBindPath", |bytes| {
+            push_bytes_property(bytes, "DataBindPath", "path", &listener_path);
+            push_bool_property(bytes, "DataBindPath", "isRelative", true);
+        });
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 11);
+        });
+        push_object_with_properties(bytes, "ListenerBoolChange", |bytes| {
+            push_uint_property(bytes, "ListenerBoolChange", "inputId", 0);
+            push_uint_property(bytes, "ListenerBoolChange", "value", 1);
+        });
+    })
+}
+
 fn synthetic_nested_relative_claimed_data_bind_path_view_model_listener(file_id: u64) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
@@ -19042,6 +19100,72 @@ fn relative_claimed_data_bind_path_view_model_listener_matches_cpp_on_property_m
         state_machine.input(0).and_then(|input| input.bool_value()),
         Some(true),
         "the relative claimed DataBindPath listener must resolve its only segment as a property name"
+    );
+    if let Some(cpp) = cpp {
+        let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+        assert_eq!(cpp_reports.len(), rust_reports.len());
+        for (step, (cpp_report, (advanced, rust_report))) in
+            cpp_reports.iter().zip(&rust_reports).enumerate()
+        {
+            compare_state_machine_advance(
+                cpp_report,
+                rust_report,
+                *advanced,
+                &format!("{label} action {step}"),
+            );
+        }
+    } else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+    }
+}
+
+#[test]
+fn unmapped_name_relative_claimed_data_bind_path_view_model_listener_matches_cpp() {
+    let label =
+        "synthetic/runtime_unmapped_name_relative_claimed_data_bind_path_view_model_listener.riv";
+    let bytes = synthetic_unmapped_name_relative_claimed_data_bind_path_view_model_listener(9696);
+    let cpp = probe_path().map(|probe| {
+        let args = [
+            "--runtime-bind-created-default-view-model-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-set-default-view-model-source-number-by-name".to_owned(),
+            "0".to_owned(),
+            String::new(),
+            "1".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ];
+        read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args)
+    });
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(state_machine.bind_owned_view_model_context(&context));
+    let mut rust_reports = vec![(
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    )];
+    assert!(
+        context.set_number_by_property_name("", 1.0),
+        "{label} failed to change the unnamed listener source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+
+    assert_eq!(
+        state_machine.input(0).and_then(|input| input.bool_value()),
+        Some(true),
+        "an unmapped manifest name id must resolve to the empty property name"
     );
     if let Some(cpp) = cpp {
         let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;

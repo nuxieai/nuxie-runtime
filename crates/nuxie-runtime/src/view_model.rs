@@ -3800,7 +3800,7 @@ impl Clone for RuntimeOwnedViewModelEndpoint {
 }
 
 #[derive(Debug, Clone)]
-struct RuntimeOwnedViewModelViewModel {
+pub(crate) struct RuntimeOwnedViewModelViewModel {
     property_index: usize,
     property_name: String,
     endpoint: RuntimeOwnedViewModelEndpoint,
@@ -4075,7 +4075,7 @@ impl RuntimeOwnedViewModelViewModel {
         }
     }
 
-    fn property_index_by_name(&self, property_name: &str) -> Option<usize> {
+    pub(crate) fn property_index_by_name(&self, property_name: &str) -> Option<usize> {
         runtime_owned_view_model_property_index_by_name(&self.property_names, property_name)
     }
 
@@ -7854,7 +7854,7 @@ impl RuntimeOwnedViewModelInstance {
         Some(instance)
     }
 
-    fn property_index_by_name(&self, property_name: &str) -> Option<usize> {
+    pub(crate) fn property_index_by_name(&self, property_name: &str) -> Option<usize> {
         runtime_owned_view_model_property_index_by_name(&self.property_names, property_name)
     }
 
@@ -10124,7 +10124,7 @@ impl RuntimeOwnedViewModelInstance {
         true
     }
 
-    fn view_model_by_property_path(
+    pub(crate) fn view_model_by_property_path(
         &self,
         property_path: &[usize],
     ) -> Option<&RuntimeOwnedViewModelViewModel> {

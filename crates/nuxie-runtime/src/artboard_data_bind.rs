@@ -1225,23 +1225,6 @@ impl RuntimeOwnedDataContext {
         })
     }
 
-    pub(crate) fn resolved_property_path_for_resolved_name_path(
-        &self,
-        file: &RuntimeFile,
-        resolved_name_ids: &[u32],
-    ) -> Option<(RuntimeOwnedViewModelHandle, Vec<usize>)> {
-        self.resolve(&mut |instance, context| {
-            let property_path = context.property_path_for_context_resolved_name_path(
-                file,
-                &instance.scope_path,
-                resolved_name_ids,
-                false,
-            )?;
-            context.cell_by_property_path(&property_path)?;
-            Some((instance.context.clone(), property_path))
-        })
-    }
-
     pub(crate) fn fire_trigger(
         &self,
         file: &RuntimeFile,

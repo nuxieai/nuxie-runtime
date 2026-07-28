@@ -60,6 +60,53 @@ use std::rc::Rc;
 #[cfg(test)]
 use crate::{ScriptListenerActionMethod, ScriptMethod};
 
+fn listener_property_path_for_resolved_name_path(
+    context: &RuntimeOwnedViewModelInstance,
+    file: &RuntimeFile,
+    scope_path: &[usize],
+    resolved_name_ids: &[u32],
+) -> Option<Vec<usize>> {
+    if resolved_name_ids.is_empty() {
+        return None;
+    }
+    let manifest = file.manifest()?;
+    let mut property_path = Vec::with_capacity(scope_path.len() + resolved_name_ids.len());
+    property_path.extend_from_slice(scope_path);
+    for name_id in resolved_name_ids {
+        // C++ `ManifestAsset::resolveName` returns `""` for an unmapped id,
+        // and `tryGetRelativeViewModelProperty` performs the ordinary lookup
+        // for every resulting segment (`manifest_asset.cpp:146-153`;
+        // `data_context.cpp:300-330`).
+        let property_name = manifest.resolve_name(*name_id).unwrap_or("");
+        let property_index = if property_path.is_empty() {
+            context.property_index_by_name(property_name)?
+        } else {
+            context
+                .view_model_by_property_path(&property_path)?
+                .property_index_by_name(property_name)?
+        };
+        property_path.push(property_index);
+    }
+    Some(property_path)
+}
+
+fn resolved_listener_property_path_for_data_context(
+    data_context: &RuntimeOwnedDataContext,
+    file: &RuntimeFile,
+    resolved_name_ids: &[u32],
+) -> Option<(RuntimeOwnedViewModelHandle, Vec<usize>)> {
+    data_context.resolve_instance(&mut |handle, context, scope_path| {
+        let property_path = listener_property_path_for_resolved_name_path(
+            context,
+            file,
+            scope_path,
+            resolved_name_ids,
+        )?;
+        context.cell_by_property_path(&property_path)?;
+        Some((handle.clone(), property_path))
+    })
+}
+
 #[derive(Debug)]
 pub struct StateMachineInstance {
     state_machine_index: usize,
@@ -7786,13 +7833,12 @@ impl StateMachineInstance {
                         let file = runtime_file?;
                         if file.manifest().is_some() {
                             context_chain.iter().find_map(|context_path| {
-                                let property_path = context
-                                    .property_path_for_context_resolved_name_path(
-                                        file,
-                                        context_path,
-                                        resolved_name_ids,
-                                        false,
-                                    )?;
+                                let property_path = listener_property_path_for_resolved_name_path(
+                                    context,
+                                    file,
+                                    context_path,
+                                    resolved_name_ids,
+                                )?;
                                 context.cell_by_property_path(&property_path)
                             })
                         } else {
@@ -7856,7 +7902,8 @@ impl StateMachineInstance {
                         } => {
                             let file = runtime_file?;
                             if file.manifest().is_some() {
-                                data_context.resolved_property_path_for_resolved_name_path(
+                                resolved_listener_property_path_for_data_context(
+                                    data_context,
                                     file,
                                     resolved_name_ids,
                                 )

@@ -395,6 +395,7 @@ fn bound_listener_scripted_converter_file_with_options(
         include_missing_child,
         converter_implemented_methods,
         false,
+        false,
     )
 }
 
@@ -408,6 +409,21 @@ fn bound_listener_scripted_converter_file_with_name_based_custom_amount(
         false,
         None,
         true,
+        false,
+    )
+}
+
+fn bound_listener_scripted_converter_file_with_listener_child(
+    listener_source: &[u8],
+    converter_source: &[u8],
+) -> Vec<u8> {
+    bound_listener_scripted_converter_file_with_manifest_options(
+        listener_source,
+        converter_source,
+        false,
+        None,
+        false,
+        true,
     )
 }
 
@@ -417,6 +433,7 @@ fn bound_listener_scripted_converter_file_with_manifest_options(
     include_missing_child: bool,
     converter_implemented_methods: Option<u64>,
     name_based_custom_amount: bool,
+    include_listener_child: bool,
 ) -> Vec<u8> {
     let mut listener_payload = vec![0];
     listener_payload.extend(compile_luau(listener_source));
@@ -434,7 +451,7 @@ fn bound_listener_scripted_converter_file_with_manifest_options(
     push_object(&mut bytes, "ViewModelPropertyNumber", |bytes| {
         push_string(bytes, "ViewModelPropertyNumber", "name", "amount");
     });
-    if include_missing_child {
+    if include_missing_child || include_listener_child {
         push_object(&mut bytes, "ViewModelPropertyViewModel", |bytes| {
             push_string(bytes, "ViewModelPropertyViewModel", "name", "child");
             push_uint(
@@ -452,6 +469,16 @@ fn bound_listener_scripted_converter_file_with_manifest_options(
         });
     }
     push_object(&mut bytes, "Backboard", |_| {});
+    if include_listener_child {
+        push_object(&mut bytes, "ViewModelInstance", |bytes| {
+            push_string(bytes, "ViewModelInstance", "name", "child-default");
+            push_uint(bytes, "ViewModelInstance", "viewModelId", 1);
+        });
+        push_object(&mut bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32(bytes, "ViewModelInstanceNumber", "propertyValue", 4.0);
+        });
+    }
     push_object(&mut bytes, "ViewModelInstance", |bytes| {
         push_string(bytes, "ViewModelInstance", "name", "root-default");
         push_uint(bytes, "ViewModelInstance", "viewModelId", 0);
@@ -469,6 +496,16 @@ fn bound_listener_scripted_converter_file_with_manifest_options(
                 1,
             );
             push_uint(bytes, "ViewModelInstanceViewModel", "propertyValue", 999);
+        });
+    } else if include_listener_child {
+        push_object(&mut bytes, "ViewModelInstanceViewModel", |bytes| {
+            push_uint(
+                bytes,
+                "ViewModelInstanceViewModel",
+                "viewModelPropertyId",
+                1,
+            );
+            push_uint(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
         });
     }
     if name_based_custom_amount {
@@ -540,6 +577,20 @@ fn bound_listener_scripted_converter_file_with_manifest_options(
         push_blob(bytes, "DataBindContext", "sourcePathIds", &source_path);
         push_uint(bytes, "DataBindContext", "converterId", 0);
     });
+    if include_listener_child {
+        let mut child_path = Vec::new();
+        push_var_uint(&mut child_path, 0);
+        push_var_uint(&mut child_path, 1);
+        push_object(&mut bytes, "ScriptInputViewModelProperty", |bytes| {
+            push_string(bytes, "ScriptInputViewModelProperty", "name", "boundChild");
+            push_blob(
+                bytes,
+                "ScriptInputViewModelProperty",
+                "dataBindPathIds",
+                &child_path,
+            );
+        });
+    }
 
     // This ScriptedObject boundary ends the listener's input collection. Its
     // following ScriptInput/DataBind records belong to this concrete converter
@@ -3816,6 +3867,10 @@ fn listener_cold_generator_cannot_see_an_already_owned_live_data_context() {
     let file = Arc::new(File::from_runtime(runtime).expect("build cold-generator file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate cold-generator artboard");
+    let root = instance
+        .instantiate_view_model_instance(0)
+        .expect("instantiate cold-generator context");
+    instance.bind_view_model(&root);
     let mut machine = instance
         .default_state_machine_instance()
         .expect("instantiate cold-generator machine");
@@ -3823,14 +3878,6 @@ fn listener_cold_generator_cannot_see_an_already_owned_live_data_context() {
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("bootstrap cold-generator scripts");
-    let root = instance
-        .instantiate_view_model_instance(0)
-        .expect("instantiate cold-generator context");
-    let root_context = nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(
-        file.runtime(),
-        root.handle().clone(),
-    );
-    machine.bind_owned_view_model_context_handle(&root_context);
 
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
         .expect("run cold then live listener initialization");
@@ -3881,6 +3928,10 @@ fn listener_cold_table_waits_for_live_view_model_input_without_regeneration() {
     let file = Arc::new(File::from_runtime(runtime).expect("build cold-table file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate cold-table artboard");
+    let root = instance
+        .instantiate_view_model_instance(0)
+        .expect("instantiate cold-table context");
+    instance.bind_view_model(&root);
     let mut machine = instance
         .default_state_machine_instance()
         .expect("instantiate cold-table machine");
@@ -3888,14 +3939,6 @@ fn listener_cold_table_waits_for_live_view_model_input_without_regeneration() {
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("bootstrap cold-table scripts");
-    let root = instance
-        .instantiate_view_model_instance(0)
-        .expect("instantiate cold-table context");
-    let root_context = nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(
-        file.runtime(),
-        root.handle().clone(),
-    );
-    machine.bind_owned_view_model_context_handle(&root_context);
 
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
         .expect("retain cold table through live ViewModel hydration");
@@ -3913,6 +3956,154 @@ fn listener_cold_table_waits_for_live_view_model_input_without_regeneration() {
         commands,
         ["listener_cold_table_live_init"],
         "ViewModel ScriptInput cold validation retains one table, then the live pass hydrates and initializes it without another generator call (`script_input_viewmodel_property.cpp:46-81`; `scripted_object.cpp:399-437`)"
+    );
+}
+
+#[test]
+fn prebound_constructor_hydrates_deferred_listener_before_converter_binding() {
+    let bytes = bound_listener_scripted_converter_file_with_listener_child(
+        br#"
+            local nuxie = require("nuxie")
+
+            return function(_context)
+                return {
+                    init = function(self, initContext)
+                        if initContext:viewModel() == nil or self.boundChild == nil then
+                            error("the constructor did not install the pre-bound DataContext")
+                        end
+                        nuxie.trigger("listener_preconverter_init")
+                        return true
+                    end,
+                    performAction = function(_self, _invocation) end,
+                }
+            end
+        "#,
+        br#"
+            local nuxie = require("nuxie")
+
+            return function(_context)
+                return {
+                    init = function(_self, _initContext)
+                        nuxie.trigger("converter_bound")
+                        return true
+                    end,
+                    convert = function(_self, _value) return 42 end,
+                }
+            end
+        "#,
+    );
+    let runtime = read_runtime_file_for_facade(&bytes).expect("import constructor-order fixture");
+    let file = Arc::new(File::from_runtime(runtime).expect("build constructor-order file"));
+    let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+        .expect("instantiate constructor-order artboard");
+    let root = instance
+        .instantiate_view_model_instance(0)
+        .expect("instantiate constructor-order context");
+    instance.bind_view_model(&root);
+    assert!(instance.owned_view_model_context().is_some());
+    let mut machine = instance
+        .default_state_machine_instance()
+        .expect("instantiate constructor-order machine");
+    let mut factory = RecordingFactory::new();
+    instance
+        .prepare_flow_scripts(&mut factory)
+        .expect("bootstrap constructor-order scripts");
+
+    instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
+        .expect("run the complete constructor lifecycle");
+    let commands = instance
+        .drain_flow_host_commands()
+        .into_iter()
+        .filter_map(|command| match command {
+            LuaHostCommand::Trigger { name, .. }
+                if matches!(
+                    name.as_str(),
+                    "listener_preconverter_init" | "converter_bound"
+                ) =>
+            {
+                Some(name)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        commands,
+        ["listener_preconverter_init", "converter_bound"],
+        "a pre-bound root constructor hydrates deferred fixed ScriptedObjects before `inheritDataContext` binds converter chains (`state_machine_instance.cpp:2072-2082`; `artboard.cpp:2844-2856`; `data_bind.cpp:251-328`)"
+    );
+}
+
+#[test]
+fn post_constructor_context_bind_runs_converter_before_live_listener_init() {
+    let bytes = bound_listener_scripted_converter_file_with_listener_child(
+        br#"
+            local nuxie = require("nuxie")
+
+            return function(_context)
+                return {
+                    init = function(self, initContext)
+                        if initContext:viewModel() == nil or self.boundChild == nil then
+                            error("the explicit bind did not install its live DataContext")
+                        end
+                        nuxie.trigger("listener_postbind_init")
+                        return true
+                    end,
+                    performAction = function(_self, _invocation) end,
+                }
+            end
+        "#,
+        br#"
+            local nuxie = require("nuxie")
+
+            return function(_context)
+                return {
+                    init = function(_self, _initContext)
+                        nuxie.trigger("converter_bound")
+                        return true
+                    end,
+                    convert = function(_self, _value) return 42 end,
+                }
+            end
+        "#,
+    );
+    let runtime = read_runtime_file_for_facade(&bytes).expect("import post-bind fixture");
+    let file = Arc::new(File::from_runtime(runtime).expect("build post-bind file"));
+    let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+        .expect("instantiate post-bind artboard");
+    let mut machine = instance
+        .default_state_machine_instance()
+        .expect("construct machine without a DataContext");
+    let mut factory = RecordingFactory::new();
+    instance
+        .prepare_flow_scripts(&mut factory)
+        .expect("bootstrap post-bind scripts");
+    let root = instance
+        .instantiate_view_model_instance(0)
+        .expect("instantiate post-bind context");
+    let root_context = nuxie_runtime::RuntimeOwnedViewModelContextHandle::root(
+        file.runtime(),
+        root.handle().clone(),
+    );
+    machine.bind_owned_view_model_context_handle(&root_context);
+
+    instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
+        .expect("run explicit-bind lifecycle");
+    let commands = instance
+        .drain_flow_host_commands()
+        .into_iter()
+        .filter_map(|command| match command {
+            LuaHostCommand::Trigger { name, .. }
+                if matches!(name.as_str(), "listener_postbind_init" | "converter_bound") =>
+            {
+                Some(name)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        commands,
+        ["converter_bound", "listener_postbind_init"],
+        "a context attached after construction enters `internalDataContext`, whose DataBind/converter pass precedes `initScriptedObjects` (`state_machine_instance.cpp:2880-2913`; `data_bind.cpp:251-328`)"
     );
 }
 

@@ -4451,10 +4451,13 @@ impl ArtboardInstance {
         self.initialize_state_machine_hit_path_flags(state_machine);
         if let Some(context) = self.artboard_owned_view_model_handle.as_ref() {
             instance.bind_owned_view_model_context_handle(context);
+            instance.mark_scripted_constructor_context_prebound();
         } else if let Some(data_context) = self.artboard_owned_data_context.as_ref() {
             instance.bind_owned_view_model_data_context(data_context);
+            instance.mark_scripted_constructor_context_prebound();
         } else if let Some(context) = self.artboard_owned_view_model_context.as_ref() {
             instance.bind_owned_view_model_contexts(context);
+            instance.mark_scripted_constructor_context_prebound();
         }
         Some(instance)
     }

@@ -612,8 +612,8 @@ enum ScriptedListenerDataContextPhase {
     /// `cloneScriptedObject()->reinit()` runs before the state-machine
     /// occurrence receives its live DataContext.
     Cold,
-    /// Construction's later `initScriptedObjects()` pass and every explicit
-    /// rebind see the occurrence-owned DataContext, with the facade root used
+    /// A constructor whose Artboard was already bound, plus every explicit
+    /// rebind, sees the occurrence-owned DataContext. The facade root is used
     /// only when no occurrence-owned context exists.
     Live,
 }
@@ -824,6 +824,7 @@ fn instantiate_script_listener_actions_with_optional_factory(
 ) -> std::result::Result<(), nuxie_runtime::ScriptError> {
     let definitions = machine.scripted_objects().to_vec();
     let mut factory = factory;
+    let constructor_context_was_prebound = machine.scripted_constructor_context_was_prebound();
 
     // Clone/reinit every ScriptedListenerAction before the live DataContext is
     // attached. C++ completes this cold pass for the full authored collection
@@ -872,6 +873,60 @@ fn instantiate_script_listener_actions_with_optional_factory(
             );
             let _ = scripted_listener_action_or_inert(result)?;
         }
+    }
+
+    if constructor_context_was_prebound {
+        // `ArtboardInstance::stateMachineAt` constructs the machine after the
+        // Artboard has already acquired its DataContext. The C++ constructor
+        // therefore installs that context and runs `initScriptedObjects`
+        // before `stateMachineAt` calls `inheritDataContext`, which is the
+        // later converter-binding pass below
+        // (`state_machine_instance.cpp:2072-2082`;
+        // `artboard.cpp:2844-2856`). Keep the preceding clone/reinit cold:
+        // only an init deferred by a live prerequisite reaches this pass.
+        let mut live_factory = factory;
+        install_live_scripted_object_contexts(
+            file,
+            machine,
+            &definitions,
+            root_view_model,
+            &mut live_factory,
+        )?;
+        for definition in &definitions {
+            if !materialize_missing_scripted_object_after_context_barrier(
+                file,
+                machine,
+                definition,
+                root_view_model,
+                &mut live_factory,
+            )? {
+                continue;
+            }
+            let result = machine
+                .hydrate_and_initialize_scripted_object_instance_after_context_install(
+                    definition.scripted_object_global_id(),
+                    definition.inits(),
+                    live_factory
+                        .as_mut()
+                        .map(|factory| &mut **factory as &mut dyn Factory),
+                    |machine| {
+                        prepare_script_listener_hydration(
+                            file,
+                            machine,
+                            definition,
+                            root_view_model,
+                            None,
+                            false,
+                            false,
+                            ScriptedListenerDataContextPhase::Live,
+                        )
+                    },
+                );
+            let _ = scripted_listener_action_or_inert(result)?;
+        }
+        factory = live_factory;
+    } else {
+        retry_cold_scripted_objects_during_constructor(file, machine, &definitions, &mut factory)?;
     }
 
     // `internalDataContext` binds the ordinary StateMachine container before
@@ -986,6 +1041,62 @@ fn install_live_scripted_object_contexts(
             definition.scripted_object_global_id(),
             &context,
         )?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn retry_cold_scripted_objects_during_constructor(
+    file: &Arc<File>,
+    machine: &mut StateMachineInstance,
+    definitions: &[nuxie_runtime::ScriptListenerActionDefinition],
+    factory: &mut Option<&mut dyn Factory>,
+) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+    // C++ always performs a second constructor `initScriptedObjects` pass
+    // after clone/reinit, even when the owning Artboard has no DataContext.
+    // A failed generator/init therefore retries once before any later
+    // `inheritDataContext` converter bind (`state_machine_instance.cpp:
+    // 2072-2082`; `scripted_object.cpp:532-540`).
+    for definition in definitions {
+        if !instantiate_state_machine_scripted_object_table(
+            file,
+            machine,
+            definition,
+            factory
+                .as_mut()
+                .map(|factory| &mut **factory as &mut dyn Factory),
+            None,
+            ScriptedListenerDataContextPhase::Cold,
+        )? {
+            continue;
+        }
+        let context = script_listener_context_hydration(
+            file,
+            machine,
+            None,
+            ScriptedListenerDataContextPhase::Cold,
+        );
+        let result = machine.hydrate_and_initialize_scripted_object_instance(
+            definition.scripted_object_global_id(),
+            context,
+            definition.inits(),
+            factory
+                .as_mut()
+                .map(|factory| &mut **factory as &mut dyn Factory),
+            |machine| {
+                prepare_script_listener_hydration(
+                    file,
+                    machine,
+                    definition,
+                    None,
+                    None,
+                    false,
+                    false,
+                    ScriptedListenerDataContextPhase::Cold,
+                )
+            },
+        );
+        let _ = scripted_listener_action_or_inert(result)?;
     }
     Ok(())
 }
@@ -2302,9 +2413,9 @@ impl FileScriptArtboard {
             .as_ref()
             .map(|parent| parent.with_local_view_model(&local))
             .unwrap_or_else(|| nuxie_runtime::ScriptArtboardDataContext::root(&local));
-        state_machine.bind_script_artboard_data_context(&context);
         self.instance
             .bind_script_artboard_data_context(&self.file.runtime, &context);
+        state_machine.bind_script_artboard_data_context(&context);
         self._data_context = Some(context);
     }
 
@@ -3766,10 +3877,6 @@ impl<'a> ArtboardInstance<'a> {
             .advance_frame_components(elapsed_seconds)
             .unwrap_or(false);
         changed |= self.raw.update_pass_with_script_errors().unwrap_or(false);
-        #[cfg(feature = "scripting")]
-        {
-            changed |= self.file.advance_detached_view_models();
-        }
         changed
     }
 
@@ -3787,7 +3894,7 @@ impl<'a> ArtboardInstance<'a> {
     ) -> Result<bool> {
         #[cfg(feature = "scripting")]
         {
-            let mut changed = advance_scripted_artboard_frame_with_factory(
+            let changed = advance_scripted_artboard_frame_with_factory(
                 &self.script_file,
                 self.artboard().graph(),
                 &mut self.raw,
@@ -3797,7 +3904,6 @@ impl<'a> ArtboardInstance<'a> {
                 None,
             )
             .context("failed to advance scripted drawables")?;
-            changed |= self.file.advance_detached_view_models();
             return Ok(changed);
         }
         #[cfg(not(feature = "scripting"))]
@@ -4035,7 +4141,7 @@ impl<'a> ArtboardInstance<'a> {
             .unwrap_or(false);
         #[cfg(feature = "scripting")]
         {
-            changed |= self.file.advance_detached_view_models();
+            self.file.advance_detached_view_models();
         }
         advance_and_apply_keep_going(changed, elapsed_seconds, state_machines)
     }
@@ -4052,6 +4158,9 @@ impl<'a> ArtboardInstance<'a> {
             return self.bind_view_model(view_model) | self.advance(elapsed_seconds);
         }
         let mut changed = false;
+        changed |= self
+            .raw
+            .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
         #[cfg(not(feature = "scripting"))]
         for state_machine in state_machines.iter_mut() {
             changed |= state_machine.bind_owned_view_model_handle(view_model.handle());
@@ -4070,9 +4179,6 @@ impl<'a> ArtboardInstance<'a> {
         }
         changed |= self
             .raw
-            .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
-        changed |= self
-            .raw
             .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
             .unwrap_or(false);
         changed |= self
@@ -4081,6 +4187,10 @@ impl<'a> ArtboardInstance<'a> {
                 state_machines,
             )
             .unwrap_or(false);
+        #[cfg(feature = "scripting")]
+        {
+            self.file.advance_detached_view_models();
+        }
         advance_and_apply_keep_going(changed, elapsed_seconds, state_machines)
     }
 
@@ -4121,7 +4231,7 @@ impl<'a> ArtboardInstance<'a> {
                 None,
             )
             .context("failed to advance scripted drawables")?;
-            changed |= self.file.advance_detached_view_models();
+            self.file.advance_detached_view_models();
         }
         #[cfg(not(feature = "scripting"))]
         {
@@ -4176,6 +4286,7 @@ impl<'a> ArtboardInstance<'a> {
                 Some(view_model),
             )
             .context("failed to advance scripted drawables")?;
+            self.file.advance_detached_view_models();
         }
         #[cfg(not(feature = "scripting"))]
         {
@@ -4348,10 +4459,6 @@ impl OwnedArtboardInstance {
             .advance_frame_components(elapsed_seconds)
             .unwrap_or(false);
         changed |= self.raw.update_pass_with_script_errors().unwrap_or(false);
-        #[cfg(feature = "scripting")]
-        {
-            changed |= self.file.advance_detached_view_models();
-        }
         changed
     }
 
@@ -4371,7 +4478,7 @@ impl OwnedArtboardInstance {
             .context("owned artboard instance graph is unavailable")?;
         #[cfg(feature = "scripting")]
         {
-            let mut changed = advance_scripted_artboard_frame_with_factory(
+            let changed = advance_scripted_artboard_frame_with_factory(
                 &self.file,
                 artboard,
                 &mut self.raw,
@@ -4381,7 +4488,6 @@ impl OwnedArtboardInstance {
                 None,
             )
             .context("failed to advance scripted drawables")?;
-            changed |= self.file.advance_detached_view_models();
             return Ok(changed);
         }
         #[cfg(not(feature = "scripting"))]
@@ -4700,7 +4806,7 @@ impl OwnedArtboardInstance {
             .unwrap_or(false);
         #[cfg(feature = "scripting")]
         {
-            changed |= self.file.advance_detached_view_models();
+            self.file.advance_detached_view_models();
         }
         advance_and_apply_keep_going(changed, elapsed_seconds, state_machines)
     }
@@ -4717,6 +4823,9 @@ impl OwnedArtboardInstance {
             return self.bind_view_model(view_model) | self.advance(elapsed_seconds);
         }
         let mut changed = false;
+        changed |= self
+            .raw
+            .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
         #[cfg(not(feature = "scripting"))]
         for state_machine in state_machines.iter_mut() {
             changed |= state_machine.bind_owned_view_model_handle(view_model.handle());
@@ -4735,9 +4844,6 @@ impl OwnedArtboardInstance {
         }
         changed |= self
             .raw
-            .bind_owned_view_model_artboard_handle(&self.file.runtime, view_model.handle());
-        changed |= self
-            .raw
             .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
             .unwrap_or(false);
         changed |= self
@@ -4746,6 +4852,10 @@ impl OwnedArtboardInstance {
                 state_machines,
             )
             .unwrap_or(false);
+        #[cfg(feature = "scripting")]
+        {
+            self.file.advance_detached_view_models();
+        }
         advance_and_apply_keep_going(changed, elapsed_seconds, state_machines)
     }
 
@@ -4795,7 +4905,7 @@ impl OwnedArtboardInstance {
                 None,
             )
             .context("failed to advance scripted drawables")?;
-            changed |= self.file.advance_detached_view_models();
+            self.file.advance_detached_view_models();
         }
         #[cfg(not(feature = "scripting"))]
         {
@@ -4857,6 +4967,7 @@ impl OwnedArtboardInstance {
                 Some(view_model),
             )
             .context("failed to advance scripted drawables")?;
+            self.file.advance_detached_view_models();
         }
         #[cfg(not(feature = "scripting"))]
         {

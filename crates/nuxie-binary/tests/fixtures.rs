@@ -2722,6 +2722,118 @@ fn runtime_state_machine_listener_input_types_retain_concrete_inputs_in_order() 
 }
 
 #[test]
+fn runtime_state_machine_listener_owners_follow_cpp_import_stack_keys() {
+    let file = read_runtime_file(&synthetic_runtime_file(4341, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "Artboard");
+
+        push_object_with_properties(bytes, "StateMachine", |bytes| {
+            push_string_property(bytes, "StateMachine", "name", "first");
+        });
+        push_empty_object(bytes, "StateMachineListener");
+        push_empty_object(bytes, "StateMachineBool");
+
+        // A new StateMachine replaces only the StateMachine importer. The
+        // earlier listener remains the latest StateMachineListener importer.
+        push_object_with_properties(bytes, "StateMachine", |bytes| {
+            push_string_property(bytes, "StateMachine", "name", "second");
+        });
+        push_empty_object(bytes, "StateMachineNumber");
+        push_empty_object(bytes, "ListenerFireEvent");
+        push_empty_object(bytes, "ListenerInputTypeKeyboard");
+        push_empty_object(bytes, "ListenerInputTypeGamepad");
+        push_empty_object(bytes, "GamepadInput");
+        push_empty_object(bytes, "StateMachineNumber");
+        push_object_with_properties(bytes, "KeyboardInput", |bytes| {
+            push_uint_property(bytes, "KeyboardInput", "keyType", 65);
+        });
+
+        // Replacing the listener importer does not replace the independently
+        // keyed ListenerInputTypeKeyboard importer.
+        push_empty_object(bytes, "StateMachineListener");
+        push_object_with_properties(bytes, "KeyboardInput", |bytes| {
+            push_uint_property(bytes, "KeyboardInput", "keyType", 66);
+        });
+
+        // Replacing the keyboard importer moves subsequent KeyboardInput
+        // records to the second listener only.
+        push_empty_object(bytes, "ListenerInputTypeKeyboard");
+        push_empty_object(bytes, "StateMachineTrigger");
+        push_object_with_properties(bytes, "KeyboardInput", |bytes| {
+            push_uint_property(bytes, "KeyboardInput", "keyType", 67);
+        });
+        push_empty_object(bytes, "ListenerFireEvent");
+    }))
+    .expect("synthetic persistent-listener-owner stream imports");
+
+    let state_machines = file.artboard_state_machine_graphs(0);
+    assert_eq!(state_machines.len(), 2);
+
+    let first = &state_machines[0];
+    assert_eq!(first.object.string_property("name"), Some("first"));
+    assert_eq!(first.listeners.len(), 1);
+    assert_eq!(
+        first.listeners[0]
+            .actions
+            .iter()
+            .map(|action| action.object.id)
+            .collect::<Vec<_>>(),
+        vec![7],
+        "the delayed action remains owned by the independently retained first listener"
+    );
+    assert_eq!(
+        first.listeners[0]
+            .listener_input_types
+            .iter()
+            .map(|input_type| input_type.id)
+            .collect::<Vec<_>>(),
+        vec![8, 9]
+    );
+    assert_eq!(
+        first.listeners[0].listener_input_type_inputs[0]
+            .iter()
+            .map(|input| (input.id, input.uint_property("keyType")))
+            .collect::<Vec<_>>(),
+        vec![(12, Some(65)), (14, Some(66))],
+        "the old keyboard importer survives a different input-type importer, unrelated records, and a new listener importer"
+    );
+    assert_eq!(
+        first.listeners[0].listener_input_type_inputs[1]
+            .iter()
+            .map(|input| input.id)
+            .collect::<Vec<_>>(),
+        vec![10]
+    );
+
+    let second = &state_machines[1];
+    assert_eq!(second.object.string_property("name"), Some("second"));
+    assert_eq!(second.listeners.len(), 1);
+    assert_eq!(
+        second.listeners[0]
+            .actions
+            .iter()
+            .map(|action| action.object.id)
+            .collect::<Vec<_>>(),
+        vec![18]
+    );
+    assert_eq!(
+        second.listeners[0]
+            .listener_input_types
+            .iter()
+            .map(|input_type| input_type.id)
+            .collect::<Vec<_>>(),
+        vec![15]
+    );
+    assert_eq!(
+        second.listeners[0].listener_input_type_inputs[0]
+            .iter()
+            .map(|input| (input.id, input.uint_property("keyType")))
+            .collect::<Vec<_>>(),
+        vec![(17, Some(67))]
+    );
+}
+
+#[test]
 fn runtime_data_binds_resolve_cpp_data_converter_ids() {
     let file = read_runtime_file(&synthetic_runtime_file(4340, |bytes| {
         push_empty_object(bytes, "DataConverterRounder");

@@ -409,6 +409,19 @@ struct RuntimeStateMachineScriptedObjectOwner {
     scripted_object_index: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct RuntimeStateMachineListenerOwner {
+    state_machine_index: usize,
+    listener_index: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeStateMachineListenerInputTypeOwner {
+    state_machine_index: usize,
+    listener_index: usize,
+    input_type_index: usize,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct RuntimeFile {
     pub header: RuntimeHeader,
@@ -1049,6 +1062,7 @@ impl RuntimeFile {
             return Some(RuntimeDataBindPath {
                 object: Some(path_object),
                 property_name: "path",
+                is_relative: path_object.bool_property("isRelative").unwrap_or(false),
                 path_ids,
                 resolved_path_ids,
             });
@@ -1059,6 +1073,7 @@ impl RuntimeFile {
         Some(RuntimeDataBindPath {
             object: None,
             property_name,
+            is_relative: false,
             resolved_path_ids: path_ids.clone(),
             path_ids,
         })
@@ -1230,6 +1245,52 @@ impl RuntimeFile {
 
     pub fn data_converter(&self, index: usize) -> Option<&RuntimeObject> {
         self.cpp_data_converters().nth(index)
+    }
+
+    /// Script inputs attached by the pinned `ScriptedObjectImporter`.
+    ///
+    /// ScriptInput records do not carry an owner id. The importer assigns
+    /// them to the latest successfully imported ScriptedObject, so reproduce
+    /// that authored-order ownership directly instead of guessing from
+    /// Component parent links.
+    pub fn scripted_inputs_for_object<'a>(
+        &'a self,
+        scripted_object: &RuntimeObject,
+    ) -> Vec<&'a RuntimeObject> {
+        let Some(owner_id) = usize::try_from(scripted_object.id).ok() else {
+            return Vec::new();
+        };
+        if self.import_status(owner_id) != Some(RuntimeImportStatus::Imported)
+            || !definition_by_type_key(scripted_object.type_key)
+                .is_some_and(definition_is_cpp_scripted_object)
+        {
+            return Vec::new();
+        }
+
+        let mut inputs = Vec::new();
+        for candidate in self
+            .objects
+            .iter()
+            .skip(owner_id.saturating_add(1))
+            .flatten()
+        {
+            let Some(candidate_id) = usize::try_from(candidate.id).ok() else {
+                continue;
+            };
+            if self.import_status(candidate_id) != Some(RuntimeImportStatus::Imported) {
+                continue;
+            }
+            let Some(definition) = definition_by_type_key(candidate.type_key) else {
+                continue;
+            };
+            if definition_is_cpp_scripted_object(definition) {
+                break;
+            }
+            if definition.name.starts_with("ScriptInput") {
+                inputs.push(candidate);
+            }
+        }
+        inputs
     }
 
     pub fn data_converter_output_type(
@@ -2404,6 +2465,25 @@ impl RuntimeFile {
         };
 
         self.cpp_data_converter_formula_tokens(index)
+    }
+
+    /// Every authored FormulaToken occurrence owned by this concrete formula,
+    /// before C++'s shunting-yard pass removes parentheses/separators from the
+    /// output queue. This is the collection used by FormulaToken DataBind
+    /// ownership and clone retargeting.
+    pub fn data_converter_formula_authored_tokens_for_object(
+        &self,
+        data_converter: &RuntimeObject,
+    ) -> Vec<&RuntimeObject> {
+        let Some(index) = self
+            .data_converters()
+            .into_iter()
+            .position(|candidate| candidate.id == data_converter.id)
+        else {
+            return Vec::new();
+        };
+
+        self.cpp_data_converter_formula_authored_tokens(index)
     }
 
     pub fn data_converter_formula_output_tokens_for_object(
@@ -5294,8 +5374,19 @@ impl RuntimeFile {
         let mut state_machines = Vec::<RuntimeStateMachine<'_>>::new();
         let mut current_state_machine: Option<usize> = None;
         let mut current_layer: Option<usize> = None;
-        let mut current_listener: Option<usize> = None;
-        let mut current_listener_input_type: Option<usize> = None;
+        // ImportStack retains the latest importer independently for every
+        // type key. Listener and ListenerInputType ownership therefore
+        // survives unrelated records, layer/state changes, and even a later
+        // StateMachine importer until the same importer key is replaced
+        // (`import_stack.hpp:23-68`; `listener_action.cpp:14-45`;
+        // `listener_input_type.cpp:10-22`).
+        let mut current_listener: Option<RuntimeStateMachineListenerOwner> = None;
+        let mut current_keyboard_input_type:
+            Option<RuntimeStateMachineListenerInputTypeOwner> = None;
+        let mut current_gamepad_input_type:
+            Option<RuntimeStateMachineListenerInputTypeOwner> = None;
+        let mut current_semantic_input_type:
+            Option<RuntimeStateMachineListenerInputTypeOwner> = None;
         let mut current_layer_component: Option<RuntimeStateMachineLayerComponentOwner> = None;
         let mut current_state_machine_scripted_object: Option<
             RuntimeStateMachineScriptedObjectOwner,
@@ -5346,8 +5437,6 @@ impl RuntimeFile {
                 });
                 current_state_machine = Some(state_machines.len() - 1);
                 current_layer = None;
-                current_listener = None;
-                current_listener_input_type = None;
                 current_state_machine_scripted_object = None;
                 continue;
             }
@@ -5360,20 +5449,24 @@ impl RuntimeFile {
                 definition.name,
                 "GamepadInput" | "KeyboardInput" | "SemanticInput"
             ) {
-                if let (Some(listener_index), Some(input_type_index)) =
-                    (current_listener, current_listener_input_type)
-                    && let Some(listener_input_type) = state_machines[state_machine_index]
+                let owner = match definition.name {
+                    "KeyboardInput" => current_keyboard_input_type,
+                    "GamepadInput" => current_gamepad_input_type,
+                    "SemanticInput" => current_semantic_input_type,
+                    _ => unreachable!("the enclosing match filters concrete listener inputs"),
+                };
+                if let Some(owner) = owner
+                    && let Some(listener_input_type) = state_machines[owner.state_machine_index]
                         .listeners
-                        .get_mut(listener_index)
+                        .get_mut(owner.listener_index)
                     && let Some(inputs) = listener_input_type
                         .listener_input_type_inputs
-                        .get_mut(input_type_index)
+                        .get_mut(owner.input_type_index)
                 {
                     inputs.push(object);
                 }
                 continue;
             }
-            current_listener_input_type = None;
 
             if definition_adds_cpp_state_machine_scripted_object(definition) {
                 state_machines[state_machine_index]
@@ -5413,7 +5506,6 @@ impl RuntimeFile {
                         states: Vec::new(),
                     });
                 current_layer = Some(state_machines[state_machine_index].layers.len() - 1);
-                current_listener = None;
                 continue;
             }
 
@@ -5442,7 +5534,6 @@ impl RuntimeFile {
                     });
                     state_machines[state_machine_index].layers[layer_index].state_count += 1;
                 }
-                current_listener = None;
                 continue;
             }
 
@@ -5474,7 +5565,6 @@ impl RuntimeFile {
                             animation,
                         });
                 }
-                current_listener = None;
                 continue;
             }
 
@@ -5521,7 +5611,6 @@ impl RuntimeFile {
                                 - 1,
                         });
                 }
-                current_listener = None;
                 continue;
             }
 
@@ -5585,7 +5674,6 @@ impl RuntimeFile {
                     .inputs
                     .push(Some(object));
                 current_layer = None;
-                current_listener = None;
                 continue;
             }
 
@@ -5597,21 +5685,27 @@ impl RuntimeFile {
                         actions: Vec::new(),
                         listener_input_types: Vec::new(),
                         listener_input_type_inputs: Vec::new(),
-                    });
+                });
                 current_layer = None;
-                current_listener = Some(state_machines[state_machine_index].listeners.len() - 1);
+                current_listener = Some(RuntimeStateMachineListenerOwner {
+                    state_machine_index,
+                    listener_index: state_machines[state_machine_index].listeners.len() - 1,
+                });
                 continue;
             }
 
             if definition.is_a("ListenerAction") {
                 if listener_action_parent_kind_is_listener(object) {
-                    if let Some(listener_index) = current_listener {
-                        state_machines[state_machine_index].listeners[listener_index]
+                    if let Some(owner) = current_listener {
+                        state_machines[owner.state_machine_index].listeners[owner.listener_index]
                             .actions
                             .push(cpp_runtime_listener_action(
                                 object,
                                 &artboard_local_slots,
                                 &self.objects,
+                                (object.type_name == "ListenerViewModelChange")
+                                    .then(|| self.latest_bindable_property_for_object(object))
+                                    .flatten(),
                             ));
                     }
                 } else if let Some(owner) = current_layer_component {
@@ -5628,6 +5722,9 @@ impl RuntimeFile {
                                     object,
                                     &artboard_local_slots,
                                     &self.objects,
+                                    (object.type_name == "ListenerViewModelChange")
+                                        .then(|| self.latest_bindable_property_for_object(object))
+                                        .flatten(),
                                 ));
                         }
                         RuntimeStateMachineLayerComponentOwner::Transition {
@@ -5644,6 +5741,9 @@ impl RuntimeFile {
                                     object,
                                     &artboard_local_slots,
                                     &self.objects,
+                                    (object.type_name == "ListenerViewModelChange")
+                                        .then(|| self.latest_bindable_property_for_object(object))
+                                        .flatten(),
                                 ));
                         }
                     }
@@ -5652,12 +5752,28 @@ impl RuntimeFile {
             }
 
             if definition.is_a("ListenerInputType") {
-                if let Some(listener_index) = current_listener {
-                    let listener =
-                        &mut state_machines[state_machine_index].listeners[listener_index];
+                if let Some(owner) = current_listener {
+                    let listener = &mut state_machines[owner.state_machine_index].listeners
+                        [owner.listener_index];
                     listener.listener_input_types.push(object);
                     listener.listener_input_type_inputs.push(Vec::new());
-                    current_listener_input_type = Some(listener.listener_input_types.len() - 1);
+                    let input_owner = Some(RuntimeStateMachineListenerInputTypeOwner {
+                        state_machine_index: owner.state_machine_index,
+                        listener_index: owner.listener_index,
+                        input_type_index: listener.listener_input_types.len() - 1,
+                    });
+                    match definition.name {
+                        "ListenerInputTypeKeyboard" => {
+                            current_keyboard_input_type = input_owner;
+                        }
+                        "ListenerInputTypeGamepad" => {
+                            current_gamepad_input_type = input_owner;
+                        }
+                        "ListenerInputTypeSemantic" => {
+                            current_semantic_input_type = input_owner;
+                        }
+                        _ => {}
+                    }
                 }
                 continue;
             }
@@ -6013,17 +6129,36 @@ impl RuntimeFile {
     ) -> Option<&'a RuntimeObject> {
         let object_id = usize::try_from(object.id).ok()?;
         let mut latest_bindable_property = None;
+        let mut import_context = ImportContext::default();
         for candidate in self.objects.iter().take(object_id).flatten() {
-            if self.import_status(usize::try_from(candidate.id).ok()?)
-                != Some(RuntimeImportStatus::Imported)
-            {
-                continue;
-            }
+            let candidate_id = usize::try_from(candidate.id).ok()?;
+            let status = self.import_status(candidate_id)?;
             let Some(definition) = definition_by_type_key(candidate.type_key) else {
                 continue;
             };
-            if definition.is_a("BindableProperty") {
+            if status == RuntimeImportStatus::Imported && definition.is_a("BindableProperty") {
                 latest_bindable_property = Some(candidate);
+            }
+
+            // `BindablePropertyImporter::bindableProperty()` transfers its
+            // pointer before delegating to `Super::import`. The transfer
+            // therefore occurs even when that superclass later drops the
+            // consumer for a missing owner. Reconstruct the pre-transfer
+            // importer checks from the same pinned C++ call order; filtering
+            // to imported consumers would incorrectly let a later action
+            // reacquire an already-consumed property.
+            if cpp_bindable_property_transfer_reached(candidate, definition, &import_context) {
+                latest_bindable_property = None;
+            }
+
+            match status {
+                RuntimeImportStatus::Imported => {
+                    update_import_context(candidate, definition, &mut import_context, false);
+                }
+                RuntimeImportStatus::Dropped { .. } => {
+                    import_context.read_dropped_object(definition);
+                }
+                RuntimeImportStatus::NullObject => import_context.read_null_object(),
             }
         }
         latest_bindable_property
@@ -6825,6 +6960,15 @@ impl RuntimeFile {
         &self,
         data_converter_index: usize,
     ) -> Vec<RuntimeFormulaOutputToken<'_>> {
+        Self::cpp_data_converter_formula_output_queue(
+            self.cpp_data_converter_formula_authored_tokens(data_converter_index),
+        )
+    }
+
+    fn cpp_data_converter_formula_authored_tokens(
+        &self,
+        data_converter_index: usize,
+    ) -> Vec<&RuntimeObject> {
         let Some(formula) = self.data_converter(data_converter_index) else {
             return Vec::new();
         };
@@ -6862,7 +7006,7 @@ impl RuntimeFile {
             }
         }
 
-        Self::cpp_data_converter_formula_output_queue(tokens)
+        tokens
     }
 
     fn cpp_data_converter_formula_output_queue<'a>(
@@ -7167,6 +7311,34 @@ impl RuntimeFile {
     }
 }
 
+fn cpp_bindable_property_transfer_reached(
+    object: &RuntimeObject,
+    definition: &'static Definition,
+    context: &ImportContext,
+) -> bool {
+    let has_bindable_importer = context.latest(ImportStackKey::BindableProperty);
+    match definition.name {
+        // Both owners transfer from BindableProperty before delegating to the
+        // ListenerAction/TransitionComparator superclass that may reject a
+        // missing parent (`listener_viewmodel_change.cpp:20-36`;
+        // `transition_property_viewmodel_comparator.cpp:31-48`).
+        "ListenerViewModelChange" | "TransitionPropertyViewModelComparator" => {
+            has_bindable_importer
+        }
+        // These owners first require StateMachine, then transfer the property,
+        // and only afterward delegate to their layer/blend superclass
+        // (`blend_state_1d_viewmodel.cpp:18-36`;
+        // `blend_animation_direct.cpp:24-65`).
+        "BlendState1DViewModel" => {
+            context.latest(ImportStackKey::StateMachine) && has_bindable_importer
+        }
+        "BlendAnimationDirect" if object.uint_property("blendSource") == Some(2) => {
+            context.latest(ImportStackKey::StateMachine) && has_bindable_importer
+        }
+        _ => false,
+    }
+}
+
 fn resolve_runtime_state_machine_transition_targets(
     state_machines: &mut [RuntimeStateMachine<'_>],
 ) {
@@ -7252,6 +7424,7 @@ fn cpp_runtime_listener_action<'a>(
     object: &'a RuntimeObject,
     artboard_local_slots: &[Option<usize>],
     objects: &'a [Option<RuntimeObject>],
+    bindable_property: Option<&'a RuntimeObject>,
 ) -> RuntimeListenerAction<'a> {
     let (event_local_index, event) =
         cpp_resolved_action_event(object, artboard_local_slots, objects);
@@ -7259,6 +7432,7 @@ fn cpp_runtime_listener_action<'a>(
         object,
         event_local_index,
         event,
+        bindable_property,
     }
 }
 
@@ -8290,6 +8464,7 @@ pub struct RuntimeListenerAction<'a> {
     pub object: &'a RuntimeObject,
     pub event_local_index: Option<usize>,
     pub event: Option<&'a RuntimeObject>,
+    pub bindable_property: Option<&'a RuntimeObject>,
 }
 
 #[derive(Debug, Clone)]
@@ -8465,6 +8640,7 @@ pub struct RuntimePathVertex<'a> {
 pub struct RuntimeDataBindPath<'a> {
     pub object: Option<&'a RuntimeObject>,
     pub property_name: &'static str,
+    pub is_relative: bool,
     pub path_ids: Vec<u32>,
     pub resolved_path_ids: Vec<u32>,
 }

@@ -46,10 +46,206 @@ LIFECYCLE_PHASES = (
     "drop",
 )
 CITATION_RE = re.compile(r"^(cpp|rust):(.+):(\d+)(?:-(\d+))?$")
+UNBOUND_SCRIPTED_CONSTRUCTOR_RATCHET = (
+    "scripted_object_unbound_constructor_enters_live_context"
+)
 
 
 class CheckFailure(Exception):
     """Raised when the frame-loop proof is incomplete or inconsistent."""
+
+
+def strip_rust_comments_and_strings(source: str) -> str:
+    """Replace Rust comments/string contents while preserving offsets/newlines."""
+
+    result = list(source)
+    index = 0
+    block_depth = 0
+    while index < len(source):
+        if block_depth:
+            if source.startswith("/*", index):
+                result[index : index + 2] = "  "
+                block_depth += 1
+                index += 2
+            elif source.startswith("*/", index):
+                result[index : index + 2] = "  "
+                block_depth -= 1
+                index += 2
+            else:
+                if source[index] != "\n":
+                    result[index] = " "
+                index += 1
+            continue
+        if source.startswith("//", index):
+            end = source.find("\n", index)
+            end = len(source) if end == -1 else end
+            result[index:end] = " " * (end - index)
+            index = end
+            continue
+        if source.startswith("/*", index):
+            result[index : index + 2] = "  "
+            block_depth = 1
+            index += 2
+            continue
+        raw = re.match(r"(?:br|r)(?P<hashes>#{0,255})\"", source[index:])
+        if raw is not None:
+            hashes = raw.group("hashes")
+            start_length = raw.end()
+            terminator = '"' + hashes
+            end = source.find(terminator, index + start_length)
+            end = len(source) if end == -1 else end + len(terminator)
+            for offset in range(index, end):
+                if source[offset] != "\n":
+                    result[offset] = " "
+            index = end
+            continue
+        if source[index] == '"':
+            cursor = index + 1
+            while cursor < len(source):
+                if source[cursor] == "\\":
+                    cursor += 2
+                    continue
+                cursor += 1
+                if source[cursor - 1] == '"':
+                    break
+            for offset in range(index, min(cursor, len(source))):
+                if source[offset] != "\n":
+                    result[offset] = " "
+            index = cursor
+            continue
+        if source[index] == "'":
+            char_literal = re.match(r"'(?:\\.|[^'\\\n])+'", source[index:])
+            if char_literal is not None:
+                end = index + char_literal.end()
+                result[index:end] = " " * (end - index)
+                index = end
+                continue
+        index += 1
+    return "".join(result)
+
+
+def unbound_scripted_constructor_hits(source: str) -> list[int]:
+    """Find constructor paths that enter live binding without a top-level guard."""
+
+    function_pattern = re.compile(
+        r"(?m)^[ \t]*(?:(?:pub(?:\([^\n)]*\))?|const|async|unsafe|"
+        r"extern(?:[ \t]+\"[^\n\"]*\")?)[ \t]+)*fn[ \t]+"
+        r"instantiate_script_listener_actions_with_optional_factory\b"
+    )
+    functions = list(function_pattern.finditer(source))
+    if len(functions) != 1:
+        return [functions[0].start()] if functions else [0]
+    function = functions[0]
+    function_indent = len(function.group(0)) - len(function.group(0).lstrip(" \t"))
+    suffix = strip_rust_comments_and_strings(source[function.start() :])
+    open_brace = suffix.find("{")
+    if open_brace == -1:
+        return [function.start()]
+    brace_depth = 0
+    paren_depth = 0
+    bracket_depth = 0
+    close_brace = None
+    brace_depths: list[int] = [0] * len(suffix)
+    paren_depths: list[int] = [0] * len(suffix)
+    bracket_depths: list[int] = [0] * len(suffix)
+    for index, character in enumerate(suffix):
+        brace_depths[index] = brace_depth
+        paren_depths[index] = paren_depth
+        bracket_depths[index] = bracket_depth
+        if character == "{":
+            brace_depth += 1
+        elif character == "}":
+            brace_depth -= 1
+            if index > open_brace and brace_depth == 0:
+                close_brace = index
+                break
+        elif character == "(":
+            paren_depth += 1
+        elif character == ")":
+            paren_depth -= 1
+        elif character == "[":
+            bracket_depth += 1
+        elif character == "]":
+            bracket_depth -= 1
+    if close_brace is None:
+        return [function.start()]
+
+    body = suffix[open_brace + 1 : close_brace]
+    body_brace_depths = brace_depths[open_brace + 1 : close_brace]
+    body_paren_depths = paren_depths[open_brace + 1 : close_brace]
+    body_bracket_depths = bracket_depths[open_brace + 1 : close_brace]
+
+    def has_plain_context(offset: int, expected_brace_depth: int) -> bool:
+        return (
+            body_brace_depths[offset] == expected_brace_depth
+            and body_paren_depths[offset] == 0
+            and body_bracket_depths[offset] == 0
+        )
+
+    def line_indent(offset: int) -> int | None:
+        line_start = body.rfind("\n", 0, offset) + 1
+        prefix = body[line_start:offset]
+        if prefix.strip():
+            return None
+        return len(prefix)
+
+    def exact_token(token: str) -> int | None:
+        offsets = [match.start() for match in re.finditer(re.escape(token), body)]
+        if len(offsets) != 1:
+            return None
+        return offsets[0]
+
+    retry = exact_token("retry_cold_scripted_objects_during_constructor")
+    converter = exact_token("instantiate_state_machine_data_converters")
+    if retry is None or converter is None:
+        return [function.start()]
+    retry_is_top_level = (
+        has_plain_context(retry, 1)
+        and line_indent(retry) == function_indent + 4
+    )
+    retry_is_direct_else = (
+        has_plain_context(retry, 2)
+        and line_indent(retry) == function_indent + 8
+    )
+    if retry_is_direct_else:
+        stack: list[int] = []
+        for index, character in enumerate(body[:retry]):
+            if character == "{":
+                stack.append(index)
+            elif character == "}" and stack:
+                stack.pop()
+        retry_is_direct_else = bool(stack) and re.search(
+            r"\}[ \t\r\n]*else[ \t\r\n]*\{[ \t\r\n]*$",
+            body[: stack[-1] + 1],
+        ) is not None
+    if not (retry_is_top_level or retry_is_direct_else):
+        return [function.start()]
+    if not (
+        has_plain_context(converter, 1)
+        and line_indent(converter) == function_indent + 4
+    ):
+        return [function.start()]
+
+    guard_pattern = re.compile(
+        r"(?m)^(?P<indent>[ \t]*)if[ \t\r\n]+"
+        r"!machine\.has_scripted_listener_data_context\(\)"
+        r"[ \t\r\n]*\{[ \t\r\n]*return[ \t\r\n]+Ok\(\(\)\);"
+        r"[ \t\r\n]*\}"
+    )
+    guards = [
+        guard
+        for guard in guard_pattern.finditer(body)
+        if has_plain_context(guard.start(), 1)
+        and len(guard.group("indent")) == function_indent + 4
+    ]
+    if len(guards) != 1:
+        return [function.start()]
+    guard = guards[0]
+    if not (retry < guard.start() < converter):
+        return [function.start()]
+    if re.search(r"#[ \t\r\n]*\[", body[retry : guard.start()]):
+        return [function.start()]
+    return []
 
 
 def read_toml(path: pathlib.Path) -> dict[str, Any]:
@@ -870,10 +1066,15 @@ def check(
                 if not path.is_file():
                     continue
                 source = path.read_text(encoding="utf-8", errors="replace")
-                found = list(pattern.finditer(source))
-                count += len(found)
-                for match in found:
-                    line_number = source.count("\n", 0, match.start()) + 1
+                if ratchet_id == UNBOUND_SCRIPTED_CONSTRUCTOR_RATCHET:
+                    found_offsets = unbound_scripted_constructor_hits(source)
+                else:
+                    found_offsets = [
+                        match.start() for match in pattern.finditer(source)
+                    ]
+                count += len(found_offsets)
+                for offset in found_offsets:
+                    line_number = source.count("\n", 0, offset) + 1
                     hits.append(f"{path.relative_to(repo_root)}:{line_number}")
         ratchet_results.append((ratchet_id, count, maximum))
         if count > maximum:

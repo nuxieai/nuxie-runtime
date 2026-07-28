@@ -837,6 +837,12 @@ pattern = "(?m)^fn install_live_scripted_object_contexts\\b(?:(?!^fn\\b)[\\s\\S]
 max_occurrences = 0
 
 [[ratchet]]
+id = "scripted_object_unbound_constructor_enters_live_context"
+globs = ["crates/nuxie/src/lib.rs"]
+pattern = "(?m)^[ \\t]*(?:pub(?:\\([^\\n)]*\\))?[ \\t]+)?fn[ \\t]+instantiate_script_listener_actions_with_optional_factory\\b(?:(?!^[ \\t]*(?:pub(?:\\([^\\n)]*\\))?[ \\t]+)?fn\\b)[\\s\\S]){0,18000}retry_cold_scripted_objects_during_constructor\\([^;]*;(?:(?!^[ \\t]*(?:pub(?:\\([^\\n)]*\\))?[ \\t]+)?fn\\b|^[ \\t]*if[ \\t]+!machine\\.has_scripted_listener_data_context\\(\\)[ \\t]*\\{[ \\t\\r\\n]*return[ \\t]+Ok\\(\\(\\)\\);[ \\t\\r\\n]*\\})[\\s\\S]){0,2400}instantiate_state_machine_data_converters\\("
+max_occurrences = 0
+
+[[ratchet]]
 id = "scripted_object_instance_map_drops_before_cloned_binds"
 globs = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
 pattern = "(?m)^pub struct StateMachineInstance\\b(?:(?!^\\})[\\s\\S]){0,24000}scripted_instances_by_global:[^\\n]*\\n(?:(?!scripted_object_bindings:)[\\s\\S]){0,3000}scripted_object_bindings:"

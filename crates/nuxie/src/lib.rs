@@ -929,6 +929,17 @@ fn instantiate_script_listener_actions_with_optional_factory(
         retry_cold_scripted_objects_during_constructor(file, machine, &definitions, &mut factory)?;
     }
 
+    // With no retained or facade-supplied DataContext, C++ construction ends
+    // after clone/reinit plus the constructor's `initScriptedObjects` retry.
+    // `ArtboardInstance::stateMachineAt` calls `inheritDataContext` only when
+    // the Artboard actually owns a context, so an unbound occurrence must not
+    // enter the later `internalDataContext` generator/hydration pass
+    // (`state_machine_instance.cpp:2072-2082`;
+    // `artboard.cpp:2844-2856`).
+    if !machine.has_scripted_listener_data_context() {
+        return Ok(());
+    }
+
     // `internalDataContext` binds the ordinary StateMachine container before
     // assigning the live context to the already-cloned ScriptedObjects. Core
     // DataBind/converter binding is not scripting-authority dependent; only

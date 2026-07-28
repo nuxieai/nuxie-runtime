@@ -1045,6 +1045,29 @@ fn prepared_machine(
     (file, instance, machine, RecordingFactory::new())
 }
 
+fn scripted_cpp_probe_path() -> Option<std::path::PathBuf> {
+    if let Some(path) = std::env::var_os("RIVE_CPP_PROBE_SCRIPTED") {
+        let path = std::path::PathBuf::from(path);
+        return Some(if path.is_absolute() {
+            path
+        } else {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join(path)
+        });
+    }
+    let os = match std::env::consts::OS {
+        "macos" => "macosx",
+        other => other,
+    };
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("tools/cpp-probe/build")
+        .join(os)
+        .join("bin/debug/rive_cpp_probe_scripted");
+    path.exists().then_some(path)
+}
+
 #[test]
 fn listener_init_uses_the_generator_context_once_before_first_perform() {
     let bytes = scripted_listener_file(
@@ -1150,6 +1173,111 @@ fn listener_init_uses_the_generator_context_once_before_first_perform() {
             (flow_session::FlowOutputPhase::HostWork, "listener_perform"),
             (flow_session::FlowOutputPhase::HostWork, "listener_perform"),
         ]
+    );
+}
+
+#[test]
+fn unbound_listener_stops_after_cpp_constructor_two_attempts() {
+    let bytes = scripted_listener_file(
+        br#"
+            generated = generated or 0
+
+            return function(_context)
+                generated += 1
+                if generated <= 2 then
+                    return nil
+                end
+                return {
+                    performAction = function(_self, _invocation) end,
+                }
+            end
+        "#,
+        1,
+    );
+
+    if let Some(probe) = scripted_cpp_probe_path() {
+        let fixture = std::env::temp_dir().join(format!(
+            "nuxie-scripted-listener-two-attempts-{}.riv",
+            std::process::id()
+        ));
+        std::fs::write(&fixture, &bytes).expect("write scripted C++ differential fixture");
+        let output = std::process::Command::new(&probe)
+            .arg("--instance-artboards")
+            .arg("--runtime-snapshot-state-machine-scripts")
+            .arg("0")
+            .arg("--file")
+            .arg(&fixture)
+            .output();
+        let _ = std::fs::remove_file(&fixture);
+        let output = output.expect("run scripted C++ differential");
+        assert!(
+            output.status.success(),
+            "scripted C++ differential failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let report: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("decode scripted C++ differential");
+        let reports = report
+            .get("artboards")
+            .and_then(serde_json::Value::as_array)
+            .and_then(|artboards| artboards.first())
+            .and_then(|artboard| artboard.get("runtimeStateMachineAdvances"))
+            .and_then(serde_json::Value::as_array)
+            .expect("C++ scripted-listener lifecycle reports");
+        let cold_occurrence = reports
+            .first()
+            .and_then(|advance| advance.get("scriptedObjects"))
+            .and_then(serde_json::Value::as_array)
+            .and_then(|objects| objects.first())
+            .expect("C++ unbound scripted-listener occurrence report");
+        assert!(
+            cold_occurrence
+                .get("occurrenceTableOrdinal")
+                .is_some_and(serde_json::Value::is_null),
+            "pinned C++ must leave the occurrence inert after exactly two failed constructor attempts"
+        );
+        assert_eq!(
+            cold_occurrence
+                .get("userLuaInitDone")
+                .and_then(serde_json::Value::as_bool),
+            Some(false)
+        );
+    }
+
+    let runtime =
+        read_runtime_file_for_facade(&bytes).expect("import unbound scripted-listener fixture");
+    let file = Arc::new(File::from_runtime(runtime).expect("build unbound scripted-listener file"));
+    let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+        .expect("instantiate unbound scripted-listener artboard");
+    let mut machine = instance
+        .default_state_machine_instance()
+        .expect("instantiate unbound scripted-listener machine");
+    let definition = machine
+        .scripted_objects()
+        .first()
+        .expect("scripted-listener definition")
+        .scripted_object_global_id();
+    let mut factory = RecordingFactory::new();
+    instance
+        .prepare_flow_scripts(&mut factory)
+        .expect("bootstrap unbound scripted-listener file VM");
+
+    instantiate_script_listener_actions(&file, &mut machine, &mut factory, None)
+        .expect("run unbound scripted-listener constructor");
+    assert!(
+        !machine.has_scripted_object_instance(definition),
+        "Rust must not invent a third live-context attempt when no DataContext exists (`state_machine_instance.cpp:2072-2082`; `artboard.cpp:2844-2856`)"
+    );
+    assert!(
+        machine.bind_owned_view_model_contexts(&nuxie_runtime::RuntimeOwnedViewModelContext::new()),
+        "install the first genuine empty DataContext"
+    );
+    let mut factory_option = Some(&mut factory as &mut dyn Factory);
+    rehydrate_script_listener_actions(&file, &mut machine, None, None, &mut factory_option)
+        .expect("run the first genuine DataContext retry");
+    assert!(
+        machine.has_scripted_object_instance(definition),
+        "the first genuine DataContext boundary must create occurrence three"
     );
 }
 
@@ -4632,6 +4760,10 @@ fn public_update_data_binds_reconciles_a_machine_with_only_a_cloned_script_input
     assert_eq!(
         root.raw().number_value_by_property_name("amount"),
         Some(9.5)
+    );
+    assert!(
+        machine.begin_scripted_object_data_context_bind(root.handle()),
+        "stage the public root as an actual DataContext before constructor completion"
     );
     instantiate_script_listener_actions(&file, &mut machine, &mut factory, Some(&root))
         .expect("mount cloned ScriptInput binding");

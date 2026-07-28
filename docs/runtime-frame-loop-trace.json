@@ -14,18 +14,18 @@
       "align_target": 6546,
       "animated_clipping": 2891,
       "animation_reset_cases": 3188,
-      "spotify_kids_demo": 25239
+      "spotify_kids_demo": 25248
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "2c7c9f60e5dc848e69939638a1cac8a8553c96f7b27b07a3989c27a6a27e5d7d",
+    "cpp_binary_sha256": "77a0e871f177b9b4e754b5ea108d11e8405b4ea84bedfed703e5809d2041a4d2",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
-    "rust_binary_sha256": "726bfa22d4fab2e0e733be60f3677c0bb436bb3f92ecc0e45e13330202d23e98",
-    "rust_coverage_sha256": "84f11c426adccbb07434b9f93470485baba4c3e93ff2a15fb0a3047a3625ebe6",
-    "rust_mechanism_coverage_sha256": "c7971612cd2675856cfb1ada9aea14a7cb273d3885900fc3600b1947238e2400",
-    "rust_steady_coverage_sha256": "80d0e053287c26b871a39ac628d3e7de9aa52e62eadf0a1dacca67ac16317ac2"
+    "rust_binary_sha256": "fb75520695c6f7e79cf0c2ab3444ffc30139299a429d601e6cca3c7ed3552194",
+    "rust_coverage_sha256": "9a1567fb795fb9b93bc7b2c401c99d5ab37f5703d69a1432640a093c30598372",
+    "rust_mechanism_coverage_sha256": "f105c34a68febc4173b076e924ca0011383c7471827fc84155d15813f5be6acf",
+    "rust_steady_coverage_sha256": "7768fe9785f37f500de926cd3759095f826f22ba2e6b0ed87848c17f560387c5"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -2632,11 +2632,11 @@
         },
         {
           "count": 24225,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::double_property::{closure#1}"
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::double_property::{closure#2}"
         },
         {
           "count": 24225,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::double_property::{closure#2}"
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::double_property::{closure#3}"
         },
         {
           "count": 215,
@@ -2699,11 +2699,11 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::linear_animation_instance_keep_going"
         },
         {
-          "count": 130,
+          "count": 194,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_changed"
         },
         {
-          "count": 64,
+          "count": 128,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::mark_components_dirty"
         },
         {
@@ -2767,7 +2767,7 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::nested_structure_epoch::{closure#0}"
         },
         {
-          "count": 64,
+          "count": 128,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::on_component_dirty_handle"
         },
         {
@@ -2803,11 +2803,11 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_file::{closure#0}"
         },
         {
-          "count": 147,
+          "count": 206,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_file_arc"
         },
         {
-          "count": 147,
+          "count": 206,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_file_arc::{closure#0}"
         },
         {
@@ -2876,11 +2876,11 @@
         },
         {
           "count": 11,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_state_machine_update_passes_after_main_advance_with_mode"
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_state_machine_update_passes_after_main_advance_with_mode_and_errors"
         },
         {
           "count": 11,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_state_machine_update_passes_after_main_advance_with_mode_and_errors"
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::settle_state_machine_update_passes_after_main_advance_with_mode_and_root_vm_reset"
         },
         {
           "count": 11,
@@ -2895,7 +2895,7 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::shape_paint_is_visible"
         },
         {
-          "count": 322,
+          "count": 38837,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::slot"
         },
         {
@@ -2907,7 +2907,7 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::solid_color_value"
         },
         {
-          "count": 49,
+          "count": 59,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::state_machine_definition_owner"
         },
         {
@@ -2955,11 +2955,11 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::tree_paint_preparation_epoch::{closure#0}"
         },
         {
-          "count": 30,
+          "count": 19,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::try_change_state_machine_instance"
         },
         {
-          "count": 19,
+          "count": 29,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::try_change_state_machine_instance_unconditionally"
         },
         {
@@ -3143,7 +3143,7 @@
           "name": "nuxie_runtime::artboard::property_may_affect_prepared_frame"
         },
         {
-          "count": 30,
+          "count": 19,
           "name": "nuxie_runtime::artboard::state_machine_requires_outer_update_probe"
         }
       ],
@@ -3195,6 +3195,10 @@
         {
           "count": 57,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::collect_artboard_authored_data_bind_source_dirt"
+        },
+        {
+          "count": 64,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::collect_artboard_authored_data_bind_source_dirt::{closure#0}"
         },
         {
           "count": 57,
@@ -3249,7 +3253,7 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::notify_artboard_data_bind_target_property_changed"
         },
         {
-          "count": 64,
+          "count": 128,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::publish_artboard_data_bind_target_dirty"
         },
         {
@@ -3301,11 +3305,11 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::update_nested_artboard_data_binds_from_hosts"
         },
         {
-          "count": 64,
+          "count": 128,
           "name": "<nuxie_runtime::artboard_data_bind::RuntimeArtboardAuthoredDataBindStates as core::ops::deref::Deref>::deref"
         },
         {
-          "count": 270,
+          "count": 334,
           "name": "<nuxie_runtime::artboard_data_bind::RuntimeArtboardAuthoredDataBindStates as core::ops::deref::DerefMut>::deref_mut"
         },
         {
@@ -3327,6 +3331,10 @@
         {
           "count": 57,
           "name": "<nuxie_runtime::artboard_data_bind::RuntimeArtboardAuthoredDataBindStates>::take_source_dirt_indices"
+        },
+        {
+          "count": 64,
+          "name": "<nuxie_runtime::artboard_data_bind::RuntimeArtboardAuthoredDataBindStates>::take_source_dirt_indices::{closure#0}"
         },
         {
           "count": 66,
@@ -3423,7 +3431,7 @@
           "name": "<nuxie_runtime::components::ComponentDirt as core::ops::bit::Not>::not"
         },
         {
-          "count": 9948,
+          "count": 10012,
           "name": "<nuxie_runtime::components::ComponentDirt>::contains"
         },
         {
@@ -3431,11 +3439,11 @@
           "name": "<nuxie_runtime::components::ComponentDirt>::is_empty"
         },
         {
-          "count": 65687,
+          "count": 65815,
           "name": "<nuxie_runtime::components::ComponentHandle>::index"
         },
         {
-          "count": 64,
+          "count": 128,
           "name": "<nuxie_runtime::components::GraphOrder>::index"
         },
         {
@@ -3689,17 +3697,43 @@
           "name": "nuxie_runtime::constraints::write_world_transform"
         }
       ],
+      "crates/nuxie-runtime/src/data_bind_container.rs": [
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::data_bind_container::RuntimeDataBindContainerQueue>::begin_occurrence"
+        },
+        {
+          "count": 59,
+          "name": "<nuxie_runtime::data_bind_container::RuntimeDataBindContainerQueue>::begin_update::<<nuxie_runtime::state_machine::instance::StateMachineInstance>::update_data_binds_false::{closure#0}>"
+        },
+        {
+          "count": 59,
+          "name": "<nuxie_runtime::data_bind_container::RuntimeDataBindContainerQueue>::finish_update"
+        },
+        {
+          "count": 11,
+          "name": "<nuxie_runtime::data_bind_container::RuntimeDataBindContainerQueue>::has_pending_work"
+        }
+      ],
       "crates/nuxie-runtime/src/data_bind_graph.rs": [
         {
-          "count": 1,
-          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::advance_stateful_converters"
+          "count": 2,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::advance_stateful_converter_with_scripted"
         },
         {
-          "count": 21,
-          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::apply_default_view_model_bindings"
+          "count": 3,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::advance_stateful_converter_with_scripted::{closure#0}"
         },
         {
-          "count": 68,
+          "count": 2,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::clear_retained_data_bind_occurrence_dirt"
+        },
+        {
+          "count": 3,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::clear_retained_data_bind_occurrence_dirt::{closure#0}"
+        },
+        {
+          "count": 118,
           "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::collect_retained_source_dirt"
         },
         {
@@ -3707,24 +3741,60 @@
           "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::collect_retained_trigger_source_dirt"
         },
         {
-          "count": 49,
+          "count": 2,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::data_bind_is_to_source"
+        },
+        {
+          "count": 3,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::data_bind_is_to_source::{closure#0}"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::data_bind_is_to_source::{closure#1}"
+        },
+        {
+          "count": 59,
           "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::data_context_present"
         },
         {
-          "count": 52,
+          "count": 17,
           "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::default_view_model_context_bound"
         },
         {
-          "count": 30,
-          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::has_bindings"
+          "count": 59,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::has_scripted_converter_occurrence"
         },
         {
-          "count": 6,
+          "count": 4,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::has_scripted_converter_occurrence::{closure#0}"
+        },
+        {
+          "count": 8,
           "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::refresh_retained_source_from_cell"
         },
         {
-          "count": 21,
-          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::take_default_view_model_binding_updates"
+          "count": 2,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::source_index_for_data_bind"
+        },
+        {
+          "count": 3,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::source_index_for_data_bind::{closure#0}"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::take_default_view_model_binding_updates_with_script_errors"
+        },
+        {
+          "count": 4,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::take_default_view_model_binding_updates_with_script_errors::{closure#0}"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::update_converter_data_binds_from_data_context_for_data_bind::<<nuxie_runtime::state_machine::instance::StateMachineInstance>::update_data_binds_false::{closure#1}::{closure#0}>"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraph>::update_default_view_model_binding"
         },
         {
           "count": 2,
@@ -3732,23 +3802,39 @@
         },
         {
           "count": 2,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphConverterState>::advance_converter_with_scripted"
+        },
+        {
+          "count": 2,
           "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphConverterState>::is_initialized_stateful"
         },
         {
-          "count": 1,
+          "count": 2,
           "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphFormulaRandomSource as core::default::Default>::default"
         },
         {
           "count": 2,
-          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphSourceNode>::advance_stateful_converter"
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphSourceNode as core::ops::drop::Drop>::drop"
         },
         {
           "count": 2,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphSourceNode>::advance_stateful_converter_with_scripted"
+        },
+        {
+          "count": 4,
           "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphSourceNode>::applies_source_to_target"
         },
         {
           "count": 2,
-          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphSourceNode>::converted_value"
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphSourceNode>::applies_target_to_source"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphSourceNode>::converted_value_with_script_errors"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphSourceNode>::has_pending_binding_work"
         },
         {
           "count": 4,
@@ -3760,18 +3846,22 @@
         },
         {
           "count": 2,
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphSourceNode>::source_to_target_value_for_concrete_target"
+        },
+        {
+          "count": 2,
           "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphTargetsMut>::apply_default_view_model_binding"
         },
         {
           "count": 3,
-          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphTargetsMut>::apply_default_view_model_binding::{closure#2}"
+          "name": "<nuxie_runtime::data_bind_graph::RuntimeDataBindGraphTargetsMut>::apply_default_view_model_binding::{closure#3}"
         },
         {
-          "count": 2,
+          "count": 4,
           "name": "nuxie_runtime::data_bind_graph::data_bind_flags_apply_source_to_target"
         },
         {
-          "count": 128,
+          "count": 130,
           "name": "nuxie_runtime::data_bind_graph::data_bind_flags_apply_target_to_source"
         }
       ],
@@ -5699,13 +5789,17 @@
       ],
       "crates/nuxie-runtime/src/focus.rs": [
         {
-          "count": 49,
+          "count": 59,
           "name": "<nuxie_runtime::focus::RuntimeFocusTree>::is_inert"
+        },
+        {
+          "count": 89,
+          "name": "<nuxie_runtime::focus::RuntimeFocusTree>::take_owner_events"
         }
       ],
       "crates/nuxie-runtime/src/objects.rs": [
         {
-          "count": 64786,
+          "count": 64914,
           "name": "<nuxie_runtime::objects::ComponentAddress>::object"
         },
         {
@@ -5729,7 +5823,7 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::color_property::{closure#0}"
         },
         {
-          "count": 51731,
+          "count": 51795,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::component"
         },
         {
@@ -5745,7 +5839,7 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::component_local_id"
         },
         {
-          "count": 2905,
+          "count": 2969,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::component_mut"
         },
         {
@@ -5781,7 +5875,7 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::fill_rule"
         },
         {
-          "count": 64,
+          "count": 128,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::graph_order"
         },
         {
@@ -5801,7 +5895,7 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::replace_solid_color_value"
         },
         {
-          "count": 274,
+          "count": 338,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::root"
         },
         {
@@ -5869,7 +5963,7 @@
           "name": "<nuxie_runtime::objects::InstanceString>::bytes"
         },
         {
-          "count": 65078,
+          "count": 65206,
           "name": "<nuxie_runtime::objects::ObjectHandle>::local_id"
         },
         {
@@ -5969,24 +6063,66 @@
       ],
       "crates/nuxie-runtime/src/retained_data_bind.rs": [
         {
-          "count": 6,
+          "count": 66,
+          "name": "<nuxie_runtime::retained_data_bind::RuntimeRetainedDataBind as core::ops::drop::Drop>::drop"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::retained_data_bind::RuntimeRetainedDataBind>::clear_source"
+        },
+        {
+          "count": 8,
           "name": "<nuxie_runtime::retained_data_bind::RuntimeRetainedDataBind>::collect_source_dirt"
         },
         {
-          "count": 6,
+          "count": 72,
           "name": "<nuxie_runtime::retained_data_bind::RuntimeRetainedDataBind>::collect_source_dirt_parts"
         },
         {
-          "count": 6,
+          "count": 8,
           "name": "<nuxie_runtime::retained_data_bind::RuntimeRetainedDataBind>::has_sources"
         },
         {
-          "count": 64,
+          "count": 2,
+          "name": "<nuxie_runtime::retained_data_bind::RuntimeRetainedDataBind>::is_collapsed"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::retained_data_bind::RuntimeRetainedDataBind>::register_additional_sources"
+        },
+        {
+          "count": 66,
+          "name": "<nuxie_runtime::retained_data_bind::RuntimeRetainedDataBind>::registers_primary_sink"
+        },
+        {
+          "count": 66,
           "name": "<nuxie_runtime::retained_data_bind::RuntimeRetainedDataBind>::take_pending_source_dirt"
+        },
+        {
+          "count": 64,
+          "name": "<nuxie_runtime::retained_data_bind::RuntimeRetainedDataBind>::take_source_dirt_with_primary"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::retained_data_bind::RuntimeRetainedDataBind>::take_target_dirt"
         },
         {
           "count": 2,
           "name": "<nuxie_runtime::retained_data_bind::RuntimeRetainedDataBind>::target_origin"
+        },
+        {
+          "count": 68,
+          "name": "<nuxie_runtime::retained_data_bind::RuntimeRetainedDataBind>::unregister_additional_sources"
+        },
+        {
+          "count": 68,
+          "name": "<nuxie_runtime::retained_data_bind::RuntimeRetainedDataBind>::unregister_primary_source"
+        }
+      ],
+      "crates/nuxie-runtime/src/scripting.rs": [
+        {
+          "count": 45,
+          "name": "<nuxie_runtime::scripting::ScriptArtboardParentContext>::from_runtime"
         }
       ],
       "crates/nuxie-runtime/src/state_machine.rs": [
@@ -6111,28 +6247,12 @@
           "name": "<nuxie_runtime::state_machine::RuntimeBlendAnimationHandle>::new"
         },
         {
-          "count": 33,
-          "name": "<nuxie_runtime::state_machine::RuntimeScheduledListenerActionTargetsMut>::evaluation_context"
-        },
-        {
-          "count": 295,
-          "name": "<nuxie_runtime::state_machine::RuntimeScheduledListenerActionTargetsMut>::reborrow"
-        },
-        {
           "count": 2,
           "name": "nuxie_runtime::state_machine::animation_reset_pool"
         },
         {
           "count": 1,
           "name": "nuxie_runtime::state_machine::animation_reset_pool::{closure#0}"
-        },
-        {
-          "count": 104,
-          "name": "nuxie_runtime::state_machine::perform_scheduled_listener_actions"
-        },
-        {
-          "count": 104,
-          "name": "nuxie_runtime::state_machine::perform_state_machine_fire_actions"
         }
       ],
       "crates/nuxie-runtime/src/state_machine/bindables.rs": [
@@ -6159,15 +6279,15 @@
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::advance_with_report_mode"
         },
         {
-          "count": 21,
-          "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::apply_default_view_model_bindings"
-        },
-        {
           "count": 30,
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::apply_local_event_listeners"
         },
         {
-          "count": 49,
+          "count": 89,
+          "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::capture_focus_callbacks"
+        },
+        {
+          "count": 59,
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::collect_retained_owned_view_model_dirt"
         },
         {
@@ -6175,19 +6295,27 @@
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::discard_reported_event_prefix"
         },
         {
-          "count": 30,
+          "count": 11,
+          "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::has_pending_data_bind_work"
+        },
+        {
+          "count": 60,
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::next_unapplied_reported_event_index"
         },
         {
-          "count": 30,
+          "count": 19,
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::post_update_probe_pending"
         },
         {
-          "count": 49,
+          "count": 30,
+          "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::process_deferred_listener_group_events"
+        },
+        {
+          "count": 19,
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::reported_event_count"
         },
         {
-          "count": 12,
+          "count": 1,
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::requires_post_update_state_probe"
         },
         {
@@ -6195,24 +6323,48 @@
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::reset_advanced_data_context"
         },
         {
-          "count": 49,
+          "count": 59,
+          "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::retain_script_result::<bool>"
+        },
+        {
+          "count": 59,
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::retained_state_machine_definitions"
         },
         {
-          "count": 49,
+          "count": 59,
+          "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::scripted_listener_artboard_parent_context"
+        },
+        {
+          "count": 14,
+          "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::scripted_listener_artboard_parent_context::{closure#0}"
+        },
+        {
+          "count": 59,
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::state_machine_index"
         },
         {
-          "count": 19,
+          "count": 29,
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::try_change_state"
         },
         {
-          "count": 19,
+          "count": 29,
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::try_change_state_with_script_host"
         },
         {
-          "count": 19,
+          "count": 59,
           "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::update_data_binds_false"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::update_data_binds_false::{closure#0}"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::update_data_binds_false::{closure#1}"
+        },
+        {
+          "count": 2,
+          "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::update_default_view_model_binding"
         }
       ],
       "crates/nuxie-runtime/src/state_machine/layer_state.rs": [
@@ -6229,8 +6381,22 @@
           "name": "<nuxie_runtime::state_machine::layer_state::RuntimeLayerState>::resets_blend_values"
         },
         {
-          "count": 154,
+          "count": 174,
           "name": "<nuxie_runtime::state_machine::layer_state::RuntimeLayerState>::uses_random_transition_selection"
+        }
+      ],
+      "crates/nuxie-runtime/src/state_machine/listener_action.rs": [
+        {
+          "count": 38,
+          "name": "<nuxie_runtime::state_machine::listener_action::RuntimeScheduledListenerActionTargetsMut>::evaluation_context"
+        },
+        {
+          "count": 305,
+          "name": "<nuxie_runtime::state_machine::listener_action::RuntimeScheduledListenerActionTargetsMut>::reborrow"
+        },
+        {
+          "count": 104,
+          "name": "nuxie_runtime::state_machine::listener_action::perform_scheduled_listener_actions"
         }
       ],
       "crates/nuxie-runtime/src/state_machine/nested_state_machine.rs": [
@@ -6241,6 +6407,16 @@
         {
           "count": 19,
           "name": "<nuxie_runtime::state_machine::nested_state_machine::RuntimeNestedStateMachineInstance>::state_machine_mut"
+        }
+      ],
+      "crates/nuxie-runtime/src/state_machine/scripted_object_lifecycle.rs": [
+        {
+          "count": 59,
+          "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::has_fixed_scripted_data_context_owner"
+        },
+        {
+          "count": 59,
+          "name": "<nuxie_runtime::state_machine::instance::StateMachineInstance>::scripted_data_context_prepare_pending"
         }
       ],
       "crates/nuxie-runtime/src/state_machine/state_instance.rs": [
@@ -6261,7 +6437,7 @@
           "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::for_each_animation_instance_mut::<<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::prepare_key_frame_data_binds::{closure#0}>"
         },
         {
-          "count": 33,
+          "count": 38,
           "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::is_same_definition"
         },
         {
@@ -6273,7 +6449,7 @@
           "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::make"
         },
         {
-          "count": 188,
+          "count": 198,
           "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::plain_animation"
         },
         {
@@ -6293,12 +6469,18 @@
           "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::spilled_time"
         },
         {
-          "count": 213,
+          "count": 238,
           "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::state_index"
         },
         {
-          "count": 33,
+          "count": 38,
           "name": "<nuxie_runtime::state_machine::state_instance::RuntimeStateInstance>::transition_animation"
+        }
+      ],
+      "crates/nuxie-runtime/src/state_machine/state_machine_fire_action.rs": [
+        {
+          "count": 104,
+          "name": "nuxie_runtime::state_machine::state_machine_fire_action::perform_state_machine_fire_actions"
         }
       ],
       "crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs": [
@@ -6307,7 +6489,7 @@
           "name": "<nuxie_runtime::state_machine::state_machine_input_instance::StateMachineInputInstance>::advanced"
         },
         {
-          "count": 5,
+          "count": 10,
           "name": "<nuxie_runtime::state_machine::state_machine_input_instance::StateMachineInputInstance>::bool_value"
         },
         {
@@ -6353,19 +6535,19 @@
           "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::change_state::{closure#0}"
         },
         {
-          "count": 33,
+          "count": 38,
           "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::current_state_index"
         },
         {
-          "count": 33,
+          "count": 38,
           "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::current_transition_animation"
         },
         {
-          "count": 171,
+          "count": 181,
           "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::has_transition_source"
         },
         {
-          "count": 114,
+          "count": 124,
           "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::is_transitioning"
         },
         {
@@ -6373,23 +6555,23 @@
           "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::prepare_key_frame_data_binds"
         },
         {
-          "count": 134,
+          "count": 144,
           "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::refresh_resolved_transition_duration"
         },
         {
-          "count": 84,
+          "count": 94,
           "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::refresh_resolved_transition_duration::{closure#0}"
         },
         {
-          "count": 154,
+          "count": 174,
           "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::try_change_state"
         },
         {
-          "count": 33,
+          "count": 38,
           "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::try_change_state::{closure#0}"
         },
         {
-          "count": 77,
+          "count": 87,
           "name": "<nuxie_runtime::state_machine::state_machine_layer_instance::StateMachineLayerInstance>::update_state"
         },
         {
@@ -6403,7 +6585,7 @@
           "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::allow"
         },
         {
-          "count": 31,
+          "count": 36,
           "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::allow_direct_inputs"
         },
         {
@@ -6415,7 +6597,7 @@
           "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::has_exit_time"
         },
         {
-          "count": 33,
+          "count": 38,
           "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::is_simple_supported"
         },
         {
@@ -6431,7 +6613,7 @@
           "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::perform_listener_actions"
         },
         {
-          "count": 110,
+          "count": 120,
           "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransition>::transition_duration_seconds"
         },
         {
@@ -6443,11 +6625,11 @@
           "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransitionHandle>::new"
         },
         {
-          "count": 116,
+          "count": 126,
           "name": "<nuxie_runtime::state_machine::state_transition::RuntimeStateTransitionHandle>::resolve"
         },
         {
-          "count": 110,
+          "count": 120,
           "name": "nuxie_runtime::state_machine::state_transition::transition_duration_value"
         }
       ],
@@ -6463,7 +6645,7 @@
       ],
       "crates/nuxie-runtime/src/state_machine/transition_bool_condition.rs": [
         {
-          "count": 5,
+          "count": 10,
           "name": "<nuxie_runtime::state_machine::transition_bool_condition::RuntimeTransitionBoolCondition>::evaluate"
         }
       ],
@@ -6473,7 +6655,7 @@
           "name": "<nuxie_runtime::state_machine::transition_condition::RuntimeTransitionCondition>::evaluate"
         },
         {
-          "count": 5,
+          "count": 10,
           "name": "<nuxie_runtime::state_machine::transition_condition::RuntimeTransitionCondition>::evaluate_direct_input"
         }
       ],
@@ -6485,7 +6667,7 @@
       ],
       "crates/nuxie-runtime/src/state_machine/transition_input_condition.rs": [
         {
-          "count": 5,
+          "count": 10,
           "name": "<nuxie_runtime::state_machine::transition_input_condition::RuntimeTransitionInputCondition>::input_index"
         }
       ],
@@ -7049,27 +7231,35 @@
       ],
       "crates/nuxie-runtime/src/view_model_cell.rs": [
         {
-          "count": 273,
+          "count": 283,
           "name": "<nuxie_runtime::view_model_cell::RuntimeCellDirt>::contains"
         },
         {
-          "count": 12,
+          "count": 144,
           "name": "<nuxie_runtime::view_model_cell::RuntimeCellDirt>::is_empty"
+        },
+        {
+          "count": 66,
+          "name": "<nuxie_runtime::view_model_cell::RuntimeCellDirtSink>::downgrade"
         },
         {
           "count": 47,
           "name": "<nuxie_runtime::view_model_cell::RuntimeCellDirtSink>::peek_dirt"
         },
         {
-          "count": 110,
+          "count": 248,
           "name": "<nuxie_runtime::view_model_cell::RuntimeCellDirtSink>::take_dirt"
         },
         {
-          "count": 124,
+          "count": 135,
           "name": "<nuxie_runtime::view_model_cell::RuntimeCellNotificationQueue>::is_empty"
         },
         {
-          "count": 114,
+          "count": 2,
+          "name": "<nuxie_runtime::view_model_cell::RuntimeCellNotificationQueue>::remove_data_bind"
+        },
+        {
+          "count": 173,
           "name": "<nuxie_runtime::view_model_cell::RuntimeCellNotificationQueue>::swap_into"
         },
         {
@@ -7079,6 +7269,14 @@
         {
           "count": 1,
           "name": "<nuxie_runtime::view_model_cell::RuntimeViewModelCell>::advanced::{closure#0}"
+        },
+        {
+          "count": 66,
+          "name": "<nuxie_runtime::view_model_cell::RuntimeViewModelCell>::remove_dependent"
+        },
+        {
+          "count": 547,
+          "name": "<nuxie_runtime::view_model_cell::RuntimeViewModelCell>::remove_dependent::{closure#0}"
         },
         {
           "count": 1,
@@ -7180,7 +7378,7 @@
     },
     "per_frame_allocations": {
       "cpp": 7008,
-      "rust": 263748
+      "rust": 263757
     },
     "state_machine_advance": {
       "cpp": 30,
@@ -7192,7 +7390,7 @@
     },
     "state_machine_transition_search": {
       "cpp": 176,
-      "rust": 154
+      "rust": 174
     }
   },
   "mechanism_allocation_counts": {
@@ -7205,8 +7403,8 @@
     },
     "rust": {
       "complex_ik_dependency": 301,
-      "component_list_follow_path": 592,
-      "component_list_virtualized": 432,
+      "component_list_follow_path": 609,
+      "component_list_virtualized": 444,
       "scroll_intent": 60458,
       "scroll_test": 1310
     }
@@ -7299,7 +7497,7 @@
     },
     "per_frame_allocations": {
       "cpp": 4218,
-      "rust": 63093
+      "rust": 63122
     },
     "resetting_dispatches": {
       "cpp": 6,
@@ -7324,16 +7522,16 @@
   },
   "mode": "frame-only counters reset after construction and before samples",
   "rust_candidate_source": {
-    "file_count": 7195,
+    "file_count": 7273,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "a385565b9134ab688eb93b1260ba8e865c8f3afd2df9dea46d543bcce6b3a80f"
+    "sha256": "31cf5258b68f6b3bde48d72e5831c85ada993bda7add8dcba640a8bc0e7ade07"
   },
-  "rust_ref": "fb16c45fcc74f2adfa57a784caaedfac0079940c",
+  "rust_ref": "fb2cb966156c275cbbe4c8d765ee94217ab521dd",
   "rust_runner_provenance": {
     "candidate_source": {
-      "file_count": 7195,
+      "file_count": 7273,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "a385565b9134ab688eb93b1260ba8e865c8f3afd2df9dea46d543bcce6b3a80f"
+      "sha256": "31cf5258b68f6b3bde48d72e5831c85ada993bda7add8dcba640a8bc0e7ade07"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -7357,8 +7555,8 @@
       "state-machine": 7
     },
     "dynamic_cpp_functions": 461,
-    "dynamic_rust_files": 29,
-    "dynamic_rust_functions": 1230,
+    "dynamic_rust_files": 34,
+    "dynamic_rust_functions": 1277,
     "static_cpp_files": 341
   },
   "steady_allocation_counts": {
@@ -7370,8 +7568,8 @@
     },
     "rust": {
       "complex_ik_dependency": 0,
-      "component_list_follow_path": 68,
-      "component_list_virtualized": 15,
+      "component_list_follow_path": 85,
+      "component_list_virtualized": 27,
       "scroll_test": 24
     }
   },
@@ -7412,7 +7610,7 @@
     },
     "per_frame_allocations": {
       "cpp": 0,
-      "rust": 107
+      "rust": 136
     },
     "skin_buffer_rebuilds": {
       "cpp": 0,

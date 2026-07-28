@@ -22985,9 +22985,16 @@ fn nested_script_view_model_wraps_the_same_root_owned_handle_graph() {
     let child = script
         .view_model("child")
         .unwrap_or_else(|| panic!("missing nested script view-model wrapper for {label}"));
+    let selected_child = context
+        .linked_view_model_by_property_name_path("child")
+        .expect("selected generated child");
 
-    assert!(child.owned_handle().shares_root_with(&context));
-    assert_eq!(child.owned_handle().scope_path(), &[0]);
+    // Pinned C++ recursively creates and retains the concrete generated child
+    // before ScriptedPropertyViewModel wraps it (`src/file.cpp:1141-1200`;
+    // `src/lua/lua_properties.cpp:536-559`).
+    assert!(child.owned_handle().shares_root_with(&selected_child));
+    assert!(child.owned_handle().root_handle().ptr_eq(&selected_child));
+    assert!(child.owned_handle().scope_path().is_empty());
     assert_eq!(child.owned_handle().view_model_index(), Some(1));
     assert!(child.set_number("amount", 42.0));
     assert_eq!(child.number("amount"), Some(42.0));
@@ -23021,9 +23028,16 @@ fn nested_script_view_model_context_preserves_an_imported_child_selection() {
         .view_model("child")
         .unwrap_or_else(|| panic!("missing selected child wrapper for {label}"));
     let child_context = child.owned_handle();
+    let selected_child = context
+        .linked_view_model_by_property_name_path("child")
+        .expect("selected imported child");
 
-    assert!(child_context.shares_root_with(&context));
-    assert_eq!(child_context.scope_path(), &[0]);
+    // Pinned C++ ScriptedPropertyViewModel::pushValue wraps the concrete
+    // referenceViewModelInstance, not an outer-root scoped projection
+    // (src/lua/lua_properties.cpp:536-559).
+    assert!(child_context.shares_root_with(&selected_child));
+    assert!(child_context.root_handle().ptr_eq(&selected_child));
+    assert!(child_context.scope_path().is_empty());
     assert_eq!(child_context.view_model_index(), Some(1));
     assert_eq!(child.number("amount"), Some(0.25));
     assert_eq!(

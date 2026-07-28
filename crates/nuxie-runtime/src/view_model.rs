@@ -4553,6 +4553,12 @@ impl RuntimeOwnedViewModelViewModel {
     }
 
     fn materialize_active_instance(&self) -> Option<RuntimeOwnedViewModelInstance> {
+        let mut instance = self.materialize_active_instance_unbound()?;
+        instance.bind_structural_ownership();
+        Some(instance)
+    }
+
+    fn materialize_active_instance_unbound(&self) -> Option<RuntimeOwnedViewModelInstance> {
         if let Some(linked) = self.endpoint.linked_instance() {
             return Some(linked.try_borrow().ok()?.clone());
         }
@@ -4599,7 +4605,7 @@ impl RuntimeOwnedViewModelViewModel {
                 _ => Vec::new(),
             },
         };
-        instance.detach_list_storage();
+        instance.detach_list_storage_unbound();
         Some(instance)
     }
 
@@ -7538,11 +7544,10 @@ impl RuntimeOwnedViewModelInstance {
         bind_owned_view_model_child_parent_relays(&mut self.view_models, &self.parent_relay);
     }
 
-    fn detach_list_storage(&mut self) {
+    fn detach_list_storage_unbound(&mut self) {
         let parent_relay = Rc::clone(&self.parent_relay);
         detach_owned_view_model_list_storage(&mut self.lists, &parent_relay);
         detach_owned_view_model_child_list_storage(&mut self.view_models, &parent_relay);
-        self.bind_structural_ownership();
     }
 
     /// Advance the values stored directly in this instance and in embedded
@@ -7572,7 +7577,36 @@ impl RuntimeOwnedViewModelInstance {
     }
 
     pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
-        Self::from_view_model(file, view_model_index, None)
+        let mut instance = Self::from_view_model_unbound(file, view_model_index, None)?;
+        Self::complete_generated_view_model_links(&mut instance)?;
+        Some(instance)
+    }
+
+    /// Complete the retained ViewModel-valued property graph created for a
+    /// generated instance.
+    ///
+    /// Pinned C++ `File::createViewModelInstance` recursively creates a
+    /// concrete `ViewModelInstance` for every ViewModel-valued property and
+    /// installs it as that property's `referenceViewModelInstance`
+    /// (`src/file.cpp:1141-1200`). Keep the same concrete identity here so
+    /// scripting and DataContext consumers retain the selected child itself
+    /// instead of reconstructing a scoped projection of the outer root.
+    fn complete_generated_view_model_links(instance: &mut Self) -> Option<()> {
+        for child in &mut instance.view_models {
+            if !matches!(
+                child.endpoint.value(),
+                RuntimeViewModelPointer::OwnedGenerated { .. }
+            ) {
+                continue;
+            }
+            let mut linked = child.materialize_active_instance_unbound()?;
+            Self::complete_generated_view_model_links(&mut linked)?;
+            child
+                .endpoint
+                .set_linked_instance_silent(Some(Rc::new(RefCell::new(linked))));
+        }
+        instance.bind_structural_ownership();
+        Some(())
     }
 
     /// Clone and complete one authored instance exactly like C++
@@ -7715,6 +7749,16 @@ impl RuntimeOwnedViewModelInstance {
         view_model_index: usize,
         instance: Option<&RuntimeObject>,
     ) -> Option<Self> {
+        let mut instance = Self::from_view_model_unbound(file, view_model_index, instance)?;
+        instance.bind_structural_ownership();
+        Some(instance)
+    }
+
+    fn from_view_model_unbound(
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance: Option<&RuntimeObject>,
+    ) -> Option<Self> {
         file.view_model(view_model_index)?;
         let use_generated_defaults = instance.is_none();
         let parent_path = [view_model_index];
@@ -7788,7 +7832,7 @@ impl RuntimeOwnedViewModelInstance {
             use_generated_defaults,
         );
         let parent_relay = RuntimeOwnedViewModelParentRelay::new();
-        let mut instance = Self {
+        let instance = Self {
             view_model_index,
             instance_identity: Self::next_instance_identity(),
             allocation_identity: Self::next_allocation_identity(),
@@ -7807,7 +7851,6 @@ impl RuntimeOwnedViewModelInstance {
             triggers,
             view_models,
         };
-        instance.bind_structural_ownership();
         Some(instance)
     }
 
@@ -13875,10 +13918,19 @@ mod owned_context_tests {
         assert!(instance.set_trigger_by_property_name_path("child/fire", 1));
         assert_eq!(instance.trigger_value_by_property_path(&[0, 0]), Some(1));
 
-        let (changed, shared_children) = instance.advance_script_frame_local();
+        let (mut changed, mut shared_children) = instance.advance_script_frame_local();
+        assert!(
+            !changed && shared_children.len() == 1,
+            "C++ File::createViewModelInstance retains the generated child as a concrete referenceViewModelInstance (`file.cpp:1141-1200`)"
+        );
+        while let Some(child) = shared_children.pop() {
+            let (child_changed, mut grandchildren) =
+                child.borrow_mut().advance_script_frame_local();
+            changed |= child_changed;
+            shared_children.append(&mut grandchildren);
+        }
 
         assert!(changed);
-        assert!(shared_children.is_empty());
         assert_eq!(instance.trigger_value_by_property_path(&[0, 0]), Some(0));
     }
 }

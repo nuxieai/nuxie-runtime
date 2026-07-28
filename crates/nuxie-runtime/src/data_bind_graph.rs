@@ -7035,7 +7035,13 @@ impl RuntimeDataBindGraph {
             ) {
                 continue;
             }
-            source.source_to_target_dirty_after_target_to_source = true;
+            // The selected ViewModel operand registers the outer DataBind as
+            // its dependent. Its mutation therefore calls
+            // `DataBind::addDirt(Bindings)` and enrolls that exact occurrence,
+            // rather than setting only a graph-side compatibility flag
+            // (`data_converter_operation_viewmodel.cpp:48-59`;
+            // `data_bind.cpp:502-531`).
+            source.mark_source_dirty_after_target_to_source();
             changed = true;
         }
         changed
@@ -7056,7 +7062,7 @@ impl RuntimeDataBindGraph {
             ) {
                 continue;
             }
-            source.source_to_target_dirty_after_target_to_source = true;
+            source.mark_source_dirty_after_target_to_source();
             changed = true;
         }
         changed

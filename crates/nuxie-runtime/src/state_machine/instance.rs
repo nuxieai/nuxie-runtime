@@ -1,6 +1,7 @@
 // Runtime instance orchestration for the C++ state machine path.
 // Mirrors /Users/levi/dev/oss/rive-runtime/src/animation/state_machine_instance.cpp.
 use super::focused_input_dispatch::RuntimeInputDispatchOutcome;
+use super::listener_types::RuntimeListenerViewModelPath;
 use super::*;
 use crate::artboard_data_bind::RuntimeOwnedDataContext;
 use crate::constraints::{
@@ -880,20 +881,19 @@ impl RuntimeViewModelListenerInstance {
         if !listener.has_listener(RuntimeListenerType::ViewModel) {
             return None;
         }
-        let property_bindings =
-            if listener.view_model_index.is_some() && listener.view_model_property_path.is_some() {
-                vec![RuntimeViewModelListenerPropertyBinding {
-                    source: RuntimeViewModelListenerSource::Single,
+        let property_bindings = if listener.view_model_path.is_some() {
+            vec![RuntimeViewModelListenerPropertyBinding {
+                source: RuntimeViewModelListenerSource::Single,
+                cell_binding: None,
+            }]
+        } else {
+            (0..listener.view_model_input_types.len())
+                .map(|input_index| RuntimeViewModelListenerPropertyBinding {
+                    source: RuntimeViewModelListenerSource::Input(input_index),
                     cell_binding: None,
-                }]
-            } else {
-                (0..listener.view_model_input_types.len())
-                    .map(|input_index| RuntimeViewModelListenerPropertyBinding {
-                        source: RuntimeViewModelListenerSource::Input(input_index),
-                        cell_binding: None,
-                    })
-                    .collect()
-            };
+                })
+                .collect()
+        };
         Some(Self {
             listener_definitions,
             listener_index,
@@ -7757,26 +7757,55 @@ impl StateMachineInstance {
         context: &RuntimeOwnedViewModelInstance,
         context_chain: &[&[usize]],
     ) {
+        let runtime_file = self.scripted_listener_runtime_file.as_deref();
         for (listener_index, listener) in self.view_model_listeners.iter_mut().enumerate() {
             let definition = &listener.listener_definitions[listener.listener_index];
             for binding in &mut listener.property_bindings {
-                let source = match binding.source {
-                    RuntimeViewModelListenerSource::Single => definition
-                        .view_model_index
-                        .zip(definition.view_model_property_path.as_deref()),
+                let path = match binding.source {
+                    RuntimeViewModelListenerSource::Single => definition.view_model_path.as_ref(),
                     RuntimeViewModelListenerSource::Input(input_index) => definition
                         .view_model_input_types
                         .get(input_index)
-                        .and_then(|input| input.source_path()),
+                        .and_then(|input| input.path()),
                 };
-                let cell = source.and_then(|(view_model_index, property_path)| {
-                    context_chain.iter().find_map(|context_path| {
+                let cell = path.and_then(|path| match path {
+                    RuntimeListenerViewModelPath::Absolute {
+                        view_model_index,
+                        property_path,
+                    } => context_chain.iter().find_map(|context_path| {
                         context.cell_by_scoped_property_path(
                             context_path,
-                            view_model_index,
+                            *view_model_index,
                             property_path,
                         )
-                    })
+                    }),
+                    RuntimeListenerViewModelPath::Relative {
+                        resolved_name_ids,
+                        absolute_fallback,
+                    } => {
+                        let file = runtime_file?;
+                        if file.manifest().is_some() {
+                            context_chain.iter().find_map(|context_path| {
+                                let property_path = context
+                                    .property_path_for_context_resolved_name_path(
+                                        file,
+                                        context_path,
+                                        resolved_name_ids,
+                                        false,
+                                    )?;
+                                context.cell_by_property_path(&property_path)
+                            })
+                        } else {
+                            let (view_model_index, property_path) = absolute_fallback.as_ref()?;
+                            context_chain.iter().find_map(|context_path| {
+                                context.cell_by_scoped_property_path(
+                                    context_path,
+                                    *view_model_index,
+                                    property_path,
+                                )
+                            })
+                        }
+                    }
                 });
                 relink_view_model_listener_cell(
                     binding,
@@ -7792,39 +7821,70 @@ impl StateMachineInstance {
         &mut self,
         data_context: &RuntimeOwnedDataContext,
     ) {
+        let runtime_file = self.scripted_listener_runtime_file.as_deref();
         for (listener_index, listener) in self.view_model_listeners.iter_mut().enumerate() {
             let definition = &listener.listener_definitions[listener.listener_index];
             for binding in &mut listener.property_bindings {
-                let source = match binding.source {
-                    RuntimeViewModelListenerSource::Single => definition
-                        .view_model_index
-                        .zip(definition.view_model_property_path.as_deref()),
+                let path = match binding.source {
+                    RuntimeViewModelListenerSource::Single => definition.view_model_path.as_ref(),
                     RuntimeViewModelListenerSource::Input(input_index) => definition
                         .view_model_input_types
                         .get(input_index)
-                        .and_then(|input| input.source_path()),
+                        .and_then(|input| input.path()),
                 };
-                let cell = source.and_then(|(view_model_index, property_path)| {
-                    let mut source_path = Vec::with_capacity(property_path.len() + 1);
-                    source_path.push(u32::try_from(view_model_index).ok()?);
-                    source_path.extend(
-                        property_path
-                            .iter()
-                            .copied()
-                            .map(u32::try_from)
-                            .collect::<Result<Vec<_>, _>>()
-                            .ok()?,
-                    );
+                let cell = path.and_then(|path| {
+                    let resolved = match path {
+                        RuntimeListenerViewModelPath::Absolute {
+                            view_model_index,
+                            property_path,
+                        } => {
+                            let mut source_path = Vec::with_capacity(property_path.len() + 1);
+                            source_path.push(u32::try_from(*view_model_index).ok()?);
+                            source_path.extend(
+                                property_path
+                                    .iter()
+                                    .copied()
+                                    .map(u32::try_from)
+                                    .collect::<Result<Vec<_>, _>>()
+                                    .ok()?,
+                            );
+                            data_context.resolved_property_path(&source_path)
+                        }
+                        RuntimeListenerViewModelPath::Relative {
+                            resolved_name_ids,
+                            absolute_fallback,
+                        } => {
+                            let file = runtime_file?;
+                            if file.manifest().is_some() {
+                                data_context.resolved_property_path_for_resolved_name_path(
+                                    file,
+                                    resolved_name_ids,
+                                )
+                            } else {
+                                let (view_model_index, property_path) =
+                                    absolute_fallback.as_ref()?;
+                                let mut source_path = Vec::with_capacity(property_path.len() + 1);
+                                source_path.push(u32::try_from(*view_model_index).ok()?);
+                                source_path.extend(
+                                    property_path
+                                        .iter()
+                                        .copied()
+                                        .map(u32::try_from)
+                                        .collect::<Result<Vec<_>, _>>()
+                                        .ok()?,
+                                );
+                                data_context.resolved_property_path(&source_path)
+                            }
+                        }
+                    };
                     // C++ `DataContext::getViewModelProperty` returns the
                     // retained `ViewModelInstanceValue`; every authored
                     // ListenerInputTypeViewModel registers its own binding
                     // against the same parent ListenerViewModel
                     // (`state_machine_instance.cpp:1349-1372,1401-1407`).
-                    data_context.resolved_property_path(&source_path).and_then(
-                        |(context, property_path)| {
-                            context.borrow().cell_by_property_path(&property_path)
-                        },
-                    )
+                    resolved.and_then(|(context, property_path)| {
+                        context.borrow().cell_by_property_path(&property_path)
+                    })
                 });
                 relink_view_model_listener_cell(
                     binding,
@@ -10462,8 +10522,7 @@ mod scripted_listener_action_tests {
             is_single: false,
             listener_types: vec![RuntimeListenerType::Event],
             event_local_indices: vec![7],
-            view_model_index: None,
-            view_model_property_path: None,
+            view_model_path: None,
             view_model_input_types: Vec::new(),
             gamepad_input_types: Vec::new(),
             keyboard_input_types: Vec::new(),
@@ -11304,8 +11363,7 @@ mod scripted_listener_action_tests {
                 RuntimeListenerType::TextInput,
             ],
             event_local_indices: Vec::new(),
-            view_model_index: None,
-            view_model_property_path: None,
+            view_model_path: None,
             view_model_input_types: Vec::new(),
             gamepad_input_types: Vec::new(),
             keyboard_input_types: Vec::new(),
@@ -11349,8 +11407,7 @@ mod scripted_listener_action_tests {
                 RuntimeListenerType::DragEnd,
             ],
             event_local_indices: Vec::new(),
-            view_model_index: None,
-            view_model_property_path: None,
+            view_model_path: None,
             view_model_input_types: Vec::new(),
             gamepad_input_types: Vec::new(),
             keyboard_input_types: Vec::new(),
@@ -11414,8 +11471,7 @@ mod scripted_listener_action_tests {
             is_single: false,
             listener_types: vec![RuntimeListenerType::Down, RuntimeListenerType::Blur],
             event_local_indices: Vec::new(),
-            view_model_index: None,
-            view_model_property_path: None,
+            view_model_path: None,
             view_model_input_types: Vec::new(),
             gamepad_input_types: Vec::new(),
             keyboard_input_types: Vec::new(),
@@ -11558,8 +11614,7 @@ mod scripted_listener_action_tests {
             is_single: false,
             listener_types,
             event_local_indices: Vec::new(),
-            view_model_index: None,
-            view_model_property_path: None,
+            view_model_path: None,
             view_model_input_types: Vec::new(),
             gamepad_input_types: Vec::new(),
             keyboard_input_types: Vec::new(),
@@ -11671,8 +11726,7 @@ mod scripted_listener_action_tests {
             is_single: false,
             listener_types: vec![RuntimeListenerType::Focus, RuntimeListenerType::Blur],
             event_local_indices: Vec::new(),
-            view_model_index: None,
-            view_model_property_path: None,
+            view_model_path: None,
             view_model_input_types: Vec::new(),
             gamepad_input_types: Vec::new(),
             keyboard_input_types: Vec::new(),
@@ -11721,8 +11775,7 @@ mod scripted_listener_action_tests {
             is_single: false,
             listener_types: vec![RuntimeListenerType::Focus, RuntimeListenerType::Blur],
             event_local_indices: Vec::new(),
-            view_model_index: None,
-            view_model_property_path: None,
+            view_model_path: None,
             view_model_input_types: Vec::new(),
             gamepad_input_types: Vec::new(),
             keyboard_input_types: Vec::new(),
@@ -11903,8 +11956,7 @@ mod scripted_listener_action_tests {
             is_single: false,
             listener_types: vec![RuntimeListenerType::Gamepad],
             event_local_indices: Vec::new(),
-            view_model_index: None,
-            view_model_property_path: None,
+            view_model_path: None,
             view_model_input_types: Vec::new(),
             gamepad_input_types: Vec::new(),
             keyboard_input_types: Vec::new(),
@@ -11946,8 +11998,7 @@ mod scripted_listener_action_tests {
             is_single: false,
             listener_types: vec![RuntimeListenerType::Gamepad],
             event_local_indices: Vec::new(),
-            view_model_index: None,
-            view_model_property_path: None,
+            view_model_path: None,
             view_model_input_types: Vec::new(),
             gamepad_input_types: vec![
                 super::listener_types::RuntimeListenerInputTypeGamepad::catch_all_for_test(1),
@@ -12145,8 +12196,7 @@ mod scripted_listener_action_tests {
                 is_single: false,
                 listener_types: vec![RuntimeListenerType::Event],
                 event_local_indices: vec![event_local_id],
-                view_model_index: None,
-                view_model_property_path: None,
+                view_model_path: None,
                 view_model_input_types: Vec::new(),
                 gamepad_input_types: Vec::new(),
                 keyboard_input_types: Vec::new(),
@@ -12386,8 +12436,7 @@ mod scripted_listener_action_tests {
             is_single: false,
             listener_types,
             event_local_indices: Vec::new(),
-            view_model_index: None,
-            view_model_property_path: None,
+            view_model_path: None,
             view_model_input_types: Vec::new(),
             gamepad_input_types: Vec::new(),
             keyboard_input_types: Vec::new(),

@@ -2,10 +2,11 @@ use super::instance::StateMachineInstance;
 use super::listener_types::{
     RuntimeGamepadInputEvent, RuntimeListenerInputTypeGamepad, RuntimeListenerInputTypeKeyboard,
     RuntimeListenerInputTypeSemantic, RuntimeListenerInputTypeViewModel, RuntimeListenerType,
+    RuntimeListenerViewModelPath,
 };
 use super::state_machine_listener_single::{
     runtime_listener_single_event_local_indices, runtime_listener_single_type,
-    runtime_listener_single_view_model_property_path,
+    runtime_listener_single_view_model_path,
 };
 use super::{RuntimeScheduledListenerAction, ScriptListenerInvocation, StateMachineEventContext};
 use crate::ArtboardInstance;
@@ -23,8 +24,7 @@ pub(crate) struct RuntimeStateMachineListener {
     pub(crate) is_single: bool,
     pub(crate) listener_types: Vec<RuntimeListenerType>,
     pub(crate) event_local_indices: Vec<usize>,
-    pub(crate) view_model_index: Option<usize>,
-    pub(crate) view_model_property_path: Option<Vec<usize>>,
+    pub(crate) view_model_path: Option<RuntimeListenerViewModelPath>,
     pub(crate) view_model_input_types: Vec<RuntimeListenerInputTypeViewModel>,
     pub(crate) gamepad_input_types: Vec<RuntimeListenerInputTypeGamepad>,
     pub(crate) keyboard_input_types: Vec<RuntimeListenerInputTypeKeyboard>,
@@ -190,19 +190,15 @@ pub(super) fn runtime_state_machine_listener(
         Vec::new()
     };
     let event_local_indices = runtime_listener_event_local_indices(listener);
-    let (view_model_index, view_model_property_path) =
-        runtime_listener_single_view_model_property_path(file, listener)
-            .map(|(view_model_index, property_path)| (Some(view_model_index), Some(property_path)))
-            .unwrap_or((None, None));
+    let view_model_path = runtime_listener_single_view_model_path(file, listener);
 
     Some(RuntimeStateMachineListener {
         target_local_id,
         is_single: listener.object.type_name == "StateMachineListenerSingle",
         listener_types,
         event_local_indices,
-        view_model_index,
-        view_model_property_path,
-        view_model_input_types: runtime_listener_input_type_viewmodels(listener),
+        view_model_path,
+        view_model_input_types: runtime_listener_input_type_viewmodels(file, listener),
         gamepad_input_types: runtime_listener_input_type_gamepads(listener),
         keyboard_input_types: runtime_listener_input_type_keyboards(listener),
         semantic_input_types: runtime_listener_input_type_semantics(listener),
@@ -269,6 +265,7 @@ fn runtime_listener_input_type_semantics(
 }
 
 fn runtime_listener_input_type_viewmodels(
+    file: &RuntimeFile,
     listener: &nuxie_binary::RuntimeStateMachineListener<'_>,
 ) -> Vec<RuntimeListenerInputTypeViewModel> {
     if listener.object.type_name == "StateMachineListenerSingle" {
@@ -279,7 +276,7 @@ fn runtime_listener_input_type_viewmodels(
         .listener_input_types
         .iter()
         .filter(|input_type| input_type.type_name == "ListenerInputTypeViewModel")
-        .map(|input_type| RuntimeListenerInputTypeViewModel::from_imported(input_type))
+        .map(|input_type| RuntimeListenerInputTypeViewModel::from_imported(file, input_type))
         .collect()
 }
 
@@ -663,16 +660,20 @@ mod tests {
         assert_eq!(listener.view_model_input_types.len(), 3);
         assert_eq!(listener.view_model_input_types[0].global_id, 4);
         assert_eq!(
-            listener.view_model_input_types[0].source_path(),
+            listener.view_model_input_types[0]
+                .path()
+                .and_then(|path| path.absolute_source_path()),
             Some((0, [0].as_slice()))
         );
         assert_eq!(listener.view_model_input_types[1].global_id, 5);
         assert_eq!(
-            listener.view_model_input_types[1].source_path(),
+            listener.view_model_input_types[1]
+                .path()
+                .and_then(|path| path.absolute_source_path()),
             Some((0, [1].as_slice()))
         );
         assert_eq!(listener.view_model_input_types[2].global_id, 6);
-        assert_eq!(listener.view_model_input_types[2].source_path(), None);
+        assert_eq!(listener.view_model_input_types[2].path(), None);
     }
 
     #[test]

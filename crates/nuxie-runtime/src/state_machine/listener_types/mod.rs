@@ -12,4 +12,6 @@ pub(crate) use listener_input_type::RuntimeListenerType;
 pub(crate) use listener_input_type_gamepad::RuntimeListenerInputTypeGamepad;
 pub(crate) use listener_input_type_keyboard::RuntimeListenerInputTypeKeyboard;
 pub(crate) use listener_input_type_semantic::RuntimeListenerInputTypeSemantic;
-pub(crate) use listener_input_type_viewmodel::RuntimeListenerInputTypeViewModel;
+pub(crate) use listener_input_type_viewmodel::{
+    RuntimeListenerInputTypeViewModel, RuntimeListenerViewModelPath,
+};

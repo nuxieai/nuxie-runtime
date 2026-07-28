@@ -1,4 +1,56 @@
-use nuxie_binary::RuntimeObject;
+use nuxie_binary::{RuntimeDataBindPath, RuntimeFile, RuntimeObject};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RuntimeListenerViewModelPath {
+    Absolute {
+        view_model_index: usize,
+        property_path: Vec<usize>,
+    },
+    Relative {
+        resolved_name_ids: Vec<u32>,
+        absolute_fallback: Option<(usize, Vec<usize>)>,
+    },
+}
+
+impl RuntimeListenerViewModelPath {
+    pub(crate) fn from_data_bind_path(path: RuntimeDataBindPath<'_>) -> Option<Self> {
+        if path.is_relative {
+            return (!path.resolved_path_ids.is_empty()).then_some(Self::Relative {
+                resolved_name_ids: path.resolved_path_ids,
+                absolute_fallback: Self::absolute_components(&path.path_ids),
+            });
+        }
+
+        let (view_model_index, property_path) = Self::absolute_components(&path.path_ids)?;
+        Some(Self::Absolute {
+            view_model_index,
+            property_path,
+        })
+    }
+
+    fn absolute_components(path_ids: &[u32]) -> Option<(usize, Vec<usize>)> {
+        let (view_model_index, property_path) = path_ids.split_first()?;
+        let view_model_index = usize::try_from(*view_model_index).ok()?;
+        let property_path = property_path
+            .iter()
+            .copied()
+            .map(usize::try_from)
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        (!property_path.is_empty()).then_some((view_model_index, property_path))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn absolute_source_path(&self) -> Option<(usize, &[usize])> {
+        match self {
+            Self::Absolute {
+                view_model_index,
+                property_path,
+            } => Some((*view_model_index, property_path)),
+            Self::Relative { .. } => None,
+        }
+    }
+}
 
 /// Authored `ListenerInputTypeViewModel` definition shared by state-machine
 /// occurrences.
@@ -11,38 +63,24 @@ use nuxie_binary::RuntimeObject;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RuntimeListenerInputTypeViewModel {
     pub(crate) global_id: u32,
-    view_model_index: Option<usize>,
-    property_path: Vec<usize>,
+    path: Option<RuntimeListenerViewModelPath>,
 }
 
 impl RuntimeListenerInputTypeViewModel {
-    pub(in crate::state_machine) fn from_imported(input_type: &RuntimeObject) -> Self {
-        let path = input_type
-            .id_list_property("viewModelPathIds")
-            .and_then(|encoded| {
-                let (view_model_index, property_path) = encoded.split_first()?;
-                let view_model_index = usize::try_from(*view_model_index).ok()?;
-                let property_path = property_path
-                    .iter()
-                    .copied()
-                    .map(usize::try_from)
-                    .collect::<Result<Vec<_>, _>>()
-                    .ok()?;
-                (!property_path.is_empty()).then_some((view_model_index, property_path))
-            });
-        let (view_model_index, property_path) = path
-            .map(|(view_model_index, property_path)| (Some(view_model_index), property_path))
-            .unwrap_or((None, Vec::new()));
+    pub(in crate::state_machine) fn from_imported(
+        file: &RuntimeFile,
+        input_type: &RuntimeObject,
+    ) -> Self {
         Self {
             global_id: input_type.id,
-            view_model_index,
-            property_path,
+            path: file
+                .data_bind_path_for_referencer_object(input_type)
+                .and_then(RuntimeListenerViewModelPath::from_data_bind_path),
         }
     }
 
-    pub(crate) fn source_path(&self) -> Option<(usize, &[usize])> {
-        self.view_model_index
-            .map(|view_model_index| (view_model_index, self.property_path.as_slice()))
+    pub(crate) fn path(&self) -> Option<&RuntimeListenerViewModelPath> {
+        self.path.as_ref()
     }
 }
 
@@ -82,10 +120,13 @@ mod tests {
             .find(|object| object.type_name == "ListenerInputTypeViewModel")
             .expect("imported definition");
 
-        let input = RuntimeListenerInputTypeViewModel::from_imported(object);
+        let input = RuntimeListenerInputTypeViewModel::from_imported(&file, object);
 
         assert_eq!(input.global_id, object.id);
-        assert_eq!(input.source_path(), Some((3, [5, 8].as_slice())));
+        assert_eq!(
+            input.path().and_then(|path| path.absolute_source_path()),
+            Some((3, [5, 8].as_slice()))
+        );
     }
 
     fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {

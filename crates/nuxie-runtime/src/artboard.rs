@@ -11462,8 +11462,7 @@ mod tests {
             is_single: false,
             listener_types: vec![RuntimeListenerType::Down],
             event_local_indices: Vec::new(),
-            view_model_index: None,
-            view_model_property_path: None,
+            view_model_path: None,
             view_model_input_types: Vec::new(),
             gamepad_input_types: Vec::new(),
             keyboard_input_types: Vec::new(),
@@ -17583,10 +17582,12 @@ mod tests {
         assert_eq!(runtime_state_machine.bindable_numbers.len(), 1);
         if listener_action {
             assert_eq!(runtime_state_machine.listeners.len(), 1);
-            assert_eq!(runtime_state_machine.listeners[0].view_model_index, Some(1));
             assert_eq!(
-                runtime_state_machine.listeners[0].view_model_property_path,
-                Some(vec![0])
+                runtime_state_machine.listeners[0]
+                    .view_model_path
+                    .as_ref()
+                    .and_then(|path| path.absolute_source_path()),
+                Some((1, [0].as_slice()))
             );
             assert_eq!(runtime_state_machine.listeners[0].listener_actions.len(), 2);
         }

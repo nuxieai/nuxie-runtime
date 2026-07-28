@@ -18,14 +18,14 @@
     }
   },
   "artifacts": {
-    "cpp_binary_sha256": "77a0e871f177b9b4e754b5ea108d11e8405b4ea84bedfed703e5809d2041a4d2",
+    "cpp_binary_sha256": "1786a9a128f70f3fb1b8ea1a40baa95aada80a2c996324ec9e7b8d30aea2fe15",
     "cpp_coverage_sha256": "86e7f845b7f7a2a79e354358e4848ae228481e12e0af9aa9fea4c4105410fa83",
     "cpp_mechanism_coverage_sha256": "c6895d3e041a4adcf4871ea7a3902a3f95965719e0563e4b9403686d72b93bd8",
     "cpp_steady_coverage_sha256": "db6f9854cec503ec0598bdb43ff25ce1ede1c9bf05e25241121448c010c365e6",
-    "rust_binary_sha256": "fb75520695c6f7e79cf0c2ab3444ffc30139299a429d601e6cca3c7ed3552194",
-    "rust_coverage_sha256": "9a1567fb795fb9b93bc7b2c401c99d5ab37f5703d69a1432640a093c30598372",
-    "rust_mechanism_coverage_sha256": "f105c34a68febc4173b076e924ca0011383c7471827fc84155d15813f5be6acf",
-    "rust_steady_coverage_sha256": "7768fe9785f37f500de926cd3759095f826f22ba2e6b0ed87848c17f560387c5"
+    "rust_binary_sha256": "521a06beee31928cfb81b62f12c90ad43f35832589a22d35f4f6cca3c83bba42",
+    "rust_coverage_sha256": "85e82e90c8e7eaf5a96f1d26d5cca8ecb55f5721ce249160138d39ef7fb4a4ae",
+    "rust_mechanism_coverage_sha256": "acaa530a680149bb35d15bb3b1942e536c91abfa0af8f401b0908f24a177624a",
+    "rust_steady_coverage_sha256": "facc61a3adabe53eddad4e5ce890dfb9fe9c2bcbb4119f2ee064a4dff9929a8d"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -7522,16 +7522,16 @@
   },
   "mode": "frame-only counters reset after construction and before samples",
   "rust_candidate_source": {
-    "file_count": 7273,
+    "file_count": 7238,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "31cf5258b68f6b3bde48d72e5831c85ada993bda7add8dcba640a8bc0e7ade07"
+    "sha256": "49ffb5c11c30d34498ccf13382e802c4ebe12f18b085563690deee87bd5ddaec"
   },
-  "rust_ref": "fb2cb966156c275cbbe4c8d765ee94217ab521dd",
+  "rust_ref": "5022e5e5cabf67f4eb1a765da79dbc1858878692",
   "rust_runner_provenance": {
     "candidate_source": {
-      "file_count": 7273,
+      "file_count": 7238,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "31cf5258b68f6b3bde48d72e5831c85ada993bda7add8dcba640a8bc0e7ade07"
+      "sha256": "49ffb5c11c30d34498ccf13382e802c4ebe12f18b085563690deee87bd5ddaec"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [

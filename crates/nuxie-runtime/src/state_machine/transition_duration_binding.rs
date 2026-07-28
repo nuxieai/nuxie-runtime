@@ -1,13 +1,10 @@
-use super::{
-    RuntimeBindableNumberDefaultViewModelSource,
-    runtime_number_default_view_model_source_for_instance,
-};
+use crate::properties::property_key_for_name;
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeTransitionDurationBinding {
+    pub(crate) data_bind_index: usize,
     pub(crate) transition_global_id: u32,
-    pub(crate) source: RuntimeBindableNumberDefaultViewModelSource,
 }
 
 #[derive(Debug, Clone)]
@@ -36,7 +33,7 @@ impl StateMachineTransitionDurationInstance {
 pub(super) fn runtime_transition_duration_bindings(
     file: &RuntimeFile,
     state_machine: &nuxie_binary::RuntimeStateMachine<'_>,
-    default_instance: Option<&RuntimeObject>,
+    _default_instance: Option<&RuntimeObject>,
 ) -> Vec<RuntimeTransitionDurationBinding> {
     // C++ constructs every state-machine DataBind occurrence before a live
     // data context is attached, then DataBindContainer resolves its retained
@@ -54,26 +51,22 @@ pub(super) fn runtime_transition_duration_bindings(
         if target.type_name != "StateTransition" {
             continue;
         }
-        let Some(source) = runtime_number_default_view_model_source_for_instance(
-            file,
-            data_bind_index,
-            data_bind,
-            "StateTransition",
-            "duration",
-            default_instance,
-            0.0,
-        ) else {
+        let duration_key = property_key_for_name("StateTransition", "duration");
+        let authored_key = data_bind
+            .uint_property("propertyKey")
+            .and_then(|value| u16::try_from(value).ok());
+        if authored_key != duration_key {
             continue;
-        };
+        }
         bindings.push(RuntimeTransitionDurationBinding {
+            data_bind_index,
             transition_global_id: target.id,
-            source,
         });
     }
     bindings
 }
 
-fn state_machine_transition_target_for_data_bind<'a>(
+pub(super) fn state_machine_transition_target_for_data_bind<'a>(
     file: &'a RuntimeFile,
     state_machine: &nuxie_binary::RuntimeStateMachine<'a>,
     data_bind: &RuntimeObject,
@@ -96,6 +89,7 @@ fn state_machine_transition_target_for_data_bind<'a>(
 mod tests {
     use super::*;
     use crate::properties::property_key_for_name;
+    use crate::state_machine::runtime_number_default_view_model_source_for_instance;
     use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
 
     fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {

@@ -1,18 +1,12 @@
+use crate::ArtboardInstance;
 use crate::animation::{
     LinearAnimationInstance, RuntimeInterpolator, RuntimeKeyedPropertyTarget,
     RuntimeLinearAnimation, RuntimeLinearAnimationHandle,
 };
 use crate::components::TransformProperty;
-use crate::data_bind_graph::{
-    RuntimeDataBindGraphConverterBuildCache, data_bind_flags_apply_target_to_source,
-};
+use crate::data_bind_graph::RuntimeDataBindGraphConverterBuildCache;
 use crate::properties::artboard_index_for_graph;
 use crate::scripting::{ScriptError, ScriptListenerActionDefinition};
-use crate::view_model_cell::RuntimeViewModelCell;
-use crate::{
-    ArtboardInstance, RuntimeGeometryHit, RuntimeGeometryHitOccurrence,
-    RuntimeGeometryHitPathSegment,
-};
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 use nuxie_graph::ArtboardGraph;
 use std::collections::{BTreeMap, BTreeSet};
@@ -20,13 +14,38 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 mod bindables;
+mod data_bind_template;
+mod data_converter_binding;
+mod event_report;
+mod focus_action_clear;
+mod focus_action_target;
+mod focus_action_traversal;
+mod focus_listener_group;
+mod focused_input_dispatch;
+mod gamepad_listener_group;
 mod instance;
+mod keyboard_listener_group;
 mod layer_state;
+mod listener_action;
+mod listener_action_owner;
+mod listener_align_target;
+mod listener_bool_change;
+mod listener_fire_event;
+mod listener_input_change;
 mod listener_invocation;
+mod listener_number_change;
+mod listener_trigger_change;
 mod listener_types;
+mod listener_viewmodel_change;
 mod nested_state_machine;
+mod scripted_listener_action;
+mod scripted_object_lifecycle;
 mod scripted_transition_condition;
+mod semantic_listener_group;
 mod state_instance;
+mod state_machine_fire_action;
+mod state_machine_fire_event;
+mod state_machine_fire_trigger;
 mod state_machine_input;
 mod state_machine_input_instance;
 mod state_machine_layer;
@@ -67,14 +86,52 @@ pub(crate) use bindables::{
     runtime_bindable_view_models, runtime_default_view_model_triggers,
     runtime_number_default_view_model_source_for_instance,
 };
+use data_bind_template::{
+    RuntimeStateMachineDataBindTemplate, runtime_state_machine_data_bind_templates,
+};
+pub use data_converter_binding::RuntimeStateMachineDataConverterBindStep;
+use data_converter_binding::runtime_state_machine_data_converter_bind_steps;
+#[cfg(test)]
+use event_report::open_url_target;
+pub use event_report::{
+    StateMachineEventContext, StateMachineEventStringProperty, StateMachineReportedEvent,
+};
 pub use instance::StateMachineInstance;
 pub use layer_state::RuntimeLayerState;
-pub use listener_invocation::{ScriptListenerInvocation, ScriptPointerEventKind};
+pub(crate) use listener_action::{
+    RuntimeScheduledListenerAction, RuntimeScheduledListenerActionExecutor,
+    RuntimeScheduledListenerActionTargetsMut, perform_scheduled_listener_actions,
+};
+pub use listener_action_owner::RuntimeFileStateMachineActionCatalog;
+pub(crate) use listener_action_owner::{RuntimeActionCoreArena, RuntimeActionCoreHandle};
+#[cfg(test)]
+pub(crate) use listener_bool_change::RuntimeListenerBoolChange;
+#[cfg(test)]
+pub(crate) use listener_input_change::RuntimeListenerInputTarget;
+pub use listener_invocation::{
+    ScriptGamepadInputChange, ScriptGamepadMappingKind, ScriptGamepadSnapshot,
+    ScriptListenerInvocation, ScriptPointerEventKind,
+};
+#[cfg(test)]
+pub(crate) use listener_number_change::RuntimeListenerNumberChange;
+#[cfg(test)]
+pub(crate) use listener_trigger_change::RuntimeListenerTriggerChange;
 pub(crate) use listener_types::RuntimeListenerType;
+pub(crate) use listener_viewmodel_change::RuntimeListenerViewModelChangeValue;
 pub(crate) use nested_state_machine::RuntimeNestedStateMachineInstance;
 pub use nested_state_machine::RuntimeNestedStateMachineReport;
+pub(crate) use scripted_listener_action::RuntimeScriptedListenerBoundValue;
+pub use scripted_listener_action::RuntimeScriptedListenerDataConverterBindStep;
+use scripted_listener_action::{
+    RuntimeScriptedListenerActionBindingDefinition, runtime_scripted_object_binding_definition,
+    runtime_scripted_object_definition,
+};
 use scripted_transition_condition::RuntimeScriptedTransitionCondition;
 use state_instance::RuntimeStateInstance;
+pub(crate) use state_machine_fire_action::{
+    RuntimeStateMachineFireAction, StateMachineFireOccurrence, perform_state_machine_fire_actions,
+};
+pub(crate) use state_machine_fire_trigger::RuntimeStateMachineFireTriggerPath;
 use state_machine_input::runtime_state_machine_input;
 pub use state_machine_input::{RuntimeStateMachineInput, StateMachineInputKind};
 pub use state_machine_input_instance::StateMachineInputInstance;
@@ -131,10 +188,25 @@ pub struct RuntimeStateMachine {
     pub(crate) bindable_booleans: Arc<Vec<RuntimeBindableBoolean>>,
     pub(crate) view_model_triggers: Arc<Vec<RuntimeViewModelTrigger>>,
     pub(crate) transition_duration_bindings: Arc<Vec<RuntimeTransitionDurationBinding>>,
+    pub(crate) data_bind_templates: Arc<Vec<RuntimeStateMachineDataBindTemplate>>,
+    /// Every source `StateMachine::scriptedObjects()` occurrence in import
+    /// order, including listener actions and scripted transition conditions.
+    pub(crate) scripted_objects: Vec<ScriptListenerActionDefinition>,
+    pub(crate) scripted_object_bindings: Vec<RuntimeScriptedListenerActionBindingDefinition>,
     pub(crate) scripted_listener_actions: Vec<ScriptListenerActionDefinition>,
+    /// Pinned C++ source-StateMachine-owned generated fields for every
+    /// ListenerAction and StateMachineFireAction. All concrete SMIs retain
+    /// handles into this one definition arena.
+    pub(crate) action_owners: RuntimeActionCoreArena,
 }
 
 impl RuntimeStateMachine {
+    /// Complete state-machine `ScriptedObject` collection in imported order.
+    #[doc(hidden)]
+    pub fn scripted_objects(&self) -> &[ScriptListenerActionDefinition] {
+        &self.scripted_objects
+    }
+
     /// Scripted listener tables that must be instantiated for each concrete
     /// [`StateMachineInstance`] occurrence.
     pub fn scripted_listener_actions(&self) -> &[ScriptListenerActionDefinition] {
@@ -159,6 +231,23 @@ pub(crate) fn build_state_machines<'a>(
     linear_animations: &[RuntimeLinearAnimation],
     converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
 ) -> Vec<RuntimeStateMachine> {
+    let action_catalog = RuntimeFileStateMachineActionCatalog::new(file);
+    build_state_machines_with_action_catalog(
+        file,
+        graph,
+        linear_animations,
+        converter_cache,
+        &action_catalog,
+    )
+}
+
+pub(crate) fn build_state_machines_with_action_catalog<'a>(
+    file: &'a RuntimeFile,
+    graph: &ArtboardGraph,
+    linear_animations: &[RuntimeLinearAnimation],
+    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
+    action_catalog: &RuntimeFileStateMachineActionCatalog,
+) -> Vec<RuntimeStateMachine> {
     let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
         return Vec::new();
     };
@@ -175,6 +264,9 @@ pub(crate) fn build_state_machines<'a>(
     file.artboard_state_machine_graphs(artboard_index)
         .into_iter()
         .map(|state_machine| {
+            let action_owners = action_catalog
+                .arena(state_machine.object.id)
+                .expect("file action catalog must contain every accepted state machine");
             let state_machine_data_binds = state_machine.data_binds.clone();
             let bindable_numbers = runtime_bindable_numbers(
                 file,
@@ -227,16 +319,46 @@ pub(crate) fn build_state_machines<'a>(
                 runtime_default_view_model_triggers(file, default_view_model_index);
             let transition_duration_bindings =
                 runtime_transition_duration_bindings(file, &state_machine, default_instance);
+            let data_bind_templates = runtime_state_machine_data_bind_templates(
+                file,
+                &state_machine,
+                default_instance,
+                &transition_duration_bindings,
+                converter_cache,
+            );
             let scripted_listener_actions = state_machine
                 .scripted_objects
                 .iter()
                 .filter_map(|scripted| {
-                    runtime_scripted_listener_action_definition(
-                        file,
-                        scripted.object,
-                        &scripted.inputs,
-                    )
+                    Some((
+                        runtime_scripted_object_definition(
+                            file,
+                            scripted.object,
+                            &scripted.inputs,
+                        )?,
+                        runtime_scripted_object_binding_definition(
+                            file,
+                            scripted.object,
+                            &scripted.inputs,
+                        )?,
+                    ))
                 })
+                .collect::<Vec<_>>();
+            let scripted_object_bindings = scripted_listener_actions
+                .iter()
+                .map(|(_, binding)| binding.clone())
+                .collect();
+            let scripted_objects = scripted_listener_actions
+                .into_iter()
+                .map(|(definition, _)| definition)
+                .collect::<Vec<_>>();
+            let scripted_listener_actions = scripted_objects
+                .iter()
+                .filter(|definition| {
+                    definition.scripted_object_kind()
+                        == crate::ScriptedStateMachineObjectKind::ListenerAction
+                })
+                .cloned()
                 .collect();
             RuntimeStateMachine {
                 global_id: state_machine.object.id,
@@ -260,8 +382,10 @@ pub(crate) fn build_state_machines<'a>(
                             runtime_state_machine_listener(
                                 file,
                                 graph,
+                                &state_machine.inputs,
                                 &state_machine_data_binds,
                                 listener,
+                                &action_owners,
                             )
                         })
                         .collect(),
@@ -279,7 +403,11 @@ pub(crate) fn build_state_machines<'a>(
                 bindable_booleans: Arc::new(bindable_booleans),
                 view_model_triggers: Arc::new(view_model_triggers),
                 transition_duration_bindings: Arc::new(transition_duration_bindings),
+                data_bind_templates: Arc::new(data_bind_templates),
+                scripted_objects,
+                scripted_object_bindings,
                 scripted_listener_actions,
+                action_owners: action_owners.clone(),
                 layers: Arc::new(
                     state_machine
                     .layers
@@ -330,20 +458,31 @@ pub(crate) fn build_state_machines<'a>(
                                     fire_actions: state
                                         .fire_actions
                                         .iter()
-                                        .filter_map(|action| {
+                                        .map(|action| {
                                             RuntimeStateMachineFireAction::from_imported(
-                                                file, action,
+                                                file,
+                                                action,
+                                                action_owners
+                                                    .handle(action.object.id)
+                                                    .expect("accepted fire action has an owner"),
                                             )
                                         })
                                         .collect(),
                                     listener_actions: state
                                         .listener_actions
                                         .iter()
-                                        .filter_map(|action| {
+                                        .map(|action| {
                                             RuntimeScheduledListenerAction::from_imported(
                                                 file,
+                                                graph,
+                                                &state_machine.inputs,
                                                 &state_machine_data_binds,
                                                 action,
+                                                action_owners
+                                                    .handle(action.object.id)
+                                                    .expect(
+                                                        "accepted listener action has an owner",
+                                                    ),
                                             )
                                         })
                                         .collect(),
@@ -396,20 +535,33 @@ pub(crate) fn build_state_machines<'a>(
                                                 fire_actions: transition
                                                     .fire_actions
                                                     .iter()
-                                                    .filter_map(|action| {
+                                                    .map(|action| {
                                                         RuntimeStateMachineFireAction::from_imported(
-                                                            file, action,
+                                                            file,
+                                                            action,
+                                                            action_owners
+                                                                .handle(action.object.id)
+                                                                .expect(
+                                                                    "accepted fire action has an owner",
+                                                                ),
                                                         )
                                                     })
                                                     .collect(),
                                                 listener_actions: transition
                                                     .listener_actions
                                                     .iter()
-                                                    .filter_map(|action| {
+                                                    .map(|action| {
                                                         RuntimeScheduledListenerAction::from_imported(
                                                             file,
+                                                            graph,
+                                                            &state_machine.inputs,
                                                             &state_machine_data_binds,
                                                             action,
+                                                            action_owners
+                                                                .handle(action.object.id)
+                                                                .expect(
+                                                                    "accepted listener action has an owner",
+                                                                ),
                                                         )
                                                     })
                                                     .collect(),
@@ -442,43 +594,6 @@ pub(crate) fn build_state_machines<'a>(
         .collect()
 }
 
-fn runtime_scripted_listener_action_definition(
-    file: &RuntimeFile,
-    action: &RuntimeObject,
-    inputs: &[&RuntimeObject],
-) -> Option<ScriptListenerActionDefinition> {
-    if action.type_name != "ScriptedListenerAction" {
-        return None;
-    }
-    let asset_ordinal = usize::try_from(action.uint_property("scriptAssetId")?).ok()?;
-    let asset = file.resolved_file_asset_for_referencer(action)?;
-    if asset.type_name != "ScriptAsset" || asset.bool_property("isModule").unwrap_or(false) {
-        return None;
-    }
-    let inputs = inputs
-        .iter()
-        .filter_map(|input| {
-            let kind = match input.type_name {
-                "ScriptInputBoolean" => crate::ScriptListenerInputKind::Boolean,
-                "ScriptInputNumber" => crate::ScriptListenerInputKind::Number,
-                "ScriptInputColor" => crate::ScriptListenerInputKind::Color,
-                "ScriptInputString" => crate::ScriptListenerInputKind::String,
-                "ScriptInputTrigger" => crate::ScriptListenerInputKind::Trigger,
-                "ScriptInputArtboard" => crate::ScriptListenerInputKind::Artboard,
-                "ScriptInputViewModelProperty" => crate::ScriptListenerInputKind::ViewModelProperty,
-                _ => return None,
-            };
-            Some(crate::ScriptListenerInputDefinition::new(input.id, kind))
-        })
-        .collect();
-    Some(ScriptListenerActionDefinition::with_inputs(
-        action.id,
-        asset_ordinal,
-        asset.string_property("name").unwrap_or_default().to_owned(),
-        inputs,
-    ))
-}
-
 fn state_machine_default_view_model_index(
     file: &RuntimeFile,
     artboard_index: usize,
@@ -486,161 +601,6 @@ fn state_machine_default_view_model_index(
     file.resolved_view_model_for_artboard(artboard_index)
         .map(|view_model| view_model.view_model_index)
         .or_else(|| file.view_model(0).map(|_| 0))
-}
-
-// Mirrors the runtime event report surface threaded through state-machine advancement.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StateMachineEventStringProperty {
-    name: String,
-    value: String,
-}
-
-impl StateMachineEventStringProperty {
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn value(&self) -> &str {
-        &self.value
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct StateMachineReportedEvent {
-    pub(crate) event_local_index: usize,
-    pub(crate) event_core_type: u32,
-    pub(crate) name: Option<String>,
-    pub(crate) url: Option<String>,
-    pub(crate) target: Option<String>,
-    pub(crate) string_properties: Vec<StateMachineEventStringProperty>,
-    pub(crate) seconds_delay: f32,
-    pub(crate) context: Option<StateMachineEventContext>,
-}
-
-/// Exact rendered occurrence that caused a pointer-listener event.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StateMachineEventContext {
-    path: Vec<RuntimeGeometryHitPathSegment>,
-    occurrence: Vec<RuntimeGeometryHitOccurrence>,
-}
-
-impl StateMachineEventContext {
-    pub fn from_geometry_hit(hit: &RuntimeGeometryHit) -> Self {
-        Self {
-            path: hit.path.clone(),
-            occurrence: hit.occurrence.clone(),
-        }
-    }
-
-    pub fn path(&self) -> &[RuntimeGeometryHitPathSegment] {
-        &self.path
-    }
-
-    pub fn occurrence(&self) -> &[RuntimeGeometryHitOccurrence] {
-        &self.occurrence
-    }
-}
-
-impl StateMachineReportedEvent {
-    pub(crate) fn from_runtime_event(event_local_index: usize, event: &RuntimeObject) -> Self {
-        let (url, target) = if event.type_name == "OpenUrlEvent" {
-            (
-                Some(event.string_property("url").unwrap_or_default().to_owned()),
-                Some(open_url_target(event.uint_property("targetValue").unwrap_or(0)).to_owned()),
-            )
-        } else {
-            (None, None)
-        };
-        Self {
-            event_local_index,
-            event_core_type: u32::from(event.type_key),
-            name: event
-                .string_property("name")
-                .filter(|name| !name.is_empty())
-                .map(ToOwned::to_owned),
-            url,
-            target,
-            string_properties: Vec::new(),
-            seconds_delay: 0.0,
-            context: None,
-        }
-    }
-
-    pub fn event_local_index(&self) -> usize {
-        self.event_local_index
-    }
-
-    pub fn event_core_type(&self) -> u32 {
-        self.event_core_type
-    }
-
-    pub fn name(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
-
-    pub fn url(&self) -> Option<&str> {
-        self.url.as_deref()
-    }
-
-    pub fn target(&self) -> Option<&str> {
-        self.target.as_deref()
-    }
-
-    pub fn string_properties(&self) -> &[StateMachineEventStringProperty] {
-        &self.string_properties
-    }
-
-    pub fn seconds_delay(&self) -> f32 {
-        self.seconds_delay
-    }
-
-    pub fn context(&self) -> Option<&StateMachineEventContext> {
-        self.context.as_ref()
-    }
-}
-
-fn imported_reported_event(
-    file: &RuntimeFile,
-    event: &RuntimeObject,
-    event_local_index: usize,
-) -> StateMachineReportedEvent {
-    let artboard_index = (0..file.artboards().len()).find(|artboard_index| {
-        file.artboard_local_object(*artboard_index, event_local_index)
-            .is_some_and(|candidate| candidate.id == event.id)
-    });
-    let string_properties = artboard_index
-        .and_then(|artboard_index| file.artboard_local_object_slots(artboard_index))
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter(|object| {
-            object.type_name == "CustomPropertyString"
-                && object.uint_property("parentId") == Some(event_local_index as u64)
-        })
-        .filter_map(|object| {
-            let name = object.string_property("name")?.trim();
-            (!name.is_empty()).then(|| StateMachineEventStringProperty {
-                name: name.to_string(),
-                value: object
-                    .string_property("propertyValue")
-                    .unwrap_or_default()
-                    .to_string(),
-            })
-        })
-        .collect();
-    let mut reported = StateMachineReportedEvent::from_runtime_event(event_local_index, event);
-    reported.string_properties = string_properties;
-    reported
-}
-
-fn open_url_target(value: u64) -> &'static str {
-    match value {
-        0 => "_blank",
-        1 => "_parent",
-        2 => "_self",
-        3 => "_top",
-        _ => "",
-    }
 }
 
 pub(crate) struct TransitionEvaluationContext<'a> {
@@ -657,63 +617,6 @@ pub(crate) struct TransitionEvaluationContext<'a> {
     data_context_present: bool,
     layer_index: usize,
     view_model_trigger_layer_id: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum StateMachineFireOccurrence {
-    AtStart,
-    AtEnd,
-}
-
-impl StateMachineFireOccurrence {
-    pub(crate) fn value(self) -> u64 {
-        match self {
-            Self::AtStart => 0,
-            Self::AtEnd => 1,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum RuntimeStateMachineFireAction {
-    Event {
-        occurs_value: u64,
-        event: StateMachineReportedEvent,
-    },
-    Trigger {
-        occurs_value: u64,
-        path: Option<RuntimeStateMachineFireTriggerPath>,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeStateMachineFireTriggerPath {
-    file: Arc<RuntimeFile>,
-    source_path: Vec<u32>,
-    is_relative: bool,
-}
-
-impl RuntimeStateMachineFireAction {
-    pub(crate) fn from_imported(
-        file: &RuntimeFile,
-        action: &nuxie_binary::RuntimeStateMachineFireAction<'_>,
-    ) -> Option<Self> {
-        let occurs_value = action.object.uint_property("occursValue").unwrap_or(0);
-        match action.object.type_name {
-            "StateMachineFireEvent" => {
-                let event = action.event?;
-                Some(Self::Event {
-                    occurs_value,
-                    event: imported_reported_event(file, event, action.event_local_index?),
-                })
-            }
-            "StateMachineFireTrigger" => Some(Self::Trigger {
-                occurs_value,
-                path: runtime_fire_trigger_path(file, action.object),
-            }),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1325,425 +1228,6 @@ struct BlendAnimationDirectInstance {
     mix: f32,
 }
 
-pub(crate) fn perform_state_machine_fire_actions(
-    fire_actions: &[RuntimeStateMachineFireAction],
-    occurrence: StateMachineFireOccurrence,
-    executor: &mut dyn RuntimeScheduledListenerActionExecutor,
-    reported_events: &mut Vec<StateMachineReportedEvent>,
-) {
-    for action in fire_actions {
-        match action {
-            RuntimeStateMachineFireAction::Event {
-                occurs_value,
-                event,
-            } if *occurs_value == occurrence.value() => {
-                reported_events.push(event.clone());
-            }
-            RuntimeStateMachineFireAction::Trigger { occurs_value, path }
-                if *occurs_value == occurrence.value() =>
-            {
-                if let Some(path) = path {
-                    executor.fire_view_model_trigger(path);
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-fn runtime_fire_trigger_path(
-    file: &RuntimeFile,
-    object: &RuntimeObject,
-) -> Option<RuntimeStateMachineFireTriggerPath> {
-    let data_bind_path = file.data_bind_path_for_referencer_object(object)?;
-    let is_relative = data_bind_path
-        .object
-        .and_then(|path_object| path_object.bool_property("isRelative"))
-        .or_else(|| object.bool_property("isDataBindPathRelative"))
-        .unwrap_or(false);
-    Some(RuntimeStateMachineFireTriggerPath {
-        file: Arc::new(file.clone()),
-        source_path: data_bind_path.resolved_path_ids,
-        is_relative,
-    })
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum RuntimeScheduledListenerAction {
-    FireEvent {
-        flags: u64,
-        event: StateMachineReportedEvent,
-    },
-    BoolChange {
-        flags: u64,
-        input_index: usize,
-        value: u64,
-    },
-    NumberChange {
-        flags: u64,
-        input_index: usize,
-        value: f32,
-    },
-    TriggerChange {
-        flags: u64,
-        input_index: usize,
-    },
-    ViewModelChange {
-        flags: u64,
-        data_bind_index: usize,
-        value: RuntimeListenerViewModelChangeValue,
-    },
-    Scripted {
-        flags: u64,
-        definition: ScriptListenerActionDefinition,
-    },
-    FocusTarget {
-        flags: u64,
-        target_local_id: usize,
-    },
-    FocusClear {
-        flags: u64,
-    },
-    FocusTraversal {
-        flags: u64,
-        traversal_kind: u64,
-    },
-}
-
-pub(crate) struct RuntimeScheduledListenerActionTargetsMut<'a> {
-    pub(crate) inputs: &'a mut [StateMachineInputInstance],
-    pub(crate) reported_events: &'a mut Vec<StateMachineReportedEvent>,
-    pub(crate) bindable_numbers: &'a mut [StateMachineBindableNumberInstance],
-    pub(crate) bindable_integers: &'a mut [StateMachineBindableIntegerInstance],
-    pub(crate) bindable_colors: &'a mut [StateMachineBindableColorInstance],
-    pub(crate) bindable_strings: &'a mut [StateMachineBindableStringInstance],
-    pub(crate) bindable_enums: &'a mut [StateMachineBindableEnumInstance],
-    pub(crate) bindable_assets: &'a mut [StateMachineBindableAssetInstance],
-    pub(crate) bindable_artboards: &'a mut [StateMachineBindableArtboardInstance],
-    pub(crate) bindable_lists: &'a mut [StateMachineBindableListInstance],
-    pub(crate) bindable_triggers: &'a mut [StateMachineBindableTriggerInstance],
-    pub(crate) bindable_view_models: &'a mut [StateMachineBindableViewModelInstance],
-    pub(crate) bindable_booleans: &'a mut [StateMachineBindableBooleanInstance],
-    pub(crate) transition_durations: &'a mut [StateMachineTransitionDurationInstance],
-}
-
-impl RuntimeScheduledListenerActionTargetsMut<'_> {
-    fn reborrow(&mut self) -> RuntimeScheduledListenerActionTargetsMut<'_> {
-        RuntimeScheduledListenerActionTargetsMut {
-            inputs: &mut *self.inputs,
-            reported_events: &mut *self.reported_events,
-            bindable_numbers: &mut *self.bindable_numbers,
-            bindable_integers: &mut *self.bindable_integers,
-            bindable_colors: &mut *self.bindable_colors,
-            bindable_strings: &mut *self.bindable_strings,
-            bindable_enums: &mut *self.bindable_enums,
-            bindable_assets: &mut *self.bindable_assets,
-            bindable_artboards: &mut *self.bindable_artboards,
-            bindable_lists: &mut *self.bindable_lists,
-            bindable_triggers: &mut *self.bindable_triggers,
-            bindable_view_models: &mut *self.bindable_view_models,
-            bindable_booleans: &mut *self.bindable_booleans,
-            transition_durations: &mut *self.transition_durations,
-        }
-    }
-
-    fn evaluation_context(
-        &self,
-        data_context_present: bool,
-        layer_index: usize,
-        view_model_trigger_layer_id: u64,
-    ) -> TransitionEvaluationContext<'_> {
-        // Pinned C++ transition evaluation reads the StateMachineInstance's
-        // retained input/bindable owners in place, then listener actions
-        // mutate those same owners after the condition walk
-        // (`state_machine_instance.cpp:2540-2665`). Keep that sequencing as
-        // two Rust reborrows; a cloned evaluation snapshot changes both the
-        // ownership model and clean-frame cost.
-        TransitionEvaluationContext {
-            bindable_numbers: self.bindable_numbers,
-            bindable_integers: self.bindable_integers,
-            bindable_colors: self.bindable_colors,
-            bindable_strings: self.bindable_strings,
-            bindable_enums: self.bindable_enums,
-            bindable_assets: self.bindable_assets,
-            bindable_artboards: self.bindable_artboards,
-            bindable_triggers: self.bindable_triggers,
-            bindable_view_models: self.bindable_view_models,
-            bindable_booleans: self.bindable_booleans,
-            data_context_present,
-            layer_index,
-            view_model_trigger_layer_id,
-        }
-    }
-}
-
-pub(crate) trait RuntimeScheduledListenerActionExecutor {
-    fn target_has_focus(&self, _target_local_id: usize) -> bool {
-        false
-    }
-
-    fn evaluate_scripted_condition(&self, _global_id: u32) -> bool {
-        false
-    }
-
-    fn retained_view_model_source(&self, _bindable_global_id: u32) -> Option<RuntimeViewModelCell> {
-        None
-    }
-
-    fn fire_view_model_trigger(&mut self, _path: &RuntimeStateMachineFireTriggerPath) -> bool {
-        false
-    }
-
-    fn perform_instance_action(
-        &mut self,
-        artboard: &mut ArtboardInstance,
-        action: &RuntimeScheduledListenerAction,
-        targets: RuntimeScheduledListenerActionTargetsMut<'_>,
-    ) -> Result<bool, ScriptError>;
-}
-
-#[derive(Debug, Clone)]
-pub(crate) enum RuntimeListenerViewModelChangeValue {
-    Number(f32),
-    Integer(u64),
-    Color(u32),
-    String(Vec<u8>),
-    Enum(u64),
-    Asset(RuntimeBindableAssetValue),
-    Artboard(u64),
-    Trigger(u64),
-    Boolean(bool),
-}
-
-impl RuntimeScheduledListenerAction {
-    pub(crate) fn from_imported(
-        file: &RuntimeFile,
-        state_machine_data_binds: &[&RuntimeObject],
-        action: &nuxie_binary::RuntimeListenerAction<'_>,
-    ) -> Option<Self> {
-        let flags = action.object.uint_property("flags").unwrap_or(0);
-        match action.object.type_name {
-            "ListenerFireEvent" => {
-                let event = action.event?;
-                Some(Self::FireEvent {
-                    flags,
-                    event: imported_reported_event(file, event, action.event_local_index?),
-                })
-            }
-            "ListenerBoolChange" => Some(Self::BoolChange {
-                flags,
-                input_index: listener_action_input_index(action)?,
-                value: action.object.uint_property("value").unwrap_or(1),
-            }),
-            "ListenerNumberChange" => Some(Self::NumberChange {
-                flags,
-                input_index: listener_action_input_index(action)?,
-                value: action.object.double_property("value").unwrap_or(0.0),
-            }),
-            "ListenerTriggerChange" => Some(Self::TriggerChange {
-                flags,
-                input_index: listener_action_input_index(action)?,
-            }),
-            "ListenerViewModelChange" => runtime_listener_view_model_change_action(
-                file,
-                state_machine_data_binds,
-                action,
-                flags,
-            ),
-            "ScriptedListenerAction" => Some(Self::Scripted {
-                flags,
-                definition: runtime_scripted_listener_action_definition(file, action.object, &[])?,
-            }),
-            "FocusActionTarget" => Some(Self::FocusTarget {
-                flags,
-                target_local_id: usize::try_from(action.object.uint_property("targetId")?).ok()?,
-            }),
-            "FocusActionClear" => Some(Self::FocusClear { flags }),
-            "FocusActionTraversal" => Some(Self::FocusTraversal {
-                flags,
-                traversal_kind: action.object.uint_property("traversalKind").unwrap_or(0),
-            }),
-            _ => None,
-        }
-    }
-}
-
-fn runtime_listener_view_model_change_action(
-    file: &RuntimeFile,
-    state_machine_data_binds: &[&RuntimeObject],
-    action: &nuxie_binary::RuntimeListenerAction<'_>,
-    flags: u64,
-) -> Option<RuntimeScheduledListenerAction> {
-    // Mirrors src/animation/listener_viewmodel_change.cpp import-time
-    // BindableProperty lookup, using object ids/data-bind indices instead of
-    // the C++ per-instance pointer maps.
-    let bindable_property_id = action
-        .object
-        .uint_property("bindablePropertyId")
-        .and_then(|id| u32::try_from(id).ok())
-        .or_else(|| latest_bindable_property_id_before(file, action.object.id))?;
-
-    state_machine_data_binds
-        .iter()
-        .enumerate()
-        .find_map(|(data_bind_index, data_bind)| {
-            let target = file.data_bind_target_for_object(data_bind)?;
-            if target.id != bindable_property_id {
-                return None;
-            }
-            let data_bind_flags = data_bind.uint_property("flags").unwrap_or(0);
-            if !data_bind_flags_apply_target_to_source(data_bind_flags) {
-                return None;
-            }
-            let value = runtime_listener_view_model_change_value(target)?;
-            Some(RuntimeScheduledListenerAction::ViewModelChange {
-                flags,
-                data_bind_index,
-                value,
-            })
-        })
-}
-
-fn latest_bindable_property_id_before(file: &RuntimeFile, object_id: u32) -> Option<u32> {
-    file.objects
-        .iter()
-        .rev()
-        .flatten()
-        .find(|object| object.id < object_id && is_bindable_property(object))
-        .map(|object| object.id)
-}
-
-fn is_bindable_property(object: &RuntimeObject) -> bool {
-    matches!(
-        object.type_name,
-        "BindablePropertyNumber"
-            | "BindablePropertyInteger"
-            | "BindablePropertyColor"
-            | "BindablePropertyString"
-            | "BindablePropertyEnum"
-            | "BindablePropertyAsset"
-            | "BindablePropertyArtboard"
-            | "BindablePropertyList"
-            | "BindablePropertyTrigger"
-            | "BindablePropertyViewModel"
-            | "BindablePropertyBoolean"
-    )
-}
-
-fn runtime_listener_view_model_change_value(
-    target: &RuntimeObject,
-) -> Option<RuntimeListenerViewModelChangeValue> {
-    match target.type_name {
-        "BindablePropertyNumber" => Some(RuntimeListenerViewModelChangeValue::Number(
-            target.double_property("propertyValue").unwrap_or(0.0),
-        )),
-        "BindablePropertyInteger" => Some(RuntimeListenerViewModelChangeValue::Integer(
-            target.uint_property("propertyValue").unwrap_or(0),
-        )),
-        "BindablePropertyColor" => Some(RuntimeListenerViewModelChangeValue::Color(
-            target.color_property("propertyValue").unwrap_or(0),
-        )),
-        "BindablePropertyString" => Some(RuntimeListenerViewModelChangeValue::String(
-            target
-                .string_property_bytes("propertyValue")
-                .unwrap_or_default()
-                .to_vec(),
-        )),
-        "BindablePropertyEnum" => Some(RuntimeListenerViewModelChangeValue::Enum(
-            target.uint_property("propertyValue").unwrap_or(0),
-        )),
-        "BindablePropertyAsset" => Some(RuntimeListenerViewModelChangeValue::Asset(
-            RuntimeBindableAssetValue::from_asset_index(
-                target
-                    .uint_property("propertyValue")
-                    .unwrap_or(u64::from(u32::MAX)),
-            ),
-        )),
-        "BindablePropertyArtboard" => Some(RuntimeListenerViewModelChangeValue::Artboard(
-            target.uint_property("propertyValue").unwrap_or(0),
-        )),
-        "BindablePropertyList" => None,
-        "BindablePropertyTrigger" => Some(RuntimeListenerViewModelChangeValue::Trigger(
-            target.uint_property("propertyValue").unwrap_or(0),
-        )),
-        "BindablePropertyBoolean" => Some(RuntimeListenerViewModelChangeValue::Boolean(
-            target.bool_property("propertyValue").unwrap_or(false),
-        )),
-        _ => None,
-    }
-}
-
-fn listener_action_input_index(action: &nuxie_binary::RuntimeListenerAction<'_>) -> Option<usize> {
-    if action
-        .object
-        .uint_property("nestedInputId")
-        .is_some_and(|nested_input_id| nested_input_id != u64::from(u32::MAX))
-    {
-        return None;
-    }
-    usize::try_from(action.object.uint_property("inputId")?).ok()
-}
-
-pub(crate) fn perform_scheduled_listener_actions(
-    listener_actions: &[RuntimeScheduledListenerAction],
-    occurrence: StateMachineFireOccurrence,
-    artboard: &mut ArtboardInstance,
-    mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
-    executor: &mut dyn RuntimeScheduledListenerActionExecutor,
-) -> Result<bool, ScriptError> {
-    let mut changed = false;
-    for action in listener_actions {
-        let flags = match action {
-            RuntimeScheduledListenerAction::FireEvent { flags, .. }
-            | RuntimeScheduledListenerAction::BoolChange { flags, .. }
-            | RuntimeScheduledListenerAction::NumberChange { flags, .. }
-            | RuntimeScheduledListenerAction::TriggerChange { flags, .. }
-            | RuntimeScheduledListenerAction::ViewModelChange { flags, .. }
-            | RuntimeScheduledListenerAction::Scripted { flags, .. }
-            | RuntimeScheduledListenerAction::FocusTarget { flags, .. }
-            | RuntimeScheduledListenerAction::FocusClear { flags }
-            | RuntimeScheduledListenerAction::FocusTraversal { flags, .. } => *flags,
-        };
-        if flags & 1 != occurrence.value() {
-            continue;
-        }
-        match action {
-            RuntimeScheduledListenerAction::FireEvent { event, .. } => {
-                targets.reported_events.push(event.clone());
-                changed = true;
-            }
-            RuntimeScheduledListenerAction::BoolChange {
-                input_index, value, ..
-            } => {
-                if let Some(input) = targets.inputs.get_mut(*input_index) {
-                    changed |= input.apply_listener_bool_change(*value);
-                }
-            }
-            RuntimeScheduledListenerAction::NumberChange {
-                input_index, value, ..
-            } => {
-                if let Some(input) = targets.inputs.get_mut(*input_index) {
-                    changed |= input.set_number(*value);
-                }
-            }
-            RuntimeScheduledListenerAction::TriggerChange { input_index, .. } => {
-                if let Some(input) = targets.inputs.get_mut(*input_index) {
-                    changed |= input.fire_trigger();
-                }
-            }
-            RuntimeScheduledListenerAction::ViewModelChange { .. }
-            | RuntimeScheduledListenerAction::Scripted { .. }
-            | RuntimeScheduledListenerAction::FocusTarget { .. }
-            | RuntimeScheduledListenerAction::FocusClear { .. }
-            | RuntimeScheduledListenerAction::FocusTraversal { .. } => {
-                changed |=
-                    executor.perform_instance_action(artboard, action, targets.reborrow())?;
-            }
-        }
-    }
-    Ok(changed)
-}
-
 #[derive(Debug, Clone)]
 struct AnimationReset {
     // `StateMachineInstance::clone` is a Rust snapshot API with no C++
@@ -2010,18 +1494,22 @@ mod animation_tests {
         let live: Arc<[u8]> = vec![1, 3, 5, 7].into();
         let mut font = RuntimeFontAssetValue::default();
         assert!(font.set_live_font_bytes(Some(Arc::clone(&live))));
-        let action = RuntimeScheduledListenerAction::ViewModelChange {
-            flags: 0,
-            data_bind_index: 4,
-            value: RuntimeListenerViewModelChangeValue::Asset(
-                RuntimeBindableAssetValue::from_font_value(font),
+        let action = RuntimeScheduledListenerAction::ViewModelChange(
+            listener_viewmodel_change::RuntimeListenerViewModelChange::for_test(
+                0,
+                Some(4),
+                Some(RuntimeListenerViewModelChangeValue::Asset(
+                    RuntimeBindableAssetValue::from_font_value(font),
+                )),
             ),
-        };
+        );
 
-        let RuntimeScheduledListenerAction::ViewModelChange {
-            value: RuntimeListenerViewModelChangeValue::Asset(value),
-            ..
-        } = action.clone()
+        let RuntimeScheduledListenerAction::ViewModelChange(
+            listener_viewmodel_change::RuntimeListenerViewModelChange {
+                value: Some(RuntimeListenerViewModelChangeValue::Asset(value)),
+                ..
+            },
+        ) = action.clone()
         else {
             panic!("listener action lost its asset value");
         };
@@ -2042,7 +1530,10 @@ mod animation_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_binary::read_runtime_file;
+    use crate::properties::property_key_for_name;
+    use nuxie_binary::{
+        AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile, read_runtime_file,
+    };
     use nuxie_graph::GraphFile;
     use std::path::PathBuf;
 
@@ -2189,7 +1680,7 @@ mod tests {
     }
 
     #[test]
-    fn scripted_listener_action_rejects_module_assets() {
+    fn scripted_listener_action_retains_module_asset_as_inert() {
         let mut file = read_runtime_file(
             &std::fs::read(rive_runtime_fixture("scripted_listener_action.riv"))
                 .expect("read scripted listener fixture"),
@@ -2215,13 +1706,97 @@ mod tests {
             &mut converter_cache,
         );
 
+        let actions = state_machines
+            .first()
+            .expect("fixture state machine")
+            .scripted_listener_actions();
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].action_global_id(), 55);
+        assert_eq!(actions[0].asset_ordinal(), 0);
+        assert_eq!(actions[0].asset_name(), "ListenerActionAppend");
         assert!(
-            state_machines
-                .first()
-                .expect("fixture state machine")
-                .scripted_listener_actions()
-                .is_empty()
+            !actions[0].has_protocol_asset(),
+            "C++ retains the action and its inputs but module ScriptAssets have no protocol generator"
         );
+    }
+
+    #[test]
+    fn scripted_listener_action_retains_missing_out_of_range_and_wrong_assets() {
+        fn actions(file: &RuntimeFile) -> Vec<ScriptListenerActionDefinition> {
+            let graph = GraphFile::from_runtime_file(file).expect("build fixture graph");
+            let mut converter_cache = RuntimeDataBindGraphConverterBuildCache::default();
+            build_state_machines(
+                file,
+                graph.artboards.first().expect("fixture artboard"),
+                &[],
+                &mut converter_cache,
+            )
+            .first()
+            .expect("fixture state machine")
+            .scripted_listener_actions()
+            .to_vec()
+        }
+
+        fn action_mut(file: &mut RuntimeFile) -> &mut RuntimeObject {
+            file.objects
+                .iter_mut()
+                .flatten()
+                .find(|object| object.type_name == "ScriptedListenerAction")
+                .expect("fixture ScriptedListenerAction")
+        }
+
+        let bytes = std::fs::read(rive_runtime_fixture("scripted_listener_action.riv"))
+            .expect("read scripted listener fixture");
+        let baseline_file = read_runtime_file(&bytes).expect("import baseline fixture");
+        let baseline = actions(&baseline_file);
+        assert_eq!(baseline.len(), 1);
+        let baseline_input_ids = baseline[0]
+            .inputs()
+            .iter()
+            .map(|input| input.input_global_id())
+            .collect::<Vec<_>>();
+
+        for case in ["missing", "out-of-range", "wrong-type"] {
+            let mut file = read_runtime_file(&bytes).expect("import mutated fixture");
+            match case {
+                "missing" => {
+                    action_mut(&mut file)
+                        .properties
+                        .retain(|property| property.name != "scriptAssetId");
+                }
+                "out-of-range" => {
+                    let property = action_mut(&mut file)
+                        .properties
+                        .iter_mut()
+                        .find(|property| property.name == "scriptAssetId")
+                        .expect("fixture scriptAssetId");
+                    property.value = nuxie_binary::FieldValue::Uint(999);
+                }
+                "wrong-type" => {
+                    file.objects
+                        .iter_mut()
+                        .flatten()
+                        .find(|object| object.type_name == "ScriptAsset")
+                        .expect("fixture ScriptAsset")
+                        .type_name = "ImageAsset";
+                }
+                _ => unreachable!(),
+            }
+
+            let retained = actions(&file);
+            assert_eq!(retained.len(), 1, "{case}");
+            assert_eq!(retained[0].action_global_id(), 55, "{case}");
+            assert!(!retained[0].has_protocol_asset(), "{case}");
+            assert_eq!(
+                retained[0]
+                    .inputs()
+                    .iter()
+                    .map(|input| input.input_global_id())
+                    .collect::<Vec<_>>(),
+                baseline_input_ids,
+                "{case}: the authored input occurrence list must survive unchanged"
+            );
+        }
     }
 
     #[test]
@@ -2251,35 +1826,57 @@ mod tests {
             }
         }
 
-        let event = |event_local_index| StateMachineReportedEvent {
-            event_local_index,
-            event_core_type: 0,
-            name: None,
-            url: None,
-            target: None,
-            string_properties: Vec::new(),
-            seconds_delay: 0.0,
-            context: None,
+        let type_key = |name: &str| {
+            nuxie_schema::definition_by_name(name)
+                .unwrap_or_else(|| panic!("missing schema definition {name}"))
+                .type_key
+                .int
         };
+        let parent = |owner: &str, value: u64| AuthoringProperty {
+            key: property_key_for_name(owner, "parentId").expect("parentId property"),
+            value: AuthoringValue::Uint(value),
+        };
+        let file = RuntimeFile::from_authoring_records(vec![
+            AuthoringRecord {
+                type_key: type_key("Backboard"),
+                properties: Vec::new(),
+            },
+            AuthoringRecord {
+                type_key: type_key("Artboard"),
+                properties: Vec::new(),
+            },
+            AuthoringRecord {
+                type_key: type_key("Event"),
+                properties: vec![parent("Event", 0)],
+            },
+            AuthoringRecord {
+                type_key: type_key("Event"),
+                properties: vec![parent("Event", 0)],
+            },
+        ])
+        .expect("import two live event occurrences");
         let actions = vec![
-            RuntimeScheduledListenerAction::FireEvent {
-                flags: StateMachineFireOccurrence::AtStart.value(),
-                event: event(1),
-            },
-            RuntimeScheduledListenerAction::Scripted {
-                flags: StateMachineFireOccurrence::AtStart.value(),
-                definition: ScriptListenerActionDefinition::new(44, 2, "action".to_owned()),
-            },
-            RuntimeScheduledListenerAction::FireEvent {
-                flags: StateMachineFireOccurrence::AtStart.value(),
-                event: event(2),
-            },
+            RuntimeScheduledListenerAction::FireEvent(
+                listener_fire_event::RuntimeListenerFireEvent::for_test(
+                    StateMachineFireOccurrence::AtStart.value(),
+                    Some(1),
+                ),
+            ),
+            RuntimeScheduledListenerAction::scripted_for_test(
+                StateMachineFireOccurrence::AtStart.value(),
+                Some(ScriptListenerActionDefinition::new(
+                    44,
+                    2,
+                    "action".to_owned(),
+                )),
+            ),
+            RuntimeScheduledListenerAction::FireEvent(
+                listener_fire_event::RuntimeListenerFireEvent::for_test(
+                    StateMachineFireOccurrence::AtStart.value(),
+                    Some(2),
+                ),
+            ),
         ];
-        let file = read_runtime_file(
-            &std::fs::read(rive_runtime_fixture("scripted_listener_action.riv"))
-                .expect("read scripted listener fixture"),
-        )
-        .expect("import scripted listener fixture");
         let graph = GraphFile::from_runtime_file(&file).expect("build fixture graph");
         let mut artboard = ArtboardInstance::from_graph_with_artboards(
             &file,
@@ -2329,36 +1926,37 @@ mod tests {
 
         reported_events.clear();
         executor.fail = true;
-        let error = perform_scheduled_listener_actions(
-            &actions,
-            StateMachineFireOccurrence::AtStart,
-            &mut artboard,
-            RuntimeScheduledListenerActionTargetsMut {
-                inputs: &mut [],
-                reported_events: &mut reported_events,
-                bindable_numbers: &mut [],
-                bindable_integers: &mut [],
-                bindable_colors: &mut [],
-                bindable_strings: &mut [],
-                bindable_enums: &mut [],
-                bindable_assets: &mut [],
-                bindable_artboards: &mut [],
-                bindable_lists: &mut [],
-                bindable_triggers: &mut [],
-                bindable_view_models: &mut [],
-                bindable_booleans: &mut [],
-                transition_durations: &mut [],
-            },
-            &mut executor,
-        )
-        .expect_err("script failure must stop the authored action tail");
-        assert_eq!(error.message(), "scheduled listener failed");
+        assert!(
+            perform_scheduled_listener_actions(
+                &actions,
+                StateMachineFireOccurrence::AtStart,
+                &mut artboard,
+                RuntimeScheduledListenerActionTargetsMut {
+                    inputs: &mut [],
+                    reported_events: &mut reported_events,
+                    bindable_numbers: &mut [],
+                    bindable_integers: &mut [],
+                    bindable_colors: &mut [],
+                    bindable_strings: &mut [],
+                    bindable_enums: &mut [],
+                    bindable_assets: &mut [],
+                    bindable_artboards: &mut [],
+                    bindable_lists: &mut [],
+                    bindable_triggers: &mut [],
+                    bindable_view_models: &mut [],
+                    bindable_booleans: &mut [],
+                    transition_durations: &mut [],
+                },
+                &mut executor,
+            )
+            .expect("script failure is consumed and the authored action tail continues")
+        );
         assert_eq!(
             reported_events
                 .iter()
                 .map(StateMachineReportedEvent::event_local_index)
                 .collect::<Vec<_>>(),
-            [1]
+            [1, 2]
         );
     }
 

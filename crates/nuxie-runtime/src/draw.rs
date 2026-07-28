@@ -18648,9 +18648,10 @@ fn runtime_draw_component_list_with_state(
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     nested_ancestors: &[u32],
 ) -> Result<()> {
-    let Some(items) = instance.component_list_items(local_id) else {
+    let Some(list_state) = instance.component_list_state(local_id) else {
         return Ok(());
     };
+    let items = &list_state.items;
     // A virtualized list's row positions already include the scroll window.
     // C++ therefore draws it in its parent's world space; non-virtualized
     // lists continue to use their own world transform.
@@ -18673,65 +18674,9 @@ fn runtime_draw_component_list_with_state(
     }
     renderer.transform(runtime_render_mat(host_world));
 
-    let Some(item_transforms) = instance
-        .component_list_state(local_id)
-        .map(|list| &list.item_transforms)
-    else {
-        if needs_save_operation {
-            renderer.restore();
-        }
-        return Ok(());
-    };
-
-    let uses_draw_index_sort = instance
-        .component_list_state(local_id)
-        .map(|list| &list.logical_items)
-        .is_some_and(|logical_items| {
-            logical_items.iter().any(|item| {
-                runtime
-                    .view_model_property_for_symbol(item.context.borrow().view_model_index(), 16)
-                    .is_some()
-            })
-        });
-    let order_dirty = items.iter().any(|item| {
-        item.draw_index_sink
-            .as_ref()
-            .is_some_and(|sink| !sink.peek_dirt().is_empty())
-    });
-    let Some(list_state) = instance.component_list_state(local_id) else {
-        if needs_save_operation {
-            renderer.restore();
-        }
-        return Ok(());
-    };
-    let mut order_cache = list_state.order_cache.borrow_mut();
-    if !order_cache.valid || order_cache.indices.len() != items.len() || order_dirty {
-        order_cache.indices.clear();
-        order_cache.indices.extend(0..items.len());
-        if uses_draw_index_sort {
-            let draw_index = |item_index: usize| {
-                let item = &items[item_index];
-                runtime
-                    .view_model_property_for_symbol(item.context.borrow().view_model_index(), 16)
-                    .and_then(|property| property.string_property("name"))
-                    .and_then(|name| item.context.borrow().number_value_by_property_name(name))
-                    .filter(|value| value.is_finite())
-                    .unwrap_or(0.0)
-            };
-            order_cache.indices.sort_by(|&a, &b| {
-                draw_index(a)
-                    .partial_cmp(&draw_index(b))
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then_with(|| items[a].logical_index.cmp(&items[b].logical_index))
-            });
-        }
-        for item in items {
-            if let Some(sink) = item.draw_index_sink.as_ref() {
-                sink.take_dirt();
-            }
-        }
-        order_cache.valid = true;
-    }
+    let item_transforms = &list_state.item_transforms;
+    let order_cache =
+        crate::artboard_component_list_order::runtime_component_list_order(runtime, list_state);
 
     for &item_index in &order_cache.indices {
         let item = &items[item_index];

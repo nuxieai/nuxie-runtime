@@ -936,7 +936,7 @@ impl FlowSession {
                 }
                 Ok(result)
             }
-            FlowOperation::StateBatch(batch) => self.perform_state_batch(batch),
+            FlowOperation::StateBatch(batch) => self.perform_state_batch(batch, factory),
             FlowOperation::PointerBatch(batch) => self.perform_pointer_batch(batch, factory),
             FlowOperation::Advance(advance) => self.perform_advance(advance, factory),
             FlowOperation::TextRunBatch(batch) => self.perform_text_run_batch(batch),
@@ -1053,6 +1053,7 @@ impl FlowSession {
     fn perform_state_batch(
         &mut self,
         batch: FlowStateBatch,
+        mut factory: Option<&mut dyn Factory>,
     ) -> Result<FlowResult, FlowSessionError> {
         let item_count = batch
             .mutations
@@ -1146,6 +1147,11 @@ impl FlowSession {
             .map(|(_, instance)| instance.handle().clone())
             .collect::<Vec<_>>();
         let detached_handles = RuntimeOwnedViewModelHandle::detached_graph(&source_handles);
+        let context_root_rehomes = source_handles
+            .iter()
+            .cloned()
+            .zip(detached_handles.iter().cloned())
+            .collect::<Vec<_>>();
         let candidates = graph_sources
             .iter()
             .zip(detached_handles)
@@ -1243,8 +1249,9 @@ impl FlowSession {
             candidate
                 .adopt_scripted_listener_action_state_from(machine)
                 .map_err(flow_script_error)?;
+            candidate.rehome_owned_data_context_for_transaction(&context_root_rehomes);
             #[cfg(feature = "scripting")]
-            if let Some(previous_root) = previous_listener_binding_baseline.as_ref() {
+            {
                 let candidate_root = self
                     .root_instance_id
                     .and_then(|id| candidate_instances.get(&id))
@@ -1255,11 +1262,54 @@ impl FlowSession {
                 // cycle instead of silently consuming them.
                 staged_listener_binding_baseline =
                     detached_view_model_snapshot(candidate_root.as_ref());
-                if let Err(error) = self.artboard.rehydrate_flow_listener_actions(
-                    candidate,
-                    candidate_root.as_ref(),
-                    Some(previous_root),
-                ) {
+                if candidate.scripted_object_initialization_complete() {
+                    let staged_context_bind = match candidate_root.as_ref() {
+                        Some(candidate_root) => candidate
+                            .begin_scripted_object_data_context_bind(candidate_root.handle()),
+                        None => candidate.begin_retained_scripted_object_data_context_rebind(),
+                    };
+                    if staged_context_bind
+                        && let Err(error) = self.artboard.rehydrate_flow_listener_actions(
+                            candidate,
+                            candidate_root.as_ref(),
+                            previous_listener_binding_baseline.as_ref(),
+                            &mut factory,
+                        )
+                    {
+                        return Err(self.poison_after_mutation(flow_script_error(error)));
+                    }
+                } else if let Some(active_factory) = factory.as_deref_mut() {
+                    match self.artboard.prepare_flow_scripts(active_factory) {
+                        Ok(changed) => result.dirty |= changed,
+                        Err(error) => {
+                            return Err(self.poison_after_mutation(flow_script_error(
+                                error.with_context("scripted state-batch File preparation failed"),
+                            )));
+                        }
+                    }
+                    if let Err(error) = self.artboard.prepare_flow_listener_actions(
+                        candidate,
+                        active_factory,
+                        candidate_root.as_ref(),
+                    ) {
+                        return Err(self.poison_after_mutation(flow_script_error(error)));
+                    }
+                } else {
+                    let prepared =
+                        crate::try_prepare_state_machine_scripted_data_context_without_factory(
+                            self.artboard.file(),
+                            self.artboard.raw(),
+                            candidate,
+                            candidate_root.as_ref(),
+                        );
+                    if let Err(error) = prepared {
+                        return Err(self.poison_after_mutation(flow_script_error(error)));
+                    }
+                }
+                if let Err(error) = self
+                    .artboard
+                    .apply_flow_listener_action_source_updates(candidate)
+                {
                     return Err(self.poison_after_mutation(flow_script_error(error)));
                 }
             }
@@ -1270,7 +1320,10 @@ impl FlowSession {
         {
             let _ = self.artboard.bind_view_model(root);
             if let Some(machine) = machine_candidate.as_mut() {
+                #[cfg(not(feature = "scripting"))]
                 let _ = machine.bind_owned_view_model_handle(root.handle());
+                #[cfg(feature = "scripting")]
+                let _ = machine;
             }
         }
         if let (FlowPlayer::StateMachine(machine), Some(candidate)) =
@@ -1284,7 +1337,7 @@ impl FlowSession {
         self.next_cycle = next_cycle;
         self.next_sequence = next_sequence;
         #[cfg(feature = "scripting")]
-        if previous_listener_binding_baseline.is_some() {
+        {
             self.listener_binding_baseline = staged_listener_binding_baseline;
         }
         result.settled = self.is_settled();
@@ -1400,8 +1453,84 @@ impl FlowSession {
             }
         }
 
+        #[cfg(feature = "scripting")]
+        let mut preparation_changed = false;
+        #[cfg(feature = "scripting")]
+        {
+            let root_view_model = self
+                .root_instance_id
+                .and_then(|id| self.instances.get(&id))
+                .cloned();
+            let initial_source_update_pending = self.listener_binding_baseline.is_none();
+            let fixed_listener_initialization_was_pending = matches!(
+                &self.player,
+                FlowPlayer::StateMachine(machine)
+                    if machine.has_fixed_scripted_data_context_owner()
+                        && !machine.scripted_object_initialization_complete()
+            );
+            let staged_baseline = self
+                .listener_binding_baseline
+                .is_none()
+                .then(|| detached_view_model_snapshot(root_view_model.as_ref()))
+                .flatten();
+            if let Some(active_factory) = factory.as_deref_mut() {
+                preparation_changed |=
+                    self.artboard
+                        .prepare_flow_scripts(active_factory)
+                        .map_err(|error| {
+                            flow_script_error(
+                                error.with_context("scripted pointer preparation failed"),
+                            )
+                        })?;
+                if let FlowPlayer::StateMachine(machine) = &mut self.player {
+                    self.artboard
+                        .prepare_flow_listener_actions(
+                            machine,
+                            active_factory,
+                            root_view_model.as_ref(),
+                        )
+                        .map_err(|error| {
+                            flow_script_error(
+                                error.with_context("scripted pointer listener preparation failed"),
+                            )
+                        })?;
+                }
+            } else if let FlowPlayer::StateMachine(machine) = &mut self.player {
+                crate::try_prepare_state_machine_scripted_data_context_without_factory(
+                    self.artboard.file(),
+                    self.artboard.raw(),
+                    machine,
+                    root_view_model.as_ref(),
+                )
+                .map_err(flow_script_error)?;
+            }
+            let fixed_listener_initialized_now = fixed_listener_initialization_was_pending
+                && matches!(
+                    &self.player,
+                    FlowPlayer::StateMachine(machine)
+                        if machine.scripted_object_initialization_complete()
+                );
+            if (initial_source_update_pending || fixed_listener_initialized_now)
+                && let FlowPlayer::StateMachine(machine) = &mut self.player
+            {
+                self.artboard
+                    .apply_flow_listener_action_source_updates(machine)
+                    .map_err(|error| {
+                        flow_script_error(
+                            error.with_context("scripted pointer listener source update failed"),
+                        )
+                    })?;
+            }
+            if self.listener_binding_baseline.is_none() {
+                self.listener_binding_baseline = staged_baseline;
+            }
+        }
+        #[cfg(not(feature = "scripting"))]
+        let preparation_changed = false;
+
         let operation_result = (|| {
             let mut result = FlowResult::idle(self.is_settled());
+            result.dirty = preparation_changed;
             for event in batch.events {
                 #[cfg(feature = "scripting")]
                 let sequence_before = {
@@ -1417,9 +1546,14 @@ impl FlowSession {
                 let changed = self.apply_pointer_event(event)?;
                 result.dirty |= changed;
                 let cycle_result = match event.kind {
-                    FlowPointerKind::Down | FlowPointerKind::Up | FlowPointerKind::Cancel => {
-                        self.run_player_cycle(0.0, false, None)?
-                    }
+                    FlowPointerKind::Down | FlowPointerKind::Up | FlowPointerKind::Cancel => self
+                        .run_player_cycle(
+                        0.0,
+                        false,
+                        factory
+                            .as_deref_mut()
+                            .map(|factory| factory as &mut dyn Factory),
+                    )?,
                     FlowPointerKind::Move | FlowPointerKind::Exit => {
                         self.finish_nonadvance_pointer_cycle(before, changed)?
                     }
@@ -1432,15 +1566,6 @@ impl FlowSession {
                     cycle_result
                 };
                 merge_results(&mut result, cycle_result)?;
-            }
-            #[cfg(feature = "scripting")]
-            if let Some(factory) = factory.take() {
-                result.dirty |= self
-                    .artboard
-                    .prepare_flow_scripts(factory)
-                    .map_err(|error| {
-                        flow_script_error(error.with_context("scripted pointer cycle failed"))
-                    })?;
             }
             #[cfg(not(feature = "scripting"))]
             let _ = factory.take();
@@ -1582,28 +1707,60 @@ impl FlowSession {
             )
         })?;
 
+        #[cfg(feature = "scripting")]
+        let pending_lazy_listener_binding_baseline =
+            self.listener_binding_baseline.is_none().then(|| {
+                let root = self.root_instance_id.and_then(|id| self.instances.get(&id));
+                detached_view_model_snapshot(root)
+            });
+
         // Pointer callbacks have already completed when they enter this
         // method. Flush retained listener bindings once at this boundary,
         // before runtime advance; never interleave a refresh into the authored
         // FIFO of listener actions and never refresh again after advance.
         #[cfg(feature = "scripting")]
-        self.flush_flow_listener_bindings()?;
+        self.flush_flow_listener_bindings(&mut factory)?;
 
         // Pointer callbacks can report events synchronously before the
         // ordinary new-frame advance. Capture only the host-visible suffix
         // now; the runtime keeps its independent listener cursor so C++
         // `applyEvents` semantics still consume this queue during advance.
         let mut pending_events = match &mut self.player {
-            FlowPlayer::StateMachine(machine) => machine.take_reported_events(),
+            FlowPlayer::StateMachine(machine) => machine.take_reported_events(self.artboard.raw()),
             FlowPlayer::Animation(_) => std::mem::take(&mut self.pending_animation_events),
             FlowPlayer::Static => Vec::new(),
         };
+        let mut root_view_model = self
+            .root_instance_id
+            .and_then(|id| self.instances.get(&id))
+            .cloned();
         let changed = match &mut self.player {
             FlowPlayer::StateMachine(machine) => {
                 let changed = if let Some(factory) = factory.as_deref_mut() {
-                    self.artboard
-                        .try_advance_with_state_machine_and_factory(machine, delta_seconds, factory)
-                        .map_err(flow_anyhow_error)?
+                    if let Some(root_view_model) = root_view_model.as_mut() {
+                        self.artboard
+                            .try_advance_with_state_machines_and_view_model_and_factory(
+                                std::slice::from_mut(machine),
+                                delta_seconds,
+                                root_view_model,
+                                factory,
+                            )
+                            .map_err(flow_anyhow_error)?
+                    } else {
+                        self.artboard
+                            .try_advance_with_state_machine_and_factory(
+                                machine,
+                                delta_seconds,
+                                factory,
+                            )
+                            .map_err(flow_anyhow_error)?
+                    }
+                } else if let Some(root_view_model) = root_view_model.as_mut() {
+                    self.artboard.advance_with_state_machines_and_view_model(
+                        std::slice::from_mut(machine),
+                        delta_seconds,
+                        root_view_model,
+                    )
                 } else {
                     self.artboard
                         .advance_with_state_machine(machine, delta_seconds)
@@ -1647,6 +1804,16 @@ impl FlowSession {
                 }
             }
         };
+        #[cfg(feature = "scripting")]
+        if self.listener_binding_baseline.is_none()
+            && matches!(
+                &self.player,
+                FlowPlayer::StateMachine(machine)
+                    if machine.scripted_object_initialization_complete()
+            )
+        {
+            self.listener_binding_baseline = pending_lazy_listener_binding_baseline.flatten();
+        }
 
         // Match C++ `StateMachineInstance::advance`: listener work retained
         // from the prior frame is applied at the start of advance, while
@@ -1655,7 +1822,7 @@ impl FlowSession {
         // `d788e8ec6e8b598526607d6a1e8818e8b637b60c`,
         // `src/animation/state_machine_instance.cpp:2320-2335,2546-2584`.
         let produced_events = match &mut self.player {
-            FlowPlayer::StateMachine(machine) => machine.take_reported_events(),
+            FlowPlayer::StateMachine(machine) => machine.take_reported_events(self.artboard.raw()),
             FlowPlayer::Animation(_) => std::mem::take(&mut self.pending_animation_events),
             FlowPlayer::Static => Vec::new(),
         };
@@ -1740,10 +1907,13 @@ impl FlowSession {
     }
 
     #[cfg(feature = "scripting")]
-    fn flush_flow_listener_bindings(&mut self) -> Result<(), FlowSessionError> {
-        let Some(previous_root) = self.listener_binding_baseline.clone() else {
+    fn flush_flow_listener_bindings(
+        &mut self,
+        _factory: &mut Option<&mut dyn Factory>,
+    ) -> Result<(), FlowSessionError> {
+        if self.listener_binding_baseline.is_none() {
             return Ok(());
-        };
+        }
         let FlowPlayer::StateMachine(machine) = &mut self.player else {
             return Ok(());
         };
@@ -1755,8 +1925,12 @@ impl FlowSession {
         // mutate the live Context.viewModel. Advancing to this pre-callback
         // source only after success preserves those writes for the next cycle.
         let next_baseline = detached_view_model_snapshot(current_root.as_ref());
-        self.artboard
-            .rehydrate_flow_listener_actions(machine, current_root.as_ref(), Some(&previous_root))
+        machine
+            .apply_scripted_listener_action_source_updates(
+                self.artboard.raw(),
+                None,
+                &mut NoopScriptHost,
+            )
             .map_err(|error| {
                 flow_script_error(error.with_context("scripted listener binding flush failed"))
             })?;

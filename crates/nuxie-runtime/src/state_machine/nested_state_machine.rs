@@ -337,7 +337,7 @@ impl RuntimeNestedStateMachineInstance {
         let changed = child.advance_state_machine_instance(state_machine, elapsed_seconds);
         if let Some(reported_events) = reported_events.as_mut() {
             for index in 0..state_machine.reported_event_count() {
-                if let Some(event) = state_machine.reported_event(index) {
+                if let Some(event) = state_machine.reported_event(child, index) {
                     (**reported_events).push(event.clone());
                 }
             }

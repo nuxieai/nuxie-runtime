@@ -1,4 +1,4 @@
-use super::RuntimeScheduledListenerAction;
+use super::instance::StateMachineInstance;
 use super::listener_types::{
     RuntimeGamepadInputEvent, RuntimeListenerInputTypeGamepad, RuntimeListenerInputTypeKeyboard,
     RuntimeListenerInputTypeSemantic, RuntimeListenerInputTypeViewModel, RuntimeListenerType,
@@ -7,14 +7,20 @@ use super::state_machine_listener_single::{
     runtime_listener_single_event_local_indices, runtime_listener_single_type,
     runtime_listener_single_view_model_property_path,
 };
+use super::{RuntimeScheduledListenerAction, ScriptListenerInvocation, StateMachineEventContext};
 use crate::ArtboardInstance;
 use crate::properties::property_key_for_name;
+use crate::{RuntimeOwnedViewModelInstance, ScriptError, ScriptHost};
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 use nuxie_graph::{ArtboardGraph, ParametricPathNode};
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeStateMachineListener {
     pub(crate) target_local_id: usize,
+    /// C++ gives `StateMachineListenerSingle` distinct event-loop semantics:
+    /// one matching report ends the report scan, while a multi-input listener
+    /// may fire once for every matching reported event.
+    pub(crate) is_single: bool,
     pub(crate) listener_types: Vec<RuntimeListenerType>,
     pub(crate) event_local_indices: Vec<usize>,
     pub(crate) view_model_index: Option<usize>,
@@ -68,6 +74,31 @@ impl RuntimeStateMachineListener {
     pub(crate) fn semantic_constraints_met(&self, action_type: u32) -> bool {
         RuntimeListenerInputTypeSemantic::constraints_met(&self.semantic_input_types, action_type)
     }
+
+    /// Run every retained action occurrence in authored order.
+    ///
+    /// This is the direct Rust owner for
+    /// `StateMachineListener::performChanges`; action failures are handled by
+    /// their concrete owners, so the listener itself never invents a
+    /// rescan/reorder boundary (`state_machine_listener.cpp:85-92`).
+    pub(crate) fn perform_changes(
+        &self,
+        instance: &mut StateMachineInstance,
+        artboard: &mut ArtboardInstance,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        invocation: &ScriptListenerInvocation,
+        host: &mut dyn ScriptHost,
+        event_context: Option<&StateMachineEventContext>,
+    ) -> Result<bool, ScriptError> {
+        instance.perform_listener_actions_with_event_context(
+            artboard,
+            &self.listener_actions,
+            owned_context,
+            invocation,
+            host,
+            event_context,
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -116,8 +147,10 @@ enum RuntimeListenerHitPathKind {
 pub(super) fn runtime_state_machine_listener(
     file: &RuntimeFile,
     graph: &ArtboardGraph,
+    state_machine_inputs: &[Option<&RuntimeObject>],
     state_machine_data_binds: &[&RuntimeObject],
     listener: &nuxie_binary::RuntimeStateMachineListener<'_>,
+    action_owners: &super::RuntimeActionCoreArena,
 ) -> Option<RuntimeStateMachineListener> {
     // Mirrors C++ StateMachineListener import/action wiring and the first
     // simple-shape branch of src/animation/state_machine_instance.cpp.
@@ -132,23 +165,27 @@ pub(super) fn runtime_state_machine_listener(
                         | RuntimeListenerType::ViewModel
                         | RuntimeListenerType::Keyboard
                         | RuntimeListenerType::Gamepad
+                        | RuntimeListenerType::Focus
+                        | RuntimeListenerType::Blur
+                        | RuntimeListenerType::TextInput
                         | RuntimeListenerType::SemanticAction
                 )
         })
         .collect::<Vec<_>>();
-    if listener_types.is_empty() {
-        return None;
-    }
+    // Pinned C++ transfers the StateMachineListener owner and its ordered
+    // actions before inspecting any ListenerInputType
+    // (`state_machine_listener.cpp:55-66`). An unknown or absent dispatch
+    // type therefore leaves an inert listener occurrence; it must not compact
+    // the listener/action arrays.
 
     let hit_paths = if listener_types
         .iter()
         .any(|listener_type| listener_type.is_pointer_hit())
     {
-        let hit_paths = runtime_listener_hit_paths(graph, target_local_id);
-        if hit_paths.is_empty() {
-            return None;
-        }
-        hit_paths
+        // C++ retains the listener occurrence and constructs all non-pointer
+        // groups even when `addToHitLookup` cannot produce a pointer target.
+        // An empty pointer lookup therefore disables only pointer hits.
+        runtime_listener_hit_paths(graph, target_local_id)
     } else {
         Vec::new()
     };
@@ -160,6 +197,7 @@ pub(super) fn runtime_state_machine_listener(
 
     Some(RuntimeStateMachineListener {
         target_local_id,
+        is_single: listener.object.type_name == "StateMachineListenerSingle",
         listener_types,
         event_local_indices,
         view_model_index,
@@ -172,11 +210,16 @@ pub(super) fn runtime_state_machine_listener(
         listener_actions: listener
             .actions
             .iter()
-            .filter_map(|action| {
+            .map(|action| {
                 RuntimeScheduledListenerAction::from_imported(
                     file,
+                    graph,
+                    state_machine_inputs,
                     state_machine_data_binds,
                     action,
+                    action_owners
+                        .handle(action.object.id)
+                        .expect("accepted listener action has an owner"),
                 )
             })
             .collect(),
@@ -359,6 +402,15 @@ mod tests {
         }
     }
 
+    fn action_owners(
+        file: &RuntimeFile,
+        state_machine_global_id: u32,
+    ) -> super::super::RuntimeActionCoreArena {
+        super::super::RuntimeFileStateMachineActionCatalog::new(file)
+            .arena(state_machine_global_id)
+            .expect("state-machine action owners")
+    }
+
     #[test]
     fn imported_listener_retains_keyboard_owner_and_constraints() {
         let file = RuntimeFile::from_authoring_records(vec![
@@ -399,8 +451,10 @@ mod tests {
         let listener = runtime_state_machine_listener(
             &file,
             graph.artboards.first().expect("artboard graph"),
+            &authored[0].inputs,
             &[],
             &authored[0].listeners[0],
+            &action_owners(&file, authored[0].object.id),
         )
         .expect("keyboard listener is retained");
 
@@ -470,8 +524,10 @@ mod tests {
         let listener = runtime_state_machine_listener(
             &file,
             graph.artboards.first().expect("artboard graph"),
+            &authored[0].inputs,
             &[],
             &authored[0].listeners[0],
+            &action_owners(&file, authored[0].object.id),
         )
         .expect("gamepad and semantic listener is retained");
 
@@ -500,6 +556,53 @@ mod tests {
         );
         assert!(listener.semantic_constraints_met(2));
         assert!(!listener.semantic_constraints_met(1));
+    }
+
+    #[test]
+    fn missing_pointer_hit_shape_does_not_drop_keyboard_channel() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record("Artboard", Vec::new()),
+            record("Node", vec![property("Node", "parentId", 0)]),
+            record("FocusData", vec![property("FocusData", "parentId", 1)]),
+            record("StateMachine", Vec::new()),
+            record(
+                "StateMachineListener",
+                vec![property("StateMachineListener", "targetId", 1)],
+            ),
+            record(
+                "ListenerInputType",
+                vec![property(
+                    "ListenerInputType",
+                    "listenerTypeValue",
+                    RuntimeListenerType::Down as u64,
+                )],
+            ),
+            record(
+                "ListenerInputTypeKeyboard",
+                vec![property(
+                    "ListenerInputTypeKeyboard",
+                    "listenerTypeValue",
+                    RuntimeListenerType::Keyboard as u64,
+                )],
+            ),
+        ])
+        .expect("mixed pointer and keyboard listener records import");
+        let graph = GraphFile::from_runtime_file(&file).expect("mixed listener graph builds");
+        let authored = file.artboard_state_machine_graphs(0);
+        let listener = runtime_state_machine_listener(
+            &file,
+            graph.artboards.first().expect("artboard graph"),
+            &authored[0].inputs,
+            &[],
+            &authored[0].listeners[0],
+            &action_owners(&file, authored[0].object.id),
+        )
+        .expect("non-pointer channels retain the listener occurrence");
+
+        assert!(listener.has_listener(RuntimeListenerType::Down));
+        assert!(listener.has_listener(RuntimeListenerType::Keyboard));
+        assert!(listener.hit_paths.is_empty());
     }
 
     #[test]
@@ -549,8 +652,10 @@ mod tests {
         let listener = runtime_state_machine_listener(
             &file,
             graph.artboards.first().expect("artboard graph"),
+            &authored[0].inputs,
             &[],
             &authored[0].listeners[0],
+            &action_owners(&file, authored[0].object.id),
         )
         .expect("view-model listener is retained");
 
@@ -568,6 +673,67 @@ mod tests {
         );
         assert_eq!(listener.view_model_input_types[2].global_id, 6);
         assert_eq!(listener.view_model_input_types[2].source_path(), None);
+    }
+
+    #[test]
+    fn listeners_without_a_recognized_dispatch_type_remain_ordered_inert_owners() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record("Artboard", Vec::new()),
+            record("StateMachine", Vec::new()),
+            record("StateMachineBool", Vec::new()),
+            record(
+                "StateMachineListener",
+                vec![property("StateMachineListener", "targetId", 0)],
+            ),
+            record(
+                "ListenerBoolChange",
+                vec![property("ListenerBoolChange", "inputId", 0)],
+            ),
+            record(
+                "StateMachineListenerSingle",
+                vec![
+                    property("StateMachineListenerSingle", "targetId", 0),
+                    property(
+                        "StateMachineListenerSingle",
+                        "listenerTypeValue",
+                        u32::MAX as u64,
+                    ),
+                ],
+            ),
+            record(
+                "ListenerBoolChange",
+                vec![property("ListenerBoolChange", "inputId", 0)],
+            ),
+        ])
+        .expect("inert listener authoring records import");
+        let graph = GraphFile::from_runtime_file(&file).expect("inert listener graph builds");
+        let artboard = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            graph.artboards.first().expect("inert listener artboard"),
+            &graph.artboards,
+        )
+        .expect("inert listener artboard instantiates");
+        let state_machine = artboard.state_machine(0).expect("state machine");
+
+        assert_eq!(
+            state_machine.listeners.len(),
+            2,
+            "StateMachineListener::import retains every authored owner even when it has no recognized dispatch type"
+        );
+        assert!(state_machine.listeners[0].listener_types.is_empty());
+        assert!(!state_machine.listeners[0].is_single);
+        assert_eq!(state_machine.listeners[0].listener_actions.len(), 1);
+        assert!(state_machine.listeners[1].listener_types.is_empty());
+        assert!(state_machine.listeners[1].is_single);
+        assert_eq!(state_machine.listeners[1].listener_actions.len(), 1);
+
+        let cold_clone = state_machine.clone();
+        assert_eq!(cold_clone.listeners.len(), 2);
+        assert!(!cold_clone.listeners[0].is_single);
+        assert!(cold_clone.listeners[1].is_single);
+        assert_eq!(cold_clone.listeners[0].listener_actions.len(), 1);
+        assert_eq!(cold_clone.listeners[1].listener_actions.len(), 1);
     }
 
     fn bytes_property(type_name: &str, name: &str, value: Vec<u8>) -> AuthoringProperty {

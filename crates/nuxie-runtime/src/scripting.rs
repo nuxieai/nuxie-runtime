@@ -9,6 +9,7 @@ use nuxie_render_api::{
     BlendMode, Factory as RenderFactory, RawPath, RenderPaintStyle, Renderer, StrokeCap, StrokeJoin,
 };
 
+use crate::artboard_data_bind::RuntimeOwnedDataContext;
 use crate::data_bind_graph::{
     RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
     runtime_data_bind_graph_convert_value, runtime_data_bind_graph_converter,
@@ -95,16 +96,29 @@ pub struct ScriptModuleFailure {
     pub error: ScriptError,
 }
 
-/// One imported scripted listener action and the protocol asset it resolves.
+/// Which pinned C++ state-machine `ScriptedObject` owner this occurrence
+/// represents.
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptedStateMachineObjectKind {
+    ListenerAction,
+    TransitionCondition,
+}
+
+/// One imported state-machine scripted object and the protocol asset it
+/// resolves.
 ///
 /// `asset_ordinal` is the dense file-asset ordinal serialized in
-/// `ScriptedListenerAction.scriptAssetId`; it is deliberately not the
-/// semantic `FileAsset.assetId` or the asset object's global id.
+/// `ScriptedObject.scriptAssetId`; it is deliberately not the semantic
+/// `FileAsset.assetId` or the asset object's global id.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScriptListenerActionDefinition {
     action_global_id: u32,
+    kind: ScriptedStateMachineObjectKind,
     asset_ordinal: usize,
     asset_name: String,
+    has_protocol_asset: bool,
+    serialized_implemented_methods: u32,
     inputs: Vec<ScriptListenerInputDefinition>,
 }
 
@@ -113,8 +127,12 @@ impl ScriptListenerActionDefinition {
     pub(crate) fn new(action_global_id: u32, asset_ordinal: usize, asset_name: String) -> Self {
         Self {
             action_global_id,
+            kind: ScriptedStateMachineObjectKind::ListenerAction,
             asset_ordinal,
             asset_name,
+            has_protocol_asset: true,
+            serialized_implemented_methods:
+                crate::script_asset::RuntimeScriptImplementedMethods::METHOD_MASK,
             inputs: Vec::new(),
         }
     }
@@ -123,12 +141,37 @@ impl ScriptListenerActionDefinition {
         action_global_id: u32,
         asset_ordinal: usize,
         asset_name: String,
+        has_protocol_asset: bool,
+        serialized_implemented_methods: u32,
+        inputs: Vec<ScriptListenerInputDefinition>,
+    ) -> Self {
+        Self::with_inputs_and_kind(
+            action_global_id,
+            ScriptedStateMachineObjectKind::ListenerAction,
+            asset_ordinal,
+            asset_name,
+            has_protocol_asset,
+            serialized_implemented_methods,
+            inputs,
+        )
+    }
+
+    pub(crate) fn with_inputs_and_kind(
+        action_global_id: u32,
+        kind: ScriptedStateMachineObjectKind,
+        asset_ordinal: usize,
+        asset_name: String,
+        has_protocol_asset: bool,
+        serialized_implemented_methods: u32,
         inputs: Vec<ScriptListenerInputDefinition>,
     ) -> Self {
         Self {
             action_global_id,
+            kind,
             asset_ordinal,
             asset_name,
+            has_protocol_asset,
+            serialized_implemented_methods,
             inputs,
         }
     }
@@ -137,12 +180,42 @@ impl ScriptListenerActionDefinition {
         self.action_global_id
     }
 
+    #[doc(hidden)]
+    pub fn scripted_object_global_id(&self) -> u32 {
+        self.action_global_id
+    }
+
+    #[doc(hidden)]
+    pub fn scripted_object_kind(&self) -> ScriptedStateMachineObjectKind {
+        self.kind
+    }
+
     pub fn asset_ordinal(&self) -> usize {
         self.asset_ordinal
     }
 
     pub fn asset_name(&self) -> &str {
         &self.asset_name
+    }
+
+    /// Whether C++ resolved this occurrence to a non-module ScriptAsset.
+    ///
+    /// The authored ScriptedListenerAction and its ordered inputs remain
+    /// present when this is false. Such an occurrence simply has no live Lua
+    /// table and is inert at init/perform time.
+    pub fn has_protocol_asset(&self) -> bool {
+        self.has_protocol_asset
+    }
+
+    pub fn serialized_implemented_methods(&self) -> u32 {
+        self.serialized_implemented_methods
+    }
+
+    pub fn inits(&self) -> bool {
+        crate::script_asset::RuntimeScriptImplementedMethods::from_serialized(
+            self.serialized_implemented_methods,
+        )
+        .inits()
     }
 
     /// Authored inputs owned by this exact listener-action occurrence.
@@ -191,6 +264,26 @@ pub enum ScriptListenerInputKind {
     ViewModelProperty,
 }
 
+/// Current cloned Core state for one authored ScriptInput occurrence.
+///
+/// This snapshot deliberately excludes live DataBind source values. C++
+/// hydrates Lua from the cloned target objects before the first
+/// `updateDataBinds(false)` applies those sources.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScriptListenerInputSnapshot {
+    pub input_global_id: u32,
+    pub kind: ScriptListenerInputKind,
+    pub name: ScriptCoreString,
+    pub value: Option<ScriptListenerInputSnapshotValue>,
+    pub view_model_path: Option<crate::ScriptInputViewModelPropertyPath>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScriptListenerInputSnapshotValue {
+    Value(ScriptValue),
+    Artboard(u64),
+}
+
 /// A fully resolved, occurrence-local listener hydration batch.
 ///
 /// Callers construct the whole batch before touching a script table. Applying
@@ -200,6 +293,8 @@ pub enum ScriptListenerInputKind {
 /// the table field is the authored callback itself.
 pub struct ScriptListenerActionHydration {
     context_view_model: Option<ScriptViewModel>,
+    context_parent_view_models: Vec<ScriptViewModel>,
+    context_resolved: bool,
     inputs: Vec<ScriptListenerInputHydration>,
 }
 
@@ -210,6 +305,30 @@ impl ScriptListenerActionHydration {
     ) -> Self {
         Self {
             context_view_model,
+            context_parent_view_models: Vec::new(),
+            context_resolved: true,
+            inputs,
+        }
+    }
+
+    pub fn new_with_context_chain(
+        context_view_model: Option<ScriptViewModel>,
+        context_parent_view_models: Vec<ScriptViewModel>,
+        inputs: Vec<ScriptListenerInputHydration>,
+    ) -> Self {
+        Self {
+            context_view_model,
+            context_parent_view_models,
+            context_resolved: true,
+            inputs,
+        }
+    }
+
+    pub fn unresolved(inputs: Vec<ScriptListenerInputHydration>) -> Self {
+        Self {
+            context_view_model: None,
+            context_parent_view_models: Vec::new(),
+            context_resolved: false,
             inputs,
         }
     }
@@ -219,20 +338,64 @@ impl ScriptListenerActionHydration {
         instance: &mut dyn ScriptInstance,
         host: &mut dyn ScriptHost,
     ) -> Result<(), ScriptError> {
-        instance.set_context_view_model(self.context_view_model)?;
+        self.install_context(instance)?;
+        self.apply_inputs(instance, host)
+    }
+
+    /// Install the live DataContext before any failed-init retry recreates the
+    /// scripted table. C++ assigns `ScriptedObject::m_dataContext` before
+    /// `ensureScriptInitialized`, so the generator itself can observe the
+    /// newly bound occurrence.
+    pub fn install_context(&self, instance: &mut dyn ScriptInstance) -> Result<(), ScriptError> {
+        if self.context_resolved {
+            instance.set_context_view_model_chain(
+                self.context_view_model.clone(),
+                self.context_parent_view_models.clone(),
+            )?;
+        } else {
+            instance.clear_unresolved_context_view_model()?;
+        }
+        Ok(())
+    }
+
+    /// Apply the already validated authored inputs after the context is live
+    /// and, when needed, the failed occurrence has recreated its table.
+    pub fn apply_inputs(
+        self,
+        instance: &mut dyn ScriptInstance,
+        host: &mut dyn ScriptHost,
+    ) -> Result<(), ScriptError> {
         for input in self.inputs {
             match input {
                 ScriptListenerInputHydration::Value { name, value } => {
-                    instance.set_input(&name, value)?;
+                    instance.set_input_core(&name, value)?;
                 }
-                ScriptListenerInputHydration::Artboard { name, artboard } => {
-                    instance.set_artboard_input(&name, artboard)?;
+                ScriptListenerInputHydration::Artboard {
+                    name,
+                    artboard_id,
+                    resolver,
+                    parent_context,
+                } => {
+                    let artboard =
+                        resolver.resolve_script_artboard(artboard_id, parent_context.as_ref())?;
+                    instance.set_artboard_input_core(&name, artboard)?;
                 }
-                ScriptListenerInputHydration::ViewModel { name, view_model } => {
-                    instance.set_view_model_input(&name, view_model)?;
+                ScriptListenerInputHydration::ViewModel {
+                    name,
+                    input_global_id,
+                    path,
+                    resolver,
+                } => {
+                    let view_model = resolver.resolve_script_view_model(input_global_id, &path)?;
+                    // A valid ViewModel-valued property may currently select
+                    // no child. C++ still considers that input hydrated and
+                    // leaves the table field untouched.
+                    if let Some(view_model) = view_model {
+                        instance.set_view_model_input_core(&name, view_model)?;
+                    }
                 }
                 ScriptListenerInputHydration::Trigger { name } => {
-                    instance.call_input_trigger(&name, host)?;
+                    instance.call_input_trigger_core(&name, host)?;
                 }
             }
         }
@@ -243,19 +406,23 @@ impl ScriptListenerActionHydration {
 /// One resolved listener input operation.
 pub enum ScriptListenerInputHydration {
     Value {
-        name: String,
+        name: ScriptCoreString,
         value: ScriptValue,
     },
     Artboard {
-        name: String,
-        artboard: Box<dyn ScriptArtboard>,
+        name: ScriptCoreString,
+        artboard_id: u64,
+        resolver: Rc<dyn ScriptArtboardResolver>,
+        parent_context: Option<ScriptArtboardParentContext>,
     },
     ViewModel {
-        name: String,
-        view_model: ScriptViewModel,
+        name: ScriptCoreString,
+        input_global_id: u32,
+        path: crate::ScriptInputViewModelPropertyPath,
+        resolver: Rc<dyn ScriptViewModelInputResolver>,
     },
     Trigger {
-        name: String,
+        name: ScriptCoreString,
     },
 }
 
@@ -273,6 +440,11 @@ pub enum ScriptMethod {
     PointerUp,
     PointerEnter,
     PointerExit,
+    KeyboardEvent,
+    TextEvent,
+    GamepadConnected,
+    GamepadEvent,
+    GamepadDisconnected,
     PerformAction,
     Perform,
 }
@@ -291,6 +463,11 @@ impl ScriptMethod {
             ScriptMethod::PointerUp => "pointerUp",
             ScriptMethod::PointerEnter => "pointerEnter",
             ScriptMethod::PointerExit => "pointerExit",
+            ScriptMethod::KeyboardEvent => "keyboardEvent",
+            ScriptMethod::TextEvent => "textEvent",
+            ScriptMethod::GamepadConnected => "gamepadConnected",
+            ScriptMethod::GamepadEvent => "gamepadEvent",
+            ScriptMethod::GamepadDisconnected => "gamepadDisconnected",
             ScriptMethod::PerformAction => "performAction",
             ScriptMethod::Perform => "perform",
         }
@@ -316,6 +493,74 @@ impl ScriptListenerActionMethod {
     }
 }
 
+/// Outcome of one direct keyboard, text, or gamepad callback lookup.
+///
+/// C++ wakes the scripted drawable only after it finds and attempts the
+/// current table function. `handled` is the callback's propagation result for
+/// keyboard/text and true for an attempted gamepad callback.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ScriptedDrawableInputResult {
+    pub invoked: bool,
+    pub handled: bool,
+}
+
+/// Byte-preserving Rive `CoreString` storage.
+///
+/// The binary format and C++ `std::string` retain arbitrary bytes, including
+/// embedded NUL. C++ projects those values through `lua_pushstring` and
+/// `lua_setfield`, which expose only the prefix before the first NUL. Keeping
+/// both views here prevents an earlier UTF-8 replacement from changing the
+/// authored Core value.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub struct ScriptCoreString(Vec<u8>);
+
+impl ScriptCoreString {
+    pub fn from_bytes(bytes: impl Into<Vec<u8>>) -> Self {
+        Self(bytes.into())
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    pub fn as_c_str_bytes(&self) -> &[u8] {
+        let end = self
+            .0
+            .iter()
+            .position(|byte| *byte == 0)
+            .unwrap_or(self.0.len());
+        &self.0[..end]
+    }
+
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.0
+    }
+}
+
+impl From<String> for ScriptCoreString {
+    fn from(value: String) -> Self {
+        Self(value.into_bytes())
+    }
+}
+
+impl From<&str> for ScriptCoreString {
+    fn from(value: &str) -> Self {
+        Self(value.as_bytes().to_vec())
+    }
+}
+
+impl PartialEq<str> for ScriptCoreString {
+    fn eq(&self, other: &str) -> bool {
+        self.as_bytes() == other.as_bytes()
+    }
+}
+
+impl PartialEq<&str> for ScriptCoreString {
+    fn eq(&self, other: &&str) -> bool {
+        self == *other
+    }
+}
+
 /// VM-neutral values crossing the scripting seam.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScriptValue {
@@ -323,6 +568,7 @@ pub enum ScriptValue {
     Bool(bool),
     Number(f64),
     String(String),
+    CoreString(ScriptCoreString),
     Color(u32),
     Vec2 { x: f32, y: f32 },
     Vec3 { x: f32, y: f32, z: f32 },
@@ -341,6 +587,18 @@ impl ScriptDataConverterMethod {
             Self::ReverseConvert => "reverseConvert",
         }
     }
+}
+
+/// Result of resolving one optional scripted data-converter callback.
+///
+/// The backend must resolve the field exactly once. `UnsupportedInput`
+/// means the callback existed but the concrete Rive `DataValue` could not be
+/// represented by the scripting backend, so the callback was not invoked.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScriptDataConverterOptionalCall {
+    Missing,
+    UnsupportedInput,
+    Returned(ScriptValue),
 }
 
 /// Runtime-owned node data exposed by C++ `ScriptedArtboard::node`.
@@ -721,7 +979,53 @@ impl ScriptViewModel {
     }
 
     pub fn view_model(&self, name: &str) -> Option<Self> {
+        let property_index = self
+            .file
+            .view_model(self.view_model_index)?
+            .properties
+            .iter()
+            .position(|property| property.string_property("name") == Some(name))?;
+        let mut property_path = self.context.scope_path().to_vec();
+        property_path.push(property_index);
+        let concrete = self
+            .context
+            .root_handle()
+            .linked_view_model_by_property_path(&property_path);
+        if let Some(concrete) = concrete {
+            let view_model_index = concrete.borrow().view_model_index();
+            return build_script_view_model_shared(
+                Rc::clone(&self.file),
+                view_model_index,
+                concrete,
+                self.ancestors.as_slice(),
+            );
+        }
+        // Generated schema-only contexts are still represented inline by the
+        // current Rust ViewModel owner. Preserve that projection until FL-D
+        // replaces it with the complete retained C++ instance graph.
         self.nested_view_models.get(name).cloned()
+    }
+
+    /// Port of `ScriptedPropertyViewModel::setValue`: replace the actual
+    /// retained child occurrence and synchronously notify/relink its parent.
+    pub fn set_view_model(&self, name: &str, value: &ScriptViewModel) -> bool {
+        let Some(property_path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        let value_context = value.owned_handle();
+        let Some(value) = (if value_context.is_root() {
+            Some(value_context.root_handle())
+        } else {
+            value_context
+                .root_handle()
+                .linked_view_model_by_property_path(value_context.scope_path())
+        }) else {
+            return false;
+        };
+        self.context
+            .root_handle()
+            .link_view_model_by_property_path(&property_path, &value)
+            .unwrap_or(false)
     }
 
     pub fn list_len(&self, name: &str) -> Option<usize> {
@@ -922,6 +1226,20 @@ pub fn script_view_model_from_owned(
     )
 }
 
+#[doc(hidden)]
+pub fn script_view_model_from_owned_context(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelContextHandle,
+) -> Option<ScriptViewModel> {
+    let view_model_index = context.view_model_index()?;
+    build_script_view_model_scoped(
+        Rc::new(file.clone()),
+        view_model_index,
+        context.clone(),
+        &[],
+    )
+}
+
 /// Build a detached scripting snapshot from one owned view-model value.
 ///
 /// Product integrations should normally use [`script_view_model_from_owned`]
@@ -939,7 +1257,7 @@ pub fn script_view_model_from_owned_snapshot(
     )
 }
 
-fn build_script_view_model(
+pub(crate) fn build_script_view_model(
     file: Rc<RuntimeFile>,
     view_model_index: usize,
     instance: RuntimeOwnedViewModelInstance,
@@ -963,7 +1281,7 @@ fn build_script_view_model_shared(
     build_script_view_model_scoped(file, view_model_index, context, ancestors)
 }
 
-fn build_script_view_model_scoped(
+pub(crate) fn build_script_view_model_scoped(
     file: Rc<RuntimeFile>,
     view_model_index: usize,
     context: RuntimeOwnedViewModelContextHandle,
@@ -1063,7 +1381,7 @@ pub fn bound_script_input_value(
         }
         ("ScriptInputColor", RuntimeDataBindGraphValue::Color(value)) => ScriptValue::Color(value),
         ("ScriptInputString", RuntimeDataBindGraphValue::String(value)) => {
-            ScriptValue::String(String::from_utf8_lossy(&value).into_owned())
+            ScriptValue::CoreString(ScriptCoreString::from_bytes(value))
         }
         (_, value) => {
             return Err(ScriptError::new(format!(
@@ -1126,22 +1444,33 @@ fn bound_script_input_graph_value(
     let Some(property_key) = property_key_for_name(input.type_name, property_name) else {
         return Ok(None);
     };
-    let Some(data_bind) = (0..file.object_count()).find_map(|id| {
-        let data_bind = file.object(id)?;
-        (data_bind.type_name == "DataBindContext"
-            && data_bind.uint_property("propertyKey") == Some(u64::from(property_key))
-            && file
-                .data_bind_target_for_object(data_bind)
+    // `ScriptInput::dataBind` is one retained pointer. Every DataBind
+    // subclass assigns it during import, so the last authored occurrence wins
+    // even when that winner is not a DataBindContext
+    // (`data_bind.cpp:66-95`; `scripted_object.cpp:569-584`).
+    let Some(data_bind) = (0..file.object_count())
+        .filter_map(|id| file.object(id))
+        .filter(|candidate| {
+            nuxie_schema::definition_by_name(candidate.type_name)
+                .is_some_and(|definition| definition.is_a("DataBind"))
+        })
+        .filter(|candidate| {
+            file.data_bind_target_for_object(candidate)
                 .is_some_and(|target| target.id == input.id)
-            && file
-                .data_bind_to_target_for_object(data_bind)
-                .unwrap_or(false))
-        .then_some(data_bind)
-    }) else {
+        })
+        .last()
+    else {
         return Ok(None);
     };
-    let Some(source_path) = file.data_bind_context_resolved_source_path_ids_for_object(data_bind)
-    else {
+    if data_bind.type_name != "DataBindContext"
+        || data_bind.uint_property("propertyKey") != Some(u64::from(property_key))
+        || !file
+            .data_bind_to_target_for_object(data_bind)
+            .unwrap_or(false)
+    {
+        return Ok(None);
+    }
+    let Some(source_path) = file.data_bind_context_source_path_ids_for_object(data_bind) else {
         return Ok(None);
     };
     let name_based = file
@@ -1154,15 +1483,10 @@ fn bound_script_input_graph_value(
 
     let Some(converter_object) = file.resolved_data_converter_for_data_bind_object(data_bind)
     else {
-        if data_bind
-            .uint_property("converterId")
-            .is_some_and(|id| id != u64::from(u32::MAX) && id != u64::MAX)
-        {
-            return Err(ScriptError::new(format!(
-                "{} global {} references an unresolved data converter",
-                input.type_name, input.id
-            )));
-        }
+        // Backboard importer resolution leaves an invalid/out-of-range
+        // converter ordinal as a null pointer. DataBind then applies the
+        // source unchanged (`backboard_importer.cpp:136-145`;
+        // `data_bind.cpp:429-457`).
         return Ok(Some(source));
     };
     let Some(converter) = runtime_data_bind_graph_converter(file, data_bind) else {
@@ -1215,110 +1539,80 @@ fn script_input_converter_is_stateless(converter: &RuntimeDataBindGraphConverter
     }
 }
 
-fn owned_script_input_source_value(
+pub(crate) fn owned_script_input_source_value(
     file: &RuntimeFile,
     context: &RuntimeOwnedViewModelInstance,
     source_path: &[u32],
     name_based: bool,
 ) -> Option<RuntimeDataBindGraphValue> {
+    owned_script_input_source_value_for_scope(file, context, &[], source_path, name_based)
+}
+
+pub(crate) fn owned_script_input_source_value_for_scope(
+    file: &RuntimeFile,
+    context: &RuntimeOwnedViewModelInstance,
+    scope_path: &[usize],
+    source_path: &[u32],
+    name_based: bool,
+) -> Option<RuntimeDataBindGraphValue> {
     context
-        .number_value_by_context_source_path(file, &[], source_path, name_based)
+        .number_value_by_context_source_path(file, scope_path, source_path, name_based)
         .map(RuntimeDataBindGraphValue::Number)
         .or_else(|| {
             context
-                .boolean_value_by_context_source_path(file, &[], source_path, name_based)
+                .boolean_value_by_context_source_path(file, scope_path, source_path, name_based)
                 .map(RuntimeDataBindGraphValue::Boolean)
         })
         .or_else(|| {
             context
-                .string_value_by_context_source_path(file, &[], source_path, name_based)
+                .string_value_by_context_source_path(file, scope_path, source_path, name_based)
                 .map(|value| RuntimeDataBindGraphValue::String(value.to_vec()))
         })
         .or_else(|| {
             context
-                .color_value_by_context_source_path(file, &[], source_path, name_based)
+                .color_value_by_context_source_path(file, scope_path, source_path, name_based)
                 .map(RuntimeDataBindGraphValue::Color)
         })
         .or_else(|| {
             context
-                .enum_value_by_context_source_path(file, &[], source_path, name_based)
+                .enum_value_by_context_source_path(file, scope_path, source_path, name_based)
                 .map(RuntimeDataBindGraphValue::Enum)
         })
         .or_else(|| {
             context
-                .symbol_list_index_value_by_context_source_path(file, &[], source_path, name_based)
+                .symbol_list_index_value_by_context_source_path(
+                    file,
+                    scope_path,
+                    source_path,
+                    name_based,
+                )
                 .map(RuntimeDataBindGraphValue::SymbolListIndex)
         })
         .or_else(|| {
             context
-                .list_item_count_by_context_source_path(file, &[], source_path, name_based)
+                .list_item_count_by_context_source_path(file, scope_path, source_path, name_based)
                 .map(|item_count| RuntimeDataBindGraphValue::List { item_count })
         })
         .or_else(|| {
             context
-                .asset_value_by_context_source_path(file, &[], source_path, name_based)
+                .asset_value_by_context_source_path(file, scope_path, source_path, name_based)
                 .map(RuntimeDataBindGraphValue::Asset)
         })
         .or_else(|| {
             context
-                .artboard_value_by_context_source_path(file, &[], source_path, name_based)
+                .artboard_value_by_context_source_path(file, scope_path, source_path, name_based)
                 .map(RuntimeDataBindGraphValue::Artboard)
         })
         .or_else(|| {
             context
-                .trigger_value_by_context_source_path(file, &[], source_path, name_based)
+                .trigger_value_by_context_source_path(file, scope_path, source_path, name_based)
                 .map(RuntimeDataBindGraphValue::Trigger)
         })
         .or_else(|| {
             context
-                .view_model_value_by_context_source_path(file, &[], source_path, name_based)
+                .view_model_value_by_context_source_path(file, scope_path, source_path, name_based)
                 .map(RuntimeDataBindGraphValue::ViewModel)
         })
-}
-
-/// Resolves a `ScriptInputViewModelProperty` after its scripted object has a
-/// data context. C++ treats hydration as all-or-nothing, so `None` means the
-/// caller must defer every input and user `init`, not install a nil stand-in.
-pub fn bound_script_view_model_from_owned_context(
-    file: &RuntimeFile,
-    context: &RuntimeOwnedViewModelContextHandle,
-    input: &RuntimeObject,
-) -> Option<ScriptViewModel> {
-    if input.type_name != "ScriptInputViewModelProperty" {
-        return None;
-    }
-    let source_path = file.resolved_data_bind_path_ids_for_referencer_object(input)?;
-    let root = context.root_handle();
-    let property_path = root.borrow().property_path_for_context_source_path(
-        file,
-        context.scope_path(),
-        &source_path,
-        false,
-    )?;
-    let nested_context = context.scoped(property_path)?;
-    let view_model_index = nested_context.view_model_index()?;
-    build_script_view_model_scoped(Rc::new(file.clone()), view_model_index, nested_context, &[])
-}
-
-/// Hydrate a detached scripting snapshot from a detached owned context.
-///
-/// Retained runtime integrations should use
-/// [`bound_script_view_model_from_owned_context`] so nested mutations keep the
-/// same graph identity and invalidation path.
-pub fn bound_script_view_model_snapshot(
-    file: &RuntimeFile,
-    context: &RuntimeOwnedViewModelInstance,
-    input: &RuntimeObject,
-) -> Option<ScriptViewModel> {
-    if input.type_name != "ScriptInputViewModelProperty" {
-        return None;
-    }
-    let source_path = file.resolved_data_bind_path_ids_for_referencer_object(input)?;
-    let property_path =
-        context.property_path_for_context_source_path(file, &[], &source_path, false)?;
-    let view_model_index = context.view_model_index_by_property_path(&property_path)?;
-    let instance = context.nested_instance_by_property_path(&property_path)?;
-    build_script_view_model(Rc::new(file.clone()), view_model_index, instance, &[])
 }
 
 /// Host callbacks exposed to scripted objects.
@@ -1452,6 +1746,94 @@ pub trait ScriptArtboard {
     ) -> Result<(), ScriptError>;
 }
 
+/// Opaque retained parent context passed into one projected ScriptArtboard.
+///
+/// C++ `ScriptedObject::setArtboardInput` passes its current `DataContext`
+/// into every fresh child instance. The facade may carry this handle but
+/// cannot inspect or rebuild the runtime's local/global/parent ordering
+/// (`scripted_object.cpp:43-59`; `lua_artboards.cpp:20-50`).
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub struct ScriptArtboardParentContext {
+    inner: RuntimeOwnedDataContext,
+}
+
+impl ScriptArtboardParentContext {
+    pub(crate) fn from_runtime(inner: RuntimeOwnedDataContext) -> Self {
+        Self { inner }
+    }
+
+    pub fn with_local_view_model(
+        &self,
+        local: &RuntimeOwnedViewModelContextHandle,
+    ) -> ScriptArtboardDataContext {
+        ScriptArtboardDataContext {
+            inner: RuntimeOwnedDataContext::with_local_context_handles(
+                [local.clone()],
+                Some(&self.inner),
+            ),
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn resolve_script_view_model_input(
+        &self,
+        file: &RuntimeFile,
+        path: &crate::ScriptInputViewModelPropertyPath,
+    ) -> Option<Option<ScriptViewModel>> {
+        self.inner.bound_script_view_model(file, path)
+    }
+}
+
+/// Opaque complete context bound to a projected child artboard and its
+/// default state machine.
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub struct ScriptArtboardDataContext {
+    inner: RuntimeOwnedDataContext,
+}
+
+impl ScriptArtboardDataContext {
+    pub fn root(local: &RuntimeOwnedViewModelContextHandle) -> Self {
+        Self {
+            inner: RuntimeOwnedDataContext::from_context_handle(local),
+        }
+    }
+
+    pub(crate) fn runtime_context(&self) -> &RuntimeOwnedDataContext {
+        &self.inner
+    }
+}
+
+/// Occurrence-owned resolver used by a live ScriptInputArtboard DataBind.
+///
+/// The low-level state-machine owns exact binding timing while the facade owns
+/// file-backed artboard userdata construction. Keeping that boundary explicit
+/// lets chained `applyEvents` batches update the script table synchronously,
+/// matching `ScriptInputArtboard::artboardIdChanged/updateArtboard`, without
+/// moving renderer/file authority into the state-machine core.
+pub trait ScriptArtboardResolver: fmt::Debug {
+    fn resolve_script_artboard(
+        &self,
+        artboard_id: u64,
+        parent_context: Option<&ScriptArtboardParentContext>,
+    ) -> Result<Box<dyn ScriptArtboard>, ScriptError>;
+}
+
+/// Occurrence-owned phase-two lookup for ScriptInputViewModelProperty.
+///
+/// C++ validates the path first, then resolves it again at the input's
+/// authored hydration position after any earlier table setters have run
+/// (`script_input_viewmodel_property.cpp:60-113`;
+/// `scripted_object.cpp:399-426`).
+pub trait ScriptViewModelInputResolver: fmt::Debug {
+    fn resolve_script_view_model(
+        &self,
+        input_global_id: u32,
+        path: &crate::ScriptInputViewModelPropertyPath,
+    ) -> Result<Option<ScriptViewModel>, ScriptError>;
+}
+
 /// Runtime-owned handle for one scripted object instance.
 pub trait ScriptInstance {
     fn set_context_view_model(
@@ -1459,6 +1841,14 @@ pub trait ScriptInstance {
         _view_model: Option<ScriptViewModel>,
     ) -> Result<(), ScriptError> {
         Ok(())
+    }
+
+    fn set_context_view_model_chain(
+        &mut self,
+        view_model: Option<ScriptViewModel>,
+        _parents: Vec<ScriptViewModel>,
+    ) -> Result<(), ScriptError> {
+        self.set_context_view_model(view_model)
     }
 
     /// Clear a context before its first host bind without declaring the
@@ -1477,6 +1867,31 @@ pub trait ScriptInstance {
         args: &[ScriptValue],
         host: &mut dyn ScriptHost,
     ) -> Result<ScriptValue, ScriptError>;
+
+    /// Run `advance(self, seconds)` and apply the VM's native truthiness rules.
+    ///
+    /// The generic [`ScriptValue`] bridge intentionally exposes only the
+    /// runtime value kinds used by authored properties. Lua `advance` may
+    /// nevertheless return any value, and pinned C++ treats every value except
+    /// `nil` and `false` as true (`scripted_data_converter.cpp:285-304`).
+    /// Backends with additional value kinds override this boundary rather than
+    /// rejecting a truthy table, function, userdata, or thread while trying to
+    /// project it into [`ScriptValue`].
+    fn call_advance_truthy(
+        &mut self,
+        elapsed_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> Result<bool, ScriptError> {
+        let value = self.call_method(
+            ScriptMethod::Advance,
+            &[ScriptValue::Number(f64::from(elapsed_seconds))],
+            host,
+        )?;
+        Ok(!matches!(
+            value,
+            ScriptValue::Nil | ScriptValue::Bool(false)
+        ))
+    }
 
     fn call_method_with_factory(
         &mut self,
@@ -1506,6 +1921,39 @@ pub trait ScriptInstance {
             .map(|_| ())
     }
 
+    /// Resolve and invoke the preferred scripted-listener callback as one
+    /// backend operation.
+    ///
+    /// Pinned C++ reads `performAction` once and calls that exact Lua value;
+    /// only when it is not a function does it read `perform` once
+    /// (`scripted_listener_action.cpp:49-100`). Backends must not split this
+    /// into a presence probe followed by a second lookup because a metatable
+    /// may return a different value on every access.
+    fn call_preferred_listener_action(
+        &mut self,
+        _invocation: &ScriptListenerInvocation,
+        _host: &mut dyn ScriptHost,
+    ) -> Result<bool, ScriptError> {
+        Ok(false)
+    }
+
+    /// Dispatch one keyboard, committed-text, or gamepad invocation directly
+    /// to a scripted drawable.
+    ///
+    /// This is distinct from `ScriptedListenerAction::performAction`: pinned
+    /// C++ `KeyboardListenerGroup` and `GamepadListenerGroup` call the
+    /// drawable's `keyboardEvent`, `textEvent`, or gamepad method before any
+    /// authored listener branch. The outcome distinguishes a missing/currently
+    /// non-function field from an invoked callback so the owner wakes only at
+    /// the C++ boundary.
+    fn call_scripted_drawable_input(
+        &mut self,
+        _invocation: &ScriptListenerInvocation,
+        _host: &mut dyn ScriptHost,
+    ) -> Result<ScriptedDrawableInputResult, ScriptError> {
+        Ok(ScriptedDrawableInputResult::default())
+    }
+
     /// Invoke an authored `ScriptInputTrigger` callback by its input name.
     /// Missing or non-function fields are a no-op, matching Rive's runtime.
     fn call_input_trigger(
@@ -1516,9 +1964,34 @@ pub trait ScriptInstance {
         Ok(())
     }
 
+    /// Byte-preserving companion used by authored `CoreString` input names.
+    fn call_input_trigger_core(
+        &mut self,
+        name: &ScriptCoreString,
+        host: &mut dyn ScriptHost,
+    ) -> Result<(), ScriptError> {
+        let name = std::str::from_utf8(name.as_c_str_bytes()).map_err(|_| {
+            ScriptError::new("script backend does not support non-UTF-8 authored input names")
+        })?;
+        self.call_input_trigger(name, host)
+    }
+
     /// Run an implemented user `init(self, context)` and apply Lua truthiness
     /// without requiring every backend value kind to cross the VM-neutral
     /// [`ScriptValue`] seam.
+    ///
+    /// Pinned C++ initialization is a scripting-VM operation and does not
+    /// require a renderer factory. Renderer-capable callers may use
+    /// [`ScriptInstance::call_init_with_factory`] to make rendering resources
+    /// available during the same callback.
+    fn call_init(&mut self, host: &mut dyn ScriptHost) -> Result<bool, ScriptError> {
+        let value = self.call_method(ScriptMethod::Init, &[], host)?;
+        Ok(!matches!(
+            value,
+            ScriptValue::Nil | ScriptValue::Bool(false)
+        ))
+    }
+
     fn call_init_with_factory(
         &mut self,
         host: &mut dyn ScriptHost,
@@ -1534,8 +2007,19 @@ pub trait ScriptInstance {
     /// Whether this concrete scripted-object occurrence still needs its user
     /// `init` callback. C++ stores the equivalent state in
     /// `ScriptedObject::m_userLuaInitDone`.
-    fn user_init_pending(&self) -> Result<bool, ScriptError> {
+    fn user_init_pending(&mut self) -> Result<bool, ScriptError> {
         Ok(false)
+    }
+
+    /// Whether this occurrence still owns the concrete script table/context
+    /// that C++ stores in `ScriptedObject::m_self`.
+    ///
+    /// A missing hydration prerequisite leaves `m_self` alive even though
+    /// user init is still pending. By contrast, init false/error or a missing
+    /// requested context value disposes `m_self` until the occurrence is
+    /// recreated (`scripted_object.cpp:277-303,399-435`).
+    fn script_lifetime_valid(&self) -> bool {
+        true
     }
 
     /// Discard the current scripted-object lifetime before the next input
@@ -1546,6 +2030,10 @@ pub trait ScriptInstance {
     /// Recreate a lifetime invalidated by a failed/deferred init. Hosts call
     /// this before hydrating inputs so a new script table observes the bound
     /// context and receives the complete input set.
+    fn prepare_init_retry(&mut self) -> Result<(), ScriptError> {
+        Ok(())
+    }
+
     fn prepare_init_retry_with_factory(
         &mut self,
         factory: &mut dyn RenderFactory,
@@ -1589,9 +2077,69 @@ pub trait ScriptInstance {
         ))
     }
 
+    /// Resolve and invoke one optional converter method in one backend
+    /// operation.
+    ///
+    /// `None` means the field was missing or not a function. That is distinct
+    /// from a called function returning an unsupported value or failing:
+    /// pinned C++ leaves its conversion cache untouched only in the missing
+    /// method case (`scripted_data_converter.cpp:89-147`).
+    fn call_data_converter_if_present(
+        &mut self,
+        method: ScriptDataConverterMethod,
+        value: ScriptValue,
+    ) -> Result<Option<ScriptValue>, ScriptError> {
+        self.call_data_converter(method, value).map(Some)
+    }
+
+    /// Resolve an optional converter method once and invoke that exact
+    /// function when the input is representable.
+    ///
+    /// Pinned C++ performs one `lua_getfield` before attempting to push the
+    /// input (`scripted_data_converter.cpp:96-147`). Keeping the lookup and
+    /// call in one backend operation prevents a dynamic `__index` from
+    /// returning different functions (or a function and then nil) across two
+    /// lookups.
+    fn call_optional_data_converter(
+        &mut self,
+        method: ScriptDataConverterMethod,
+        value: Option<ScriptValue>,
+    ) -> Result<ScriptDataConverterOptionalCall, ScriptError> {
+        let Some(value) = value else {
+            return if self.has_data_converter_method(method)? {
+                Ok(ScriptDataConverterOptionalCall::UnsupportedInput)
+            } else {
+                Ok(ScriptDataConverterOptionalCall::Missing)
+            };
+        };
+        Ok(match self.call_data_converter_if_present(method, value)? {
+            Some(value) => ScriptDataConverterOptionalCall::Returned(value),
+            None => ScriptDataConverterOptionalCall::Missing,
+        })
+    }
+
+    fn has_data_converter_method(
+        &self,
+        _method: ScriptDataConverterMethod,
+    ) -> Result<bool, ScriptError> {
+        Ok(true)
+    }
+
     fn get_input(&self, name: &str) -> Result<ScriptValue, ScriptError>;
 
     fn set_input(&mut self, name: &str, value: ScriptValue) -> Result<(), ScriptError>;
+
+    /// Byte-preserving companion used by authored `CoreString` input names.
+    fn set_input_core(
+        &mut self,
+        name: &ScriptCoreString,
+        value: ScriptValue,
+    ) -> Result<(), ScriptError> {
+        let name = std::str::from_utf8(name.as_c_str_bytes()).map_err(|_| {
+            ScriptError::new("script backend does not support non-UTF-8 authored input names")
+        })?;
+        self.set_input(name, value)
+    }
 
     fn set_artboard_input(
         &mut self,
@@ -1604,6 +2152,17 @@ pub trait ScriptInstance {
         ))
     }
 
+    fn set_artboard_input_core(
+        &mut self,
+        name: &ScriptCoreString,
+        artboard: Box<dyn ScriptArtboard>,
+    ) -> Result<(), ScriptError> {
+        let name = std::str::from_utf8(name.as_c_str_bytes()).map_err(|_| {
+            ScriptError::new("script backend does not support non-UTF-8 authored input names")
+        })?;
+        self.set_artboard_input(name, artboard)
+    }
+
     fn set_view_model_input(
         &mut self,
         name: &str,
@@ -1613,6 +2172,17 @@ pub trait ScriptInstance {
         Err(ScriptError::new(
             "script view-model inputs require backend userdata support",
         ))
+    }
+
+    fn set_view_model_input_core(
+        &mut self,
+        name: &ScriptCoreString,
+        view_model: ScriptViewModel,
+    ) -> Result<(), ScriptError> {
+        let name = std::str::from_utf8(name.as_c_str_bytes()).map_err(|_| {
+            ScriptError::new("script backend does not support non-UTF-8 authored input names")
+        })?;
+        self.set_view_model_input(name, view_model)
     }
 }
 

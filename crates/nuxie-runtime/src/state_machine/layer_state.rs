@@ -34,12 +34,14 @@ impl RuntimeLayerState {
     pub(super) fn perform_fire_actions(
         &self,
         occurrence: StateMachineFireOccurrence,
+        artboard: &ArtboardInstance,
         executor: &mut dyn RuntimeScheduledListenerActionExecutor,
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) {
         perform_state_machine_fire_actions(
             &self.fire_actions,
             occurrence,
+            artboard,
             executor,
             reported_events,
         );

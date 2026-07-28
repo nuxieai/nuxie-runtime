@@ -1368,3 +1368,16 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   `build/build_rive.sh:277-287`;
   [Emscripten 3.1.61 `rand.c`](https://github.com/emscripten-core/emscripten/blob/3.1.61/system/lib/libc/musl/src/prng/rand.c);
   [Emscripten 3.1.61 clock shim](https://github.com/emscripten-core/emscripten/blob/3.1.61/src/library_wasi.js#L145-L165)).
+- **FLR-19 Determinize only order that C++ leaves unspecified.** When a C++
+  lifecycle pass visits an `unordered_map`, Rust may use a stable order, but
+  that order is an adaptation rather than authored-order behavior. Preserve
+  the exact key identity, membership, one visit per key, and every phase
+  barrier around the pass; never write a behavioral differential whose result
+  depends on the C++ map's relative key order. State-machine ScriptedObjects
+  are cloned from the authored vector, then stored by source-pointer identity.
+  The live-context pass reaches every retained wrapper before the init pass
+  starts, while relative order within each unordered-map pass is unspecified.
+  Rust uses the authored-first unique definition order for deterministic
+  visitation and keeps the context-install and init passes separate
+  (`include/rive/animation/state_machine_instance.hpp:399-402`;
+  `src/animation/state_machine_instance.cpp:2072-2082,2886-2913`).

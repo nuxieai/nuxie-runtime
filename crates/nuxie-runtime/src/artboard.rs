@@ -70,13 +70,15 @@ use crate::properties::{
     solid_color_value_property_key, solo_active_component_id_property_key,
     transform_property_for_key,
 };
+use crate::script_asset::{RuntimeScriptImplementedMethods, RuntimeScriptedObjectOccurrence};
 use crate::scripting::{
     NoopScriptHost, RuntimeScriptInstanceHandle, ScriptArtboard, ScriptError, ScriptHost,
     ScriptInstance, ScriptMethod, ScriptValue, ScriptViewModel,
 };
 use crate::state_machine::{
-    RuntimeNestedStateMachineInstance, RuntimeNestedStateMachineReport, RuntimeStateMachine,
-    StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent, build_state_machines,
+    RuntimeFileStateMachineActionCatalog, RuntimeNestedStateMachineInstance,
+    RuntimeNestedStateMachineReport, RuntimeStateMachine, StateMachineInputKind,
+    StateMachineInstance, StateMachineReportedEvent, build_state_machines_with_action_catalog,
 };
 use crate::view_model::{
     RuntimeFontAssetValue, RuntimeImportedViewModelInstanceContext,
@@ -396,12 +398,23 @@ pub struct ArtboardInstance {
     pub(crate) empty_linear_animation: Arc<RuntimeLinearAnimation>,
     pub(crate) state_machines: Arc<Vec<RuntimeStateMachine>>,
     pub(crate) script_instances_by_global:
-        RuntimeScriptState<BTreeMap<u32, RuntimeScriptInstanceHandle>>,
+        RuntimeScriptState<BTreeMap<u32, RuntimeScriptedObjectOccurrence>>,
+    /// Generation of concrete script occurrence attachments. Rust's
+    /// authenticated facade mounts these after Artboard cloning, while C++
+    /// mounts them before state-machine input-group construction.
+    script_attachment_generation: u64,
     pub(crate) scripted_data_converter_instances_by_global:
         RuntimeScriptState<BTreeMap<u32, RuntimeScriptInstanceHandle>>,
     has_scripted_drawables: bool,
     nested_script_owned_contexts: BTreeMap<u32, RuntimeOwnedViewModelInstance>,
     script_update_error: Option<ScriptError>,
+    /// C++ `Artboard::m_FocusManager`: a mounted child Artboard retains the
+    /// parent state-machine focus domain so component-list rows and nested
+    /// state machines can install it at their exact link boundary.
+    ///
+    /// The root `StateMachineInstance` remains the projection owner. This is
+    /// only a shared, non-projecting domain handle and is reset on cold clone.
+    external_focus_domain: Option<crate::focus::RuntimeFocusTree>,
     pub(crate) nested_artboards: RuntimeNestedArtboards,
     pub(crate) nested_artboard_locals: Vec<usize>,
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
@@ -513,12 +526,14 @@ impl Clone for ArtboardInstance {
             empty_linear_animation: self.empty_linear_animation.clone(),
             state_machines: self.state_machines.clone(),
             script_instances_by_global: self.script_instances_by_global.clone(),
+            script_attachment_generation: self.script_attachment_generation,
             scripted_data_converter_instances_by_global: self
                 .scripted_data_converter_instances_by_global
                 .clone(),
             has_scripted_drawables: self.has_scripted_drawables,
             nested_script_owned_contexts: self.nested_script_owned_contexts.clone(),
             script_update_error: None,
+            external_focus_domain: None,
             nested_artboards: self.nested_artboards.clone(),
             nested_artboard_locals: self.nested_artboard_locals.clone(),
             newly_uncollapsed_nested_artboards: self.newly_uncollapsed_nested_artboards.clone(),
@@ -653,7 +668,7 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     // Rust drops fields in declaration order. C++ releases nested animations
     // (including StateMachineInstances that can reference m_Instance) before
     // destroying m_Instance (`nested_artboard.cpp:48-64`).
-    animations: Vec<RuntimeNestedAnimationInstance>,
+    pub(crate) animations: Vec<RuntimeNestedAnimationInstance>,
     pub(crate) child: Box<ArtboardInstance>,
     pub(crate) render_cache_revision: u64,
     /// C++ child objects own their backend members. This sidecar follows the
@@ -805,7 +820,7 @@ impl RuntimeNestedArtboards {
         Some(nested)
     }
 
-    fn keys(&self) -> impl Iterator<Item = &usize> {
+    pub(crate) fn keys(&self) -> impl Iterator<Item = &usize> {
         self.entries.iter().map(|(local_id, _)| local_id)
     }
 
@@ -825,7 +840,32 @@ impl RuntimeNestedArtboards {
         self.entries.iter_mut().map(|(_, nested)| nested)
     }
 
-    fn state_machine_mut(
+    pub(crate) fn state_machine(
+        &self,
+        local_id: usize,
+    ) -> Option<&RuntimeNestedStateMachineInstance> {
+        let (host_entry, animation_index) = self
+            .state_machine_owner_by_local
+            .get(local_id)
+            .copied()
+            .flatten()?;
+        match self
+            .entries
+            .get(host_entry)?
+            .1
+            .animations
+            .get(animation_index)?
+        {
+            RuntimeNestedAnimationInstance::StateMachine(occurrence)
+                if occurrence.local_id() == local_id =>
+            {
+                Some(occurrence)
+            }
+            _ => None,
+        }
+    }
+
+    pub(crate) fn state_machine_mut(
         &mut self,
         local_id: usize,
     ) -> Option<&mut RuntimeNestedStateMachineInstance> {
@@ -981,6 +1021,7 @@ fn component_list_contexts_retain_same_handles(
 struct RuntimeArtboardBuildContext {
     file: Arc<RuntimeFile>,
     file_view_model_instances: RuntimeFileViewModelInstanceCatalog,
+    state_machine_actions: RuntimeFileStateMachineActionCatalog,
     artboards: Arc<Vec<ArtboardGraph>>,
     artboard_index_by_global: Arc<Vec<Option<usize>>>,
     nested_structure_epoch: Arc<AtomicU64>,
@@ -1059,7 +1100,7 @@ struct RuntimeNestedLayoutBoundsFrame {
 }
 
 #[derive(Debug, Clone)]
-enum RuntimeNestedAnimationInstance {
+pub(crate) enum RuntimeNestedAnimationInstance {
     Simple {
         local_id: usize,
         animation: LinearAnimationInstance,
@@ -2105,6 +2146,7 @@ impl ArtboardInstance {
         let context = RuntimeArtboardBuildContext {
             file: Arc::new(file.clone()),
             file_view_model_instances,
+            state_machine_actions: RuntimeFileStateMachineActionCatalog::new(file),
             artboards: Arc::new(artboards.clone()),
             artboard_index_by_global: Arc::new(build_artboard_index_by_global(&artboards)),
             nested_structure_epoch: Arc::new(AtomicU64::new(0)),
@@ -2154,9 +2196,29 @@ impl ArtboardInstance {
         external_font_assets: &BTreeMap<u32, Arc<[u8]>>,
         file_view_model_instances: RuntimeFileViewModelInstanceCatalog,
     ) -> Result<Self> {
+        Self::from_graph_with_artboards_external_fonts_and_file_catalogs(
+            file,
+            graph,
+            artboards,
+            external_font_assets,
+            file_view_model_instances,
+            RuntimeFileStateMachineActionCatalog::new(file),
+        )
+    }
+
+    #[doc(hidden)]
+    pub fn from_graph_with_artboards_external_fonts_and_file_catalogs(
+        file: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        external_font_assets: &BTreeMap<u32, Arc<[u8]>>,
+        file_view_model_instances: RuntimeFileViewModelInstanceCatalog,
+        state_machine_actions: RuntimeFileStateMachineActionCatalog,
+    ) -> Result<Self> {
         let context = RuntimeArtboardBuildContext {
             file: Arc::new(file.clone()),
             file_view_model_instances,
+            state_machine_actions,
             artboards: Arc::new(artboards.to_vec()),
             artboard_index_by_global: Arc::new(build_artboard_index_by_global(artboards)),
             nested_structure_epoch: Arc::new(AtomicU64::new(0)),
@@ -2254,8 +2316,17 @@ impl ArtboardInstance {
         let mut linear_animations =
             build_linear_animations(file, graph, &slots, &mut converter_cache);
         let joysticks = build_runtime_joysticks(graph, &linear_animations);
-        let state_machines =
-            build_state_machines(file, graph, &linear_animations, &mut converter_cache);
+        let state_machine_actions = build_context
+            .as_ref()
+            .map(|context| context.state_machine_actions.clone())
+            .unwrap_or_else(|| RuntimeFileStateMachineActionCatalog::new(file));
+        let state_machines = build_state_machines_with_action_catalog(
+            file,
+            graph,
+            &linear_animations,
+            &mut converter_cache,
+            &state_machine_actions,
+        );
         for state_machine in &state_machines {
             for layer in state_machine.layers.iter() {
                 layer.validate_imported_references()?;
@@ -2359,13 +2430,15 @@ impl ArtboardInstance {
             empty_linear_animation: Arc::new(RuntimeLinearAnimation::empty()),
             state_machines: Arc::new(state_machines),
             script_instances_by_global: RuntimeScriptState::default(),
+            script_attachment_generation: 0,
             scripted_data_converter_instances_by_global: RuntimeScriptState::default(),
-            has_scripted_drawables: graph
-                .components
-                .iter()
-                .any(|component| component.type_name == "ScriptedDrawable"),
+            has_scripted_drawables: graph.components.iter().any(|component| {
+                definition_by_name(component.type_name)
+                    .is_some_and(|definition| definition.is_a("ScriptedDrawable"))
+            }),
             nested_script_owned_contexts: BTreeMap::new(),
             script_update_error: None,
+            external_focus_domain: None,
             nested_artboards,
             nested_artboard_locals,
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
@@ -2616,12 +2689,31 @@ impl ArtboardInstance {
         global_id: u32,
         instance: Box<dyn ScriptInstance>,
     ) {
+        self.set_script_instance_for_global_with_implemented_methods(
+            global_id,
+            instance,
+            RuntimeScriptImplementedMethods::METHOD_MASK,
+        );
+    }
+
+    /// Attach one VM table with the exact ScriptAsset method mask copied by
+    /// pinned C++ `ScriptAsset::initScriptedObjectWith`.
+    #[doc(hidden)]
+    pub fn set_script_instance_for_global_with_implemented_methods(
+        &mut self,
+        global_id: u32,
+        mut instance: Box<dyn ScriptInstance>,
+        serialized_implemented_methods: u32,
+    ) {
         self.has_scripted_drawables = true;
         let user_init_pending = instance.user_init_pending().unwrap_or(false);
         let advance_active =
             !user_init_pending && instance.has_method(ScriptMethod::Advance).unwrap_or(false);
-        self.script_instances_by_global
-            .insert(global_id, RuntimeScriptInstanceHandle::new(instance));
+        self.script_instances_by_global.insert(
+            global_id,
+            RuntimeScriptedObjectOccurrence::new(instance, serialized_implemented_methods),
+        );
+        self.script_attachment_generation = self.script_attachment_generation.wrapping_add(1);
         if self.set_script_owner_lifecycle(global_id, advance_active, !user_init_pending)
             && !user_init_pending
             && let Some(component) = self.script_component_handle_for_global(global_id)
@@ -3189,7 +3281,22 @@ impl ArtboardInstance {
         &self,
         global_id: u32,
     ) -> Option<RuntimeScriptInstanceHandle> {
-        self.script_instances_by_global.get(&global_id).cloned()
+        self.script_instances_by_global
+            .get(&global_id)
+            .map(RuntimeScriptedObjectOccurrence::instance)
+    }
+
+    pub(crate) fn script_implemented_methods_for_global(
+        &self,
+        global_id: u32,
+    ) -> Option<RuntimeScriptImplementedMethods> {
+        self.script_instances_by_global
+            .get(&global_id)
+            .map(RuntimeScriptedObjectOccurrence::implemented_methods)
+    }
+
+    pub(crate) fn script_attachment_generation(&self) -> u64 {
+        self.script_attachment_generation
     }
 
     pub fn slot(&self, local_id: usize) -> Option<&InstanceSlot> {
@@ -3232,10 +3339,12 @@ impl ArtboardInstance {
                     ),
                     _ => return None,
                 };
+                let name_key = property_key_for_name(component.type_name, "name")?;
                 Some(RuntimeEventProperty {
                     name: self
-                        .slot(component.local_id)
-                        .and_then(|slot| slot.name.clone()),
+                        .string_property(component.local_id, name_key)
+                        .map(|value| String::from_utf8_lossy(value).into_owned())
+                        .filter(|name| !name.is_empty()),
                     value,
                 })
             })
@@ -3466,6 +3575,10 @@ impl ArtboardInstance {
         let handle = self.component_handle(local_id)?;
         let parent = self.component_parent_handle(handle)?;
         self.objects.component_local_id(parent)
+    }
+
+    pub(crate) fn runtime_object_type_name(&self, local_id: usize) -> Option<&'static str> {
+        self.slot(local_id).and_then(|slot| slot.type_name)
     }
 
     pub(crate) fn component_child_len(&self, handle: ComponentHandle) -> usize {
@@ -3783,6 +3896,14 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn bool_property(&self, local_id: usize, property_key: u16) -> Option<bool> {
+        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("NestedBool")
+            && property_key_for_name("NestedBool", "nestedValue") == Some(property_key)
+        {
+            // `NestedBool::nestedValue()` reads the live SMIBool occurrence
+            // and returns false when the nested input cannot be resolved
+            // (`src/animation/nested_bool.cpp:36-48`).
+            return Some(self.nested_bool_value(local_id).unwrap_or(false));
+        }
         self.objects.bool_property(local_id, property_key)
     }
 
@@ -3811,6 +3932,11 @@ impl ArtboardInstance {
     /// embeddings): returns whether a matching property existed and its
     /// value changed; invalidation is handled internally.
     pub fn set_bool_property(&mut self, local_id: usize, property_key: u16, value: bool) -> bool {
+        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("NestedBool")
+            && property_key_for_name("NestedBool", "nestedValue") == Some(property_key)
+        {
+            return self.set_nested_bool_value(local_id, value);
+        }
         if !self
             .objects
             .set_bool_property(local_id, property_key, value)
@@ -3904,6 +4030,14 @@ impl ArtboardInstance {
     /// the object arena, so a matching property returns its current value
     /// even when the source record omitted that default.
     pub fn double_property(&self, local_id: usize, property_key: u16) -> Option<f32> {
+        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("NestedNumber")
+            && property_key_for_name("NestedNumber", "nestedValue") == Some(property_key)
+        {
+            // `NestedNumber::nestedValue()` reads the live SMINumber
+            // occurrence and returns 0 when it cannot be resolved
+            // (`src/animation/nested_number.cpp:36-48`).
+            return Some(self.nested_number_value(local_id).unwrap_or(0.0));
+        }
         self.has_legacy_image_layout_scales
             .get()
             .then(|| self.legacy_image_layout_public_scale(local_id, property_key))
@@ -4011,6 +4145,11 @@ impl ArtboardInstance {
     /// embeddings): returns whether a matching property existed and its
     /// value changed; invalidation is handled internally.
     pub fn set_double_property(&mut self, local_id: usize, property_key: u16, value: f32) -> bool {
+        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("NestedNumber")
+            && property_key_for_name("NestedNumber", "nestedValue") == Some(property_key)
+        {
+            return self.set_nested_number_value(local_id, value);
+        }
         if let Some(changed) =
             set_runtime_scroll_double_property(self, local_id, property_key, value)
         {
@@ -4044,6 +4183,11 @@ impl ArtboardInstance {
         property_key: u16,
         value: f32,
     ) -> bool {
+        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("NestedNumber")
+            && property_key_for_name("NestedNumber", "nestedValue") == Some(property_key)
+        {
+            return self.set_nested_number_value(local_id, value);
+        }
         if let Some(changed) =
             set_runtime_scroll_double_property(self, local_id, property_key, value)
         {
@@ -4803,6 +4947,17 @@ impl ArtboardInstance {
             state_machine.advance_data_context();
             state_machines.push(state_machine);
         }
+        if let Some(parent_focus) = self.external_focus_domain.as_ref() {
+            let child_identity = child.instance_identity();
+            for state_machine in &mut state_machines {
+                // C++ `ArtboardComponentList::linkStateMachineToArtboard`
+                // installs the parent Artboard's FocusManager immediately
+                // after the row machine is created and data-bound
+                // (`artboard_component_list.cpp:641-678`).
+                state_machine.install_external_focus(parent_focus, child_identity);
+            }
+            child.install_external_focus_domain(parent_focus);
+        }
         child.advance_artboard_data_binds_with_elapsed(0.0);
         child.update_pass();
         let context_rebind_sink = crate::view_model_cell::RuntimeCellDirtSink::new();
@@ -5186,13 +5341,14 @@ impl ArtboardInstance {
         // C++ `applyEvents()` consumes only reports not delivered to
         // listeners yet, at new-frame start, and loops chained reports before
         // layer advance (`state_machine_instance.cpp:2320-2343,2555-2565`).
-        // Keep processed reports publicly visible for this frame while the
-        // listener cursor prevents replay; reports created by the layer pass
-        // remain pending for the next frame's `applyEvents()`.
-        let previous_report_count = instance.reported_event_count();
+        // Each C++ iteration clears the batch before notifying it. Drain the
+        // complete prefix consumed by the bounded chained loop; reports
+        // created later by the layer pass remain pending for the next frame's
+        // `applyEvents()`.
         let next_event_index = instance.next_unapplied_reported_event_index();
         instance.apply_local_event_listeners(self, next_event_index, owned_context.as_deref_mut());
-        instance.discard_reported_event_prefix(previous_report_count);
+        let applied_report_count = instance.next_unapplied_reported_event_index();
+        instance.discard_reported_event_prefix(applied_report_count);
 
         match owned_context.as_deref_mut() {
             Some(context) => instance.advance_with_owned_view_model_context(
@@ -7475,24 +7631,54 @@ impl ArtboardInstance {
         state_machines: &mut [StateMachineInstance],
         script_mode: &mut RuntimeScriptUpdateMode<'_>,
     ) -> bool {
+        self.settle_state_machine_update_passes_after_main_advance_with_mode_and_root_vm_reset(
+            state_machines,
+            script_mode,
+            true,
+        )
+    }
+
+    fn settle_state_machine_update_passes_after_main_advance_with_mode_and_root_vm_reset(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+        script_mode: &mut RuntimeScriptUpdateMode<'_>,
+        reset_root_view_models: bool,
+    ) -> bool {
         const MAX_OUTER_PASSES: usize = 5;
 
         let mut changed = false;
         for _ in 0..MAX_OUTER_PASSES {
             changed |= self.update_pass_with_script_mode(script_mode, Mat2D::IDENTITY);
             for state_machine in state_machines.iter_mut() {
-                if self.try_change_state_machine_instance(state_machine) {
+                // C++ calls `StateMachineInstance::tryChangeState()` on every
+                // outer pass, not only when a transition-specific probe was
+                // pre-scheduled. Besides evaluating transitions, that method
+                // runs `updateDataBinds(false)`, which propagates the
+                // suppressed ViewModelTrigger reset back to a retained
+                // ScriptInputTrigger before the next authored edge
+                // (`state_machine_instance.cpp:2306-2318,2629-2635`).
+                if self.try_change_state_machine_instance_unconditionally(state_machine) {
                     changed = true;
                     changed |=
                         self.advance_state_machine_instance_after_state_probe(state_machine, 0.0);
                 }
             }
             changed |= self.advance_outer_update_components();
-            for state_machine in state_machines.iter_mut() {
-                state_machine.reset_advanced_data_context();
+            if reset_root_view_models {
+                for state_machine in state_machines.iter_mut() {
+                    state_machine.reset_advanced_data_context();
+                }
             }
             self.reset_retained_components();
-            if !self.has_dirt(ComponentDirt::COMPONENTS) {
+            // C++ cloned ScriptInput DataBinds are Components, so a trigger
+            // reset keeps the outer loop alive through their Bindings dirt.
+            // Rust stores those occurrences in the state-machine container;
+            // include its exact pending queue in the equivalent stop test.
+            if !self.has_dirt(ComponentDirt::COMPONENTS)
+                && !state_machines
+                    .iter()
+                    .any(StateMachineInstance::has_pending_data_bind_work)
+            {
                 break;
             }
         }
@@ -7507,6 +7693,25 @@ impl ArtboardInstance {
         self.settle_state_machine_update_passes_after_main_advance_with_mode_and_errors(
             state_machines,
             &mut script_mode,
+            true,
+        )
+    }
+
+    /// Script-owned artboards use C++ `advanceAndApply(seconds, false)`: run
+    /// the same bounded component settlement and Artboard reset, but leave
+    /// the root state-machine DataContext for its owning host frame to
+    /// advance/reset (`lua_artboards.cpp:103-115`;
+    /// `state_machine_instance.cpp:2601-2665`).
+    #[doc(hidden)]
+    pub fn settle_state_machine_update_passes_after_main_advance_without_root_view_model_reset_with_script_errors(
+        &mut self,
+        state_machines: &mut [StateMachineInstance],
+    ) -> Result<bool, ScriptError> {
+        let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
+        self.settle_state_machine_update_passes_after_main_advance_with_mode_and_errors(
+            state_machines,
+            &mut script_mode,
+            false,
         )
     }
 
@@ -7519,6 +7724,7 @@ impl ArtboardInstance {
         self.settle_state_machine_update_passes_after_main_advance_with_mode_and_errors(
             state_machines,
             &mut script_mode,
+            true,
         )
     }
 
@@ -7526,12 +7732,15 @@ impl ArtboardInstance {
         &mut self,
         state_machines: &mut [StateMachineInstance],
         script_mode: &mut RuntimeScriptUpdateMode<'_>,
+        reset_root_view_models: bool,
     ) -> Result<bool, ScriptError> {
         self.clear_script_update_error_tree();
-        let changed = self.settle_state_machine_update_passes_after_main_advance_with_mode(
-            state_machines,
-            script_mode,
-        );
+        let changed = self
+            .settle_state_machine_update_passes_after_main_advance_with_mode_and_root_vm_reset(
+                state_machines,
+                script_mode,
+                reset_root_view_models,
+            );
         match self.take_script_update_error_tree() {
             Some(error) => {
                 self.rearm_pending_script_updates_tree();
@@ -9313,13 +9522,10 @@ impl ArtboardInstance {
         {
             return false;
         }
-        let Some((state_machine_local_id, input_id)) = self.nested_input_target(local_id) else {
-            return false;
-        };
-        self.fire_nested_state_machine_trigger(state_machine_local_id, input_id)
+        self.fire_nested_trigger_input(local_id)
     }
 
-    fn nested_input_target(&self, local_id: usize) -> Option<(usize, usize)> {
+    pub(crate) fn nested_input_target(&self, local_id: usize) -> Option<(usize, usize)> {
         let parent_key = property_key_for_name("Component", "parentId")?;
         let input_key = property_key_for_name("NestedInput", "inputId")?;
         let state_machine_local_id =
@@ -9328,7 +9534,16 @@ impl ArtboardInstance {
         Some((state_machine_local_id, input_id))
     }
 
-    fn nested_state_machine_mut(
+    pub(crate) fn nested_state_machine(
+        &self,
+        state_machine_local_id: usize,
+    ) -> Option<&StateMachineInstance> {
+        self.nested_artboards
+            .state_machine(state_machine_local_id)
+            .and_then(RuntimeNestedStateMachineInstance::state_machine)
+    }
+
+    pub(crate) fn nested_state_machine_mut(
         &mut self,
         state_machine_local_id: usize,
     ) -> Option<&mut StateMachineInstance> {
@@ -9337,7 +9552,7 @@ impl ArtboardInstance {
             .and_then(RuntimeNestedStateMachineInstance::state_machine_mut)
     }
 
-    fn set_nested_state_machine_bool(
+    pub(crate) fn set_nested_state_machine_bool(
         &mut self,
         state_machine_local_id: usize,
         input_id: usize,
@@ -9353,7 +9568,7 @@ impl ArtboardInstance {
         true
     }
 
-    fn set_nested_state_machine_number(
+    pub(crate) fn set_nested_state_machine_number(
         &mut self,
         state_machine_local_id: usize,
         input_id: usize,
@@ -9369,7 +9584,7 @@ impl ArtboardInstance {
         true
     }
 
-    fn fire_nested_state_machine_trigger(
+    pub(crate) fn fire_nested_state_machine_trigger(
         &mut self,
         state_machine_local_id: usize,
         input_id: usize,
@@ -9669,12 +9884,27 @@ impl ArtboardInstance {
 }
 
 impl ArtboardInstance {
-    pub(crate) fn install_nested_external_focus_domain(
+    pub(crate) fn install_external_focus_domain(
         &mut self,
         parent_focus: &crate::focus::RuntimeFocusTree,
     ) {
+        self.external_focus_domain =
+            Some(parent_focus.external_for_owner(self.instance_identity()));
         for (_, nested) in &mut self.nested_artboards.entries {
             nested.install_external_focus_domain(parent_focus);
+        }
+        let list_locals = self.component_list_locals().collect::<Vec<_>>();
+        for list_local_id in list_locals {
+            let Some(items) = self.component_list_items_mut(list_local_id) else {
+                continue;
+            };
+            for item in items {
+                let child_identity = item.child.instance_identity();
+                for state_machine in &mut item.state_machines {
+                    state_machine.install_external_focus(parent_focus, child_identity);
+                }
+                item.child.install_external_focus_domain(parent_focus);
+            }
         }
     }
 }
@@ -9740,8 +9970,7 @@ impl RuntimeNestedArtboardInstance {
             };
             occurrence.install_external_focus(parent_focus, child_identity);
         }
-        self.child
-            .install_nested_external_focus_domain(parent_focus);
+        self.child.install_external_focus_domain(parent_focus);
     }
 
     fn reuse_owned_stateful_view_model_context(&mut self, existing: &Self) -> bool {
@@ -10597,8 +10826,11 @@ mod tests {
     };
     use crate::properties::property_key_for_name;
     use crate::state_machine::{
-        RuntimeBlendState1D, RuntimeBlendState1DSource, RuntimeLayerState, RuntimeListenerType,
-        RuntimeStateMachineInput, RuntimeStateMachineLayer, RuntimeStateMachineListener,
+        RuntimeBlendState1D, RuntimeBlendState1DSource, RuntimeLayerState,
+        RuntimeListenerBoolChange, RuntimeListenerInputTarget, RuntimeListenerNumberChange,
+        RuntimeListenerTriggerChange, RuntimeListenerType, RuntimeStateMachineInput,
+        RuntimeStateMachineLayer, RuntimeStateMachineListener, ScriptGamepadMappingKind,
+        ScriptGamepadSnapshot, ScriptListenerInvocation, StateMachineInputInstance,
     };
     use nuxie_binary::{
         AuthoringProperty, AuthoringRecord, AuthoringValue, BytesValue, FieldValue, RuntimeObject,
@@ -10984,10 +11216,12 @@ mod tests {
             empty_linear_animation: Arc::new(RuntimeLinearAnimation::empty()),
             state_machines: Arc::new(Vec::new()),
             script_instances_by_global: RuntimeScriptState::default(),
+            script_attachment_generation: 0,
             scripted_data_converter_instances_by_global: RuntimeScriptState::default(),
             has_scripted_drawables: false,
             nested_script_owned_contexts: BTreeMap::new(),
             script_update_error: None,
+            external_focus_domain: None,
             nested_artboards: RuntimeNestedArtboards::default(),
             nested_artboard_locals: Vec::new(),
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
@@ -11190,7 +11424,11 @@ mod tests {
             bindable_booleans: Arc::new(Vec::new()),
             view_model_triggers: Arc::new(Vec::new()),
             transition_duration_bindings: Arc::new(Vec::new()),
+            data_bind_templates: Arc::new(Vec::new()),
+            scripted_objects: Vec::new(),
             scripted_listener_actions: Vec::new(),
+            scripted_object_bindings: Vec::new(),
+            action_owners: crate::state_machine::RuntimeActionCoreArena::empty(),
         }
     }
 
@@ -11218,6 +11456,7 @@ mod tests {
         let mut artboard = synthetic_instance(vec![shape], vec![0]);
         let listener = RuntimeStateMachineListener {
             target_local_id: 0,
+            is_single: false,
             listener_types: vec![RuntimeListenerType::Down],
             event_local_indices: Vec::new(),
             view_model_index: None,
@@ -11366,7 +11605,27 @@ mod tests {
                 Vec::new(),
             )),
         ]);
-        let mut parent = synthetic_instance(Vec::new(), Vec::new());
+        let nested_bool = synthetic_component_for_type(0, "NestedBool");
+        let nested_number = synthetic_component_for_type(1, "NestedNumber");
+        let nested_trigger = synthetic_component_for_type(2, "NestedTrigger");
+        let mut parent =
+            synthetic_instance(vec![nested_bool, nested_number, nested_trigger], Vec::new());
+        let parent_id_key =
+            property_key_for_name("Component", "parentId").expect("Component.parentId");
+        let input_id_key =
+            property_key_for_name("NestedInput", "inputId").expect("NestedInput.inputId");
+        for (local_id, state_machine_local_id, input_id) in [(0, 7, 0), (1, 8, 1), (2, 9, 2)] {
+            assert!(parent.objects.set_uint_property(
+                local_id,
+                parent_id_key,
+                state_machine_local_id
+            ));
+            assert!(
+                parent
+                    .objects
+                    .set_uint_property(local_id, input_id_key, input_id)
+            );
+        }
         parent.nested_artboards.insert(3, nested);
 
         assert!(parent.set_nested_state_machine_bool(7, 0, true));
@@ -11383,13 +11642,222 @@ mod tests {
                 .expect("mounted nested state machine")
                 .post_update_probe_pending()
         );
-        assert!(parent.fire_nested_state_machine_trigger(9, 2));
+        assert!(
+            parent.fire_nested_trigger_input(2),
+            "NestedTrigger::fire is a callback and must reach the nested occurrence without a stored-property write"
+        );
         assert!(
             parent
                 .nested_state_machine_mut(9)
                 .expect("mounted nested state machine")
                 .post_update_probe_pending()
         );
+        assert_eq!(
+            parent
+                .nested_state_machine_mut(9)
+                .expect("mounted nested state machine")
+                .input(2)
+                .and_then(|input| input.trigger_fired()),
+            Some(true)
+        );
+
+        let direct_definitions = Arc::new(vec![
+            Some(RuntimeStateMachineInput::new_bool(
+                101,
+                Some("direct bool".to_owned()),
+                false,
+            )),
+            Some(RuntimeStateMachineInput::new_number(
+                102,
+                Some("direct number".to_owned()),
+                0.0,
+            )),
+            Some(RuntimeStateMachineInput::new_trigger(
+                103,
+                Some("direct trigger".to_owned()),
+            )),
+        ]);
+        let mut direct_inputs = (0..direct_definitions.len())
+            .map(|index| StateMachineInputInstance::new(index, Arc::clone(&direct_definitions)))
+            .collect::<Vec<_>>();
+
+        let nested_bool_action = RuntimeListenerBoolChange::for_test(
+            0,
+            RuntimeListenerInputTarget {
+                direct_input_index: Some(0),
+                nested_input_local_id: Some(0),
+            },
+            1,
+        );
+        let nested_bool_value_key =
+            property_key_for_name("NestedBool", "nestedValue").expect("NestedBool.nestedValue");
+        let parent_cache_epoch = parent.cache_epoch();
+        assert!(
+            !nested_bool_action.perform(&mut parent, &mut direct_inputs),
+            "the child was independently set true above, so setting true again is an exact no-op"
+        );
+        assert_eq!(direct_inputs[0].bool_value(), Some(false));
+        assert_eq!(
+            parent.objects.bool_property(0, nested_bool_value_key),
+            Some(false),
+            "NestedBoolBase storage is construction-only and is not rewritten by the live setter"
+        );
+        assert_eq!(
+            parent.bool_property(0, nested_bool_value_key),
+            Some(true),
+            "the virtual getter reads the child SMIBool rather than stale authored storage"
+        );
+        assert_eq!(
+            parent.cache_epoch(),
+            parent_cache_epoch,
+            "a nested-input listener action dirties only the child state-machine occurrence"
+        );
+        assert_eq!(
+            parent
+                .nested_state_machine_mut(7)
+                .and_then(|machine| machine.input(0))
+                .and_then(StateMachineInputInstance::bool_value),
+            Some(true)
+        );
+        assert!(
+            RuntimeListenerBoolChange::for_test(
+                0,
+                RuntimeListenerInputTarget {
+                    direct_input_index: Some(0),
+                    nested_input_local_id: Some(0),
+                },
+                2,
+            )
+            .perform(&mut parent, &mut direct_inputs)
+        );
+        assert_eq!(
+            parent.objects.bool_property(0, nested_bool_value_key),
+            Some(false),
+            "toggling the live child must not mutate parent property storage"
+        );
+        assert_eq!(
+            parent
+                .nested_state_machine_mut(7)
+                .and_then(|machine| machine.input(0))
+                .and_then(StateMachineInputInstance::bool_value),
+            Some(false)
+        );
+        assert!(
+            !RuntimeListenerBoolChange::for_test(
+                0,
+                RuntimeListenerInputTarget {
+                    direct_input_index: Some(0),
+                    nested_input_local_id: Some(99),
+                },
+                1,
+            )
+            .perform(&mut parent, &mut direct_inputs)
+        );
+        assert!(
+            !RuntimeListenerBoolChange::for_test(
+                0,
+                RuntimeListenerInputTarget {
+                    direct_input_index: Some(0),
+                    nested_input_local_id: Some(1),
+                },
+                1,
+            )
+            .perform(&mut parent, &mut direct_inputs)
+        );
+        assert_eq!(direct_inputs[0].bool_value(), Some(false));
+
+        let nested_number_value_key =
+            property_key_for_name("NestedNumber", "nestedValue").expect("NestedNumber.nestedValue");
+        for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 1.0, -0.0] {
+            assert!(
+                RuntimeListenerNumberChange::for_test(
+                    0,
+                    RuntimeListenerInputTarget {
+                        direct_input_index: Some(1),
+                        nested_input_local_id: Some(1),
+                    },
+                    value,
+                )
+                .perform(&mut parent, &mut direct_inputs)
+            );
+            let actual = parent
+                .nested_state_machine_mut(8)
+                .and_then(|machine| machine.input(1))
+                .and_then(StateMachineInputInstance::number_value)
+                .expect("nested number value");
+            assert_eq!(actual.to_bits(), value.to_bits());
+            assert_eq!(
+                parent
+                    .objects
+                    .double_property(1, nested_number_value_key)
+                    .expect("authored NestedNumber storage")
+                    .to_bits(),
+                0.0f32.to_bits(),
+                "the live NestedNumber setter must not rewrite parent storage"
+            );
+            assert_eq!(
+                parent
+                    .double_property(1, nested_number_value_key)
+                    .expect("virtual NestedNumber getter")
+                    .to_bits(),
+                value.to_bits()
+            );
+            assert_eq!(direct_inputs[1].number_value(), Some(0.0));
+        }
+
+        let nested_trigger_action = RuntimeListenerTriggerChange::for_test(
+            0,
+            RuntimeListenerInputTarget {
+                direct_input_index: Some(2),
+                nested_input_local_id: Some(2),
+            },
+        );
+        assert!(
+            !nested_trigger_action.perform(&mut parent, &mut direct_inputs),
+            "the earlier direct fire remains latched until the child advances"
+        );
+        {
+            let nested = parent
+                .nested_artboards
+                .get_mut(&3)
+                .expect("mounted nested artboard");
+            let (animations, child) = (&mut nested.animations, &mut nested.child);
+            let occurrence = animations
+                .iter_mut()
+                .find_map(|animation| match animation {
+                    RuntimeNestedAnimationInstance::StateMachine(occurrence)
+                        if occurrence.local_id() == 9 =>
+                    {
+                        Some(occurrence)
+                    }
+                    _ => None,
+                })
+                .expect("nested trigger state machine");
+            let _ = occurrence.advance(child, 0.0, None);
+        }
+        assert!(nested_trigger_action.perform(&mut parent, &mut direct_inputs));
+        assert_eq!(direct_inputs[2].trigger_fired(), Some(false));
+        {
+            let nested = parent
+                .nested_artboards
+                .get_mut(&3)
+                .expect("mounted nested artboard");
+            let (animations, child) = (&mut nested.animations, &mut nested.child);
+            let occurrence = animations
+                .iter_mut()
+                .find_map(|animation| match animation {
+                    RuntimeNestedAnimationInstance::StateMachine(occurrence)
+                        if occurrence.local_id() == 9 =>
+                    {
+                        Some(occurrence)
+                    }
+                    _ => None,
+                })
+                .expect("nested trigger state machine");
+            let _ = occurrence.advance(child, 0.0, None);
+        }
+        assert!(nested_trigger_action.perform(&mut parent, &mut direct_inputs));
+        assert_eq!(direct_inputs[2].trigger_fired(), Some(false));
     }
 
     #[test]
@@ -13129,6 +13597,7 @@ mod tests {
                             name: Some("callback".to_owned()),
                             url: None,
                             target: None,
+                            properties: Vec::new(),
                             string_properties: Vec::new(),
                             context: None,
                             seconds_delay: 0.0,
@@ -14001,9 +14470,12 @@ mod tests {
         let initial_cache_epoch = instance.cache_epoch();
         let initial_prepared_epoch = instance.prepared_epoch();
 
-        assert!(instance.set_double_property(0, nested_value, 1.0));
-
-        assert!(instance.cache_epoch() > initial_cache_epoch);
+        // C++ forwards the virtual setter only to a live SMINumber and leaves
+        // the serialized parent field untouched when no child input resolves
+        // (`src/animation/nested_number.cpp:24-48`).
+        assert!(!instance.set_double_property(0, nested_value, 1.0));
+        assert_eq!(instance.double_property(0, nested_value), Some(0.0));
+        assert_eq!(instance.cache_epoch(), initial_cache_epoch);
         assert_eq!(instance.prepared_epoch(), initial_prepared_epoch);
     }
 
@@ -17489,6 +17961,25 @@ mod tests {
     }
 
     #[test]
+    fn retained_data_context_listener_reads_the_live_bindable_occurrence() {
+        let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9732, true);
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 1)
+                .expect("fixture has an owned ViewModel context"),
+        );
+
+        assert!(state_machine.bind_owned_view_model_handle(&context));
+        assert!(state_machine.set_bindable_number_for_data_bind(0, 9.0));
+        assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
+        assert!(artboard.advance_state_machine_instance(&mut state_machine, 0.0));
+        assert_eq!(
+            context.borrow().number_value_by_property_path(&[1]),
+            Some(9.0),
+            "ListenerViewModelChange must read the mutable cloned BindableProperty at perform time, not its imported default",
+        );
+    }
+
+    #[test]
     fn retained_data_context_listener_queues_each_mutation_until_next_frame() {
         let (file, mut artboard, mut state_machine) = owned_view_model_action_fixture(9720, true);
         let context = RuntimeOwnedViewModelHandle::new(
@@ -18743,6 +19234,140 @@ mod tests {
         let leaf_root = leaf.child.component(0).expect("leaf root component");
         assert_eq!(leaf_root.transform.render_opacity, 1.0);
         assert!(!leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
+    }
+
+    #[test]
+    fn component_list_row_state_machine_uses_parent_focus_domain_for_all_input_channels() {
+        let bytes = synthetic_riv(9703, |bytes| {
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "ViewModelPropertyList", &[]);
+            push_synthetic_object(bytes, "ViewModel", &[]);
+            push_synthetic_object(bytes, "Backboard", &[]);
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 0)]);
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstanceList",
+                &[("viewModelPropertyId", 0)],
+            );
+            push_synthetic_object(bytes, "ViewModelInstance", &[("viewModelId", 1)]);
+            push_synthetic_object(
+                bytes,
+                "ViewModelInstanceListItem",
+                &[("viewModelId", 1), ("viewModelInstanceId", 0)],
+            );
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 0)]);
+            push_synthetic_object_with_properties(bytes, "ArtboardComponentList", |bytes| {
+                push_synthetic_uint_property(bytes, "ArtboardComponentList", "parentId", 0);
+                push_synthetic_f32_property(bytes, "ArtboardComponentList", "opacity", 1.0);
+            });
+            // The parent StateMachine owns the shared FocusManager before the
+            // row is mounted.
+            push_synthetic_object(bytes, "StateMachine", &[]);
+            push_synthetic_object(bytes, "Artboard", &[("viewModelId", 1)]);
+            push_synthetic_object_with_properties(bytes, "Node", |bytes| {
+                push_synthetic_uint_property(bytes, "Node", "parentId", 0);
+                push_synthetic_f32_property(bytes, "Node", "opacity", 1.0);
+            });
+            push_synthetic_object(bytes, "FocusData", &[("parentId", 1), ("focusFlags", 7)]);
+            push_synthetic_object(bytes, "StateMachine", &[]);
+            push_synthetic_object(bytes, "StateMachineBool", &[]);
+            push_synthetic_object(bytes, "StateMachineListener", &[("targetId", 1)]);
+            push_synthetic_object(
+                bytes,
+                "ListenerInputTypeKeyboard",
+                &[("listenerTypeValue", RuntimeListenerType::Keyboard as u64)],
+            );
+            push_synthetic_object(
+                bytes,
+                "ListenerInputTypeText",
+                &[("listenerTypeValue", RuntimeListenerType::TextInput as u64)],
+            );
+            push_synthetic_object(
+                bytes,
+                "ListenerInputTypeGamepad",
+                &[("listenerTypeValue", RuntimeListenerType::Gamepad as u64)],
+            );
+            // Toggle once for each delivered channel so order/duplication is
+            // observable without relying on a handled return.
+            push_synthetic_object(bytes, "ListenerBoolChange", &[("inputId", 0), ("value", 2)]);
+        });
+        let file = read_runtime_file(&bytes).expect("component-list focus fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("component-list focus graphs");
+        let mut parent = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graph.artboards[0],
+            &graph.artboards,
+        )
+        .expect("parent artboard instance");
+        // The ordinary runtime constructs focus topology after the initial
+        // component update has published render opacity. This low-level
+        // fixture bypasses the facade initialization, so mirror that C++
+        // ordering explicitly.
+        parent.update_components();
+        let mut parent_machine = parent
+            .state_machine_instance(0)
+            .expect("parent focus-manager owner");
+
+        let list_local_id = graph.artboards[0].component_lists[0].local_id;
+        let row_context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+                .expect("component-list row context"),
+        );
+        assert!(parent.sync_component_list_items(&file, list_local_id, vec![row_context],));
+
+        // Refresh the parent's retained projection after the dynamic row was
+        // linked, then focus through the row machine's shared manager handle.
+        parent_machine.sync_focus_for_test(&parent);
+        let row_target_local = graph.artboards[1]
+            .components
+            .iter()
+            .find(|component| component.type_name == "Node")
+            .expect("row focus target")
+            .local_id;
+        {
+            let row = parent
+                .component_list_items_mut(list_local_id)
+                .and_then(|items| items.first_mut())
+                .expect("mounted row");
+            assert!(
+                row.state_machines[0].set_focus_target_for_test(row_target_local),
+                "C++ setExternalFocusManager makes the row target visible in the parent domain"
+            );
+        }
+
+        assert!(!parent_machine.key_input(&mut parent, 65, 0, true, false));
+        assert_eq!(
+            parent.component_list_items(list_local_id).unwrap()[0].state_machines[0]
+                .input(0)
+                .and_then(StateMachineInputInstance::bool_value),
+            Some(true)
+        );
+        assert!(!parent_machine.text_input(&mut parent, "owned"));
+        assert_eq!(
+            parent.component_list_items(list_local_id).unwrap()[0].state_machines[0]
+                .input(0)
+                .and_then(StateMachineInputInstance::bool_value),
+            Some(false)
+        );
+        assert!(!parent_machine.gamepad_dispatch(
+            &mut parent,
+            ScriptListenerInvocation::GamepadConnected {
+                snapshot: ScriptGamepadSnapshot {
+                    device_id: 7,
+                    button_mask: 0,
+                    button_values: Vec::new(),
+                    axes: Vec::new(),
+                    mapping: ScriptGamepadMappingKind::Standard,
+                },
+            },
+        ));
+        assert_eq!(
+            parent.component_list_items(list_local_id).unwrap()[0].state_machines[0]
+                .input(0)
+                .and_then(StateMachineInputInstance::bool_value),
+            Some(true),
+            "key, text, and gamepad each reach the same list-row occurrence exactly once"
+        );
     }
 
     #[test]

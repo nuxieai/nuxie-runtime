@@ -247,6 +247,7 @@ pub(crate) struct RuntimeBindableViewModel {
     pub(crate) global_id: u32,
     pub(crate) data_bind_indices: Vec<usize>,
     pub(crate) source: RuntimeBindableViewModelSource,
+    pub(crate) property_value: u64,
     pub(crate) default_view_model_sources: Vec<RuntimeBindableViewModelDefaultViewModelSource>,
 }
 
@@ -636,6 +637,7 @@ pub(crate) struct StateMachineBindableViewModelInstance {
     pub(crate) global_id: u32,
     pub(crate) data_bind_indices: Vec<usize>,
     source: RuntimeBindableViewModelSource,
+    pub(crate) property_value: u64,
     pub(crate) value: RuntimeViewModelPointer,
 }
 
@@ -645,6 +647,7 @@ impl StateMachineBindableViewModelInstance {
             global_id: bindable_view_model.global_id,
             data_bind_indices: bindable_view_model.data_bind_indices.clone(),
             source: bindable_view_model.source,
+            property_value: bindable_view_model.property_value,
             value: RuntimeViewModelPointer::Null,
         }
     }
@@ -661,6 +664,14 @@ impl StateMachineBindableViewModelInstance {
 
     pub(crate) fn set_value(&mut self, value: RuntimeViewModelPointer) {
         self.value = value;
+    }
+
+    pub(crate) fn set_property_value(&mut self, value: u64) -> bool {
+        if self.property_value == value {
+            return false;
+        }
+        self.property_value = value;
+        true
     }
 
     pub(crate) fn has_data_bind_index(&self, data_bind_index: usize) -> bool {
@@ -1689,7 +1700,7 @@ fn runtime_view_model_property_at_path<'a>(
     None
 }
 
-fn runtime_unresolved_view_model_value_at_path(
+pub(super) fn runtime_unresolved_view_model_value_at_path(
     file: &RuntimeFile,
     path: &[u32],
 ) -> Option<RuntimeDataBindGraphValue> {
@@ -1853,6 +1864,9 @@ pub(crate) fn runtime_bindable_view_models<'a>(
                 global_id: target.id,
                 data_bind_indices: vec![data_bind_index],
                 source,
+                property_value: target
+                    .uint_property("propertyValue")
+                    .unwrap_or(u64::from(u32::MAX)),
                 default_view_model_sources: Vec::new(),
             });
         if let Some(source) = runtime_bindable_view_model_default_view_model_source(

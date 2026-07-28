@@ -4181,7 +4181,10 @@ fn typed_vertical_component_list_exports_imports_advances_and_draws_two_view_mod
     let second_item = nuxie::Vec2D::new(6.0, 34.0);
     assert!(scene.frame().pointer_down(instance, second_item, 42));
     assert!(scene.frame().pointer_up(instance, second_item, 42));
-    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert!(
+        scene.frame().take_reported_events(instance, &mut events),
+        "the listener report is host-visible before the next frame"
+    );
     let [
         SceneEvent::Authored {
             event,
@@ -6414,7 +6417,7 @@ fn authored_drag_lifecycle_stays_on_the_captured_target() -> Result<()> {
 }
 
 #[test]
-fn authored_listener_fire_event_survives_until_the_next_frame_report() -> Result<()> {
+fn authored_listener_fire_event_is_host_visible_before_the_next_frame() -> Result<()> {
     let mut scene = Scene::new();
     let ((artboard, shape, machine, event), _) = scene.edit(|tx| {
         let (artboard, shape, machine, _, event) = create_authored_trigger_machine(tx)?;
@@ -6467,7 +6470,10 @@ fn authored_listener_fire_event_survives_until_the_next_frame_report() -> Result
             .pointer_down(instance, Vec2D::new(0.0, 0.0), 9)
     );
     assert!(scene.frame().pointer_up(instance, Vec2D::new(0.0, 0.0), 9));
-    assert!(scene.frame().advance(instance, 0.0, &mut events));
+    assert!(
+        scene.frame().take_reported_events(instance, &mut events),
+        "C++ ListenerFireEvent reports synchronously, before the next advance"
+    );
     let [
         SceneEvent::Authored {
             event: reported_event,

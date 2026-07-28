@@ -144,6 +144,7 @@ impl StateMachineLayerInstance {
         };
         state.perform_fire_actions(
             StateMachineFireOccurrence::AtStart,
+            artboard,
             executor,
             &mut *targets.reported_events,
         );
@@ -281,6 +282,7 @@ impl StateMachineLayerInstance {
         };
         entry_state.perform_fire_actions(
             StateMachineFireOccurrence::AtStart,
+            artboard,
             executor,
             &mut *targets.reported_events,
         );
@@ -595,6 +597,7 @@ impl StateMachineLayerInstance {
         {
             previous_state.perform_fire_actions(
                 StateMachineFireOccurrence::AtEnd,
+                artboard,
                 executor,
                 &mut *targets.reported_events,
             );
@@ -619,6 +622,7 @@ impl StateMachineLayerInstance {
         if let Some(current_state) = layer.states.get(state_to_index) {
             current_state.perform_fire_actions(
                 StateMachineFireOccurrence::AtStart,
+                artboard,
                 executor,
                 &mut *targets.reported_events,
             );
@@ -643,6 +647,7 @@ impl StateMachineLayerInstance {
             transition.transition_duration_seconds(previous_runtime_animation, duration_override);
         transition.perform_fire_actions(
             StateMachineFireOccurrence::AtStart,
+            artboard,
             executor,
             &mut *targets.reported_events,
         );
@@ -657,6 +662,7 @@ impl StateMachineLayerInstance {
         if transition_duration_seconds == 0.0 {
             transition.perform_fire_actions(
                 StateMachineFireOccurrence::AtEnd,
+                artboard,
                 executor,
                 &mut *targets.reported_events,
             );
@@ -792,6 +798,7 @@ impl StateMachineLayerInstance {
             };
             transition.perform_fire_actions(
                 StateMachineFireOccurrence::AtEnd,
+                artboard,
                 executor,
                 &mut *targets.reported_events,
             );

@@ -25,6 +25,8 @@ use crate::view_model_cell::{
     RuntimeCellDirt, RuntimeCellDirtSink, RuntimeCellNotificationQueue, RuntimeViewModelCell,
     RuntimeViewModelCellValue,
 };
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 /// The bind's target seam. C++ writes `Core*` properties through generated
 /// setters; the Rust migration applies through the instance object arena.
@@ -45,6 +47,86 @@ pub(crate) struct RuntimeRetainedDataBindCollapse {
     pub(crate) requests_dirty_update: bool,
 }
 
+/// Occurrence-local portion of C++ `DataBind` that a child `DataConverter`
+/// may wake through its retained `m_parentDataBind` pointer.
+///
+/// Rust converter bindings are stored beside, rather than inside, the outer
+/// bind. Sharing only this state preserves the exact parent identity without
+/// a self-referential Rust owner. Cloning a DataBind creates a fresh state;
+/// converter clones are explicitly reattached to that fresh occurrence.
+#[derive(Debug)]
+struct RuntimeRetainedDataBindWakeState {
+    source_to_target_runs_first: bool,
+    target_origin: Cell<bool>,
+    suppress_dirt: Cell<bool>,
+    collapsed: Cell<bool>,
+    dirt: Cell<RuntimeCellDirt>,
+    notification: RefCell<Option<(RuntimeCellNotificationQueue, usize)>>,
+}
+
+impl RuntimeRetainedDataBindWakeState {
+    fn new(flags: u64) -> Self {
+        Self {
+            source_to_target_runs_first: data_bind_flags_source_to_target_runs_first(flags),
+            target_origin: Cell::new(false),
+            suppress_dirt: Cell::new(false),
+            collapsed: Cell::new(false),
+            dirt: Cell::new(RuntimeCellDirt::NONE),
+            notification: RefCell::new(None),
+        }
+    }
+
+    fn accepts(&self, dirt: RuntimeCellDirt) -> bool {
+        !self.suppress_dirt.get() && !dirt.is_empty() && !self.dirt.get().contains(dirt)
+    }
+
+    /// C++ `DataBind::addDirt` (`data_bind.cpp:502-546`).
+    fn add_dirt(&self, dirt: RuntimeCellDirt) -> bool {
+        if !self.accepts(dirt) {
+            return false;
+        }
+        let has_source = dirt.contains(RuntimeCellDirt::BINDINGS);
+        let has_target = dirt.contains(RuntimeCellDirt::BINDINGS_TARGET);
+        if has_source && has_target {
+            self.target_origin.set(!self.source_to_target_runs_first);
+        } else if has_target {
+            self.target_origin.set(true);
+        } else if has_source {
+            self.target_origin.set(false);
+        }
+        let mut pending = self.dirt.get();
+        pending.insert(dirt);
+        self.dirt.set(pending);
+        if !self.collapsed.get()
+            && let Some((queue, index)) = self.notification.borrow().as_ref()
+        {
+            queue.report_data_bind(*index);
+        }
+        true
+    }
+
+    fn mark_converter_changed(&self) -> bool {
+        let direction = if self.target_origin.get() {
+            RuntimeCellDirt::BINDINGS_TARGET
+        } else {
+            RuntimeCellDirt::BINDINGS
+        };
+        self.add_dirt(direction)
+    }
+}
+
+/// Cloneable equivalent of C++ `DataConverter::m_parentDataBind`.
+#[derive(Clone, Debug)]
+pub(crate) struct RuntimeConverterParentWake {
+    state: Rc<RuntimeRetainedDataBindWakeState>,
+}
+
+impl RuntimeConverterParentWake {
+    pub(crate) fn mark_converter_changed(&self) -> bool {
+        self.state.mark_converter_changed()
+    }
+}
+
 /// One retained data bind (C++ `DataBind`).
 pub struct RuntimeRetainedDataBind {
     flags: u64,
@@ -63,21 +145,16 @@ pub struct RuntimeRetainedDataBind {
     /// `DataConverterOperationViewModel::bindFromContext` registers the
     /// outer `DataBind*` directly on its operand value
     /// (`data_converter_operation_viewmodel.cpp:48-59`). The distinct sink
-    /// above is only an origin discriminator; both sinks fold into this same
-    /// bind's `ComponentDirt::Bindings` latch and occurrence queue.
+    /// above is only an origin discriminator; both direct sinks fold into this
+    /// same bind's source-origin `ComponentDirt::Bindings` latch.
     additional_sources: Vec<RuntimeViewModelCell>,
-    /// C++ `Flag::TargetOrigin`: which side the latched dirt came from.
-    target_origin: bool,
-    /// C++ `Flag::SuppressDirt`.
-    suppress_dirt: bool,
-    /// C++ `DataBind::Flag::Collapsed`. This is occurrence state rebuilt from
-    /// the clone-owned target Component by `DataBind::initialize`.
-    collapsed: bool,
+    wake_state: Rc<RuntimeRetainedDataBindWakeState>,
+    /// Set only for a DataBind owned by a converter. C++ calls
+    /// `DataConverter::markConverterDirty` before the inner container queues
+    /// this occurrence (`data_converter.cpp:51-55`).
+    container_wake: Option<RuntimeConverterParentWake>,
     /// `DataBind::collapse` exempts displayValue and targets that cannot push.
     collapse_eligible: bool,
-    /// Pending dirt latched from the sink plus reconcile marks
-    /// (C++ `m_Dirt`).
-    dirt: RuntimeCellDirt,
 }
 
 impl std::fmt::Debug for RuntimeRetainedDataBind {
@@ -85,9 +162,9 @@ impl std::fmt::Debug for RuntimeRetainedDataBind {
         f.debug_struct("RuntimeRetainedDataBind")
             .field("flags", &self.flags)
             .field("binds_once", &self.binds_once)
-            .field("target_origin", &self.target_origin)
-            .field("collapsed", &self.collapsed)
-            .field("dirt", &self.dirt)
+            .field("target_origin", &self.wake_state.target_origin.get())
+            .field("collapsed", &self.wake_state.collapsed.get())
+            .field("dirt", &self.wake_state.dirt.get())
             .finish_non_exhaustive()
     }
 }
@@ -105,12 +182,27 @@ impl Clone for RuntimeRetainedDataBind {
             cloned.set_source(source.clone());
         }
         cloned.set_additional_sources(self.additional_sources.clone());
-        cloned.target_origin = self.target_origin;
-        cloned.dirt = self.dirt;
+        cloned
+            .wake_state
+            .target_origin
+            .set(self.wake_state.target_origin.get());
+        cloned.wake_state.dirt.set(self.wake_state.dirt.get());
         cloned.collapse_eligible = self.collapse_eligible;
         cloned.sink.add_dirt(primary_dirt);
         cloned.additional_sink.add_dirt(additional_dirt);
         cloned
+    }
+}
+
+impl Drop for RuntimeRetainedDataBind {
+    fn drop(&mut self) {
+        // Pinned `~DataBind` immediately detaches the occurrence from every
+        // retained source. Rust's weak dirt sinks make a later cascade safe,
+        // but leaving dead weak entries until that later write would not
+        // preserve the C++ teardown boundary (`data_bind.cpp:239-249,
+        // 354-369`; `data_converter_operation_viewmodel.cpp:48-59`).
+        self.unregister_additional_sources();
+        self.unregister_primary_source();
     }
 }
 
@@ -123,11 +215,9 @@ impl RuntimeRetainedDataBind {
             additional_sink: RuntimeCellDirtSink::new(),
             source: None,
             additional_sources: Vec::new(),
-            target_origin: false,
-            suppress_dirt: false,
-            collapsed: false,
+            wake_state: Rc::new(RuntimeRetainedDataBindWakeState::new(flags)),
+            container_wake: None,
             collapse_eligible: false,
-            dirt: RuntimeCellDirt::NONE,
         }
     }
 
@@ -136,22 +226,22 @@ impl RuntimeRetainedDataBind {
     }
 
     pub(crate) fn is_collapsed(&self) -> bool {
-        self.collapsed
+        self.wake_state.collapsed.get()
     }
 
     /// Exact `DataBind::collapse` branch table
     /// (`src/data_bind/data_bind.cpp:595-607`).
     pub(crate) fn collapse(&mut self, collapsed: bool) -> RuntimeRetainedDataBindCollapse {
-        if self.collapsed == collapsed || !self.collapse_eligible {
+        if self.wake_state.collapsed.get() == collapsed || !self.collapse_eligible {
             return RuntimeRetainedDataBindCollapse {
                 changed: false,
                 requests_dirty_update: false,
             };
         }
-        self.collapsed = collapsed;
+        self.wake_state.collapsed.set(collapsed);
         RuntimeRetainedDataBindCollapse {
             changed: true,
-            requests_dirty_update: !collapsed && !self.dirt.is_empty(),
+            requests_dirty_update: !collapsed && !self.wake_state.dirt.get().is_empty(),
         }
     }
 
@@ -234,6 +324,38 @@ impl RuntimeRetainedDataBind {
         }
     }
 
+    pub(crate) fn converter_parent_wake(&self) -> RuntimeConverterParentWake {
+        RuntimeConverterParentWake {
+            state: self.wake_state.clone(),
+        }
+    }
+
+    fn install_container_wake_on_sinks(&self) {
+        let callback = self.container_wake.as_ref().map(|parent| {
+            let parent = parent.clone();
+            let own = self.wake_state.clone();
+            Rc::new(move |dirt: RuntimeCellDirt| {
+                // `DataBind::addDirt` performs its already-dirty/suppressed
+                // guard before `DataConverter::addDirtyDataBind`. Only an
+                // accepted inner change may wake the outer occurrence.
+                if !own.accepts(dirt) {
+                    return false;
+                }
+                parent.mark_converter_changed();
+                own.add_dirt(dirt)
+            }) as Rc<dyn Fn(RuntimeCellDirt) -> bool>
+        });
+        self.sink.set_before_notify(callback.clone());
+        self.additional_sink.set_before_notify(callback);
+    }
+
+    /// Attach this inner bind to the exact outer occurrence retained by its
+    /// C++ `DataConverter::m_parentDataBind`.
+    pub(crate) fn set_container_wake(&mut self, wake: Option<RuntimeConverterParentWake>) {
+        self.container_wake = wake;
+        self.install_container_wake_on_sinks();
+    }
+
     /// C++ `DataBind::source(value)`: retain the cell, register as a
     /// dependent unless the bind binds once.
     pub fn set_source(&mut self, cell: RuntimeViewModelCell) {
@@ -260,15 +382,50 @@ impl RuntimeRetainedDataBind {
         self.unregister_primary_source();
         self.sink = RuntimeCellDirtSink::reporting_data_bind(queue, data_bind_index);
         self.additional_sink = RuntimeCellDirtSink::reporting_data_bind(queue, data_bind_index);
+        *self.wake_state.notification.borrow_mut() = Some((queue.clone(), data_bind_index));
+        self.install_container_wake_on_sinks();
         self.register_primary_source();
         self.register_additional_sources();
+        let mut must_report = !self.wake_state.dirt.get().is_empty();
         if !primary_dirt.is_empty() {
             self.sink.add_dirt(primary_dirt);
-            queue.report_data_bind(data_bind_index);
+            must_report = true;
         }
         if !additional_dirt.is_empty() {
             self.additional_sink.add_dirt(additional_dirt);
+            must_report = true;
+        }
+        if must_report {
             queue.report_data_bind(data_bind_index);
+        }
+    }
+
+    /// Detach this occurrence from its container without dropping its
+    /// retained source/value. Used by deferred DataBindContainer removal;
+    /// source dirt raised after removal must not resurrect the old slot.
+    pub(crate) fn clear_notification_queue(&mut self) {
+        self.unregister_additional_sources();
+        self.unregister_primary_source();
+        self.sink = RuntimeCellDirtSink::new();
+        self.additional_sink = RuntimeCellDirtSink::new();
+        *self.wake_state.notification.borrow_mut() = None;
+        self.install_container_wake_on_sinks();
+        self.register_primary_source();
+        self.register_additional_sources();
+    }
+
+    /// Recreate this occurrence's C++ direction engine while preserving its
+    /// container/queue identity. DataContext rebinding replaces the retained
+    /// source and dirt, not the `DataBind*` owned by the container.
+    pub(crate) fn reset_preserving_notification(&mut self) {
+        let notification = self.wake_state.notification.borrow().clone();
+        let container_wake = self.container_wake.clone();
+        let flags = self.flags;
+        let binds_once = self.binds_once;
+        *self = Self::new(flags, binds_once);
+        self.set_container_wake(container_wake);
+        if let Some((queue, index)) = notification {
+            self.report_source_dirt_to(&queue, index);
         }
     }
 
@@ -330,23 +487,43 @@ impl RuntimeRetainedDataBind {
         self.add_dirt(RuntimeCellDirt::BINDINGS);
     }
 
+    /// Requeue an unvisited converter-owned bind after an update error.
+    ///
+    /// The active container snapshot has already removed this occurrence, so
+    /// even already-latched dirt must re-enter both the outer parent and inner
+    /// queues in C++ parent-first order.
+    pub(crate) fn requeue_source_dirt(&mut self) {
+        if self.wake_state.accepts(RuntimeCellDirt::BINDINGS) {
+            self.add_dirt(RuntimeCellDirt::BINDINGS);
+            return;
+        }
+        if let Some(parent) = self.container_wake.as_ref() {
+            parent.mark_converter_changed();
+        }
+        if !self.wake_state.collapsed.get()
+            && let Some((queue, index)) = self.wake_state.notification.borrow().as_ref()
+        {
+            queue.report_data_bind(*index);
+        }
+    }
+
+    /// C++ `DataConverter::markConverterDirty`: keep the direction already
+    /// latched on the parent DataBind and ensure that occurrence is scheduled.
+    pub(crate) fn mark_converter_changed(&mut self) {
+        self.wake_state.mark_converter_changed();
+    }
+
     /// C++ `DataBind::addDirt` with the origin latch: a reconcile (both
     /// bits) resolves the origin by favored direction; a one-sided change
     /// records its own side. Suppressed applies never re-dirty.
     fn add_dirt(&mut self, dirt: RuntimeCellDirt) {
-        if self.suppress_dirt || dirt.is_empty() || self.dirt.contains(dirt) {
+        if !self.wake_state.accepts(dirt) {
             return;
         }
-        let has_source = dirt.contains(RuntimeCellDirt::BINDINGS);
-        let has_target = dirt.contains(RuntimeCellDirt::BINDINGS_TARGET);
-        if has_source && has_target {
-            self.target_origin = !self.source_to_target_runs_first();
-        } else if has_target {
-            self.target_origin = true;
-        } else if has_source {
-            self.target_origin = false;
+        if let Some(parent) = self.container_wake.as_ref() {
+            parent.mark_converter_changed();
         }
-        self.dirt.insert(dirt);
+        self.wake_state.add_dirt(dirt);
     }
 
     /// Fold sink dirt (cell cascades) into the latched dirt with the same
@@ -390,11 +567,14 @@ impl RuntimeRetainedDataBind {
         if !primary && !additional {
             return None;
         }
-        self.dirt = if self.dirt.contains(RuntimeCellDirt::BINDINGS_TARGET) {
-            RuntimeCellDirt::BINDINGS_TARGET
-        } else {
-            RuntimeCellDirt::NONE
-        };
+        let dirt = self.wake_state.dirt.get();
+        self.wake_state
+            .dirt
+            .set(if dirt.contains(RuntimeCellDirt::BINDINGS_TARGET) {
+                RuntimeCellDirt::BINDINGS_TARGET
+            } else {
+                RuntimeCellDirt::NONE
+            });
         Some(primary)
     }
 
@@ -402,14 +582,17 @@ impl RuntimeRetainedDataBind {
     /// the authored-bind scheduler counterpart to [`Self::take_source_dirt`]
     /// and preserves any simultaneously pending source reconcile bit.
     pub(crate) fn take_target_dirt(&mut self) -> bool {
-        if !self.dirt.contains(RuntimeCellDirt::BINDINGS_TARGET) {
+        let dirt = self.wake_state.dirt.get();
+        if !dirt.contains(RuntimeCellDirt::BINDINGS_TARGET) {
             return false;
         }
-        self.dirt = if self.dirt.contains(RuntimeCellDirt::BINDINGS) {
-            RuntimeCellDirt::BINDINGS
-        } else {
-            RuntimeCellDirt::NONE
-        };
+        self.wake_state
+            .dirt
+            .set(if dirt.contains(RuntimeCellDirt::BINDINGS) {
+                RuntimeCellDirt::BINDINGS
+            } else {
+                RuntimeCellDirt::NONE
+            });
         true
     }
 
@@ -418,36 +601,42 @@ impl RuntimeRetainedDataBind {
     /// later notification can latch a fresh origin (`data_bind_container.cpp:
     /// 144-147`, `data_bind.cpp:502-531`).
     pub(crate) fn take_pending_source_dirt(&mut self) -> bool {
-        if !self.dirt.contains(RuntimeCellDirt::BINDINGS) {
+        let dirt = self.wake_state.dirt.get();
+        if !dirt.contains(RuntimeCellDirt::BINDINGS) {
             return false;
         }
-        self.dirt = if self.dirt.contains(RuntimeCellDirt::BINDINGS_TARGET) {
-            RuntimeCellDirt::BINDINGS_TARGET
-        } else {
-            RuntimeCellDirt::NONE
-        };
+        self.wake_state
+            .dirt
+            .set(if dirt.contains(RuntimeCellDirt::BINDINGS_TARGET) {
+                RuntimeCellDirt::BINDINGS_TARGET
+            } else {
+                RuntimeCellDirt::NONE
+            });
         true
     }
 
     pub fn pending_dirt(&self) -> RuntimeCellDirt {
-        self.dirt
+        self.wake_state.dirt.get()
     }
 
     pub fn target_origin(&self) -> bool {
-        self.target_origin
+        self.wake_state.target_origin.get()
     }
 
     /// C++ `DataBind::update(ComponentDirt::Bindings)`: apply source→target
     /// under dirt, self-notification suppressed. Consumes the source bit.
     pub fn update(&mut self, target: &mut dyn RuntimeDataBindTarget) -> bool {
-        if !self.dirt.contains(RuntimeCellDirt::BINDINGS) {
+        let dirt = self.wake_state.dirt.get();
+        if !dirt.contains(RuntimeCellDirt::BINDINGS) {
             return false;
         }
-        self.dirt = if self.dirt.contains(RuntimeCellDirt::BINDINGS_TARGET) {
-            RuntimeCellDirt::BINDINGS_TARGET
-        } else {
-            RuntimeCellDirt::NONE
-        };
+        self.wake_state
+            .dirt
+            .set(if dirt.contains(RuntimeCellDirt::BINDINGS_TARGET) {
+                RuntimeCellDirt::BINDINGS_TARGET
+            } else {
+                RuntimeCellDirt::NONE
+            });
         let Some(source) = self.source.as_ref() else {
             return false;
         };
@@ -455,9 +644,9 @@ impl RuntimeRetainedDataBind {
             return false;
         }
         let value = source.value();
-        self.suppress_dirt = true;
+        self.wake_state.suppress_dirt.set(true);
         target.apply_to_target(&value);
-        self.suppress_dirt = false;
+        self.wake_state.suppress_dirt.set(false);
         true
     }
 
@@ -469,20 +658,46 @@ impl RuntimeRetainedDataBind {
         if !self.to_source() {
             return false;
         }
-        self.dirt = if self.dirt.contains(RuntimeCellDirt::BINDINGS) {
-            RuntimeCellDirt::BINDINGS
-        } else {
-            RuntimeCellDirt::NONE
-        };
-        let Some(source) = self.source.as_ref() else {
-            return false;
-        };
         let Some(value) = target.read_target() else {
             return false;
         };
+        self.update_source_binding_value(value)
+    }
+
+    /// `DataBind::updateSourceBinding()` after a focused owner has read and,
+    /// when necessary, reverse-converted its concrete target value.
+    ///
+    /// ScriptInput targets cannot implement the generic Core target adapter
+    /// because their value may need a scripted converter before it reaches the
+    /// retained ViewModel cell. Keep the direction/dirt/self-notification
+    /// mechanics here so both owners still share the exact C++ behavior.
+    pub(crate) fn update_source_binding_value(&mut self, value: RuntimeViewModelCellValue) -> bool {
+        if !self.to_source() {
+            return false;
+        }
+        let dirt = self.wake_state.dirt.get();
+        self.wake_state
+            .dirt
+            .set(if dirt.contains(RuntimeCellDirt::BINDINGS) {
+                RuntimeCellDirt::BINDINGS
+            } else {
+                RuntimeCellDirt::NONE
+            });
+        let Some(source) = self.source.as_ref() else {
+            return false;
+        };
+        // C++ raises `SuppressDirt` around ContextValue::applyToSource, so the
+        // writer never enters its container queue while sibling dependents
+        // still observe the shared source write (`context_value.hpp:81-99`;
+        // `data_bind.cpp:502-507`). The primary and converter-operand sinks
+        // share that occurrence-local guard; other DataBinds remain live.
+        self.sink.suppress_dirt(true);
+        self.additional_sink.suppress_dirt(true);
+        self.wake_state.suppress_dirt.set(true);
         let changed = source.set_value(value);
-        // The cell cascade dirtied our own sink too; swallow the echo.
-        self.sink.take_dirt();
+        self.wake_state.suppress_dirt.set(false);
+        self.sink.suppress_dirt(false);
+        self.additional_sink.suppress_dirt(false);
         changed
     }
 
@@ -529,6 +744,21 @@ mod tests {
 
         fn read_target(&mut self) -> Option<RuntimeViewModelCellValue> {
             Some(self.value.clone())
+        }
+    }
+
+    struct ReentrantSourceTarget {
+        source: RuntimeViewModelCell,
+        replacement: RuntimeViewModelCellValue,
+    }
+
+    impl RuntimeDataBindTarget for ReentrantSourceTarget {
+        fn apply_to_target(&mut self, _value: &RuntimeViewModelCellValue) {
+            self.source.set_value(self.replacement.clone());
+        }
+
+        fn read_target(&mut self) -> Option<RuntimeViewModelCellValue> {
+            None
         }
     }
 
@@ -608,6 +838,30 @@ mod tests {
     }
 
     #[test]
+    fn drop_immediately_unregisters_primary_and_converter_sources() {
+        let primary = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        let operand = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(2.0));
+        {
+            let mut bind = RuntimeRetainedDataBind::new(TO_TARGET, false);
+            bind.set_source(primary.clone());
+            bind.set_additional_sources(vec![operand.clone()]);
+            assert_eq!(primary.dependent_count(), 1);
+            assert_eq!(operand.dependent_count(), 1);
+        }
+
+        assert_eq!(
+            primary.dependent_count(),
+            0,
+            "C++ ~DataBind removes its primary source edge during owner teardown"
+        );
+        assert_eq!(
+            operand.dependent_count(),
+            0,
+            "converter-owned source edges are removed at the same teardown boundary"
+        );
+    }
+
+    #[test]
     fn target_to_source_write_reaches_sibling_binds_without_echo() {
         let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
         let mut writer = RuntimeRetainedDataBind::new(TO_SOURCE, false);
@@ -628,6 +882,32 @@ mod tests {
         assert!(
             !writer.pending_dirt().contains(RuntimeCellDirt::BINDINGS),
             "own write echo is swallowed (C++ suppressDirt)"
+        );
+    }
+
+    #[test]
+    fn target_to_source_write_queues_only_sibling_occurrences() {
+        let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        let queue = RuntimeCellNotificationQueue::default();
+        let mut writer = RuntimeRetainedDataBind::new(TO_SOURCE, false);
+        let mut reader = RuntimeRetainedDataBind::new(TO_TARGET, false);
+        writer.set_source(cell.clone());
+        reader.set_source(cell);
+        writer.report_source_dirt_to(&queue, 0);
+        reader.report_source_dirt_to(&queue, 1);
+
+        writer.mark_target_changed();
+        let mut reporting = Vec::new();
+        queue.swap_into(&mut reporting);
+        assert_eq!(reporting, vec![0]);
+
+        let mut writer_target = FakeTarget::number(42.0);
+        assert!(writer.update_source_binding(&mut writer_target));
+        queue.swap_into(&mut reporting);
+        assert_eq!(
+            reporting,
+            vec![1],
+            "C++ SuppressDirt prevents the writer's phantom queue entry while preserving its sibling observer"
         );
     }
 
@@ -759,6 +1039,166 @@ mod tests {
         assert!(
             !bind.target_origin(),
             "after processed dirt is cleared, a genuine source notification latches source origin"
+        );
+    }
+
+    #[test]
+    fn converter_owned_source_reasserts_the_settled_parent_origin() {
+        let converter_source = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        let mut target_origin = RuntimeRetainedDataBind::new(TWO_WAY, false);
+        target_origin.mark_rebind_reconcile();
+        assert!(target_origin.take_target_dirt());
+        assert!(target_origin.take_pending_source_dirt());
+        assert!(target_origin.target_origin());
+        let mut inner = RuntimeRetainedDataBind::new(TO_TARGET, false);
+        inner.set_container_wake(Some(target_origin.converter_parent_wake()));
+        inner.set_source(converter_source.clone());
+
+        assert!(converter_source.set_value(RuntimeViewModelCellValue::Number(2.0)));
+        assert!(
+            inner.collect_source_dirt(),
+            "the source dirt belongs to the converter-owned inner DataBind"
+        );
+        assert!(
+            target_origin.target_origin(),
+            "DataConverter::markConverterDirty preserves the outer TargetOrigin flag"
+        );
+        assert!(
+            target_origin
+                .pending_dirt()
+                .contains(RuntimeCellDirt::BINDINGS_TARGET)
+        );
+        assert!(
+            !target_origin
+                .pending_dirt()
+                .contains(RuntimeCellDirt::BINDINGS)
+        );
+
+        let source = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(3.0));
+        let mut source_origin = RuntimeRetainedDataBind::new(
+            TWO_WAY | DATA_BIND_FLAG_SOURCE_TO_TARGET_RUNS_FIRST,
+            false,
+        );
+        source_origin.mark_rebind_reconcile();
+        assert!(source_origin.take_pending_source_dirt());
+        assert!(source_origin.take_target_dirt());
+        assert!(!source_origin.target_origin());
+        let mut source_inner = RuntimeRetainedDataBind::new(TO_TARGET, false);
+        source_inner.set_container_wake(Some(source_origin.converter_parent_wake()));
+        source_inner.set_source(source.clone());
+
+        assert!(source.set_value(RuntimeViewModelCellValue::Number(4.0)));
+        assert!(source_inner.collect_source_dirt());
+        assert!(!source_origin.target_origin());
+        assert!(
+            source_origin
+                .pending_dirt()
+                .contains(RuntimeCellDirt::BINDINGS)
+        );
+        assert!(
+            !source_origin
+                .pending_dirt()
+                .contains(RuntimeCellDirt::BINDINGS_TARGET)
+        );
+    }
+
+    #[test]
+    fn direct_converter_operand_remains_a_source_origin_control() {
+        let operand = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        let mut bind = RuntimeRetainedDataBind::new(TWO_WAY, false);
+        bind.mark_rebind_reconcile();
+        assert!(bind.take_target_dirt());
+        assert!(bind.take_pending_source_dirt());
+        assert!(bind.target_origin());
+        bind.set_additional_sources(vec![operand.clone()]);
+
+        assert!(operand.set_value(RuntimeViewModelCellValue::Number(2.0)));
+        assert!(bind.collect_source_dirt());
+        assert!(
+            !bind.target_origin(),
+            "OperationViewModel registers the outer DataBind directly, so its operand is a new source-origin notification"
+        );
+        assert!(bind.pending_dirt().contains(RuntimeCellDirt::BINDINGS));
+    }
+
+    #[test]
+    fn converter_wake_reports_the_exact_idle_parent_occurrence() {
+        let queue = RuntimeCellNotificationQueue::default();
+        let mut bind = RuntimeRetainedDataBind::new(TWO_WAY, false);
+        bind.report_source_dirt_to(&queue, 7);
+        bind.mark_rebind_reconcile();
+        let mut reported = Vec::new();
+        queue.swap_into(&mut reported);
+        assert_eq!(reported, vec![7]);
+        assert!(bind.take_target_dirt());
+        assert!(bind.take_pending_source_dirt());
+
+        bind.converter_parent_wake().mark_converter_changed();
+        queue.swap_into(&mut reported);
+        assert_eq!(reported, vec![7]);
+        assert!(bind.target_origin());
+        assert!(
+            bind.pending_dirt()
+                .contains(RuntimeCellDirt::BINDINGS_TARGET)
+        );
+    }
+
+    #[test]
+    fn converter_owned_source_rejects_reentrant_dirt_while_applying() {
+        let source = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        let outer = RuntimeRetainedDataBind::new(TO_TARGET, false);
+        let mut inner = RuntimeRetainedDataBind::new(TO_TARGET, false);
+        inner.set_container_wake(Some(outer.converter_parent_wake()));
+        inner.set_source(source.clone());
+        inner.wake_state.dirt.set(RuntimeCellDirt::BINDINGS);
+
+        let mut target = ReentrantSourceTarget {
+            source,
+            replacement: RuntimeViewModelCellValue::Number(2.0),
+        };
+        assert!(inner.update(&mut target));
+        assert!(
+            !inner.collect_source_dirt(),
+            "DataBind::SuppressDirt rejects the reentrant source cascade instead of retaining it in the sink"
+        );
+        assert!(inner.pending_dirt().is_empty());
+        assert!(
+            outer.pending_dirt().is_empty(),
+            "a rejected inner DataBind cascade cannot wake its parent converter occurrence"
+        );
+    }
+
+    #[test]
+    fn converter_owned_source_coalesces_while_inner_dirt_is_pending() {
+        let source = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        let queue = RuntimeCellNotificationQueue::default();
+        let mut outer = RuntimeRetainedDataBind::new(TO_TARGET, false);
+        outer.report_source_dirt_to(&queue, 0);
+        let mut inner = RuntimeRetainedDataBind::new(TO_TARGET, false);
+        inner.set_container_wake(Some(outer.converter_parent_wake()));
+        inner.report_source_dirt_to(&queue, 1);
+        inner.set_source(source.clone());
+
+        assert!(source.set_value(RuntimeViewModelCellValue::Number(2.0)));
+        let mut reported = Vec::new();
+        queue.swap_into(&mut reported);
+        assert_eq!(
+            reported,
+            vec![0, 1],
+            "C++ wakes the parent DataBind before the inner converter-owned DataBind"
+        );
+        assert!(inner.collect_source_dirt());
+        assert!(inner.pending_dirt().contains(RuntimeCellDirt::BINDINGS));
+
+        assert!(source.set_value(RuntimeViewModelCellValue::Number(3.0)));
+        queue.swap_into(&mut reported);
+        assert!(
+            reported.is_empty(),
+            "DataBind::addDirt rejects a duplicate while the same bit is pending"
+        );
+        assert!(
+            !inner.collect_source_dirt(),
+            "the rejected duplicate is not retained in the source sink for a later redundant pass"
         );
     }
 

@@ -1,20 +1,38 @@
 mod animation;
 mod artboard;
+mod artboard_component_list_order;
 mod artboard_data_bind;
 mod components;
 mod constraints;
+mod data_bind_container;
 mod data_bind_graph;
+mod data_converter;
+mod data_converter_trigger;
 mod draw;
 mod focus;
 mod math;
+mod nested_bool;
+mod nested_number;
+mod nested_trigger;
 mod objects;
 mod parent_traversal;
 mod project_data_converter;
 mod properties;
 mod rectangles_to_contour;
+mod script_asset;
+mod script_input_artboard;
+mod script_input_boolean;
+mod script_input_color;
+mod script_input_number;
+mod script_input_string;
+mod script_input_trigger;
+mod script_input_viewmodel_property;
+mod scripted_data_converter;
+mod scripted_object;
 mod scripting;
 mod state_machine;
 mod text;
+mod text_input;
 mod view_model;
 // #RB-1: retained-identity view-model core (map Phase RB). Additive while
 // consumers migrate; the compensation family deletes when migration ends.
@@ -70,23 +88,41 @@ pub use project_data_converter::{
     ProjectDataConverterValidationRule, ProjectDataValue, ProjectDataValuePath,
     ProjectDataViewModelReference,
 };
+#[doc(hidden)]
+pub use script_asset::scripted_object_inits;
+pub use script_input_viewmodel_property::{
+    ScriptInputViewModelPropertyPath, bound_script_view_model_from_owned_context,
+    bound_script_view_model_from_owned_path, bound_script_view_model_snapshot,
+    bound_script_view_model_snapshot_from_path,
+};
+#[doc(hidden)]
+pub use scripted_data_converter::{
+    RuntimeScriptedDataConverterDataBindSnapshot, RuntimeScriptedDataConverterOccurrenceSnapshot,
+};
 pub use scripting::{
     NoopScriptHost, ScriptAnimation, ScriptAnimationTime, ScriptArtboard,
-    ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptImage, ScriptInstance,
-    ScriptListenerActionDefinition, ScriptListenerActionHydration, ScriptListenerActionMethod,
-    ScriptListenerInputDefinition, ScriptListenerInputHydration, ScriptListenerInputKind,
-    ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptNode, ScriptPaint, ScriptValue,
-    ScriptViewModel, ScriptViewModelProperty, ScriptingVm, bound_script_artboard_input,
-    bound_script_input_value, bound_script_trigger_input,
-    bound_script_view_model_from_owned_context, bound_script_view_model_snapshot,
-    script_node_for_artboard, script_view_model_from_owned, script_view_model_from_owned_snapshot,
-    script_view_models,
+    ScriptArtboardDataContext, ScriptArtboardParentContext, ScriptArtboardResolver,
+    ScriptCoreString, ScriptDataConverterMethod, ScriptDataConverterOptionalCall, ScriptError,
+    ScriptHost, ScriptImage, ScriptInstance, ScriptListenerActionDefinition,
+    ScriptListenerActionHydration, ScriptListenerActionMethod, ScriptListenerInputDefinition,
+    ScriptListenerInputHydration, ScriptListenerInputKind, ScriptListenerInputSnapshot,
+    ScriptListenerInputSnapshotValue, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptNode,
+    ScriptPaint, ScriptValue, ScriptViewModel, ScriptViewModelInputResolver,
+    ScriptViewModelProperty, ScriptedDrawableInputResult, ScriptedStateMachineObjectKind,
+    ScriptingVm, bound_script_artboard_input, bound_script_input_value, bound_script_trigger_input,
+    script_node_for_artboard, script_view_model_from_owned, script_view_model_from_owned_context,
+    script_view_model_from_owned_snapshot, script_view_models,
 };
+#[doc(hidden)]
+pub use state_machine::RuntimeFileStateMachineActionCatalog;
 pub use state_machine::{
-    RuntimeLayerState, RuntimeNestedStateMachineReport, RuntimeStateMachine,
-    RuntimeStateMachineInput, RuntimeStateMachineLayer, ScriptListenerInvocation,
-    ScriptPointerEventKind, StateMachineEventContext, StateMachineInputInstance,
-    StateMachineInputKind, StateMachineInstance, StateMachineReportedEvent,
+    RuntimeLayerState, RuntimeNestedStateMachineReport,
+    RuntimeScriptedListenerDataConverterBindStep, RuntimeStateMachine,
+    RuntimeStateMachineDataConverterBindStep, RuntimeStateMachineInput, RuntimeStateMachineLayer,
+    ScriptGamepadInputChange, ScriptGamepadMappingKind, ScriptGamepadSnapshot,
+    ScriptListenerInvocation, ScriptPointerEventKind, StateMachineEventContext,
+    StateMachineEventStringProperty, StateMachineInputInstance, StateMachineInputKind,
+    StateMachineInstance, StateMachineReportedEvent,
 };
 pub(crate) use state_machine::{
     RuntimeTransitionInterpolator, StateMachineBindableArtboardInstance,

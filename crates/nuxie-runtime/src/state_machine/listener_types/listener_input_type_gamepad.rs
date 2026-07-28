@@ -35,6 +35,14 @@ impl RuntimeListenerInputTypeGamepad {
         self.gamepad_inputs.get(index)
     }
 
+    #[cfg(test)]
+    pub(in crate::state_machine) fn catch_all_for_test(global_id: u32) -> Self {
+        Self {
+            global_id,
+            gamepad_inputs: Vec::new(),
+        }
+    }
+
     pub(crate) fn constraints_met(input_types: &[Self], event: RuntimeGamepadInputEvent) -> bool {
         for input_type in input_types {
             if input_type.gamepad_inputs.is_empty() {

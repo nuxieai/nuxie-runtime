@@ -9,11 +9,13 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import tomllib
 import unittest
 
 
 TOOL = pathlib.Path(__file__).with_name("check.py")
 TOOL_DIR = pathlib.Path(__file__).resolve().parent
+PRODUCTION_GAPS = TOOL_DIR.parents[1] / "docs/runtime-frame-loop-gaps.toml"
 if str(TOOL_DIR) not in sys.path:
     sys.path.insert(0, str(TOOL_DIR))
 
@@ -229,6 +231,69 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         if closed:
             command.append("--require-closed")
         return subprocess.run(command, text=True, capture_output=True, check=False)
+
+    def install_production_ratchet(self, ratchet_id: str) -> dict[str, object]:
+        with PRODUCTION_GAPS.open("rb") as source:
+            production = tomllib.load(source)
+        rows = [
+            row
+            for row in production.get("ratchet", [])
+            if row.get("id") == ratchet_id
+        ]
+        self.assertEqual(len(rows), 1, ratchet_id)
+        row = rows[0]
+        gaps = self.gaps.read_text()
+        self.assertIn("ratchet = []", gaps)
+        block = textwrap.dedent(
+            f"""
+            [[ratchet]]
+            id = {json.dumps(row["id"])}
+            globs = {json.dumps(row["globs"])}
+            pattern = {json.dumps(row["pattern"])}
+            max_occurrences = {row["max_occurrences"]}
+            """
+        ).strip()
+        self.gaps.write_text(gaps.replace("ratchet = []", block))
+        return row
+
+    def assert_production_ratchet_case(
+        self,
+        ratchet_id: str,
+        relative_source: str,
+        forbidden_source: str,
+        safe_source: str,
+    ) -> None:
+        base_gaps = self.gaps.read_text()
+        row = self.install_production_ratchet(ratchet_id)
+        relative_path = pathlib.PurePosixPath(relative_source)
+        self.assertTrue(
+            any(
+                relative_source == glob
+                or relative_path.match(glob)
+                or (
+                    "/**/" in glob
+                    and relative_path.match(glob.replace("/**/", "/"))
+                )
+                for glob in row["globs"]
+            ),
+            f"{relative_source} is outside {row['globs']}",
+        )
+        source = self.repo / relative_source
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text(forbidden_source)
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            f"ratchet {ratchet_id} increased to 1 > 0",
+            result.stderr,
+        )
+
+        self.gaps.write_text(base_gaps)
+        self.install_production_ratchet(ratchet_id)
+        source.write_text(safe_source)
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.gaps.write_text(base_gaps)
 
     def test_open_atlas_passes_and_reports_counts(self) -> None:
         result = self.run_check()
@@ -740,6 +805,30 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     result.stderr,
                 )
 
+    def test_duplicate_ratchet_ids_are_rejected(self) -> None:
+        base_gaps = self.gaps.read_text()
+        duplicate_rows = textwrap.dedent(
+            """
+            [[ratchet]]
+            id = "duplicate"
+            globs = ["crates/runtime/src/animation.rs"]
+            pattern = "first"
+            max_occurrences = 0
+
+            [[ratchet]]
+            id = "duplicate"
+            globs = ["crates/runtime/src/animation.rs"]
+            pattern = "second"
+            max_occurrences = 0
+            """
+        ).strip()
+        self.gaps.write_text(base_gaps.replace("ratchet = []", duplicate_rows))
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("duplicate ratchet ids: duplicate", result.stderr)
+
     def test_fl_c3_negative_ratchets_reject_displaced_layer_occurrence_shapes(self) -> None:
         cases = [
             (
@@ -1027,6 +1116,681 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(
                     f"ratchet {ratchet_id} increased to 1 > 0",
+                    result.stderr,
+                )
+
+    def test_fl_c4_live_ratchets_reject_forbidden_and_stop_at_function_boundaries(
+        self,
+    ) -> None:
+        cases = [
+            (
+                "listener_input_direct_before_nested",
+                "crates/nuxie-runtime/src/state_machine/listener_bool_change.rs",
+                "impl X {\n    pub(crate) fn perform(&self) {\n        let _ = target.direct_input_index;\n        let _ = target.nested_input_local_id;\n    }\n    fn next(&self) {}\n}\n",
+                "impl X {\n    pub(crate) fn perform(&self) {\n        let _ = target.nested_input_local_id;\n        let _ = target.direct_input_index;\n    }\n    pub(crate) fn next(&self) {\n        let _ = target.nested_input_local_id;\n    }\n}\n",
+            ),
+            (
+                "script_input_artboard_live_source_overwrites_generated_id",
+                "crates/nuxie-runtime/src/scripted_object.rs",
+                "impl X {\n    pub(crate) fn apply_artboard_source(&mut self, id: u64) {\n        self.value = Some(id);\n    }\n    pub(crate) fn next(&self) {}\n}\n",
+                "impl X {\n    pub(crate) fn apply_artboard_source(&mut self) {\n        self.artboard = None;\n    }\n    pub(crate) fn update_generated(&mut self) {\n        self.value = None;\n    }\n}\n",
+            ),
+            (
+                "script_input_artboard_projection_reads_generated_id",
+                "crates/nuxie-runtime/src/scripted_object.rs",
+                "impl X {\n    pub(crate) fn projection_value(&self, kind: ScriptListenerInputKind) {\n        if kind == ScriptListenerInputKind::Artboard {\n            return self.value.clone();\n        }\n        None\n    }\n    pub(crate) fn next(&self) {}\n}\n",
+                "impl X {\n    pub(crate) fn projection_value(&self, kind: ScriptListenerInputKind) {\n        if kind == ScriptListenerInputKind::Artboard {\n            return self.artboard.value();\n        }\n        self.value.clone()\n    }\n    pub(crate) fn next(&self) {}\n}\n",
+            ),
+            (
+                "script_input_artboard_clone_blindly_copies_reference_state",
+                "crates/nuxie-runtime/src/scripted_object.rs",
+                "impl X {\n    pub(crate) fn clone_for_scripted_object(&self) -> Self {\n        Self { artboard: self.artboard.clone() }\n    }\n    pub(crate) fn next(&self) {}\n}\n",
+                "impl X {\n    pub(crate) fn clone_for_scripted_object(&self) -> Self {\n        Self { artboard: self.artboard.clone_for_scripted_object() }\n    }\n    pub(crate) fn next(&self) {\n        let _ = self.artboard.clone();\n    }\n}\n",
+            ),
+            (
+                "script_input_artboard_fresh_clone_uses_derived_state",
+                "crates/nuxie-runtime/src/state_machine/scripted_listener_action.rs",
+                "impl X {\n    fn from_definition(definition: &D) -> Self {\n        Self { properties: definition.properties.clone() }\n    }\n    fn next(&self) {}\n}\n",
+                "impl X {\n    fn from_definition(definition: &D) -> Self {\n        Self { properties: definition.properties.clone_for_scripted_object() }\n    }\n    fn next(input: &D) {\n        let _ = input.properties.clone();\n    }\n}\n",
+            ),
+            (
+                "data_converter_group_forward_output_type_walk",
+                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                "impl C {\n    pub(crate) fn cpp_output_data_type(&self) -> T {\n        match self {\n            Self::Group(converters) => converters.iter().find(ok).unwrap(),\n            _ => T::None,\n        }\n    }\n    fn next(&self) {}\n}\n",
+                "impl C {\n    pub(crate) fn cpp_output_data_type(&self) -> T {\n        match self {\n            Self::Group(converters) => converters.iter().rev().find(ok).unwrap(),\n            _ => T::None,\n        }\n    }\n    fn next(&self) {\n        if let Self::Group(converters) = self { let _ = converters.iter(); }\n    }\n}\n",
+            ),
+            (
+                "data_converter_group_output_capability_union",
+                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                "impl C {\n    pub(crate) fn can_change_output_kind(&self) -> bool {\n        match self {\n            Self::Group(converters) => converters.iter().any(Self::can_change_output_kind),\n            _ => false,\n        }\n    }\n    fn next(&self) {}\n}\n",
+                "impl C {\n    pub(crate) fn can_change_output_kind(&self) -> bool {\n        self.cpp_output_kind() == Kind::Deferred\n    }\n    pub(crate) fn next(&self) {\n        if let Self::Group(converters) = self { let _ = converters.iter().any(ok); }\n    }\n}\n",
+            ),
+            (
+                "scripted_object_partial_hydration_during_validation",
+                "crates/nuxie/src/lib.rs",
+                "fn prepare_script_listener_hydrations(definitions: &[D], instance: &mut I) {\n    for definition in definitions {\n        instance.set_input_core(name, value);\n    }\n}\nfn next() {}\n",
+                "fn prepare_script_listener_hydrations(definitions: &[D]) {\n    let _ = definitions.iter().collect::<Vec<_>>();\n}\nfn hydrate(instance: &mut I) {\n    instance.set_input_core(name, value);\n}\n",
+            ),
+            (
+                "scripted_object_split_hydration_entrypoint",
+                "crates/nuxie-runtime/src/state_machine/instance.rs",
+                "impl X {\n    pub fn hydrate_scripted_listener_action_instance(&mut self) {}\n    pub fn next(&self) {}\n}\n",
+                "impl X {\n    pub fn hydrate_and_initialize_scripted_listener_action_instance(&mut self) {}\n    pub fn next(&self) {}\n}\n",
+            ),
+            (
+                "scripted_object_batch_hydration_collection",
+                "crates/nuxie/src/lib.rs",
+                "fn prepare_script_listener_data_converter_hydrations() -> Vec<Hydration> {\n    Vec::new()\n}\nfn next() {}\n",
+                "fn prepare_script_listener_data_converter_hydration() -> Hydration {\n    Hydration\n}\nfn next() {}\n",
+            ),
+            (
+                "scripted_object_mutable_hydration_preflight",
+                "crates/nuxie-runtime/src/state_machine/instance.rs",
+                "impl X {\n    pub fn hydrate_and_initialize_scripted_listener_action_instance<F>(&mut self, prepare: F)\n    where\n        F: FnOnce(&mut Self),\n    {\n        prepare(self);\n    }\n    pub fn next(&self) {}\n}\n",
+                "impl X {\n    pub fn hydrate_and_initialize_scripted_listener_action_instance<F>(&mut self, prepare: F)\n    where\n        F: FnOnce(&Self),\n    {\n        prepare(self);\n    }\n    pub fn next(&self) {}\n}\n",
+            ),
+            (
+                "scripted_object_live_context_barrier_runs_init",
+                "crates/nuxie/src/lib.rs",
+                "fn install_live_scripted_object_contexts() {\n    machine.install_scripted_object_data_context(id, &context);\n    machine.hydrate_and_initialize_scripted_object_instance(id);\n}\nfn next() {}\n",
+                "fn install_live_scripted_object_contexts() {\n    machine.install_scripted_object_data_context(id, &context);\n}\nfn next() {\n    machine.hydrate_and_initialize_scripted_object_instance(id);\n}\n",
+            ),
+            (
+                "scripted_object_instance_map_drops_before_cloned_binds",
+                "crates/nuxie-runtime/src/state_machine/instance.rs",
+                "pub struct StateMachineInstance {\n    scripted_instances_by_global: BTreeMap<u32, Handle>,\n    focus: Focus,\n    scripted_object_bindings: Vec<Binding>,\n}\n",
+                "pub struct StateMachineInstance {\n    scripted_object_bindings: Vec<Binding>,\n    scripted_instances_by_global: BTreeMap<u32, Handle>,\n}\n",
+            ),
+            (
+                "scripted_converter_unstable_authored_order",
+                "crates/nuxie-runtime/src/scripted_data_converter.rs",
+                "impl X {\n    pub(crate) fn from_definition(values: &mut [Value]) {\n        values.sort_by_key(Value::authored_order);\n    }\n    pub(crate) fn next() {}\n}\n",
+                "impl X {\n    pub(crate) fn from_definition(values: &[Value]) {\n        for value in values { value.retain(); }\n    }\n    pub(crate) fn next() {}\n}\n",
+            ),
+        ]
+        for ratchet_id, source, forbidden, safe in cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    forbidden,
+                    safe,
+                )
+
+    def test_fl_c4_data_bind_converter_live_ratchets_reject_forbidden_and_stop_at_function_boundaries(
+        self,
+    ) -> None:
+        cases = [
+            (
+                "state_machine_data_bind_template_drop_or_reorder",
+                "crates/nuxie-runtime/src/state_machine/data_bind_template.rs",
+                (
+                    "pub(super) fn runtime_state_machine_data_bind_templates() {\n"
+                    "    state_machine.data_binds.iter().filter_map(build).collect();\n"
+                    "}\n"
+                    "fn next() {}\n"
+                ),
+                (
+                    "pub(super) fn runtime_state_machine_data_bind_templates() {\n"
+                    "    state_machine.data_binds.iter().map(build).collect();\n"
+                    "}\n"
+                    "fn next() { let _ = values.iter().filter_map(build); }\n"
+                ),
+            ),
+            (
+                "state_machine_data_bind_container_enrollment_drop_or_reorder",
+                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                (
+                    "impl X {\n"
+                    "    pub(crate) fn add_data_binds_to_container(&mut self) {\n"
+                    "        self.bindings.iter().filter_map(enroll).collect();\n"
+                    "    }\n"
+                    "    fn next(&self) {}\n"
+                    "}\n"
+                ),
+                (
+                    "impl X {\n"
+                    "    pub(crate) fn add_data_binds_to_container(&mut self) {\n"
+                    "        self.bindings.iter().map(enroll).collect();\n"
+                    "    }\n"
+                    "    pub(crate) fn next(&self) {\n"
+                    "        let _ = self.bindings.iter().filter_map(enroll);\n"
+                    "    }\n"
+                    "}\n"
+                ),
+            ),
+            (
+                "state_machine_base_data_bind_requires_context_path",
+                "crates/nuxie-runtime/src/state_machine/data_bind_template.rs",
+                (
+                    "pub(super) fn runtime_state_machine_data_bind_templates() {\n"
+                    "    let Some(path) = "
+                    "file.data_bind_context_source_path_ids_for_object(data_bind) "
+                    "else { return None; };\n"
+                    "}\n"
+                    "fn next() {}\n"
+                ),
+                (
+                    "pub(super) fn runtime_state_machine_data_bind_templates() {\n"
+                    "    let path = "
+                    "file.data_bind_context_source_path_ids_for_object(data_bind)"
+                    ".unwrap_or_default();\n"
+                    "}\n"
+                    "fn next() {\n"
+                    "    let Some(path) = "
+                    "file.data_bind_context_source_path_ids_for_object(data_bind) "
+                    "else { return; };\n"
+                    "}\n"
+                ),
+            ),
+            (
+                "data_bind_per_type_target_to_source_path",
+                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                (
+                    "fn apply_default_view_model_number_targets_to_sources() {}\n"
+                ),
+                "fn apply_default_view_model_targets_to_sources() {}\n",
+            ),
+            (
+                "data_bind_target_dirt_default_context_only",
+                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                (
+                    "impl X {\n"
+                    "    pub(crate) fn mark_target_dirty_for_data_bind(&mut self) {\n"
+                    "        if self.default_view_model_source_context_bound() {\n"
+                    "            self.mark_target();\n"
+                    "        }\n"
+                    "    }\n"
+                    "    fn next(&self) {}\n"
+                    "}\n"
+                ),
+                (
+                    "impl X {\n"
+                    "    pub(crate) fn mark_target_dirty_for_data_bind(&mut self) {\n"
+                    "        self.nodes.mark_target();\n"
+                    "    }\n"
+                    "    pub(crate) fn next(&self) {\n"
+                    "        let _ = self.default_view_model_source_context_bound();\n"
+                    "    }\n"
+                    "}\n"
+                ),
+            ),
+            (
+                "data_bind_occurrence_target_apply_before_dirt_clear",
+                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                (
+                    "impl X {\n"
+                    "    pub(crate) fn update_default_view_model_binding(&mut self) {\n"
+                    "        self.targets.apply_default_view_model_binding();\n"
+                    "        self.clear_retained_data_bind_occurrence_dirt();\n"
+                    "    }\n"
+                    "    fn next(&self) {}\n"
+                    "}\n"
+                ),
+                (
+                    "impl X {\n"
+                    "    pub(crate) fn update_default_view_model_binding(&mut self) {\n"
+                    "        self.clear_retained_data_bind_occurrence_dirt();\n"
+                    "        self.targets.apply_default_view_model_binding();\n"
+                    "    }\n"
+                    "    pub(crate) fn next(&self) {}\n"
+                    "}\n"
+                ),
+            ),
+            (
+                "data_bind_occurrence_dirt_clear_incomplete",
+                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                (
+                    "impl X {\n"
+                    "    fn clear_retained_data_bind_occurrence_dirt(&mut self) {\n"
+                    "        self.take_target_dirt();\n"
+                    "    }\n"
+                    "    fn next(&self) {}\n"
+                    "}\n"
+                ),
+                (
+                    "impl X {\n"
+                    "    fn clear_retained_data_bind_occurrence_dirt(&mut self) {\n"
+                    "        self.take_target_dirt();\n"
+                    "        self.take_pending_source_dirt();\n"
+                    "    }\n"
+                    "    fn next(&self) {}\n"
+                    "}\n"
+                ),
+            ),
+            (
+                "scripted_converter_optional_lookup_split",
+                "crates/nuxie-runtime/src/scripted_data_converter.rs",
+                (
+                    "impl X {\n"
+                    "    pub(crate) fn apply_conversion(&mut self) {\n"
+                    "        if self.has_data_converter_method() {\n"
+                    "            self.call_data_converter_if_present();\n"
+                    "        }\n"
+                    "    }\n"
+                    "    fn next(&self) {}\n"
+                    "}\n"
+                ),
+                (
+                    "impl X {\n"
+                    "    pub(crate) fn apply_conversion(&mut self) {\n"
+                    "        self.call_optional_data_converter_once();\n"
+                    "    }\n"
+                    "    pub(crate) fn next(&self) {\n"
+                    "        let _ = self.has_data_converter_method();\n"
+                    "    }\n"
+                    "}\n"
+                ),
+            ),
+            (
+                "scripted_converter_optional_lookup_split",
+                "crates/nuxie-scripting/src/vm.rs",
+                (
+                    "impl X {\n"
+                    "    fn call_optional_data_converter_once(&self, method: Method) {\n"
+                    "        let _ = self.table.get(method.as_str());\n"
+                    "        let _ = self.table.get(method.as_str());\n"
+                    "    }\n"
+                    "    fn next(&self) {}\n"
+                    "}\n"
+                ),
+                (
+                    "impl X {\n"
+                    "    fn call_optional_data_converter_once(&self, method: Method) {\n"
+                    "        let value = self.table.get(method.as_str());\n"
+                    "        self.invoke(value);\n"
+                    "    }\n"
+                    "    pub(crate) fn next(&self) {}\n"
+                    "}\n"
+                ),
+            ),
+        ]
+        for ratchet_id, source, forbidden, safe in cases:
+            with self.subTest(ratchet=ratchet_id, source=source):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    forbidden,
+                    safe,
+                )
+
+    def test_fl_c4_negative_ratchets_reject_displaced_listener_action_shapes(self) -> None:
+        cases = [
+            (
+                "listener_action_occurrence_filter_map",
+                (
+                    r"(?:listener\.actions|state\.fire_actions|transition\.fire_actions|focus_listener_groups|"
+                    r"keyboard_listener_groups|gamepad_listener_groups|"
+                    r"semantic_listener_groups)[^;]{0,500}filter_map"
+                ),
+                "fn import() { listener.actions.iter().filter_map(decode); }\n",
+            ),
+            (
+                "listener_action_occurrence_reorder",
+                (
+                    r"(?:listener_actions|fire_actions|focus_listener_groups|"
+                    r"keyboard_listener_groups|gamepad_listener_groups|"
+                    r"semantic_listener_groups)\.(?:sort|sort_by|sort_by_key|"
+                    r"sort_unstable|sort_unstable_by|sort_unstable_by_key|dedup)"
+                ),
+                "fn import() { listener_actions.sort_by_key(|action| action.id); }\n",
+            ),
+            (
+                "listener_fire_event_import_snapshot",
+                r"(?:event_template|from_runtime_event\([^)]*\))",
+                "fn import() { let event_template = from_runtime_event(event); }\n",
+            ),
+            (
+                "listener_fire_event_deferred_host_report",
+                (
+                    r"RuntimeScheduledListenerAction::FireEvent"
+                    r"[\s\S]{0,1200}pending_listener_events\.push"
+                ),
+                (
+                    "fn perform(action: RuntimeScheduledListenerAction) { "
+                    "if let RuntimeScheduledListenerAction::FireEvent(event) = action { "
+                    "pending_listener_events.push(event); } }\n"
+                ),
+            ),
+            (
+                "listener_reported_event_payload_frozen_at_fire",
+                r"reported_events\[start\.\.\]\.to_vec\(\)",
+                (
+                    "fn take_reported_events(&mut self) { "
+                    "let events = self.reported_events[start..].to_vec(); }\n"
+                ),
+            ),
+            (
+                "listener_reported_event_observed_without_live_artboard",
+                (
+                    r"pub\s+fn\s+reported_event\(\s*&self"
+                    r"[\s\S]{0,240}reported_events\.get\("
+                ),
+                (
+                    "pub fn reported_event(&self, index: usize) { "
+                    "self.reported_events.get(index); }\n"
+                ),
+            ),
+            (
+                "listener_viewmodel_consumed_null_occurrence_drop",
+                (
+                    r'"ListenerViewModelChange"[\s\S]{0,240}'
+                    r"bindable_property\.is_some\(\)"
+                ),
+                (
+                    'fn validate() { match kind { "ListenerViewModelChange" => '
+                    "action.bindable_property.is_some(), _ => true } }\n"
+                ),
+            ),
+            (
+                "listener_viewmodel_perform_reads_imported_default",
+                (
+                    r"RuntimeScheduledListenerAction::ViewModelChange\(action\)"
+                    r"[\s\S]{0,1800}action\.value\.as_ref\(\)"
+                ),
+                (
+                    "fn perform(action: RuntimeScheduledListenerAction) { "
+                    "if let RuntimeScheduledListenerAction::ViewModelChange(action) = action { "
+                    "let value = action.value.as_ref(); } }\n"
+                ),
+            ),
+            (
+                "focus_action_target_import_graph_lookup",
+                r"\.runtime_graph\(\)",
+                (
+                    "fn perform(artboard: &ArtboardInstance) { "
+                    "let graph = artboard.runtime_graph(); }\n"
+                ),
+            ),
+            (
+                "listener_group_import_graph_child_lookup",
+                (
+                    r"fn\s+listener_target_direct_child"
+                    r"[\s\S]{0,1400}\.runtime_graph\(\)"
+                ),
+                (
+                    "fn listener_target_direct_child(artboard: &ArtboardInstance) { "
+                    "let graph = artboard.runtime_graph(); }\n"
+                ),
+            ),
+            (
+                "listener_pointer_mark_depends_on_action_change",
+                (
+                    r"if\s+self\.perform_listener_actions_with_event_context\("
+                    r"[\s\S]{0,700}\)\?\s*\{\s*self\.needs_advance\s*=\s*true"
+                ),
+                (
+                    "fn pointer() { if self.perform_listener_actions_with_event_context()? "
+                    "{ self.needs_advance = true; } }\n"
+                ),
+            ),
+            (
+                "listener_align_target_shared_fused_inverse",
+                r"parent_world\.(?:determinant|invert|invert_or_identity)\(",
+                (
+                    "fn perform(parent_world: Mat2D) { "
+                    "let inverse = parent_world.invert_or_identity(); }\n"
+                ),
+            ),
+            (
+                "listener_scripted_action_double_dispatch",
+                (
+                    r"fn\s+perform_listener_actions_with_event_context"
+                    r"[\s\S]{0,6500}perform_script_object_listener_action"
+                ),
+                (
+                    "fn perform_listener_actions_with_event_context() { "
+                    "perform_script_object_listener_action(); }\n"
+                ),
+            ),
+            (
+                "listener_scripted_resource_error_erased",
+                (
+                    r"(?:(?:fn\s+perform_listener_actions_with_event_context"
+                    r"[\s\S]{0,6500}perform_scripted_listener_action"
+                    r"|fn\s+perform_scheduled_listener_actions"
+                    r"[\s\S]{0,2600}perform_instance_action"
+                    r"|call_scripted_drawable_input|perform_listener_actions)"
+                    r"\([^;]{0,300}unwrap_or\(false\)"
+                    r"|let\s+_\s*=\s*[^;]{0,300}"
+                    r"(?:call_scripted_drawable_input|perform_listener_actions)\()"
+                ),
+                (
+                    "fn perform_listener_actions_with_event_context() { "
+                    "let changed = perform_scripted_listener_action()"
+                    ".unwrap_or(false); }\n"
+                ),
+            ),
+            (
+                "listener_ordinary_script_error_truncates_fifo",
+                r"perform_instance_action\([^;]{0,300}\)\?",
+                (
+                    "fn perform_scheduled_listener_actions() -> Result<bool, Error> { "
+                    "let changed = executor.perform_instance_action("
+                    "artboard, action, targets)?; Ok(changed) }\n"
+                ),
+            ),
+            (
+                "focused_dispatch_flat_group_scan",
+                (
+                    r"pub\s+fn\s+(?:key_input|text_input|gamepad_dispatch)"
+                    r"\([^\{]*\{[\s\S]{0,1800}"
+                    r"(?:keyboard_listener_groups|gamepad_listener_groups)\.iter\(\)"
+                ),
+                (
+                    "pub fn key_input() { "
+                    "for group in self.keyboard_listener_groups.iter() {} }\n"
+                ),
+            ),
+            (
+                "gamepad_focused_identity_global_only",
+                r"already_dispatched\s*:\s*Option<u32>",
+                "fn broadcast(already_dispatched: Option<u32>) {}\n",
+            ),
+            (
+                "gamepad_scripted_parent_listener_fallback",
+                (
+                    r'component\(group\.target_local_id\)[\s\S]{0,420}'
+                    r'type_name\s*==\s*"ScriptedDrawable"[\s\S]{0,220}'
+                    r"&&\s*let\s+Some\(script\)"
+                ),
+                (
+                    'fn dispatch() { if let Some(id) = component(group.target_local_id) '
+                    '.filter(|component| component.type_name == "ScriptedDrawable") '
+                    ".map(|component| component.global_id) && let Some(script) = "
+                    "artboard.script_instance_for_global(id) { call(script); } "
+                    "perform_listener_actions(); }\n"
+                ),
+            ),
+            (
+                "scripted_drawable_subtype_dispatch_drop",
+                r'type_name\s*(?:==|!=)\s*"ScriptedDrawable"',
+                'fn register(component: Component) { if component.type_name == "ScriptedDrawable" {} }\n',
+            ),
+            (
+                "mixed_report_listener_falls_through",
+                (
+                    r"for\s+\([^)]*listener[^)]*\)\s+in\s+listener_definitions"
+                    r"[^\{]*\{(?:(?!listener_uses_report_queue)[\s\S]){0,700}"
+                    r"(?:focus_listener_groups|keyboard_listener_groups|"
+                    r"gamepad_listener_groups|semantic_listener_groups)\.push"
+                ),
+                (
+                    "fn init() { for (index, listener) in listener_definitions.iter() { "
+                    "self.focus_listener_groups.push(listener); } }\n"
+                ),
+            ),
+            (
+                "mixed_report_listener_hit_test_rediscovery",
+                r"fn\s+hit_test[\s\S]{0,900}state_machine\.listeners",
+                (
+                    "fn hit_test(&self, artboard: &Artboard) { "
+                    "let state_machine = artboard.state_machine(0).unwrap(); "
+                    "for listener in state_machine.listeners.iter() { listener.hit_test(); } }\n"
+                ),
+            ),
+            (
+                "listener_missing_pointer_path_drops_other_channels",
+                (
+                    r"runtime_listener_hit_paths\([^;]{0,300}"
+                    r"(?:\?|\.is_empty\(\)[\s\S]{0,160}"
+                    r"(?:return\s+None|continue))"
+                ),
+                (
+                    "fn import(graph: &Graph) -> Option<Listener> { "
+                    "let hit_paths = runtime_listener_hit_paths(graph, 1)?; "
+                    "Some(Listener { hit_paths }) }\n"
+                ),
+            ),
+            (
+                "scripted_input_groups_not_refreshed_at_dispatch",
+                (
+                    r"pub\s+fn\s+(?:key_input|text_input|gamepad_dispatch)"
+                    r"\([^\{]*\{(?:(?!ensure_scripted_input_groups_current)"
+                    r"[\s\S]){0,500}(?:focus\.sync|focused_listener_chain)"
+                ),
+                (
+                    "pub fn key_input(&mut self, artboard: &Artboard) { "
+                    "self.focus.sync(artboard); "
+                    "for node in self.focus.focused_listener_chain() {} }\n"
+                ),
+            ),
+            (
+                "scripted_listener_last_data_bind_first_match",
+                (
+                    r"fn\s+runtime_scripted_listener_action_binding_definition"
+                    r"[\s\S]{0,6500}\.find(?:_map)?\("
+                ),
+                (
+                    "fn runtime_scripted_listener_action_binding_definition() { "
+                    "let binding = file.data_binds().find(|binding| binding.matches()); }\n"
+                ),
+            ),
+            (
+                "scripted_listener_fresh_clone_aliases_live_state",
+                (
+                    r"fn\s+fresh_clone[\s\S]{0,2600}"
+                    r"(?:inputs:\s*self\.inputs\.clone\(\)"
+                    r"|retained_bind:\s*binding\.retained_bind\.clone\(\)"
+                    r"|converter_state:\s*binding\.converter_state\.clone\(\)"
+                    r"|formula_random_source:\s*binding\.formula_random_source\.clone\(\))"
+                ),
+                (
+                    "fn fresh_clone(&self) -> Self { Self { "
+                    "inputs: self.inputs.clone(), retained_bind: "
+                    "binding.retained_bind.clone() } }\n"
+                ),
+            ),
+            (
+                "scripted_converter_occurrence_dedup_or_reorder",
+                (
+                    r"fn\s+(?:scripted_converter_occurrences"
+                    r"|collect_scripted_converter_occurrences"
+                    r"|scripted_converter_occurrence_snapshots"
+                    r"|collect_scripted_converter_occurrence_snapshots)"
+                    r"[\s\S]{0,3200}(?:BTreeMap|HashMap|\.sort|\.dedup)"
+                ),
+                (
+                    "fn scripted_converter_occurrence_snapshots() { "
+                    "let mut occurrences = Vec::new(); "
+                    "occurrences.sort_by_key(Occurrence::path); }\n"
+                ),
+            ),
+            (
+                "scripted_input_binding_flags_zeroed_on_clone",
+                (
+                    r"(?:fn\s+from_definition\(\s*definition:"
+                    r"|pub\(crate\)\s+fn\s+fresh_clone\(&self\))"
+                    r"[\s\S]{0,2600}"
+                    r"(?:flags:\s*0|RuntimeRetainedDataBind::new\(\s*0)"
+                ),
+                (
+                    "fn from_definition(definition: &Binding) -> Occurrence { "
+                    "Occurrence { flags: 0, retained_bind: "
+                    "RuntimeRetainedDataBind::new(0, false) } }\n"
+                ),
+            ),
+            (
+                "scripted_converter_unbind_clears_authored_collection",
+                (
+                    r"fn\s+unbind_sources[\s\S]{0,900}"
+                    r"(?:inputs\.clear\(\)|data_binds\.clear\(\)|self\.inputs\s*=)"
+                ),
+                "fn unbind_sources(&mut self) { self.inputs.clear(); }\n",
+            ),
+            (
+                "script_input_artboard_id_equality_short_circuit",
+                (
+                    r"self\.value\s*==\s*Some\("
+                    r"RuntimeDataBindGraphValue::Artboard"
+                ),
+                (
+                    "fn apply_artboard(&mut self, value: u64) { "
+                    "if self.value == Some(RuntimeDataBindGraphValue::Artboard(value)) "
+                    "{ return; } }\n"
+                ),
+            ),
+            (
+                "script_input_trigger_collapsed_to_boolean",
+                (
+                    r"RuntimeDataBindGraphValue::Trigger\([^)]*"
+                    r"(?:!=\s*0|\.min\(1\)|\.clamp\(0,\s*1\))"
+                ),
+                (
+                    "fn trigger(value: u64) { "
+                    "let value = RuntimeDataBindGraphValue::Trigger(value.min(1)); }\n"
+                ),
+            ),
+            (
+                "state_machine_fire_trigger_resolved_at_import",
+                (
+                    r"struct\s+RuntimeStateMachineFireTriggerPath\s*\{"
+                    r"(?:(?!\n\})[\s\S]){0,700}RuntimeViewModelCell"
+                ),
+                (
+                    "struct RuntimeStateMachineFireTriggerPath { "
+                    "trigger_cell: RuntimeViewModelCell }\n"
+                ),
+            ),
+            (
+                "state_machine_fire_trigger_drops_file_context",
+                (
+                    r"fn\s+fire_view_model_trigger[\s\S]{0,900}owned_data_context"
+                    r"[\s\S]{0,450}\n\s*false\s*\n\s*\}"
+                ),
+                (
+                    "fn fire_view_model_trigger() {\n"
+                    "    if self.owned_data_context.fire() { return true; }\n"
+                    "    false\n"
+                    "}\n"
+                ),
+            ),
+        ]
+        base_gaps = self.gaps.read_text()
+        source = self.repo / "crates/runtime/src/state_machine/instance.rs"
+        source.parent.mkdir(parents=True, exist_ok=True)
+
+        for ratchet_id, pattern, forbidden_source in cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.gaps.write_text(
+                    base_gaps.replace(
+                        "ratchet = []",
+                        textwrap.dedent(
+                            f"""
+                            [[ratchet]]
+                            id = "{ratchet_id}"
+                            globs = ["crates/runtime/src/state_machine/instance.rs"]
+                            pattern = {json.dumps(pattern)}
+                            max_occurrences = 0
+                            """
+                        ).strip(),
+                    )
+                )
+                source.write_text(forbidden_source)
+                result = self.run_check()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    f"ratchet {ratchet_id} increased to ",
                     result.stderr,
                 )
 

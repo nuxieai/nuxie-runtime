@@ -804,13 +804,16 @@ struct RuntimeFocusDescriptor {
     parent: Option<RuntimeFocusOccurrenceKey>,
     sibling_index: usize,
     node: FocusNode,
-    target: Option<(u64, usize)>,
+    /// Owning Artboard occurrence, target Node, and the exact direct
+    /// FocusData child selected in authored order.
+    target: Option<(u64, usize, usize)>,
 }
 
 #[derive(Debug, Clone, Default)]
 struct RuntimeFocusDomain {
     manager: FocusManager,
     targets: BTreeMap<(u64, usize), FocusNodeId>,
+    focus_data_by_target: BTreeMap<(u64, usize), usize>,
 }
 
 /// One state-machine instance's authored focus domain.
@@ -847,9 +850,14 @@ impl Clone for RuntimeFocusTree {
         // retained focus domain rather than aliasing focus mutations back to
         // the source occurrence. Nested machines are reattached to the new
         // root domain when their owning parent instance is constructed.
+        let domain = self.domain.borrow().clone();
+        // Public Clone is Rust's explicit state snapshot. Preserve owned
+        // pending focus/blur values in the new non-aliased manager, just as
+        // StateMachineInstance preserves callbacks already translated into
+        // its own queue. A cold remount still starts empty through `default`.
         Self {
             inert: self.inert,
-            domain: Rc::new(RefCell::new(self.domain.borrow().clone())),
+            domain: Rc::new(RefCell::new(domain)),
             owner_identity: self.owner_identity,
             owns_projection: self.owns_projection,
             nodes_by_key: self.nodes_by_key.clone(),
@@ -859,6 +867,10 @@ impl Clone for RuntimeFocusTree {
 }
 
 impl RuntimeFocusTree {
+    pub(crate) fn owner_identity(&self) -> u64 {
+        self.owner_identity
+    }
+
     /// Create the focus-manager identity used by one state-machine occurrence
     /// without building the authored focus topology yet.
     ///
@@ -1002,14 +1014,23 @@ impl RuntimeFocusTree {
             .collect();
         let mut domain = self.domain.borrow_mut();
         domain.targets.clear();
+        domain.focus_data_by_target.clear();
         for descriptor in descriptors {
-            let Some(target) = descriptor.target else {
+            let Some((owner_identity, target_local, focus_data_local)) = descriptor.target else {
                 continue;
             };
             let Some(node_id) = self.nodes_by_key.get(&descriptor.key).copied() else {
                 continue;
             };
-            domain.targets.insert(target, node_id);
+            let target = (owner_identity, target_local);
+            // `FocusActionTarget` scans direct children in authored order and
+            // stops at the first FocusData. Retain that first occurrence even
+            // when malformed input authored a second direct FocusData child.
+            domain.targets.entry(target).or_insert(node_id);
+            domain
+                .focus_data_by_target
+                .entry(target)
+                .or_insert(focus_data_local);
         }
         domain.manager.drop_focus_if_ineligible();
     }
@@ -1022,8 +1043,9 @@ impl RuntimeFocusTree {
         &mut self,
         artboard: &ArtboardInstance,
         target_local: usize,
+        focus_data_local: usize,
     ) -> bool {
-        self.ensure_unattached_target(artboard, target_local);
+        self.ensure_unattached_target(artboard, target_local, focus_data_local);
         self.set_focus_target(target_local)
     }
 
@@ -1040,9 +1062,21 @@ impl RuntimeFocusTree {
     /// attaching any other authored node or descendant. The later full sync
     /// reuses this exact occurrence identity and places it into the completed
     /// tree.
-    fn ensure_unattached_target(&mut self, artboard: &ArtboardInstance, target_local: usize) {
+    fn ensure_unattached_target(
+        &mut self,
+        artboard: &ArtboardInstance,
+        target_local: usize,
+        focus_data_local: usize,
+    ) {
         let target = (self.owner_identity, target_local);
-        if self.domain.borrow().targets.contains_key(&target) {
+        if self
+            .domain
+            .borrow()
+            .focus_data_by_target
+            .get(&target)
+            .copied()
+            == Some(focus_data_local)
+        {
             return;
         }
 
@@ -1059,8 +1093,11 @@ impl RuntimeFocusTree {
         );
         let Some(descriptor) = descriptors
             .into_iter()
-            .find(|descriptor| descriptor.target == Some(target))
+            .find(|descriptor| descriptor.target == Some((target.0, target.1, focus_data_local)))
         else {
+            return;
+        };
+        let Some((_, _, focus_data_local)) = descriptor.target else {
             return;
         };
 
@@ -1077,7 +1114,9 @@ impl RuntimeFocusTree {
             }
         };
         self.parents_by_key.insert(descriptor.key, None);
-        self.domain.borrow_mut().targets.insert(target, node_id);
+        let mut domain = self.domain.borrow_mut();
+        domain.targets.insert(target, node_id);
+        domain.focus_data_by_target.insert(target, focus_data_local);
     }
 
     pub(crate) fn clear_focus(&mut self) -> bool {
@@ -1104,6 +1143,80 @@ impl RuntimeFocusTree {
             .get(&(self.owner_identity, target_local))
             .copied()
             .is_some_and(|node_id| domain.manager.has_focus(node_id))
+    }
+
+    /// Return focused listener targets from the primary leaf toward the root.
+    ///
+    /// C++ `FocusManager::{keyInput,textInput,gamepadDispatch}` bubbles along
+    /// this exact node chain and only then applies registration order within
+    /// each `FocusData` (`focus_manager.cpp:702-751`).
+    pub(crate) fn focused_listener_chain(&self) -> Vec<(u64, usize, usize)> {
+        let domain = self.domain.borrow();
+        let Some(primary) = domain.manager.primary_focus() else {
+            return Vec::new();
+        };
+        domain
+            .manager
+            .ancestor_chain(primary)
+            .into_iter()
+            .filter_map(|node_id| {
+                let (owner_identity, target_local) = domain
+                    .targets
+                    .iter()
+                    .find_map(|(target, candidate)| (*candidate == node_id).then_some(*target))?;
+                let focus_data_local = domain
+                    .focus_data_by_target
+                    .get(&(owner_identity, target_local))
+                    .copied()?;
+                Some((owner_identity, target_local, focus_data_local))
+            })
+            .collect()
+    }
+
+    /// Drain this occurrence's focus callbacks as authored target ids.
+    ///
+    /// `FocusManager` owns the concrete node identities while listener groups
+    /// retain `FocusData` occurrences. Pinned C++ delivers the manager
+    /// callback to those groups, which enqueue an occurrence-owned record on
+    /// the state machine. Translating back through the retained target table
+    /// preserves that ownership without rediscovering the artboard graph.
+    pub(crate) fn take_owner_events(&mut self) -> Vec<(usize, usize, FocusEventKind)> {
+        let mut domain = self.domain.borrow_mut();
+        let events = std::mem::take(&mut domain.manager.pending_events);
+        let mut owner_events = Vec::new();
+        for event in events {
+            let target = domain
+                .targets
+                .iter()
+                .find_map(|(target, node_id)| (*node_id == event.node_id).then_some(*target));
+            let Some((owner_identity, target_local)) = target else {
+                // Structural scopes have no FocusData callback in C++.
+                continue;
+            };
+            if owner_identity != self.owner_identity {
+                domain.manager.pending_events.push(event);
+                continue;
+            }
+            let Some(focus_data_local) = domain
+                .focus_data_by_target
+                .get(&(owner_identity, target_local))
+                .copied()
+            else {
+                continue;
+            };
+            owner_events.push((target_local, focus_data_local, event.kind));
+        }
+        owner_events
+    }
+
+    /// Drop focus notifications produced before listener groups exist.
+    ///
+    /// Pinned C++ initializes every layer (including entry focus actions)
+    /// before it constructs `FocusListenerGroup` occurrences. Those earlier
+    /// callbacks therefore have no registered recipient and are not replayed
+    /// after registration (`state_machine_instance.cpp:1747-1752,1829-1891`).
+    pub(crate) fn discard_unregistered_events(&mut self) {
+        self.domain.borrow_mut().manager.pending_events.clear();
     }
 }
 
@@ -1296,7 +1409,7 @@ fn collect_component_focus_descriptors(
             focus_key.clone(),
             parent_focus,
             authored_focus_node(artboard, focus_local, inherited_eligible, root_transform),
-            target_owner.map(|owner| (owner, local_id)),
+            target_owner.map(|owner| (owner, local_id, focus_local)),
         );
         Some(focus_key)
     } else {
@@ -1329,7 +1442,7 @@ fn push_focus_descriptor(
     key: RuntimeFocusOccurrenceKey,
     parent: Option<RuntimeFocusOccurrenceKey>,
     node: FocusNode,
-    target: Option<(u64, usize)>,
+    target: Option<(u64, usize, usize)>,
 ) {
     descriptors.push(RuntimeFocusDescriptor {
         key,
@@ -2030,15 +2143,72 @@ mod tests {
             let target = domain.manager.create_node(FocusNode::new());
             domain.manager.add_child(None, target);
             domain.targets.insert((22, 7), target);
+            domain.focus_data_by_target.insert((22, 7), 8);
             target
         };
         let mut child = root.external_for_owner(22);
 
         assert!(child.set_focus_target(7));
         assert!(root.domain.borrow().manager.has_focus(child_target));
+        let mut root = root;
+        assert!(
+            root.take_owner_events().is_empty(),
+            "the parent occurrence must not consume a nested owner's callback"
+        );
+        assert_eq!(child.take_owner_events(), [(7, 8, FocusEventKind::Focused)]);
 
         let mut snapshot = child.clone();
         assert!(snapshot.clear_focus());
         assert!(root.domain.borrow().manager.has_focus(child_target));
+    }
+
+    #[test]
+    fn listener_registration_does_not_replay_constructor_focus_callbacks() {
+        let mut tree = RuntimeFocusTree {
+            owner_identity: 11,
+            ..RuntimeFocusTree::default()
+        };
+        let target = {
+            let mut domain = tree.domain.borrow_mut();
+            let target = domain.manager.create_node(FocusNode::new());
+            domain.manager.add_child(None, target);
+            domain.targets.insert((11, 7), target);
+            domain.focus_data_by_target.insert((11, 7), 8);
+            target
+        };
+
+        assert!(tree.set_focus_target(7));
+        assert!(tree.domain.borrow().manager.has_focus(target));
+        tree.discard_unregistered_events();
+
+        assert!(tree.take_owner_events().is_empty());
+        assert!(tree.target_has_focus(7));
+    }
+
+    #[test]
+    fn snapshot_clone_preserves_untranslated_focus_callbacks_without_aliasing() {
+        let mut tree = RuntimeFocusTree {
+            owner_identity: 11,
+            ..RuntimeFocusTree::default()
+        };
+        {
+            let mut domain = tree.domain.borrow_mut();
+            let target = domain.manager.create_node(FocusNode::new());
+            domain.manager.add_child(None, target);
+            domain.targets.insert((11, 7), target);
+            domain.focus_data_by_target.insert((11, 7), 8);
+        }
+        assert!(tree.set_focus_target(7));
+
+        let mut snapshot = tree.clone();
+        assert_eq!(
+            snapshot.take_owner_events(),
+            [(7, 8, FocusEventKind::Focused)]
+        );
+        assert_eq!(
+            tree.take_owner_events(),
+            [(7, 8, FocusEventKind::Focused)],
+            "draining the snapshot may not consume the source callback"
+        );
     }
 }

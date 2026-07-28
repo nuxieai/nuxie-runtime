@@ -845,7 +845,12 @@ def check(
             + ", ".join(untracked_mismatches)
         )
 
-    for row in gaps.get("ratchet", []):
+    ratchet_rows = list(gaps.get("ratchet", []))
+    ratchet_ids = [str(row.get("id", "")) for row in ratchet_rows]
+    duplicates = duplicate_values(ratchet_ids)
+    if duplicates:
+        errors.append(f"duplicate ratchet ids: {', '.join(duplicates)}")
+    for row in ratchet_rows:
         ratchet_id = str(row.get("id", ""))
         pattern_text = str(row.get("pattern", ""))
         globs = [str(value) for value in row.get("globs", [])]

@@ -3,6 +3,7 @@ use nuxie_runtime::{RuntimeOwnedViewModelInstance, ScriptValue, bound_script_inp
 use nuxie_schema::definition_by_name;
 
 const DATA_BIND_TO_SOURCE: u64 = 1 << 0;
+const DATA_BIND_TWO_WAY: u64 = 1 << 1;
 
 #[derive(Clone, Copy)]
 enum SourceKind {
@@ -17,8 +18,10 @@ enum ConverterFixture {
     Unresolved,
     ToNumber,
     NumberOperationGroup,
+    MissingItemGroup,
     Scripted,
     Interpolator,
+    PlainDataBindShadow,
 }
 
 impl ConverterFixture {
@@ -27,8 +30,9 @@ impl ConverterFixture {
             Self::None => None,
             Self::Unresolved => Some(99),
             Self::ToNumber => Some(0),
-            Self::NumberOperationGroup => Some(2),
+            Self::NumberOperationGroup | Self::MissingItemGroup => Some(2),
             Self::Scripted | Self::Interpolator => Some(0),
+            Self::PlainDataBindShadow => None,
         }
     }
 }
@@ -165,7 +169,9 @@ fn script_input_file_with_target(
         }),
     }
     match converter {
-        ConverterFixture::None | ConverterFixture::Unresolved => {}
+        ConverterFixture::None
+        | ConverterFixture::Unresolved
+        | ConverterFixture::PlainDataBindShadow => {}
         ConverterFixture::ToNumber => push_object(&mut bytes, "DataConverterToNumber", |_| {}),
         ConverterFixture::NumberOperationGroup => {
             push_object(&mut bytes, "DataConverterOperationValue", |bytes| {
@@ -176,6 +182,25 @@ fn script_input_file_with_target(
                 push_uint(bytes, "DataConverterRounder", "decimals", 1);
             });
             push_object(&mut bytes, "DataConverterGroup", |_| {});
+            push_object(&mut bytes, "DataConverterGroupItem", |bytes| {
+                push_uint(bytes, "DataConverterGroupItem", "converterId", 0);
+            });
+            push_object(&mut bytes, "DataConverterGroupItem", |bytes| {
+                push_uint(bytes, "DataConverterGroupItem", "converterId", 1);
+            });
+        }
+        ConverterFixture::MissingItemGroup => {
+            push_object(&mut bytes, "DataConverterOperationValue", |bytes| {
+                push_uint(bytes, "DataConverterOperationValue", "operationType", 2);
+                push_f32(bytes, "DataConverterOperationValue", "operationValue", 2.0);
+            });
+            push_object(&mut bytes, "DataConverterRounder", |bytes| {
+                push_uint(bytes, "DataConverterRounder", "decimals", 1);
+            });
+            push_object(&mut bytes, "DataConverterGroup", |_| {});
+            push_object(&mut bytes, "DataConverterGroupItem", |bytes| {
+                push_uint(bytes, "DataConverterGroupItem", "converterId", 99);
+            });
             push_object(&mut bytes, "DataConverterGroupItem", |bytes| {
                 push_uint(bytes, "DataConverterGroupItem", "converterId", 0);
             });
@@ -244,6 +269,9 @@ fn script_input_file_with_target(
             push_uint(bytes, "DataBindContext", "flags", data_bind_flags);
         }
     });
+    if matches!(converter, ConverterFixture::PlainDataBindShadow) {
+        push_object(&mut bytes, "DataBind", |_| {});
+    }
     bytes
 }
 
@@ -340,6 +368,46 @@ fn stateless_number_converter_group_hydrates_in_authored_order() {
 }
 
 #[test]
+fn converter_group_skips_null_items_and_keeps_authored_order() {
+    let runtime = import_fixture(&script_input_file(
+        9_509,
+        SourceKind::Number,
+        ConverterFixture::MissingItemGroup,
+        0,
+    ));
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .expect("fixture exposes the Root view model");
+    assert!(context.set_number_by_property_name("source", 0.44));
+
+    let value = bound_script_input_value(&runtime, &context, number_input(&runtime))
+        .expect("a null DataConverterGroupItem is skipped");
+    let Some(ScriptValue::Number(value)) = value else {
+        panic!("converter group did not produce a number");
+    };
+    assert!((value - 0.9).abs() < 1e-6, "converted value was {value}");
+}
+
+#[test]
+fn later_plain_data_bind_shadows_the_earlier_context_bind() {
+    let runtime = import_fixture(&script_input_file(
+        9_510,
+        SourceKind::Number,
+        ConverterFixture::PlainDataBindShadow,
+        0,
+    ));
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .expect("fixture exposes the Root view model");
+    assert!(context.set_number_by_property_name("source", 42.0));
+
+    let value = bound_script_input_value(&runtime, &context, number_input(&runtime))
+        .expect("direction/import selection is not an evaluation failure");
+    assert_eq!(
+        value, None,
+        "ScriptInput retains only the last authored DataBind subclass"
+    );
+}
+
+#[test]
 fn target_to_source_only_binding_leaves_the_script_input_unbound() {
     let runtime = import_fixture(&script_input_file(
         9_503,
@@ -360,7 +428,24 @@ fn target_to_source_only_binding_leaves_the_script_input_unbound() {
 }
 
 #[test]
-fn explicit_unresolved_converter_fails_closed() {
+fn two_way_to_source_still_hydrates_the_script_input_from_source() {
+    let runtime = import_fixture(&script_input_file(
+        9_508,
+        SourceKind::Number,
+        ConverterFixture::None,
+        DATA_BIND_TO_SOURCE | DATA_BIND_TWO_WAY,
+    ));
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .expect("fixture exposes the Root view model");
+    assert!(context.set_number_by_property_name("source", 42.0));
+
+    let value = bound_script_input_value(&runtime, &context, number_input(&runtime))
+        .expect("TwoWay includes the source-to-target direction");
+    assert_eq!(value, Some(ScriptValue::Number(42.0)));
+}
+
+#[test]
+fn explicit_unresolved_converter_is_the_cpp_null_converter_passthrough() {
     let runtime = import_fixture(&script_input_file(
         9_506,
         SourceKind::Number,
@@ -371,12 +456,9 @@ fn explicit_unresolved_converter_fails_closed() {
         .expect("fixture exposes the Root view model");
     assert!(context.set_number_by_property_name("source", 3.0));
 
-    let error = bound_script_input_value(&runtime, &context, number_input(&runtime))
-        .expect_err("an explicit broken converter reference must never behave as passthrough");
-    assert!(
-        error.message().contains("unresolved data converter"),
-        "unexpected unresolved converter error: {error}"
-    );
+    let value = bound_script_input_value(&runtime, &context, number_input(&runtime))
+        .expect("the unresolved ordinal leaves C++ DataBind::converter null");
+    assert_eq!(value, Some(ScriptValue::Number(3.0)));
 }
 
 #[test]

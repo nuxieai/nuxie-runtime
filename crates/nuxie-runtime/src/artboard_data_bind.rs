@@ -826,6 +826,7 @@ impl Clone for RuntimeArtboardRetainedSubordinateConverterOperands {
 struct RuntimeOwnedDataContextInstance {
     context: RuntimeOwnedViewModelHandle,
     scope_path: Vec<usize>,
+    is_main: bool,
 }
 
 impl RuntimeOwnedDataContextInstance {
@@ -833,6 +834,7 @@ impl RuntimeOwnedDataContextInstance {
         Self {
             context,
             scope_path: Vec::new(),
+            is_main: true,
         }
     }
 
@@ -840,6 +842,7 @@ impl RuntimeOwnedDataContextInstance {
         Self {
             context: context.root_handle(),
             scope_path: context.scope_path().to_vec(),
+            is_main: true,
         }
     }
 }
@@ -885,12 +888,17 @@ impl RuntimeOwnedDataContext {
     pub(crate) fn from_owned_context(context: &RuntimeOwnedViewModelContext) -> Self {
         let mut instances = Vec::new();
         if let Some(main) = context.main_handle() {
-            instances.push(RuntimeOwnedDataContextInstance::root(main.clone()));
+            instances.push(RuntimeOwnedDataContextInstance {
+                context: main.clone(),
+                scope_path: Vec::new(),
+                is_main: true,
+            });
         }
         instances.extend(context.global_slot_handles().map(|(_, handle)| {
             RuntimeOwnedDataContextInstance {
                 context: handle.clone(),
                 scope_path: Vec::new(),
+                is_main: false,
             }
         }));
         Self {
@@ -913,6 +921,7 @@ impl RuntimeOwnedDataContext {
                     instances: vec![RuntimeOwnedDataContextInstance {
                         context: root.clone(),
                         scope_path: scope_path.to_vec(),
+                        is_main: true,
                     }],
                     parent,
                 }),
@@ -927,7 +936,12 @@ impl RuntimeOwnedDataContext {
     ) -> Self {
         let instances = handles
             .into_iter()
-            .map(RuntimeOwnedDataContextInstance::root)
+            .enumerate()
+            .map(|(index, context)| RuntimeOwnedDataContextInstance {
+                context,
+                scope_path: Vec::new(),
+                is_main: index == 0,
+            })
             .collect::<Vec<_>>();
         if instances.is_empty() {
             return parent.cloned().unwrap_or_default();
@@ -940,14 +954,18 @@ impl RuntimeOwnedDataContext {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn with_local_context_handles(
         handles: impl IntoIterator<Item = RuntimeOwnedViewModelContextHandle>,
         parent: Option<&Self>,
     ) -> Self {
         let instances = handles
             .into_iter()
-            .map(|handle| RuntimeOwnedDataContextInstance::scoped(&handle))
+            .enumerate()
+            .map(|(index, handle)| RuntimeOwnedDataContextInstance {
+                context: handle.root_handle(),
+                scope_path: handle.scope_path().to_vec(),
+                is_main: index == 0,
+            })
             .collect::<Vec<_>>();
         if instances.is_empty() {
             return parent.cloned().unwrap_or_default();
@@ -970,6 +988,7 @@ impl RuntimeOwnedDataContext {
                 instances: vec![RuntimeOwnedDataContextInstance {
                     context,
                     scope_path,
+                    is_main: true,
                 }],
                 parent: parent.cloned(),
             }),
@@ -981,7 +1000,33 @@ impl RuntimeOwnedDataContext {
     }
 
     pub(crate) fn same_binding(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.state, &other.state)
+        if Rc::ptr_eq(&self.state, &other.state) {
+            return true;
+        }
+        self.state.instances.len() == other.state.instances.len()
+            && self
+                .state
+                .instances
+                .iter()
+                .zip(&other.state.instances)
+                .all(|(left, right)| {
+                    left.is_main == right.is_main
+                        && left.scope_path == right.scope_path
+                        && left.context.ptr_eq(&right.context)
+                })
+            && match (&self.state.parent, &other.state.parent) {
+                (Some(left), Some(right)) => left.same_binding(right),
+                (None, None) => true,
+                _ => false,
+            }
+    }
+
+    pub(crate) fn main_root_matches(&self, root: &RuntimeOwnedViewModelHandle) -> bool {
+        self.state
+            .instances
+            .iter()
+            .find(|instance| instance.is_main)
+            .is_some_and(|main| main.scope_path.is_empty() && main.context.ptr_eq(root))
     }
 
     fn resolve<R>(
@@ -1026,6 +1071,55 @@ impl RuntimeOwnedDataContext {
         handles
     }
 
+    pub(crate) fn main_context_chain(
+        &self,
+        file: &RuntimeFile,
+    ) -> Vec<RuntimeOwnedViewModelContextHandle> {
+        fn append(
+            data_context: &RuntimeOwnedDataContext,
+            file: &RuntimeFile,
+            result: &mut Vec<RuntimeOwnedViewModelContextHandle>,
+        ) {
+            let main = data_context
+                .state
+                .instances
+                .iter()
+                .find(|instance| instance.is_main);
+            if let Some(main) = main {
+                let root = RuntimeOwnedViewModelContextHandle::root(file, main.context.clone());
+                if main.scope_path.is_empty() {
+                    result.push(root);
+                } else if let Some(scoped) = root.scoped(main.scope_path.clone()) {
+                    result.push(scoped);
+                }
+            }
+            if let Some(parent) = data_context.state.parent.as_ref() {
+                append(parent, file, result);
+            }
+        }
+
+        let mut result = Vec::new();
+        append(self, file, &mut result);
+        result
+    }
+
+    pub(crate) fn bound_script_view_model(
+        &self,
+        file: &RuntimeFile,
+        path: &crate::ScriptInputViewModelPropertyPath,
+    ) -> Option<Option<crate::ScriptViewModel>> {
+        self.resolve_instance(&mut |handle, _, scope_path| {
+            let root = RuntimeOwnedViewModelContextHandle::root(file, handle.clone());
+            let context = if scope_path.is_empty() {
+                root
+            } else {
+                root.scoped(scope_path.to_vec())?
+            };
+            crate::script_input_viewmodel_property::
+                bound_script_view_model_property_from_owned_path(file, &context, path)
+        })
+    }
+
     fn has_scoped_instance(&self) -> bool {
         self.resolve_instance(&mut |_, _, scope_path| (!scope_path.is_empty()).then_some(()))
             .is_some()
@@ -1034,6 +1128,9 @@ impl RuntimeOwnedDataContext {
     pub(crate) fn add_rebind_dependent(&self, sink: &RuntimeCellDirtSink) {
         for instance in &self.state.instances {
             instance.context.add_rebind_dependent(sink);
+        }
+        if let Some(parent) = self.state.parent.as_ref() {
+            parent.add_rebind_dependent(sink);
         }
     }
 
@@ -1059,6 +1156,7 @@ impl RuntimeOwnedDataContext {
                 RuntimeOwnedDataContextInstance {
                     context,
                     scope_path: instance.scope_path.clone(),
+                    is_main: instance.is_main,
                 }
             })
             .collect();
@@ -1070,6 +1168,14 @@ impl RuntimeOwnedDataContext {
         Self {
             state: Rc::new(RuntimeOwnedDataContextState { instances, parent }),
         }
+    }
+
+    pub(crate) fn rehomed_clone_with_roots(
+        &self,
+        roots: &[(RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelHandle)],
+    ) -> Self {
+        let mut detached_handles = roots.to_vec();
+        self.detached_clone_with_root_memo(&mut detached_handles)
     }
 
     pub(crate) fn resolved_property_path(
@@ -1246,43 +1352,55 @@ impl RuntimeOwnedDataContext {
             |resolved| {
                 matches!(
                     (value, &resolved),
-                    (
-                        RuntimeDataBindGraphValue::Number(_),
-                        RuntimeDataBindGraphValue::Number(_)
-                    ) | (
-                        RuntimeDataBindGraphValue::Boolean(_),
-                        RuntimeDataBindGraphValue::Boolean(_)
-                    ) | (
-                        RuntimeDataBindGraphValue::String(_),
-                        RuntimeDataBindGraphValue::String(_)
-                    ) | (
-                        RuntimeDataBindGraphValue::Color(_),
-                        RuntimeDataBindGraphValue::Color(_)
-                    ) | (
-                        RuntimeDataBindGraphValue::Enum(_),
-                        RuntimeDataBindGraphValue::Enum(_)
-                    ) | (
-                        RuntimeDataBindGraphValue::SymbolListIndex(_),
-                        RuntimeDataBindGraphValue::SymbolListIndex(_)
-                    ) | (
-                        RuntimeDataBindGraphValue::List { .. },
-                        RuntimeDataBindGraphValue::List { .. }
-                    ) | (
-                        RuntimeDataBindGraphValue::ListLength(_),
-                        RuntimeDataBindGraphValue::List { .. }
-                    ) | (
-                        RuntimeDataBindGraphValue::Asset(_),
-                        RuntimeDataBindGraphValue::Asset(_)
-                    ) | (
-                        RuntimeDataBindGraphValue::Artboard(_),
-                        RuntimeDataBindGraphValue::Artboard(_)
-                    ) | (
-                        RuntimeDataBindGraphValue::Trigger(_),
-                        RuntimeDataBindGraphValue::Trigger(_)
-                    ) | (
-                        RuntimeDataBindGraphValue::ViewModel(_),
-                        RuntimeDataBindGraphValue::ViewModel(_)
-                    )
+                    (RuntimeDataBindGraphValue::Untyped, _)
+                        | (
+                            RuntimeDataBindGraphValue::Number(_),
+                            RuntimeDataBindGraphValue::Number(_)
+                        )
+                        | (
+                            RuntimeDataBindGraphValue::Boolean(_),
+                            RuntimeDataBindGraphValue::Boolean(_)
+                        )
+                        | (
+                            RuntimeDataBindGraphValue::String(_),
+                            RuntimeDataBindGraphValue::String(_)
+                        )
+                        | (
+                            RuntimeDataBindGraphValue::Color(_),
+                            RuntimeDataBindGraphValue::Color(_)
+                        )
+                        | (
+                            RuntimeDataBindGraphValue::Enum(_),
+                            RuntimeDataBindGraphValue::Enum(_)
+                        )
+                        | (
+                            RuntimeDataBindGraphValue::SymbolListIndex(_),
+                            RuntimeDataBindGraphValue::SymbolListIndex(_)
+                        )
+                        | (
+                            RuntimeDataBindGraphValue::List { .. },
+                            RuntimeDataBindGraphValue::List { .. }
+                        )
+                        | (
+                            RuntimeDataBindGraphValue::ListLength(_),
+                            RuntimeDataBindGraphValue::List { .. }
+                        )
+                        | (
+                            RuntimeDataBindGraphValue::Asset(_),
+                            RuntimeDataBindGraphValue::Asset(_)
+                        )
+                        | (
+                            RuntimeDataBindGraphValue::Artboard(_),
+                            RuntimeDataBindGraphValue::Artboard(_)
+                        )
+                        | (
+                            RuntimeDataBindGraphValue::Trigger(_),
+                            RuntimeDataBindGraphValue::Trigger(_)
+                        )
+                        | (
+                            RuntimeDataBindGraphValue::ViewModel(_),
+                            RuntimeDataBindGraphValue::ViewModel(_)
+                        )
                 )
                 .then(|| match (value, resolved) {
                     (
@@ -2428,7 +2546,7 @@ fn runtime_owned_view_model_value_for_data_context(
     })
 }
 
-fn runtime_owned_view_model_binding_value_for_property_path(
+pub(crate) fn runtime_owned_view_model_binding_value_for_property_path(
     context: &RuntimeOwnedViewModelInstance,
     property_path: &[usize],
 ) -> Option<RuntimeDataBindGraphValue> {
@@ -4490,6 +4608,52 @@ impl ArtboardInstance {
             .contains_key(&global_id)
     }
 
+    /// Scripted converter definitions actually cloned into this Artboard
+    /// occurrence. Backboard definitions used only by a state-machine
+    /// ScriptInput are deliberately absent: C++ initializes the clone at its
+    /// owning DataBind container, never the unowned Backboard definition.
+    pub fn scripted_data_converter_global_ids(&self) -> Vec<u32> {
+        let mut global_ids = BTreeSet::new();
+        for converter in self
+            .artboard_authored_data_bind_states
+            .iter()
+            .filter_map(|state| {
+                state
+                    .shared_converter
+                    .as_ref()
+                    .map(|state| &state.converter)
+            })
+            .chain(
+                self.artboard_property_bindings
+                    .iter()
+                    .filter_map(|binding| binding.converter.as_ref()),
+            )
+            .chain(
+                self.artboard_custom_property_bindings
+                    .iter()
+                    .filter_map(|binding| binding.converter.as_ref()),
+            )
+            .chain(
+                self.artboard_formula_token_bindings
+                    .iter()
+                    .filter_map(|binding| binding.converter.as_ref()),
+            )
+            .chain(
+                self.artboard_converter_property_bindings
+                    .iter()
+                    .filter_map(|binding| binding.converter.as_ref()),
+            )
+            .chain(
+                self.artboard_list_bindings
+                    .iter()
+                    .filter_map(|binding| binding.converter.as_ref()),
+            )
+        {
+            converter.collect_scripted_global_ids(&mut global_ids);
+        }
+        global_ids.into_iter().collect()
+    }
+
     pub fn set_scripted_data_converter_instance_for_global(
         &mut self,
         global_id: u32,
@@ -5254,6 +5418,20 @@ impl ArtboardInstance {
         );
         self.artboard_owned_view_model_handle = Some(context.clone());
         changed
+    }
+
+    #[doc(hidden)]
+    pub fn bind_script_artboard_data_context(
+        &mut self,
+        file: &RuntimeFile,
+        context: &crate::ScriptArtboardDataContext,
+    ) -> bool {
+        self.bind_owned_view_model_artboard_data_context(
+            file,
+            context.runtime_context(),
+            true,
+            true,
+        )
     }
 
     fn bind_owned_view_model_artboard_context_snapshot(
@@ -9523,6 +9701,10 @@ mod tests {
     fn scripted_converter_defers_default_output_kind_validation() {
         let converter = RuntimeDataBindGraphConverter::Scripted {
             global_id: 42,
+            serialized_implemented_methods:
+                crate::script_asset::RuntimeScriptImplementedMethods::METHOD_MASK,
+            definition:
+                crate::scripted_data_converter::RuntimeScriptedDataConverterDefinition::default(),
             instance: None,
         };
         let numeric_default = RuntimeDataBindGraphValue::Number(10_001.0);
@@ -9536,6 +9718,71 @@ mod tests {
             &numeric_default,
             FieldKind::String
         ));
+    }
+
+    #[test]
+    fn converter_group_uses_the_last_non_input_cpp_output_type() {
+        let scripted = RuntimeDataBindGraphConverter::Scripted {
+            global_id: 42,
+            serialized_implemented_methods:
+                crate::script_asset::RuntimeScriptImplementedMethods::METHOD_MASK,
+            definition:
+                crate::scripted_data_converter::RuntimeScriptedDataConverterDefinition::default(),
+            instance: None,
+        };
+        let numeric_default = RuntimeDataBindGraphValue::Number(10_001.0);
+
+        let concrete_last = RuntimeDataBindGraphConverter::Group(vec![
+            scripted.clone(),
+            RuntimeDataBindGraphConverter::ToNumber,
+        ]);
+        assert!(
+            !artboard_property_binding_accepts_default(
+                Some(&concrete_last),
+                &numeric_default,
+                FieldKind::String,
+            ),
+            "C++ returns the trailing ToNumber output type; an earlier Any converter cannot admit a String target",
+        );
+
+        let deferred_last = RuntimeDataBindGraphConverter::Group(vec![
+            RuntimeDataBindGraphConverter::ToNumber,
+            scripted,
+        ]);
+        assert!(
+            artboard_property_binding_accepts_default(
+                Some(&deferred_last),
+                &numeric_default,
+                FieldKind::String,
+            ),
+            "C++ returns the trailing ScriptedDataConverter Any output type",
+        );
+
+        let deferred_before_input = RuntimeDataBindGraphConverter::Group(vec![
+            RuntimeDataBindGraphConverter::ToNumber,
+            RuntimeDataBindGraphConverter::Scripted {
+                global_id: 43,
+                serialized_implemented_methods:
+                    crate::script_asset::RuntimeScriptImplementedMethods::METHOD_MASK,
+                definition:
+                    crate::scripted_data_converter::RuntimeScriptedDataConverterDefinition::default(
+                    ),
+                instance: None,
+            },
+            RuntimeDataBindGraphConverter::Interpolator {
+                global_id: 44,
+                duration: 1.0,
+                interpolator: None,
+            },
+        ]);
+        assert!(
+            artboard_property_binding_accepts_default(
+                Some(&deferred_before_input),
+                &numeric_default,
+                FieldKind::String,
+            ),
+            "C++ skips trailing DataType::input converters before selecting the preceding Any output",
+        );
     }
 
     #[test]
@@ -9873,6 +10120,34 @@ mod tests {
                 .zip(context.cell_by_property_path(&[1]).as_ref())
                 .is_some_and(|(retained, source)| retained.ptr_eq(source))
         );
+    }
+
+    #[test]
+    fn rebuilt_data_context_wrappers_preserve_the_same_retained_binding_identity() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record(
+                "ViewModel",
+                vec![property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Values".to_owned()),
+                )],
+            ),
+        ])
+        .expect("identity fixture imports");
+        let retained = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(&file, 0).expect("first Values instance"),
+        );
+        let first = RuntimeOwnedDataContext::from_root_handle(retained.clone());
+        let rebuilt = RuntimeOwnedDataContext::from_root_handle(retained);
+        let replacement =
+            RuntimeOwnedDataContext::from_root_handle(RuntimeOwnedViewModelHandle::new(
+                RuntimeOwnedViewModelInstance::new(&file, 0).expect("replacement Values instance"),
+            ));
+
+        assert!(first.same_binding(&rebuilt));
+        assert!(!first.same_binding(&replacement));
     }
 
     fn font_binding_fixture() -> RuntimeFile {

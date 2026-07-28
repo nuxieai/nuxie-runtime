@@ -199,6 +199,20 @@ FL-C4 does not call that subclass-specific lifetime faithful
 - [x] State/transition fire actions execute in authored order and observe
   their exact occurrence code. Fire-trigger paths resolve against the live
   DataContext at perform time.
+- [x] ScriptedObject construction preserves the C++ phase boundary. Every
+  occurrence first clones and reinitializes cold. If the Artboard DataContext
+  was already live, the constructor-wide context barrier and deferred listener
+  hydration run before converter binding; a later inherited live pass follows.
+  An unbound occurrence instead receives C++'s unconditional second cold retry
+  before any later context bind
+  (`state_machine_instance.cpp:2072-2082`;
+  `artboard.cpp:2844-2856`).
+- [x] One File registration owns one shared scripting VM and program map across
+  the root Artboard and ScriptInputArtboard children. The detached-ViewModel
+  tail runs exactly once after each root StateMachineInstance host advance,
+  never for a static/plain Artboard-only call, and its boolean result is
+  discarded (`file.cpp:694-746`; `state_machine_instance.cpp:2607-2662`;
+  `artboard.cpp:914-923`).
 - [x] A fresh remount shares immutable definitions but reconstructs every
   group, queue, registration, callback target, and mutable invocation
   occurrence with empty pending state. Rust's explicit public `Clone`
@@ -334,10 +348,10 @@ Before the immutable candidate is pushed:
 - [x] every source/lifecycle/adversarial row above is checked;
 - [x] every structural rule has a passing injected negative control;
 - [x] all focused Rust tests and pinned-C++ differentials are green;
-- [ ] one fresh complete non-performance floor is green;
-- [ ] exact C++ citations, test names, checker counts, gate counts, trace
-  fingerprint, and candidate SHA are recorded in this document and both status
-  layers; and
+- [x] one fresh complete non-performance floor is green;
+- [x] exact C++ citations, test names, checker counts, gate counts, and the
+  trace receipt are recorded in this document and both status layers; the
+  immutable candidate SHA accompanies the external review request; and
 - [x] performance is not run or used to select implementation work.
 
 ## Candidate evidence
@@ -356,15 +370,45 @@ The focused proof set includes:
 - `scripted_listener_failure_is_swallowed_and_later_actions_still_run` plus
   `pointer_subcycles_reset_script_budgets_and_roll_back_overflowing_host_work`,
   proving ordinary C++ protected-call failures are consumed while Rust's
-  terminal resource fence remains fail-closed; and
+  terminal resource fence remains fail-closed;
+- `prebound_constructor_hydrates_deferred_listener_before_converter_binding`
+  and
+  `post_constructor_context_bind_runs_converter_before_live_listener_init`
+  lock the two constructor/context orders;
+- `file_vm_tail_requires_a_root_state_machine_and_runs_once_per_host_frame`
+  plus `shared_file_vm_contributes_one_host_frame_tail` prove shared File-VM
+  identity and the single root-state-machine frame tail; and
 - every FL-C4 structural ratchet with an injected negative control, including
   permanent guards against erasing a typed terminal resource error or freezing
   a retained Event payload at fire time.
 
-An earlier full-floor receipt was invalidated by the final adversarial fixes
-and is not publication evidence. One fresh complete non-performance floor is
-still required after the production tree and trace settle. The commit-bound
-size and XCFramework receipts remain open and are recorded only after the
-production source commit, because both gates bind their evidence to an
-immutable clean tree. The immutable candidate SHA and authoritative NEXT
-pointers remain open until that evidence commit is published.
+Final production corrections are
+`4f10f3ca081006774fb1c55dbc03a0335bf0844c` and
+`97b5eefa415bfd1785f8be60ca6fd23024df515e`. They restore the prebound and
+unbound constructor orders, Artboard-before-StateMachine context binding, one
+shared File VM across root and child occurrences, and one ignored-result
+detached-ViewModel tail at the root StateMachineInstance frame boundary. The
+final read-only pinned-C++ audit found no remaining behavior or ownership
+blocker in this closure.
+
+The fresh non-performance receipt bound to production source
+`97b5eefa415bfd1785f8be60ca6fd23024df515e` is:
+
+- runtime 665 / 665 and public facade 146 / 146;
+- probe-armed workspace including 759 / 759 pinned-C++ comparisons;
+- ordinary and scripted golden each 317 / 317 entries and 647 / 647 segments,
+  zero divergences, including `data_viz_demo` and `db_health_tracker`;
+- same-runner pixels 1,468 / 1,468, 1,370 byte-exact, zero divergences, and
+  zero gated rows;
+- C API, native Apple, browser WebGPU-only, lint, format, and diff checks;
+- committed-tree size 8,151,336 bytes without scripting and 9,252,072 bytes
+  with scripting, both below 9 MiB;
+- Apple XCFramework build/package/ABI/header/C/Swift checks, checksum
+  `a4617edff64f19cbc353c579babb3c99e6a48a539644d04a65235a76f7913e1f`;
+- a source-bound trace with all 18 landmarks and exact runner provenance; and
+- structural checker 41 / 41 with every injected negative control green.
+
+No performance measurement was run. Every FL-C4 file/member row remains
+pending or pending-verification until an independent whole-family verdict.
+The exact immutable evidence-commit SHA is supplied with that review request
+instead of being self-referenced by this fingerprinted closure.

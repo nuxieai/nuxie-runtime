@@ -1007,34 +1007,34 @@ milestone; the current subplan status selects its exact wave/lane; executable
 ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
-**Canonical NEXT:** port the complete 18-file pinned-C++ listener-action,
-event, and focus-dispatch family against the committed closure checklist in
-`docs/runtime-frame-loop-fl-c4-closure.md`, then publish one whole-family
-non-performance review packet (FL-C4). Exact FL-C3 candidate
-`975962ccb22c3089620ab1f4a735e502e51d7ef1` passed independent production
-review and is promoted by the dedicated reconciliation commit. Candidate
-`b8d1fd6f7222fcdf3f520896f1dc8e9423d69bb8` was rejected because it built
-the complete focus topology before initial layer callbacks. The replacement
-retains only the manager identity and lazily requested unattached target nodes
-during those callbacks, builds the topology afterward, and carries live
-target-scope/traversal differentials plus 22 structural ratchets. The complete
-C++ constructor availability table covers inputs, reports, DataBinds,
-listeners, scripts, focus, and hit facilities rather than validating another
-single symptom. Its fresh non-performance battery and source-bound trace are
-green. The five FL-C3 file rows and `state_machine.layer` are now faithful;
-the supporting random-provider row remains pending for its FL-D formula
-consumer. Active publication branch is `levi/fl-c`; there is no PR.
-Exact FL-C2 candidate
-`7546f4f15b05e582c62aa52ecc93430a7048e143` passed independent Standards and
-Spec review with no findings; its 12 mapped frame-loop files, three importer
-rows, and two member rows are promoted by the dedicated reconciliation
-commit. User direction on 2026-07-26 defers all further timing until every
-mapped FL-A-through-FL-E code row is ported and the complete
-correctness/structure floor is green. The historical 1.661x checkpoint remains
-context and the final 1.0x requirement remains open, but performance is not a
-family gate or implementation queue. FL-B and FL-C1 rows remain pending
-reacceptance/acceptance. Listener groups remain in scope beside their actual
-FL-C4 invocation and FL-E TextInput dependencies.
+**Canonical NEXT:** obtain the independent whole-family verdict on the
+immutable listener/action/event/focus-dispatch evidence commit containing this
+status (FL-C4). Production is complete through
+`97b5eefa415bfd1785f8be60ca6fd23024df515e`. The final lifecycle corrections
+preserve the prebound and unbound scripted-constructor orders,
+Artboard-before-StateMachine context binding, one shared File VM and program
+identity across root/child occurrences, and one ignored-result detached-
+ViewModel tail only after a root StateMachineInstance host advance. The final
+read-only pinned-C++ audit found no behavior or ownership blocker.
+
+The fresh non-performance receipt is runtime 665 / 665; public facade
+146 / 146; probe-armed workspace and pinned-C++ comparisons 759 / 759;
+ordinary and scripted golden 317 / 317 entries and 647 / 647 segments with
+zero divergences; pixels 1,468 / 1,468 with 1,370 byte-exact and zero
+divergences; C API, native Apple, browser, lint, format, and diff green; size
+8,151,336 / 9,252,072 bytes under 9 MiB; Apple XCFramework checksum
+`a4617edff64f19cbc353c579babb3c99e6a48a539644d04a65235a76f7913e1f`;
+trace fingerprint
+`de30569ccc2999baec88cc1b17583cdc7093c09d415952fdbdd6d76927dc9d8e`;
+103 / 341 dynamically reached C++ files, 34 Rust modules, all 18 landmarks;
+and checker 41 / 41. No performance measurement was run.
+
+All FL-C4 rows remain pending or pending-verification. Accepted program counts
+therefore remain 68 / 341 files and 50 / 75 members, with 7 / 10 mechanism
+gaps open. After an accepting verdict, reconcile only the mapped FL-C4 rows
+and continue to the next dependency-ready FL-C owner family. FL-B and FL-C1
+retain their separate pending acceptance state. Active branch is `levi/fl-c`;
+there is no PR.
 
 ## Next queue (top = next; orchestrator maintains)
 

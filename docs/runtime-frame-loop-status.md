@@ -60,7 +60,9 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `f86d5ba0146697abc996310c62fa45e1f053144b`; exact main
   `e72323c808b91d706ba3b745396beaca7accd69a` was consumed without overlap at
   FL-B boundary merge `b5d5bc8afeaa0369cbc248b85366111649cb9010`.
-  No FL-B or FL-C acceptance request is active.
+  FL-B remains pending reacceptance. The FL-C4 publication packet is complete;
+  its immutable evidence-commit SHA accompanies the independent whole-family
+  review request, and no FL-C4 row is promoted before that verdict.
 - Active production branch: `levi/fl-c`. The former `levi/fl-b` branch name
   described the provisional stack base, not the active wave, and is no longer
   used for FL-C publication. There is no PR.
@@ -126,6 +128,29 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   The source-bound trace reports 103 / 341 reached C++ files, 29 Rust modules,
   and all 18 frame landmarks. Structural checker 37 / 37 is green. No
   performance measurement was run.
+- The complete listener/action/event/focus-dispatch family (FL-C4) is
+  production-complete on
+  `97b5eefa415bfd1785f8be60ca6fd23024df515e`. The final lifecycle
+  corrections preserve cold clone/reinit, distinguish prebound constructor
+  hydration from later context binding, share one File VM/program identity
+  across root and child occurrences, bind the Artboard before its
+  StateMachine, and run one ignored-result detached-ViewModel tail only after
+  a root StateMachineInstance host advance. The final pinned-C++ audit is
+  behavior/ownership clean.
+- FL-C4's fresh non-performance floor is green: runtime 665 / 665; public
+  facade 146 / 146; probe-armed workspace and pinned-C++ comparisons
+  759 / 759; ordinary and scripted golden each 317 / 317 entries and
+  647 / 647 segments with zero divergences; pixels 1,468 / 1,468 with 1,370
+  byte-exact and zero divergences; C API, native Apple, browser, lint, format,
+  and diff checks; size 8,151,336 / 9,252,072 bytes under 9 MiB; Apple
+  XCFramework checksum
+  `a4617edff64f19cbc353c579babb3c99e6a48a539644d04a65235a76f7913e1f`;
+  trace fingerprint
+  `de30569ccc2999baec88cc1b17583cdc7093c09d415952fdbdd6d76927dc9d8e`;
+  103 / 341 dynamically reached C++ files, 34 Rust modules, all 18 landmarks;
+  and structural checker 41 / 41. No performance measurement was run.
+  Accepted closure remains 68 / 341 files and 50 / 75 members, with 7 / 10
+  mechanism gaps open, until independent promotion.
 - FL-C1 input ownership is now source-corresponding: `state_machine_input.rs`
   owns the authored definition and `state_machine_input_instance.rs` owns the
   mutable occurrence. Each occurrence retains a handle into the one authored
@@ -782,11 +807,10 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Port the complete 18-file pinned-C++ listener-action/event/focus-dispatch
-   family against `docs/runtime-frame-loop-fl-c4-closure.md`, then publish one
-   whole-family non-performance review packet (FL-C4). Close
-   `state_machine.actions` and `state_machine.events` only after one complete
-   implementation and independent verdict.
-2. Keep FL-B and FL-C1 rows pending until their independent acceptance.
-   Performance remains verification evidence, never the source of a work
-   slice.
+1. Obtain the independent whole-family verdict on the immutable FL-C4 evidence
+   commit containing this status. Keep every listener/action/event/focus-
+   dispatch row pending or pending-verification.
+2. On acceptance, perform only the mapped promotion/reconciliation, then begin
+   the next dependency-ready FL-C owner family. FL-B and FL-C1 retain their
+   separate pending acceptance state. Performance remains deferred until all
+   mapped FL-A-through-FL-E code is ported.

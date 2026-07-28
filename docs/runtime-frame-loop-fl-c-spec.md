@@ -19,7 +19,7 @@ Active runtime base after the stable-Rust Apple compatibility repair:
 
 ## Finite closure
 
-The executable ledger contains 49 FL-C C++ file rows and these eight pending
+The executable ledger contains 56 FL-C C++ file rows and these eight pending
 member rows:
 
 1. `state_machine.inputs`
@@ -101,8 +101,11 @@ is entirely a client of `TextInput::{startDrag,drag,endDrag,selectWord,
 selectLine}` and therefore moves with the `src/text/text_input.cpp` owner in
 FL-E. No source file leaves the program; this is a topological correction that
 prevents placeholder invocations or partial text-editing behavior.
-The correction moves one source row from FL-C to FL-E, so the finite FL-C
-closure is 49 files; the overall 341-file program closure is unchanged.
+The correction moves one source row from FL-C to FL-E. FL-C4 later brought
+the six complete scalar/ViewModel ScriptInput owners into its executable
+transitive closure while leaving the partial `script_input_artboard.cpp`
+whole-file owner in FL-D, so the finite FL-C closure is 56 files; the overall
+341-file program closure is unchanged.
 
 ### FL-C2 — Conditions and transition definitions (12 files)
 
@@ -167,7 +170,7 @@ supporting oracle for FL-C3 even though the whole
 class to `state_machine/state_machine_layer_instance.rs`; this does not promote
 the later whole-instance row.
 
-### FL-C4 — Listener actions, events, and focus dispatch (18 files)
+### FL-C4 — Listener actions, events, and focus dispatch (25 files)
 
 C++ files:
 
@@ -186,9 +189,16 @@ C++ files:
 - `src/animation/listener_number_change.cpp`
 - `src/animation/listener_trigger_change.cpp`
 - `src/animation/listener_viewmodel_change.cpp`
+- `src/animation/scripted_listener_action.cpp`
 - `src/animation/semantic_listener_group.cpp`
 - `src/animation/state_machine_fire_action.cpp`
 - `src/animation/state_machine_fire_trigger.cpp`
+- `src/script_input_boolean.cpp`
+- `src/script_input_color.cpp`
+- `src/script_input_number.cpp`
+- `src/script_input_string.cpp`
+- `src/script_input_trigger.cpp`
+- `src/script_input_viewmodel_property.cpp`
 
 Retention boundary:
 
@@ -198,7 +208,11 @@ Retention boundary:
 - one apply-events call drains the pinned chained-notification loop to
   completion without rescanning authored definitions;
 - focus, input, ViewModel, trigger, and event dispatch preserve C++ callback
-  order and next-frame boundaries.
+  order and next-frame boundaries;
+- every scripted-listener occurrence owns fresh, authored-order scalar and
+  ViewModel ScriptInput state across bind, hydrate, advance, clone, rebind,
+  and teardown. The component-owned `script_input_artboard.cpp` lifecycle
+  remains in FL-D.
 
 Members closed by the complete lane: `state_machine.actions` and
 `state_machine.events`.

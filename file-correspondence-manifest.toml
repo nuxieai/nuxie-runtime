@@ -3786,7 +3786,7 @@ b6_row_id = "B6-0314"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port."
+note = "FL-C4 proves only the owner-null ScriptInputArtboard projection; the component-owned whole-file lifecycle remains pending in FL-D."
 
 [[file]]
 upstream = "src/script_input_boolean.cpp"
@@ -3798,7 +3798,7 @@ b6_row_id = "B6-0315"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-4: scene-rebind scalar ScriptInput rehydration remains a confirmed divergence."
+note = "Direct filename correspondence and complete scripted-listener occurrence lifecycle are implemented in FL-C4; pending independent whole-family verification."
 
 [[file]]
 upstream = "src/script_input_color.cpp"
@@ -3810,7 +3810,7 @@ b6_row_id = "B6-0316"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-4: scene-rebind scalar ScriptInput rehydration remains a confirmed divergence."
+note = "Direct filename correspondence and complete scripted-listener occurrence lifecycle are implemented in FL-C4; pending independent whole-family verification."
 
 [[file]]
 upstream = "src/script_input_number.cpp"
@@ -3822,7 +3822,7 @@ b6_row_id = "B6-0317"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-4: scene-rebind scalar ScriptInput rehydration remains a confirmed divergence."
+note = "Direct filename correspondence and complete scripted-listener occurrence lifecycle are implemented in FL-C4; pending independent whole-family verification."
 
 [[file]]
 upstream = "src/script_input_string.cpp"
@@ -3834,7 +3834,7 @@ b6_row_id = "B6-0318"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-4: scene-rebind scalar ScriptInput rehydration remains a confirmed divergence."
+note = "Direct filename correspondence and complete scripted-listener occurrence lifecycle are implemented in FL-C4; pending independent whole-family verification."
 
 [[file]]
 upstream = "src/script_input_trigger.cpp"
@@ -3846,7 +3846,7 @@ b6_row_id = "B6-0319"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port."
+note = "Direct filename correspondence and complete scripted-listener occurrence lifecycle are implemented in FL-C4; pending independent whole-family verification."
 
 [[file]]
 upstream = "src/script_input_viewmodel_property.cpp"
@@ -3858,7 +3858,7 @@ b6_row_id = "B6-0320"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port."
+note = "Direct filename correspondence and complete scripted-listener occurrence lifecycle are implemented in FL-C4; pending independent whole-family verification."
 
 [[file]]
 upstream = "src/scripted/scripted_data_converter.cpp"

@@ -33,6 +33,12 @@ cpp_files = [
   "src/animation/semantic_listener_group.cpp",
   "src/animation/state_machine_fire_action.cpp",
   "src/animation/state_machine_fire_trigger.cpp",
+  "src/script_input_boolean.cpp",
+  "src/script_input_color.cpp",
+  "src/script_input_number.cpp",
+  "src/script_input_string.cpp",
+  "src/script_input_trigger.cpp",
+  "src/script_input_viewmodel_property.cpp",
 ]
 required_adversarial = [
   "Parent-kind import ownership",
@@ -52,6 +58,7 @@ required_adversarial = [
   "Chained applyEvents completion",
   "Deferred focus/semantic batches",
   "Fire-trigger live path",
+  "ScriptInput owner lifecycle",
   "Clone and teardown isolation",
   "Permanent structural ratchets",
 ]
@@ -281,7 +288,12 @@ include = [
   "src/animation/scripted_listener_action.cpp",
   "src/animation/system_state_instance.cpp",
   "src/inputs/*.cpp",
-  "src/script_input_*.cpp",
+  "src/script_input_boolean.cpp",
+  "src/script_input_color.cpp",
+  "src/script_input_number.cpp",
+  "src/script_input_string.cpp",
+  "src/script_input_trigger.cpp",
+  "src/script_input_viewmodel_property.cpp",
 ]
 exclude = [
   "src/animation/blend_state*.cpp",
@@ -320,6 +332,7 @@ include = [
   "src/event.cpp",
   "src/listener_group.cpp",
   "src/nested_artboard*.cpp",
+  "src/script_input_artboard.cpp",
 ]
 exclude = []
 rust_modules = [
@@ -2148,8 +2161,8 @@ status = "faithful"
 
 [[file]]
 upstream = "src/script_input_artboard.cpp"
-source_set = "state-machine"
-wave = "FL-C"
+source_set = "databind-artboard-settlement"
+wave = "FL-D"
 rust_modules = ["crates/nuxie-runtime/src/script_input_artboard.rs"]
 dynamically_reached = false
 status = "pending"

@@ -1023,6 +1023,15 @@ ignored-result detached-ViewModel tail only after a root StateMachineInstance
 host advance. The final read-only pinned-C++ and adversarial ratchet audits
 found no behavior or ownership blocker.
 
+First evidence candidate
+`5aeb4c06aa9cc7f29a52b7d053814045f15f0539` passed independent
+behavior/oracle review but failed executable-scope review: six complete
+scalar/ViewModel ScriptInput owners were absent from the active family list,
+while the partial component-owned `script_input_artboard.cpp` row was assigned
+to FL-C instead of FL-D. The replacement packet includes those six complete
+rows in FL-C4, restores the Artboard row to FL-D, and leaves every candidate
+row pending.
+
 The fresh non-performance receipt is runtime 665 / 665; public facade
 146 / 146; probe-armed workspace and pinned-C++ comparisons 759 / 759;
 ordinary and scripted golden 317 / 317 entries and 647 / 647 segments with
@@ -1032,7 +1041,7 @@ divergences; C API, native Apple, browser, lint, format, and diff green; size
 8,151,336 / 9,252,072 bytes under 9 MiB; Apple XCFramework checksum
 `316fad479f4a764610db39f94e5621330f9fc337a5d35597696aecd800b7f11c`;
 trace fingerprint
-`a91d6c9b1aa244c9448f51ab4881ab65670b0e03288abd80e8afdc5909b04a94`;
+`7f202a118e462fe298b88e7c56a76e0e8aec761e48876c12d242351180635320`;
 103 / 341 dynamically reached C++ files, 34 Rust modules, all 18 landmarks;
 and checker 41 / 41. No performance measurement was run.
 
@@ -1055,7 +1064,7 @@ there is no PR.
    through FL-B4 are translated on a provisional tip and remain pending
    reacceptance. Coordinator direction authorizes FL-C to proceed without
    falsely promoting FL-B. Execute FL-C1 through FL-C5 from the frozen
-   corrected 49-file/eight-member spec
+   corrected 56-file/eight-member spec
    `docs/runtime-frame-loop-fl-c-spec.md`, followed
    by dependency-ordered Artboard/DataBind and live-draw owner waves. Run the
    canonical whole-corpus measurement only after every mapped FL-A-through-FL-E

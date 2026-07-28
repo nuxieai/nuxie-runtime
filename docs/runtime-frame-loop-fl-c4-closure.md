@@ -76,7 +76,7 @@ settlement remains pending in FL-D.
 | `src/data_bind/data_bind.cpp`: `import`, `bind`, `unbind`, `update`, `updateSourceBinding`, `reconcileDirt`, `toTarget`, `toSource`, `sourceToTargetRunsFirst`, `bindsOnce`, `advance` | retain complete flags and target value; last authored DataBind occurrence owns the ScriptInput; ToSource, TwoWay favored order, Once subscription, forward/reverse conversion, rebind reset, target/source self-notification suppression, and source-required converter advance remain occurrence-local | reuse `crates/nuxie-runtime/src/retained_data_bind.rs` inside `crates/nuxie-runtime/src/state_machine/scripted_listener_action.rs`; live direction/rebind/advance differentials |
 | `src/data_bind/data_bind_context.cpp`: `copySourcePathIds`, `resolvePath`, `bindFromContext`; the immutable-membership projection of `src/data_bind/data_bind_container.cpp`: construction-time `addDataBind`, `bindDataBindsFromContext`, dirty scheduling in `updateDataBinds`, `advanceDataBinds`, `deleteDataBinds` | preserve full id/name path, main/global/parent resolution, retained source-cell identity, authored occurrence order, same-batch dirty updates, stateful advance after layers, and one-time deletion for the fixed listener/converter occurrence set | occurrence-owned ordered bindings plus retained cell/dirt sinks; nested/global/parent, duplicate, same-frame, and cold-clone proofs. FL-C4 does not promote the whole DataBindContainer row: dynamic add/remove, pending mutation flush, add-after-live-context reconciliation, and membership-changing advance remain pending in FL-D. |
 | `src/scripted/scripted_data_converter.cpp`: `clone`, `bindFromContext`, `didHydrateScriptInputs`, `convert`, `reverseConvert`, `advance`, `disposeScriptInputs` | clone a fresh converter table for every converter occurrence, including its ordered custom ScriptInputs/DataBinds; bind it, complete the occurrence-local write-free preflight, then hydrate in authored order before init; gate optional methods; pass through failed/missing ordinary conversion; advance only a bound source, mark the parent bind dirty on `true`, retry failed construction when C++ retries, and never alias repeated converter occurrences | focused scripted-data-converter occurrence owner used by `scripted_listener_action.rs`; custom-input, duplicate-occurrence, method-mask, failure/retry, direction, and same-frame tests |
-| `src/script_input_boolean.cpp`, `script_input_number.cpp`, `script_input_color.cpp`, `script_input_string.cpp`, `script_input_trigger.cpp`, `script_input_viewmodel_property.cpp`; the owner-null projection of `script_input_artboard.cpp` | preserve authored order/name/value, exact typed hydration and callback behavior, trigger edge semantics, ViewModel path/live occurrence, parent linkage, clone, and destruction; a later plain DataBind shadows an earlier context bind. Both FL-C4 scripted owners return `component() == nullptr`, so the reachable Artboard projection is authored-id resolution, unresolved prerequisite behavior, clone file/reference asymmetry, hydration/table projection, live numeric updates, and prior-reference retention. | focused typed ScriptInput occurrence representation and tests. Scalar and ViewModel rows move only when their whole lifecycle is proven. The whole `script_input_artboard.cpp` row remains pending with FL-D's Artboard/DataBind settlement. |
+| `src/script_input_boolean.cpp`, `src/script_input_number.cpp`, `src/script_input_color.cpp`, `src/script_input_string.cpp`, `src/script_input_trigger.cpp`, `src/script_input_viewmodel_property.cpp`; the owner-null projection of `src/script_input_artboard.cpp` | preserve authored order/name/value, exact typed hydration and callback behavior, trigger edge semantics, ViewModel path/live occurrence, parent linkage, clone, and destruction; a later plain DataBind shadows an earlier context bind. Both FL-C4 scripted owners return `component() == nullptr`, so the reachable Artboard projection is authored-id resolution, unresolved prerequisite behavior, clone file/reference asymmetry, hydration/table projection, live numeric updates, and prior-reference retention. | focused typed ScriptInput occurrence representation and tests. Scalar and ViewModel rows move only when their whole lifecycle is proven. The whole `src/script_input_artboard.cpp` row remains pending with FL-D's Artboard/DataBind settlement. |
 
 The complete transitive checklist is:
 
@@ -276,6 +276,11 @@ FL-C4 does not call that subclass-specific lifetime faithful
   batch runs waits for the next processing batch rather than joining it.
 - [x] Fire-trigger live path: nested/relative path, missing context/path,
   wrong property type, duplicate actions, and same-frame state effect.
+- [x] ScriptInput owner lifecycle: all six complete scalar/ViewModel owners
+  preserve authored defaults and order, live typed updates, trigger
+  repetition, last-bind ownership, rebind, clone isolation, and teardown.
+  The owner-null Artboard projection is covered without claiming the
+  component-owned whole-file lifecycle reserved to FL-D.
 - [x] Clone and teardown isolation: registrations, queues, owned bindable
   properties, pending events, invocation payloads, and callback sinks are not
   aliased across either Rust snapshots or cold remounts; only the Rust
@@ -344,9 +349,10 @@ differentials because a regex cannot truthfully prove them:
 
 Before the immutable candidate is pushed:
 
-- [x] all 19 hand-authored primary filename-corresponding Rust owners plus the
-  generated `state_machine_fire_event.cpp` support owner exist, and the two
-  mechanical ledgers point to every in-scope hand-authored owner directly;
+- [x] all 25 hand-authored primary/transitive filename-corresponding Rust
+  owners plus the generated `state_machine_fire_event.cpp` support owner
+  exist, and the two mechanical ledgers point to every in-scope hand-authored
+  owner directly;
 - [x] every transitive support method is mapped to the focused Rust path
   actually used by the action while unrelated whole FL-D rows remain pending;
 - [x] every source/lifecycle/adversarial row above is checked;

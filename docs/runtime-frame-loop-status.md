@@ -11,7 +11,7 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   FL-B file/member row remains pending until reacceptance.
 - Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
   on that provisional implementation without claiming FL-B verification.
-  FL-C's corrected 49-file/eight-member lane map is
+  FL-C's corrected 56-file/eight-member lane map is
   `docs/runtime-frame-loop-fl-c-spec.md`; FL-C1 inputs/listener definitions is
   implemented with a green lane-boundary floor and pending independent
   acceptance. FL-C2 transition conditions is accepted and promoted. Every one
@@ -143,6 +143,14 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   parser-backed `scripted_object_unbound_constructor_enters_live_context`
   ratchet are green; the final pinned-C++ and adversarial ratchet audits are
   behavior/ownership clean.
+- First evidence candidate
+  `5aeb4c06aa9cc7f29a52b7d053814045f15f0539` passed independent
+  behavior/oracle review but failed executable-scope review: six complete
+  scalar/ViewModel ScriptInput owners were absent from the active family list,
+  while the partial component-owned `script_input_artboard.cpp` row was
+  assigned to FL-C instead of FL-D. The replacement packet includes those six
+  complete rows in FL-C4, restores the Artboard row to FL-D, and leaves every
+  candidate row pending.
 - FL-C4's fresh non-performance floor is green: runtime 665 / 665; public
   facade 146 / 146; probe-armed workspace and pinned-C++ comparisons
   759 / 759; ordinary and scripted golden each 317 / 317 entries and
@@ -153,7 +161,7 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   XCFramework checksum
   `316fad479f4a764610db39f94e5621330f9fc337a5d35597696aecd800b7f11c`;
   trace fingerprint
-  `a91d6c9b1aa244c9448f51ab4881ab65670b0e03288abd80e8afdc5909b04a94`;
+  `7f202a118e462fe298b88e7c56a76e0e8aec761e48876c12d242351180635320`;
   103 / 341 dynamically reached C++ files, 34 Rust modules, all 18 landmarks;
   and structural checker 41 / 41. No performance measurement was run.
   Accepted closure remains 68 / 341 files and 50 / 75 members, with 7 / 10

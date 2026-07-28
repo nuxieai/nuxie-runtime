@@ -14130,6 +14130,47 @@ fn synthetic_view_model_listener_trigger_then_number_transition(file_id: u64) ->
     })
 }
 
+fn synthetic_claimed_data_bind_path_view_model_listener(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "watch");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+        });
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "observed");
+        });
+
+        let mut listener_path = Vec::new();
+        push_var_uint(&mut listener_path, 0);
+        push_var_uint(&mut listener_path, 0);
+        push_object_with_properties(bytes, "DataBindPath", |bytes| {
+            push_bytes_property(bytes, "DataBindPath", "path", &listener_path);
+        });
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 11);
+        });
+        push_object_with_properties(bytes, "ListenerBoolChange", |bytes| {
+            push_uint_property(bytes, "ListenerBoolChange", "inputId", 0);
+            push_uint_property(bytes, "ListenerBoolChange", "value", 1);
+        });
+    })
+}
+
 fn synthetic_state_machine_viewmodel_boolean_condition(
     file_id: u64,
     initial_value: bool,
@@ -18762,6 +18803,40 @@ fn composite_listener_trigger_survives_a_later_view_model_write_until_transition
             .map(|animation| animation.animation_index()),
         Some(1),
         "the earlier trigger action must remain fireable after the later action rebinds the context"
+    );
+}
+
+#[test]
+fn claimed_data_bind_path_view_model_listener_fires_on_property_mutation() {
+    let label = "synthetic/runtime_claimed_data_bind_path_view_model_listener.riv";
+    let bytes = synthetic_claimed_data_bind_path_view_model_listener(9692);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}")),
+    );
+    let contexts = RuntimeOwnedViewModelContext::from_main_handle(context.clone());
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(state_machine.bind_owned_view_model_contexts(&contexts));
+    assert_eq!(
+        state_machine.input(0).and_then(|input| input.bool_value()),
+        Some(false)
+    );
+    assert!(
+        context
+            .borrow_mut()
+            .set_number_by_property_name("watch", 1.0),
+        "{label} failed to change the claimed listener source"
+    );
+
+    let _ = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    assert_eq!(
+        state_machine.input(0).and_then(|input| input.bool_value()),
+        Some(true),
+        "the claimed DataBindPath listener must register a dependent and fire its action"
     );
 }
 

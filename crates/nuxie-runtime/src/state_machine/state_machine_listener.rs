@@ -191,7 +191,7 @@ pub(super) fn runtime_state_machine_listener(
     };
     let event_local_indices = runtime_listener_event_local_indices(listener);
     let (view_model_index, view_model_property_path) =
-        runtime_listener_single_view_model_property_path(listener)
+        runtime_listener_single_view_model_property_path(file, listener)
             .map(|(view_model_index, property_path)| (Some(view_model_index), Some(property_path)))
             .unwrap_or((None, None));
 

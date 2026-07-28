@@ -1007,30 +1007,20 @@ milestone; the current subplan status selects its exact wave/lane; executable
 ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
-**Canonical NEXT:** obtain the independent whole-family verdict on the
-immutable listener/action/event/focus-dispatch evidence commit containing this
-status (FL-C4). Production is complete through
-`6f008b5b8acba0b93d1405aff0f0a08583138ca9`. Immutable candidate
-`f2819cda3836846df6017cc7be747fdeb03dcb67` was rejected because unbound Rust
-performed an invented third no-context scripted-listener attempt. The
-correction stops after C++'s two cold attempts and defers occurrence three to
-the first genuine DataContext attachment. The exact differential and
-parser-backed `scripted_object_unbound_constructor_enters_live_context`
-ratchet are green. The other final lifecycle corrections preserve the prebound
-scripted-constructor order, Artboard-before-StateMachine context binding, one
-shared File VM and program identity across root/child occurrences, and one
-ignored-result detached-ViewModel tail only after a root StateMachineInstance
-host advance. The final read-only pinned-C++ and adversarial ratchet audits
-found no behavior or ownership blocker.
+**Canonical NEXT:** begin the complete StateMachine/StateMachineInstance owner
+family (FL-C5) by reading both pinned headers and both complete C++ sources,
+then commit its exhaustive closure checklist before any semantic Rust edit.
+Do not run performance work. Stop at this boundary until the next execution
+session.
 
-First evidence candidate
-`5aeb4c06aa9cc7f29a52b7d053814045f15f0539` passed independent
-behavior/oracle review but failed executable-scope review: six complete
-scalar/ViewModel ScriptInput owners were absent from the active family list,
-while the partial component-owned `script_input_artboard.cpp` row was assigned
-to FL-C instead of FL-D. The replacement packet includes those six complete
-rows in FL-C4, restores the Artboard row to FL-D, and leaves every candidate
-row pending.
+The complete listener/action/event/focus-dispatch family (FL-C4) is accepted.
+Production source is
+`6f008b5b8acba0b93d1405aff0f0a08583138ca9`; the corrected executable-scope
+candidate is `0eb48976755d759c078f1f1a032bd88590e223f7`. Independent Standards and
+Spec/oracle reviews both passed with no findings. Its 25 exact file owners and
+the `state_machine.actions` / `state_machine.events` member rows are promoted;
+the partial component-owned `script_input_artboard.cpp` row remains pending in
+FL-D.
 
 The fresh non-performance receipt is runtime 665 / 665; public facade
 146 / 146; probe-armed workspace and pinned-C++ comparisons 759 / 759;
@@ -1045,12 +1035,11 @@ trace fingerprint
 103 / 341 dynamically reached C++ files, 34 Rust modules, all 18 landmarks;
 and checker 41 / 41. No performance measurement was run.
 
-All FL-C4 rows remain pending or pending-verification. Accepted program counts
-therefore remain 68 / 341 files and 50 / 75 members, with 7 / 10 mechanism
-gaps open. After an accepting verdict, reconcile only the mapped FL-C4 rows
-and continue to the next dependency-ready FL-C owner family. FL-B and FL-C1
-retain their separate pending acceptance state. Active branch is `levi/fl-c`;
-there is no PR.
+Accepted program counts are now 93 / 341 files and 52 / 75 members, with
+7 / 10 mechanism gaps open. The align-target half of FL-G03 is closed, but
+the gap remains open for FL-C5's StateMachineInstance collection and
+transition-search owner. FL-B and FL-C1 retain their separate pending
+acceptance state. Active branch is `levi/fl-c`; there is no PR.
 
 ## Next queue (top = next; orchestrator maintains)
 

@@ -431,7 +431,9 @@ The fresh non-performance receipt bound to production source
 - a source-bound trace with all 18 landmarks and exact runner provenance; and
 - structural checker 41 / 41 with every injected negative control green.
 
-No performance measurement was run. Every FL-C4 file/member row remains
-pending or pending-verification until an independent whole-family verdict.
-The exact immutable evidence-commit SHA is supplied with that review request
-instead of being self-referenced by this fingerprinted closure.
+No performance measurement was run. Independent Standards and Spec/oracle
+reviews both accepted exact immutable candidate
+`0eb48976755d759c078f1f1a032bd88590e223f7` with no findings. The mapped 25
+file rows and `state_machine.actions` / `state_machine.events` member rows are
+promoted by the following reconciliation commit; the component-owned
+`script_input_artboard.cpp` and every unrelated later-wave row remain pending.

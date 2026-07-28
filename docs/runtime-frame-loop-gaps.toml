@@ -63,14 +63,14 @@ counters = [
   "state_machine_transition_search",
   "component_dirt_consumptions",
 ]
-mechanism = "State-machine definition and instance collections must be checked for per-frame clone and name/id search work against C++ retained vectors and pointers. The remaining canonical dirt-consumption delta is isolated to align_target: pinned C++ dispatches ListenerAlignTarget and dirties the retained target Node, while Rust has no corresponding RuntimeScheduledListenerAction variant/import branch."
+mechanism = "The complete listener/action family now dispatches ListenerAlignTarget through the retained target Node with the pinned transform/world-transform dirt writes. The remaining gap is the whole StateMachine/StateMachineInstance owner: definition and occurrence collections, transition search, advance/applyEvents, and name/id lookup still require end-to-end comparison against C++ retained vectors and pointers before the transition-search counter can close."
 citations = [
   "cpp:src/animation/state_machine_instance.cpp:2583",
   "cpp:src/animation/listener_align_target.cpp:9",
-  "rust:crates/nuxie-runtime/src/state_machine/instance.rs:53",
-  "rust:crates/nuxie-runtime/src/state_machine/listener_align_target.rs:8-112",
+  "rust:crates/nuxie-runtime/src/state_machine/listener_align_target.rs:15-112",
+  "rust:crates/nuxie-runtime/src/state_machine/instance.rs:8784-9088",
 ]
-closure = "FL-C ports the complete pinned listener-action owner family, including ListenerAlignTarget's retained target resolution and transform/world-transform dirt writes, reaches parity for component dirt additions, transition searches, and component dirt consumptions, and deletes any displaced lookup path."
+closure = "FL-C4 closes ListenerAlignTarget and its component-dirt branch. FL-C5 must close the complete StateMachine/StateMachineInstance collection and transition-search owner, reach parity for transition searches, and delete any displaced lookup path before this gap closes."
 
 [[gap]]
 id = "FL-G04"

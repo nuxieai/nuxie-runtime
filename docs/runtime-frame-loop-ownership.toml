@@ -10,56 +10,26 @@ provisional_fl_b_tip = "0b08970fccc42ff3677534d4dcece0f05f69a0bc"
 fl_b_verification = "pending-reacceptance"
 
 [active_owner_family]
-id = "FL-C4-listener-actions-events-dispatch"
-checklist = "docs/runtime-frame-loop-fl-c4-closure.md"
-checklist_state = "candidate"
+id = "FL-C5-state-machine-instance"
+checklist = "docs/runtime-frame-loop-fl-c5-closure.md"
+checklist_state = "planning"
 cpp_files = [
-  "src/animation/focus_action_clear.cpp",
-  "src/animation/focus_action_target.cpp",
-  "src/animation/focus_action_traversal.cpp",
-  "src/animation/focus_listener_group.cpp",
-  "src/animation/gamepad_listener_group.cpp",
-  "src/animation/keyboard_listener_group.cpp",
-  "src/animation/listener_action.cpp",
-  "src/animation/listener_align_target.cpp",
-  "src/animation/listener_bool_change.cpp",
-  "src/animation/listener_fire_event.cpp",
-  "src/animation/listener_input_change.cpp",
-  "src/animation/listener_invocation.cpp",
-  "src/animation/listener_number_change.cpp",
-  "src/animation/listener_trigger_change.cpp",
-  "src/animation/listener_viewmodel_change.cpp",
-  "src/animation/scripted_listener_action.cpp",
-  "src/animation/semantic_listener_group.cpp",
-  "src/animation/state_machine_fire_action.cpp",
-  "src/animation/state_machine_fire_trigger.cpp",
-  "src/script_input_boolean.cpp",
-  "src/script_input_color.cpp",
-  "src/script_input_number.cpp",
-  "src/script_input_string.cpp",
-  "src/script_input_trigger.cpp",
-  "src/script_input_viewmodel_property.cpp",
+  "src/animation/state_machine.cpp",
+  "src/animation/state_machine_instance.cpp",
 ]
 required_adversarial = [
-  "Parent-kind import ownership",
-  "Authored FIFO with duplicates",
-  "Malformed input actions",
-  "Bool and number edge values",
-  "Trigger callback identity",
-  "All invocation alternatives",
-  "Owned invocation payloads",
-  "Align target matrix",
-  "Focus target and traversal",
-  "Keyboard dispatch precedence",
-  "Gamepad dispatch precedence",
-  "Semantic queue constraints",
-  "ViewModel bind pairing",
-  "Reported-event ownership",
-  "Chained applyEvents completion",
-  "Deferred focus/semantic batches",
-  "Fire-trigger live path",
-  "ScriptInput owner lifecycle",
-  "Clone and teardown isolation",
+  "Definition import and collection ownership",
+  "Occurrence construction order",
+  "Ordered duplicates and nullable slots",
+  "Transition search and state change",
+  "Hit listener and focus ownership",
+  "DataContext bind rebind and clear",
+  "Event application and chained reports",
+  "Zero-second and floating-point edges",
+  "Advance return and pending work",
+  "Keyframe DataBind lifecycle",
+  "Clone remount and teardown isolation",
+  "Direct C++ file correspondence",
   "Permanent structural ratchets",
 ]
 
@@ -156,19 +126,19 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 68
+faithful = 93
 adapted = 0
 divergent-by-decision = 0
-pending = 273
+pending = 248
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
 # are the state-bearing frame-loop owners still requiring member-level proof.
 [expected_member_status_counts]
-faithful = 10
+faithful = 12
 adapted = 40
 divergent-by-decision = 0
-pending = 25
+pending = 23
 compensation = 0
 
 [[wave]]
@@ -583,7 +553,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/focus_action_clear.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/focus_action_target.cpp"
@@ -591,7 +561,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/focus_action_target.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/focus_action_traversal.cpp"
@@ -599,7 +569,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/focus_action_traversal.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/focus_listener_group.cpp"
@@ -607,7 +577,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/focus_listener_group.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/gamepad_listener_group.cpp"
@@ -615,7 +585,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/gamepad_listener_group.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/interpolating_keyframe.cpp"
@@ -631,7 +601,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/keyboard_listener_group.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/keyed_object.cpp"
@@ -751,7 +721,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_action.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/listener_align_target.cpp"
@@ -759,7 +729,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_align_target.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/listener_bool_change.cpp"
@@ -767,7 +737,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_bool_change.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/listener_fire_event.cpp"
@@ -775,7 +745,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_fire_event.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/listener_input_change.cpp"
@@ -783,7 +753,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_input_change.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/listener_invocation.cpp"
@@ -791,7 +761,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_invocation.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/listener_number_change.cpp"
@@ -799,7 +769,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_number_change.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/listener_trigger_change.cpp"
@@ -807,7 +777,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_trigger_change.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/listener_types/listener_input_type.cpp"
@@ -855,7 +825,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_viewmodel_change.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/nested_animation.cpp"
@@ -935,7 +905,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/scripted_listener_action.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/scripted_transition_condition.cpp"
@@ -951,7 +921,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/semantic_listener_group.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/state_instance.cpp"
@@ -975,7 +945,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/state_machine_fire_action.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/state_machine_fire_trigger.cpp"
@@ -983,7 +953,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/state_machine_fire_trigger.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/state_machine_input.cpp"
@@ -2173,7 +2143,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/script_input_boolean.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/script_input_color.cpp"
@@ -2181,7 +2151,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/script_input_color.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/script_input_number.cpp"
@@ -2189,7 +2159,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/script_input_number.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/script_input_string.cpp"
@@ -2197,7 +2167,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/script_input_string.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/script_input_trigger.cpp"
@@ -2205,7 +2175,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/script_input_trigger.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/script_input_viewmodel_property.cpp"
@@ -2213,7 +2183,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/script_input_viewmodel_property.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/shapes/clipping_shape.cpp"
@@ -3341,7 +3311,16 @@ wave = "FL-C"
 cpp_files = ["src/animation/state_machine_instance.cpp", "src/animation/listener_action.cpp"]
 rust_file = "crates/nuxie-runtime/src/state_machine/instance.rs"
 rust_anchor = "reported_events"
-status = "pending"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/animation/state_machine_instance.cpp:1831-1843", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:1198-1247"]
+retain = ["cpp:src/animation/state_machine_instance.cpp:2141-2199", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:100-115"]
+dirty = ["cpp:src/animation/state_machine_instance.cpp:3016-3019", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:5035-5041"]
+update = ["cpp:src/animation/state_machine_instance.cpp:2320-2343", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:4794-4898"]
+advance = ["cpp:src/animation/state_machine_instance.cpp:2546-2665", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:8784-9088"]
+draw = ["cpp:src/animation/state_machine_instance.cpp:2601-2665", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:8660-8723"]
+clone = ["cpp:src/animation/state_machine_instance.cpp:1707-2140", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:666-698"]
+drop = ["cpp:src/animation/state_machine_instance.cpp:2141-2199", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:100-115"]
 
 [[member]]
 id = "state_machine.layer"
@@ -3408,7 +3387,16 @@ cpp_files = [
 ]
 rust_file = "crates/nuxie-runtime/src/state_machine/instance.rs"
 rust_anchor = "RuntimeStateMachineListenerActionExecutor"
-status = "pending"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/animation/listener_action.cpp:8-23", "rust:crates/nuxie-runtime/src/state_machine/listener_action.rs:179-252"]
+retain = ["cpp:src/animation/state_machine_instance.cpp:1831-1843", "rust:crates/nuxie-runtime/src/state_machine/listener_action.rs:26-49"]
+dirty = ["cpp:src/animation/listener_align_target.cpp:9-49", "rust:crates/nuxie-runtime/src/state_machine/listener_align_target.rs:15-112"]
+update = ["cpp:src/animation/listener_action.cpp:25-34", "rust:crates/nuxie-runtime/src/state_machine/listener_action.rs:273-323"]
+advance = ["cpp:src/animation/state_machine_instance.cpp:2320-2539", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:4794-5117"]
+draw = ["cpp:src/animation/listener_align_target.cpp:9-49", "rust:crates/nuxie-runtime/src/state_machine/listener_align_target.rs:15-112"]
+clone = ["cpp:src/animation/state_machine_instance.cpp:1707-2140", "rust:crates/nuxie-runtime/src/state_machine/listener_action.rs:26-49"]
+drop = ["cpp:src/animation/state_machine_instance.cpp:2141-2199", "rust:crates/nuxie-runtime/src/state_machine/listener_action.rs:26-49"]
 
 [[member]]
 id = "state_machine.inputs"

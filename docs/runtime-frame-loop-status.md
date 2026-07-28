@@ -60,20 +60,19 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `f86d5ba0146697abc996310c62fa45e1f053144b`; exact main
   `e72323c808b91d706ba3b745396beaca7accd69a` was consumed without overlap at
   FL-B boundary merge `b5d5bc8afeaa0369cbc248b85366111649cb9010`.
-  FL-B remains pending reacceptance. The FL-C4 publication packet is complete;
-  its immutable evidence-commit SHA accompanies the independent whole-family
-  review request, and no FL-C4 row is promoted before that verdict.
+  FL-B remains pending reacceptance. The complete FL-C4 listener/action family
+  is independently accepted at
+  `0eb48976755d759c078f1f1a032bd88590e223f7` and its exact mapped rows are
+  promoted.
 - Active production branch: `levi/fl-c`. The former `levi/fl-b` branch name
   described the provisional stack base, not the active wave, and is no longer
   used for FL-C publication. There is no PR.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
-- File closure: 68 / 341. The 51 `component-update-graph` rows, all 12 FL-C2
-  transition/condition rows, and all five FL-C3 layer/state rows are
-  `faithful`; the 273 later-wave rows remain pending. The file-correspondence
-  manifest additionally retains the accepted importer rows.
-- Member closure: 50 / 75 owner/member rows (41 imported runtime-drawing
-  owners, all six FL-A Component rows, the two FL-C2 rows, and
-  `state_machine.layer`); 25 later-wave rows remain.
+- File closure: 93 / 341. The accepted FL-C4 family adds 25 exact
+  listener/action/ScriptInput owners; 248 later-wave rows remain pending.
+- Member closure: 52 / 75 owner/member rows. FL-C4 adds
+  `state_machine.actions` and `state_machine.events`; 23 later-wave rows
+  remain.
 - Open mechanism gaps: 7 / 10. FL-G02 and FL-G06 remain closed; FL-G10 records
   the user-approved D2 saturation choice for AnimationReset's otherwise
   undefined float-to-int edge.
@@ -164,8 +163,10 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `7f202a118e462fe298b88e7c56a76e0e8aec761e48876c12d242351180635320`;
   103 / 341 dynamically reached C++ files, 34 Rust modules, all 18 landmarks;
   and structural checker 41 / 41. No performance measurement was run.
-  Accepted closure remains 68 / 341 files and 50 / 75 members, with 7 / 10
-  mechanism gaps open, until independent promotion.
+  Independent Standards and Spec/oracle reviews both passed exact
+  `0eb48976755d759c078f1f1a032bd88590e223f7` with no findings. The exact 25
+  file owners and two member rows are promoted. Accepted closure is now
+  93 / 341 files and 52 / 75 members, with 7 / 10 mechanism gaps open.
 - FL-C1 input ownership is now source-corresponding: `state_machine_input.rs`
   owns the authored definition and `state_machine_input_instance.rs` owns the
   mutable occurrence. Each occurrence retains a handle into the one authored
@@ -822,11 +823,8 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. The corrected immutable FL-C4 candidate is published and awaits an
-   independent whole-family verdict. Keep every listener/action/event/focus-
-   dispatch row pending or pending-verification and do not begin FL-C5
-   production before that verdict.
-2. On acceptance, perform only the mapped promotion/reconciliation, then begin
-   the next dependency-ready FL-C owner family. FL-B and FL-C1 retain their
-   separate pending acceptance state. Performance remains deferred until all
-   mapped FL-A-through-FL-E code is ported.
+1. Begin the complete StateMachine/StateMachineInstance family (FL-C5) with
+   the full pinned-source walk and an exhaustive committed closure checklist;
+   make no semantic edit before that map exists.
+2. FL-B and FL-C1 retain their separate pending acceptance state. Performance
+   remains deferred until all mapped FL-A-through-FL-E code is ported.

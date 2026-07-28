@@ -823,8 +823,15 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Begin the complete StateMachine/StateMachineInstance family (FL-C5) with
-   the full pinned-source walk and an exhaustive committed closure checklist;
-   make no semantic edit before that map exists.
-2. FL-B and FL-C1 retain their separate pending acceptance state. Performance
+1. Implement FL-C5 per the committed family map: the binding checklist is
+   `runtime-frame-loop-fl-c5-closure.md`, the dependency-ordered writer
+   packages are `runtime-frame-loop-fl-c5-impl-spec.md` (WP0 file split
+   first), and the complete source-walk evidence is
+   `runtime-frame-loop-fl-c5-walk/`. One production writer; no semantic edit
+   outside the packages.
+2. FL-C1: the first independent acceptance audit found one BLOCKING gap
+   (claimed `DataBindPath` for `StateMachineListenerSingle`); the
+   non-relative half landed as `ec4d13f0` and was independently confirmed,
+   while relative claimed-path resolution remains an open correction in
+   progress. FL-B retains its separate pending acceptance state. Performance
    remains deferred until all mapped FL-A-through-FL-E code is ported.

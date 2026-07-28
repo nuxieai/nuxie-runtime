@@ -1010,22 +1010,29 @@ historical unless it agrees with these sources.
 **Canonical NEXT:** obtain the independent whole-family verdict on the
 immutable listener/action/event/focus-dispatch evidence commit containing this
 status (FL-C4). Production is complete through
-`97b5eefa415bfd1785f8be60ca6fd23024df515e`. The final lifecycle corrections
-preserve the prebound and unbound scripted-constructor orders,
-Artboard-before-StateMachine context binding, one shared File VM and program
-identity across root/child occurrences, and one ignored-result detached-
-ViewModel tail only after a root StateMachineInstance host advance. The final
-read-only pinned-C++ audit found no behavior or ownership blocker.
+`6f008b5b8acba0b93d1405aff0f0a08583138ca9`. Immutable candidate
+`f2819cda3836846df6017cc7be747fdeb03dcb67` was rejected because unbound Rust
+performed an invented third no-context scripted-listener attempt. The
+correction stops after C++'s two cold attempts and defers occurrence three to
+the first genuine DataContext attachment. The exact differential and
+parser-backed `scripted_object_unbound_constructor_enters_live_context`
+ratchet are green. The other final lifecycle corrections preserve the prebound
+scripted-constructor order, Artboard-before-StateMachine context binding, one
+shared File VM and program identity across root/child occurrences, and one
+ignored-result detached-ViewModel tail only after a root StateMachineInstance
+host advance. The final read-only pinned-C++ and adversarial ratchet audits
+found no behavior or ownership blocker.
 
 The fresh non-performance receipt is runtime 665 / 665; public facade
 146 / 146; probe-armed workspace and pinned-C++ comparisons 759 / 759;
 ordinary and scripted golden 317 / 317 entries and 647 / 647 segments with
-zero divergences; pixels 1,468 / 1,468 with 1,370 byte-exact and zero
+zero divergences; static pixels 1,468 / 1,468 with 837 byte-exact and
+same-runner pixels 1,468 / 1,468 with 1,370 byte-exact, both with zero
 divergences; C API, native Apple, browser, lint, format, and diff green; size
 8,151,336 / 9,252,072 bytes under 9 MiB; Apple XCFramework checksum
-`a4617edff64f19cbc353c579babb3c99e6a48a539644d04a65235a76f7913e1f`;
+`316fad479f4a764610db39f94e5621330f9fc337a5d35597696aecd800b7f11c`;
 trace fingerprint
-`de30569ccc2999baec88cc1b17583cdc7093c09d415952fdbdd6d76927dc9d8e`;
+`a91d6c9b1aa244c9448f51ab4881ab65670b0e03288abd80e8afdc5909b04a94`;
 103 / 341 dynamically reached C++ files, 34 Rust modules, all 18 landmarks;
 and checker 41 / 41. No performance measurement was run.
 

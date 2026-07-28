@@ -204,7 +204,9 @@ FL-C4 does not call that subclass-specific lifetime faithful
   was already live, the constructor-wide context barrier and deferred listener
   hydration run before converter binding; a later inherited live pass follows.
   An unbound occurrence instead receives C++'s unconditional second cold retry
-  before any later context bind
+  and then construction stops: without a retained or supplied DataContext it
+  does not enter converter binding or live generator/hydration. The first
+  genuine DataContext attachment performs occurrence three
   (`state_machine_instance.cpp:2072-2082`;
   `artboard.cpp:2844-2856`).
 - [x] One File registration owns one shared scripting VM and program map across
@@ -334,7 +336,9 @@ differentials because a regex cannot truthfully prove them:
 23. hydrating/initializing a ScriptedDataConverter before all of its own
     ScriptInputs and DataBinds are cloned, bound, and validated atomically; and
 24. subscribing a Once bind to its primary source or failing to reset a
-    stateful converter when the retained source-cell identity changes.
+    stateful converter when the retained source-cell identity changes; and
+25. entering the live DataContext/converter path after the second cold
+    constructor attempt when no DataContext exists.
 
 ## Publication packet
 
@@ -375,36 +379,49 @@ The focused proof set includes:
   and
   `post_constructor_context_bind_runs_converter_before_live_listener_init`
   lock the two constructor/context orders;
+- `unbound_listener_stops_after_cpp_constructor_two_attempts` proves that an
+  unbound listener stops after the two pinned constructor attempts and makes
+  occurrence three only when a genuine DataContext is attached;
 - `file_vm_tail_requires_a_root_state_machine_and_runs_once_per_host_frame`
   plus `shared_file_vm_contributes_one_host_frame_tail` prove shared File-VM
   identity and the single root-state-machine frame tail; and
 - every FL-C4 structural ratchet with an injected negative control, including
   permanent guards against erasing a typed terminal resource error or freezing
-  a retained Event payload at fire time.
+  a retained Event payload at fire time. The parser-backed
+  `scripted_object_unbound_constructor_enters_live_context` ratchet rejects
+  missing, nested, duplicate, or wrong-polarity guards; comments, dead code,
+  attributes/macros, duplicate definitions, and cross-function lookalikes
+  cannot satisfy it.
 
 Final production corrections are
 `4f10f3ca081006774fb1c55dbc03a0335bf0844c` and
-`97b5eefa415bfd1785f8be60ca6fd23024df515e`. They restore the prebound and
-unbound constructor orders, Artboard-before-StateMachine context binding, one
-shared File VM across root and child occurrences, and one ignored-result
-detached-ViewModel tail at the root StateMachineInstance frame boundary. The
-final read-only pinned-C++ audit found no remaining behavior or ownership
-blocker in this closure.
+`97b5eefa415bfd1785f8be60ca6fd23024df515e`. They restore the prebound
+constructor order, Artboard-before-StateMachine context binding, one shared
+File VM across root and child occurrences, and one ignored-result
+detached-ViewModel tail at the root StateMachineInstance frame boundary.
+Immutable candidate `f2819cda3836846df6017cc7be747fdeb03dcb67` was rejected
+because an unbound Rust occurrence incorrectly performed a third no-context
+attempt. Correction
+`6f008b5b8acba0b93d1405aff0f0a08583138ca9` stops after C++'s two cold
+attempts and defers occurrence three to the first genuine DataContext
+boundary. The final read-only pinned-C++ audit and adversarial ratchet review
+found no remaining behavior or ownership blocker in this closure.
 
 The fresh non-performance receipt bound to production source
-`97b5eefa415bfd1785f8be60ca6fd23024df515e` is:
+`6f008b5b8acba0b93d1405aff0f0a08583138ca9` is:
 
 - runtime 665 / 665 and public facade 146 / 146;
 - probe-armed workspace including 759 / 759 pinned-C++ comparisons;
 - ordinary and scripted golden each 317 / 317 entries and 647 / 647 segments,
   zero divergences, including `data_viz_demo` and `db_health_tracker`;
-- same-runner pixels 1,468 / 1,468, 1,370 byte-exact, zero divergences, and
-  zero gated rows;
+- static pixels 1,468 / 1,468, 837 byte-exact, zero divergences, and zero
+  gated rows; same-runner pixels 1,468 / 1,468, 1,370 byte-exact, zero
+  divergences, and zero gated rows;
 - C API, native Apple, browser WebGPU-only, lint, format, and diff checks;
 - committed-tree size 8,151,336 bytes without scripting and 9,252,072 bytes
   with scripting, both below 9 MiB;
 - Apple XCFramework build/package/ABI/header/C/Swift checks, checksum
-  `a4617edff64f19cbc353c579babb3c99e6a48a539644d04a65235a76f7913e1f`;
+  `316fad479f4a764610db39f94e5621330f9fc337a5d35597696aecd800b7f11c`;
 - a source-bound trace with all 18 landmarks and exact runner provenance; and
 - structural checker 41 / 41 with every injected negative control green.
 

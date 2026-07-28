@@ -130,23 +130,30 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   performance measurement was run.
 - The complete listener/action/event/focus-dispatch family (FL-C4) is
   production-complete on
-  `97b5eefa415bfd1785f8be60ca6fd23024df515e`. The final lifecycle
+  `6f008b5b8acba0b93d1405aff0f0a08583138ca9`. Immutable candidate
+  `f2819cda3836846df6017cc7be747fdeb03dcb67` was rejected because unbound
+  Rust performed an invented third no-context scripted-listener attempt. The
+  correction stops after C++'s two cold attempts and defers occurrence three
+  to the first genuine DataContext attachment. The other final lifecycle
   corrections preserve cold clone/reinit, distinguish prebound constructor
   hydration from later context binding, share one File VM/program identity
   across root and child occurrences, bind the Artboard before its
   StateMachine, and run one ignored-result detached-ViewModel tail only after
-  a root StateMachineInstance host advance. The final pinned-C++ audit is
+  a root StateMachineInstance host advance. The exact differential and
+  parser-backed `scripted_object_unbound_constructor_enters_live_context`
+  ratchet are green; the final pinned-C++ and adversarial ratchet audits are
   behavior/ownership clean.
 - FL-C4's fresh non-performance floor is green: runtime 665 / 665; public
   facade 146 / 146; probe-armed workspace and pinned-C++ comparisons
   759 / 759; ordinary and scripted golden each 317 / 317 entries and
-  647 / 647 segments with zero divergences; pixels 1,468 / 1,468 with 1,370
-  byte-exact and zero divergences; C API, native Apple, browser, lint, format,
-  and diff checks; size 8,151,336 / 9,252,072 bytes under 9 MiB; Apple
+  647 / 647 segments with zero divergences; static pixels 1,468 / 1,468 with
+  837 byte-exact and same-runner pixels 1,468 / 1,468 with 1,370 byte-exact,
+  both with zero divergences; C API, native Apple, browser, lint, format, and
+  diff checks; size 8,151,336 / 9,252,072 bytes under 9 MiB; Apple
   XCFramework checksum
-  `a4617edff64f19cbc353c579babb3c99e6a48a539644d04a65235a76f7913e1f`;
+  `316fad479f4a764610db39f94e5621330f9fc337a5d35597696aecd800b7f11c`;
   trace fingerprint
-  `de30569ccc2999baec88cc1b17583cdc7093c09d415952fdbdd6d76927dc9d8e`;
+  `a91d6c9b1aa244c9448f51ab4881ab65670b0e03288abd80e8afdc5909b04a94`;
   103 / 341 dynamically reached C++ files, 34 Rust modules, all 18 landmarks;
   and structural checker 41 / 41. No performance measurement was run.
   Accepted closure remains 68 / 341 files and 50 / 75 members, with 7 / 10
@@ -807,9 +814,10 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Obtain the independent whole-family verdict on the immutable FL-C4 evidence
-   commit containing this status. Keep every listener/action/event/focus-
-   dispatch row pending or pending-verification.
+1. The corrected immutable FL-C4 candidate is published and awaits an
+   independent whole-family verdict. Keep every listener/action/event/focus-
+   dispatch row pending or pending-verification and do not begin FL-C5
+   production before that verdict.
 2. On acceptance, perform only the mapped promotion/reconciliation, then begin
    the next dependency-ready FL-C owner family. FL-B and FL-C1 retain their
    separate pending acceptance state. Performance remains deferred until all

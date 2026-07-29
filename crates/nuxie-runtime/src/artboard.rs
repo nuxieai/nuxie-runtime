@@ -5417,6 +5417,11 @@ impl ArtboardInstance {
             return true;
         }
 
+        if parametric_path_double_property_affects_geometry(type_name, property_key) {
+            self.add_dirt(local_id, ComponentDirt::PATH, false);
+            return true;
+        }
+
         if let Some(property) = transform_property_for_key(property_key) {
             match property {
                 TransformProperty::Opacity => {
@@ -6850,6 +6855,43 @@ fn path_vertex_property_affects_geometry(type_name: Option<&str>, property_key: 
     properties
         .iter()
         .any(|name| property_key_for_name(type_name, name) == Some(property_key))
+}
+
+fn parametric_path_double_property_affects_geometry(
+    type_name: Option<&str>,
+    property_key: u16,
+) -> bool {
+    let properties: &[(&str, &[&str])] = match type_name {
+        Some("Ellipse" | "Triangle") => {
+            &[("ParametricPath", &["width", "height", "originX", "originY"])]
+        }
+        Some("Polygon") => &[
+            ("ParametricPath", &["width", "height", "originX", "originY"]),
+            ("Polygon", &["cornerRadius"]),
+        ],
+        Some("Star") => &[
+            ("ParametricPath", &["width", "height", "originX", "originY"]),
+            ("Star", &["cornerRadius", "innerRadius"]),
+        ],
+        Some("Rectangle") => &[
+            ("ParametricPath", &["width", "height", "originX", "originY"]),
+            (
+                "Rectangle",
+                &[
+                    "cornerRadiusTL",
+                    "cornerRadiusTR",
+                    "cornerRadiusBL",
+                    "cornerRadiusBR",
+                ],
+            ),
+        ],
+        _ => return false,
+    };
+    properties.iter().any(|(owner, names)| {
+        names
+            .iter()
+            .any(|name| property_key_for_name(owner, name) == Some(property_key))
+    })
 }
 
 fn property_affects_effect_path_epoch(type_name: Option<&str>, property_key: u16) -> bool {

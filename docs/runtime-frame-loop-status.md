@@ -829,9 +829,18 @@ FL-A post-rebase floor, refreshed after final independent review:
    first), and the complete source-walk evidence is
    `runtime-frame-loop-fl-c5-walk/`. One production writer; no semantic edit
    outside the packages.
-2. FL-C1: the first independent acceptance audit found one BLOCKING gap
-   (claimed `DataBindPath` for `StateMachineListenerSingle`); the
-   non-relative half landed as `ec4d13f0` and was independently confirmed,
-   while relative claimed-path resolution remains an open correction in
-   progress. FL-B retains its separate pending acceptance state. Performance
-   remains deferred until all mapped FL-A-through-FL-E code is ported.
+2. FL-C1: five independent audit rounds. The claimed-`DataBindPath`
+   corrections (non-relative `ec4d13f0`, relative name resolution
+   `82e229f3`, unmapped-name-ID empty-string fallback plus boundary
+   restoration `69fee252`) are all independently confirmed correct.
+   Making the probes genuinely differential (`20cd8c02`) then demonstrated
+   a real one-advance ViewModel-listener firing-boundary divergence (Rust
+   applies the change one advance earlier than pinned C++'s
+   queue-then-next-new-frame `applyEvents`). That gap is owned by the
+   FL-C5 WP6 event rows as recorded gap `flc5-vm-listener-firing-boundary`;
+   the claimed-path probes must pin the current divergence explicitly (no
+   loosened comparisons) until WP6 restores the C++ boundary. FL-C1
+   acceptance is pending one further round under that recorded-gap
+   disposition. FL-B retains its separate pending acceptance state.
+   Performance remains deferred until all mapped FL-A-through-FL-E code is
+   ported.

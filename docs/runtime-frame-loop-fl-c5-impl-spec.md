@@ -358,6 +358,14 @@ Depends on WP5.
 
 1. Keep the existing dual-cursor event adaptation and notification queue.
 2. Port the trigger-zero suppression guard into `reportToStateMachine`.
+2b. Close recorded gap `flc5-vm-listener-firing-boundary`: live claimed-path
+   differentials demonstrated Rust applies a ViewModel-listener change one
+   advance earlier than pinned C++, which queues the report during one
+   advance and applies it at the next new-frame `applyEvents`
+   (`state_machine_instance.cpp:1481-1488,2320-2344,3021-3025`; round-5
+   FL-C1 re-audit). Restore the C++ boundary — do NOT relax the probes.
+   WP6 completion requires the four claimed-path probes to pass with strict
+   per-step equality and their explicit divergence pins removed.
 3. Preserve `applyEvents`: update binds; snapshot/clear both pending queues;
    event callbacks; ViewModel callbacks; repeat through exactly 100 batches.
 4. Make pending count/index inspection exclude the batch currently being

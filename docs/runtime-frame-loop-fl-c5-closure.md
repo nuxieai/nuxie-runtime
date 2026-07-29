@@ -476,6 +476,12 @@ instance-level Rust implementation.
   listener breaks after its first match while multi-input listeners continue
   across events; local dispatch precedes bubbling and the recorded audio seam;
   host draining is isolated; trigger zero and signed zero are suppressed.
+  Includes closing recorded gap `flc5-vm-listener-firing-boundary`: live
+  claimed-path differentials demonstrated Rust applies a ViewModel-listener
+  change one advance earlier than pinned C++ (queue-on-one-advance,
+  apply-at-next-new-frame `applyEvents`); WP6 must restore the C++ boundary
+  and convert the probes' explicit divergence pins to strict per-step
+  equality.
 - [ ] **8. Zero-second and floating-point edges.** On every
   C++-corresponding path forward `+0`, `-0`, NaN, positive/negative infinity,
   and negative ordinary values without Rust finite validation. Cover advance

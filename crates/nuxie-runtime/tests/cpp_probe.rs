@@ -19265,13 +19265,11 @@ fn relative_claimed_data_bind_path_view_model_listener_matches_cpp_on_property_m
                 *advanced,
                 &format!("{label} action {step}"),
             );
-            if step + 1 == rust_reports.len() {
-                compare_state_machine_bool_inputs(
-                    cpp_report,
-                    rust_report,
-                    &format!("{label} action {step}"),
-                );
-            }
+            compare_state_machine_bool_inputs(
+                cpp_report,
+                rust_report,
+                &format!("{label} action {step}"),
+            );
         }
     } else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -19345,13 +19343,11 @@ fn unmapped_name_relative_claimed_data_bind_path_view_model_listener_matches_cpp
                 *advanced,
                 &format!("{label} action {step}"),
             );
-            if step + 1 == rust_reports.len() {
-                compare_state_machine_bool_inputs(
-                    cpp_report,
-                    rust_report,
-                    &format!("{label} action {step}"),
-                );
-            }
+            compare_state_machine_bool_inputs(
+                cpp_report,
+                rust_report,
+                &format!("{label} action {step}"),
+            );
         }
     } else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -19431,13 +19427,11 @@ fn unmapped_intermediate_name_relative_claimed_data_bind_path_listener_matches_c
                 *advanced,
                 &format!("{label} action {step}"),
             );
-            if step + 1 == rust_reports.len() {
-                compare_state_machine_bool_inputs(
-                    cpp_report,
-                    rust_report,
-                    &format!("{label} action {step}"),
-                );
-            }
+            compare_state_machine_bool_inputs(
+                cpp_report,
+                rust_report,
+                &format!("{label} action {step}"),
+            );
         }
     } else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -19507,6 +19501,19 @@ fn nested_relative_claimed_data_bind_path_view_model_listener_matches_cpp() {
                 *advanced,
                 &format!("{label} action {step}"),
             );
+            if step == 1 {
+                assert_view_model_listener_firing_boundary_divergence(
+                    cpp_report,
+                    rust_report,
+                    &format!("{label} action {step}"),
+                );
+            } else {
+                compare_state_machine_bool_inputs(
+                    cpp_report,
+                    rust_report,
+                    &format!("{label} action {step}"),
+                );
+            }
         }
     } else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -81514,6 +81521,42 @@ fn compare_state_machine_bool_inputs(
             cpp_input.index
         );
     }
+}
+
+fn assert_view_model_listener_firing_boundary_divergence(
+    cpp: &CppRuntimeStateMachineAdvance,
+    rust: &nuxie_runtime::StateMachineInstance,
+    label: &str,
+) {
+    let message = format!(
+        "{label} KNOWN DIVERGENCE flc5-vm-listener-firing-boundary: \
+         Rust fires one advance early; WP6 must restore the C++ boundary"
+    );
+    let rust_bool_input_count = (0..rust.input_count())
+        .filter(|index| {
+            rust.input(*index)
+                .is_some_and(|input| input.kind() == StateMachineInputKind::Bool)
+        })
+        .count();
+    assert_eq!(
+        cpp.bool_inputs.len(),
+        rust_bool_input_count,
+        "{message}: bool input count mismatch"
+    );
+    let cpp_input = cpp
+        .bool_inputs
+        .iter()
+        .find(|input| input.index == 0)
+        .unwrap_or_else(|| panic!("{message}: missing C++ bool input 0"));
+    assert_eq!(
+        cpp_input.value, false,
+        "{message}: C++ bool input 0 must remain false at the early step"
+    );
+    assert_eq!(
+        rust.input(0).and_then(|input| input.bool_value()),
+        Some(true),
+        "{message}: Rust bool input 0 must already be true at the early step"
+    );
 }
 
 fn compare_state_machine_number_binding(

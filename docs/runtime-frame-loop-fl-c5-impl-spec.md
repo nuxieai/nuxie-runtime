@@ -363,9 +363,12 @@ Depends on WP5.
    advance earlier than pinned C++, which queues the report during one
    advance and applies it at the next new-frame `applyEvents`
    (`state_machine_instance.cpp:1481-1488,2320-2344,3021-3025`; round-5
-   FL-C1 re-audit). Restore the C++ boundary — do NOT relax the probes.
-   WP6 completion requires the four claimed-path probes to pass with strict
-   per-step equality and their explicit divergence pins removed.
+   FL-C1 re-audit). Against a fresh clean pinned-C++ build the divergence
+   reproduces only for the NESTED-relative claimed path; the three flat
+   claimed-path probes hold strict per-step equality. Restore the C++
+   boundary — do NOT relax the probes. WP6 completion requires the
+   nested-relative probe's explicit divergence pin to be flipped to strict
+   per-step equality (the other three already are strict).
 3. Preserve `applyEvents`: update binds; snapshot/clear both pending queues;
    event callbacks; ViewModel callbacks; repeat through exactly 100 batches.
 4. Make pending count/index inspection exclude the batch currently being

@@ -837,10 +837,12 @@ FL-A post-rebase floor, refreshed after final independent review:
    a real one-advance ViewModel-listener firing-boundary divergence (Rust
    applies the change one advance earlier than pinned C++'s
    queue-then-next-new-frame `applyEvents`). That gap is owned by the
-   FL-C5 WP6 event rows as recorded gap `flc5-vm-listener-firing-boundary`;
-   the claimed-path probes must pin the current divergence explicitly (no
-   loosened comparisons) until WP6 restores the C++ boundary. FL-C1
-   acceptance is pending one further round under that recorded-gap
-   disposition. FL-B retains its separate pending acceptance state.
+   FL-C5 WP6 event rows as recorded gap `flc5-vm-listener-firing-boundary`.
+   Against a fresh clean pinned-C++ build it reproduces only for the
+   nested-relative claimed path: the three flat claimed-path probes hold
+   strict per-step equality, and the nested probe pins both runtimes'
+   current step-1 values explicitly (no loosened comparisons) until WP6
+   restores the C++ boundary. FL-C1 acceptance is pending one further
+   round under that recorded-gap disposition. FL-B retains its separate pending acceptance state.
    Performance remains deferred until all mapped FL-A-through-FL-E code is
    ported.

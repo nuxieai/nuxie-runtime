@@ -369,6 +369,13 @@ Depends on WP5.
    boundary — do NOT relax the probes. WP6 completion requires the
    nested-relative probe's explicit divergence pin to be flipped to strict
    per-step equality (the other three already are strict).
+2c. Close the WP5 proof debt: convert the bind-family null/inherit/
+   completion probes to live pinned-C++ differentials by extending
+   tools/cpp-probe with the needed bind-family drive commands
+   (bindViewModelInstance null and non-null, setViewModelInstance staging
+   without bind, inheritDataContext A-then-B, completeViewModelInstances
+   with occupied cross-model slots), so the B-BIND closure rows carry live
+   differentials rather than source-shape citations.
 3. Preserve `applyEvents`: update binds; snapshot/clear both pending queues;
    event callbacks; ViewModel callbacks; repeat through exactly 100 batches.
 4. Make pending count/index inspection exclude the batch currently being

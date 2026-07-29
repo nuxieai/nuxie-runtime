@@ -89,6 +89,7 @@ size_t randomProviderTotalCalls();
 #include "rive/animation/state_machine_fire_event.hpp"
 #include "rive/animation/state_machine_layer_component.hpp"
 #include "rive/animation/state_machine_component.hpp"
+#include "rive/animation/state_machine_bool.hpp"
 #include "rive/animation/state_machine_input.hpp"
 #include "rive/animation/state_machine_input_instance.hpp"
 #include "rive/animation/state_machine_layer.hpp"
@@ -747,6 +748,7 @@ struct RuntimeStateMachineAdvanceReport
     size_t currentAnimationCount;
     size_t changedStateCount;
     size_t randomTotalCalls;
+    std::vector<std::pair<size_t, bool>> boolInputs;
     std::vector<RuntimeStateMachineCurrentAnimationReport> currentAnimations;
     std::vector<RuntimeStateMachineReportedEventReport> reportedEvents;
     std::vector<RuntimeStateMachineViewModelTriggerReport> viewModelTriggers;
@@ -7403,6 +7405,16 @@ apply_runtime_state_machine_advances(rive::File* file,
         report.currentAnimationCount = stateMachine->currentAnimationCount();
         report.changedStateCount = stateMachine->stateChangedCount();
         report.randomTotalCalls = rive_probe::randomProviderTotalCalls();
+        for (size_t i = 0; i < stateMachine->inputCount(); ++i)
+        {
+            auto input = stateMachine->input(i);
+            if (input != nullptr && input->input() != nullptr &&
+                input->input()->is<rive::StateMachineBool>())
+            {
+                report.boolInputs.push_back(
+                    {i, static_cast<rive::SMIBool*>(input)->value()});
+            }
+        }
         for (size_t i = 0; i < report.currentAnimationCount; ++i)
         {
             auto animation = stateMachine->currentAnimationByIndex(i);
@@ -7943,7 +7955,19 @@ void write_runtime_state_machine_advance_reports(
         out << ",\"changedStateCount\":" << report.changedStateCount;
         out << ",\"randomTotalCalls\":" << report.randomTotalCalls;
         out << ",\"reportedEventCount\":" << report.reportedEvents.size();
-        out << ",\"currentAnimations\":[";
+        out << ",\"boolInputs\":[";
+        for (size_t j = 0; j < report.boolInputs.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            const auto& input = report.boolInputs[j];
+            out << "{\"index\":" << input.first;
+            out << ",\"value\":" << (input.second ? "true" : "false");
+            out << '}';
+        }
+        out << "],\"currentAnimations\":[";
         for (size_t j = 0; j < report.currentAnimations.size(); ++j)
         {
             if (j != 0)

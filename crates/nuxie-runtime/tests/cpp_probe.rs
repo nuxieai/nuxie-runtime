@@ -9257,6 +9257,40 @@ fn push_manifest_unmapped_name_path_asset(bytes: &mut Vec<u8>, path_id: u32, nam
     });
 }
 
+fn push_manifest_unmapped_intermediate_name_path_asset(
+    bytes: &mut Vec<u8>,
+    path_id: u32,
+    unmapped_name_id: u32,
+    final_name_id: u32,
+    final_name: &[u8],
+) {
+    let mut manifest_names = Vec::new();
+    push_var_uint(&mut manifest_names, 1);
+    push_var_uint(&mut manifest_names, u64::from(final_name_id));
+    push_var_uint(&mut manifest_names, final_name.len() as u64);
+    manifest_names.extend_from_slice(final_name);
+
+    let mut manifest_paths = Vec::new();
+    push_var_uint(&mut manifest_paths, 1);
+    push_var_uint(&mut manifest_paths, u64::from(path_id));
+    push_var_uint(&mut manifest_paths, 2);
+    push_var_uint(&mut manifest_paths, u64::from(unmapped_name_id));
+    push_var_uint(&mut manifest_paths, u64::from(final_name_id));
+
+    let mut manifest_bytes = Vec::new();
+    push_var_uint(&mut manifest_bytes, 0);
+    push_var_uint(&mut manifest_bytes, manifest_names.len() as u64);
+    manifest_bytes.extend_from_slice(&manifest_names);
+    push_var_uint(&mut manifest_bytes, 1);
+    push_var_uint(&mut manifest_bytes, manifest_paths.len() as u64);
+    manifest_bytes.extend_from_slice(&manifest_paths);
+
+    push_object_with_properties(bytes, "ManifestAsset", |_| {});
+    push_object_with_properties(bytes, "FileAssetContents", |bytes| {
+        push_bytes_property(bytes, "FileAssetContents", "bytes", &manifest_bytes);
+    });
+}
+
 fn push_manifest_name_path_asset_path(bytes: &mut Vec<u8>, path_id: u32, names: &[(u32, &[u8])]) {
     let mut manifest_names = Vec::new();
     push_var_uint(&mut manifest_names, names.len() as u64);
@@ -14236,8 +14270,8 @@ fn synthetic_relative_claimed_data_bind_path_view_model_listener(file_id: u64) -
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
         });
-        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
-            push_string_property(bytes, "ViewModelPropertyNumber", "name", "watch");
+        push_object_with_properties(bytes, "ViewModelPropertyBoolean", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyBoolean", "name", "watch");
         });
         push_object_with_properties(bytes, "Backboard", |_| {});
         push_manifest_name_path_asset(bytes, 79, 7, b"watch");
@@ -14273,7 +14307,7 @@ fn synthetic_unmapped_name_relative_claimed_data_bind_path_view_model_listener(
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
         });
-        push_object_with_properties(bytes, "ViewModelPropertyNumber", |_| {});
+        push_object_with_properties(bytes, "ViewModelPropertyBoolean", |_| {});
         push_object_with_properties(bytes, "Backboard", |_| {});
         push_manifest_unmapped_name_path_asset(bytes, 79, 999);
         push_object_with_properties(bytes, "Artboard", |bytes| {
@@ -14283,6 +14317,75 @@ fn synthetic_unmapped_name_relative_claimed_data_bind_path_view_model_listener(
         push_object_with_properties(bytes, "StateMachineBool", |bytes| {
             push_string_property(bytes, "StateMachineBool", "name", "observed");
         });
+
+        let mut listener_path = Vec::new();
+        push_var_uint(&mut listener_path, 79);
+        push_object_with_properties(bytes, "DataBindPath", |bytes| {
+            push_bytes_property(bytes, "DataBindPath", "path", &listener_path);
+            push_bool_property(bytes, "DataBindPath", "isRelative", true);
+        });
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 11);
+        });
+        push_object_with_properties(bytes, "ListenerBoolChange", |bytes| {
+            push_uint_property(bytes, "ListenerBoolChange", "inputId", 0);
+            push_uint_property(bytes, "ListenerBoolChange", "value", 1);
+        });
+    })
+}
+
+fn synthetic_unmapped_intermediate_name_relative_claimed_data_bind_path_view_model_listener(
+    file_id: u64,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelPropertyViewModel",
+                "viewModelReferenceId",
+                1,
+            );
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Child");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_manifest_unmapped_intermediate_name_path_asset(bytes, 79, 999, 8, b"amount");
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "child");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 1);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceViewModel", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceViewModel",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+        });
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "observed");
+        });
+        push_bindable_number_data_bind_context(bytes, 0.0, &[0, 0, 0]);
 
         let mut listener_path = Vec::new();
         push_var_uint(&mut listener_path, 79);
@@ -19107,10 +19210,13 @@ fn relative_claimed_data_bind_path_view_model_listener_matches_cpp_on_property_m
             "--runtime-advance-state-machine".to_owned(),
             "0".to_owned(),
             "0".to_owned(),
-            "--runtime-set-default-view-model-source-number-by-name".to_owned(),
+            "--runtime-set-owned-view-model-source-bool-by-name".to_owned(),
             "0".to_owned(),
             "watch".to_owned(),
-            "1".to_owned(),
+            "true".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
             "--runtime-advance-state-machine".to_owned(),
             "0".to_owned(),
             "0".to_owned(),
@@ -19130,9 +19236,13 @@ fn relative_claimed_data_bind_path_view_model_listener_matches_cpp_on_property_m
         state_machine.clone(),
     )];
     assert!(
-        context.set_number_by_property_name("watch", 1.0),
+        context.set_boolean_by_property_name("watch", true),
         "{label} failed to change the relative listener source"
     );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
@@ -19155,6 +19265,13 @@ fn relative_claimed_data_bind_path_view_model_listener_matches_cpp_on_property_m
                 *advanced,
                 &format!("{label} action {step}"),
             );
+            if step + 1 == rust_reports.len() {
+                compare_state_machine_bool_inputs(
+                    cpp_report,
+                    rust_report,
+                    &format!("{label} action {step}"),
+                );
+            }
         }
     } else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -19173,10 +19290,13 @@ fn unmapped_name_relative_claimed_data_bind_path_view_model_listener_matches_cpp
             "--runtime-advance-state-machine".to_owned(),
             "0".to_owned(),
             "0".to_owned(),
-            "--runtime-set-default-view-model-source-number-by-name".to_owned(),
+            "--runtime-set-owned-view-model-source-bool-by-name".to_owned(),
             "0".to_owned(),
             String::new(),
-            "1".to_owned(),
+            "true".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
             "--runtime-advance-state-machine".to_owned(),
             "0".to_owned(),
             "0".to_owned(),
@@ -19196,9 +19316,13 @@ fn unmapped_name_relative_claimed_data_bind_path_view_model_listener_matches_cpp
         state_machine.clone(),
     )];
     assert!(
-        context.set_number_by_property_name("", 1.0),
+        context.set_boolean_by_property_name("", true),
         "{label} failed to change the unnamed listener source"
     );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
@@ -19221,6 +19345,99 @@ fn unmapped_name_relative_claimed_data_bind_path_view_model_listener_matches_cpp
                 *advanced,
                 &format!("{label} action {step}"),
             );
+            if step + 1 == rust_reports.len() {
+                compare_state_machine_bool_inputs(
+                    cpp_report,
+                    rust_report,
+                    &format!("{label} action {step}"),
+                );
+            }
+        }
+    } else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+    }
+}
+
+#[test]
+fn unmapped_intermediate_name_relative_claimed_data_bind_path_listener_matches_cpp() {
+    let label = "synthetic/runtime_unmapped_intermediate_name_relative_claimed_data_bind_path_view_model_listener.riv";
+    let bytes =
+        synthetic_unmapped_intermediate_name_relative_claimed_data_bind_path_view_model_listener(
+            9697,
+        );
+    let cpp = probe_path().map(|probe| {
+        let args = [
+            "--runtime-bind-created-default-view-model-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-set-owned-view-model-source-number".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ];
+        read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args)
+    });
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(state_machine.bind_owned_view_model_context(&context));
+    let mut rust_reports = vec![(
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    )];
+    assert!(
+        state_machine.set_owned_view_model_context_number_source_for_data_bind(
+            &mut context,
+            0,
+            1.0,
+        ),
+        "{label} failed to change the nested unnamed listener source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+
+    assert_eq!(
+        state_machine.input(0).and_then(|input| input.bool_value()),
+        Some(true),
+        "an unmapped intermediate name id must resolve to the empty ViewModel property name"
+    );
+    if let Some(cpp) = cpp {
+        let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+        assert_eq!(cpp_reports.len(), rust_reports.len());
+        for (step, (cpp_report, (advanced, rust_report))) in
+            cpp_reports.iter().zip(&rust_reports).enumerate()
+        {
+            compare_state_machine_advance(
+                cpp_report,
+                rust_report,
+                *advanced,
+                &format!("{label} action {step}"),
+            );
+            if step + 1 == rust_reports.len() {
+                compare_state_machine_bool_inputs(
+                    cpp_report,
+                    rust_report,
+                    &format!("{label} action {step}"),
+                );
+            }
         }
     } else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -81150,6 +81367,33 @@ fn compare_state_machine_advance(
     }
 }
 
+fn compare_state_machine_bool_inputs(
+    cpp: &CppRuntimeStateMachineAdvance,
+    rust: &nuxie_runtime::StateMachineInstance,
+    label: &str,
+) {
+    let rust_bool_input_count = (0..rust.input_count())
+        .filter(|index| {
+            rust.input(*index)
+                .is_some_and(|input| input.kind() == StateMachineInputKind::Bool)
+        })
+        .count();
+    assert_eq!(
+        cpp.bool_inputs.len(),
+        rust_bool_input_count,
+        "{label} bool input count mismatch"
+    );
+    for cpp_input in &cpp.bool_inputs {
+        assert_eq!(
+            rust.input(cpp_input.index)
+                .and_then(|input| input.bool_value()),
+            Some(cpp_input.value),
+            "{label} bool input {} value mismatch",
+            cpp_input.index
+        );
+    }
+}
+
 fn compare_state_machine_number_binding(
     cpp: &CppRuntimeStateMachineAdvance,
     rust: &StateMachineInstance,
@@ -82183,6 +82427,8 @@ struct CppRuntimeStateMachineAdvance {
     reported_event_count: usize,
     #[serde(default, rename = "randomTotalCalls")]
     random_total_calls: usize,
+    #[serde(default, rename = "boolInputs")]
+    bool_inputs: Vec<CppRuntimeStateMachineBoolInput>,
     #[serde(rename = "currentAnimations")]
     current_animations: Vec<CppRuntimeStateMachineCurrentAnimation>,
     #[serde(default, rename = "reportedEvents")]
@@ -82217,6 +82463,12 @@ struct CppRuntimeStateMachineAdvance {
     artboard_scripted_objects: Vec<CppRuntimeStateMachineScriptedObject>,
     #[serde(default, rename = "scriptedConverters")]
     scripted_converters: Vec<CppRuntimeStateMachineScriptedConverter>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppRuntimeStateMachineBoolInput {
+    index: usize,
+    value: bool,
 }
 
 #[derive(Debug, Deserialize)]

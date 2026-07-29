@@ -126,19 +126,19 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 93
+faithful = 105
 adapted = 0
 divergent-by-decision = 0
-pending = 248
+pending = 236
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
 # are the state-bearing frame-loop owners still requiring member-level proof.
 [expected_member_status_counts]
-faithful = 12
+faithful = 13
 adapted = 40
 divergent-by-decision = 0
-pending = 23
+pending = 22
 compensation = 0
 
 [[wave]]
@@ -785,7 +785,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_types/listener_input_type.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/listener_types/listener_input_type_gamepad.cpp"
@@ -793,7 +793,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_types/listener_input_type_gamepad.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/listener_types/listener_input_type_keyboard.cpp"
@@ -801,7 +801,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_types/listener_input_type_keyboard.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/listener_types/listener_input_type_semantic.cpp"
@@ -809,7 +809,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_types/listener_input_type_semantic.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/listener_types/listener_input_type_viewmodel.cpp"
@@ -817,7 +817,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_types/listener_input_type_viewmodel.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/listener_viewmodel_change.cpp"
@@ -961,7 +961,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/state_machine_input.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/state_machine_input_instance.cpp"
@@ -969,7 +969,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/state_machine_instance.cpp"
@@ -997,7 +997,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/state_machine_listener.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/state_machine_listener_single.cpp"
@@ -1005,7 +1005,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/state_machine_listener_single.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/animation/state_transition.cpp"
@@ -1827,7 +1827,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_types/gamepad_input.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/inputs/keyboard_input.cpp"
@@ -1835,7 +1835,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_types/keyboard_input.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/inputs/semantic_input.cpp"
@@ -1843,7 +1843,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/listener_types/semantic_input.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/joystick.cpp"
@@ -3407,7 +3407,16 @@ cpp_files = [
 ]
 rust_file = "crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs"
 rust_anchor = "pub struct StateMachineInputInstance"
-status = "pending"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/animation/state_machine_instance.cpp:1707-1745", "rust:crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs:15-37"]
+retain = ["cpp:src/animation/state_machine_input_instance.cpp:9-16", "rust:crates/nuxie-runtime/src/state_machine/state_machine_input.rs:75-94"]
+dirty = ["cpp:src/animation/state_machine_input_instance.cpp:18-28", "rust:crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs:87-142"]
+update = ["cpp:src/animation/state_machine_input_instance.cpp:37-77", "rust:crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs:87-142"]
+advance = ["cpp:src/animation/state_machine_instance.cpp:2576-2582", "rust:crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs:144-166"]
+draw = ["cpp:src/animation/state_machine_instance.cpp:2680-2700", "rust:crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs:66-85"]
+clone = ["cpp:src/animation/state_machine_input_instance.cpp:9-67", "rust:crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs:7-12"]
+drop = ["cpp:src/animation/state_machine_instance.cpp:2160-2164", "rust:crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs:169-178"]
 
 [[member]]
 id = "databind.context"

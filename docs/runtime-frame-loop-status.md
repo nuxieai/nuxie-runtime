@@ -12,9 +12,9 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 - Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
   on that provisional implementation without claiming FL-B verification.
   FL-C's corrected 56-file/eight-member lane map is
-  `docs/runtime-frame-loop-fl-c-spec.md`; FL-C1 inputs/listener definitions is
-  implemented with a green lane-boundary floor and pending independent
-  acceptance. FL-C2 transition conditions is accepted and promoted. Every one
+  `docs/runtime-frame-loop-fl-c-spec.md`; the FL-C1 input/listener-definition
+  family is independently accepted at `efd87746` after six audit rounds and
+  promoted. FL-C2 transition conditions is accepted and promoted. Every one
   of its 12 C++
   owners now has a filename-corresponding Rust module; `state_machine.rs` and
   `transition_condition.rs` retain only shared dispatch/re-exports. The pinned
@@ -60,19 +60,19 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `f86d5ba0146697abc996310c62fa45e1f053144b`; exact main
   `e72323c808b91d706ba3b745396beaca7accd69a` was consumed without overlap at
   FL-B boundary merge `b5d5bc8afeaa0369cbc248b85366111649cb9010`.
-  FL-B remains pending reacceptance. The complete FL-C4 listener/action family
-  is independently accepted at
+  FL-B remains pending reacceptance. FL-C1 is independently accepted at
+  `efd87746` and its exact mapped rows are promoted. The complete FL-C4
+  listener/action family is independently accepted at
   `0eb48976755d759c078f1f1a032bd88590e223f7` and its exact mapped rows are
   promoted.
 - Active production branch: `levi/fl-c`. The former `levi/fl-b` branch name
   described the provisional stack base, not the active wave, and is no longer
   used for FL-C publication. There is no PR.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
-- File closure: 93 / 341. The accepted FL-C4 family adds 25 exact
-  listener/action/ScriptInput owners; 248 later-wave rows remain pending.
-- Member closure: 52 / 75 owner/member rows. FL-C4 adds
-  `state_machine.actions` and `state_machine.events`; 23 later-wave rows
-  remain.
+- File closure: 105 / 341. The accepted FL-C1 family adds 12 exact
+  input/listener owners; 236 later-wave rows remain pending.
+- Member closure: 53 / 75 owner/member rows. FL-C1 adds
+  `state_machine.inputs`; 22 later-wave rows remain.
 - Open mechanism gaps: 7 / 10. FL-G02 and FL-G06 remain closed; FL-G10 records
   the user-approved D2 saturation choice for AnimationReset's otherwise
   undefined float-to-int edge.
@@ -165,16 +165,17 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   and structural checker 41 / 41. No performance measurement was run.
   Independent Standards and Spec/oracle reviews both passed exact
   `0eb48976755d759c078f1f1a032bd88590e223f7` with no findings. The exact 25
-  file owners and two member rows are promoted. Accepted closure is now
-  93 / 341 files and 52 / 75 members, with 7 / 10 mechanism gaps open.
+  file owners and two member rows are promoted. Together with accepted FL-C1,
+  closure is now 105 / 341 files and 53 / 75 members, with 7 / 10 mechanism
+  gaps open.
 - FL-C1 input ownership is now source-corresponding: `state_machine_input.rs`
   owns the authored definition and `state_machine_input_instance.rs` owns the
   mutable occurrence. Each occurrence retains a handle into the one authored
   input arena and reads id/name/kind through it, matching pinned
   `SMIInput::m_input`; only bool/number/trigger state is copied into the
-  occurrence. The two input files and the `state_machine.inputs` member remain
-  pending until the complete 12-file input/listener lane is translated and
-  independently accepted.
+  occurrence. The two input files and the `state_machine.inputs` member are
+  promoted with the complete 12-file input/listener lane accepted at
+  `efd87746`.
 - FL-C1 listener qualification found four real absent branches rather than
   benchmark defects: import currently discards authored Keyboard,
   SemanticAction, Gamepad, and TextInput listener types, and the public runtime
@@ -189,7 +190,7 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   C++ sources, so the executable source set now includes `src/inputs/*.cpp`
   and the definition lane contains 12 files after the dispatch-group
   dependency correction below. This is scope completion, not a new feature
-  choice; all three rows remain pending.
+  choice; all three rows are promoted with the accepted FL-C1 lane.
 - FL-C1 now has direct Rust files for all four typed listener-input
   definitions and the three concrete input records. Keyboard, gamepad, and
   semantic constraints match their C++ branch order and wildcard rules.
@@ -215,8 +216,7 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `text_input.cpp`, because its pointer body is only drag/focus/selection
   calls on that incomplete owner. This forbids partial groups, placeholder
   `None` invocations, and invented Rust editing behavior. FL-C1 is therefore
-  implementation-complete at 12 source-corresponding files; all rows remain
-  pending until lane acceptance.
+  accepted at 12 source-corresponding files, with every mapped row promoted.
 - FL-C1 boundary floor at `6bca78080cddf94d983ca03f9460ebb129d28477`
   is green: fmt; runtime 507 / 507; probe-armed workspace including C++ probe
   727 / 727; ordinary and scripted golden each 317 / 317 entries and 647 /
@@ -224,7 +224,7 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   build/package/ABI/header/Swift verification; size 7.66 MiB without
   scripting and 8.51 MiB with scripting under the 9 MiB budget; and the
   same-runner Dawn pixel corpus 1,468 / 1,468 with 1,370 byte-exact and zero
-  divergences. This evidence does not promote the pending FL-C1 rows.
+  divergences. This evidence did not by itself promote the FL-C1 rows.
 - Editor defect RT-ED-007 overlaps the state-machine instance owner currently
   being ported. Pinned C++ retains each unresolved DataBindContext path on the
   StateMachineInstance before live data exists, then resolves it from
@@ -829,20 +829,7 @@ FL-A post-rebase floor, refreshed after final independent review:
    first), and the complete source-walk evidence is
    `runtime-frame-loop-fl-c5-walk/`. One production writer; no semantic edit
    outside the packages.
-2. FL-C1: five independent audit rounds. The claimed-`DataBindPath`
-   corrections (non-relative `ec4d13f0`, relative name resolution
-   `82e229f3`, unmapped-name-ID empty-string fallback plus boundary
-   restoration `69fee252`) are all independently confirmed correct.
-   Making the probes genuinely differential (`20cd8c02`) then demonstrated
-   a real one-advance ViewModel-listener firing-boundary divergence (Rust
-   applies the change one advance earlier than pinned C++'s
-   queue-then-next-new-frame `applyEvents`). That gap is owned by the
-   FL-C5 WP6 event rows as recorded gap `flc5-vm-listener-firing-boundary`.
-   Against a fresh clean pinned-C++ build it reproduces only for the
-   nested-relative claimed path: the three flat claimed-path probes hold
-   strict per-step equality, and the nested probe pins both runtimes'
-   current step-1 values explicitly (no loosened comparisons) until WP6
-   restores the C++ boundary. FL-C1 acceptance is pending one further
-   round under that recorded-gap disposition. FL-B retains its separate pending acceptance state.
-   Performance remains deferred until all mapped FL-A-through-FL-E code is
-   ported.
+2. FL-C1 is independently accepted at `efd87746`; recorded gap
+   `flc5-vm-listener-firing-boundary` remains owned by FL-C5 WP6. FL-B remains
+   the only outstanding prior acceptance. Performance remains deferred until
+   all mapped FL-A-through-FL-E code is ported.

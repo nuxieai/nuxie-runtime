@@ -1035,11 +1035,16 @@ trace fingerprint
 103 / 341 dynamically reached C++ files, 34 Rust modules, all 18 landmarks;
 and checker 41 / 41. No performance measurement was run.
 
-Accepted program counts are now 93 / 341 files and 52 / 75 members, with
+The FL-C1 input/listener-definition family is independently accepted at
+`efd87746` after six audit rounds. Its 12 exact file owners and the
+`state_machine.inputs` member row are promoted. Recorded gap
+`flc5-vm-listener-firing-boundary` remains owned by FL-C5 WP6.
+
+Accepted program counts are now 105 / 341 files and 53 / 75 members, with
 7 / 10 mechanism gaps open. The align-target half of FL-G03 is closed, but
 the gap remains open for FL-C5's StateMachineInstance collection and
-transition-search owner. FL-B and FL-C1 retain their separate pending
-acceptance state. Active branch is `levi/fl-c`; there is no PR.
+transition-search owner. FL-B remains the only outstanding prior acceptance.
+Active branch is `levi/fl-c`; there is no PR.
 
 ## Next queue (top = next; orchestrator maintains)
 

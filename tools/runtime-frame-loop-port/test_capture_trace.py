@@ -76,12 +76,16 @@ class CaptureTraceTest(unittest.TestCase):
             local_fixture = repo / "fixtures/animation"
             local_fixture.parent.mkdir()
             local_fixture.symlink_to("/developer-only/fixtures")
+            orchestration_log = repo / ".flc5/out/W29.log"
+            orchestration_log.parent.mkdir(parents=True)
+            orchestration_log.write_text("before\n")
 
             first = CAPTURE.candidate_source_fingerprint(
                 repo, evidence_path=output
             )
             output.write_text('{"generated": true}\n')
             status.write_text("after\n")
+            orchestration_log.write_text("after\n")
             generated = repo / "tools/trace/__pycache__/capture.pyc"
             generated.parent.mkdir(parents=True)
             generated.write_bytes(b"generated")

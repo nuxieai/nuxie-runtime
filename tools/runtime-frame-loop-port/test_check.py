@@ -1231,7 +1231,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "scripted_object_split_hydration_entrypoint",
-                "crates/nuxie-runtime/src/state_machine/instance.rs",
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
                 "impl X {\n    pub fn hydrate_scripted_listener_action_instance(&mut self) {}\n    pub fn next(&self) {}\n}\n",
                 "impl X {\n    pub fn hydrate_and_initialize_scripted_listener_action_instance(&mut self) {}\n    pub fn next(&self) {}\n}\n",
             ),
@@ -1243,7 +1243,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "scripted_object_mutable_hydration_preflight",
-                "crates/nuxie-runtime/src/state_machine/instance.rs",
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
                 "impl X {\n    pub fn hydrate_and_initialize_scripted_listener_action_instance<F>(&mut self, prepare: F)\n    where\n        F: FnOnce(&mut Self),\n    {\n        prepare(self);\n    }\n    pub fn next(&self) {}\n}\n",
                 "impl X {\n    pub fn hydrate_and_initialize_scripted_listener_action_instance<F>(&mut self, prepare: F)\n    where\n        F: FnOnce(&Self),\n    {\n        prepare(self);\n    }\n    pub fn next(&self) {}\n}\n",
             ),
@@ -1333,7 +1333,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "scripted_object_instance_map_drops_before_cloned_binds",
-                "crates/nuxie-runtime/src/state_machine/instance.rs",
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
                 "pub struct StateMachineInstance {\n    scripted_instances_by_global: BTreeMap<u32, Handle>,\n    focus: Focus,\n    scripted_object_bindings: Vec<Binding>,\n}\n",
                 "pub struct StateMachineInstance {\n    scripted_object_bindings: Vec<Binding>,\n    scripted_instances_by_global: BTreeMap<u32, Handle>,\n}\n",
             ),
@@ -1672,6 +1672,66 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     source,
                     textwrap.dedent(forbidden),
                     textwrap.dedent(safe),
+                )
+
+    def test_fl_c5_entrypoint_and_public_api_negative_controls(self) -> None:
+        self.assert_production_ratchet_case(
+            "state_machine_instance_owner_in_compat_entry",
+            "crates/nuxie-runtime/src/state_machine/instance.rs",
+            "pub struct StateMachineInstance;\n",
+            (
+                "pub use super::state_machine_instance::"
+                "{FocusState, StateMachineInstance};\n"
+            ),
+        )
+        required_cases = [
+            (
+                "state_machine_definition_reexport_required",
+                "crates/nuxie-runtime/src/state_machine.rs",
+                "pub use state_machine::RuntimeStateMachine;\n",
+                "use state_machine::RuntimeStateMachine;\n",
+            ),
+            (
+                "state_machine_instance_reexport_required",
+                "crates/nuxie-runtime/src/state_machine/instance.rs",
+                (
+                    "pub use super::state_machine_instance::"
+                    "{FocusState, StateMachineInstance};\n"
+                ),
+                (
+                    "pub(super) use super::state_machine_instance::"
+                    "{FocusState, StateMachineInstance};\n"
+                ),
+            ),
+            (
+                "state_machine_public_export_hub_required",
+                "crates/nuxie-runtime/src/lib.rs",
+                (
+                    "pub use state_machine::{FocusState, RuntimeStateMachine, "
+                    "StateMachineInstance, StateMachineReportedEvent};\n"
+                ),
+                (
+                    "pub(crate) use state_machine::{FocusState, RuntimeStateMachine, "
+                    "StateMachineInstance, StateMachineReportedEvent};\n"
+                ),
+            ),
+            (
+                "state_machine_public_api_inventory_required",
+                "crates/nuxie-runtime/tests/public_api_fl_c5.rs",
+                (
+                    "fn fl_c5_public_reexports_are_downstream_visible_"
+                    "after_file_split() {}\n"
+                ),
+                "fn unrelated_test() {}\n",
+            ),
+        ]
+        for ratchet_id, source, required, missing in required_cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_required_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    required,
+                    missing,
                 )
 
     def test_fl_c5_instance_lifecycle_live_ratchets_reject_forbidden_shapes(

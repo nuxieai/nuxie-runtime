@@ -3272,8 +3272,8 @@ cpp_files = [
   "src/animation/animation_reset.cpp",
   "src/animation/animation_reset_factory.cpp",
 ]
-rust_file = "crates/nuxie-runtime/src/state_machine.rs"
-rust_anchor = "struct AnimationReset"
+rust_file = "crates/nuxie-runtime/src/state_machine/state_machine.rs"
+rust_anchor = "pub(super) struct AnimationReset"
 status = "pending"
 
 [[member]]
@@ -3285,7 +3285,7 @@ cpp_files = [
   "src/animation/blend_state_1d.cpp",
   "src/animation/blend_state_direct.cpp",
 ]
-rust_file = "crates/nuxie-runtime/src/state_machine.rs"
+rust_file = "crates/nuxie-runtime/src/state_machine/state_machine.rs"
 rust_anchor = "pub(crate) struct RuntimeBlendState1D"
 status = "pending"
 
@@ -3293,7 +3293,7 @@ status = "pending"
 id = "state_machine.collections"
 wave = "FL-C"
 cpp_files = ["src/animation/state_machine.cpp", "src/animation/state_machine_instance.cpp"]
-rust_file = "crates/nuxie-runtime/src/state_machine/instance.rs"
+rust_file = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
 rust_anchor = "pub struct StateMachineInstance"
 status = "pending"
 
@@ -3301,7 +3301,7 @@ status = "pending"
 id = "state_machine.advance"
 wave = "FL-C"
 cpp_files = ["src/animation/state_machine_instance.cpp"]
-rust_file = "crates/nuxie-runtime/src/state_machine/instance.rs"
+rust_file = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
 rust_anchor = "fn advance_with_report_mode"
 status = "pending"
 
@@ -3309,18 +3309,18 @@ status = "pending"
 id = "state_machine.events"
 wave = "FL-C"
 cpp_files = ["src/animation/state_machine_instance.cpp", "src/animation/listener_action.cpp"]
-rust_file = "crates/nuxie-runtime/src/state_machine/instance.rs"
+rust_file = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
 rust_anchor = "reported_events"
 status = "faithful"
 [member.lifecycle]
-construct = ["cpp:src/animation/state_machine_instance.cpp:1831-1843", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:1198-1247"]
-retain = ["cpp:src/animation/state_machine_instance.cpp:2141-2199", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:100-115"]
-dirty = ["cpp:src/animation/state_machine_instance.cpp:3016-3019", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:5035-5041"]
-update = ["cpp:src/animation/state_machine_instance.cpp:2320-2343", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:4794-4898"]
-advance = ["cpp:src/animation/state_machine_instance.cpp:2546-2665", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:8784-9088"]
-draw = ["cpp:src/animation/state_machine_instance.cpp:2601-2665", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:8660-8723"]
-clone = ["cpp:src/animation/state_machine_instance.cpp:1707-2140", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:666-698"]
-drop = ["cpp:src/animation/state_machine_instance.cpp:2141-2199", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:100-115"]
+construct = ["cpp:src/animation/state_machine_instance.cpp:1831-1843", "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:2766-2940"]
+retain = ["cpp:src/animation/state_machine_instance.cpp:2141-2199", "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:1389-1495"]
+dirty = ["cpp:src/animation/state_machine_instance.cpp:3016-3019", "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7540-7565"]
+update = ["cpp:src/animation/state_machine_instance.cpp:2320-2343", "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7217-7355"]
+advance = ["cpp:src/animation/state_machine_instance.cpp:2546-2665", "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12084-12340"]
+draw = ["cpp:src/animation/state_machine_instance.cpp:2601-2665", "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12353-12480"]
+clone = ["cpp:src/animation/state_machine_instance.cpp:1707-2140", "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:2040-2205"]
+drop = ["cpp:src/animation/state_machine_instance.cpp:2141-2199", "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:2207-2227"]
 
 [[member]]
 id = "state_machine.layer"
@@ -3347,7 +3347,7 @@ rust_file = "crates/nuxie-runtime/src/state_machine/state_transition.rs"
 rust_anchor = "pub(crate) struct RuntimeStateTransition"
 status = "faithful"
 [member.lifecycle]
-construct = ["cpp:src/animation/state_transition.cpp:65-80", "rust:crates/nuxie-runtime/src/state_machine.rs:338-410"]
+construct = ["cpp:src/animation/state_transition.cpp:65-80", "rust:crates/nuxie-runtime/src/state_machine/state_machine.rs:331-403"]
 retain = ["cpp:src/animation/state_transition.cpp:77-80", "rust:crates/nuxie-runtime/src/state_machine/state_transition.rs:13-28"]
 dirty = ["cpp:src/animation/state_transition.cpp:28-63", "rust:crates/nuxie-runtime/src/state_machine/transition_condition.rs:37-73"]
 update = ["cpp:src/animation/state_transition.cpp:147-206", "rust:crates/nuxie-runtime/src/state_machine/state_transition.rs:50-107"]
@@ -3385,7 +3385,7 @@ cpp_files = [
   "src/animation/state_machine_fire_action.cpp",
   "src/animation/state_machine_fire_trigger.cpp",
 ]
-rust_file = "crates/nuxie-runtime/src/state_machine/instance.rs"
+rust_file = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
 rust_anchor = "RuntimeStateMachineListenerActionExecutor"
 status = "faithful"
 [member.lifecycle]
@@ -3393,7 +3393,7 @@ construct = ["cpp:src/animation/listener_action.cpp:8-23", "rust:crates/nuxie-ru
 retain = ["cpp:src/animation/state_machine_instance.cpp:1831-1843", "rust:crates/nuxie-runtime/src/state_machine/listener_action.rs:26-49"]
 dirty = ["cpp:src/animation/listener_align_target.cpp:9-49", "rust:crates/nuxie-runtime/src/state_machine/listener_align_target.rs:15-112"]
 update = ["cpp:src/animation/listener_action.cpp:25-34", "rust:crates/nuxie-runtime/src/state_machine/listener_action.rs:273-323"]
-advance = ["cpp:src/animation/state_machine_instance.cpp:2320-2539", "rust:crates/nuxie-runtime/src/state_machine/instance.rs:4794-5117"]
+advance = ["cpp:src/animation/state_machine_instance.cpp:2320-2539", "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7217-7380"]
 draw = ["cpp:src/animation/listener_align_target.cpp:9-49", "rust:crates/nuxie-runtime/src/state_machine/listener_align_target.rs:15-112"]
 clone = ["cpp:src/animation/state_machine_instance.cpp:1707-2140", "rust:crates/nuxie-runtime/src/state_machine/listener_action.rs:26-49"]
 drop = ["cpp:src/animation/state_machine_instance.cpp:2141-2199", "rust:crates/nuxie-runtime/src/state_machine/listener_action.rs:26-49"]

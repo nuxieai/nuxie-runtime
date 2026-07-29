@@ -21,13 +21,23 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
 use std::thread;
 use std::time::{Duration, Instant};
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn cpp_probe_temp_path(prefix: &str, label: &str) -> PathBuf {
+    static NEXT_FIXTURE_ID: AtomicU64 = AtomicU64::new(0);
+    std::env::temp_dir().join(format!(
+        "{prefix}-{}-{}-{}.riv",
+        std::process::id(),
+        NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed),
+        label.replace('/', "-")
+    ))
 }
 
 fn default_probe_path() -> PathBuf {
@@ -16394,11 +16404,7 @@ fn read_cpp_probe_bytes_with_args(
     bytes: &[u8],
     extra_args: &[String],
 ) -> CppProbeFile {
-    let path = std::env::temp_dir().join(format!(
-        "rive-rust-runtime-{}-{}.riv",
-        std::process::id(),
-        label.replace('/', "-")
-    ));
+    let path = cpp_probe_temp_path("rive-rust-runtime", label);
     std::fs::write(&path, bytes)
         .unwrap_or_else(|err| panic!("failed to write {}: {err}", path.display()));
 
@@ -16432,11 +16438,7 @@ fn read_cpp_probe_bytes_with_args(
 }
 
 fn cpp_probe_accepts_bytes(probe: &Path, label: &str, bytes: &[u8]) -> bool {
-    let path = std::env::temp_dir().join(format!(
-        "rive-rust-runtime-{}-{}.riv",
-        std::process::id(),
-        label.replace('/', "-")
-    ));
+    let path = cpp_probe_temp_path("rive-rust-runtime", label);
     std::fs::write(&path, bytes)
         .unwrap_or_else(|err| panic!("failed to write {}: {err}", path.display()));
     let status = Command::new(probe)
@@ -80597,7 +80599,7 @@ fn fl_c5_constructor_order_source_and_runtime_boundaries_match_cpp() {
         "initialize_component_provided_groups",
         "initialize_nested_list_text_hit_ownership",
         "initialize_scripted_clones_and_facilities",
-        "sort_hit_ownership_skeleton",
+        "sort_hit_components",
         "build_initial_focus_tree",
     ]
     .map(|needle| {
@@ -82752,11 +82754,7 @@ fn fl_c5_bounded_cpp_state_machine_advance(
     bytes: &[u8],
     seconds: &str,
 ) -> bool {
-    let path = std::env::temp_dir().join(format!(
-        "rive-rust-runtime-wp7-bounded-{}-{}.riv",
-        std::process::id(),
-        label
-    ));
+    let path = cpp_probe_temp_path("rive-rust-runtime-wp7-bounded", label);
     std::fs::write(&path, bytes)
         .unwrap_or_else(|error| panic!("write bounded WP7 fixture {}: {error}", path.display()));
     let mut command = Command::new(probe);

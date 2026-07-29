@@ -18,7 +18,7 @@ LANDMARKS = {
     "state_machine_advance": {
         "cpp": "rive::StateMachineInstance::advance(float, bool)",
         "rust": (
-            "<nuxie_runtime::state_machine::instance::StateMachineInstance>"
+            "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>"
             "::advance_with_report_mode"
         ),
     },
@@ -114,7 +114,7 @@ LANDMARKS = {
     "event_apply_batch": {
         "cpp": "rive::StateMachineInstance::applyEvents()",
         "rust": (
-            "<nuxie_runtime::state_machine::instance::StateMachineInstance>"
+            "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>"
             "::apply_local_event_listeners"
         ),
     },
@@ -176,7 +176,7 @@ CONSTRUCTION_LANDMARKS = {
             "rive::StateMachine const*, rive::ArtboardInstance*)"
         ),
         "rust": (
-            "<nuxie_runtime::state_machine::instance::StateMachineInstance>::new"
+            "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::new"
         ),
     },
     "linear_animation_instance": {

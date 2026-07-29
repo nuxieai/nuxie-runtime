@@ -16,6 +16,26 @@ SPEC.loader.exec_module(SUMMARIZER)
 
 
 class RuntimeFrameLoopTraceSummaryTest(unittest.TestCase):
+    def test_state_machine_landmarks_follow_the_fl_c5_owner_split(self) -> None:
+        expected_owner = (
+            "<nuxie_runtime::state_machine::state_machine_instance::"
+            "StateMachineInstance>"
+        )
+        self.assertEqual(
+            SUMMARIZER.LANDMARKS["state_machine_advance"]["rust"],
+            f"{expected_owner}::advance_with_report_mode",
+        )
+        self.assertEqual(
+            SUMMARIZER.LANDMARKS["event_apply_batch"]["rust"],
+            f"{expected_owner}::apply_local_event_listeners",
+        )
+        self.assertEqual(
+            SUMMARIZER.CONSTRUCTION_LANDMARKS["state_machine_instance"][
+                "rust"
+            ],
+            f"{expected_owner}::new",
+        )
+
     def test_exact_function_count_requires_one_match(self) -> None:
         functions = {
             "src/a.cpp": [{"name": "Owner::advance", "count": 3}],

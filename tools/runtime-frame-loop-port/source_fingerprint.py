@@ -24,6 +24,9 @@ LOCAL_FIXTURE_LINKS = {
     pathlib.PurePosixPath(f"fixtures/{name}")
     for name in ("animation", "flow", "graph", "minimal")
 }
+# FL-C5 work-package plans, salvage patches, and logs are local orchestration
+# inputs rather than candidate source, even when the directory is untracked.
+LOCAL_ORCHESTRATION_DIRS = {".flc5"}
 
 
 class SourceFingerprintError(RuntimeError):
@@ -74,7 +77,8 @@ def _is_excluded(
     if relative in LOCAL_FIXTURE_LINKS:
         return True
     if (
-        "__pycache__" in relative.parts
+        (relative.parts and relative.parts[0] in LOCAL_ORCHESTRATION_DIRS)
+        or "__pycache__" in relative.parts
         or relative.suffix in {".pyc", ".pyo", ".profraw", ".profdata"}
         or relative.name == ".DS_Store"
         or relative.parts[:1] == ("target",)

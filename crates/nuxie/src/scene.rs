@@ -6610,6 +6610,34 @@ pub struct Scene {
     next_mount_id: u64,
 }
 
+/// Current value of one input on a retained runtime state-machine instance.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SceneMachineInputValue {
+    Boolean(bool),
+    Number(f32),
+    Trigger { fired: bool },
+}
+
+/// Truthful runtime observation of one named state-machine input.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SceneMachineInputSnapshot {
+    pub name: String,
+    pub value: SceneMachineInputValue,
+}
+
+/// Truthful runtime observation of one retained state-machine instance.
+///
+/// State names are deliberately absent: the runtime exposes its active
+/// animation instances cheaply, while reconstructing authored layer-state
+/// names outside the machine would duplicate execution semantics.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SceneMachineSnapshot {
+    pub running: bool,
+    pub changed_state_count: usize,
+    pub inputs: Vec<SceneMachineInputSnapshot>,
+    pub active_animation_names: Vec<String>,
+}
+
 impl Default for Scene {
     fn default() -> Self {
         Self::new()
@@ -8355,6 +8383,76 @@ impl Scene {
             machine,
             machine_index,
             input_index,
+        })
+    }
+
+    /// Read the retained runtime instance behind one authored machine.
+    ///
+    /// This is an observation-only counterpart to the typed input cursor
+    /// methods. It reports values and animations owned by the real machine
+    /// instance and never evaluates authored transition data.
+    pub fn state_machine_snapshot(
+        &self,
+        instance: InstanceId,
+        machine: MachineId,
+    ) -> std::result::Result<SceneMachineSnapshot, ResolveError> {
+        let live = self
+            .instances
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|candidate| candidate.id == instance)
+            .ok_or(ResolveError::UnknownInstance)?;
+        let materialized = self
+            .materialized
+            .get(&live.artboard)
+            .ok_or(ResolveError::UnknownMachine)?;
+        let Some(machine_index) = materialized.machines.get(&machine).copied() else {
+            return Err(
+                if self
+                    .materialized
+                    .values()
+                    .any(|candidate| candidate.machines.contains_key(&machine))
+                {
+                    ResolveError::DifferentArtboard
+                } else {
+                    ResolveError::UnknownMachine
+                },
+            );
+        };
+        let retained = live
+            .machines
+            .get(machine, machine_index)
+            .ok_or(ResolveError::UnknownMachine)?;
+        let inputs = (0..retained.input_count())
+            .filter_map(|index| {
+                let input = retained.input(index)?;
+                let name = input.name()?.to_string();
+                let value = match input.kind() {
+                    StateMachineInputKind::Bool => {
+                        SceneMachineInputValue::Boolean(input.bool_value()?)
+                    }
+                    StateMachineInputKind::Number => {
+                        SceneMachineInputValue::Number(input.number_value()?)
+                    }
+                    StateMachineInputKind::Trigger => SceneMachineInputValue::Trigger {
+                        fired: input.trigger_fired()?,
+                    },
+                };
+                Some(SceneMachineInputSnapshot { name, value })
+            })
+            .collect();
+        let artboard = live.runtime.artboard();
+        let active_animation_names = (0..retained.current_animation_count())
+            .filter_map(|index| retained.current_animation(index))
+            .filter_map(|animation| artboard.animation_name(animation.animation_index()))
+            .map(str::to_string)
+            .collect();
+
+        Ok(SceneMachineSnapshot {
+            running: retained.needs_advance() || retained.current_animation_count() > 0,
+            changed_state_count: retained.changed_state_count(),
+            inputs,
+            active_animation_names,
         })
     }
 

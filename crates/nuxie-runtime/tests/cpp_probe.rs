@@ -22090,6 +22090,153 @@ fn cpp_pointer_and_advance_event_boundaries_pin_flow_session_order() {
     assert_eq!(combined, ["Third", "First", "Second", "Third"]);
 }
 
+fn assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+    label: &str,
+    x: f32,
+    y: f32,
+    x_argument: &str,
+    y_argument: &str,
+) {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read C++ pointer fixture {label}: {error}"));
+    let args = [
+        "--runtime-pointer-down-state-machine".to_owned(),
+        "0".to_owned(),
+        x_argument.to_owned(),
+        y_argument.to_owned(),
+        "--runtime-pointer-up-state-machine".to_owned(),
+        "0".to_owned(),
+        x_argument.to_owned(),
+        y_argument.to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    let _ = state_machine.pointer_down(&mut rust, x, y, 0);
+    let after_down = state_machine.clone();
+    let _ = state_machine.pointer_up(&mut rust, x, y, 0);
+    let after_up = state_machine.clone();
+    let rust_reports = [(false, after_down), (false, after_up)];
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(
+        cpp_reports.len(),
+        rust_reports.len(),
+        "{label} action count"
+    );
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&rust_reports).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} WP3 pointer action {step}"),
+        );
+    }
+}
+
+#[test]
+fn fl_c5_hit_component_shared_target_down_up_matches_cpp_probe() {
+    assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+        "pointer_events.riv",
+        425.0,
+        425.0,
+        "425",
+        "425",
+    );
+    // The pinned opaque fixture has a non-opaque overlay and two overlapping
+    // opaque targets. These three points respectively exercise the front
+    // target, back target, and opaque-front suppression of the back target.
+    for (x, y, x_argument, y_argument) in [
+        (100.0, 50.0, "100", "50"),
+        (100.0, 250.0, "100", "250"),
+        (100.0, 110.0, "100", "110"),
+    ] {
+        assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+            "opaque_hit_test.riv",
+            x,
+            y,
+            x_argument,
+            y_argument,
+        );
+    }
+    // This fixture's four authored targets are, in order: a shape inside a
+    // no-path shape, a nested artboard inside a no-path shape, a text run
+    // inside a path shape, and a nested artboard inside a path shape.
+    for (x, y, x_argument, y_argument) in [
+        (150.0, 150.0, "150", "150"),
+        (300.0, 200.0, "300", "200"),
+        (100.0, 250.0, "100", "250"),
+        (400.0, 350.0, "400", "350"),
+    ] {
+        assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+            "hit_test_nested.riv",
+            x,
+            y,
+            x_argument,
+            y_argument,
+        );
+    }
+    assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+        "hittest_collapsed_layouts.riv",
+        250.0,
+        50.0,
+        "250",
+        "50",
+    );
+}
+
+#[test]
+fn fl_c5_nested_pointer_authored_child_routing_matches_cpp_probe() {
+    assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+        "pointer_events_nested_artboards_in_solos.riv",
+        200.0,
+        300.0,
+        "200",
+        "300",
+    );
+}
+
+#[test]
+fn fl_c5_component_list_pointer_reverse_overlap_matches_cpp_probe() {
+    // Reverse orderedListIndices routing at both overlap boundaries, followed
+    // by a non-overlap control on the first item.
+    for (x, x_argument) in [(175.0, "175"), (325.0, "325"), (100.0, "100")] {
+        assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+            "component_list_hit_order.riv",
+            x,
+            50.0,
+            x_argument,
+            "50",
+        );
+    }
+}
+
+#[test]
+fn fl_c5_pointer_fp_nonfinite_coordinates_match_cpp_probe() {
+    assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+        "pointer_events.riv",
+        f32::NAN,
+        f32::INFINITY,
+        "nan",
+        "inf",
+    );
+    assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+        "pointer_events.riv",
+        -0.0,
+        f32::NEG_INFINITY,
+        "-0",
+        "-inf",
+    );
+}
+
 #[test]
 fn state_machine_fire_event_listeners_apply_on_the_next_frame() {
     let label = "synthetic/runtime_state_machine_fire_event_listener_input_change.riv";

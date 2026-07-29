@@ -959,6 +959,81 @@ pattern = "impl\\s+Drop\\s+for\\s+StateMachineInstance[\\s\\S]{0,1000}(?:self\\.
 max_occurrences = 0
 
 [[ratchet]]
+id = "state_machine_hit_trait_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "trait\\s+HitComponent\\b"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_hit_concrete_types_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "struct\\s+Hit(?:Drawable|Expandable|TextRun|Layout|NestedArtboard|ComponentList)\\b"
+min_occurrences = 6
+max_occurrences = 6
+
+[[ratchet]]
+id = "state_machine_hit_result_tristate_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "enum\\s+HitResult\\s*\\{\\s*None\\s*,\\s*Hit\\s*,\\s*HitOpaque\\s*,?\\s*\\}"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_hit_three_pass_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "for\\s+group\\s+in\\s+&mut\\s+groups\\s*\\{\\s*group\\.reset\\([\\s\\S]{0,500}for\\s+hit\\s+in\\s+&mut\\s+hit_components\\s*\\{\\s*hit\\.prepare_event\\([\\s\\S]{0,3000}let\\s+mut\\s+result\\s*=\\s*HitResult::None\\s*;\\s*for\\s+hit\\s+in\\s+&mut\\s+hit_components"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_hit_can_hit_propagation_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "hit\\.process_event\\([^;]{0,500}result\\s*!=\\s*HitResult::HitOpaque"
+min_occurrences = 2
+max_occurrences = 2
+
+[[ratchet]]
+id = "state_machine_hit_break_after_opaque"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+update_listeners\\b[\\s\\S]{0,4200}HitResult::HitOpaque[\\s\\S]{0,120}\\bbreak\\s*;"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_hit_component_list_reverse_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "for\\s+item_index\\s+in\\s+order\\.into_iter\\(\\)\\.rev\\(\\)"
+min_occurrences = 2
+max_occurrences = 2
+
+[[ratchet]]
+id = "state_machine_hit_draw_order_counter_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "if\\s+self\\.draw_order_change_counter\\s*!=\\s*draw_order_change_counter\\s*\\{[\\s\\S]{0,180}self\\.sort_hit_components\\("
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_hit_exit_release_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "if\\s+hit_type\\s*==\\s*RuntimeListenerType::Exit\\s*\\{[\\s\\S]{0,220}self\\.release_pointer_input\\(pointer_id\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_hit_enable_disable_walks_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+(?:enable|disable)_pointer_events\\(&mut\\s+self,\\s*pointer_id:\\s*i32\\)\\s*\\{[^}]{0,220}for\\s+hit\\s+in\\s+&mut\\s+self\\.hit_components"
+min_occurrences = 2
+max_occurrences = 2
+
+[[ratchet]]
+id = "state_machine_displaced_pointer_listener_traversal"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+(?:pointer_down_with_context_and_script_host|pointer_up_with_context_and_script_host|update_pointer_listeners)[\\s\\S]{0,2500}listener_definitions\\s*\\.\\s*iter\\("
+max_occurrences = 0
+
+[[ratchet]]
 id = "data_bind_per_type_target_to_source_path"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "(?m)^\\s*(?:pub\\(crate\\)\\s+)?fn\\s+apply_default_view_model_(?:number|symbol_list_index|boolean|string|color|enum|asset|artboard|list|trigger|view_model)(?:_public_update)?_targets_to_sources(?:_with_options)?\\b"

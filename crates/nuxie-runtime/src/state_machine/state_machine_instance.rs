@@ -3,14 +3,17 @@
 use super::focused_input_dispatch::RuntimeInputDispatchOutcome;
 use super::listener_types::RuntimeListenerViewModelPath;
 use super::*;
+use crate::artboard_component_list_order::runtime_component_list_order;
 use crate::artboard_data_bind::RuntimeOwnedDataContext;
+use crate::components::{ComponentHandle, RuntimeShapeState};
 use crate::constraints::{
     RuntimeDraggableProxy, runtime_draggable_proxies, runtime_draggable_proxy_drag,
-    runtime_draggable_proxy_end, runtime_draggable_proxy_hit_test, runtime_draggable_proxy_start,
+    runtime_draggable_proxy_end, runtime_draggable_proxy_start,
 };
 use crate::data_bind_container::RuntimeDataBindContainerQueue;
 use crate::data_bind_graph::data_bind_flags_apply_source_to_target;
 use crate::focus::RuntimeFocusTree;
+use crate::properties::property_key_for_name;
 use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelAdvanceContext};
 use crate::view_model_cell::{
@@ -19,8 +22,8 @@ use crate::view_model_cell::{
     RuntimeViewModelInstanceCells,
 };
 use crate::{
-    ArtboardInstance, NoopScriptHost, RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase,
-    RuntimeDataBindGraphTargetsMut, RuntimeDataBindGraphValue,
+    ArtboardInstance, ComponentDirt, NoopScriptHost, RuntimeDataBindGraph,
+    RuntimeDataBindGraphApplyPhase, RuntimeDataBindGraphTargetsMut, RuntimeDataBindGraphValue,
     RuntimeDefaultViewModelArtboardSourceHandle, RuntimeDefaultViewModelAssetSourceHandle,
     RuntimeDefaultViewModelBooleanSourceHandle, RuntimeDefaultViewModelColorSourceHandle,
     RuntimeDefaultViewModelEnumSourceHandle, RuntimeDefaultViewModelListSourceHandle,
@@ -62,22 +65,895 @@ use crate::{ScriptListenerActionMethod, ScriptMethod};
 #[cfg(test)]
 use std::cell::RefCell;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RuntimeHitOwnershipKind {
-    AuthoredListener,
-    ComponentProvided,
-    NestedArtboard,
-    ComponentList,
-    TextInput,
+/// Exact C++ pointer result strength. Keep this tri-state internally even
+/// though the established Rust facade projects it to `bool`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum HitResult {
+    None,
+    Hit,
+    HitOpaque,
 }
 
-/// WP2 retains only the identity/category skeleton needed by the complete
-/// polymorphic hit owners in WP3. It deliberately has no hit-test or pointer
-/// routing behavior.
+impl HitResult {
+    fn is_hit(self) -> bool {
+        self != Self::None
+    }
+
+    fn strongest(self, other: Self) -> Self {
+        self.max(other)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct RuntimeHitOwnership {
-    source_local_id: usize,
-    kind: RuntimeHitOwnershipKind,
+enum ListenerGroupKind {
+    Authored { listener_index: usize },
+    Draggable { proxy_index: usize },
+}
+
+/// ListenerGroup-shaped seam for FL-C5. The C++ group internals remain FL-D:
+/// this value owns only group-level routing state and delegates pointer
+/// history/capture to the existing Rust vectors on `StateMachineInstance`.
+#[derive(Debug, Clone)]
+struct ListenerGroup {
+    kind: ListenerGroupKind,
+    is_consumed: bool,
+    prepared_hovered: bool,
+    disabled_pointers: Vec<i32>,
+}
+
+impl ListenerGroup {
+    fn authored(listener_index: usize) -> Self {
+        Self {
+            kind: ListenerGroupKind::Authored { listener_index },
+            is_consumed: false,
+            prepared_hovered: false,
+            disabled_pointers: Vec::new(),
+        }
+    }
+
+    fn draggable(proxy_index: usize) -> Self {
+        Self {
+            kind: ListenerGroupKind::Draggable { proxy_index },
+            is_consumed: false,
+            prepared_hovered: false,
+            disabled_pointers: Vec::new(),
+        }
+    }
+
+    fn reset(&mut self, instance: &mut StateMachineInstance, pointer_id: i32) {
+        self.prepared_hovered = false;
+        if !self.disabled_pointers.contains(&pointer_id) {
+            self.is_consumed = false;
+        }
+        if let ListenerGroupKind::Authored { listener_index } = self.kind {
+            instance.ensure_pointer_listener_state(listener_index, pointer_id);
+        }
+    }
+
+    fn hover(&mut self) {
+        self.prepared_hovered = true;
+    }
+
+    fn enable(&mut self, pointer_id: i32) {
+        self.disabled_pointers
+            .retain(|disabled| *disabled != pointer_id);
+    }
+
+    fn disable(&mut self, pointer_id: i32) {
+        if !self.disabled_pointers.contains(&pointer_id) {
+            self.disabled_pointers.push(pointer_id);
+        }
+        self.is_consumed = true;
+    }
+
+    fn disabled(&self, pointer_id: i32) -> bool {
+        self.disabled_pointers.contains(&pointer_id)
+    }
+}
+
+trait HitComponent: std::fmt::Debug {
+    fn clone_box(&self) -> Box<dyn HitComponent>;
+    fn component(&self) -> Option<ComponentHandle>;
+    fn prepare_event(
+        &mut self,
+        artboard: &ArtboardInstance,
+        groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        pointer_id: i32,
+    );
+    #[allow(clippy::too_many_arguments)]
+    fn process_event(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        artboard: &mut ArtboardInstance,
+        groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        can_hit: bool,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        event_context: Option<&StateMachineEventContext>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<HitResult, ScriptError>;
+    fn process_gamepad_invocation(
+        &mut self,
+        _instance: &mut StateMachineInstance,
+        _artboard: &mut ArtboardInstance,
+        _invocation: &ScriptListenerInvocation,
+        _already_dispatched: Option<(u64, u32)>,
+    ) -> HitResult {
+        HitResult::None
+    }
+    fn hit_test(
+        &self,
+        instance: &StateMachineInstance,
+        artboard: &ArtboardInstance,
+        position: (f32, f32),
+    ) -> bool;
+    fn enable_pointer_events(&mut self, _groups: &mut [ListenerGroup], _pointer_id: i32) {}
+    fn disable_pointer_events(&mut self, _groups: &mut [ListenerGroup], _pointer_id: i32) {}
+    fn add_listener(
+        &mut self,
+        _group_index: usize,
+        _groups: &[ListenerGroup],
+        _listeners: &[RuntimeStateMachineListener],
+    ) -> bool {
+        false
+    }
+    fn set_explicit_opaque(&mut self, _opaque: bool) {}
+}
+
+impl Clone for Box<dyn HitComponent> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct HitDrawable {
+    component: Option<ComponentHandle>,
+    drawable: Option<ComponentHandle>,
+    listeners: Vec<usize>,
+    is_hovered: bool,
+    can_early_out: bool,
+    needs_down_listener: bool,
+    needs_up_listener: bool,
+    is_opaque: bool,
+}
+
+impl HitDrawable {
+    fn new(
+        artboard: &ArtboardInstance,
+        drawable: Option<ComponentHandle>,
+        component: Option<ComponentHandle>,
+        is_opaque: bool,
+    ) -> Self {
+        let dynamic_opaque = drawable.is_some_and(|drawable| {
+            StateMachineInstance::drawable_is_target_opaque(artboard, drawable)
+        });
+        Self {
+            component,
+            drawable,
+            listeners: Vec::new(),
+            is_hovered: false,
+            can_early_out: !dynamic_opaque,
+            needs_down_listener: false,
+            needs_up_listener: false,
+            is_opaque,
+        }
+    }
+
+    fn event_is_required(&self, hit_type: RuntimeListenerType) -> bool {
+        !self.can_early_out
+            || (hit_type == RuntimeListenerType::Down && self.needs_down_listener)
+            || (hit_type == RuntimeListenerType::Up && self.needs_up_listener)
+    }
+
+    fn prepare_with(
+        &mut self,
+        artboard: &ArtboardInstance,
+        groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        hit_test: impl FnOnce(&ArtboardInstance, (f32, f32)) -> bool,
+    ) {
+        if !self.event_is_required(hit_type) {
+            return;
+        }
+        self.is_hovered = hit_type != RuntimeListenerType::Exit && hit_test(artboard, position);
+        if self.is_hovered {
+            for &group_index in &self.listeners {
+                if let Some(group) = groups.get_mut(group_index) {
+                    group.hover();
+                }
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn process_with(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        artboard: &mut ArtboardInstance,
+        groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        can_hit: bool,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        event_context: Option<&StateMachineEventContext>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<HitResult, ScriptError> {
+        if !self.event_is_required(hit_type) {
+            return Ok(HitResult::None);
+        }
+        let mut blocking = false;
+        for &group_index in &self.listeners {
+            let Some(group) = groups.get_mut(group_index) else {
+                continue;
+            };
+            if group.is_consumed {
+                continue;
+            }
+            blocking |= instance.process_listener_group_event(
+                group,
+                artboard,
+                position,
+                hit_type,
+                can_hit,
+                timestamp_seconds,
+                pointer_id,
+                owned_context.as_deref_mut(),
+                event_context,
+                host,
+            )?;
+        }
+        if !(self.is_hovered && can_hit) {
+            return Ok(HitResult::None);
+        }
+        let dynamic_opaque = self.drawable.is_some_and(|drawable| {
+            StateMachineInstance::drawable_is_target_opaque(artboard, drawable)
+        });
+        Ok(if self.is_opaque || dynamic_opaque || blocking {
+            HitResult::HitOpaque
+        } else {
+            HitResult::Hit
+        })
+    }
+
+    fn add_listener_impl(
+        &mut self,
+        group_index: usize,
+        groups: &[ListenerGroup],
+        listeners: &[RuntimeStateMachineListener],
+    ) -> bool {
+        let Some(group) = groups.get(group_index) else {
+            return false;
+        };
+        if let ListenerGroupKind::Authored { listener_index } = group.kind {
+            let Some(listener) = listeners.get(listener_index) else {
+                return false;
+            };
+            let has_continuous = listener.listener_types.iter().any(|kind| {
+                matches!(
+                    kind,
+                    RuntimeListenerType::Enter
+                        | RuntimeListenerType::Exit
+                        | RuntimeListenerType::Move
+                        | RuntimeListenerType::Drag
+                )
+            });
+            if has_continuous {
+                self.can_early_out = false;
+            } else {
+                self.needs_down_listener |= listener.listener_types.iter().any(|kind| {
+                    matches!(
+                        kind,
+                        RuntimeListenerType::Down
+                            | RuntimeListenerType::Click
+                            | RuntimeListenerType::Drag
+                    )
+                });
+                self.needs_up_listener |= listener.listener_types.iter().any(|kind| {
+                    matches!(
+                        kind,
+                        RuntimeListenerType::Up
+                            | RuntimeListenerType::Click
+                            | RuntimeListenerType::Drag
+                    )
+                });
+            }
+        } else {
+            self.can_early_out = false;
+        }
+        self.listeners.push(group_index);
+        true
+    }
+
+    fn enable_groups(&mut self, groups: &mut [ListenerGroup], pointer_id: i32) {
+        for &group_index in &self.listeners {
+            if let Some(group) = groups.get_mut(group_index) {
+                group.enable(pointer_id);
+            }
+        }
+    }
+
+    fn disable_groups(&mut self, groups: &mut [ListenerGroup], pointer_id: i32) {
+        for &group_index in &self.listeners {
+            if let Some(group) = groups.get_mut(group_index) {
+                group.disable(pointer_id);
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct HitExpandable {
+    drawable: HitDrawable,
+}
+
+#[derive(Debug, Clone)]
+struct HitTextRun {
+    expandable: HitExpandable,
+}
+
+#[derive(Debug, Clone)]
+struct HitLayout {
+    drawable: HitDrawable,
+}
+
+#[derive(Debug, Clone)]
+struct HitNestedArtboard {
+    component: Option<ComponentHandle>,
+}
+
+#[derive(Debug, Clone)]
+struct HitComponentList {
+    component: Option<ComponentHandle>,
+}
+
+impl HitComponent for HitDrawable {
+    fn clone_box(&self) -> Box<dyn HitComponent> {
+        Box::new(self.clone())
+    }
+
+    fn component(&self) -> Option<ComponentHandle> {
+        self.component
+    }
+
+    fn prepare_event(
+        &mut self,
+        artboard: &ArtboardInstance,
+        groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        _pointer_id: i32,
+    ) {
+        self.prepare_with(artboard, groups, position, hit_type, |_, _| false);
+    }
+
+    fn process_event(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        artboard: &mut ArtboardInstance,
+        groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        can_hit: bool,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        event_context: Option<&StateMachineEventContext>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<HitResult, ScriptError> {
+        self.process_with(
+            instance,
+            artboard,
+            groups,
+            position,
+            hit_type,
+            can_hit,
+            timestamp_seconds,
+            pointer_id,
+            owned_context,
+            event_context,
+            host,
+        )
+    }
+
+    fn hit_test(
+        &self,
+        _instance: &StateMachineInstance,
+        _artboard: &ArtboardInstance,
+        _position: (f32, f32),
+    ) -> bool {
+        false
+    }
+
+    fn enable_pointer_events(&mut self, groups: &mut [ListenerGroup], pointer_id: i32) {
+        self.enable_groups(groups, pointer_id);
+    }
+
+    fn disable_pointer_events(&mut self, groups: &mut [ListenerGroup], pointer_id: i32) {
+        self.disable_groups(groups, pointer_id);
+    }
+
+    fn add_listener(
+        &mut self,
+        group_index: usize,
+        groups: &[ListenerGroup],
+        listeners: &[RuntimeStateMachineListener],
+    ) -> bool {
+        self.add_listener_impl(group_index, groups, listeners)
+    }
+
+    fn set_explicit_opaque(&mut self, opaque: bool) {
+        self.is_opaque |= opaque;
+    }
+}
+
+impl HitComponent for HitExpandable {
+    fn clone_box(&self) -> Box<dyn HitComponent> {
+        Box::new(self.clone())
+    }
+
+    fn component(&self) -> Option<ComponentHandle> {
+        self.drawable.component
+    }
+
+    fn prepare_event(
+        &mut self,
+        artboard: &ArtboardInstance,
+        groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        _pointer_id: i32,
+    ) {
+        let component = self.drawable.component;
+        self.drawable.prepare_with(
+            artboard,
+            groups,
+            position,
+            hit_type,
+            |artboard, position| {
+                component.is_some_and(|component| {
+                    StateMachineInstance::hit_expandable(artboard, component, position)
+                })
+            },
+        );
+    }
+
+    fn process_event(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        artboard: &mut ArtboardInstance,
+        groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        can_hit: bool,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        event_context: Option<&StateMachineEventContext>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<HitResult, ScriptError> {
+        self.drawable.process_with(
+            instance,
+            artboard,
+            groups,
+            position,
+            hit_type,
+            can_hit,
+            timestamp_seconds,
+            pointer_id,
+            owned_context,
+            event_context,
+            host,
+        )
+    }
+
+    fn hit_test(
+        &self,
+        _instance: &StateMachineInstance,
+        artboard: &ArtboardInstance,
+        position: (f32, f32),
+    ) -> bool {
+        self.drawable.component.is_some_and(|component| {
+            StateMachineInstance::hit_expandable(artboard, component, position)
+        })
+    }
+
+    fn enable_pointer_events(&mut self, groups: &mut [ListenerGroup], pointer_id: i32) {
+        self.drawable.enable_groups(groups, pointer_id);
+    }
+
+    fn disable_pointer_events(&mut self, groups: &mut [ListenerGroup], pointer_id: i32) {
+        self.drawable.disable_groups(groups, pointer_id);
+    }
+
+    fn add_listener(
+        &mut self,
+        group_index: usize,
+        groups: &[ListenerGroup],
+        listeners: &[RuntimeStateMachineListener],
+    ) -> bool {
+        self.drawable
+            .add_listener_impl(group_index, groups, listeners)
+    }
+
+    fn set_explicit_opaque(&mut self, opaque: bool) {
+        self.drawable.is_opaque |= opaque;
+    }
+}
+
+impl HitComponent for HitTextRun {
+    fn clone_box(&self) -> Box<dyn HitComponent> {
+        Box::new(self.clone())
+    }
+
+    fn component(&self) -> Option<ComponentHandle> {
+        self.expandable.component()
+    }
+
+    fn prepare_event(
+        &mut self,
+        artboard: &ArtboardInstance,
+        groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        pointer_id: i32,
+    ) {
+        self.expandable
+            .prepare_event(artboard, groups, position, hit_type, pointer_id);
+    }
+
+    fn process_event(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        artboard: &mut ArtboardInstance,
+        groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        can_hit: bool,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        event_context: Option<&StateMachineEventContext>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<HitResult, ScriptError> {
+        self.expandable.process_event(
+            instance,
+            artboard,
+            groups,
+            position,
+            hit_type,
+            can_hit,
+            timestamp_seconds,
+            pointer_id,
+            owned_context,
+            event_context,
+            host,
+        )
+    }
+
+    fn hit_test(
+        &self,
+        instance: &StateMachineInstance,
+        artboard: &ArtboardInstance,
+        position: (f32, f32),
+    ) -> bool {
+        self.expandable.hit_test(instance, artboard, position)
+    }
+
+    fn enable_pointer_events(&mut self, groups: &mut [ListenerGroup], pointer_id: i32) {
+        self.expandable.enable_pointer_events(groups, pointer_id);
+    }
+
+    fn disable_pointer_events(&mut self, groups: &mut [ListenerGroup], pointer_id: i32) {
+        self.expandable.disable_pointer_events(groups, pointer_id);
+    }
+
+    fn add_listener(
+        &mut self,
+        group_index: usize,
+        groups: &[ListenerGroup],
+        listeners: &[RuntimeStateMachineListener],
+    ) -> bool {
+        self.expandable.add_listener(group_index, groups, listeners)
+    }
+}
+
+impl HitComponent for HitLayout {
+    fn clone_box(&self) -> Box<dyn HitComponent> {
+        Box::new(self.clone())
+    }
+
+    fn component(&self) -> Option<ComponentHandle> {
+        self.drawable.component
+    }
+
+    fn prepare_event(
+        &mut self,
+        artboard: &ArtboardInstance,
+        groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        _pointer_id: i32,
+    ) {
+        let component = self.drawable.component;
+        self.drawable.prepare_with(
+            artboard,
+            groups,
+            position,
+            hit_type,
+            |artboard, position| {
+                component.is_some_and(|component| {
+                    artboard.component_hit_test_point(component, position, false, true)
+                })
+            },
+        );
+    }
+
+    fn process_event(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        artboard: &mut ArtboardInstance,
+        groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        can_hit: bool,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        event_context: Option<&StateMachineEventContext>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<HitResult, ScriptError> {
+        self.drawable.process_with(
+            instance,
+            artboard,
+            groups,
+            position,
+            hit_type,
+            can_hit,
+            timestamp_seconds,
+            pointer_id,
+            owned_context,
+            event_context,
+            host,
+        )
+    }
+
+    fn hit_test(
+        &self,
+        _instance: &StateMachineInstance,
+        artboard: &ArtboardInstance,
+        position: (f32, f32),
+    ) -> bool {
+        self.drawable.component.is_some_and(|component| {
+            artboard.component_hit_test_point(component, position, false, true)
+        })
+    }
+
+    fn enable_pointer_events(&mut self, groups: &mut [ListenerGroup], pointer_id: i32) {
+        self.drawable.enable_groups(groups, pointer_id);
+    }
+
+    fn disable_pointer_events(&mut self, groups: &mut [ListenerGroup], pointer_id: i32) {
+        self.drawable.disable_groups(groups, pointer_id);
+    }
+
+    fn add_listener(
+        &mut self,
+        group_index: usize,
+        groups: &[ListenerGroup],
+        listeners: &[RuntimeStateMachineListener],
+    ) -> bool {
+        self.drawable
+            .add_listener_impl(group_index, groups, listeners)
+    }
+
+    fn set_explicit_opaque(&mut self, opaque: bool) {
+        self.drawable.is_opaque |= opaque;
+    }
+}
+
+impl HitComponent for HitNestedArtboard {
+    fn clone_box(&self) -> Box<dyn HitComponent> {
+        Box::new(self.clone())
+    }
+
+    fn component(&self) -> Option<ComponentHandle> {
+        self.component
+    }
+
+    fn prepare_event(
+        &mut self,
+        _artboard: &ArtboardInstance,
+        _groups: &mut [ListenerGroup],
+        _position: (f32, f32),
+        _hit_type: RuntimeListenerType,
+        _pointer_id: i32,
+    ) {
+    }
+
+    fn process_event(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        artboard: &mut ArtboardInstance,
+        _groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        can_hit: bool,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+        _owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        _event_context: Option<&StateMachineEventContext>,
+        _host: &mut dyn ScriptHost,
+    ) -> Result<HitResult, ScriptError> {
+        Ok(instance.process_nested_artboard_event(
+            artboard,
+            self.component,
+            position,
+            hit_type,
+            can_hit,
+            timestamp_seconds,
+            pointer_id,
+        ))
+    }
+
+    fn process_gamepad_invocation(
+        &mut self,
+        _instance: &mut StateMachineInstance,
+        artboard: &mut ArtboardInstance,
+        invocation: &ScriptListenerInvocation,
+        already_dispatched: Option<(u64, u32)>,
+    ) -> HitResult {
+        let Some(component) = self.component else {
+            return HitResult::None;
+        };
+        let local_id = artboard.component_at(component).local_id;
+        let Some(nested) = artboard.nested_artboards.get_mut(&local_id) else {
+            return HitResult::None;
+        };
+        for animation in &mut nested.animations {
+            let crate::artboard::RuntimeNestedAnimationInstance::StateMachine(occurrence) =
+                animation
+            else {
+                continue;
+            };
+            if let Some(state_machine) = occurrence.state_machine_mut() {
+                let _ = state_machine.broadcast_gamepad_to_scripted_drawables(
+                    &mut nested.child,
+                    invocation,
+                    already_dispatched,
+                );
+            }
+        }
+        // C++ deliberately ignores every nested child's result here.
+        HitResult::None
+    }
+
+    fn hit_test(
+        &self,
+        instance: &StateMachineInstance,
+        artboard: &ArtboardInstance,
+        position: (f32, f32),
+    ) -> bool {
+        instance.hit_test_nested_artboard(artboard, self.component, position)
+    }
+}
+
+impl HitComponent for HitComponentList {
+    fn clone_box(&self) -> Box<dyn HitComponent> {
+        Box::new(self.clone())
+    }
+
+    fn component(&self) -> Option<ComponentHandle> {
+        self.component
+    }
+
+    fn prepare_event(
+        &mut self,
+        _artboard: &ArtboardInstance,
+        _groups: &mut [ListenerGroup],
+        _position: (f32, f32),
+        _hit_type: RuntimeListenerType,
+        _pointer_id: i32,
+    ) {
+    }
+
+    fn process_event(
+        &mut self,
+        instance: &mut StateMachineInstance,
+        artboard: &mut ArtboardInstance,
+        _groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        can_hit: bool,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+        _owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        _event_context: Option<&StateMachineEventContext>,
+        _host: &mut dyn ScriptHost,
+    ) -> Result<HitResult, ScriptError> {
+        Ok(instance.process_component_list_event(
+            artboard,
+            self.component,
+            position,
+            hit_type,
+            can_hit,
+            timestamp_seconds,
+            pointer_id,
+        ))
+    }
+
+    fn process_gamepad_invocation(
+        &mut self,
+        _instance: &mut StateMachineInstance,
+        artboard: &mut ArtboardInstance,
+        invocation: &ScriptListenerInvocation,
+        already_dispatched: Option<(u64, u32)>,
+    ) -> HitResult {
+        let Some(component) = self.component else {
+            return HitResult::None;
+        };
+        let owner = artboard.component_at(component);
+        if owner.is_collapsed() {
+            return HitResult::None;
+        }
+        let list_local_id = owner.local_id;
+        let order = {
+            let Some(list) = artboard.component_list_state(list_local_id) else {
+                return HitResult::None;
+            };
+            if let Some(runtime) = artboard.runtime_file() {
+                runtime_component_list_order(runtime, list).indices.clone()
+            } else {
+                (0..list.items.len()).collect()
+            }
+        };
+        let Some(items) = artboard.component_list_items_mut(list_local_id) else {
+            return HitResult::None;
+        };
+        let mut result = HitResult::None;
+        let mut running_can_hit = true;
+        for item_index in order.into_iter().rev() {
+            let Some(item) = items.get_mut(item_index) else {
+                continue;
+            };
+            if !running_can_hit {
+                continue;
+            }
+            let mut item_result = HitResult::None;
+            for state_machine in &mut item.state_machines {
+                let outcome = state_machine.broadcast_gamepad_to_scripted_drawables(
+                    &mut item.child,
+                    invocation,
+                    already_dispatched,
+                );
+                if outcome.handled {
+                    item_result = item_result.strongest(HitResult::Hit);
+                }
+            }
+            result = result.strongest(item_result);
+            if result == HitResult::HitOpaque {
+                running_can_hit = false;
+            }
+        }
+        result
+    }
+
+    fn hit_test(
+        &self,
+        instance: &StateMachineInstance,
+        artboard: &ArtboardInstance,
+        position: (f32, f32),
+    ) -> bool {
+        instance.hit_test_component_list(artboard, self.component, position)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -312,12 +1188,11 @@ pub struct StateMachineInstance {
     /// Fresh component-provided listener/proxy owners constructed for this
     /// StateMachineInstance (`state_machine_instance.cpp:1969-2013`).
     draggable_proxies: Vec<RuntimeDraggableProxy>,
-    /// WP2 ownership-only inventory. WP3 replaces this with the complete hit
-    /// trait/concrete hierarchy and routing behavior.
-    hit_ownership: Vec<RuntimeHitOwnership>,
-    /// Retain one group occurrence for every authored pointer listener,
-    /// including unresolved targets and duplicates.
-    pointer_listener_group_occurrences: Vec<usize>,
+    /// Complete polymorphic hit-owner hierarchy in current C++ hit order.
+    hit_components: Vec<Box<dyn HitComponent>>,
+    /// One retained ListenerGroup seam per authored/provider occurrence,
+    /// including unresolved authored pointer targets.
+    listener_groups: Vec<ListenerGroup>,
     /// Explicitly detachable, value-owned adaptation of nested notifier
     /// registrations.
     nested_event_registrations: Vec<RuntimeNestedEventRegistration>,
@@ -906,10 +1781,8 @@ impl Clone for StateMachineInstance {
                 .iter()
                 .map(RuntimeDraggableProxy::clone_cold)
                 .collect(),
-            hit_ownership: self.hit_ownership.clone(),
-            pointer_listener_group_occurrences: self
-                .pointer_listener_group_occurrences
-                .clone(),
+            hit_components: self.hit_components.clone(),
+            listener_groups: self.listener_groups.clone(),
             // Registration identities are snapshot state, but the owning Vec
             // must never alias the source instance.
             nested_event_registrations: self.nested_event_registrations.clone(),
@@ -1541,8 +2414,8 @@ impl StateMachineInstance {
             pointer_listener_states: Vec::new(),
             pointer_positions: Vec::new(),
             draggable_proxies: Vec::new(),
-            hit_ownership: Vec::new(),
-            pointer_listener_group_occurrences: Vec::new(),
+            hit_components: Vec::new(),
+            listener_groups: Vec::new(),
             nested_event_registrations: Vec::new(),
             disposed: false,
             draw_order_change_counter: 0,
@@ -1588,7 +2461,7 @@ impl StateMachineInstance {
         instance.record_constructor_phase(RuntimeConstructorPhase::NestedListTextHits);
         instance.initialize_scripted_clones_and_facilities(artboard, state_machine);
         instance.record_constructor_phase(RuntimeConstructorPhase::ScriptedClonesAndFacilities);
-        instance.sort_hit_ownership_skeleton();
+        instance.sort_hit_components(artboard);
         instance.record_constructor_phase(RuntimeConstructorPhase::HitSort);
         instance.build_initial_focus_tree(artboard);
         instance.record_constructor_phase(RuntimeConstructorPhase::FocusTree);
@@ -1619,32 +2492,31 @@ impl StateMachineInstance {
         self.append_scripted_data_binds_to_container();
     }
 
-    fn initialize_component_provided_groups(&mut self, artboard: &ArtboardInstance) {
+    fn initialize_component_provided_groups(&mut self, artboard: &mut ArtboardInstance) {
         self.draggable_proxies = runtime_draggable_proxies(artboard);
-        let source_local_ids = self
+        let targets = self
             .draggable_proxies
             .iter()
-            .map(|proxy| artboard.component_at(proxy.hittable).local_id)
+            .enumerate()
+            .map(|(proxy_index, proxy)| (proxy_index, proxy.hittable, proxy.opaque))
             .collect::<Vec<_>>();
-        for source_local_id in source_local_ids {
-            Self::push_reused_hit_ownership_if_absent(
-                &mut self.hit_ownership,
-                source_local_id,
-                RuntimeHitOwnershipKind::ComponentProvided,
-            );
+        for (proxy_index, target, opaque) in targets {
+            let group_index = self.listener_groups.len();
+            self.listener_groups
+                .push(ListenerGroup::draggable(proxy_index));
+            self.add_to_hit_lookup(artboard, target, true, group_index, opaque);
         }
     }
 
-    fn initialize_nested_list_text_hit_ownership(&mut self, artboard: &ArtboardInstance) {
+    fn initialize_nested_list_text_hit_ownership(&mut self, artboard: &mut ArtboardInstance) {
         // Pinned C++ appends every nested-artboard owner (and its notifier
         // registrations) before component-list owners, then appends the
         // optional TextInput owner. Keep those category passes distinct even
         // when local IDs from different categories are interleaved.
         for source_local_id in artboard.nested_artboards.keys().copied() {
-            self.hit_ownership.push(RuntimeHitOwnership {
-                source_local_id,
-                kind: RuntimeHitOwnershipKind::NestedArtboard,
-            });
+            self.hit_components.push(Box::new(HitNestedArtboard {
+                component: artboard.component_handle(source_local_id),
+            }));
             let Some(nested) = artboard.nested_artboards.get(&source_local_id) else {
                 continue;
             };
@@ -1674,38 +2546,22 @@ impl StateMachineInstance {
             .iter()
             .filter(|component| component.type_name == "ArtboardComponentList")
         {
-            self.hit_ownership.push(RuntimeHitOwnership {
-                source_local_id: component.local_id,
-                kind: RuntimeHitOwnershipKind::ComponentList,
-            });
+            self.hit_components.push(Box::new(HitComponentList {
+                component: artboard.component_handle(component.local_id),
+            }));
         }
         for component in artboard
             .components()
             .iter()
             .filter(|component| component.type_name == "TextInput")
         {
-            self.hit_ownership.push(RuntimeHitOwnership {
-                source_local_id: component.local_id,
-                kind: RuntimeHitOwnershipKind::TextInput,
-            });
+            let Some(handle) = artboard.component_handle(component.local_id) else {
+                continue;
+            };
+            self.hit_components.push(Box::new(HitExpandable {
+                drawable: HitDrawable::new(artboard, Some(handle), Some(handle), true),
+            }));
         }
-    }
-
-    fn push_reused_hit_ownership_if_absent(
-        hit_ownership: &mut Vec<RuntimeHitOwnership>,
-        source_local_id: usize,
-        kind: RuntimeHitOwnershipKind,
-    ) {
-        if hit_ownership
-            .iter()
-            .any(|owner| owner.source_local_id == source_local_id)
-        {
-            return;
-        }
-        hit_ownership.push(RuntimeHitOwnership {
-            source_local_id,
-            kind,
-        });
     }
 
     fn initialize_scripted_clones_and_facilities(
@@ -1725,10 +2581,122 @@ impl StateMachineInstance {
         self.scripted_input_group_generation = artboard.script_attachment_generation();
     }
 
-    fn sort_hit_ownership_skeleton(&mut self) {
-        // WP2 establishes the constructor boundary but intentionally does not
-        // implement C++ hit ordering. WP3 replaces this no-op ownership seam
-        // with `sortHitComponents` and draw-order counter synchronization.
+    fn sort_hit_components(&mut self, artboard: &ArtboardInstance) {
+        let mut current_sorted_index = 0;
+        for index in 0..self.hit_components.len() {
+            let is_artboard = self.hit_components[index]
+                .component()
+                .is_some_and(|component| artboard.component_at(component).type_name == "Artboard");
+            if is_artboard {
+                self.hit_components.swap(current_sorted_index, index);
+                current_sorted_index += 1;
+            }
+        }
+        for drawable in artboard.runtime_hit_component_order() {
+            let mut index = current_sorted_index;
+            while index < self.hit_components.len() {
+                if self.hit_components[index].component() == Some(drawable) {
+                    self.hit_components.swap(current_sorted_index, index);
+                    current_sorted_index += 1;
+                }
+                index += 1;
+            }
+            if current_sorted_index == self.hit_components.len() {
+                break;
+            }
+        }
+    }
+
+    fn add_to_hit_lookup(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        target: ComponentHandle,
+        is_layout_component: bool,
+        group_index: usize,
+        is_opaque: bool,
+    ) {
+        if let Some(existing) = self
+            .hit_components
+            .iter_mut()
+            .find(|hit| hit.component() == Some(target))
+            && existing.add_listener(
+                group_index,
+                &self.listener_groups,
+                &self.listener_definitions,
+            )
+        {
+            if is_layout_component && is_opaque {
+                existing.set_explicit_opaque(true);
+            }
+            return;
+        }
+
+        let type_name = artboard.component_at(target).type_name;
+        let definition = nuxie_schema::definition_by_name(type_name);
+        if is_layout_component
+            || definition.is_some_and(|definition| definition.is_a("LayoutComponent"))
+        {
+            let mut hit = HitLayout {
+                drawable: HitDrawable::new(artboard, Some(target), Some(target), is_opaque),
+            };
+            hit.add_listener(
+                group_index,
+                &self.listener_groups,
+                &self.listener_definitions,
+            );
+            self.hit_components.push(Box::new(hit));
+            return;
+        }
+
+        if type_name == "Shape" {
+            if let Some(shape) = artboard.component_at(target).concrete.shape.as_ref() {
+                shape.add_flags(RuntimeShapeState::NEVER_DEFER_UPDATE);
+            }
+            let local_id = artboard.component_at(target).local_id;
+            artboard.add_dirt(local_id, ComponentDirt::PATH, true);
+            let mut hit = HitExpandable {
+                drawable: HitDrawable::new(artboard, Some(target), Some(target), false),
+            };
+            hit.add_listener(
+                group_index,
+                &self.listener_groups,
+                &self.listener_definitions,
+            );
+            self.hit_components.push(Box::new(hit));
+            return;
+        }
+
+        if type_name == "TextValueRun" {
+            let drawable = artboard.component_parent_handle(target).or(Some(target));
+            if let Some(drawable) = drawable {
+                let local_id = artboard.component_at(drawable).local_id;
+                artboard.add_dirt(local_id, ComponentDirt::PATH, true);
+            }
+            let mut hit = HitTextRun {
+                expandable: HitExpandable {
+                    drawable: HitDrawable::new(artboard, drawable, Some(target), false),
+                },
+            };
+            hit.add_listener(
+                group_index,
+                &self.listener_groups,
+                &self.listener_definitions,
+            );
+            self.hit_components.push(Box::new(hit));
+            return;
+        }
+
+        if definition.is_some_and(|definition| definition.is_a("ContainerComponent")) {
+            let children = (0..artboard.component_child_len(target))
+                .filter_map(|index| artboard.component_child_at(target, index))
+                .collect::<Vec<_>>();
+            for child in children {
+                let child_is_layout =
+                    nuxie_schema::definition_by_name(artboard.component_at(child).type_name)
+                        .is_some_and(|definition| definition.is_a("LayoutComponent"));
+                self.add_to_hit_lookup(artboard, child, child_is_layout, group_index, is_opaque);
+            }
+        }
     }
 
     fn build_initial_focus_tree(&mut self, artboard: &ArtboardInstance) {
@@ -1754,7 +2722,7 @@ impl StateMachineInstance {
         }
     }
 
-    fn initialize_authored_listener_categories(&mut self, artboard: &ArtboardInstance) {
+    fn initialize_authored_listener_categories(&mut self, artboard: &mut ArtboardInstance) {
         self.view_model_listeners = (0..self.listener_definitions.len())
             .filter_map(|listener_index| {
                 let listener = self.listener_definitions.get(listener_index)?;
@@ -1768,7 +2736,8 @@ impl StateMachineInstance {
             })
             .collect();
 
-        for (listener_index, listener) in self.listener_definitions.iter().enumerate() {
+        let listener_definitions = Arc::clone(&self.listener_definitions);
+        for (listener_index, listener) in listener_definitions.iter().enumerate() {
             // Pinned C++ gives reported-event and ViewModel listeners their
             // own constructor paths and immediately continues the listener
             // loop. Even a malformed mixed listener therefore does not also
@@ -1791,12 +2760,19 @@ impl StateMachineInstance {
                         | RuntimeListenerType::Drag
                 )
             }) {
-                self.pointer_listener_group_occurrences.push(listener_index);
-                if artboard.component(listener.target_local_id).is_some() {
-                    Self::push_reused_hit_ownership_if_absent(
-                        &mut self.hit_ownership,
-                        listener.target_local_id,
-                        RuntimeHitOwnershipKind::AuthoredListener,
+                let group_index = self.listener_groups.len();
+                self.listener_groups
+                    .push(ListenerGroup::authored(listener_index));
+                if let Some(target) = artboard.component_handle(listener.target_local_id) {
+                    let is_layout_component =
+                        nuxie_schema::definition_by_name(artboard.component_at(target).type_name)
+                            .is_some_and(|definition| definition.is_a("LayoutComponent"));
+                    self.add_to_hit_lookup(
+                        artboard,
+                        target,
+                        is_layout_component,
+                        group_index,
+                        false,
                     );
                 }
             }
@@ -1827,7 +2803,7 @@ impl StateMachineInstance {
                 self.gamepad_listener_groups.push(group);
             }
         }
-        for (listener_index, listener) in self.listener_definitions.iter().enumerate() {
+        for (listener_index, listener) in listener_definitions.iter().enumerate() {
             if listener_uses_report_queue(listener) {
                 continue;
             }
@@ -3468,6 +4444,20 @@ impl StateMachineInstance {
         self.needs_advance
     }
 
+    pub fn has_listeners(&self) -> bool {
+        !self.hit_components.is_empty()
+    }
+
+    #[cfg(test)]
+    fn hit_components_count(&self) -> usize {
+        self.hit_components.len()
+    }
+
+    #[cfg(test)]
+    fn hit_component(&self, index: usize) -> Option<&dyn HitComponent> {
+        self.hit_components.get(index).map(Box::as_ref)
+    }
+
     pub fn input_count(&self) -> usize {
         self.inputs.len()
     }
@@ -3834,12 +4824,21 @@ impl StateMachineInstance {
         if self.script_error.is_some() {
             return RuntimeInputDispatchOutcome::terminal();
         }
-        let nested =
-            artboard.broadcast_nested_gamepad_to_scripted_drawables(invocation, already_dispatched);
-        if nested.terminal_resource_failure {
+        let mut hit_components = std::mem::take(&mut self.hit_components);
+        let mut hit_result = HitResult::None;
+        for hit in &mut hit_components {
+            let item =
+                hit.process_gamepad_invocation(self, artboard, invocation, already_dispatched);
+            hit_result = hit_result.strongest(item);
+            if hit_result == HitResult::HitOpaque {
+                break;
+            }
+        }
+        self.hit_components = hit_components;
+        if self.script_error.is_some() {
             return RuntimeInputDispatchOutcome::terminal();
         }
-        let mut handled = nested.handled;
+        let mut handled = hit_result.is_hit();
         let owner_identity = artboard.instance_identity();
         // Pinned C++ broadcasts after the focus-tree pass to every scripted
         // drawable that declares the selected gamepad method, skipping the
@@ -3908,6 +4907,686 @@ impl StateMachineInstance {
             }
         }
         (RuntimeInputDispatchOutcome::default(), already_dispatched)
+    }
+
+    fn normalized_hit_position(artboard: &ArtboardInstance, x: f32, y: f32) -> (f32, f32) {
+        if artboard.frame_origin() {
+            (
+                x - artboard.origin_x * artboard.width,
+                y - artboard.origin_y * artboard.height,
+            )
+        } else {
+            (x, y)
+        }
+    }
+
+    fn drawable_is_target_opaque(artboard: &ArtboardInstance, drawable: ComponentHandle) -> bool {
+        let Some(flags_key) = property_key_for_name("Drawable", "drawableFlags") else {
+            return false;
+        };
+        artboard
+            .component_local_id(drawable)
+            .and_then(|local_id| artboard.uint_property(local_id, flags_key))
+            .is_some_and(|flags| flags & (1 << 3) != 0)
+    }
+
+    fn hit_expandable(
+        artboard: &ArtboardInstance,
+        component: ComponentHandle,
+        position: (f32, f32),
+    ) -> bool {
+        let owner = artboard.component_at(component);
+        if owner.type_name != "Shape" {
+            return artboard.component_hit_test_point(component, position, true, true);
+        }
+        if owner.is_collapsed()
+            || !artboard.component_hit_test_point(component, position, true, true)
+        {
+            return false;
+        }
+        let Some(shape) = owner.concrete.shape.as_ref() else {
+            return false;
+        };
+        for path in &shape.paths {
+            let path_owner = artboard.component_at(*path);
+            if path_owner.is_collapsed()
+                || path_owner.transform.world_transform.determinant() == 0.0
+            {
+                continue;
+            }
+            if path_owner.type_name != "Rectangle" {
+                continue;
+            }
+            let local = path_owner
+                .transform
+                .world_transform
+                .invert_or_identity()
+                .transform_point(position.0, position.1);
+            let property = |name, default| {
+                property_key_for_name("Rectangle", name)
+                    .and_then(|key| artboard.double_property(path_owner.local_id, key))
+                    .unwrap_or(default)
+            };
+            let width = property("width", 0.0);
+            let height = property("height", 0.0);
+            let left = -width * property("originX", 0.5);
+            let top = -height * property("originY", 0.5);
+            const HIT_RADIUS: f32 = 2.0;
+            if local.0 >= left - HIT_RADIUS
+                && local.0 <= left + width + HIT_RADIUS
+                && local.1 >= top - HIT_RADIUS
+                && local.1 <= top + height + HIT_RADIUS
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn ensure_pointer_listener_state(&mut self, listener_index: usize, pointer_id: i32) {
+        if self
+            .pointer_listener_states
+            .iter()
+            .any(|state| state.pointer_id == pointer_id && state.listener_index == listener_index)
+        {
+            return;
+        }
+        self.pointer_listener_states
+            .push(RuntimePointerListenerState {
+                pointer_id,
+                listener_index,
+                is_hovered: false,
+                previous_x: 0.0,
+                previous_y: 0.0,
+            });
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn process_listener_group_event(
+        &mut self,
+        group: &mut ListenerGroup,
+        artboard: &mut ArtboardInstance,
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        can_hit: bool,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        event_context: Option<&StateMachineEventContext>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<bool, ScriptError> {
+        if group.disabled(pointer_id) {
+            return Ok(false);
+        }
+        match group.kind {
+            ListenerGroupKind::Draggable { proxy_index } => {
+                let Some(proxy) = self.draggable_proxies.get_mut(proxy_index) else {
+                    return Ok(false);
+                };
+                let hovered = group.prepared_hovered && can_hit;
+                let mut blocking = false;
+                match hit_type {
+                    RuntimeListenerType::Down if hovered => {
+                        if !proxy.active_pointers.contains(&pointer_id) {
+                            proxy.active_pointers.push(pointer_id);
+                        }
+                        runtime_draggable_proxy_start(artboard, proxy, position, timestamp_seconds);
+                        group.is_consumed = true;
+                    }
+                    RuntimeListenerType::Move if proxy.active_pointers.contains(&pointer_id) => {
+                        if runtime_draggable_proxy_drag(
+                            artboard,
+                            proxy,
+                            position,
+                            timestamp_seconds,
+                        ) {
+                            proxy.has_scrolled = true;
+                            blocking = true;
+                            group.is_consumed = true;
+                        }
+                    }
+                    RuntimeListenerType::Up => {
+                        if let Some(index) = proxy
+                            .active_pointers
+                            .iter()
+                            .position(|active| *active == pointer_id)
+                        {
+                            proxy.active_pointers.remove(index);
+                            runtime_draggable_proxy_end(artboard, proxy);
+                            proxy.has_scrolled = false;
+                            group.is_consumed = true;
+                        }
+                    }
+                    RuntimeListenerType::Exit => {
+                        proxy.active_pointers.retain(|active| *active != pointer_id);
+                        proxy.has_scrolled = false;
+                    }
+                    _ => {}
+                }
+                return Ok(blocking);
+            }
+            ListenerGroupKind::Authored { listener_index } => {
+                let Some(listener) = self.listener_definitions.get(listener_index).cloned() else {
+                    return Ok(false);
+                };
+                let is_hovered = group.prepared_hovered && can_hit;
+                let (hover_action, pointer) = self.update_pointer_listener_hover(
+                    listener_index,
+                    &listener,
+                    is_hovered,
+                    pointer_id,
+                    position.0,
+                    position.1,
+                    timestamp_seconds,
+                );
+                let capture = self.pointer_down_listener_hits.iter().find(|capture| {
+                    capture.pointer_id == pointer_id && capture.listener_index == listener_index
+                });
+                let captured_drag = hit_type == RuntimeListenerType::Move
+                    && listener.has_listener(RuntimeListenerType::Drag)
+                    && capture.is_some_and(|capture| {
+                        capture.drag_phase == Some(RuntimePointerDragPhase::Dragging)
+                    });
+                let click_matched = hit_type == RuntimeListenerType::Up
+                    && listener.has_listener(RuntimeListenerType::Click)
+                    && capture.is_some();
+                let direct_action = is_hovered && listener.has_listener(hit_type);
+                let action_type = hover_action
+                    .or_else(|| click_matched.then_some(RuntimeListenerType::Click))
+                    .or_else(|| captured_drag.then_some(RuntimeListenerType::Drag))
+                    .or_else(|| direct_action.then_some(hit_type));
+                if hit_type == RuntimeListenerType::Down && is_hovered {
+                    let drag = listener.has_listener(RuntimeListenerType::Drag);
+                    if listener.has_listener(RuntimeListenerType::Click) || drag {
+                        self.pointer_down_listener_hits
+                            .push(RuntimePointerDownListenerHit {
+                                pointer_id,
+                                listener_index,
+                                drag_phase: drag.then_some(RuntimePointerDragPhase::Armed),
+                                event_context: event_context.cloned(),
+                            });
+                    }
+                }
+                let captured_event_context = self
+                    .pointer_down_listener_hits
+                    .iter()
+                    .find(|capture| {
+                        capture.pointer_id == pointer_id && capture.listener_index == listener_index
+                    })
+                    .and_then(|capture| capture.event_context.clone())
+                    .or_else(|| event_context.cloned());
+                if let Some(action_type) = action_type {
+                    let _ = self.perform_listener_actions_with_event_context(
+                        artboard,
+                        &listener.listener_actions,
+                        owned_context.as_deref_mut(),
+                        &script_pointer_invocation(pointer, action_type),
+                        host,
+                        captured_event_context.as_ref(),
+                    )?;
+                    self.needs_advance = true;
+                    group.is_consumed = true;
+                }
+                self.record_pointer_input_for_listener(listener_index, pointer);
+                Ok(false)
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn update_listeners(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        hit_type: RuntimeListenerType,
+        x: f32,
+        y: f32,
+        pointer_id: i32,
+        timestamp_seconds: f32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        event_context: Option<&StateMachineEventContext>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<HitResult, ScriptError> {
+        if self.scripted_data_context_prepare_pending() {
+            return Ok(HitResult::None);
+        }
+        if !self.focus.is_inert() {
+            self.focus.sync(artboard);
+        }
+        let position = Self::normalized_hit_position(artboard, x, y);
+        if hit_type == RuntimeListenerType::Down {
+            self.pointer_down_listener_hits
+                .retain(|hit| hit.pointer_id != pointer_id);
+        }
+        let mut groups = std::mem::take(&mut self.listener_groups);
+        for group in &mut groups {
+            group.reset(self, pointer_id);
+        }
+        let mut hit_components = std::mem::take(&mut self.hit_components);
+        for hit in &mut hit_components {
+            hit.prepare_event(artboard, &mut groups, position, hit_type, pointer_id);
+        }
+
+        if hit_type == RuntimeListenerType::Move {
+            let mut started_drag = false;
+            for capture in self
+                .pointer_down_listener_hits
+                .iter_mut()
+                .filter(|capture| capture.pointer_id == pointer_id)
+            {
+                if capture.drag_phase == Some(RuntimePointerDragPhase::Armed) {
+                    capture.drag_phase = Some(RuntimePointerDragPhase::Dragging);
+                    started_drag = true;
+                }
+            }
+            if started_drag {
+                // ListenerGroup::processEvent re-enters the owning state
+                // machine with dragStart(..., disablePointer=false). Keep the
+                // re-entrant reset/prepare/process shape, but operate on the
+                // temporarily detached owners rather than borrowing `self`
+                // through them. The C++ dragStart timestamp is discarded.
+                for group in &mut groups {
+                    group.reset(self, pointer_id);
+                }
+                for hit in &mut hit_components {
+                    hit.prepare_event(
+                        artboard,
+                        &mut groups,
+                        position,
+                        RuntimeListenerType::DragStart,
+                        pointer_id,
+                    );
+                }
+                let mut drag_start_result = HitResult::None;
+                for hit in &mut hit_components {
+                    let item = hit.process_event(
+                        self,
+                        artboard,
+                        &mut groups,
+                        position,
+                        RuntimeListenerType::DragStart,
+                        drag_start_result != HitResult::HitOpaque,
+                        0.0,
+                        pointer_id,
+                        owned_context.as_deref_mut(),
+                        event_context,
+                        host,
+                    )?;
+                    drag_start_result = drag_start_result.strongest(item);
+                }
+            }
+        }
+
+        let mut result = HitResult::None;
+        for hit in &mut hit_components {
+            let item = hit.process_event(
+                self,
+                artboard,
+                &mut groups,
+                position,
+                hit_type,
+                result != HitResult::HitOpaque,
+                timestamp_seconds,
+                pointer_id,
+                owned_context.as_deref_mut(),
+                event_context,
+                host,
+            )?;
+            result = result.strongest(item);
+        }
+        self.hit_components = hit_components;
+        self.listener_groups = groups;
+        self.remember_pointer_position(pointer_id, position.0, position.1);
+        if hit_type == RuntimeListenerType::Up {
+            self.pointer_down_listener_hits
+                .retain(|hit| hit.pointer_id != pointer_id);
+        }
+        if hit_type == RuntimeListenerType::Exit {
+            self.release_pointer_input(pointer_id);
+            self.pointer_down_listener_hits
+                .retain(|capture| capture.pointer_id != pointer_id);
+            self.pointer_positions
+                .retain(|position| position.pointer_id != pointer_id);
+            for group in &mut self.listener_groups {
+                group
+                    .disabled_pointers
+                    .retain(|disabled| *disabled != pointer_id);
+                group.prepared_hovered = false;
+                group.is_consumed = false;
+            }
+            self.release_draggable_pointer(pointer_id);
+        }
+        Ok(result)
+    }
+
+    fn enable_pointer_events(&mut self, pointer_id: i32) {
+        let mut groups = std::mem::take(&mut self.listener_groups);
+        for hit in &mut self.hit_components {
+            hit.enable_pointer_events(&mut groups, pointer_id);
+        }
+        self.listener_groups = groups;
+    }
+
+    fn disable_pointer_events(&mut self, pointer_id: i32) {
+        let mut groups = std::mem::take(&mut self.listener_groups);
+        for hit in &mut self.hit_components {
+            hit.disable_pointer_events(&mut groups, pointer_id);
+        }
+        self.listener_groups = groups;
+    }
+
+    fn nested_local_position(
+        artboard: &ArtboardInstance,
+        component: Option<ComponentHandle>,
+        position: (f32, f32),
+    ) -> Option<(usize, (f32, f32))> {
+        let component = component?;
+        let owner = artboard.component_at(component);
+        if owner.is_collapsed() || owner.transform.world_transform.determinant() == 0.0 {
+            return None;
+        }
+        let paused = property_key_for_name("NestedArtboard", "isPaused")
+            .and_then(|key| artboard.bool_property(owner.local_id, key))
+            .unwrap_or(false);
+        if paused {
+            return None;
+        }
+        Some((
+            owner.local_id,
+            owner
+                .transform
+                .world_transform
+                .invert_or_identity()
+                .transform_point(position.0, position.1),
+        ))
+    }
+
+    fn hit_test_nested_artboard(
+        &self,
+        artboard: &ArtboardInstance,
+        component: Option<ComponentHandle>,
+        position: (f32, f32),
+    ) -> bool {
+        let Some((local_id, position)) = Self::nested_local_position(artboard, component, position)
+        else {
+            return false;
+        };
+        let Some(nested) = artboard.nested_artboards.get(&local_id) else {
+            return false;
+        };
+        nested.animations.iter().any(|animation| {
+            let crate::artboard::RuntimeNestedAnimationInstance::StateMachine(occurrence) =
+                animation
+            else {
+                return false;
+            };
+            occurrence.state_machine().is_some_and(|state_machine| {
+                state_machine.hit_test(&nested.child, position.0, position.1)
+            })
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn process_nested_artboard_event(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        component: Option<ComponentHandle>,
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        can_hit: bool,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+    ) -> HitResult {
+        let Some((local_id, position)) = Self::nested_local_position(artboard, component, position)
+        else {
+            return HitResult::None;
+        };
+        let Some(nested) = artboard.nested_artboards.get_mut(&local_id) else {
+            return HitResult::None;
+        };
+        let mut result = HitResult::None;
+        for animation in &mut nested.animations {
+            let crate::artboard::RuntimeNestedAnimationInstance::StateMachine(occurrence) =
+                animation
+            else {
+                continue;
+            };
+            let Some(state_machine) = occurrence.state_machine_mut() else {
+                continue;
+            };
+            let routed = if can_hit {
+                match hit_type {
+                    RuntimeListenerType::Down
+                    | RuntimeListenerType::Up
+                    | RuntimeListenerType::Move
+                    | RuntimeListenerType::Exit => state_machine
+                        .update_listeners(
+                            &mut nested.child,
+                            hit_type,
+                            position.0,
+                            position.1,
+                            pointer_id,
+                            if hit_type == RuntimeListenerType::Move {
+                                timestamp_seconds
+                            } else {
+                                0.0
+                            },
+                            None,
+                            None,
+                            &mut NoopScriptHost,
+                        )
+                        .unwrap_or(HitResult::None),
+                    RuntimeListenerType::DragStart => {
+                        let _ = state_machine.drag_start(
+                            &mut nested.child,
+                            position.0,
+                            position.1,
+                            timestamp_seconds,
+                            pointer_id,
+                        );
+                        HitResult::None
+                    }
+                    RuntimeListenerType::DragEnd => {
+                        let _ = state_machine.drag_end(
+                            &mut nested.child,
+                            position.0,
+                            position.1,
+                            timestamp_seconds,
+                            pointer_id,
+                        );
+                        HitResult::None
+                    }
+                    _ => HitResult::None,
+                }
+            } else if matches!(
+                hit_type,
+                RuntimeListenerType::Down
+                    | RuntimeListenerType::Up
+                    | RuntimeListenerType::Move
+                    | RuntimeListenerType::Exit
+            ) {
+                let _ = state_machine.update_listeners(
+                    &mut nested.child,
+                    RuntimeListenerType::Exit,
+                    position.0,
+                    position.1,
+                    pointer_id,
+                    0.0,
+                    None,
+                    None,
+                    &mut NoopScriptHost,
+                );
+                HitResult::None
+            } else {
+                HitResult::None
+            };
+            // Pinned nested routing deliberately lets a later child overwrite
+            // an earlier hit/opaque result.
+            result = routed;
+        }
+        result
+    }
+
+    fn component_list_order_and_positions(
+        artboard: &ArtboardInstance,
+        component: Option<ComponentHandle>,
+        position: (f32, f32),
+    ) -> Option<(usize, Vec<(usize, (f32, f32))>)> {
+        let component = component?;
+        let owner = artboard.component_at(component);
+        if owner.is_collapsed() {
+            return None;
+        }
+        let list_local_id = owner.local_id;
+        let list = artboard.component_list_state(list_local_id)?;
+        let order = if let Some(runtime) = artboard.runtime_file() {
+            runtime_component_list_order(runtime, list).indices.clone()
+        } else {
+            (0..list.items.len()).collect()
+        };
+        let list_world = owner.transform.world_transform;
+        let mut positions = Vec::with_capacity(order.len());
+        for item_index in order.into_iter().rev() {
+            let Some(item) = list.items.get(item_index) else {
+                continue;
+            };
+            let transform = list_world.multiply(item.transform);
+            if transform.determinant() == 0.0 {
+                continue;
+            }
+            positions.push((
+                item_index,
+                transform
+                    .invert_or_identity()
+                    .transform_point(position.0, position.1),
+            ));
+        }
+        Some((list_local_id, positions))
+    }
+
+    fn hit_test_component_list(
+        &self,
+        artboard: &ArtboardInstance,
+        component: Option<ComponentHandle>,
+        position: (f32, f32),
+    ) -> bool {
+        let Some((list_local_id, positions)) =
+            Self::component_list_order_and_positions(artboard, component, position)
+        else {
+            return false;
+        };
+        let Some(items) = artboard.component_list_items(list_local_id) else {
+            return false;
+        };
+        positions.into_iter().any(|(item_index, position)| {
+            items.get(item_index).is_some_and(|item| {
+                item.state_machines.iter().any(|state_machine| {
+                    state_machine.hit_test(&item.child, position.0, position.1)
+                })
+            })
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn process_component_list_event(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        component: Option<ComponentHandle>,
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        can_hit: bool,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+    ) -> HitResult {
+        let Some((list_local_id, positions)) =
+            Self::component_list_order_and_positions(artboard, component, position)
+        else {
+            return HitResult::None;
+        };
+        let Some(items) = artboard.component_list_items_mut(list_local_id) else {
+            return HitResult::None;
+        };
+        let mut result = HitResult::None;
+        let mut running_can_hit = can_hit;
+        for (item_index, position) in positions {
+            let Some(item) = items.get_mut(item_index) else {
+                continue;
+            };
+            let mut item_result = HitResult::None;
+            for state_machine in &mut item.state_machines {
+                let routed = if running_can_hit {
+                    match hit_type {
+                        RuntimeListenerType::Down
+                        | RuntimeListenerType::Up
+                        | RuntimeListenerType::Move
+                        | RuntimeListenerType::Exit => state_machine
+                            .update_listeners(
+                                &mut item.child,
+                                hit_type,
+                                position.0,
+                                position.1,
+                                pointer_id,
+                                if hit_type == RuntimeListenerType::Move {
+                                    timestamp_seconds
+                                } else {
+                                    0.0
+                                },
+                                None,
+                                None,
+                                &mut NoopScriptHost,
+                            )
+                            .unwrap_or(HitResult::None),
+                        RuntimeListenerType::DragStart => {
+                            let _ = state_machine.drag_start(
+                                &mut item.child,
+                                position.0,
+                                position.1,
+                                0.0,
+                                pointer_id,
+                            );
+                            HitResult::None
+                        }
+                        RuntimeListenerType::DragEnd => {
+                            let _ = state_machine.drag_end(
+                                &mut item.child,
+                                position.0,
+                                position.1,
+                                0.0,
+                                pointer_id,
+                            );
+                            HitResult::None
+                        }
+                        _ => HitResult::None,
+                    }
+                } else if matches!(
+                    hit_type,
+                    RuntimeListenerType::Down
+                        | RuntimeListenerType::Up
+                        | RuntimeListenerType::Move
+                        | RuntimeListenerType::Exit
+                ) {
+                    let _ = state_machine.update_listeners(
+                        &mut item.child,
+                        RuntimeListenerType::Exit,
+                        position.0,
+                        position.1,
+                        pointer_id,
+                        0.0,
+                        None,
+                        None,
+                        &mut NoopScriptHost,
+                    );
+                    HitResult::None
+                } else {
+                    HitResult::None
+                };
+                item_result = item_result.strongest(routed);
+            }
+            result = result.strongest(item_result);
+            if item_result == HitResult::HitOpaque {
+                running_can_hit = false;
+            }
+        }
+        result
     }
 
     fn pointer_input_for_listener(
@@ -3981,75 +5660,6 @@ impl StateMachineInstance {
             .retain(|state| state.pointer_id != pointer_id);
     }
 
-    fn draggable_pointer_down(
-        &mut self,
-        artboard: &mut ArtboardInstance,
-        position: (f32, f32),
-        pointer_id: i32,
-        timestamp_seconds: f32,
-    ) -> bool {
-        let mut hit = false;
-        let mut hit_opaque = false;
-        for proxy in &mut self.draggable_proxies {
-            if hit_opaque || !runtime_draggable_proxy_hit_test(artboard, proxy, position) {
-                continue;
-            }
-            if !proxy.active_pointers.contains(&pointer_id) {
-                proxy.active_pointers.push(pointer_id);
-            }
-            runtime_draggable_proxy_start(artboard, proxy, position, timestamp_seconds);
-            hit = true;
-            hit_opaque |= proxy.opaque;
-        }
-        hit
-    }
-
-    fn draggable_pointer_move(
-        &mut self,
-        artboard: &mut ArtboardInstance,
-        position: (f32, f32),
-        pointer_id: i32,
-        timestamp_seconds: f32,
-    ) -> (bool, bool) {
-        let mut hit = false;
-        let mut started_scroll = false;
-        for proxy in &mut self.draggable_proxies {
-            if !proxy.active_pointers.contains(&pointer_id) {
-                continue;
-            }
-            if runtime_draggable_proxy_drag(artboard, proxy, position, timestamp_seconds) {
-                started_scroll |= !proxy.has_scrolled;
-                proxy.has_scrolled = true;
-                hit = true;
-            }
-        }
-        (hit, started_scroll)
-    }
-
-    fn draggable_pointer_end(
-        &mut self,
-        artboard: &mut ArtboardInstance,
-        pointer_id: i32,
-    ) -> (bool, bool) {
-        let mut hit = false;
-        let mut ended_scroll = false;
-        for proxy in &mut self.draggable_proxies {
-            let Some(index) = proxy
-                .active_pointers
-                .iter()
-                .position(|active| *active == pointer_id)
-            else {
-                continue;
-            };
-            proxy.active_pointers.remove(index);
-            runtime_draggable_proxy_end(artboard, proxy);
-            hit = true;
-            ended_scroll |= proxy.has_scrolled;
-            proxy.has_scrolled = false;
-        }
-        (hit, ended_scroll)
-    }
-
     fn release_draggable_pointer(&mut self, pointer_id: i32) {
         // `updateListeners(exit)` calls `ListenerGroup::releaseEvent` after
         // processing. The base phase does not transition through clicked/out
@@ -4075,39 +5685,10 @@ impl StateMachineInstance {
     }
 
     pub(crate) fn hit_test(&self, artboard: &ArtboardInstance, x: f32, y: f32) -> bool {
-        if !x.is_finite() || !y.is_finite() {
-            return false;
-        }
-        if self
-            .draggable_proxies
+        let position = Self::normalized_hit_position(artboard, x, y);
+        self.hit_components
             .iter()
-            .any(|proxy| runtime_draggable_proxy_hit_test(artboard, proxy, (x, y)))
-        {
-            return true;
-        }
-        for listener in self.listener_definitions.iter() {
-            if listener_uses_report_queue(listener) {
-                continue;
-            }
-            if [
-                RuntimeListenerType::Down,
-                RuntimeListenerType::Up,
-                RuntimeListenerType::Move,
-                RuntimeListenerType::Enter,
-                RuntimeListenerType::Exit,
-                RuntimeListenerType::Click,
-                RuntimeListenerType::Drag,
-                RuntimeListenerType::DragStart,
-                RuntimeListenerType::DragEnd,
-            ]
-            .into_iter()
-            .any(|kind| listener.has_listener(kind))
-                && listener.hit_test(artboard, x, y)
-            {
-                return true;
-            }
-        }
-        false
+            .any(|hit| hit.hit_test(self, artboard, position))
     }
 
     pub fn pointer_down_with_event_context(
@@ -4192,7 +5773,6 @@ impl StateMachineInstance {
         timestamp_seconds: f32,
         host: &mut dyn ScriptHost,
     ) -> Result<bool, ScriptError> {
-        validate_pointer_timestamp(timestamp_seconds)?;
         self.pointer_down_with_context_and_script_host(
             artboard,
             x,
@@ -4234,74 +5814,22 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
         timestamp_seconds: f32,
-        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         event_context: Option<&StateMachineEventContext>,
         host: &mut dyn ScriptHost,
     ) -> Result<bool, ScriptError> {
-        if self.scripted_data_context_prepare_pending() {
-            return Ok(false);
-        }
-        if !x.is_finite() || !y.is_finite() {
-            return Ok(false);
-        }
-        if !self.focus.is_inert() {
-            self.focus.sync(artboard);
-        }
-        self.pointer_down_listener_hits
-            .retain(|hit| hit.pointer_id != pointer_id);
-        let mut hit = self.draggable_pointer_down(artboard, (x, y), pointer_id, timestamp_seconds);
-        let listener_definitions = Arc::clone(&self.listener_definitions);
-        for (listener_index, listener) in listener_definitions.iter().enumerate() {
-            if listener_uses_report_queue(listener) {
-                continue;
-            }
-            let listener_hit = listener.hit_test(artboard, x, y);
-            let (hover_action, pointer) = self.update_pointer_listener_hover(
-                listener_index,
-                listener,
-                listener_hit,
-                pointer_id,
-                x,
-                y,
-                timestamp_seconds,
-            );
-            let click_action = listener_hit && listener.has_listener(RuntimeListenerType::Click);
-            let drag_action = listener_hit && listener.has_listener(RuntimeListenerType::Drag);
-            if click_action || drag_action {
-                self.pointer_down_listener_hits
-                    .push(RuntimePointerDownListenerHit {
-                        pointer_id,
-                        listener_index,
-                        drag_phase: drag_action.then_some(RuntimePointerDragPhase::Armed),
-                        event_context: event_context.cloned(),
-                    });
-            }
-            let direct_action = listener_hit && listener.has_listener(RuntimeListenerType::Down);
-            let action_type =
-                hover_action.or_else(|| direct_action.then_some(RuntimeListenerType::Down));
-            if listener_hit
-                && (click_action || drag_action || direct_action || hover_action.is_some())
-            {
-                hit = true;
-            }
-            if let Some(action_type) = action_type {
-                let _ = self.perform_listener_actions_with_event_context(
-                    artboard,
-                    &listener.listener_actions,
-                    owned_context.as_deref_mut(),
-                    &script_pointer_invocation(pointer, action_type),
-                    host,
-                    event_context,
-                )?;
-                // C++ marks the machine after every matched pointer listener,
-                // independent of whether an action changed a value
-                // (`listener_group.cpp:218-225`).
-                self.needs_advance = true;
-            }
-            self.record_pointer_input_for_listener(listener_index, pointer);
-        }
-        self.remember_pointer_position(pointer_id, x, y);
-        Ok(hit)
+        self.update_listeners(
+            artboard,
+            RuntimeListenerType::Down,
+            x,
+            y,
+            pointer_id,
+            timestamp_seconds,
+            owned_context,
+            event_context,
+            host,
+        )
+        .map(HitResult::is_hit)
     }
 
     pub fn pointer_move(
@@ -4367,7 +5895,6 @@ impl StateMachineInstance {
         timestamp_seconds: f32,
         host: &mut dyn ScriptHost,
     ) -> Result<bool, ScriptError> {
-        validate_pointer_timestamp(timestamp_seconds)?;
         self.update_pointer_listeners_with_script_host(
             artboard,
             RuntimeListenerType::Move,
@@ -4495,7 +6022,6 @@ impl StateMachineInstance {
         timestamp_seconds: f32,
         host: &mut dyn ScriptHost,
     ) -> Result<bool, ScriptError> {
-        validate_pointer_timestamp(timestamp_seconds)?;
         self.pointer_up_with_context_and_script_host(
             artboard,
             x,
@@ -4537,120 +6063,22 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
         timestamp_seconds: f32,
-        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         event_context: Option<&StateMachineEventContext>,
         host: &mut dyn ScriptHost,
     ) -> Result<bool, ScriptError> {
-        if self.scripted_data_context_prepare_pending() {
-            return Ok(false);
-        }
-        if !x.is_finite() || !y.is_finite() {
-            return Ok(false);
-        }
-        if !self.focus.is_inert() {
-            self.focus.sync(artboard);
-        }
-        let (component_hit, component_ended_drag) =
-            self.draggable_pointer_end(artboard, pointer_id);
-        let mut hit = component_hit;
-        if component_ended_drag {
-            hit |= self.dispatch_direct_pointer_listener_type(
-                artboard,
-                pointer_id,
-                RuntimeListenerType::DragEnd,
-                x,
-                y,
-                timestamp_seconds,
-                owned_context.as_deref_mut(),
-                host,
-            )?;
-            // C++ `StateMachineInstance::dragEnd` immediately follows the
-            // DragEnd listener pass with `pointerMove(position, timeStamp,
-            // pointerId)`. The component-provided group has already left its
-            // down phase, so this tail only needs the ordinary listener pass
-            // (`state_machine_instance.cpp:1585-1607`).
-            hit |= self.update_pointer_listeners_with_script_host_internal(
-                artboard,
-                RuntimeListenerType::Move,
-                x,
-                y,
-                pointer_id,
-                timestamp_seconds,
-                owned_context.as_deref_mut(),
-                host,
-                false,
-            )?;
-        }
-        let listener_definitions = Arc::clone(&self.listener_definitions);
-        if self.pointer_down_listener_hits.iter().any(|capture| {
-            capture.pointer_id == pointer_id
-                && capture.drag_phase == Some(RuntimePointerDragPhase::Dragging)
-        }) {
-            hit |= self.dispatch_captured_pointer_listener_type(
-                artboard,
-                pointer_id,
-                RuntimeListenerType::DragEnd,
-                x,
-                y,
-                timestamp_seconds,
-                owned_context.as_deref_mut(),
-                host,
-            )?;
-        }
-        for (listener_index, listener) in listener_definitions.iter().enumerate() {
-            if listener_uses_report_queue(listener) {
-                continue;
-            }
-            let listener_hit = listener.hit_test(artboard, x, y);
-            let (hover_action, pointer) = self.update_pointer_listener_hover(
-                listener_index,
-                listener,
-                listener_hit,
-                pointer_id,
-                x,
-                y,
-                timestamp_seconds,
-            );
-            let click_matched = listener.has_listener(RuntimeListenerType::Click)
-                && self.pointer_down_listener_hits.iter().any(|hit| {
-                    hit.pointer_id == pointer_id && hit.listener_index == listener_index
-                });
-            let direct_action = listener_hit && listener.has_listener(RuntimeListenerType::Up);
-            let action_type = hover_action
-                .or_else(|| (listener_hit && click_matched).then_some(RuntimeListenerType::Click))
-                .or_else(|| direct_action.then_some(RuntimeListenerType::Up));
-            if listener_hit && (click_matched || direct_action || hover_action.is_some()) {
-                hit = true;
-            }
-            let captured_event_context = (action_type == Some(RuntimeListenerType::Click))
-                .then(|| {
-                    self.pointer_down_listener_hits
-                        .iter()
-                        .find(|capture| {
-                            capture.pointer_id == pointer_id
-                                && capture.listener_index == listener_index
-                        })
-                        .and_then(|capture| capture.event_context.clone())
-                })
-                .flatten();
-            let action_event_context = captured_event_context.as_ref().or(event_context);
-            if let Some(action_type) = action_type {
-                let _ = self.perform_listener_actions_with_event_context(
-                    artboard,
-                    &listener.listener_actions,
-                    owned_context.as_deref_mut(),
-                    &script_pointer_invocation(pointer, action_type),
-                    host,
-                    action_event_context,
-                )?;
-                self.needs_advance = true;
-            }
-            self.record_pointer_input_for_listener(listener_index, pointer);
-        }
-        self.remember_pointer_position(pointer_id, x, y);
-        self.pointer_down_listener_hits
-            .retain(|hit| hit.pointer_id != pointer_id);
-        Ok(hit)
+        self.update_listeners(
+            artboard,
+            RuntimeListenerType::Up,
+            x,
+            y,
+            pointer_id,
+            timestamp_seconds,
+            owned_context,
+            event_context,
+            host,
+        )
+        .map(HitResult::is_hit)
     }
 
     pub fn pointer_exit(
@@ -4673,18 +6101,21 @@ impl StateMachineInstance {
         timestamp_seconds: f32,
         pointer_id: i32,
     ) -> bool {
-        let result = validate_pointer_timestamp(timestamp_seconds).and_then(|()| {
-            self.dispatch_direct_pointer_listener_type(
+        let _ = timestamp_seconds;
+        self.disable_pointer_events(pointer_id);
+        let result = self
+            .update_listeners(
                 artboard,
-                pointer_id,
                 RuntimeListenerType::DragStart,
                 x,
                 y,
-                timestamp_seconds,
+                pointer_id,
+                0.0,
+                None,
                 None,
                 &mut NoopScriptHost,
             )
-        });
+            .map(HitResult::is_hit);
         self.retain_script_result(result)
     }
 
@@ -4696,30 +6127,21 @@ impl StateMachineInstance {
         timestamp_seconds: f32,
         pointer_id: i32,
     ) -> bool {
-        let result = validate_pointer_timestamp(timestamp_seconds).and_then(|()| {
-            let mut hit = self.dispatch_direct_pointer_listener_type(
-                artboard,
-                pointer_id,
-                RuntimeListenerType::DragEnd,
-                x,
-                y,
-                timestamp_seconds,
-                None,
-                &mut NoopScriptHost,
-            )?;
-            hit |= self.update_pointer_listeners_with_script_host(
-                artboard,
-                RuntimeListenerType::Move,
-                x,
-                y,
-                pointer_id,
-                timestamp_seconds,
-                None,
-                &mut NoopScriptHost,
-            )?;
-            Ok(hit)
-        });
-        self.retain_script_result(result)
+        self.enable_pointer_events(pointer_id);
+        let result = self.update_listeners(
+            artboard,
+            RuntimeListenerType::DragEnd,
+            x,
+            y,
+            pointer_id,
+            0.0,
+            None,
+            None,
+            &mut NoopScriptHost,
+        );
+        let drag_result = self.retain_script_result(result.map(HitResult::is_hit));
+        let _ = self.pointer_move(artboard, x, y, timestamp_seconds, pointer_id);
+        return drag_result;
     }
 
     pub fn pointer_exit_with_owned_view_model_context(
@@ -4761,7 +6183,6 @@ impl StateMachineInstance {
         timestamp_seconds: f32,
         host: &mut dyn ScriptHost,
     ) -> Result<bool, ScriptError> {
-        validate_pointer_timestamp(timestamp_seconds)?;
         self.update_pointer_listeners_with_script_host(
             artboard,
             RuntimeListenerType::Exit,
@@ -4846,53 +6267,6 @@ impl StateMachineInstance {
         Ok(hit)
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn dispatch_direct_pointer_listener_type(
-        &mut self,
-        artboard: &mut ArtboardInstance,
-        pointer_id: i32,
-        listener_type: RuntimeListenerType,
-        x: f32,
-        y: f32,
-        timestamp_seconds: f32,
-        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
-        host: &mut dyn ScriptHost,
-    ) -> Result<bool, ScriptError> {
-        if self.scripted_data_context_prepare_pending() {
-            return Ok(false);
-        }
-        let listener_definitions = Arc::clone(&self.listener_definitions);
-        let mut hit = false;
-        for (listener_index, listener) in listener_definitions.iter().enumerate() {
-            if listener_uses_report_queue(listener) {
-                continue;
-            }
-            if !listener.has_listener(listener_type) || !listener.hit_test(artboard, x, y) {
-                continue;
-            }
-            let (pointer, _) = self.pointer_input_for_listener(
-                listener_index,
-                x,
-                y,
-                pointer_id,
-                timestamp_seconds,
-                true,
-            );
-            let _ = self.perform_listener_actions_with_event_context(
-                artboard,
-                &listener.listener_actions,
-                owned_context.as_deref_mut(),
-                &script_pointer_invocation(pointer, listener_type),
-                host,
-                None,
-            )?;
-            self.needs_advance = true;
-            self.record_pointer_input_for_listener(listener_index, pointer);
-            hit = true;
-        }
-        Ok(hit)
-    }
-
     pub fn try_pointer_exit_with_owned_view_model_context_and_script_host(
         &mut self,
         artboard: &mut ArtboardInstance,
@@ -4923,178 +6297,21 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
         timestamp_seconds: f32,
-        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         host: &mut dyn ScriptHost,
     ) -> Result<bool, ScriptError> {
-        self.update_pointer_listeners_with_script_host_internal(
+        self.update_listeners(
             artboard,
             listener_type,
             x,
             y,
             pointer_id,
             timestamp_seconds,
-            owned_context.as_deref_mut(),
+            owned_context,
+            None,
             host,
-            true,
         )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn update_pointer_listeners_with_script_host_internal(
-        &mut self,
-        artboard: &mut ArtboardInstance,
-        listener_type: RuntimeListenerType,
-        x: f32,
-        y: f32,
-        pointer_id: i32,
-        timestamp_seconds: f32,
-        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
-        host: &mut dyn ScriptHost,
-        process_component_proxies: bool,
-    ) -> Result<bool, ScriptError> {
-        if self.scripted_data_context_prepare_pending() {
-            return Ok(false);
-        }
-        if !x.is_finite() || !y.is_finite() {
-            return Ok(false);
-        }
-        if !self.focus.is_inert() {
-            self.focus.sync(artboard);
-        }
-        let (component_hit, component_starts_drag, component_ends_drag) =
-            if !process_component_proxies {
-                (false, false, false)
-            } else {
-                match listener_type {
-                    RuntimeListenerType::Move => {
-                        let (hit, starts) = self.draggable_pointer_move(
-                            artboard,
-                            (x, y),
-                            pointer_id,
-                            timestamp_seconds,
-                        );
-                        (hit, starts, false)
-                    }
-                    RuntimeListenerType::Exit => {
-                        self.release_draggable_pointer(pointer_id);
-                        (false, false, false)
-                    }
-                    _ => (false, false, false),
-                }
-            };
-        let mut hit = component_hit;
-        if component_starts_drag {
-            hit |= self.dispatch_direct_pointer_listener_type(
-                artboard,
-                pointer_id,
-                RuntimeListenerType::DragStart,
-                x,
-                y,
-                timestamp_seconds,
-                owned_context.as_deref_mut(),
-                host,
-            )?;
-        }
-        if component_ends_drag {
-            hit |= self.dispatch_direct_pointer_listener_type(
-                artboard,
-                pointer_id,
-                RuntimeListenerType::DragEnd,
-                x,
-                y,
-                timestamp_seconds,
-                owned_context.as_deref_mut(),
-                host,
-            )?;
-        }
-        let listener_definitions = Arc::clone(&self.listener_definitions);
-
-        let mut starts_drag = false;
-        if listener_type == RuntimeListenerType::Move {
-            for capture in self
-                .pointer_down_listener_hits
-                .iter_mut()
-                .filter(|capture| capture.pointer_id == pointer_id)
-            {
-                if capture.drag_phase == Some(RuntimePointerDragPhase::Armed) {
-                    capture.drag_phase = Some(RuntimePointerDragPhase::Dragging);
-                    starts_drag = true;
-                }
-            }
-        }
-
-        if starts_drag {
-            hit |= self.dispatch_captured_pointer_listener_type(
-                artboard,
-                pointer_id,
-                RuntimeListenerType::DragStart,
-                x,
-                y,
-                timestamp_seconds,
-                owned_context.as_deref_mut(),
-                host,
-            )?;
-        }
-        for (listener_index, listener) in listener_definitions.iter().enumerate() {
-            if listener_uses_report_queue(listener) {
-                continue;
-            }
-            let listener_hit =
-                listener_type != RuntimeListenerType::Exit && listener.hit_test(artboard, x, y);
-            let (hover_action, pointer) = self.update_pointer_listener_hover(
-                listener_index,
-                listener,
-                listener_hit,
-                pointer_id,
-                x,
-                y,
-                timestamp_seconds,
-            );
-            let captured_drag = listener_type == RuntimeListenerType::Move
-                && listener.has_listener(RuntimeListenerType::Drag)
-                && self.pointer_down_listener_hits.iter().any(|capture| {
-                    capture.pointer_id == pointer_id
-                        && capture.listener_index == listener_index
-                        && capture.drag_phase == Some(RuntimePointerDragPhase::Dragging)
-                });
-            let direct_action = listener_hit && listener.has_listener(listener_type);
-            let action_type = hover_action
-                .or_else(|| captured_drag.then_some(RuntimeListenerType::Drag))
-                .or_else(|| direct_action.then_some(listener_type));
-            if captured_drag || (listener_hit && (direct_action || hover_action.is_some())) {
-                hit = true;
-            }
-            let captured_event_context = captured_drag
-                .then(|| {
-                    self.pointer_down_listener_hits
-                        .iter()
-                        .find(|capture| {
-                            capture.pointer_id == pointer_id
-                                && capture.listener_index == listener_index
-                        })
-                        .and_then(|capture| capture.event_context.clone())
-                })
-                .flatten();
-            if let Some(action_type) = action_type {
-                let _ = self.perform_listener_actions_with_event_context(
-                    artboard,
-                    &listener.listener_actions,
-                    owned_context.as_deref_mut(),
-                    &script_pointer_invocation(pointer, action_type),
-                    host,
-                    captured_event_context.as_ref(),
-                )?;
-                self.needs_advance = true;
-            }
-            self.record_pointer_input_for_listener(listener_index, pointer);
-        }
-        self.remember_pointer_position(pointer_id, x, y);
-        if listener_type == RuntimeListenerType::Exit {
-            self.release_pointer_input(pointer_id);
-            self.pointer_down_listener_hits
-                .retain(|capture| capture.pointer_id != pointer_id);
-        }
-        Ok(hit)
+        .map(HitResult::is_hit)
     }
 
     pub(crate) fn notify_events(
@@ -9462,6 +10679,11 @@ impl StateMachineInstance {
         if self.scripted_data_context_prepare_pending() {
             return Ok(false);
         }
+        let draw_order_change_counter = artboard.prepared_epoch();
+        if self.draw_order_change_counter != draw_order_change_counter {
+            self.sort_hit_components(artboard);
+            self.draw_order_change_counter = draw_order_change_counter;
+        }
         if !self.focus.is_inert() {
             self.focus.sync(artboard);
         }
@@ -10790,6 +12012,276 @@ mod scripted_listener_action_tests {
         scripted_listener_artboard_and_machine().1
     }
 
+    #[derive(Debug, Clone)]
+    struct RecordingHitComponent {
+        label: &'static str,
+        result: HitResult,
+        trace: Rc<RefCell<Vec<String>>>,
+    }
+
+    impl HitComponent for RecordingHitComponent {
+        fn clone_box(&self) -> Box<dyn HitComponent> {
+            Box::new(self.clone())
+        }
+
+        fn component(&self) -> Option<ComponentHandle> {
+            None
+        }
+
+        fn prepare_event(
+            &mut self,
+            _artboard: &ArtboardInstance,
+            _groups: &mut [ListenerGroup],
+            _position: (f32, f32),
+            _hit_type: RuntimeListenerType,
+            _pointer_id: i32,
+        ) {
+            self.trace
+                .borrow_mut()
+                .push(format!("prepare:{}", self.label));
+        }
+
+        fn process_event(
+            &mut self,
+            _instance: &mut StateMachineInstance,
+            _artboard: &mut ArtboardInstance,
+            _groups: &mut [ListenerGroup],
+            _position: (f32, f32),
+            hit_type: RuntimeListenerType,
+            can_hit: bool,
+            timestamp_seconds: f32,
+            _pointer_id: i32,
+            _owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+            _event_context: Option<&StateMachineEventContext>,
+            _host: &mut dyn ScriptHost,
+        ) -> Result<HitResult, ScriptError> {
+            self.trace.borrow_mut().push(format!(
+                "process:{}:{can_hit}:{hit_type:?}:{timestamp_seconds:?}",
+                self.label
+            ));
+            Ok(self.result)
+        }
+
+        fn hit_test(
+            &self,
+            _instance: &StateMachineInstance,
+            _artboard: &ArtboardInstance,
+            _position: (f32, f32),
+        ) -> bool {
+            self.result.is_hit()
+        }
+
+        fn enable_pointer_events(&mut self, _groups: &mut [ListenerGroup], pointer_id: i32) {
+            self.trace
+                .borrow_mut()
+                .push(format!("enable:{}:{pointer_id}", self.label));
+        }
+
+        fn disable_pointer_events(&mut self, _groups: &mut [ListenerGroup], pointer_id: i32) {
+            self.trace
+                .borrow_mut()
+                .push(format!("disable:{}:{pointer_id}", self.label));
+        }
+    }
+
+    #[test]
+    fn fl_c5_hit_result_is_tristate_and_aggregates_strongest() {
+        assert!(!HitResult::None.is_hit());
+        assert!(HitResult::Hit.is_hit());
+        assert_eq!(HitResult::None.strongest(HitResult::Hit), HitResult::Hit);
+        assert_eq!(
+            HitResult::Hit.strongest(HitResult::HitOpaque),
+            HitResult::HitOpaque
+        );
+        assert_eq!(
+            HitResult::HitOpaque.strongest(HitResult::None),
+            HitResult::HitOpaque
+        );
+    }
+
+    #[test]
+    fn fl_c5_hit_three_passes_continue_after_opaque_with_can_hit_false() {
+        let (mut artboard, mut machine) = scripted_listener_artboard_and_machine();
+        let trace = Rc::new(RefCell::new(Vec::new()));
+        machine.listener_groups.clear();
+        machine.hit_components = vec![
+            Box::new(RecordingHitComponent {
+                label: "front",
+                result: HitResult::HitOpaque,
+                trace: Rc::clone(&trace),
+            }),
+            Box::new(RecordingHitComponent {
+                label: "back",
+                result: HitResult::Hit,
+                trace: Rc::clone(&trace),
+            }),
+        ];
+
+        let result = machine
+            .update_listeners(
+                &mut artboard,
+                RuntimeListenerType::Move,
+                7.0,
+                9.0,
+                3,
+                -2.5,
+                None,
+                None,
+                &mut NoopScriptHost,
+            )
+            .expect("hit passes");
+
+        assert_eq!(result, HitResult::HitOpaque);
+        assert_eq!(
+            trace.borrow().as_slice(),
+            [
+                "prepare:front",
+                "prepare:back",
+                "process:front:true:Move:-2.5",
+                "process:back:false:Move:-2.5",
+            ]
+        );
+    }
+
+    #[test]
+    fn fl_c5_pointer_drag_discards_event_timestamps_then_follows_with_move() {
+        let (mut artboard, mut machine) = scripted_listener_artboard_and_machine();
+        let trace = Rc::new(RefCell::new(Vec::new()));
+        machine.listener_groups.clear();
+        machine.hit_components = vec![Box::new(RecordingHitComponent {
+            label: "drag",
+            result: HitResult::None,
+            trace: Rc::clone(&trace),
+        })];
+
+        assert!(!machine.drag_start(&mut artboard, 4.0, 5.0, 9.5, 11));
+        assert!(!machine.drag_end(&mut artboard, 6.0, 7.0, -3.25, 11));
+
+        assert_eq!(
+            trace.borrow().as_slice(),
+            [
+                "disable:drag:11",
+                "prepare:drag",
+                "process:drag:true:DragStart:0.0",
+                "enable:drag:11",
+                "prepare:drag",
+                "process:drag:true:DragEnd:0.0",
+                "prepare:drag",
+                "process:drag:true:Move:-3.25",
+            ]
+        );
+    }
+
+    #[test]
+    fn fl_c5_hit_click_only_duplicate_groups_require_down_and_up() {
+        let (artboard, _) = scripted_listener_artboard_and_machine();
+        let target = artboard
+            .components()
+            .iter()
+            .find_map(|component| artboard.component_handle(component.local_id))
+            .expect("component");
+        let listener = RuntimeStateMachineListener {
+            target_local_id: artboard.component_at(target).local_id,
+            is_single: false,
+            listener_types: vec![RuntimeListenerType::Click],
+            event_local_indices: Vec::new(),
+            view_model_path: None,
+            view_model_input_types: Vec::new(),
+            gamepad_input_types: Vec::new(),
+            keyboard_input_types: Vec::new(),
+            semantic_input_types: Vec::new(),
+            hit_paths: Vec::new(),
+            listener_actions: Vec::new(),
+        };
+        let groups = vec![ListenerGroup::authored(0), ListenerGroup::authored(0)];
+        let listeners = vec![listener];
+        let mut hit = HitDrawable::new(&artboard, Some(target), Some(target), false);
+
+        assert!(hit.add_listener_impl(0, &groups, &listeners));
+        assert!(hit.add_listener_impl(1, &groups, &listeners));
+        assert_eq!(hit.listeners, [0, 1]);
+        assert!(hit.needs_down_listener);
+        assert!(hit.needs_up_listener);
+        assert!(hit.can_early_out);
+    }
+
+    #[test]
+    fn fl_c5_pointer_exit_releases_group_history_and_drag_state() {
+        let (mut artboard, mut machine) = scripted_listener_artboard_and_machine();
+        machine
+            .pointer_listener_states
+            .push(RuntimePointerListenerState {
+                pointer_id: -7,
+                listener_index: 0,
+                is_hovered: true,
+                previous_x: 1.0,
+                previous_y: 2.0,
+            });
+        machine
+            .pointer_down_listener_hits
+            .push(RuntimePointerDownListenerHit {
+                pointer_id: -7,
+                listener_index: 0,
+                drag_phase: Some(RuntimePointerDragPhase::Dragging),
+                event_context: None,
+            });
+        for group in &mut machine.listener_groups {
+            group.disable(-7);
+        }
+
+        let _ = machine.pointer_exit(&mut artboard, 0.0, -0.0, -7);
+
+        assert!(
+            machine
+                .pointer_listener_states
+                .iter()
+                .all(|state| state.pointer_id != -7)
+        );
+        assert!(
+            machine
+                .pointer_down_listener_hits
+                .iter()
+                .all(|capture| capture.pointer_id != -7)
+        );
+        assert!(
+            machine
+                .listener_groups
+                .iter()
+                .all(|group| !group.disabled(-7))
+        );
+    }
+
+    #[test]
+    fn fl_c5_pointer_cpp_paths_accept_nonfinite_coordinates_and_timestamps() {
+        let (mut artboard, mut machine) = scripted_listener_artboard_and_machine();
+        for (x, y, timestamp) in [
+            (f32::NAN, f32::INFINITY, f32::NEG_INFINITY),
+            (f32::NEG_INFINITY, -0.0, f32::NAN),
+            (0.0, f32::NAN, -42.0),
+        ] {
+            machine
+                .update_listeners(
+                    &mut artboard,
+                    RuntimeListenerType::Move,
+                    x,
+                    y,
+                    77,
+                    timestamp,
+                    None,
+                    None,
+                    &mut NoopScriptHost,
+                )
+                .expect("C++-corresponding path forwards every f32 value");
+        }
+        let position = machine
+            .pointer_positions
+            .iter()
+            .find(|position| position.pointer_id == 77)
+            .expect("forwarded pointer position");
+        assert_eq!(position.x.to_bits(), 0.0_f32.to_bits());
+        assert!(position.y.is_nan());
+    }
+
     #[test]
     fn fl_c5_constructor_order_phase_trace_and_explicit_fields() {
         let (artboard, machine) = scripted_listener_artboard_and_machine();
@@ -10815,6 +12307,13 @@ mod scripted_listener_action_tests {
         );
         assert_eq!(machine.draw_order_change_counter, 0);
         assert!(!machine.disposed);
+        assert_eq!(machine.has_listeners(), machine.hit_components_count() != 0);
+        assert_eq!(
+            machine
+                .hit_component(machine.hit_components_count())
+                .map(HitComponent::component),
+            None
+        );
     }
 
     #[test]
@@ -10846,23 +12345,28 @@ mod scripted_listener_action_tests {
             Some(true),
             "entry actions execute during the layer phase"
         );
-        assert_eq!(machine.pointer_listener_group_occurrences, [0]);
+        assert_eq!(machine.listener_groups.len(), 1);
         assert!(
             machine
-                .hit_ownership
+                .hit_components
                 .iter()
-                .all(|owner| owner.kind != RuntimeHitOwnershipKind::AuthoredListener),
+                .all(|owner| owner.component().is_some()),
             "an unresolved target retains its group but creates no hit owner"
         );
     }
 
     #[test]
-    fn fl_c5_constructor_order_retains_duplicate_groups_but_one_hit_owner() {
+    fn fl_c5_hit_component_identity_reuses_owner_but_retains_duplicate_groups() {
         let (mut artboard, _) = scripted_listener_artboard_and_machine();
         let target_local_id = artboard
             .components()
             .iter()
-            .find(|component| component.type_name != "Artboard")
+            .find(|component| {
+                component.type_name == "Shape"
+                    || component.type_name == "TextValueRun"
+                    || nuxie_schema::definition_by_name(component.type_name)
+                        .is_some_and(|definition| definition.is_a("LayoutComponent"))
+            })
             .expect("fixture pointer target")
             .local_id;
         let listener = RuntimeStateMachineListener {
@@ -10896,12 +12400,15 @@ mod scripted_listener_action_tests {
             .state_machine_instance(0)
             .expect("state machine with duplicate pointer and bind occurrences");
 
-        assert_eq!(machine.pointer_listener_group_occurrences, [0, 1]);
+        assert_eq!(machine.listener_groups.len(), 2);
+        let target = artboard
+            .component_handle(target_local_id)
+            .expect("pointer target handle");
         assert_eq!(
             machine
-                .hit_ownership
+                .hit_components
                 .iter()
-                .filter(|owner| owner.source_local_id == target_local_id)
+                .filter(|owner| owner.component() == Some(target))
                 .count(),
             1,
             "duplicate groups share one component-identity hit owner"
@@ -11999,7 +13506,7 @@ mod scripted_listener_action_tests {
         machine.gamepad_listener_groups.clear();
         machine.semantic_listener_groups.clear();
 
-        machine.initialize_authored_listener_categories(&artboard);
+        machine.initialize_authored_listener_categories(&mut artboard);
 
         assert!(machine.focus_listener_groups.is_empty());
         assert!(
@@ -12062,7 +13569,7 @@ mod scripted_listener_action_tests {
         machine.keyboard_listener_groups.clear();
         machine.gamepad_listener_groups.clear();
         machine.semantic_listener_groups.clear();
-        machine.initialize_authored_listener_categories(&artboard);
+        machine.initialize_authored_listener_categories(&mut artboard);
 
         assert!(
             !machine.pointer_down(&mut artboard, 0.0, 0.0, 1),

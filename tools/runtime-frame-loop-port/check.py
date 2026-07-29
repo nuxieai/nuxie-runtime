@@ -990,7 +990,7 @@ def check(
                 f"expected {expected}"
             )
 
-    ratchet_results: list[tuple[str, int, int]] = []
+    ratchet_results: list[tuple[str, int, int, int]] = []
     gap_rows = list(gaps.get("gap", []))
     gap_ids = [str(row.get("id", "")) for row in gap_rows]
     duplicates = duplicate_values(gap_ids)
@@ -1051,7 +1051,16 @@ def check(
         pattern_text = str(row.get("pattern", ""))
         globs = [str(value) for value in row.get("globs", [])]
         maximum = row.get("max_occurrences")
-        if not ratchet_id or not pattern_text or not globs or not isinstance(maximum, int):
+        minimum = row.get("min_occurrences", 0)
+        if (
+            not ratchet_id
+            or not pattern_text
+            or not globs
+            or not isinstance(maximum, int)
+            or not isinstance(minimum, int)
+            or minimum < 0
+            or minimum > maximum
+        ):
             errors.append(f"ratchet {ratchet_id!r} is incomplete")
             continue
         try:
@@ -1076,7 +1085,12 @@ def check(
                 for offset in found_offsets:
                     line_number = source.count("\n", 0, offset) + 1
                     hits.append(f"{path.relative_to(repo_root)}:{line_number}")
-        ratchet_results.append((ratchet_id, count, maximum))
+        ratchet_results.append((ratchet_id, count, minimum, maximum))
+        if count < minimum:
+            errors.append(
+                f"ratchet {ratchet_id} decreased to {count} < {minimum}; "
+                "required structural proof is missing"
+            )
         if count > maximum:
             errors.append(
                 f"ratchet {ratchet_id} increased to {count} > {maximum}; "
@@ -1097,8 +1111,8 @@ def check(
         f"{status}={member_status_counts[status]}" for status in sorted(STATUSES)
     )
     ratchets = ", ".join(
-        f"{ratchet_id}={count}/{maximum}"
-        for ratchet_id, count, maximum in ratchet_results
+        f"{ratchet_id}={count}/{minimum}..{maximum}"
+        for ratchet_id, count, minimum, maximum in ratchet_results
     )
     return (
         f"runtime-frame-loop-port: files={len(assignments)} ({files}); "

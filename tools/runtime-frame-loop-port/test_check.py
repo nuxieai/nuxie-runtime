@@ -250,6 +250,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             id = {json.dumps(row["id"])}
             globs = {json.dumps(row["globs"])}
             pattern = {json.dumps(row["pattern"])}
+            min_occurrences = {row.get("min_occurrences", 0)}
             max_occurrences = {row["max_occurrences"]}
             """
         ).strip()
@@ -294,6 +295,63 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         result = self.run_check()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.gaps.write_text(base_gaps)
+
+    def assert_required_production_ratchet_case(
+        self,
+        ratchet_id: str,
+        relative_source: str,
+        required_source: str,
+        missing_source: str,
+    ) -> None:
+        base_gaps = self.gaps.read_text()
+        try:
+            row = self.install_production_ratchet(ratchet_id)
+            minimum = row.get("min_occurrences", 0)
+            self.assertGreater(minimum, 0, ratchet_id)
+            source = self.repo / relative_source
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(required_source)
+            result = self.run_check()
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            source.write_text(missing_source)
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                f"ratchet {ratchet_id} decreased",
+                result.stderr,
+            )
+        finally:
+            self.gaps.write_text(base_gaps)
+
+    def test_required_ratchet_rejects_missing_structural_proof(self) -> None:
+        gaps = self.gaps.read_text()
+        self.gaps.write_text(
+            gaps.replace(
+                "ratchet = []",
+                textwrap.dedent(
+                    """
+                    [[ratchet]]
+                    id = "required_shape"
+                    globs = ["crates/runtime/src/animation.rs"]
+                    pattern = "struct RuntimeRequiredShape"
+                    min_occurrences = 1
+                    max_occurrences = 1
+                    """
+                ).strip(),
+            )
+        )
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "ratchet required_shape decreased to 0 < 1",
+            result.stderr,
+        )
+        (self.repo / "crates/runtime/src/animation.rs").write_text(
+            "struct RuntimeAnimation;\nstruct RuntimeRequiredShape;\n"
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_open_atlas_passes_and_reports_counts(self) -> None:
         result = self.run_check()
@@ -1749,6 +1807,172 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
         ]
         for ratchet_id, forbidden, safe in cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    textwrap.dedent(forbidden),
+                    textwrap.dedent(safe),
+                )
+
+    def test_fl_c5_hit_live_ratchets_require_complete_hierarchy_and_routing(
+        self,
+    ) -> None:
+        source = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+        cases = [
+            (
+                "state_machine_hit_trait_required",
+                "trait HitComponent {}\n",
+                "trait BooleanHit {}\n",
+            ),
+            (
+                "state_machine_hit_concrete_types_required",
+                """
+                struct HitDrawable;
+                struct HitExpandable;
+                struct HitTextRun;
+                struct HitLayout;
+                struct HitNestedArtboard;
+                struct HitComponentList;
+                """,
+                """
+                struct HitDrawable;
+                struct HitExpandable;
+                struct HitTextRun;
+                struct HitLayout;
+                struct HitNestedArtboard;
+                """,
+            ),
+            (
+                "state_machine_hit_result_tristate_required",
+                "enum HitResult { None, Hit, HitOpaque }\n",
+                "type HitResult = bool;\n",
+            ),
+            (
+                "state_machine_hit_three_pass_order_required",
+                """
+                fn update() {
+                    for group in &mut groups { group.reset(owner, pointer_id); }
+                    for hit in &mut hit_components {
+                        hit.prepare_event(owner, groups);
+                    }
+                    let mut result = HitResult::None;
+                    for hit in &mut hit_components { hit.process_event(owner); }
+                }
+                """,
+                """
+                fn update() {
+                    for group in &mut groups { group.reset(owner, pointer_id); }
+                    let mut result = HitResult::None;
+                    for hit in &mut hit_components {
+                        hit.prepare_event(owner, groups);
+                        hit.process_event(owner);
+                    }
+                }
+                """,
+            ),
+            (
+                "state_machine_hit_can_hit_propagation_required",
+                """
+                fn update() {
+                    hit.process_event(owner, result != HitResult::HitOpaque);
+                    hit.process_event(owner, drag_start_result != HitResult::HitOpaque);
+                }
+                """,
+                """
+                fn update() {
+                    hit.process_event(owner, result != HitResult::HitOpaque);
+                    hit.process_event(owner, true);
+                }
+                """,
+            ),
+            (
+                "state_machine_hit_component_list_reverse_required",
+                """
+                fn pointer() {
+                    for item_index in order.into_iter().rev() {}
+                    for item_index in order.into_iter().rev() {}
+                }
+                """,
+                """
+                fn pointer() {
+                    for item_index in order.into_iter() {}
+                    for item_index in order.into_iter().rev() {}
+                }
+                """,
+            ),
+            (
+                "state_machine_hit_draw_order_counter_required",
+                """
+                fn advance() {
+                    if self.draw_order_change_counter != draw_order_change_counter {
+                        self.sort_hit_components(artboard);
+                    }
+                }
+                """,
+                "fn advance() { self.sort_hit_components(artboard); }\n",
+            ),
+            (
+                "state_machine_hit_exit_release_required",
+                """
+                fn update() {
+                    if hit_type == RuntimeListenerType::Exit {
+                        self.release_pointer_input(pointer_id);
+                    }
+                }
+                """,
+                "fn update() { self.release_pointer_input(pointer_id); }\n",
+            ),
+            (
+                "state_machine_hit_enable_disable_walks_required",
+                """
+                fn enable_pointer_events(&mut self, pointer_id: i32) {
+                    for hit in &mut self.hit_components { hit.enable(pointer_id); }
+                }
+                fn disable_pointer_events(&mut self, pointer_id: i32) {
+                    for hit in &mut self.hit_components { hit.disable(pointer_id); }
+                }
+                """,
+                """
+                fn enable_pointer_events(&mut self, pointer_id: i32) {}
+                fn disable_pointer_events(&mut self, pointer_id: i32) {
+                    for hit in &mut self.hit_components { hit.disable(pointer_id); }
+                }
+                """,
+            ),
+        ]
+        for ratchet_id, required, missing in cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_required_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    textwrap.dedent(required),
+                    textwrap.dedent(missing),
+                )
+
+        forbidden_cases = [
+            (
+                "state_machine_hit_break_after_opaque",
+                """
+                fn update_listeners() {
+                    if result == HitResult::HitOpaque { break; }
+                }
+                """,
+                "fn update_listeners() { continue_processing(false); }\n",
+            ),
+            (
+                "state_machine_displaced_pointer_listener_traversal",
+                """
+                fn update_pointer_listeners() {
+                    for listener in self.listener_definitions.iter() {
+                        listener.dispatch();
+                    }
+                }
+                """,
+                "fn update_pointer_listeners() { self.update_listeners(); }\n",
+            ),
+        ]
+        for ratchet_id, forbidden, safe in forbidden_cases:
             with self.subTest(ratchet=ratchet_id):
                 self.assert_production_ratchet_case(
                     ratchet_id,

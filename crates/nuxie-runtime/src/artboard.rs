@@ -1121,6 +1121,58 @@ fn state_machine_requires_outer_update_probe(instance: &StateMachineInstance) ->
 }
 
 impl ArtboardInstance {
+    /// Thin borrow-model hook for C++
+    /// `Artboard::clearDataContext` as called by the StateMachineInstance bind
+    /// family. Substantive bind ordering remains owned by
+    /// `state_machine_instance.rs`; this releases the artboard/host retained
+    /// identities and invalidates scripted lifetimes before the immediately
+    /// following internal bind.
+    pub(crate) fn clear_data_context_for_state_machine_bind(&mut self) {
+        self.artboard_owned_view_model_context = None;
+        self.artboard_owned_data_context = None;
+        self.artboard_owned_view_model_handle = None;
+        self.artboard_owned_view_model_rebind_sink =
+            crate::view_model_cell::RuntimeCellDirtSink::new();
+        self.stateful_nested_view_model_contexts_dirty = true;
+        let scripted_occurrences = self
+            .script_instances_by_global
+            .iter()
+            .map(|(global_id, occurrence)| (*global_id, occurrence.instance()))
+            .collect::<Vec<_>>();
+        for (global_id, instance) in scripted_occurrences {
+            instance.borrow_mut().invalidate_for_init_retry();
+            self.set_script_owner_lifecycle(global_id, false, false);
+        }
+        for nested in self.nested_artboards.values_mut() {
+            for animation in &mut nested.animations {
+                if let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation {
+                    occurrence.clear_data_context();
+                }
+            }
+            nested.child.clear_data_context_for_state_machine_bind();
+        }
+    }
+
+    /// Thin counterpart of `Artboard::unbind` for
+    /// `StateMachineInstance::bindViewModelInstance(nullptr)`.
+    pub(crate) fn unbind_for_state_machine_view_model_clear(&mut self, file: Option<&RuntimeFile>) {
+        self.clear_data_context_for_state_machine_bind();
+        if let Some(file) = file {
+            let empty = RuntimeOwnedDataContext::default();
+            self.bind_owned_view_model_artboard_data_context(file, &empty, true, true);
+        }
+        self.clear_data_context_for_state_machine_bind();
+    }
+
+    /// Artboard-only relink delegation used by
+    /// `StateMachineInstance::relinkDataContext`.
+    pub(crate) fn relink_data_context_for_state_machine(&mut self, file: &RuntimeFile) -> bool {
+        let Some(data_context) = self.artboard_owned_data_context.clone() else {
+            return false;
+        };
+        self.bind_owned_view_model_artboard_data_context(file, &data_context, false, true)
+    }
+
     fn build_component_interface_schedules(
         objects: &InstanceObjectArena,
         graph: &ArtboardGraph,

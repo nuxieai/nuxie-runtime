@@ -2102,6 +2102,246 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     textwrap.dedent(safe),
                 )
 
+    def test_fl_c5_bind_live_ratchets_preserve_null_order_and_delegation(
+        self,
+    ) -> None:
+        source = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+        required_cases = [
+            (
+                "state_machine_bind_primary_family_required",
+                """
+                fn set_view_model_instance() {}
+                fn set_global_view_model_instance() {}
+                fn complete_view_model_instances() {}
+                fn bind() {}
+                fn bind_view_model_instance() {}
+                fn bind_data_context() {}
+                fn inherit_data_context() {}
+                fn set_data_context() {}
+                fn data_context() {}
+                fn global_view_model_instance() {}
+                fn rebind() {}
+                fn clear_data_context() {}
+                fn relink_data_context() {}
+                fn rebuild_data_bind() {}
+                fn unbind() {}
+                fn internal_data_context() {}
+                """,
+                """
+                fn set_view_model_instance() {}
+                fn set_global_view_model_instance() {}
+                fn complete_view_model_instances() {}
+                fn bind() {}
+                fn bind_view_model_instance() {}
+                fn bind_data_context() {}
+                fn inherit_data_context() {}
+                fn set_data_context() {}
+                fn data_context() {}
+                fn global_view_model_instance() {}
+                fn rebind() {}
+                fn clear_data_context() {}
+                fn relink_data_context() {}
+                fn rebuild_data_bind() {}
+                fn unbind() {}
+                """,
+            ),
+            (
+                "state_machine_bind_null_branches_distinct_required",
+                """
+                fn set_view_model_instance(view_model_instance: Option<Handle>) {
+                    let Some(view_model_instance) = view_model_instance else {
+                        return false;
+                    };
+                    stage(view_model_instance)
+                }
+                fn bind_view_model_instance(view_model_instance: Option<Handle>) {
+                    let Some(view_model_instance) = view_model_instance else {
+                        self.clear_data_context();
+                        artboard.unbind_for_state_machine_view_model_clear(file);
+                        return Ok(true);
+                    };
+                    bind(view_model_instance)
+                }
+                """,
+                """
+                fn set_view_model_instance(view_model_instance: Option<Handle>) {
+                    let Some(view_model_instance) = view_model_instance else {
+                        self.clear_data_context();
+                        return false;
+                    };
+                    stage(view_model_instance)
+                }
+                fn bind_view_model_instance(view_model_instance: Option<Handle>) {
+                    self.set_view_model_instance(view_model_instance)
+                }
+                """,
+            ),
+            (
+                "state_machine_bind_data_context_null_and_order_required",
+                """
+                fn bind_data_context(data_context: Option<&Context>) {
+                    let data_context = data_context.ok_or(RuntimeDataContextBindError::NullDataContext)?;
+                    self.clear_data_context();
+                    data_context.add_rebind_dependent(&sink);
+                    artboard.clear_data_context_for_state_machine_bind();
+                    artboard.bind_owned_view_model_artboard_data_context(file, data_context);
+                    self.internal_data_context(Some(data_context))
+                }
+                """,
+                """
+                fn bind_data_context(data_context: Option<&Context>) {
+                    let Some(data_context) = data_context else { return Ok(false); };
+                    self.clear_data_context();
+                    data_context.add_rebind_dependent(&sink);
+                    self.internal_data_context(Some(data_context))
+                }
+                """,
+            ),
+            (
+                "state_machine_internal_context_listener_before_script_required",
+                """
+                fn internal_data_context() {
+                    self.bind_view_model_listener_cells_for_data_context(data_context);
+                    self.record_bind_phase("script-context-pass");
+                    self.record_bind_phase("script-init-pass");
+                }
+                """,
+                """
+                fn internal_data_context() {
+                    self.record_bind_phase("script-context-pass");
+                    self.record_bind_phase("script-init-pass");
+                    self.bind_view_model_listener_cells_for_data_context(data_context);
+                }
+                """,
+            ),
+            (
+                "state_machine_typed_context_primary_delegation_required",
+                """
+                fn bind_empty_data_context() {
+                    self.bind_typed_context_adaptation(bind)
+                }
+                fn bind_default_view_model_context() {
+                    self.bind_typed_context_adaptation(bind)
+                }
+                fn bind_view_model_instance_context() {
+                    self.bind_typed_context_adaptation(bind)
+                }
+                fn bind_imported_view_model_context() {
+                    self.bind_typed_context_adaptation(bind)
+                }
+                fn bind_owned_view_model_context() {
+                    self.bind_typed_context_adaptation(bind)
+                }
+                fn bind_owned_view_model_handle() {
+                    self.bind_owned_view_model_context_handle(context)
+                }
+                fn bind_owned_view_model_context_handle() {
+                    self.bind_owned_view_model_data_context(data_context)
+                }
+                fn bind_owned_view_model_context_mut() {
+                    self.bind_typed_context_adaptation(bind)
+                }
+                fn bind_owned_view_model_contexts() {
+                    self.bind_owned_view_model_data_context(data_context)
+                }
+                fn bind_script_artboard_data_context() {
+                    self.bind_owned_view_model_data_context(data_context)
+                }
+                fn bind_owned_view_model_context_chain() {
+                    self.bind_typed_context_adaptation(bind)
+                }
+                """,
+                """
+                fn bind_empty_data_context() {
+                    self.data_bind_graph.bind_empty_data_context()
+                }
+                fn bind_default_view_model_context() {
+                    self.bind_typed_context_adaptation(bind)
+                }
+                fn bind_view_model_instance_context() {
+                    self.bind_typed_context_adaptation(bind)
+                }
+                fn bind_imported_view_model_context() {
+                    self.bind_typed_context_adaptation(bind)
+                }
+                fn bind_owned_view_model_data_context(data_context: &Context) {
+                    self.bind_data_context_to_machine(data_context)
+                }
+                fn bind_owned_view_model_context() {
+                    self.bind_typed_context_adaptation(bind)
+                }
+                fn bind_owned_view_model_handle() {
+                    self.bind_owned_view_model_context_handle(context)
+                }
+                fn bind_owned_view_model_context_handle() {
+                    self.bind_owned_view_model_data_context(data_context)
+                }
+                fn bind_owned_view_model_context_mut() {
+                    self.bind_typed_context_adaptation(bind)
+                }
+                fn bind_owned_view_model_contexts() {
+                    self.bind_owned_view_model_data_context(data_context)
+                }
+                fn bind_script_artboard_data_context() {
+                    self.bind_owned_view_model_data_context(data_context)
+                }
+                fn bind_owned_view_model_context_chain() {
+                    self.bind_typed_context_adaptation(bind)
+                }
+                """,
+            ),
+        ]
+        for ratchet_id, required, missing in required_cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_required_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    textwrap.dedent(required),
+                    textwrap.dedent(missing),
+                )
+
+        forbidden_cases = [
+            (
+                "state_machine_inherit_context_prior_clear",
+                """
+                fn inherit_data_context(data_context: Option<&Context>) {
+                    self.clear_data_context();
+                    data_context.add_rebind_dependent(&sink);
+                    self.internal_data_context(data_context)
+                }
+                """,
+                """
+                fn inherit_data_context(data_context: Option<&Context>) {
+                    data_context.add_rebind_dependent(&sink);
+                    self.internal_data_context(data_context)
+                }
+                """,
+            ),
+            (
+                "state_machine_bind_machine_before_artboard",
+                """
+                fn bind() {
+                    self.internal_data_context(data_context);
+                    artboard.bind_owned_view_model_artboard_data_context(file, data_context);
+                }
+                """,
+                """
+                fn bind() {
+                    artboard.bind_owned_view_model_artboard_data_context(file, data_context);
+                    self.internal_data_context(data_context);
+                }
+                """,
+            ),
+        ]
+        for ratchet_id, forbidden, safe in forbidden_cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    textwrap.dedent(forbidden),
+                    textwrap.dedent(safe),
+                )
+
     def test_fl_c4_negative_ratchets_reject_displaced_listener_action_shapes(self) -> None:
         cases = [
             (

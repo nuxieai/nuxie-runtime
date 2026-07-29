@@ -11,13 +11,15 @@ use crate::constraints::{
     runtime_draggable_proxy_end, runtime_draggable_proxy_start,
 };
 use crate::data_bind_container::RuntimeDataBindContainerQueue;
-use crate::data_bind_graph::data_bind_flags_apply_source_to_target;
+use crate::data_bind_graph::{
+    RuntimeDataBindGraphContextKind, data_bind_flags_apply_source_to_target,
+};
 use crate::focus::RuntimeFocusTree;
 use crate::properties::property_key_for_name;
 use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelAdvanceContext};
 use crate::view_model_cell::{
-    RuntimeCellDirt, RuntimeCellDirtSink, RuntimeCellNotificationQueue,
+    RuntimeCellDependent, RuntimeCellDirt, RuntimeCellDirtSink, RuntimeCellNotificationQueue,
     RuntimeFileViewModelInstanceCatalog, RuntimeViewModelCell, RuntimeViewModelCellValue,
     RuntimeViewModelInstanceCells,
 };
@@ -58,12 +60,11 @@ use crate::{
     runtime_default_view_model_view_model_property_path_for_name_path,
 };
 use nuxie_binary::RuntimeFile;
-use std::rc::Rc;
+use std::cell::RefCell;
+use std::rc::{Rc, Weak};
 
 #[cfg(test)]
 use crate::{ScriptListenerActionMethod, ScriptMethod};
-#[cfg(test)]
-use std::cell::RefCell;
 
 /// Exact C++ pointer result strength. Keep this tri-state internally even
 /// though the established Rust facade projects it to `bool`.
@@ -1096,6 +1097,253 @@ fn resolved_listener_property_path_for_data_context(
     })
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimeDataContextBindError {
+    NullDataContext,
+    NullDataContextWithViewModelListeners,
+    NullDataBind,
+}
+
+/// Mutable, shareable carrier for the C++ `DataContext` member surface.
+///
+/// The established Rust `RuntimeOwnedDataContext` is an immutable resolution
+/// snapshot and intentionally discards global slot keys. C++ setters instead
+/// mutate one shared main/global table and notify every registered container.
+/// Keep that primary identity here, in the StateMachineInstance owner, and
+/// project a fresh immutable Rust resolution view only at an actual bind.
+#[derive(Debug)]
+struct RuntimeStateMachineDataContextRelay {
+    handle: RuntimeOwnedViewModelHandle,
+    sink: RuntimeCellDirtSink,
+}
+
+impl RuntimeStateMachineDataContextRelay {
+    fn new(
+        handle: RuntimeOwnedViewModelHandle,
+        state: Weak<RefCell<RuntimeStateMachineDataContextState>>,
+    ) -> Self {
+        let sink = RuntimeCellDirtSink::new();
+        sink.set_before_notify(Some(Rc::new(move |dirt| {
+            if let Some(state) = state.upgrade() {
+                let _ = dirt;
+                state
+                    .borrow_mut()
+                    .notify_rebind_dependents(RuntimeCellDirt::BINDINGS);
+            }
+            // The relay forwards immediately and deliberately remains clean,
+            // so every later structural mutation reaches stale registrations
+            // such as inherit(A) followed by inherit(B).
+            false
+        })));
+        handle.add_rebind_dependent(&sink);
+        Self { handle, sink }
+    }
+}
+
+#[derive(Debug, Default)]
+struct RuntimeStateMachineDataContextState {
+    context: RuntimeOwnedViewModelContext,
+    unusual_slot_handles: BTreeMap<usize, RuntimeOwnedViewModelHandle>,
+    dependent_sinks: Vec<RuntimeCellDependent>,
+    main_rebind_relay: Option<RuntimeStateMachineDataContextRelay>,
+    global_rebind_relays: BTreeMap<usize, RuntimeStateMachineDataContextRelay>,
+}
+
+impl RuntimeStateMachineDataContextState {
+    fn sync_rebind_relays(&mut self, state: &Weak<RefCell<RuntimeStateMachineDataContextState>>) {
+        self.main_rebind_relay = self.context.main_handle().cloned().map(|handle| {
+            self.main_rebind_relay
+                .take()
+                .filter(|relay| relay.handle.ptr_eq(&handle))
+                .unwrap_or_else(|| RuntimeStateMachineDataContextRelay::new(handle, state.clone()))
+        });
+
+        let mut prior_globals = std::mem::take(&mut self.global_rebind_relays);
+        let mut slot_handles = self
+            .context
+            .global_slot_handles()
+            .map(|(slot, handle)| (slot, handle.clone()))
+            .collect::<BTreeMap<_, _>>();
+        for (&slot, handle) in &self.unusual_slot_handles {
+            slot_handles.insert(slot, handle.clone());
+        }
+        self.global_rebind_relays = slot_handles
+            .into_iter()
+            .map(|(slot, handle)| {
+                let relay = prior_globals
+                    .remove(&slot)
+                    .filter(|relay| relay.handle.ptr_eq(&handle))
+                    .unwrap_or_else(|| {
+                        RuntimeStateMachineDataContextRelay::new(handle, state.clone())
+                    });
+                (slot, relay)
+            })
+            .collect();
+    }
+
+    fn notify_rebind_dependents(&mut self, dirt: RuntimeCellDirt) {
+        self.dependent_sinks
+            .retain(|dependent| dependent.add_dirt(dirt));
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeStateMachineDataContext {
+    state: Rc<RefCell<RuntimeStateMachineDataContextState>>,
+}
+
+impl Default for RuntimeStateMachineDataContext {
+    fn default() -> Self {
+        Self::from_owned_context(RuntimeOwnedViewModelContext::default())
+    }
+}
+
+impl RuntimeStateMachineDataContext {
+    fn from_owned_context(context: RuntimeOwnedViewModelContext) -> Self {
+        Self::from_parts(context, BTreeMap::new())
+    }
+
+    fn from_parts(
+        context: RuntimeOwnedViewModelContext,
+        unusual_slot_handles: BTreeMap<usize, RuntimeOwnedViewModelHandle>,
+    ) -> Self {
+        let state = Rc::new(RefCell::new(RuntimeStateMachineDataContextState {
+            context,
+            unusual_slot_handles,
+            ..RuntimeStateMachineDataContextState::default()
+        }));
+        state
+            .borrow_mut()
+            .sync_rebind_relays(&Rc::downgrade(&state));
+        Self { state }
+    }
+
+    fn detached_snapshot(&self) -> Self {
+        let state = self.state.borrow();
+        Self::from_parts(state.context.clone(), state.unusual_slot_handles.clone())
+    }
+
+    fn add_rebind_dependent(&self, sink: &RuntimeCellDirtSink) {
+        let dependent = sink.downgrade();
+        let mut state = self.state.borrow_mut();
+        state
+            .dependent_sinks
+            .retain(|candidate| candidate.add_dirt(RuntimeCellDirt::NONE));
+        if !state
+            .dependent_sinks
+            .iter()
+            .any(|candidate| candidate.ptr_eq(&dependent))
+        {
+            state.dependent_sinks.push(dependent);
+        }
+    }
+
+    fn add_artboard_rebind_dependent(&self, artboard: &mut ArtboardInstance) {
+        // The ordinary Rust projection temporarily registers this sink
+        // directly on each handle. Rotate it immediately so those weak
+        // registrations become inert and the shared C++-shaped carrier owns
+        // all later detach/attach behavior.
+        artboard.artboard_owned_view_model_rebind_sink = RuntimeCellDirtSink::new();
+        self.add_rebind_dependent(&artboard.artboard_owned_view_model_rebind_sink);
+    }
+
+    fn set_main(&self, handle: RuntimeOwnedViewModelHandle) {
+        let weak_state = Rc::downgrade(&self.state);
+        let mut state = self.state.borrow_mut();
+        state.context.set_main_handle(handle);
+        state.sync_rebind_relays(&weak_state);
+    }
+
+    fn set_global_named(
+        &self,
+        file: &RuntimeFile,
+        name: &str,
+        handle: RuntimeOwnedViewModelHandle,
+    ) -> bool {
+        let weak_state = Rc::downgrade(&self.state);
+        let mut state = self.state.borrow_mut();
+        if !state.context.set_global_named_handle(file, name, handle) {
+            return false;
+        }
+        if let Some(slot) = file
+            .view_models()
+            .iter()
+            .position(|view_model| view_model.object.string_property("name") == Some(name))
+        {
+            state.unusual_slot_handles.remove(&slot);
+        }
+        state.sync_rebind_relays(&weak_state);
+        true
+    }
+
+    fn complete_for_artboard(&self, file: &RuntimeFile, artboard_index: usize) -> bool {
+        let weak_state = Rc::downgrade(&self.state);
+        let mut state = self.state.borrow_mut();
+        let unusual_slot_handles = state.unusual_slot_handles.clone();
+        for (slot, handle) in unusual_slot_handles {
+            state.context.set_global_slot_handle(file, slot, handle);
+        }
+        if !state.context.complete_for_artboard(file, artboard_index) {
+            return false;
+        }
+        state.sync_rebind_relays(&weak_state);
+        true
+    }
+
+    fn global_slot_handle(&self, slot: usize) -> Option<RuntimeOwnedViewModelHandle> {
+        let state = self.state.borrow();
+        state
+            .unusual_slot_handles
+            .get(&slot)
+            .or_else(|| state.context.global_slot_handle(slot))
+            .cloned()
+    }
+
+    fn projection(&self) -> RuntimeOwnedDataContext {
+        RuntimeOwnedDataContext::from_owned_context(&self.state.borrow().context)
+    }
+
+    #[cfg(test)]
+    fn snapshot(&self) -> RuntimeOwnedViewModelContext {
+        self.state.borrow().context.clone()
+    }
+
+    #[cfg(test)]
+    fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.state, &other.state)
+    }
+
+    #[cfg(test)]
+    fn mark_main_rebind_for_test(&self) {
+        let dependent = self
+            .state
+            .borrow()
+            .main_rebind_relay
+            .as_ref()
+            .map(|relay| relay.sink.downgrade());
+        if let Some(dependent) = dependent {
+            dependent.add_dirt(RuntimeCellDirt::BINDINGS);
+        }
+    }
+
+    #[cfg(test)]
+    fn main_rebind_dependent_for_test(&self) -> Option<RuntimeCellDependent> {
+        self.state
+            .borrow()
+            .main_rebind_relay
+            .as_ref()
+            .map(|relay| relay.sink.downgrade())
+    }
+
+    #[cfg(test)]
+    fn set_unusual_slot_for_test(&self, slot: usize, handle: RuntimeOwnedViewModelHandle) {
+        let weak_state = Rc::downgrade(&self.state);
+        let mut state = self.state.borrow_mut();
+        state.unusual_slot_handles.insert(slot, handle);
+        state.sync_rebind_relays(&weak_state);
+    }
+}
+
 #[derive(Debug)]
 pub struct StateMachineInstance {
     state_machine_index: usize,
@@ -1174,9 +1422,18 @@ pub struct StateMachineInstance {
     // settles. C++ gives that occurrence one outer-update probe after the
     // mounted artboard updates, even when its authored conditions are stable.
     post_update_probe_pending: bool,
+    /// C++ `m_DataContext` can be mutated by the staged main/global setters
+    /// before any DataBind is rebound. The existing Rust graph APIs used the
+    /// bound source cells as their only context record, which collapsed that
+    /// distinction. Retain the public composite shape separately so
+    /// `setViewModelInstance`/`setGlobalViewModelInstance` can update slot
+    /// ownership without applying paths until `bind`.
+    primary_data_context: Option<RuntimeStateMachineDataContext>,
     pub(super) owned_data_context: Option<RuntimeOwnedDataContext>,
     #[cfg(test)]
     owned_data_bind_context_bind_count: usize,
+    #[cfg(test)]
+    bind_phase_trace: Vec<&'static str>,
     /// C++ `ViewModelInstance::m_dependents` push channel: structural
     /// ViewModel replacement dirties this sink so the retained DataContext is
     /// relinked without polling a root mutation generation every frame.
@@ -1767,9 +2024,18 @@ impl Clone for StateMachineInstance {
             needs_advance: self.needs_advance,
             has_advanced_once: self.has_advanced_once,
             post_update_probe_pending: self.post_update_probe_pending,
+            // Public Rust Clone is an approved non-aliasing snapshot. Rebuild
+            // the primary carrier so a clone cannot join the source
+            // occurrence's dependent-container identity.
+            primary_data_context: self
+                .primary_data_context
+                .as_ref()
+                .map(RuntimeStateMachineDataContext::detached_snapshot),
             owned_data_context: self.owned_data_context.clone(),
             #[cfg(test)]
             owned_data_bind_context_bind_count: self.owned_data_bind_context_bind_count,
+            #[cfg(test)]
+            bind_phase_trace: self.bind_phase_trace.clone(),
             owned_view_model_rebind_sink: RuntimeCellDirtSink::new(),
             pointer_down_listener_hits: self.pointer_down_listener_hits.clone(),
             pointer_listener_states: self.pointer_listener_states.clone(),
@@ -1850,6 +2116,7 @@ impl Drop for StateMachineInstance {
         }
         drop(std::mem::take(&mut self.focus));
         self.dispose();
+        self.unbind();
         self.teardown_bind_occurrences();
         self.teardown_layers();
         self.teardown_script_occurrences();
@@ -2129,6 +2396,13 @@ fn apply_scripted_input_update(
 }
 
 impl StateMachineInstance {
+    fn record_bind_phase(&mut self, phase: &'static str) {
+        #[cfg(test)]
+        self.bind_phase_trace.push(phase);
+        #[cfg(not(test))]
+        let _ = phase;
+    }
+
     fn record_constructor_phase(&mut self, phase: RuntimeConstructorPhase) {
         #[cfg(test)]
         self.constructor_phases.push(phase);
@@ -2403,9 +2677,12 @@ impl StateMachineInstance {
             needs_advance: false,
             has_advanced_once: false,
             post_update_probe_pending: false,
+            primary_data_context: None,
             owned_data_context: None,
             #[cfg(test)]
             owned_data_bind_context_bind_count: 0,
+            #[cfg(test)]
+            bind_phase_trace: Vec::new(),
             owned_view_model_rebind_sink: RuntimeCellDirtSink::new(),
             pointer_down_listener_hits: Vec::new(),
             pointer_listener_states: Vec::new(),
@@ -9136,38 +9413,475 @@ impl StateMachineInstance {
         true
     }
 
-    pub fn bind_empty_data_context(&mut self) -> bool {
-        self.clear_owned_view_model_context();
-        if !self.data_bind_graph.bind_empty_data_context() {
+    /// Rust error projection for C++ pointer paths whose null behavior is not
+    /// a safe clear/no-op. The C++-shaped methods below keep `Option` at the
+    /// boundary so their intentionally different null branches cannot be
+    /// collapsed by a typed convenience API.
+    #[doc(hidden)]
+    pub(crate) fn bind_data_context(
+        &mut self,
+        file: &RuntimeFile,
+        artboard: &mut ArtboardInstance,
+        data_context: Option<&RuntimeStateMachineDataContext>,
+    ) -> Result<bool, RuntimeDataContextBindError> {
+        let data_context = data_context.ok_or(RuntimeDataContextBindError::NullDataContext)?;
+        // Pinned C++: clear the machine registration, register the supplied
+        // context, clear/bind the artboard, then bind the machine.
+        self.clear_data_context();
+        self.primary_data_context = Some(data_context.clone());
+        self.record_bind_phase("register-machine");
+        data_context.add_rebind_dependent(&self.owned_view_model_rebind_sink);
+        let projection = data_context.projection();
+        self.record_bind_phase("clear-artboard");
+        artboard.clear_data_context_for_state_machine_bind();
+        self.record_bind_phase("bind-artboard");
+        let mut changed =
+            artboard.bind_owned_view_model_artboard_data_context(file, &projection, true, true);
+        data_context.add_artboard_rebind_dependent(artboard);
+        self.record_bind_phase("bind-machine");
+        changed |= self.internal_data_context(Some(&projection))?;
+        Ok(changed)
+    }
+
+    /// C++ `inheritDataContext`: null is a no-op and, critically, the old
+    /// context is not cleared before the new one registers this same sink.
+    /// A→B therefore leaves a live weak registration on A while the retained
+    /// context pointer and all paths refer to B.
+    #[doc(hidden)]
+    pub(crate) fn inherit_data_context(
+        &mut self,
+        data_context: Option<&RuntimeStateMachineDataContext>,
+    ) -> Result<bool, RuntimeDataContextBindError> {
+        let Some(data_context) = data_context else {
+            return Ok(false);
+        };
+        self.primary_data_context = Some(data_context.clone());
+        self.record_bind_phase("register-machine-without-clear");
+        data_context.add_rebind_dependent(&self.owned_view_model_rebind_sink);
+        self.internal_data_context(Some(&data_context.projection()))
+    }
+
+    /// C++ `dataContext(rcp<DataContext>)`: clear only the machine
+    /// registration/listener cells, then forward the supplied pointer to the
+    /// internal binder without registering it or touching the artboard.
+    #[doc(hidden)]
+    pub(crate) fn set_data_context(
+        &mut self,
+        data_context: Option<&RuntimeStateMachineDataContext>,
+    ) -> Result<bool, RuntimeDataContextBindError> {
+        self.clear_data_context();
+        self.primary_data_context = data_context.cloned();
+        let projection = data_context.map(RuntimeStateMachineDataContext::projection);
+        self.internal_data_context(projection.as_ref())
+    }
+
+    /// Borrowed counterpart of C++ `dataContext() const`.
+    #[doc(hidden)]
+    pub(crate) fn data_context(&self) -> Option<&RuntimeStateMachineDataContext> {
+        self.primary_data_context.as_ref()
+    }
+
+    /// C++ `setViewModelInstance`: a null pointer is an inert no-op; a live
+    /// instance replaces only the main slot and does not bind any path.
+    #[doc(hidden)]
+    pub(crate) fn set_view_model_instance(
+        &mut self,
+        view_model_instance: Option<RuntimeOwnedViewModelHandle>,
+    ) -> bool {
+        let Some(view_model_instance) = view_model_instance else {
             return false;
-        }
-        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-            graph.bind_empty_data_context();
-        }
-        self.active_file_view_model_binding = None;
-        self.needs_advance = true;
+        };
+        let context = self.ensure_primary_data_context();
+        context.set_main(view_model_instance);
         true
     }
 
-    pub fn bind_default_view_model_context(&mut self) -> bool {
-        self.clear_owned_view_model_context();
-        if !self.data_bind_graph.bind_default_view_model_context() {
+    /// C++ `setGlobalViewModelInstance`: validate the named file slot, then
+    /// replace exactly that slot. The occupying instance may belong to a
+    /// different ViewModel; slot identity comes from `name`.
+    #[doc(hidden)]
+    pub(crate) fn set_global_view_model_instance(
+        &mut self,
+        file: Option<&RuntimeFile>,
+        name: &str,
+        view_model_instance: Option<RuntimeOwnedViewModelHandle>,
+    ) -> bool {
+        let (Some(file), Some(view_model_instance)) = (file, view_model_instance) else {
+            return false;
+        };
+        let mut validated_slot = RuntimeOwnedViewModelContext::default();
+        if !validated_slot.set_global_named_handle(file, name, view_model_instance.clone()) {
             return false;
         }
-        if let Some(context) = self.default_view_model_trigger_instance.as_ref() {
-            self.data_bind_graph
-                .bind_file_view_model_trigger_sources(context);
+        let context = self.ensure_primary_data_context();
+        if !context.set_global_named(file, name, view_model_instance) {
+            return false;
         }
-        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-            graph.bind_default_view_model_context();
-            if let Some(context) = self.default_view_model_trigger_instance.as_ref() {
-                graph.bind_file_view_model_trigger_sources(context);
-            }
-        }
-        self.sync_bindable_font_assets_from_default_context();
-        self.active_file_view_model_binding = self.default_view_model_index.map(|index| (index, 0));
-        self.needs_advance = true;
         true
+    }
+
+    /// Fill the missing main first, then missing globals in file-global
+    /// order. `RuntimeOwnedViewModelContext` stores globals in slot-key order
+    /// and treats any existing cross-model occupant as occupied.
+    #[doc(hidden)]
+    pub(crate) fn complete_view_model_instances(
+        &mut self,
+        file: Option<&RuntimeFile>,
+        artboard: &ArtboardInstance,
+    ) -> bool {
+        let (Some(file), Some(context)) = (file, self.primary_data_context.clone()) else {
+            return false;
+        };
+        let Some(artboard_index) = file
+            .artboards()
+            .into_iter()
+            .position(|candidate| candidate.id == artboard.graph_global_id)
+        else {
+            return false;
+        };
+        if !context.complete_for_artboard(file, artboard_index) {
+            return false;
+        }
+        true
+    }
+
+    /// C++ `bind`: no retained context is a no-op; otherwise complete missing
+    /// defaults, bind the artboard, then bind this machine.
+    #[doc(hidden)]
+    pub(crate) fn bind(
+        &mut self,
+        file: Option<&RuntimeFile>,
+        artboard: &mut ArtboardInstance,
+    ) -> Result<bool, RuntimeDataContextBindError> {
+        if self.primary_data_context.is_none() {
+            return Ok(false);
+        }
+        self.record_bind_phase("complete-view-models");
+        self.complete_view_model_instances(file, artboard);
+        let data_context = self
+            .primary_data_context
+            .clone()
+            .expect("checked retained DataContext")
+            .projection();
+        self.record_bind_phase("bind-artboard");
+        let mut changed = file.is_some_and(|file| {
+            artboard.bind_owned_view_model_artboard_data_context(file, &data_context, true, true)
+        });
+        if file.is_some()
+            && let Some(context) = self.primary_data_context.as_ref()
+        {
+            context.add_artboard_rebind_dependent(artboard);
+        }
+        self.record_bind_phase("bind-machine");
+        changed |= self.internal_data_context(Some(&data_context))?;
+        Ok(changed)
+    }
+
+    /// Convenience C++ member with deliberately asymmetric null behavior.
+    /// Null clears only the machine context/listener cells and unbinds the
+    /// artboard. It must not explicitly unbind this machine's DataBinds.
+    #[doc(hidden)]
+    pub(crate) fn bind_view_model_instance(
+        &mut self,
+        file: Option<&RuntimeFile>,
+        artboard: &mut ArtboardInstance,
+        view_model_instance: Option<RuntimeOwnedViewModelHandle>,
+    ) -> Result<bool, RuntimeDataContextBindError> {
+        let Some(view_model_instance) = view_model_instance else {
+            self.clear_data_context();
+            self.record_bind_phase("unbind-artboard");
+            artboard.unbind_for_state_machine_view_model_clear(file);
+            return Ok(true);
+        };
+        self.set_view_model_instance(Some(view_model_instance));
+        self.bind(file, artboard)
+    }
+
+    /// Pure C++ slot read. Unlike the setter, the lookup intentionally does
+    /// not reject a non-global name before consulting that numeric slot.
+    #[doc(hidden)]
+    pub(crate) fn global_view_model_instance(
+        &self,
+        file: Option<&RuntimeFile>,
+        name: &str,
+    ) -> Option<RuntimeOwnedViewModelHandle> {
+        let file = file?;
+        let slot = file
+            .view_models()
+            .iter()
+            .position(|view_model| view_model.object.string_property("name") == Some(name))?;
+        self.primary_data_context.as_ref()?.global_slot_handle(slot)
+    }
+
+    /// C++ `rebind`: clear/reapply the artboard first, then reapply the exact
+    /// retained machine context. A cleared/null context is still forwarded to
+    /// the internal paths and can therefore fail at a ViewModel listener.
+    #[doc(hidden)]
+    pub(crate) fn rebind(
+        &mut self,
+        file: &RuntimeFile,
+        artboard: &mut ArtboardInstance,
+    ) -> Result<bool, RuntimeDataContextBindError> {
+        let data_context = self
+            .primary_data_context
+            .as_ref()
+            .map(RuntimeStateMachineDataContext::projection);
+        self.record_bind_phase("clear-artboard");
+        artboard.clear_data_context_for_state_machine_bind();
+        self.record_bind_phase("bind-artboard");
+        let mut changed = data_context.as_ref().is_some_and(|data_context| {
+            artboard.bind_owned_view_model_artboard_data_context(file, data_context, true, true)
+        });
+        if data_context.is_some()
+            && let Some(context) = self.primary_data_context.as_ref()
+        {
+            context.add_artboard_rebind_dependent(artboard);
+        }
+        self.record_bind_phase("bind-machine");
+        changed |= self.internal_data_context(data_context.as_ref())?;
+        Ok(changed)
+    }
+
+    /// C++ `clearDataContext`: unregister/null first, then drop listener
+    /// property cells. It does not unbind state-machine DataBinds or touch the
+    /// artboard/script occurrences.
+    #[doc(hidden)]
+    pub(crate) fn clear_data_context(&mut self) {
+        self.record_bind_phase("clear-machine");
+        self.primary_data_context = None;
+        self.owned_data_context = None;
+        self.active_owned_view_model_advance_context = None;
+        self.active_file_view_model_binding = None;
+        self.scripted_data_context_bind_complete = false;
+        // Dropping this sink makes all old weak registrations inert, the Rust
+        // equivalent of removeDependentContainer.
+        self.owned_view_model_rebind_sink = RuntimeCellDirtSink::new();
+        self.clear_view_model_listener_cell_bindings();
+    }
+
+    /// C++ delegates this member exclusively to the artboard.
+    #[doc(hidden)]
+    pub(crate) fn relink_data_context(
+        &mut self,
+        file: &RuntimeFile,
+        artboard: &mut ArtboardInstance,
+    ) -> bool {
+        artboard.relink_data_context_for_state_machine(file)
+    }
+
+    /// Rebuild only one context-bind subtype. A plain authored DataBind is
+    /// ignored; a null pointer is an error, matching the C++ dereference.
+    #[doc(hidden)]
+    pub(crate) fn rebuild_data_bind(
+        &mut self,
+        data_bind_index: Option<usize>,
+    ) -> Result<bool, RuntimeDataContextBindError> {
+        let data_bind_index = data_bind_index.ok_or(RuntimeDataContextBindError::NullDataBind)?;
+        let Some(source_index) = self
+            .data_bind_graph
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source.0)
+        else {
+            return Ok(false);
+        };
+        if !self
+            .data_bind_graph
+            .sources
+            .get(source_index)
+            .is_some_and(|source| source.context_bindable)
+        {
+            return Ok(false);
+        }
+        let Some(data_context) = self.owned_data_context.clone() else {
+            self.unbind_data_bind_source(source_index);
+            return Ok(false);
+        };
+        let mut changed = self
+            .data_bind_graph
+            .bind_owned_view_model_data_context_for_data_bind(data_bind_index, &data_context);
+        changed |= self
+            .data_bind_graph
+            .finalize_owned_view_model_data_context_for_data_bind(data_bind_index, &data_context);
+        if changed {
+            self.needs_advance = true;
+        }
+        Ok(changed)
+    }
+
+    /// C++ `unbind`: context/listener teardown precedes every machine
+    /// DataBind source/converter unbind.
+    #[doc(hidden)]
+    pub(crate) fn unbind(&mut self) {
+        self.clear_data_context();
+        self.unbind_data_binds();
+    }
+
+    /// C++ `internalDataContext` primary machine path: assign, bind ordinary
+    /// and keyframe DataBinds, bind listener cells, then hand the new context
+    /// to the deferred scripted-object context/init passes.
+    #[doc(hidden)]
+    pub(crate) fn internal_data_context(
+        &mut self,
+        data_context: Option<&RuntimeOwnedDataContext>,
+    ) -> Result<bool, RuntimeDataContextBindError> {
+        self.record_bind_phase("assign-context");
+        self.owned_data_context = data_context.cloned();
+        let Some(data_context) = data_context else {
+            self.record_bind_phase("bind-data-binds");
+            self.unbind_data_binds();
+            self.record_bind_phase("bind-listener-cells");
+            self.clear_view_model_listener_cell_bindings();
+            if !self.view_model_listeners.is_empty() {
+                return Err(RuntimeDataContextBindError::NullDataContextWithViewModelListeners);
+            }
+            self.record_bind_phase("script-context-pass");
+            self.scripted_data_context_bind_complete = false;
+            self.record_bind_phase("script-init-pass");
+            self.active_owned_view_model_advance_context = None;
+            return Ok(true);
+        };
+
+        self.record_bind_phase("bind-data-binds");
+        let changed = self.bind_owned_data_binds_from_data_context(data_context);
+        self.record_bind_phase("bind-listener-cells");
+        self.bind_view_model_listener_cells_for_data_context(data_context);
+        // Rust's authenticated scripting facade owns the fallible table
+        // context/install and init/hydrate calls. Mark that exact later pass
+        // only after every listener cell has been rebound.
+        self.record_bind_phase("script-context-pass");
+        self.scripted_data_context_bind_complete = false;
+        self.record_bind_phase("script-init-pass");
+        self.retain_owned_view_model_advance_context(data_context);
+        self.needs_advance = true;
+        Ok(changed)
+    }
+
+    fn ensure_primary_data_context(&mut self) -> RuntimeStateMachineDataContext {
+        if let Some(context) = self.primary_data_context.clone() {
+            // Reusing an existing DataContext must preserve its registration
+            // status. In particular, `dataContext(value)` intentionally
+            // installs without `addDependentContainer`.
+            return context;
+        }
+        let context = RuntimeStateMachineDataContext::default();
+        self.owned_view_model_rebind_sink = RuntimeCellDirtSink::new();
+        context.add_rebind_dependent(&self.owned_view_model_rebind_sink);
+        self.primary_data_context = Some(context.clone());
+        context
+    }
+
+    fn refresh_primary_data_context_projection(&mut self) {
+        let Some(context) = self.primary_data_context.as_ref() else {
+            self.owned_data_context = None;
+            return;
+        };
+        let data_context = context.projection();
+        self.active_file_view_model_binding = None;
+        self.owned_data_context = Some(data_context.clone());
+        self.retain_owned_view_model_advance_context(&data_context);
+    }
+
+    fn unbind_data_bind_source(&mut self, source_index: usize) {
+        let Some(source) = self.data_bind_graph.sources.get_mut(source_index) else {
+            return;
+        };
+        source.retained_bind.reset_preserving_notification();
+        if let Some(converter) = source.converter.as_ref() {
+            source
+                .converter_data_binds
+                .unbind(converter, &mut source.converter_state);
+        }
+        source.retained_structural_source = None;
+        source.bound = false;
+        source.reconcile_pending = false;
+    }
+
+    fn unbind_data_binds(&mut self) {
+        for source_index in 0..self.data_bind_graph.sources.len() {
+            self.unbind_data_bind_source(source_index);
+        }
+        self.data_bind_graph.context_kind = RuntimeDataBindGraphContextKind::None;
+        self.data_bind_graph.imported_view_model_context = None;
+        self.data_bind_graph.default_view_model_bindings_dirty = false;
+        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
+            for source in &mut graph.sources {
+                source.retained_bind.reset_preserving_notification();
+                if let Some(converter) = source.converter.as_ref() {
+                    source
+                        .converter_data_binds
+                        .unbind(converter, &mut source.converter_state);
+                }
+                source.retained_structural_source = None;
+                source.bound = false;
+                source.reconcile_pending = false;
+            }
+            graph.context_kind = RuntimeDataBindGraphContextKind::None;
+            graph.imported_view_model_context = None;
+            graph.default_view_model_bindings_dirty = false;
+        }
+    }
+
+    /// Machine-only borrow-model adaptation used by the established typed
+    /// Rust APIs, which do not own an Artboard borrow in their signatures.
+    fn bind_data_context_to_machine(&mut self, data_context: &RuntimeOwnedDataContext) -> bool {
+        self.clear_data_context();
+        self.primary_data_context = None;
+        data_context.add_rebind_dependent(&self.owned_view_model_rebind_sink);
+        self.internal_data_context(Some(data_context))
+            .unwrap_or(false)
+    }
+
+    /// Preserve the established typed Rust context representations while
+    /// making their public entry points pure delegating adaptations. The
+    /// C++-shaped clear member owns replacement teardown; the closure contains
+    /// only the representation-specific graph/listener projection required to
+    /// preserve each existing boolean API's signature and behavior.
+    fn bind_typed_context_adaptation(
+        &mut self,
+        bind: impl FnOnce(&mut StateMachineInstance) -> bool,
+    ) -> bool {
+        self.clear_data_context();
+        bind(self)
+    }
+
+    pub fn bind_empty_data_context(&mut self) -> bool {
+        self.bind_typed_context_adaptation(|machine| {
+            if !machine.data_bind_graph.bind_empty_data_context() {
+                return false;
+            }
+            for graph in machine.key_frame_data_bind_graphs.iter_mut().flatten() {
+                graph.bind_empty_data_context();
+            }
+            machine.active_file_view_model_binding = None;
+            machine.needs_advance = true;
+            true
+        })
+    }
+
+    pub fn bind_default_view_model_context(&mut self) -> bool {
+        self.bind_typed_context_adaptation(|machine| {
+            if !machine.data_bind_graph.bind_default_view_model_context() {
+                return false;
+            }
+            if let Some(context) = machine.default_view_model_trigger_instance.as_ref() {
+                machine
+                    .data_bind_graph
+                    .bind_file_view_model_trigger_sources(context);
+            }
+            for graph in machine.key_frame_data_bind_graphs.iter_mut().flatten() {
+                graph.bind_default_view_model_context();
+                if let Some(context) = machine.default_view_model_trigger_instance.as_ref() {
+                    graph.bind_file_view_model_trigger_sources(context);
+                }
+            }
+            machine.sync_bindable_font_assets_from_default_context();
+            machine.active_file_view_model_binding =
+                machine.default_view_model_index.map(|index| (index, 0));
+            machine.needs_advance = true;
+            true
+        })
     }
 
     pub fn set_data_bind_formula_random_values(&mut self, values: &[f32]) {
@@ -9206,38 +9920,39 @@ impl StateMachineInstance {
         view_model_index: usize,
         instance_index: usize,
     ) -> bool {
-        self.clear_owned_view_model_context();
-        let Some(instance_cells) = self
-            .file_view_model_instances
-            .as_ref()
-            .and_then(|catalog| catalog.instance(view_model_index, instance_index))
-        else {
-            return false;
-        };
-        if !self.data_bind_graph.bind_view_model_instance_context(
-            file,
-            view_model_index,
-            instance_index,
-            &instance_cells,
-        ) {
-            return false;
-        }
-        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-            graph.bind_view_model_instance_context(
+        self.bind_typed_context_adaptation(|machine| {
+            let Some(instance_cells) = machine
+                .file_view_model_instances
+                .as_ref()
+                .and_then(|catalog| catalog.instance(view_model_index, instance_index))
+            else {
+                return false;
+            };
+            if !machine.data_bind_graph.bind_view_model_instance_context(
                 file,
                 view_model_index,
                 instance_index,
                 &instance_cells,
+            ) {
+                return false;
+            }
+            for graph in machine.key_frame_data_bind_graphs.iter_mut().flatten() {
+                graph.bind_view_model_instance_context(
+                    file,
+                    view_model_index,
+                    instance_index,
+                    &instance_cells,
+                );
+            }
+            machine.sync_bindable_font_assets_from_imported_instance(
+                file,
+                view_model_index,
+                instance_index,
             );
-        }
-        self.sync_bindable_font_assets_from_imported_instance(
-            file,
-            view_model_index,
-            instance_index,
-        );
-        self.active_file_view_model_binding = Some((view_model_index, instance_index));
-        self.needs_advance = true;
-        true
+            machine.active_file_view_model_binding = Some((view_model_index, instance_index));
+            machine.needs_advance = true;
+            true
+        })
     }
 
     pub fn bind_imported_view_model_context(
@@ -9245,35 +9960,38 @@ impl StateMachineInstance {
         file: &RuntimeFile,
         context: &RuntimeImportedViewModelInstanceContext,
     ) -> bool {
-        let Some(instance) = self
-            .file_view_model_instances
-            .as_ref()
-            .and_then(|catalog| catalog.instance(context.view_model_index, context.instance_index))
-        else {
-            return false;
-        };
-        if !context.adopt_file_trigger_instance(instance) {
-            return false;
-        }
-        self.clear_owned_view_model_context();
-        if !self
-            .data_bind_graph
-            .bind_imported_view_model_context(file, context)
-        {
-            return false;
-        }
-        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-            graph.bind_imported_view_model_context(file, context);
-        }
-        self.sync_bindable_font_assets_from_imported_instance(
-            file,
-            context.view_model_index,
-            context.instance_index,
-        );
-        self.active_file_view_model_binding =
-            Some((context.view_model_index, context.instance_index));
-        self.needs_advance = true;
-        true
+        self.bind_typed_context_adaptation(|machine| {
+            let Some(instance) = machine
+                .file_view_model_instances
+                .as_ref()
+                .and_then(|catalog| {
+                    catalog.instance(context.view_model_index, context.instance_index)
+                })
+            else {
+                return false;
+            };
+            if !context.adopt_file_trigger_instance(instance) {
+                return false;
+            }
+            if !machine
+                .data_bind_graph
+                .bind_imported_view_model_context(file, context)
+            {
+                return false;
+            }
+            for graph in machine.key_frame_data_bind_graphs.iter_mut().flatten() {
+                graph.bind_imported_view_model_context(file, context);
+            }
+            machine.sync_bindable_font_assets_from_imported_instance(
+                file,
+                context.view_model_index,
+                context.instance_index,
+            );
+            machine.active_file_view_model_binding =
+                Some((context.view_model_index, context.instance_index));
+            machine.needs_advance = true;
+            true
+        })
     }
 
     /// Snapshot an owned ViewModel context into this machine.
@@ -9286,8 +10004,9 @@ impl StateMachineInstance {
         &mut self,
         context: &RuntimeOwnedViewModelInstance,
     ) -> bool {
-        self.clear_owned_view_model_handle();
-        self.bind_owned_view_model_snapshot(context)
+        self.bind_typed_context_adaptation(|machine| {
+            machine.bind_owned_view_model_snapshot(context)
+        })
     }
 
     /// Bind and retain a shared owned view-model graph.
@@ -9295,8 +10014,17 @@ impl StateMachineInstance {
     /// Later mutations through any alias are refreshed at the next data
     /// context advance, so the state machine and host never fork identity.
     pub fn bind_owned_view_model_handle(&mut self, context: &RuntimeOwnedViewModelHandle) -> bool {
+        let staged = RuntimeOwnedViewModelContext::from_main_handle(context.clone());
         let context = RuntimeOwnedViewModelContextHandle::root_without_file(context.clone());
-        self.bind_owned_view_model_context_handle(&context)
+        let changed = self.bind_owned_view_model_context_handle(&context);
+        let primary = RuntimeStateMachineDataContext::from_owned_context(staged);
+        // The immutable adaptation registered this sink directly on the
+        // current root. Rotate it before installing the mutable carrier so a
+        // later setMain makes that old weak registration inert.
+        self.owned_view_model_rebind_sink = RuntimeCellDirtSink::new();
+        primary.add_rebind_dependent(&self.owned_view_model_rebind_sink);
+        self.primary_data_context = Some(primary);
+        changed
     }
 
     pub fn bind_owned_view_model_context_handle(
@@ -9434,21 +10162,23 @@ impl StateMachineInstance {
         &mut self,
         context: &mut RuntimeOwnedViewModelInstance,
     ) -> bool {
-        self.active_file_view_model_binding = None;
-        self.clear_owned_view_model_handle();
-        let mut advance_context = RuntimeOwnedViewModelAdvanceContext::default();
-        advance_context.extend(context);
-        self.active_owned_view_model_advance_context = Some(advance_context);
-        let mut changed = self.data_bind_graph.bind_owned_view_model_context(context);
-        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-            changed |= graph.bind_owned_view_model_context(context);
-        }
-        self.sync_bindable_font_assets_from_owned_context(context);
-        self.bind_view_model_listener_cells_for_context_chain(context, &[&[]]);
-        if changed {
-            self.needs_advance = true;
-        }
-        changed
+        self.bind_typed_context_adaptation(|machine| {
+            let mut advance_context = RuntimeOwnedViewModelAdvanceContext::default();
+            advance_context.extend(context);
+            machine.active_owned_view_model_advance_context = Some(advance_context);
+            let mut changed = machine
+                .data_bind_graph
+                .bind_owned_view_model_context(context);
+            for graph in machine.key_frame_data_bind_graphs.iter_mut().flatten() {
+                changed |= graph.bind_owned_view_model_context(context);
+            }
+            machine.sync_bindable_font_assets_from_owned_context(context);
+            machine.bind_view_model_listener_cells_for_context_chain(context, &[&[]]);
+            if changed {
+                machine.needs_advance = true;
+            }
+            changed
+        })
     }
 
     fn bind_view_model_listener_cells_for_context_chain(
@@ -9799,9 +10529,14 @@ impl StateMachineInstance {
         &mut self,
         context: &RuntimeOwnedViewModelContext,
     ) -> bool {
-        self.bind_owned_view_model_data_context(&RuntimeOwnedDataContext::from_owned_context(
-            context,
-        ))
+        let changed = self.bind_owned_view_model_data_context(
+            &RuntimeOwnedDataContext::from_owned_context(context),
+        );
+        let primary = RuntimeStateMachineDataContext::from_owned_context(context.clone());
+        self.owned_view_model_rebind_sink = RuntimeCellDirtSink::new();
+        primary.add_rebind_dependent(&self.owned_view_model_rebind_sink);
+        self.primary_data_context = Some(primary);
+        changed
     }
 
     pub(crate) fn bind_owned_view_model_context_chain(
@@ -9810,64 +10545,36 @@ impl StateMachineInstance {
         context: &RuntimeOwnedViewModelInstance,
         context_chain: &[&[usize]],
     ) -> bool {
-        self.active_file_view_model_binding = None;
-        self.clear_owned_view_model_handle();
-        let mut advance_context = RuntimeOwnedViewModelAdvanceContext::default();
-        advance_context.extend(context);
-        self.active_owned_view_model_advance_context = Some(advance_context);
-        let mut changed =
-            self.data_bind_graph
-                .bind_owned_view_model_context_chain(file, context, context_chain);
-        for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-            changed |= graph.bind_owned_view_model_context_chain(file, context, context_chain);
-        }
-        self.sync_bindable_font_assets_from_owned_context_chain(file, context, context_chain);
-        self.bind_view_model_listener_cells_for_context_chain(context, context_chain);
-        if changed {
-            self.needs_advance = true;
-        }
-        changed
+        self.bind_typed_context_adaptation(|machine| {
+            let mut advance_context = RuntimeOwnedViewModelAdvanceContext::default();
+            advance_context.extend(context);
+            machine.active_owned_view_model_advance_context = Some(advance_context);
+            let mut changed = machine.data_bind_graph.bind_owned_view_model_context_chain(
+                file,
+                context,
+                context_chain,
+            );
+            for graph in machine.key_frame_data_bind_graphs.iter_mut().flatten() {
+                changed |= graph.bind_owned_view_model_context_chain(file, context, context_chain);
+            }
+            machine.sync_bindable_font_assets_from_owned_context_chain(
+                file,
+                context,
+                context_chain,
+            );
+            machine.bind_view_model_listener_cells_for_context_chain(context, context_chain);
+            if changed {
+                machine.needs_advance = true;
+            }
+            changed
+        })
     }
 
     pub(crate) fn bind_owned_view_model_data_context(
         &mut self,
         data_context: &RuntimeOwnedDataContext,
     ) -> bool {
-        self.active_file_view_model_binding = None;
-        let identity_changed = self
-            .owned_data_context
-            .as_ref()
-            .is_none_or(|bound| !bound.same_binding(data_context));
-        let structural_rebind = self
-            .owned_view_model_rebind_sink
-            .take_dirt()
-            .contains(RuntimeCellDirt::BINDINGS);
-        if !identity_changed && !structural_rebind {
-            // Explicit same-source bindFromContext is still C++
-            // `DataBind::bind()`: the graph marks both supported directions
-            // for reconcile in favor order (`data_bind_context.cpp:80-85`).
-            // This path deliberately does not scan trigger values.
-            self.scripted_data_context_bind_complete = false;
-            let changed = self.bind_owned_data_binds_from_data_context(data_context);
-            if changed {
-                self.needs_advance = true;
-            }
-            return changed;
-        }
-
-        self.scripted_data_context_bind_complete = false;
-        let changed = self.bind_owned_data_binds_from_data_context(data_context);
-        self.bind_view_model_listener_cells_for_data_context(data_context);
-        self.owned_data_context = Some(data_context.clone());
-        self.retain_owned_view_model_advance_context(data_context);
-        if identity_changed {
-            self.owned_view_model_rebind_sink = RuntimeCellDirtSink::new();
-            self.register_owned_view_model_rebind_dependents();
-        }
-        if changed || identity_changed || structural_rebind {
-            self.needs_advance = true;
-        }
-        changed || identity_changed || structural_rebind
+        self.bind_data_context_to_machine(data_context)
     }
 
     fn register_owned_view_model_rebind_dependents(&self) {
@@ -10214,6 +10921,9 @@ impl StateMachineInstance {
             .take_dirt()
             .contains(RuntimeCellDirt::BINDINGS);
         if structural_rebind {
+            if self.primary_data_context.is_some() {
+                self.refresh_primary_data_context_projection();
+            }
             // The legacy ordinary/keyframe walk consumed the shared
             // structural sink, but fixed ScriptedObject occurrences have not
             // crossed their C++ rebind yet. Keep that work pending for the
@@ -10231,22 +10941,6 @@ impl StateMachineInstance {
             self.needs_advance = true;
         }
         collected || structural_rebind
-    }
-
-    fn clear_owned_view_model_handle(&mut self) {
-        self.owned_data_context = None;
-        self.scripted_data_context_bind_complete = false;
-        self.owned_view_model_rebind_sink = RuntimeCellDirtSink::new();
-        self.active_owned_view_model_advance_context = None;
-    }
-
-    fn clear_owned_view_model_context(&mut self) {
-        self.clear_owned_view_model_handle();
-        // Leaving every owned-context path drops each listener's dependent
-        // registration (C++ `ListenerViewModel::clearDataContext`). Owned
-        // compatibility rebinds instead relink in place when identity is
-        // unchanged.
-        self.clear_view_model_listener_cell_bindings();
     }
 
     fn clear_view_model_listener_cell_bindings(&mut self) {
@@ -15903,5 +16597,604 @@ mod scripted_listener_action_tests {
             .expect("committed candidate retains the listener table");
 
         assert_eq!(calls.borrow().len(), 1);
+    }
+
+    fn fl_c5_bind_record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
+        AuthoringRecord {
+            type_key: nuxie_schema::definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+                .type_key
+                .int,
+            properties,
+        }
+    }
+
+    fn fl_c5_bind_property(
+        type_name: &str,
+        name: &str,
+        value: AuthoringValue,
+    ) -> AuthoringProperty {
+        AuthoringProperty {
+            key: property_key_for_name(type_name, name)
+                .unwrap_or_else(|| panic!("missing property {type_name}.{name}")),
+            value,
+        }
+    }
+
+    fn fl_c5_bind_file_and_artboard() -> (RuntimeFile, ArtboardInstance) {
+        let file = RuntimeFile::from_authoring_records(vec![
+            fl_c5_bind_record("Backboard", Vec::new()),
+            fl_c5_bind_record(
+                "ViewModel",
+                vec![fl_c5_bind_property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Main".to_owned()),
+                )],
+            ),
+            fl_c5_bind_record(
+                "ViewModel",
+                vec![
+                    fl_c5_bind_property(
+                        "ViewModel",
+                        "name",
+                        AuthoringValue::String("Global A".to_owned()),
+                    ),
+                    fl_c5_bind_property("ViewModel", "viewModelType", AuthoringValue::Uint(2)),
+                ],
+            ),
+            fl_c5_bind_record(
+                "ViewModel",
+                vec![
+                    fl_c5_bind_property(
+                        "ViewModel",
+                        "name",
+                        AuthoringValue::String("Global B".to_owned()),
+                    ),
+                    fl_c5_bind_property("ViewModel", "viewModelType", AuthoringValue::Uint(2)),
+                ],
+            ),
+            fl_c5_bind_record(
+                "ViewModel",
+                vec![fl_c5_bind_property(
+                    "ViewModel",
+                    "name",
+                    AuthoringValue::String("Standard".to_owned()),
+                )],
+            ),
+            fl_c5_bind_record(
+                "Artboard",
+                vec![
+                    fl_c5_bind_property("Artboard", "width", AuthoringValue::Double(100.0)),
+                    fl_c5_bind_property("Artboard", "height", AuthoringValue::Double(100.0)),
+                    fl_c5_bind_property("Artboard", "viewModelId", AuthoringValue::Uint(0)),
+                ],
+            ),
+        ])
+        .expect("WP5 binding fixture imports");
+        let graph = GraphFile::from_runtime_file(&file).expect("WP5 binding fixture graphs");
+        let artboard =
+            ArtboardInstance::from_graph(&file, graph.artboards.first().expect("fixture artboard"))
+                .expect("WP5 binding fixture artboard");
+        (file, artboard)
+    }
+
+    fn fl_c5_bind_handle(
+        file: &RuntimeFile,
+        view_model_index: usize,
+    ) -> RuntimeOwnedViewModelHandle {
+        RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(file, view_model_index)
+                .expect("fixture ViewModel instance"),
+        )
+    }
+
+    #[test]
+    fn fl_c5_bind_staged_main_and_globals_apply_only_through_primary_bind() {
+        let (file, mut artboard) = fl_c5_bind_file_and_artboard();
+        let mut machine = scripted_listener_machine();
+        machine.bind_phase_trace.clear();
+        let initial_context_kind = machine.data_bind_graph.context_kind;
+        let main = fl_c5_bind_handle(&file, 0);
+        let override_a = fl_c5_bind_handle(&file, 2);
+        let replacement_a = fl_c5_bind_handle(&file, 3);
+
+        let mut invalid_global_machine = scripted_listener_machine();
+        assert!(!invalid_global_machine.set_global_view_model_instance(
+            Some(&file),
+            "missing",
+            Some(override_a.clone()),
+        ));
+        assert!(!invalid_global_machine.set_global_view_model_instance(
+            Some(&file),
+            "Standard",
+            Some(override_a.clone()),
+        ));
+        assert!(
+            invalid_global_machine.data_context().is_none(),
+            "failed global validation must not create or register an empty DataContext"
+        );
+
+        assert!(!machine.set_view_model_instance(None));
+        assert!(machine.data_context().is_none());
+        assert!(machine.set_view_model_instance(Some(main.clone())));
+        assert_eq!(machine.data_bind_graph.context_kind, initial_context_kind);
+        assert!(
+            machine
+                .primary_data_context
+                .as_ref()
+                .map(RuntimeStateMachineDataContext::snapshot)
+                .as_ref()
+                .and_then(RuntimeOwnedViewModelContext::main_handle)
+                .is_some_and(|bound| bound.ptr_eq(&main))
+        );
+
+        assert!(!machine.set_global_view_model_instance(Some(&file), "Global A", None,));
+        assert!(!machine.set_global_view_model_instance(
+            None,
+            "Global A",
+            Some(override_a.clone()),
+        ));
+        assert!(!machine.set_global_view_model_instance(
+            Some(&file),
+            "missing",
+            Some(override_a.clone()),
+        ));
+        assert!(!machine.set_global_view_model_instance(
+            Some(&file),
+            "Standard",
+            Some(override_a.clone()),
+        ));
+        assert!(machine.set_global_view_model_instance(
+            Some(&file),
+            "Global A",
+            Some(override_a.clone()),
+        ));
+        assert!(
+            machine
+                .global_view_model_instance(Some(&file), "Global A")
+                .is_some_and(|bound| bound.ptr_eq(&override_a)),
+            "slot identity comes from the requested global, not the override's ViewModel"
+        );
+        assert!(machine.set_global_view_model_instance(
+            Some(&file),
+            "Global A",
+            Some(replacement_a.clone()),
+        ));
+        assert!(
+            machine
+                .global_view_model_instance(Some(&file), "Global A")
+                .is_some_and(|bound| bound.ptr_eq(&replacement_a))
+        );
+        assert!(
+            machine
+                .global_view_model_instance(Some(&file), "Standard")
+                .is_none(),
+            "the getter performs a pure numeric-slot read and never creates"
+        );
+        let unusual_slot = fl_c5_bind_handle(&file, 0);
+        machine
+            .primary_data_context
+            .as_ref()
+            .expect("primary context")
+            .set_unusual_slot_for_test(3, unusual_slot.clone());
+        assert!(
+            machine
+                .global_view_model_instance(Some(&file), "Standard")
+                .is_some_and(|bound| bound.ptr_eq(&unusual_slot)),
+            "the pure getter reads an occupied numeric slot even when the named ViewModel is non-global"
+        );
+        assert_eq!(machine.data_bind_graph.context_kind, initial_context_kind);
+
+        machine.bind_phase_trace.clear();
+        machine
+            .bind(Some(&file), &mut artboard)
+            .expect("staged primary bind");
+        assert_eq!(
+            machine.bind_phase_trace,
+            [
+                "complete-view-models",
+                "bind-artboard",
+                "bind-machine",
+                "assign-context",
+                "bind-data-binds",
+                "bind-listener-cells",
+                "script-context-pass",
+                "script-init-pass",
+            ],
+            "completion and artboard binding precede the machine's exact internal member order"
+        );
+        let staged = machine
+            .primary_data_context
+            .as_ref()
+            .expect("completed staged context")
+            .snapshot();
+        assert!(staged.main_handle().is_some());
+        assert!(
+            staged
+                .global_slot_handle(1)
+                .is_some_and(|bound| bound.ptr_eq(&replacement_a))
+        );
+        assert!(staged.global_slot_handle(2).is_some());
+        assert_eq!(
+            staged.handles().count(),
+            3,
+            "completion inserts main first, then both globals, without replacing occupied A"
+        );
+
+        let bound_before_replacement = machine
+            .owned_data_context
+            .clone()
+            .expect("bound machine projection");
+        let replacement_main = fl_c5_bind_handle(&file, 0);
+        assert!(machine.set_view_model_instance(Some(replacement_main.clone())));
+        let staged_after_replacement = machine
+            .primary_data_context
+            .as_ref()
+            .expect("retained primary context")
+            .projection();
+        assert!(
+            !bound_before_replacement.same_binding(&staged_after_replacement),
+            "the shared slot table owns the staged replacement identity"
+        );
+        assert!(
+            machine
+                .owned_data_context
+                .as_ref()
+                .is_some_and(|bound| bound.same_binding(&bound_before_replacement))
+                && artboard
+                    .artboard_owned_data_context
+                    .as_ref()
+                    .is_some_and(|bound| bound.same_binding(&bound_before_replacement)),
+            "setViewModelInstance leaves machine and artboard paths on the old projection"
+        );
+        assert!(
+            machine.owned_view_model_rebind_sink.peek_dirt().is_empty()
+                && artboard
+                    .artboard_owned_view_model_rebind_sink
+                    .peek_dirt()
+                    .is_empty(),
+            "staging a replacement does not synthesize structural dirt"
+        );
+        machine
+            .bind(Some(&file), &mut artboard)
+            .expect("explicit replacement bind");
+        assert!(
+            machine
+                .owned_data_context
+                .as_ref()
+                .is_some_and(|bound| bound.same_binding(&staged_after_replacement))
+                && artboard
+                    .artboard_owned_data_context
+                    .as_ref()
+                    .is_some_and(|bound| bound.same_binding(&staged_after_replacement)),
+            "the explicit bind is the first point where staged paths move"
+        );
+    }
+
+    #[test]
+    fn fl_c5_bind_null_matrix_keeps_every_cpp_branch_distinct() {
+        let (file, mut artboard) = fl_c5_bind_file_and_artboard();
+        let mut machine = scripted_listener_machine();
+        machine.view_model_listeners.clear();
+        let main = fl_c5_bind_handle(&file, 0);
+
+        assert!(machine.set_view_model_instance(Some(main.clone())));
+        machine
+            .bind(Some(&file), &mut artboard)
+            .expect("initial primary bind");
+        assert_eq!(
+            machine.data_bind_graph.context_kind,
+            RuntimeDataBindGraphContextKind::OwnedViewModel
+        );
+        assert!(!machine.set_view_model_instance(None));
+        assert!(machine.data_context().is_some());
+
+        machine.bind_phase_trace.clear();
+        machine
+            .bind_view_model_instance(Some(&file), &mut artboard, None)
+            .expect("bindViewModelInstance null is the limited clear branch");
+        assert!(machine.data_context().is_none());
+        assert!(artboard.artboard_owned_data_context.is_none());
+        assert_eq!(
+            machine.data_bind_graph.context_kind,
+            RuntimeDataBindGraphContextKind::OwnedViewModel,
+            "bindViewModelInstance(nullptr) does not explicitly unbind machine DataBinds"
+        );
+        assert_eq!(
+            machine.bind_phase_trace,
+            ["clear-machine", "unbind-artboard"]
+        );
+
+        assert_eq!(
+            machine.bind_data_context(&file, &mut artboard, None),
+            Err(RuntimeDataContextBindError::NullDataContext),
+            "bindDataContext(nullptr) is not a safe clear"
+        );
+        assert_eq!(machine.inherit_data_context(None), Ok(false));
+
+        assert_eq!(machine.set_data_context(None), Ok(true));
+        assert_eq!(
+            machine.data_bind_graph.context_kind,
+            RuntimeDataBindGraphContextKind::None,
+            "dataContext(nullptr) reaches the internal null bind when no VM listener exists"
+        );
+        machine
+            .view_model_listeners
+            .push(RuntimeViewModelListenerInstance {
+                listener_definitions: Arc::new(Vec::new()),
+                listener_index: 0,
+                property_bindings: Vec::new(),
+            });
+        machine.bind_phase_trace.clear();
+        assert_eq!(
+            machine.set_data_context(None),
+            Err(RuntimeDataContextBindError::NullDataContextWithViewModelListeners),
+            "the C++ listener dereference hazard remains distinct"
+        );
+        assert_eq!(
+            machine.bind_phase_trace,
+            [
+                "clear-machine",
+                "assign-context",
+                "bind-data-binds",
+                "bind-listener-cells",
+            ],
+            "listener failure prevents both scripted context/init passes"
+        );
+        assert_eq!(
+            machine.rebuild_data_bind(None),
+            Err(RuntimeDataContextBindError::NullDataBind)
+        );
+    }
+
+    #[test]
+    fn fl_c5_bind_data_context_and_rebind_preserve_artboard_machine_order() {
+        let (file, mut artboard) = fl_c5_bind_file_and_artboard();
+        let mut machine = scripted_listener_machine();
+        machine.view_model_listeners.clear();
+        let context = RuntimeStateMachineDataContext::from_owned_context(
+            RuntimeOwnedViewModelContext::from_main_handle(fl_c5_bind_handle(&file, 0)),
+        );
+
+        machine.bind_phase_trace.clear();
+        machine
+            .bind_data_context(&file, &mut artboard, Some(&context))
+            .expect("bindDataContext");
+        assert_eq!(
+            machine.bind_phase_trace,
+            [
+                "clear-machine",
+                "register-machine",
+                "clear-artboard",
+                "bind-artboard",
+                "bind-machine",
+                "assign-context",
+                "bind-data-binds",
+                "bind-listener-cells",
+                "script-context-pass",
+                "script-init-pass",
+            ]
+        );
+        assert!(
+            machine
+                .data_context()
+                .is_some_and(|bound| bound.ptr_eq(&context))
+        );
+        assert!(
+            artboard
+                .artboard_owned_data_context
+                .as_ref()
+                .is_some_and(|bound| bound.same_binding(&context.projection()))
+        );
+
+        machine.bind_phase_trace.clear();
+        machine.rebind(&file, &mut artboard).expect("rebind");
+        assert_eq!(
+            machine.bind_phase_trace,
+            [
+                "clear-artboard",
+                "bind-artboard",
+                "bind-machine",
+                "assign-context",
+                "bind-data-binds",
+                "bind-listener-cells",
+                "script-context-pass",
+                "script-init-pass",
+            ]
+        );
+        machine.bind_phase_trace.clear();
+        let _ = machine.relink_data_context(&file, &mut artboard);
+        assert!(
+            machine.bind_phase_trace.is_empty(),
+            "relinkDataContext delegates to the artboard only"
+        );
+    }
+
+    #[test]
+    fn fl_c5_bind_setters_preserve_an_existing_unregistered_context() {
+        let (file, _artboard) = fl_c5_bind_file_and_artboard();
+        let mut machine = scripted_listener_machine();
+        machine.view_model_listeners.clear();
+        let context = RuntimeStateMachineDataContext::from_owned_context(
+            RuntimeOwnedViewModelContext::from_main_handle(fl_c5_bind_handle(&file, 0)),
+        );
+
+        machine
+            .set_data_context(Some(&context))
+            .expect("dataContext setter");
+        machine.owned_view_model_rebind_sink.take_dirt();
+        assert!(machine.set_view_model_instance(Some(fl_c5_bind_handle(&file, 0))));
+        assert!(machine.set_global_view_model_instance(
+            Some(&file),
+            "Global A",
+            Some(fl_c5_bind_handle(&file, 1)),
+        ));
+        context.mark_main_rebind_for_test();
+        assert!(
+            machine.owned_view_model_rebind_sink.peek_dirt().is_empty(),
+            "setters reuse the non-registering dataContext(value) carrier without inventing addDependentContainer"
+        );
+    }
+
+    #[test]
+    fn fl_c5_bind_inherit_a_then_b_retains_the_prior_registration_hazard() {
+        let (file, _artboard) = fl_c5_bind_file_and_artboard();
+        let mut machine = scripted_listener_machine();
+        machine.view_model_listeners.clear();
+        let context_a = RuntimeStateMachineDataContext::from_owned_context(
+            RuntimeOwnedViewModelContext::from_main_handle(fl_c5_bind_handle(&file, 0)),
+        );
+        let context_b = RuntimeStateMachineDataContext::from_owned_context(
+            RuntimeOwnedViewModelContext::from_main_handle(fl_c5_bind_handle(&file, 0)),
+        );
+
+        machine
+            .inherit_data_context(Some(&context_a))
+            .expect("inherit A");
+        let inherited_sink = machine.owned_view_model_rebind_sink.clone();
+        machine.bind_phase_trace.clear();
+        machine
+            .inherit_data_context(Some(&context_b))
+            .expect("inherit B");
+        inherited_sink.take_dirt();
+        context_a.mark_main_rebind_for_test();
+        assert!(
+            machine
+                .owned_view_model_rebind_sink
+                .peek_dirt()
+                .contains(RuntimeCellDirt::BINDINGS),
+            "structural dirt from A after inheriting B still reaches the machine because inherit never clears A"
+        );
+        assert!(
+            machine
+                .data_context()
+                .is_some_and(|bound| bound.ptr_eq(&context_b))
+        );
+        assert_eq!(
+            machine.bind_phase_trace,
+            [
+                "register-machine-without-clear",
+                "assign-context",
+                "bind-data-binds",
+                "bind-listener-cells",
+                "script-context-pass",
+                "script-init-pass",
+            ],
+            "the A→B path contains no clear phase"
+        );
+    }
+
+    #[test]
+    fn fl_c5_bind_shared_context_repoints_all_registered_machine_sinks() {
+        let (file, mut artboard_a) = fl_c5_bind_file_and_artboard();
+        let mut artboard_b = artboard_a.clone();
+        let context = RuntimeStateMachineDataContext::default();
+        let mut machine_a = scripted_listener_machine();
+        let mut machine_b = scripted_listener_machine();
+        machine_a.view_model_listeners.clear();
+        machine_b.view_model_listeners.clear();
+
+        machine_a
+            .bind_data_context(&file, &mut artboard_a, Some(&context))
+            .expect("bind shared context to A");
+        machine_b
+            .bind_data_context(&file, &mut artboard_b, Some(&context))
+            .expect("bind shared context to B");
+        machine_a.owned_view_model_rebind_sink.take_dirt();
+        machine_b.owned_view_model_rebind_sink.take_dirt();
+        artboard_a.artboard_owned_view_model_rebind_sink.take_dirt();
+        artboard_b.artboard_owned_view_model_rebind_sink.take_dirt();
+
+        let replacement = fl_c5_bind_handle(&file, 0);
+        context.set_main(replacement.clone());
+        assert!(
+            machine_a
+                .owned_view_model_rebind_sink
+                .peek_dirt()
+                .is_empty()
+                && machine_b
+                    .owned_view_model_rebind_sink
+                    .peek_dirt()
+                    .is_empty(),
+            "slot replacement stages identity without scheduling a bind"
+        );
+        let detached_relay = context
+            .main_rebind_dependent_for_test()
+            .expect("replacement relay");
+        let final_replacement = fl_c5_bind_handle(&file, 0);
+        context.set_main(final_replacement.clone());
+        assert!(
+            !detached_relay.add_dirt(RuntimeCellDirt::BINDINGS),
+            "the replaced handle's relay is dropped, making its weak registration inert"
+        );
+        context.mark_main_rebind_for_test();
+        assert!(
+            machine_a
+                .owned_view_model_rebind_sink
+                .peek_dirt()
+                .contains(RuntimeCellDirt::BINDINGS)
+        );
+        assert!(
+            machine_b
+                .owned_view_model_rebind_sink
+                .peek_dirt()
+                .contains(RuntimeCellDirt::BINDINGS)
+        );
+        assert!(
+            artboard_a
+                .artboard_owned_view_model_rebind_sink
+                .peek_dirt()
+                .contains(RuntimeCellDirt::BINDINGS)
+                && artboard_b
+                    .artboard_owned_view_model_rebind_sink
+                    .peek_dirt()
+                    .contains(RuntimeCellDirt::BINDINGS),
+            "the active relay forwards later structural dirt to every registered artboard"
+        );
+        assert!(
+            context
+                .snapshot()
+                .main_handle()
+                .is_some_and(|bound| bound.ptr_eq(&final_replacement)),
+            "one mutable primary context retains the replacement identity for every dependent"
+        );
+
+        assert!(machine_a.complete_view_model_instances(Some(&file), &artboard_a));
+        assert!(
+            machine_b
+                .global_view_model_instance(Some(&file), "Global A")
+                .is_some(),
+            "completion on one registered container mutates the shared slot table"
+        );
+    }
+
+    #[test]
+    fn fl_c5_bind_typed_context_apis_delegate_without_signature_changes() {
+        let (file, _artboard) = fl_c5_bind_file_and_artboard();
+        let mut machine = scripted_listener_machine();
+        machine.view_model_listeners.clear();
+        let main = fl_c5_bind_handle(&file, 0);
+        let context_handle = RuntimeOwnedViewModelContextHandle::root(&file, main.clone());
+        let mut contexts = RuntimeOwnedViewModelContext::from_main_handle(main.clone());
+        assert!(contexts.set_global_slot_handle(&file, 1, fl_c5_bind_handle(&file, 2)));
+
+        let _: bool = machine.bind_owned_view_model_handle(&main);
+        assert!(machine.data_context().is_some());
+        let _: bool = machine.bind_owned_view_model_context_handle(&context_handle);
+        assert!(machine.owned_data_context.is_some());
+        let _: bool = machine.bind_owned_view_model_contexts(&contexts);
+        assert!(
+            machine
+                .primary_data_context
+                .as_ref()
+                .map(RuntimeStateMachineDataContext::snapshot)
+                .as_ref()
+                .and_then(|context| context.global_slot_handle(1))
+                .is_some()
+        );
+        let _: bool = machine
+            .bind_script_artboard_data_context(&ScriptArtboardDataContext::root(&context_handle));
+        assert!(machine.owned_data_context.is_some());
     }
 }

@@ -81648,6 +81648,212 @@ fn state_machine_animation_state_advance_matches_cpp_probe() {
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
 
+fn fl_c5_cpp_state_machine_instance_source() -> String {
+    let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let source_path = PathBuf::from(runtime_root).join("src/animation/state_machine_instance.cpp");
+    std::fs::read_to_string(&source_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", source_path.display()))
+}
+
+fn fl_c5_cpp_member<'a>(source: &'a str, start: &str, end: &str) -> &'a str {
+    let start = source
+        .find(start)
+        .unwrap_or_else(|| panic!("missing pinned C++ member {start}"));
+    let end = source[start..]
+        .find(end)
+        .map(|offset| start + offset)
+        .unwrap_or_else(|| panic!("missing pinned C++ member boundary {end}"));
+    &source[start..end]
+}
+
+fn fl_c5_run_rust_unit_probe(filter: &str) {
+    let output = Command::new(env!("CARGO"))
+        .current_dir(repo_root())
+        .args(["test", "-q", "-p", "nuxie-runtime", "--lib", filter])
+        .output()
+        .unwrap_or_else(|error| panic!("run Rust WP5 probe {filter}: {error}"));
+    assert!(
+        output.status.success(),
+        "Rust WP5 probe {filter} failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+}
+
+#[test]
+fn fl_c5_bind_family_typed_default_context_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/fl_c5_bind_family_default_context.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_number_blend_state(90_510);
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "typed default-context adaptation must bind through the WP5 primary path"
+    );
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    let cpp_report = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("C++ state-machine bind report");
+    compare_state_machine_advance(cpp_report, &state_machine, advanced, label);
+
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let bind = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::bind()",
+        "void StateMachineInstance::completeViewModelInstances()",
+    );
+    let complete = bind
+        .find("completeViewModelInstances();")
+        .expect("C++ bind completion phase");
+    let artboard = bind
+        .find("m_artboardInstance->internalDataContext(m_DataContext);")
+        .expect("C++ bind artboard phase");
+    let machine = bind
+        .rfind("internalDataContext(m_DataContext);")
+        .expect("C++ bind machine phase");
+    assert!(
+        complete < artboard && artboard < machine,
+        "C++ bind must complete, then bind artboard, then bind state machine"
+    );
+}
+
+#[test]
+fn fl_c5_bind_null_matrix_matches_pinned_cpp_members() {
+    fl_c5_run_rust_unit_probe("fl_c5_bind_null_matrix_keeps_every_cpp_branch_distinct");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let set = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::setViewModelInstance(",
+        "bool StateMachineInstance::setGlobalViewModelInstance(",
+    );
+    assert!(
+        set.contains("if (viewModelInstance == nullptr)")
+            && set.contains("return;")
+            && !set.contains("clearDataContext()"),
+        "setViewModelInstance(null) must remain a no-op"
+    );
+
+    let bind_instance = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::bindViewModelInstance(",
+        "rcp<ViewModelInstance> StateMachineInstance::globalViewModelInstance(",
+    );
+    let clear = bind_instance
+        .find("clearDataContext();")
+        .expect("C++ null bindViewModelInstance clear");
+    let artboard_unbind = bind_instance
+        .find("m_artboardInstance->unbind();")
+        .expect("C++ null bindViewModelInstance artboard unbind");
+    assert!(
+        clear < artboard_unbind && !bind_instance.contains("unbindDataBinds()"),
+        "bindViewModelInstance(null) clears the machine context and only unbinds the artboard"
+    );
+
+    let bind_data_context = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::bindDataContext(",
+        "void StateMachineInstance::inheritDataContext(",
+    );
+    assert!(
+        !bind_data_context.contains("dataContext == nullptr"),
+        "bindDataContext(null) is intentionally not a safe clear branch"
+    );
+
+    let inherit = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::inheritDataContext(",
+        "void StateMachineInstance::dataContext(",
+    );
+    assert!(
+        inherit.contains("if (dataContext == nullptr)")
+            && inherit.contains("return;")
+            && !inherit.contains("clearDataContext()"),
+        "inheritDataContext(null) must be a no-op without prior clearing"
+    );
+}
+
+#[test]
+fn fl_c5_inherit_context_a_then_b_retains_pinned_cpp_registration_hazard() {
+    fl_c5_run_rust_unit_probe("fl_c5_bind_inherit_a_then_b_retains_the_prior_registration_hazard");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let inherit = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::inheritDataContext(",
+        "void StateMachineInstance::dataContext(",
+    );
+    let register = inherit
+        .find("dataContext->addDependentContainer(this);")
+        .expect("C++ inherited-context registration");
+    let bind = inherit
+        .find("internalDataContext(dataContext);")
+        .expect("C++ inherited-context bind");
+    assert!(
+        register < bind,
+        "C++ registers the inherited context before binding"
+    );
+    assert!(
+        !inherit.contains("removeDependentContainer")
+            && !inherit.contains("clearDataContext")
+            && inherit.matches("addDependentContainer(this)").count() == 1,
+        "A→B inheritance must retain A's dependent registration while registering B"
+    );
+}
+
+#[test]
+fn fl_c5_complete_view_models_main_then_globals_matches_pinned_cpp() {
+    fl_c5_run_rust_unit_probe("fl_c5_bind_staged_main_and_globals_apply_only_through_primary_bind");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let complete = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::completeViewModelInstances()",
+        "void StateMachineInstance::bindViewModelInstance(",
+    );
+    let main_check = complete
+        .find("m_DataContext->mainViewModelInstance() == nullptr")
+        .expect("C++ missing-main check");
+    let main_create = complete
+        .find("createDefaultViewModelInstance(m_artboardInstance)")
+        .expect("C++ main completion");
+    let globals = complete
+        .find("for (auto* viewModel : file->globalViewModels())")
+        .expect("C++ file-order globals loop");
+    let occupied = complete
+        .find("m_DataContext->instanceForSlot(slotKey) != nullptr")
+        .expect("C++ occupied-slot check");
+    let global_create = complete[globals..]
+        .find("createDefaultViewModelInstance(viewModel)")
+        .map(|offset| globals + offset)
+        .expect("C++ global completion");
+    assert!(
+        main_check < main_create
+            && main_create < globals
+            && globals < occupied
+            && occupied < global_create,
+        "C++ completion must fill a missing main before missing global slots in file order"
+    );
+    assert!(
+        !complete[occupied..global_create].contains("viewModelId("),
+        "occupied global slots are accepted by slot key even when the occupant is cross-model"
+    );
+}
+
 fn assert_close(actual: f32, expected: f32, label: &str) {
     assert!(
         (actual - expected).abs() <= 0.0001,

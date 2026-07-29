@@ -1095,6 +1095,53 @@ pattern = "fn\\s+(?:pointer_down_with_context_and_script_host|pointer_up_with_co
 max_occurrences = 0
 
 [[ratchet]]
+id = "state_machine_bind_primary_family_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:pub\\(crate\\)\\s+)?fn\\s+(?:set_view_model_instance|set_global_view_model_instance|complete_view_model_instances|bind|bind_view_model_instance|bind_data_context|inherit_data_context|set_data_context|data_context|global_view_model_instance|rebind|clear_data_context|relink_data_context|rebuild_data_bind|unbind|internal_data_context)\\b"
+min_occurrences = 16
+max_occurrences = 16
+
+[[ratchet]]
+id = "state_machine_bind_null_branches_distinct_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+set_view_model_instance\\b[\\s\\S]{0,550}let\\s+Some\\(view_model_instance\\)\\s*=\\s*view_model_instance\\s+else\\s*\\{\\s*return\\s+false;\\s*\\}[\\s\\S]{0,8000}fn\\s+bind_view_model_instance\\b[\\s\\S]{0,700}let\\s+Some\\(view_model_instance\\)\\s*=\\s*view_model_instance\\s+else\\s*\\{[\\s\\S]{0,220}self\\.clear_data_context\\(\\);[\\s\\S]{0,220}artboard\\.unbind_for_state_machine_view_model_clear\\(file\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_bind_data_context_null_and_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+bind_data_context\\b[\\s\\S]{0,650}data_context\\.ok_or\\(RuntimeDataContextBindError::NullDataContext\\)\\?[\\s\\S]{0,350}self\\.clear_data_context\\(\\);[\\s\\S]{0,450}add_rebind_dependent[\\s\\S]{0,350}artboard\\.clear_data_context_for_state_machine_bind\\(\\);[\\s\\S]{0,500}artboard\\.bind_owned_view_model_artboard_data_context[\\s\\S]{0,350}self\\.internal_data_context"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_inherit_context_prior_clear"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+inherit_data_context\\b(?:(?!\\n\\s*(?:pub(?:\\([^)]*\\))?\\s+)?fn\\b)[\\s\\S]){0,900}clear_data_context\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_bind_machine_before_artboard"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+(?:bind|bind_data_context|rebind)\\b(?:(?!\\n\\s*(?:pub(?:\\([^)]*\\))?\\s+)?fn\\b)[\\s\\S]){0,1800}self\\.internal_data_context[\\s\\S]{0,650}artboard\\.(?:bind_owned_view_model_artboard_data_context|clear_data_context_for_state_machine_bind)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_internal_context_listener_before_script_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+internal_data_context\\b[\\s\\S]{0,2500}bind_view_model_listener_cells_for_data_context[\\s\\S]{0,500}record_bind_phase\\(\"script-context-pass\"\\)[\\s\\S]{0,350}record_bind_phase\\(\"script-init-pass\"\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_typed_context_primary_delegation_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+(?:bind_empty_data_context|bind_default_view_model_context|bind_view_model_instance_context|bind_imported_view_model_context|bind_owned_view_model_context|bind_owned_view_model_handle|bind_owned_view_model_context_handle|bind_owned_view_model_context_mut|bind_owned_view_model_contexts|bind_script_artboard_data_context|bind_owned_view_model_context_chain)\\b(?:(?!\\n\\s*(?:pub(?:\\([^)]*\\))?\\s+)?fn\\b)[\\s\\S]){0,1600}self\\.(?:bind_typed_context_adaptation|bind_owned_view_model_context_handle|bind_owned_view_model_data_context)\\("
+min_occurrences = 11
+max_occurrences = 11
+
+[[ratchet]]
 id = "data_bind_per_type_target_to_source_path"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "(?m)^\\s*(?:pub\\(crate\\)\\s+)?fn\\s+apply_default_view_model_(?:number|symbol_list_index|boolean|string|color|enum|asset|artboard|list|trigger|view_model)(?:_public_update)?_targets_to_sources(?:_with_options)?\\b"

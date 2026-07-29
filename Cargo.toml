@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/nux-container",
     "crates/nuxie-binary",
     "crates/nuxie-graph",
     "crates/nuxie-image-codec",

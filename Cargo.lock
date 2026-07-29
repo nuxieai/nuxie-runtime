@@ -976,6 +976,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nux-container"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "ed25519-dalek",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
 name = "nuxie"
 version = "0.1.0"
 dependencies = [

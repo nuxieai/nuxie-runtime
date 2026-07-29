@@ -1,4 +1,4 @@
-//! Exact-runtime-identity bounded, coarse flow-session protocol.
+//! Exact-runtime-identity bounded, coarse screen-session protocol.
 //!
 //! The C layouts in this module are deliberately independent from the Rust
 //! session model. Every caller-owned view is validated and copied before the
@@ -9,170 +9,170 @@
 use super::*;
 use std::{collections::HashSet, ffi::c_void, ptr, slice};
 
-pub const NUX_FLOW_MAX_ID_BYTE_LENGTH: u64 = 4_096;
-pub const NUX_FLOW_MAX_PATH_BYTE_LENGTH: u64 = 4_096;
-pub const NUX_FLOW_MAX_STRING_BYTE_LENGTH: u64 = 1_048_576;
-pub const NUX_FLOW_MAX_BATCH_ITEM_COUNT: u64 = 4_096;
-pub const NUX_FLOW_MAX_QUERY_COUNT: u64 = 4_096;
-pub const NUX_FLOW_MAX_OUTPUT_COUNT: u64 = 4_096;
-pub const NUX_FLOW_MAX_INSTANCE_COUNT: u64 = 4_096;
-pub const NUX_FLOW_MAX_LIST_ITEM_COUNT: u64 = 4_096;
-pub const NUX_FLOW_MAX_VALUE_EDGE_COUNT: u64 = 16_384;
-pub const NUX_FLOW_MAX_VALUE_DEPTH: u32 = 32;
-pub const NUX_FLOW_MAX_EVENT_PROPERTY_COUNT: u64 = 256;
-pub const NUX_FLOW_MAX_OPERATION_PAYLOAD_BYTE_LENGTH: u64 = 4_194_304;
-pub const NUX_FLOW_MAX_POINTER_COUNT: u64 = 32;
+pub const NUX_SCREEN_MAX_ID_BYTE_LENGTH: u64 = 4_096;
+pub const NUX_SCREEN_MAX_PATH_BYTE_LENGTH: u64 = 4_096;
+pub const NUX_SCREEN_MAX_STRING_BYTE_LENGTH: u64 = 1_048_576;
+pub const NUX_SCREEN_MAX_BATCH_ITEM_COUNT: u64 = 4_096;
+pub const NUX_SCREEN_MAX_QUERY_COUNT: u64 = 4_096;
+pub const NUX_SCREEN_MAX_OUTPUT_COUNT: u64 = 4_096;
+pub const NUX_SCREEN_MAX_INSTANCE_COUNT: u64 = 4_096;
+pub const NUX_SCREEN_MAX_LIST_ITEM_COUNT: u64 = 4_096;
+pub const NUX_SCREEN_MAX_VALUE_EDGE_COUNT: u64 = 16_384;
+pub const NUX_SCREEN_MAX_VALUE_DEPTH: u32 = 32;
+pub const NUX_SCREEN_MAX_EVENT_PROPERTY_COUNT: u64 = 256;
+pub const NUX_SCREEN_MAX_OPERATION_PAYLOAD_BYTE_LENGTH: u64 = 4_194_304;
+pub const NUX_SCREEN_MAX_POINTER_COUNT: u64 = 32;
 
 const NO_VALUE_ROOT: u32 = u32::MAX;
-const NUX_FLOW_MAX_HOST_COMMANDS_PER_CYCLE: usize = 256;
+const NUX_SCREEN_MAX_HOST_COMMANDS_PER_CYCLE: usize = 256;
 
 /// Stable-width selected-player kind.
-pub type NuxFlowPlayerKind = u32;
+pub type NuxScreenPlayerKind = u32;
 
-pub const NUX_FLOW_PLAYER_KIND_STATE_MACHINE: NuxFlowPlayerKind = 1;
-pub const NUX_FLOW_PLAYER_KIND_LINEAR_ANIMATION: NuxFlowPlayerKind = 2;
-pub const NUX_FLOW_PLAYER_KIND_STATIC: NuxFlowPlayerKind = 3;
+pub const NUX_SCREEN_PLAYER_KIND_STATE_MACHINE: NuxScreenPlayerKind = 1;
+pub const NUX_SCREEN_PLAYER_KIND_LINEAR_ANIMATION: NuxScreenPlayerKind = 2;
+pub const NUX_SCREEN_PLAYER_KIND_STATIC: NuxScreenPlayerKind = 3;
 
 /// Stable-width explicit player-selector kind. `DEFAULT` mirrors C++
 /// `defaultScene`; the named variants mirror the two independent named lookup
 /// operations on `ArtboardInstance`.
-pub type NuxFlowPlayerSelectorKind = u32;
+pub type NuxScreenPlayerSelectorKind = u32;
 
-pub const NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT: NuxFlowPlayerSelectorKind = 0;
-pub const NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE: NuxFlowPlayerSelectorKind = 1;
-pub const NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION: NuxFlowPlayerSelectorKind = 2;
+pub const NUX_SCREEN_PLAYER_SELECTOR_KIND_DEFAULT: NuxScreenPlayerSelectorKind = 0;
+pub const NUX_SCREEN_PLAYER_SELECTOR_KIND_STATE_MACHINE: NuxScreenPlayerSelectorKind = 1;
+pub const NUX_SCREEN_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION: NuxScreenPlayerSelectorKind = 2;
 
 /// Stable-width branch used by deterministic player selection.
-pub type NuxFlowPlayerSelection = u32;
+pub type NuxScreenPlayerSelection = u32;
 
-pub const NUX_FLOW_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE: NuxFlowPlayerSelection = 1;
-pub const NUX_FLOW_PLAYER_SELECTION_AUTHORED_DEFAULT_STATE_MACHINE: NuxFlowPlayerSelection = 2;
-pub const NUX_FLOW_PLAYER_SELECTION_FIRST_STATE_MACHINE: NuxFlowPlayerSelection = 3;
-pub const NUX_FLOW_PLAYER_SELECTION_FIRST_ANIMATION: NuxFlowPlayerSelection = 4;
-pub const NUX_FLOW_PLAYER_SELECTION_STATIC: NuxFlowPlayerSelection = 5;
-pub const NUX_FLOW_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION: NuxFlowPlayerSelection = 6;
+pub const NUX_SCREEN_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE: NuxScreenPlayerSelection = 1;
+pub const NUX_SCREEN_PLAYER_SELECTION_AUTHORED_DEFAULT_STATE_MACHINE: NuxScreenPlayerSelection = 2;
+pub const NUX_SCREEN_PLAYER_SELECTION_FIRST_STATE_MACHINE: NuxScreenPlayerSelection = 3;
+pub const NUX_SCREEN_PLAYER_SELECTION_FIRST_ANIMATION: NuxScreenPlayerSelection = 4;
+pub const NUX_SCREEN_PLAYER_SELECTION_STATIC: NuxScreenPlayerSelection = 5;
+pub const NUX_SCREEN_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION: NuxScreenPlayerSelection = 6;
 
 /// Stable-width state-machine input kind returned by a player-input query.
-pub type NuxFlowPlayerInputKind = u32;
+pub type NuxScreenPlayerInputKind = u32;
 
-pub const NUX_FLOW_PLAYER_INPUT_KIND_BOOL: NuxFlowPlayerInputKind = 1;
-pub const NUX_FLOW_PLAYER_INPUT_KIND_NUMBER: NuxFlowPlayerInputKind = 2;
-pub const NUX_FLOW_PLAYER_INPUT_KIND_TRIGGER: NuxFlowPlayerInputKind = 3;
+pub const NUX_SCREEN_PLAYER_INPUT_KIND_BOOL: NuxScreenPlayerInputKind = 1;
+pub const NUX_SCREEN_PLAYER_INPUT_KIND_NUMBER: NuxScreenPlayerInputKind = 2;
+pub const NUX_SCREEN_PLAYER_INPUT_KIND_TRIGGER: NuxScreenPlayerInputKind = 3;
 
 /// Stable-width generic session-operation kind.
-pub type NuxFlowSessionOperationKind = u32;
+pub type NuxScreenSessionOperationKind = u32;
 
-pub const NUX_FLOW_SESSION_OPERATION_KIND_STATE_BATCH: NuxFlowSessionOperationKind = 1;
-pub const NUX_FLOW_SESSION_OPERATION_KIND_POINTER_BATCH: NuxFlowSessionOperationKind = 2;
-pub const NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE: NuxFlowSessionOperationKind = 3;
-pub const NUX_FLOW_SESSION_OPERATION_KIND_QUERY: NuxFlowSessionOperationKind = 4;
-pub const NUX_FLOW_SESSION_OPERATION_KIND_TEXT_RUN_BATCH: NuxFlowSessionOperationKind = 5;
+pub const NUX_SCREEN_SESSION_OPERATION_KIND_STATE_BATCH: NuxScreenSessionOperationKind = 1;
+pub const NUX_SCREEN_SESSION_OPERATION_KIND_POINTER_BATCH: NuxScreenSessionOperationKind = 2;
+pub const NUX_SCREEN_SESSION_OPERATION_KIND_ADVANCE: NuxScreenSessionOperationKind = 3;
+pub const NUX_SCREEN_SESSION_OPERATION_KIND_QUERY: NuxScreenSessionOperationKind = 4;
+pub const NUX_SCREEN_SESSION_OPERATION_KIND_TEXT_RUN_BATCH: NuxScreenSessionOperationKind = 5;
 
 /// Stable-width canonical-state mutation kind.
-pub type NuxFlowStateMutationKind = u32;
+pub type NuxScreenStateMutationKind = u32;
 
-pub const NUX_FLOW_STATE_MUTATION_KIND_SET: NuxFlowStateMutationKind = 1;
-pub const NUX_FLOW_STATE_MUTATION_KIND_TRIGGER: NuxFlowStateMutationKind = 2;
-pub const NUX_FLOW_STATE_MUTATION_KIND_LIST_INSERT: NuxFlowStateMutationKind = 3;
-pub const NUX_FLOW_STATE_MUTATION_KIND_LIST_REMOVE: NuxFlowStateMutationKind = 4;
-pub const NUX_FLOW_STATE_MUTATION_KIND_LIST_SWAP: NuxFlowStateMutationKind = 5;
-pub const NUX_FLOW_STATE_MUTATION_KIND_LIST_MOVE: NuxFlowStateMutationKind = 6;
-pub const NUX_FLOW_STATE_MUTATION_KIND_LIST_SET: NuxFlowStateMutationKind = 7;
-pub const NUX_FLOW_STATE_MUTATION_KIND_LIST_CLEAR: NuxFlowStateMutationKind = 8;
-pub const NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_BOOL: NuxFlowStateMutationKind = 9;
-pub const NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_NUMBER: NuxFlowStateMutationKind = 10;
-pub const NUX_FLOW_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER: NuxFlowStateMutationKind = 11;
-pub const NUX_FLOW_STATE_MUTATION_KIND_SET_VIEW_MODEL: NuxFlowStateMutationKind = 12;
+pub const NUX_SCREEN_STATE_MUTATION_KIND_SET: NuxScreenStateMutationKind = 1;
+pub const NUX_SCREEN_STATE_MUTATION_KIND_TRIGGER: NuxScreenStateMutationKind = 2;
+pub const NUX_SCREEN_STATE_MUTATION_KIND_LIST_INSERT: NuxScreenStateMutationKind = 3;
+pub const NUX_SCREEN_STATE_MUTATION_KIND_LIST_REMOVE: NuxScreenStateMutationKind = 4;
+pub const NUX_SCREEN_STATE_MUTATION_KIND_LIST_SWAP: NuxScreenStateMutationKind = 5;
+pub const NUX_SCREEN_STATE_MUTATION_KIND_LIST_MOVE: NuxScreenStateMutationKind = 6;
+pub const NUX_SCREEN_STATE_MUTATION_KIND_LIST_SET: NuxScreenStateMutationKind = 7;
+pub const NUX_SCREEN_STATE_MUTATION_KIND_LIST_CLEAR: NuxScreenStateMutationKind = 8;
+pub const NUX_SCREEN_STATE_MUTATION_KIND_SET_INPUT_BOOL: NuxScreenStateMutationKind = 9;
+pub const NUX_SCREEN_STATE_MUTATION_KIND_SET_INPUT_NUMBER: NuxScreenStateMutationKind = 10;
+pub const NUX_SCREEN_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER: NuxScreenStateMutationKind = 11;
+pub const NUX_SCREEN_STATE_MUTATION_KIND_SET_VIEW_MODEL: NuxScreenStateMutationKind = 12;
 
 /// Stable-width instance reference used by state mutations.
-pub type NuxFlowInstanceReferenceKind = u32;
+pub type NuxScreenInstanceReferenceKind = u32;
 
-pub const NUX_FLOW_INSTANCE_REFERENCE_KIND_EXISTING: NuxFlowInstanceReferenceKind = 1;
-pub const NUX_FLOW_INSTANCE_REFERENCE_KIND_NEW: NuxFlowInstanceReferenceKind = 2;
+pub const NUX_SCREEN_INSTANCE_REFERENCE_KIND_EXISTING: NuxScreenInstanceReferenceKind = 1;
+pub const NUX_SCREEN_INSTANCE_REFERENCE_KIND_NEW: NuxScreenInstanceReferenceKind = 2;
 
 /// Stable-width pointer command. Coordinates are already inverse-mapped into
 /// artboard space and are never clamped by the runtime.
-pub type NuxFlowPointerEventKind = u32;
+pub type NuxScreenPointerEventKind = u32;
 
-pub const NUX_FLOW_POINTER_EVENT_KIND_DOWN: NuxFlowPointerEventKind = 1;
-pub const NUX_FLOW_POINTER_EVENT_KIND_MOVE: NuxFlowPointerEventKind = 2;
-pub const NUX_FLOW_POINTER_EVENT_KIND_UP: NuxFlowPointerEventKind = 3;
-pub const NUX_FLOW_POINTER_EVENT_KIND_CANCEL: NuxFlowPointerEventKind = 4;
-pub const NUX_FLOW_POINTER_EVENT_KIND_EXIT: NuxFlowPointerEventKind = 5;
+pub const NUX_SCREEN_POINTER_EVENT_KIND_DOWN: NuxScreenPointerEventKind = 1;
+pub const NUX_SCREEN_POINTER_EVENT_KIND_MOVE: NuxScreenPointerEventKind = 2;
+pub const NUX_SCREEN_POINTER_EVENT_KIND_UP: NuxScreenPointerEventKind = 3;
+pub const NUX_SCREEN_POINTER_EVENT_KIND_CANCEL: NuxScreenPointerEventKind = 4;
+pub const NUX_SCREEN_POINTER_EVENT_KIND_EXIT: NuxScreenPointerEventKind = 5;
 
 /// Stable-width query kind. Query results populate the result's borrowed
 /// bootstrap, value, catalog, and player-input views; queries do not emit
 /// ordered output records.
-pub type NuxFlowQueryKind = u32;
+pub type NuxScreenQueryKind = u32;
 
-pub const NUX_FLOW_QUERY_KIND_BOOTSTRAP: NuxFlowQueryKind = 1;
-pub const NUX_FLOW_QUERY_KIND_VALUES: NuxFlowQueryKind = 2;
-pub const NUX_FLOW_QUERY_KIND_CATALOG: NuxFlowQueryKind = 3;
-pub const NUX_FLOW_QUERY_KIND_PLAYER_INPUTS: NuxFlowQueryKind = 4;
+pub const NUX_SCREEN_QUERY_KIND_BOOTSTRAP: NuxScreenQueryKind = 1;
+pub const NUX_SCREEN_QUERY_KIND_VALUES: NuxScreenQueryKind = 2;
+pub const NUX_SCREEN_QUERY_KIND_CATALOG: NuxScreenQueryKind = 3;
+pub const NUX_SCREEN_QUERY_KIND_PLAYER_INPUTS: NuxScreenQueryKind = 4;
 
 /// Stable-width recursive value kind.
-pub type NuxFlowValueKind = u32;
+pub type NuxScreenValueKind = u32;
 
-pub const NUX_FLOW_VALUE_KIND_NULL: NuxFlowValueKind = 0;
-pub const NUX_FLOW_VALUE_KIND_STRING: NuxFlowValueKind = 1;
-pub const NUX_FLOW_VALUE_KIND_NUMBER: NuxFlowValueKind = 2;
-pub const NUX_FLOW_VALUE_KIND_BOOL: NuxFlowValueKind = 3;
-pub const NUX_FLOW_VALUE_KIND_ENUM: NuxFlowValueKind = 4;
-pub const NUX_FLOW_VALUE_KIND_COLOR: NuxFlowValueKind = 5;
-pub const NUX_FLOW_VALUE_KIND_IMAGE: NuxFlowValueKind = 6;
-pub const NUX_FLOW_VALUE_KIND_OBJECT: NuxFlowValueKind = 7;
-pub const NUX_FLOW_VALUE_KIND_VIEW_MODEL: NuxFlowValueKind = 8;
-pub const NUX_FLOW_VALUE_KIND_LIST: NuxFlowValueKind = 9;
-pub const NUX_FLOW_VALUE_KIND_LIST_INDEX: NuxFlowValueKind = 10;
+pub const NUX_SCREEN_VALUE_KIND_NULL: NuxScreenValueKind = 0;
+pub const NUX_SCREEN_VALUE_KIND_STRING: NuxScreenValueKind = 1;
+pub const NUX_SCREEN_VALUE_KIND_NUMBER: NuxScreenValueKind = 2;
+pub const NUX_SCREEN_VALUE_KIND_BOOL: NuxScreenValueKind = 3;
+pub const NUX_SCREEN_VALUE_KIND_ENUM: NuxScreenValueKind = 4;
+pub const NUX_SCREEN_VALUE_KIND_COLOR: NuxScreenValueKind = 5;
+pub const NUX_SCREEN_VALUE_KIND_IMAGE: NuxScreenValueKind = 6;
+pub const NUX_SCREEN_VALUE_KIND_OBJECT: NuxScreenValueKind = 7;
+pub const NUX_SCREEN_VALUE_KIND_VIEW_MODEL: NuxScreenValueKind = 8;
+pub const NUX_SCREEN_VALUE_KIND_LIST: NuxScreenValueKind = 9;
+pub const NUX_SCREEN_VALUE_KIND_LIST_INDEX: NuxScreenValueKind = 10;
 
 /// Stable-width observable output phase. Phases are monotonic inside one
 /// cycle, and may restart when a pointer batch starts another immediate cycle.
-pub type NuxFlowOutputPhase = u32;
+pub type NuxScreenOutputPhase = u32;
 
 /// Reserved for the runtime's ordering contract; current Rive event delays are
 /// overshoot metadata and do not schedule callbacks into this phase.
-pub const NUX_FLOW_OUTPUT_PHASE_DELAYED_EVENT_CALLBACKS: NuxFlowOutputPhase = 0;
-pub const NUX_FLOW_OUTPUT_PHASE_REPORTED_EVENTS: NuxFlowOutputPhase = 1;
-pub const NUX_FLOW_OUTPUT_PHASE_RUNTIME_ADVANCE: NuxFlowOutputPhase = 2;
-pub const NUX_FLOW_OUTPUT_PHASE_VIEW_MODEL_CHANGES: NuxFlowOutputPhase = 3;
-pub const NUX_FLOW_OUTPUT_PHASE_HOST_WORK: NuxFlowOutputPhase = 4;
-pub const NUX_FLOW_OUTPUT_PHASE_RENDER: NuxFlowOutputPhase = 5;
+pub const NUX_SCREEN_OUTPUT_PHASE_DELAYED_EVENT_CALLBACKS: NuxScreenOutputPhase = 0;
+pub const NUX_SCREEN_OUTPUT_PHASE_REPORTED_EVENTS: NuxScreenOutputPhase = 1;
+pub const NUX_SCREEN_OUTPUT_PHASE_RUNTIME_ADVANCE: NuxScreenOutputPhase = 2;
+pub const NUX_SCREEN_OUTPUT_PHASE_VIEW_MODEL_CHANGES: NuxScreenOutputPhase = 3;
+pub const NUX_SCREEN_OUTPUT_PHASE_HOST_WORK: NuxScreenOutputPhase = 4;
+pub const NUX_SCREEN_OUTPUT_PHASE_RENDER: NuxScreenOutputPhase = 5;
 
 /// Stable-width output payload family.
-pub type NuxFlowOutputKind = u32;
+pub type NuxScreenOutputKind = u32;
 
-pub const NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT: NuxFlowOutputKind = 2;
-pub const NUX_FLOW_OUTPUT_KIND_STATE_CHANGE: NuxFlowOutputKind = 3;
-pub const NUX_FLOW_OUTPUT_KIND_VIEW_MODEL_CHANGE: NuxFlowOutputKind = 4;
-pub const NUX_FLOW_OUTPUT_KIND_HOST_COMMAND: NuxFlowOutputKind = 5;
-pub const NUX_FLOW_OUTPUT_KIND_RENDER_REQUEST: NuxFlowOutputKind = 6;
-pub const NUX_FLOW_OUTPUT_KIND_RUNTIME_ADVANCED: NuxFlowOutputKind = 9;
+pub const NUX_SCREEN_OUTPUT_KIND_REPORTED_EVENT: NuxScreenOutputKind = 2;
+pub const NUX_SCREEN_OUTPUT_KIND_STATE_CHANGE: NuxScreenOutputKind = 3;
+pub const NUX_SCREEN_OUTPUT_KIND_VIEW_MODEL_CHANGE: NuxScreenOutputKind = 4;
+pub const NUX_SCREEN_OUTPUT_KIND_HOST_COMMAND: NuxScreenOutputKind = 5;
+pub const NUX_SCREEN_OUTPUT_KIND_RENDER_REQUEST: NuxScreenOutputKind = 6;
+pub const NUX_SCREEN_OUTPUT_KIND_RUNTIME_ADVANCED: NuxScreenOutputKind = 9;
 
 /// Stable-width schema property kind. Values intentionally share the recursive
 /// value-kind vocabulary where the property is directly representable.
-pub type NuxFlowSchemaPropertyKind = u32;
+pub type NuxScreenSchemaPropertyKind = u32;
 
-pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_STRING: NuxFlowSchemaPropertyKind = 1;
-pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_NUMBER: NuxFlowSchemaPropertyKind = 2;
-pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_BOOL: NuxFlowSchemaPropertyKind = 3;
-pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_TRIGGER: NuxFlowSchemaPropertyKind = 4;
-pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_ENUM: NuxFlowSchemaPropertyKind = 5;
-pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_COLOR: NuxFlowSchemaPropertyKind = 6;
-pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_IMAGE: NuxFlowSchemaPropertyKind = 7;
-pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_VIEW_MODEL: NuxFlowSchemaPropertyKind = 8;
-pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST: NuxFlowSchemaPropertyKind = 9;
-pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_OBJECT: NuxFlowSchemaPropertyKind = 10;
-pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_NULL: NuxFlowSchemaPropertyKind = 11;
-pub const NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST_INDEX: NuxFlowSchemaPropertyKind = 12;
+pub const NUX_SCREEN_SCHEMA_PROPERTY_KIND_STRING: NuxScreenSchemaPropertyKind = 1;
+pub const NUX_SCREEN_SCHEMA_PROPERTY_KIND_NUMBER: NuxScreenSchemaPropertyKind = 2;
+pub const NUX_SCREEN_SCHEMA_PROPERTY_KIND_BOOL: NuxScreenSchemaPropertyKind = 3;
+pub const NUX_SCREEN_SCHEMA_PROPERTY_KIND_TRIGGER: NuxScreenSchemaPropertyKind = 4;
+pub const NUX_SCREEN_SCHEMA_PROPERTY_KIND_ENUM: NuxScreenSchemaPropertyKind = 5;
+pub const NUX_SCREEN_SCHEMA_PROPERTY_KIND_COLOR: NuxScreenSchemaPropertyKind = 6;
+pub const NUX_SCREEN_SCHEMA_PROPERTY_KIND_IMAGE: NuxScreenSchemaPropertyKind = 7;
+pub const NUX_SCREEN_SCHEMA_PROPERTY_KIND_VIEW_MODEL: NuxScreenSchemaPropertyKind = 8;
+pub const NUX_SCREEN_SCHEMA_PROPERTY_KIND_LIST: NuxScreenSchemaPropertyKind = 9;
+pub const NUX_SCREEN_SCHEMA_PROPERTY_KIND_OBJECT: NuxScreenSchemaPropertyKind = 10;
+pub const NUX_SCREEN_SCHEMA_PROPERTY_KIND_NULL: NuxScreenSchemaPropertyKind = 11;
+pub const NUX_SCREEN_SCHEMA_PROPERTY_KIND_LIST_INDEX: NuxScreenSchemaPropertyKind = 12;
 
 /// Configured-session descriptor for the bound runtime. `player_kind` selects
 /// the default scene, a named state machine, or a named linear animation
 /// without cross-kind fallback.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowConfiguredSessionDescriptor {
+pub struct NuxScreenConfiguredSessionDescriptor {
     pub struct_size: u32,
-    pub player_kind: NuxFlowPlayerSelectorKind,
+    pub player_kind: NuxScreenPlayerSelectorKind,
     pub artboard_name: NuxByteView,
     pub player_name: NuxByteView,
 }
@@ -186,9 +186,9 @@ pub struct NuxFlowConfiguredSessionDescriptor {
 /// the same result. Composite children occupy `first_edge..edge_count`.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowValueNode {
+pub struct NuxScreenValueNode {
     pub struct_size: u32,
-    pub kind: NuxFlowValueKind,
+    pub kind: NuxScreenValueKind,
     pub number_value: f64,
     pub color_value: u32,
     /// Canonical false/true values are exactly 0 and 1.
@@ -207,7 +207,7 @@ pub struct NuxFlowValueNode {
 /// edges require a nonempty UTF-8 key; list edges require an empty key.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowValueEdge {
+pub struct NuxScreenValueEdge {
     pub struct_size: u32,
     pub node_index: u32,
     pub key: NuxByteView,
@@ -216,7 +216,7 @@ pub struct NuxFlowValueEdge {
 /// One root binding from a stable external instance to a value-arena node.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowValueRootView {
+pub struct NuxScreenValueRootView {
     pub struct_size: u32,
     pub value_root_index: u32,
     pub instance_id: u64,
@@ -224,11 +224,11 @@ pub struct NuxFlowValueRootView {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowValueArena {
+pub struct NuxScreenValueArena {
     pub struct_size: u32,
-    pub nodes: *const NuxFlowValueNode,
+    pub nodes: *const NuxScreenValueNode,
     pub node_count: u64,
-    pub edges: *const NuxFlowValueEdge,
+    pub edges: *const NuxScreenValueEdge,
     pub edge_count: u64,
 }
 
@@ -237,7 +237,7 @@ pub struct NuxFlowValueArena {
 /// and is resolved to a stable runtime ID only if the entire batch commits.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowNewInstance {
+pub struct NuxScreenNewInstance {
     pub struct_size: u32,
     pub local_id: u32,
     pub schema_name: NuxByteView,
@@ -247,8 +247,8 @@ pub struct NuxFlowNewInstance {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowInstanceReference {
-    pub kind: NuxFlowInstanceReferenceKind,
+pub struct NuxScreenInstanceReference {
+    pub kind: NuxScreenInstanceReferenceKind,
     pub local_id: u32,
     pub instance_id: u64,
 }
@@ -260,12 +260,12 @@ pub struct NuxFlowInstanceReference {
 /// `input_name` and require `instance`, `item`, and `path` to be zero/absent.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowStateMutation {
+pub struct NuxScreenStateMutation {
     pub struct_size: u32,
-    pub kind: NuxFlowStateMutationKind,
-    pub instance: NuxFlowInstanceReference,
+    pub kind: NuxScreenStateMutationKind,
+    pub instance: NuxScreenInstanceReference,
     /// Used by list insert/set and view-model replacement; zeroed otherwise.
-    pub item: NuxFlowInstanceReference,
+    pub item: NuxScreenInstanceReference,
     pub path: NuxByteView,
     pub input_name: NuxByteView,
     pub value_root_index: u32,
@@ -277,15 +277,15 @@ pub struct NuxFlowStateMutation {
 /// batch, including sequential list effects, before applying any mutation.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowStateBatch {
+pub struct NuxScreenStateBatch {
     pub struct_size: u32,
     /// Canonical 0/1 presence flag for `host_mutation_id`.
     pub has_host_mutation_id: u32,
     pub host_mutation_id: u64,
-    pub value_arena: *const NuxFlowValueArena,
-    pub new_instances: *const NuxFlowNewInstance,
+    pub value_arena: *const NuxScreenValueArena,
+    pub new_instances: *const NuxScreenNewInstance,
     pub new_instance_count: u64,
-    pub mutations: *const NuxFlowStateMutation,
+    pub mutations: *const NuxScreenStateMutation,
     pub mutation_count: u64,
 }
 
@@ -293,7 +293,7 @@ pub struct NuxFlowStateBatch {
 /// artboard. Array elements require the exact published size.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowTextRunMutation {
+pub struct NuxScreenTextRunMutation {
     pub struct_size: u32,
     pub name: NuxByteView,
     pub text: NuxByteView,
@@ -302,17 +302,17 @@ pub struct NuxFlowTextRunMutation {
 /// One all-or-nothing root-artboard text-run batch.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowTextRunBatch {
+pub struct NuxScreenTextRunBatch {
     pub struct_size: u32,
-    pub mutations: *const NuxFlowTextRunMutation,
+    pub mutations: *const NuxScreenTextRunMutation,
     pub mutation_count: u64,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowPointerEvent {
+pub struct NuxScreenPointerEvent {
     pub struct_size: u32,
-    pub kind: NuxFlowPointerEventKind,
+    pub kind: NuxScreenPointerEventKind,
     /// Positive session-scoped pointer identity, passed losslessly to runtime.
     pub pointer_id: i32,
     pub x: f32,
@@ -323,9 +323,9 @@ pub struct NuxFlowPointerEvent {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowPointerBatch {
+pub struct NuxScreenPointerBatch {
     pub struct_size: u32,
-    pub events: *const NuxFlowPointerEvent,
+    pub events: *const NuxScreenPointerEvent,
     pub event_count: u64,
 }
 
@@ -335,7 +335,7 @@ pub struct NuxFlowPointerBatch {
 /// contract.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowAdvanceOperation {
+pub struct NuxScreenAdvanceOperation {
     pub struct_size: u32,
     pub timestamp_seconds: f64,
     pub delta_seconds: f32,
@@ -348,16 +348,16 @@ pub struct NuxFlowAdvanceOperation {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowQuery {
+pub struct NuxScreenQuery {
     pub struct_size: u32,
-    pub kind: NuxFlowQueryKind,
+    pub kind: NuxScreenQueryKind,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowQueryBatch {
+pub struct NuxScreenQueryBatch {
     pub struct_size: u32,
-    pub queries: *const NuxFlowQuery,
+    pub queries: *const NuxScreenQuery,
     pub query_count: u64,
 }
 
@@ -365,23 +365,23 @@ pub struct NuxFlowQueryBatch {
 /// selected by `kind` must be non-null and the other payload pointers null.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowSessionOperation {
+pub struct NuxScreenSessionOperation {
     pub struct_size: u32,
-    pub kind: NuxFlowSessionOperationKind,
-    pub state_batch: *const NuxFlowStateBatch,
-    pub pointer_batch: *const NuxFlowPointerBatch,
-    pub advance: *const NuxFlowAdvanceOperation,
-    pub query_batch: *const NuxFlowQueryBatch,
-    pub text_run_batch: *const NuxFlowTextRunBatch,
+    pub kind: NuxScreenSessionOperationKind,
+    pub state_batch: *const NuxScreenStateBatch,
+    pub pointer_batch: *const NuxScreenPointerBatch,
+    pub advance: *const NuxScreenAdvanceOperation,
+    pub query_batch: *const NuxScreenQueryBatch,
+    pub text_run_batch: *const NuxScreenTextRunBatch,
 }
 
 /// Borrowed selected-player metadata owned by a session result.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowPlayerMetadataView {
+pub struct NuxScreenPlayerMetadataView {
     pub struct_size: u32,
-    pub kind: NuxFlowPlayerKind,
-    pub selection: NuxFlowPlayerSelection,
+    pub kind: NuxScreenPlayerKind,
+    pub selection: NuxScreenPlayerSelection,
     /// Authored player index, or `UINT32_MAX` for a static artboard.
     pub player_index: u32,
     pub artboard_name: NuxByteView,
@@ -396,9 +396,9 @@ pub struct NuxFlowPlayerMetadataView {
 /// authored input. The value root is owned by the same session result.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowPlayerInputView {
+pub struct NuxScreenPlayerInputView {
     pub struct_size: u32,
-    pub kind: NuxFlowPlayerInputKind,
+    pub kind: NuxScreenPlayerInputKind,
     pub value_root_index: u32,
     pub name: NuxByteView,
 }
@@ -406,7 +406,7 @@ pub struct NuxFlowPlayerInputView {
 /// Borrowed view-model schema record owned by a session result.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowSchemaView {
+pub struct NuxScreenSchemaView {
     pub struct_size: u32,
     pub first_property: u32,
     pub property_count: u32,
@@ -417,9 +417,9 @@ pub struct NuxFlowSchemaView {
 /// Borrowed schema-property record owned by a session result.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowSchemaPropertyView {
+pub struct NuxScreenSchemaPropertyView {
     pub struct_size: u32,
-    pub kind: NuxFlowSchemaPropertyKind,
+    pub kind: NuxScreenSchemaPropertyKind,
     pub schema_id: NuxByteView,
     pub property_id: NuxByteView,
     pub name: NuxByteView,
@@ -433,7 +433,7 @@ pub struct NuxFlowSchemaPropertyView {
 /// One authored enum label. `value` is its stable numeric enum identity.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowEnumLabelView {
+pub struct NuxScreenEnumLabelView {
     pub struct_size: u32,
     pub value: u32,
     pub label: NuxByteView,
@@ -443,7 +443,7 @@ pub struct NuxFlowEnumLabelView {
 /// recipes and are not addressable live instances.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowInstanceTemplateView {
+pub struct NuxScreenInstanceTemplateView {
     pub struct_size: u32,
     pub authored_index: u32,
     pub schema_id: NuxByteView,
@@ -453,7 +453,7 @@ pub struct NuxFlowInstanceTemplateView {
 /// Borrowed stable external instance record owned by a session result.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowInstanceView {
+pub struct NuxScreenInstanceView {
     pub struct_size: u32,
     pub value_root_index: u32,
     pub is_root: u32,
@@ -465,7 +465,7 @@ pub struct NuxFlowInstanceView {
 /// Mapping returned after an atomic batch commits host-created instances.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowCreatedInstanceView {
+pub struct NuxScreenCreatedInstanceView {
     pub struct_size: u32,
     pub local_id: u32,
     pub instance_id: u64,
@@ -477,10 +477,10 @@ pub struct NuxFlowCreatedInstanceView {
 /// opaque `payload` byte view empty.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowOutputView {
+pub struct NuxScreenOutputView {
     pub struct_size: u32,
-    pub phase: NuxFlowOutputPhase,
-    pub kind: NuxFlowOutputKind,
+    pub phase: NuxScreenOutputPhase,
+    pub kind: NuxScreenOutputKind,
     pub payload_root_index: u32,
     /// Canonical 0/1 presence flag for `origin_mutation_id`.
     pub has_origin_mutation_id: u32,
@@ -509,7 +509,7 @@ pub struct NuxFlowOutputView {
 /// Borrowed typed property of a reported event.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowEventPropertyView {
+pub struct NuxScreenEventPropertyView {
     pub struct_size: u32,
     pub value_root_index: u32,
     /// Canonical 0/1 presence flag for `trigger_count`.
@@ -521,13 +521,13 @@ pub struct NuxFlowEventPropertyView {
 
 /// Opaque owned session result. Every borrowed view returned by an accessor
 /// remains valid until this handle is freed.
-pub struct NuxFlowSessionResult {
+pub struct NuxScreenSessionResult {
     _private: [u8; 0],
 }
 
 #[derive(Debug, Clone, PartialEq)]
 struct OwnedValueNode {
-    kind: NuxFlowValueKind,
+    kind: NuxScreenValueKind,
     number_value: f64,
     color_value: u32,
     bool_value: bool,
@@ -578,7 +578,7 @@ enum OwnedInstanceReference {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct OwnedStateMutation {
-    kind: NuxFlowStateMutationKind,
+    kind: NuxScreenStateMutationKind,
     instance: Option<OwnedInstanceReference>,
     item: Option<OwnedInstanceReference>,
     path: Option<Vec<u8>>,
@@ -604,7 +604,7 @@ struct OwnedTextRunMutation {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct OwnedPointerEvent {
-    kind: NuxFlowPointerEventKind,
+    kind: NuxScreenPointerEventKind,
     pointer_id: i32,
     x: f32,
     y: f32,
@@ -613,7 +613,7 @@ struct OwnedPointerEvent {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct OwnedQuery {
-    kind: NuxFlowQueryKind,
+    kind: NuxScreenQueryKind,
 }
 
 #[derive(Debug)]
@@ -658,7 +658,7 @@ impl PayloadBudget {
             .bytes
             .checked_add(bytes)
             .ok_or(NuxStatus::InvalidArgument)?;
-        if self.bytes > NUX_FLOW_MAX_OPERATION_PAYLOAD_BYTE_LENGTH as usize {
+        if self.bytes > NUX_SCREEN_MAX_OPERATION_PAYLOAD_BYTE_LENGTH as usize {
             return Err(NuxStatus::InvalidArgument);
         }
         Ok(())
@@ -731,28 +731,28 @@ fn copy_optional_utf8(
 }
 
 unsafe fn copy_configured_session_descriptor(
-    descriptor: *const NuxFlowConfiguredSessionDescriptor,
+    descriptor: *const NuxScreenConfiguredSessionDescriptor,
 ) -> Result<OwnedConfiguredSessionDescriptor, NuxStatus> {
     if descriptor.is_null() {
         return Err(NuxStatus::NullArgument);
     }
     let struct_size = unsafe { read_struct_size(descriptor) };
-    if struct_size != size_u32::<NuxFlowConfiguredSessionDescriptor>() {
+    if struct_size != size_u32::<NuxScreenConfiguredSessionDescriptor>() {
         return Err(NuxStatus::InvalidArgument);
     }
     let descriptor = unsafe { descriptor.read() };
     if !matches!(
         descriptor.player_kind,
-        NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT
-            | NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE
-            | NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION
+        NUX_SCREEN_PLAYER_SELECTOR_KIND_DEFAULT
+            | NUX_SCREEN_PLAYER_SELECTOR_KIND_STATE_MACHINE
+            | NUX_SCREEN_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION
     ) {
         return Err(NuxStatus::InvalidArgument);
     }
     let mut budget = PayloadBudget::default();
     let artboard_name = copy_optional_utf8(
         descriptor.artboard_name,
-        NUX_FLOW_MAX_ID_BYTE_LENGTH,
+        NUX_SCREEN_MAX_ID_BYTE_LENGTH,
         &mut budget,
     )?
     .map(String::from_utf8)
@@ -760,18 +760,18 @@ unsafe fn copy_configured_session_descriptor(
     .map_err(|_| NuxStatus::InvalidArgument)?;
     let player_name = copy_optional_utf8(
         descriptor.player_name,
-        NUX_FLOW_MAX_ID_BYTE_LENGTH,
+        NUX_SCREEN_MAX_ID_BYTE_LENGTH,
         &mut budget,
     )?
     .map(String::from_utf8)
     .transpose()
     .map_err(|_| NuxStatus::InvalidArgument)?;
     let player = match (descriptor.player_kind, player_name) {
-        (NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT, None) => None,
-        (NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE, Some(name)) if !name.is_empty() => {
+        (NUX_SCREEN_PLAYER_SELECTOR_KIND_DEFAULT, None) => None,
+        (NUX_SCREEN_PLAYER_SELECTOR_KIND_STATE_MACHINE, Some(name)) if !name.is_empty() => {
             Some(OwnedPlayerSelector::StateMachine(name))
         }
-        (NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION, Some(name)) if !name.is_empty() => {
+        (NUX_SCREEN_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION, Some(name)) if !name.is_empty() => {
             Some(OwnedPlayerSelector::LinearAnimation(name))
         }
         _ => return Err(NuxStatus::InvalidArgument),
@@ -783,27 +783,38 @@ unsafe fn copy_configured_session_descriptor(
 }
 
 unsafe fn copy_value_arena(
-    arena: *const NuxFlowValueArena,
+    arena: *const NuxScreenValueArena,
     budget: &mut PayloadBudget,
 ) -> Result<OwnedValueArena, NuxStatus> {
     if arena.is_null() {
         return Ok(OwnedValueArena::default());
     }
-    if unsafe { read_struct_size(arena) } != size_u32::<NuxFlowValueArena>() {
+    if unsafe { read_struct_size(arena) } != size_u32::<NuxScreenValueArena>() {
         return Err(NuxStatus::InvalidArgument);
     }
     let arena = unsafe { arena.read() };
-    let raw_nodes =
-        unsafe { copy_array(arena.nodes, arena.node_count, NUX_FLOW_MAX_BATCH_ITEM_COUNT)? };
-    let raw_edges =
-        unsafe { copy_array(arena.edges, arena.edge_count, NUX_FLOW_MAX_VALUE_EDGE_COUNT)? };
+    let raw_nodes = unsafe {
+        copy_array(
+            arena.nodes,
+            arena.node_count,
+            NUX_SCREEN_MAX_BATCH_ITEM_COUNT,
+        )?
+    };
+    let raw_edges = unsafe {
+        copy_array(
+            arena.edges,
+            arena.edge_count,
+            NUX_SCREEN_MAX_VALUE_EDGE_COUNT,
+        )?
+    };
     let mut nodes = Vec::with_capacity(raw_nodes.len());
     for node in raw_nodes {
-        if node.struct_size != size_u32::<NuxFlowValueNode>() {
+        if node.struct_size != size_u32::<NuxScreenValueNode>() {
             return Err(NuxStatus::InvalidArgument);
         }
-        let string_value = copy_bytes(node.string_value, NUX_FLOW_MAX_STRING_BYTE_LENGTH, budget)?;
-        let schema_id = copy_bytes(node.schema_id, NUX_FLOW_MAX_ID_BYTE_LENGTH, budget)?;
+        let string_value =
+            copy_bytes(node.string_value, NUX_SCREEN_MAX_STRING_BYTE_LENGTH, budget)?;
+        let schema_id = copy_bytes(node.schema_id, NUX_SCREEN_MAX_ID_BYTE_LENGTH, budget)?;
         let instance_id = match node.has_instance_id {
             0 if node.instance_id == 0 => None,
             1 if node.instance_id != 0 => Some(node.instance_id),
@@ -824,14 +835,14 @@ unsafe fn copy_value_arena(
         let edge_end = first_edge
             .checked_add(edge_count)
             .ok_or(NuxStatus::InvalidArgument)?;
-        if edge_count > NUX_FLOW_MAX_LIST_ITEM_COUNT as usize || edge_end > raw_edges.len() {
+        if edge_count > NUX_SCREEN_MAX_LIST_ITEM_COUNT as usize || edge_end > raw_edges.len() {
             return Err(NuxStatus::InvalidArgument);
         }
         let has_edges = edge_count != 0;
         let has_canonical_edge_start = has_edges || node.first_edge == 0;
         let number_is_zero = node.number_value.to_bits() == 0;
         let fields_are_canonical = match node.kind {
-            NUX_FLOW_VALUE_KIND_NULL => {
+            NUX_SCREEN_VALUE_KIND_NULL => {
                 number_is_zero
                     && node.color_value == 0
                     && node.bool_value == 0
@@ -842,7 +853,7 @@ unsafe fn copy_value_arena(
                     && !has_edges
                     && has_canonical_edge_start
             }
-            NUX_FLOW_VALUE_KIND_STRING => {
+            NUX_SCREEN_VALUE_KIND_STRING => {
                 number_is_zero
                     && node.color_value == 0
                     && node.bool_value == 0
@@ -852,7 +863,7 @@ unsafe fn copy_value_arena(
                     && !has_edges
                     && has_canonical_edge_start
             }
-            NUX_FLOW_VALUE_KIND_NUMBER => {
+            NUX_SCREEN_VALUE_KIND_NUMBER => {
                 node.number_value.is_finite()
                     && node.number_value.abs() <= f64::from(f32::MAX)
                     && node.color_value == 0
@@ -864,7 +875,7 @@ unsafe fn copy_value_arena(
                     && !has_edges
                     && has_canonical_edge_start
             }
-            NUX_FLOW_VALUE_KIND_BOOL => {
+            NUX_SCREEN_VALUE_KIND_BOOL => {
                 number_is_zero
                     && node.color_value == 0
                     && node.identity_value == 0
@@ -874,7 +885,7 @@ unsafe fn copy_value_arena(
                     && !has_edges
                     && has_canonical_edge_start
             }
-            NUX_FLOW_VALUE_KIND_COLOR => {
+            NUX_SCREEN_VALUE_KIND_COLOR => {
                 number_is_zero
                     && node.bool_value == 0
                     && node.identity_value == 0
@@ -884,9 +895,9 @@ unsafe fn copy_value_arena(
                     && !has_edges
                     && has_canonical_edge_start
             }
-            NUX_FLOW_VALUE_KIND_ENUM
-            | NUX_FLOW_VALUE_KIND_IMAGE
-            | NUX_FLOW_VALUE_KIND_LIST_INDEX => {
+            NUX_SCREEN_VALUE_KIND_ENUM
+            | NUX_SCREEN_VALUE_KIND_IMAGE
+            | NUX_SCREEN_VALUE_KIND_LIST_INDEX => {
                 number_is_zero
                     && node.color_value == 0
                     && node.bool_value == 0
@@ -896,7 +907,7 @@ unsafe fn copy_value_arena(
                     && !has_edges
                     && has_canonical_edge_start
             }
-            NUX_FLOW_VALUE_KIND_OBJECT => {
+            NUX_SCREEN_VALUE_KIND_OBJECT => {
                 number_is_zero
                     && node.color_value == 0
                     && node.bool_value == 0
@@ -906,7 +917,7 @@ unsafe fn copy_value_arena(
                     && !schema_id.is_empty()
                     && has_canonical_edge_start
             }
-            NUX_FLOW_VALUE_KIND_VIEW_MODEL => {
+            NUX_SCREEN_VALUE_KIND_VIEW_MODEL => {
                 number_is_zero
                     && node.color_value == 0
                     && node.bool_value == 0
@@ -916,7 +927,7 @@ unsafe fn copy_value_arena(
                     && !schema_id.is_empty()
                     && has_canonical_edge_start
             }
-            NUX_FLOW_VALUE_KIND_LIST => {
+            NUX_SCREEN_VALUE_KIND_LIST => {
                 number_is_zero
                     && node.color_value == 0
                     && node.bool_value == 0
@@ -946,7 +957,7 @@ unsafe fn copy_value_arena(
     }
     let mut edges = Vec::with_capacity(raw_edges.len());
     for edge in raw_edges {
-        if edge.struct_size != size_u32::<NuxFlowValueEdge>() {
+        if edge.struct_size != size_u32::<NuxScreenValueEdge>() {
             return Err(NuxStatus::InvalidArgument);
         }
         let node_index =
@@ -954,7 +965,7 @@ unsafe fn copy_value_arena(
         if node_index >= nodes.len() {
             return Err(NuxStatus::InvalidArgument);
         }
-        let key = copy_bytes(edge.key, NUX_FLOW_MAX_PATH_BYTE_LENGTH, budget)?;
+        let key = copy_bytes(edge.key, NUX_SCREEN_MAX_PATH_BYTE_LENGTH, budget)?;
         if !key.is_empty() && std::str::from_utf8(&key).is_err() {
             return Err(NuxStatus::InvalidArgument);
         }
@@ -978,7 +989,7 @@ fn validate_value_graph(
             .ok_or(NuxStatus::InvalidArgument)?;
         let node_edges = edges.get(start..end).ok_or(NuxStatus::InvalidArgument)?;
         match node.kind {
-            NUX_FLOW_VALUE_KIND_OBJECT | NUX_FLOW_VALUE_KIND_VIEW_MODEL => {
+            NUX_SCREEN_VALUE_KIND_OBJECT | NUX_SCREEN_VALUE_KIND_VIEW_MODEL => {
                 let mut keys = HashSet::with_capacity(node_edges.len());
                 for edge in node_edges {
                     if edge.key.is_empty() || !keys.insert(edge.key.as_slice()) {
@@ -986,7 +997,7 @@ fn validate_value_graph(
                     }
                 }
             }
-            NUX_FLOW_VALUE_KIND_LIST => {
+            NUX_SCREEN_VALUE_KIND_LIST => {
                 if node_edges.iter().any(|edge| !edge.key.is_empty()) {
                     return Err(NuxStatus::InvalidArgument);
                 }
@@ -1011,7 +1022,7 @@ fn validate_value_height(
     states: &mut [u8],
     heights: &mut [u32],
 ) -> Result<u32, NuxStatus> {
-    if depth > NUX_FLOW_MAX_VALUE_DEPTH {
+    if depth > NUX_SCREEN_MAX_VALUE_DEPTH {
         return Err(NuxStatus::InvalidArgument);
     }
     match states
@@ -1051,7 +1062,7 @@ fn validate_value_height(
                 .checked_add(1)
                 .ok_or(NuxStatus::InvalidArgument)?,
         );
-        if height > NUX_FLOW_MAX_VALUE_DEPTH {
+        if height > NUX_SCREEN_MAX_VALUE_DEPTH {
             return Err(NuxStatus::InvalidArgument);
         }
     }
@@ -1064,11 +1075,13 @@ fn validate_value_height(
     Ok(height)
 }
 
-unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedStateBatch, NuxStatus> {
+unsafe fn copy_state_batch(
+    batch: *const NuxScreenStateBatch,
+) -> Result<OwnedStateBatch, NuxStatus> {
     if batch.is_null() {
         return Err(NuxStatus::NullArgument);
     }
-    if unsafe { read_struct_size(batch) } != size_u32::<NuxFlowStateBatch>() {
+    if unsafe { read_struct_size(batch) } != size_u32::<NuxScreenStateBatch>() {
         return Err(NuxStatus::InvalidArgument);
     }
     let batch = unsafe { batch.read() };
@@ -1083,20 +1096,20 @@ unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedState
         copy_array(
             batch.new_instances,
             batch.new_instance_count,
-            NUX_FLOW_MAX_INSTANCE_COUNT,
+            NUX_SCREEN_MAX_INSTANCE_COUNT,
         )?
     };
     let raw_mutations = unsafe {
         copy_array(
             batch.mutations,
             batch.mutation_count,
-            NUX_FLOW_MAX_BATCH_ITEM_COUNT,
+            NUX_SCREEN_MAX_BATCH_ITEM_COUNT,
         )?
     };
     if raw_instances
         .len()
         .checked_add(raw_mutations.len())
-        .is_none_or(|item_count| item_count > NUX_FLOW_MAX_BATCH_ITEM_COUNT as usize)
+        .is_none_or(|item_count| item_count > NUX_SCREEN_MAX_BATCH_ITEM_COUNT as usize)
     {
         return Err(NuxStatus::InvalidArgument);
     }
@@ -1106,7 +1119,7 @@ unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedState
     let mut new_instances = Vec::with_capacity(raw_instances.len());
     let mut local_ids = HashSet::with_capacity(raw_instances.len());
     for instance in raw_instances {
-        if instance.struct_size != size_u32::<NuxFlowNewInstance>() {
+        if instance.struct_size != size_u32::<NuxScreenNewInstance>() {
             return Err(NuxStatus::InvalidArgument);
         }
         if !local_ids.insert(instance.local_id) {
@@ -1114,12 +1127,12 @@ unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedState
         }
         let schema_name = copy_required_utf8(
             instance.schema_name,
-            NUX_FLOW_MAX_ID_BYTE_LENGTH,
+            NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             &mut budget,
         )?;
         let authored_instance_name = copy_optional_utf8(
             instance.authored_instance_name,
-            NUX_FLOW_MAX_ID_BYTE_LENGTH,
+            NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             &mut budget,
         )?;
         new_instances.push(OwnedNewInstance {
@@ -1130,18 +1143,18 @@ unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedState
     }
     let mut mutations = Vec::with_capacity(raw_mutations.len());
     for mutation in raw_mutations {
-        if mutation.struct_size != size_u32::<NuxFlowStateMutation>() {
+        if mutation.struct_size != size_u32::<NuxScreenStateMutation>() {
             return Err(NuxStatus::InvalidArgument);
         }
-        let path = copy_optional_utf8(mutation.path, NUX_FLOW_MAX_PATH_BYTE_LENGTH, &mut budget)?;
+        let path = copy_optional_utf8(mutation.path, NUX_SCREEN_MAX_PATH_BYTE_LENGTH, &mut budget)?;
         let input_name = copy_optional_utf8(
             mutation.input_name,
-            NUX_FLOW_MAX_ID_BYTE_LENGTH,
+            NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             &mut budget,
         )?;
         let value_root_index = optional_value_root(mutation.value_root_index, &value_arena)?;
         let (instance, item, valid_shape) = match mutation.kind {
-            NUX_FLOW_STATE_MUTATION_KIND_SET => (
+            NUX_SCREEN_STATE_MUTATION_KIND_SET => (
                 Some(copy_instance_reference(mutation.instance)?),
                 None,
                 value_root_index.is_some()
@@ -1151,7 +1164,7 @@ unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedState
                     && mutation.index == 0
                     && mutation.other_index == 0,
             ),
-            NUX_FLOW_STATE_MUTATION_KIND_TRIGGER => (
+            NUX_SCREEN_STATE_MUTATION_KIND_TRIGGER => (
                 Some(copy_instance_reference(mutation.instance)?),
                 None,
                 value_root_index.is_none()
@@ -1161,7 +1174,7 @@ unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedState
                     && mutation.index == 0
                     && mutation.other_index == 0,
             ),
-            NUX_FLOW_STATE_MUTATION_KIND_SET_VIEW_MODEL => (
+            NUX_SCREEN_STATE_MUTATION_KIND_SET_VIEW_MODEL => (
                 Some(copy_instance_reference(mutation.instance)?),
                 Some(copy_instance_reference(mutation.item)?),
                 value_root_index.is_none()
@@ -1170,7 +1183,8 @@ unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedState
                     && mutation.index == 0
                     && mutation.other_index == 0,
             ),
-            NUX_FLOW_STATE_MUTATION_KIND_LIST_INSERT | NUX_FLOW_STATE_MUTATION_KIND_LIST_SET => (
+            NUX_SCREEN_STATE_MUTATION_KIND_LIST_INSERT
+            | NUX_SCREEN_STATE_MUTATION_KIND_LIST_SET => (
                 Some(copy_instance_reference(mutation.instance)?),
                 Some(copy_instance_reference(mutation.item)?),
                 value_root_index.is_none()
@@ -1178,7 +1192,7 @@ unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedState
                     && input_name.is_none()
                     && mutation.other_index == 0,
             ),
-            NUX_FLOW_STATE_MUTATION_KIND_LIST_REMOVE => (
+            NUX_SCREEN_STATE_MUTATION_KIND_LIST_REMOVE => (
                 Some(copy_instance_reference(mutation.instance)?),
                 None,
                 value_root_index.is_none()
@@ -1187,15 +1201,17 @@ unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedState
                     && instance_reference_is_zero(mutation.item)
                     && mutation.other_index == 0,
             ),
-            NUX_FLOW_STATE_MUTATION_KIND_LIST_SWAP | NUX_FLOW_STATE_MUTATION_KIND_LIST_MOVE => (
-                Some(copy_instance_reference(mutation.instance)?),
-                None,
-                value_root_index.is_none()
-                    && path.is_some()
-                    && input_name.is_none()
-                    && instance_reference_is_zero(mutation.item),
-            ),
-            NUX_FLOW_STATE_MUTATION_KIND_LIST_CLEAR => (
+            NUX_SCREEN_STATE_MUTATION_KIND_LIST_SWAP | NUX_SCREEN_STATE_MUTATION_KIND_LIST_MOVE => {
+                (
+                    Some(copy_instance_reference(mutation.instance)?),
+                    None,
+                    value_root_index.is_none()
+                        && path.is_some()
+                        && input_name.is_none()
+                        && instance_reference_is_zero(mutation.item),
+                )
+            }
+            NUX_SCREEN_STATE_MUTATION_KIND_LIST_CLEAR => (
                 Some(copy_instance_reference(mutation.instance)?),
                 None,
                 value_root_index.is_none()
@@ -1205,10 +1221,10 @@ unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedState
                     && mutation.index == 0
                     && mutation.other_index == 0,
             ),
-            NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_BOOL => (
+            NUX_SCREEN_STATE_MUTATION_KIND_SET_INPUT_BOOL => (
                 None,
                 None,
-                value_root_has_kind(value_root_index, &value_arena, NUX_FLOW_VALUE_KIND_BOOL)
+                value_root_has_kind(value_root_index, &value_arena, NUX_SCREEN_VALUE_KIND_BOOL)
                     && input_name.is_some()
                     && path.is_none()
                     && instance_reference_is_zero(mutation.instance)
@@ -1216,10 +1232,10 @@ unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedState
                     && mutation.index == 0
                     && mutation.other_index == 0,
             ),
-            NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_NUMBER => (
+            NUX_SCREEN_STATE_MUTATION_KIND_SET_INPUT_NUMBER => (
                 None,
                 None,
-                value_root_has_kind(value_root_index, &value_arena, NUX_FLOW_VALUE_KIND_NUMBER)
+                value_root_has_kind(value_root_index, &value_arena, NUX_SCREEN_VALUE_KIND_NUMBER)
                     && input_name.is_some()
                     && path.is_none()
                     && instance_reference_is_zero(mutation.instance)
@@ -1227,7 +1243,7 @@ unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedState
                     && mutation.index == 0
                     && mutation.other_index == 0,
             ),
-            NUX_FLOW_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER => (
+            NUX_SCREEN_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER => (
                 None,
                 None,
                 value_root_index.is_none()
@@ -1270,20 +1286,20 @@ unsafe fn copy_state_batch(batch: *const NuxFlowStateBatch) -> Result<OwnedState
     })
 }
 
-fn instance_reference_is_zero(reference: NuxFlowInstanceReference) -> bool {
+fn instance_reference_is_zero(reference: NuxScreenInstanceReference) -> bool {
     reference.kind == 0 && reference.local_id == 0 && reference.instance_id == 0
 }
 
 fn copy_instance_reference(
-    reference: NuxFlowInstanceReference,
+    reference: NuxScreenInstanceReference,
 ) -> Result<OwnedInstanceReference, NuxStatus> {
     match reference.kind {
-        NUX_FLOW_INSTANCE_REFERENCE_KIND_EXISTING
+        NUX_SCREEN_INSTANCE_REFERENCE_KIND_EXISTING
             if reference.instance_id != 0 && reference.local_id == 0 =>
         {
             Ok(OwnedInstanceReference::Existing(reference.instance_id))
         }
-        NUX_FLOW_INSTANCE_REFERENCE_KIND_NEW if reference.instance_id == 0 => {
+        NUX_SCREEN_INSTANCE_REFERENCE_KIND_NEW if reference.instance_id == 0 => {
             Ok(OwnedInstanceReference::New(reference.local_id))
         }
         _ => Err(NuxStatus::InvalidArgument),
@@ -1304,7 +1320,7 @@ fn optional_value_root(root_index: u32, arena: &OwnedValueArena) -> Result<Optio
 fn value_root_has_kind(
     root_index: Option<u32>,
     arena: &OwnedValueArena,
-    expected_kind: NuxFlowValueKind,
+    expected_kind: NuxScreenValueKind,
 ) -> bool {
     root_index
         .and_then(|index| arena.nodes.get(index as usize))
@@ -1312,12 +1328,12 @@ fn value_root_has_kind(
 }
 
 unsafe fn copy_text_run_batch(
-    batch: *const NuxFlowTextRunBatch,
+    batch: *const NuxScreenTextRunBatch,
 ) -> Result<Vec<OwnedTextRunMutation>, NuxStatus> {
     if batch.is_null() {
         return Err(NuxStatus::NullArgument);
     }
-    if unsafe { read_struct_size(batch) } != size_u32::<NuxFlowTextRunBatch>() {
+    if unsafe { read_struct_size(batch) } != size_u32::<NuxScreenTextRunBatch>() {
         return Err(NuxStatus::InvalidArgument);
     }
     let batch = unsafe { batch.read() };
@@ -1325,25 +1341,29 @@ unsafe fn copy_text_run_batch(
         copy_array(
             batch.mutations,
             batch.mutation_count,
-            NUX_FLOW_MAX_BATCH_ITEM_COUNT,
+            NUX_SCREEN_MAX_BATCH_ITEM_COUNT,
         )?
     };
     let mut budget = PayloadBudget::default();
     let mut aggregate_text_bytes = 0_usize;
     let mut mutations = Vec::with_capacity(raw_mutations.len());
     for mutation in raw_mutations {
-        if mutation.struct_size != size_u32::<NuxFlowTextRunMutation>() {
+        if mutation.struct_size != size_u32::<NuxScreenTextRunMutation>() {
             return Err(NuxStatus::InvalidArgument);
         }
-        let name = copy_required_utf8(mutation.name, NUX_FLOW_MAX_ID_BYTE_LENGTH, &mut budget)?;
-        let text = copy_bytes(mutation.text, NUX_FLOW_MAX_STRING_BYTE_LENGTH, &mut budget)?;
+        let name = copy_required_utf8(mutation.name, NUX_SCREEN_MAX_ID_BYTE_LENGTH, &mut budget)?;
+        let text = copy_bytes(
+            mutation.text,
+            NUX_SCREEN_MAX_STRING_BYTE_LENGTH,
+            &mut budget,
+        )?;
         if std::str::from_utf8(&text).is_err() {
             return Err(NuxStatus::InvalidArgument);
         }
         aggregate_text_bytes = aggregate_text_bytes
             .checked_add(text.len())
             .ok_or(NuxStatus::InvalidArgument)?;
-        if aggregate_text_bytes > NUX_FLOW_MAX_OPERATION_PAYLOAD_BYTE_LENGTH as usize {
+        if aggregate_text_bytes > NUX_SCREEN_MAX_OPERATION_PAYLOAD_BYTE_LENGTH as usize {
             return Err(NuxStatus::InvalidArgument);
         }
         mutations.push(OwnedTextRunMutation { name, text });
@@ -1352,23 +1372,28 @@ unsafe fn copy_text_run_batch(
 }
 
 unsafe fn copy_pointer_batch(
-    batch: *const NuxFlowPointerBatch,
+    batch: *const NuxScreenPointerBatch,
 ) -> Result<Vec<OwnedPointerEvent>, NuxStatus> {
     if batch.is_null() {
         return Err(NuxStatus::NullArgument);
     }
-    if unsafe { read_struct_size(batch) } != size_u32::<NuxFlowPointerBatch>() {
+    if unsafe { read_struct_size(batch) } != size_u32::<NuxScreenPointerBatch>() {
         return Err(NuxStatus::InvalidArgument);
     }
     let batch = unsafe { batch.read() };
-    let raw_events =
-        unsafe { copy_array(batch.events, batch.event_count, NUX_FLOW_MAX_POINTER_COUNT)? };
+    let raw_events = unsafe {
+        copy_array(
+            batch.events,
+            batch.event_count,
+            NUX_SCREEN_MAX_POINTER_COUNT,
+        )?
+    };
     if raw_events.is_empty() {
         return Err(NuxStatus::InvalidArgument);
     }
     let mut events = Vec::with_capacity(raw_events.len());
     for event in raw_events {
-        if event.struct_size != size_u32::<NuxFlowPointerEvent>()
+        if event.struct_size != size_u32::<NuxScreenPointerEvent>()
             || !event.x.is_finite()
             || !event.y.is_finite()
             || !event.timestamp_seconds.is_finite()
@@ -1376,11 +1401,11 @@ unsafe fn copy_pointer_batch(
             || event.pointer_id <= 0
             || !matches!(
                 event.kind,
-                NUX_FLOW_POINTER_EVENT_KIND_DOWN
-                    | NUX_FLOW_POINTER_EVENT_KIND_MOVE
-                    | NUX_FLOW_POINTER_EVENT_KIND_UP
-                    | NUX_FLOW_POINTER_EVENT_KIND_CANCEL
-                    | NUX_FLOW_POINTER_EVENT_KIND_EXIT
+                NUX_SCREEN_POINTER_EVENT_KIND_DOWN
+                    | NUX_SCREEN_POINTER_EVENT_KIND_MOVE
+                    | NUX_SCREEN_POINTER_EVENT_KIND_UP
+                    | NUX_SCREEN_POINTER_EVENT_KIND_CANCEL
+                    | NUX_SCREEN_POINTER_EVENT_KIND_EXIT
             )
         {
             return Err(NuxStatus::InvalidArgument);
@@ -1396,30 +1421,32 @@ unsafe fn copy_pointer_batch(
     Ok(events)
 }
 
-unsafe fn copy_query_batch(batch: *const NuxFlowQueryBatch) -> Result<Vec<OwnedQuery>, NuxStatus> {
+unsafe fn copy_query_batch(
+    batch: *const NuxScreenQueryBatch,
+) -> Result<Vec<OwnedQuery>, NuxStatus> {
     if batch.is_null() {
         return Err(NuxStatus::NullArgument);
     }
-    if unsafe { read_struct_size(batch) } != size_u32::<NuxFlowQueryBatch>() {
+    if unsafe { read_struct_size(batch) } != size_u32::<NuxScreenQueryBatch>() {
         return Err(NuxStatus::InvalidArgument);
     }
     let batch = unsafe { batch.read() };
     let raw_queries =
-        unsafe { copy_array(batch.queries, batch.query_count, NUX_FLOW_MAX_QUERY_COUNT)? };
+        unsafe { copy_array(batch.queries, batch.query_count, NUX_SCREEN_MAX_QUERY_COUNT)? };
     if raw_queries.is_empty() {
         return Err(NuxStatus::InvalidArgument);
     }
     let mut queries = Vec::with_capacity(raw_queries.len());
     for query in raw_queries {
-        if query.struct_size != size_u32::<NuxFlowQuery>() {
+        if query.struct_size != size_u32::<NuxScreenQuery>() {
             return Err(NuxStatus::InvalidArgument);
         }
         if !matches!(
             query.kind,
-            NUX_FLOW_QUERY_KIND_BOOTSTRAP
-                | NUX_FLOW_QUERY_KIND_VALUES
-                | NUX_FLOW_QUERY_KIND_CATALOG
-                | NUX_FLOW_QUERY_KIND_PLAYER_INPUTS
+            NUX_SCREEN_QUERY_KIND_BOOTSTRAP
+                | NUX_SCREEN_QUERY_KIND_VALUES
+                | NUX_SCREEN_QUERY_KIND_CATALOG
+                | NUX_SCREEN_QUERY_KIND_PLAYER_INPUTS
         ) {
             return Err(NuxStatus::InvalidArgument);
         }
@@ -1434,7 +1461,7 @@ struct PendingAdvanceCompletion {
 }
 
 impl PendingAdvanceCompletion {
-    fn from_operation(operation: &NuxFlowAdvanceOperation) -> Result<Self, NuxStatus> {
+    fn from_operation(operation: &NuxScreenAdvanceOperation) -> Result<Self, NuxStatus> {
         if operation.completion_callback.is_some() == operation.completion_context.is_null() {
             return Err(NuxStatus::InvalidArgument);
         }
@@ -1460,12 +1487,12 @@ impl Drop for PendingAdvanceCompletion {
 }
 
 unsafe fn copy_advance_operation(
-    operation: *const NuxFlowAdvanceOperation,
+    operation: *const NuxScreenAdvanceOperation,
 ) -> Result<OwnedAdvanceOperation, NuxStatus> {
     if operation.is_null() {
         return Err(NuxStatus::NullArgument);
     }
-    if unsafe { read_struct_size(operation) } != size_u32::<NuxFlowAdvanceOperation>() {
+    if unsafe { read_struct_size(operation) } != size_u32::<NuxScreenAdvanceOperation>() {
         return Err(NuxStatus::InvalidArgument);
     }
     let operation = unsafe { operation.read() };
@@ -1497,12 +1524,12 @@ unsafe fn copy_advance_operation(
 }
 
 unsafe fn copy_session_operation(
-    operation: *const NuxFlowSessionOperation,
+    operation: *const NuxScreenSessionOperation,
 ) -> Result<OwnedSessionOperation, NuxStatus> {
     if operation.is_null() {
         return Err(NuxStatus::NullArgument);
     }
-    if unsafe { read_struct_size(operation) } != size_u32::<NuxFlowSessionOperation>() {
+    if unsafe { read_struct_size(operation) } != size_u32::<NuxScreenSessionOperation>() {
         return Err(NuxStatus::InvalidArgument);
     }
     let operation = unsafe { operation.read() };
@@ -1520,7 +1547,7 @@ unsafe fn copy_session_operation(
         return Err(NuxStatus::InvalidArgument);
     }
     match operation.kind {
-        NUX_FLOW_SESSION_OPERATION_KIND_STATE_BATCH
+        NUX_SCREEN_SESSION_OPERATION_KIND_STATE_BATCH
             if !operation.state_batch.is_null()
                 && operation.pointer_batch.is_null()
                 && operation.advance.is_null()
@@ -1530,7 +1557,7 @@ unsafe fn copy_session_operation(
             unsafe { copy_state_batch(operation.state_batch) }
                 .map(OwnedSessionOperation::StateBatch)
         }
-        NUX_FLOW_SESSION_OPERATION_KIND_POINTER_BATCH
+        NUX_SCREEN_SESSION_OPERATION_KIND_POINTER_BATCH
             if operation.state_batch.is_null()
                 && !operation.pointer_batch.is_null()
                 && operation.advance.is_null()
@@ -1540,7 +1567,7 @@ unsafe fn copy_session_operation(
             unsafe { copy_pointer_batch(operation.pointer_batch) }
                 .map(OwnedSessionOperation::PointerBatch)
         }
-        NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE
+        NUX_SCREEN_SESSION_OPERATION_KIND_ADVANCE
             if operation.state_batch.is_null()
                 && operation.pointer_batch.is_null()
                 && !operation.advance.is_null()
@@ -1549,7 +1576,7 @@ unsafe fn copy_session_operation(
         {
             unsafe { copy_advance_operation(operation.advance) }.map(OwnedSessionOperation::Advance)
         }
-        NUX_FLOW_SESSION_OPERATION_KIND_QUERY
+        NUX_SCREEN_SESSION_OPERATION_KIND_QUERY
             if operation.state_batch.is_null()
                 && operation.pointer_batch.is_null()
                 && operation.advance.is_null()
@@ -1558,7 +1585,7 @@ unsafe fn copy_session_operation(
         {
             unsafe { copy_query_batch(operation.query_batch) }.map(OwnedSessionOperation::Query)
         }
-        NUX_FLOW_SESSION_OPERATION_KIND_TEXT_RUN_BATCH
+        NUX_SCREEN_SESSION_OPERATION_KIND_TEXT_RUN_BATCH
             if operation.state_batch.is_null()
                 && operation.pointer_batch.is_null()
                 && operation.advance.is_null()
@@ -1574,8 +1601,8 @@ unsafe fn copy_session_operation(
 
 #[derive(Debug, Clone)]
 struct OwnedPlayerMetadata {
-    kind: NuxFlowPlayerKind,
-    selection: NuxFlowPlayerSelection,
+    kind: NuxScreenPlayerKind,
+    selection: NuxScreenPlayerSelection,
     player_index: Option<u32>,
     artboard_name: Vec<u8>,
     player_name: Vec<u8>,
@@ -1587,7 +1614,7 @@ struct OwnedPlayerMetadata {
 
 #[derive(Debug, Clone)]
 struct OwnedPlayerInput {
-    kind: NuxFlowPlayerInputKind,
+    kind: NuxScreenPlayerInputKind,
     value_root_index: u32,
     name: Vec<u8>,
 }
@@ -1602,7 +1629,7 @@ struct OwnedSchema {
 
 #[derive(Debug, Clone)]
 struct OwnedSchemaProperty {
-    kind: NuxFlowSchemaPropertyKind,
+    kind: NuxScreenSchemaPropertyKind,
     first_enum_label: u32,
     enum_label_count: u32,
     schema_id: Vec<u8>,
@@ -1647,8 +1674,8 @@ struct OwnedCreatedInstance {
 
 #[derive(Debug, Clone)]
 struct OwnedOutput {
-    phase: NuxFlowOutputPhase,
-    kind: NuxFlowOutputKind,
+    phase: NuxScreenOutputPhase,
+    kind: NuxScreenOutputKind,
     payload_root_index: Option<u32>,
     sequence: u64,
     cycle: u64,
@@ -1678,7 +1705,7 @@ struct OwnedEventProperty {
 }
 
 #[derive(Clone)]
-struct FlowSessionResultHandle {
+struct ScreenSessionResultHandle {
     status: NuxStatus,
     surface_disposition: NuxSurfaceDisposition,
     is_dirty: bool,
@@ -1702,7 +1729,7 @@ struct FlowSessionResultHandle {
     diagnostics: Vec<OwnedDiagnostic>,
 }
 
-impl FlowSessionResultHandle {
+impl ScreenSessionResultHandle {
     fn empty_success() -> Self {
         Self {
             status: NuxStatus::Ok,
@@ -1779,19 +1806,19 @@ impl FlowSessionResultHandle {
         {
             return Err(NuxStatus::RuntimeError);
         }
-        if self.schemas.len() > NUX_FLOW_MAX_INSTANCE_COUNT as usize
-            || self.player_inputs.len() > NUX_FLOW_MAX_BATCH_ITEM_COUNT as usize
-            || self.schema_properties.len() > NUX_FLOW_MAX_BATCH_ITEM_COUNT as usize
-            || self.enum_labels.len() > NUX_FLOW_MAX_BATCH_ITEM_COUNT as usize
-            || self.instance_templates.len() > NUX_FLOW_MAX_INSTANCE_COUNT as usize
-            || self.instances.len() > NUX_FLOW_MAX_INSTANCE_COUNT as usize
-            || self.value_roots.len() > NUX_FLOW_MAX_INSTANCE_COUNT as usize
-            || self.created_instances.len() > NUX_FLOW_MAX_INSTANCE_COUNT as usize
-            || self.outputs.len() > NUX_FLOW_MAX_OUTPUT_COUNT as usize
+        if self.schemas.len() > NUX_SCREEN_MAX_INSTANCE_COUNT as usize
+            || self.player_inputs.len() > NUX_SCREEN_MAX_BATCH_ITEM_COUNT as usize
+            || self.schema_properties.len() > NUX_SCREEN_MAX_BATCH_ITEM_COUNT as usize
+            || self.enum_labels.len() > NUX_SCREEN_MAX_BATCH_ITEM_COUNT as usize
+            || self.instance_templates.len() > NUX_SCREEN_MAX_INSTANCE_COUNT as usize
+            || self.instances.len() > NUX_SCREEN_MAX_INSTANCE_COUNT as usize
+            || self.value_roots.len() > NUX_SCREEN_MAX_INSTANCE_COUNT as usize
+            || self.created_instances.len() > NUX_SCREEN_MAX_INSTANCE_COUNT as usize
+            || self.outputs.len() > NUX_SCREEN_MAX_OUTPUT_COUNT as usize
             || self.event_properties.len()
-                > (NUX_FLOW_MAX_OUTPUT_COUNT * NUX_FLOW_MAX_EVENT_PROPERTY_COUNT) as usize
-            || self.value_arena.nodes.len() > NUX_FLOW_MAX_BATCH_ITEM_COUNT as usize
-            || self.value_arena.edges.len() > NUX_FLOW_MAX_VALUE_EDGE_COUNT as usize
+                > (NUX_SCREEN_MAX_OUTPUT_COUNT * NUX_SCREEN_MAX_EVENT_PROPERTY_COUNT) as usize
+            || self.value_arena.nodes.len() > NUX_SCREEN_MAX_BATCH_ITEM_COUNT as usize
+            || self.value_arena.edges.len() > NUX_SCREEN_MAX_VALUE_EDGE_COUNT as usize
         {
             return Err(NuxStatus::RuntimeError);
         }
@@ -1803,19 +1830,20 @@ impl FlowSessionResultHandle {
         let mut payload_bytes = 0usize;
         if let Some(metadata) = self.player_metadata.as_ref() {
             let selection_is_consistent = match metadata.selection {
-                NUX_FLOW_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE
-                | NUX_FLOW_PLAYER_SELECTION_AUTHORED_DEFAULT_STATE_MACHINE
-                | NUX_FLOW_PLAYER_SELECTION_FIRST_STATE_MACHINE => {
-                    metadata.kind == NUX_FLOW_PLAYER_KIND_STATE_MACHINE
+                NUX_SCREEN_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE
+                | NUX_SCREEN_PLAYER_SELECTION_AUTHORED_DEFAULT_STATE_MACHINE
+                | NUX_SCREEN_PLAYER_SELECTION_FIRST_STATE_MACHINE => {
+                    metadata.kind == NUX_SCREEN_PLAYER_KIND_STATE_MACHINE
                         && metadata.player_index.is_some()
                 }
-                NUX_FLOW_PLAYER_SELECTION_FIRST_ANIMATION
-                | NUX_FLOW_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION => {
-                    metadata.kind == NUX_FLOW_PLAYER_KIND_LINEAR_ANIMATION
+                NUX_SCREEN_PLAYER_SELECTION_FIRST_ANIMATION
+                | NUX_SCREEN_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION => {
+                    metadata.kind == NUX_SCREEN_PLAYER_KIND_LINEAR_ANIMATION
                         && metadata.player_index.is_some()
                 }
-                NUX_FLOW_PLAYER_SELECTION_STATIC => {
-                    metadata.kind == NUX_FLOW_PLAYER_KIND_STATIC && metadata.player_index.is_none()
+                NUX_SCREEN_PLAYER_SELECTION_STATIC => {
+                    metadata.kind == NUX_SCREEN_PLAYER_KIND_STATIC
+                        && metadata.player_index.is_none()
                 }
                 _ => false,
             };
@@ -1832,20 +1860,20 @@ impl FlowSessionResultHandle {
             charge_result_utf8(
                 &mut payload_bytes,
                 &metadata.artboard_name,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
             charge_result_utf8(
                 &mut payload_bytes,
                 &metadata.player_name,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
         }
         for input in &self.player_inputs {
             let expected_value_kind = match input.kind {
-                NUX_FLOW_PLAYER_INPUT_KIND_BOOL | NUX_FLOW_PLAYER_INPUT_KIND_TRIGGER => {
-                    NUX_FLOW_VALUE_KIND_BOOL
+                NUX_SCREEN_PLAYER_INPUT_KIND_BOOL | NUX_SCREEN_PLAYER_INPUT_KIND_TRIGGER => {
+                    NUX_SCREEN_VALUE_KIND_BOOL
                 }
-                NUX_FLOW_PLAYER_INPUT_KIND_NUMBER => NUX_FLOW_VALUE_KIND_NUMBER,
+                NUX_SCREEN_PLAYER_INPUT_KIND_NUMBER => NUX_SCREEN_VALUE_KIND_NUMBER,
                 _ => return Err(NuxStatus::RuntimeError),
             };
             if self
@@ -1856,7 +1884,11 @@ impl FlowSessionResultHandle {
             {
                 return Err(NuxStatus::RuntimeError);
             }
-            charge_result_utf8(&mut payload_bytes, &input.name, NUX_FLOW_MAX_ID_BYTE_LENGTH)?;
+            charge_result_utf8(
+                &mut payload_bytes,
+                &input.name,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
+            )?;
         }
         for schema in &self.schemas {
             let first = schema.first_property as usize;
@@ -1868,12 +1900,12 @@ impl FlowSessionResultHandle {
             charge_result_utf8(
                 &mut payload_bytes,
                 &schema.schema_id,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
             charge_result_utf8(
                 &mut payload_bytes,
                 &schema.name,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
         }
         for property in &self.schema_properties {
@@ -1884,26 +1916,26 @@ impl FlowSessionResultHandle {
                 .ok_or(NuxStatus::RuntimeError)?;
             if !matches!(
                 property.kind,
-                NUX_FLOW_SCHEMA_PROPERTY_KIND_STRING
-                    | NUX_FLOW_SCHEMA_PROPERTY_KIND_NUMBER
-                    | NUX_FLOW_SCHEMA_PROPERTY_KIND_BOOL
-                    | NUX_FLOW_SCHEMA_PROPERTY_KIND_TRIGGER
-                    | NUX_FLOW_SCHEMA_PROPERTY_KIND_ENUM
-                    | NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST_INDEX
-                    | NUX_FLOW_SCHEMA_PROPERTY_KIND_COLOR
-                    | NUX_FLOW_SCHEMA_PROPERTY_KIND_IMAGE
-                    | NUX_FLOW_SCHEMA_PROPERTY_KIND_VIEW_MODEL
-                    | NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST
-                    | NUX_FLOW_SCHEMA_PROPERTY_KIND_OBJECT
-                    | NUX_FLOW_SCHEMA_PROPERTY_KIND_NULL
+                NUX_SCREEN_SCHEMA_PROPERTY_KIND_STRING
+                    | NUX_SCREEN_SCHEMA_PROPERTY_KIND_NUMBER
+                    | NUX_SCREEN_SCHEMA_PROPERTY_KIND_BOOL
+                    | NUX_SCREEN_SCHEMA_PROPERTY_KIND_TRIGGER
+                    | NUX_SCREEN_SCHEMA_PROPERTY_KIND_ENUM
+                    | NUX_SCREEN_SCHEMA_PROPERTY_KIND_LIST_INDEX
+                    | NUX_SCREEN_SCHEMA_PROPERTY_KIND_COLOR
+                    | NUX_SCREEN_SCHEMA_PROPERTY_KIND_IMAGE
+                    | NUX_SCREEN_SCHEMA_PROPERTY_KIND_VIEW_MODEL
+                    | NUX_SCREEN_SCHEMA_PROPERTY_KIND_LIST
+                    | NUX_SCREEN_SCHEMA_PROPERTY_KIND_OBJECT
+                    | NUX_SCREEN_SCHEMA_PROPERTY_KIND_NULL
             ) || property.schema_id.is_empty()
                 || property.property_id.is_empty()
                 || enum_label_end > self.enum_labels.len()
                 || (enum_label_count == 0 && first_enum_label != 0)
-                || (property.kind != NUX_FLOW_SCHEMA_PROPERTY_KIND_ENUM && enum_label_count != 0)
-                || (property.kind == NUX_FLOW_SCHEMA_PROPERTY_KIND_VIEW_MODEL
+                || (property.kind != NUX_SCREEN_SCHEMA_PROPERTY_KIND_ENUM && enum_label_count != 0)
+                || (property.kind == NUX_SCREEN_SCHEMA_PROPERTY_KIND_VIEW_MODEL
                     && property.referenced_schema_id.is_empty())
-                || (property.kind != NUX_FLOW_SCHEMA_PROPERTY_KIND_VIEW_MODEL
+                || (property.kind != NUX_SCREEN_SCHEMA_PROPERTY_KIND_VIEW_MODEL
                     && !property.referenced_schema_id.is_empty())
             {
                 return Err(NuxStatus::RuntimeError);
@@ -1928,29 +1960,29 @@ impl FlowSessionResultHandle {
             charge_result_utf8(
                 &mut payload_bytes,
                 &property.schema_id,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
             charge_result_utf8(
                 &mut payload_bytes,
                 &property.property_id,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
             charge_result_utf8(
                 &mut payload_bytes,
                 &property.name,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
             charge_result_utf8(
                 &mut payload_bytes,
                 &property.referenced_schema_id,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
         }
         for label in &self.enum_labels {
             charge_result_utf8(
                 &mut payload_bytes,
                 &label.label,
-                NUX_FLOW_MAX_STRING_BYTE_LENGTH,
+                NUX_SCREEN_MAX_STRING_BYTE_LENGTH,
             )?;
         }
         for template in &self.instance_templates {
@@ -1960,12 +1992,12 @@ impl FlowSessionResultHandle {
             charge_result_utf8(
                 &mut payload_bytes,
                 &template.schema_id,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
             charge_result_utf8(
                 &mut payload_bytes,
                 &template.authored_name,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
         }
         let mut instance_ids = HashSet::with_capacity(self.instances.len());
@@ -1984,12 +2016,12 @@ impl FlowSessionResultHandle {
             charge_result_utf8(
                 &mut payload_bytes,
                 &instance.schema_id,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
             charge_result_utf8(
                 &mut payload_bytes,
                 &instance.name,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
         }
         let mut root_instance_ids = HashSet::with_capacity(self.value_roots.len());
@@ -2015,16 +2047,20 @@ impl FlowSessionResultHandle {
             charge_result_utf8(
                 &mut payload_bytes,
                 &node.string_value,
-                NUX_FLOW_MAX_STRING_BYTE_LENGTH,
+                NUX_SCREEN_MAX_STRING_BYTE_LENGTH,
             )?;
             charge_result_utf8(
                 &mut payload_bytes,
                 &node.schema_id,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
         }
         for edge in &self.value_arena.edges {
-            charge_result_utf8(&mut payload_bytes, &edge.key, NUX_FLOW_MAX_PATH_BYTE_LENGTH)?;
+            charge_result_utf8(
+                &mut payload_bytes,
+                &edge.key,
+                NUX_SCREEN_MAX_PATH_BYTE_LENGTH,
+            )?;
         }
         let mut prior_sequence = None;
         let mut prior_cycle_phase = None;
@@ -2037,20 +2073,20 @@ impl FlowSessionResultHandle {
             }
             if !matches!(
                 output.phase,
-                NUX_FLOW_OUTPUT_PHASE_DELAYED_EVENT_CALLBACKS
-                    | NUX_FLOW_OUTPUT_PHASE_REPORTED_EVENTS
-                    | NUX_FLOW_OUTPUT_PHASE_RUNTIME_ADVANCE
-                    | NUX_FLOW_OUTPUT_PHASE_VIEW_MODEL_CHANGES
-                    | NUX_FLOW_OUTPUT_PHASE_HOST_WORK
-                    | NUX_FLOW_OUTPUT_PHASE_RENDER
+                NUX_SCREEN_OUTPUT_PHASE_DELAYED_EVENT_CALLBACKS
+                    | NUX_SCREEN_OUTPUT_PHASE_REPORTED_EVENTS
+                    | NUX_SCREEN_OUTPUT_PHASE_RUNTIME_ADVANCE
+                    | NUX_SCREEN_OUTPUT_PHASE_VIEW_MODEL_CHANGES
+                    | NUX_SCREEN_OUTPUT_PHASE_HOST_WORK
+                    | NUX_SCREEN_OUTPUT_PHASE_RENDER
             ) || !matches!(
                 output.kind,
-                NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT
-                    | NUX_FLOW_OUTPUT_KIND_STATE_CHANGE
-                    | NUX_FLOW_OUTPUT_KIND_VIEW_MODEL_CHANGE
-                    | NUX_FLOW_OUTPUT_KIND_HOST_COMMAND
-                    | NUX_FLOW_OUTPUT_KIND_RENDER_REQUEST
-                    | NUX_FLOW_OUTPUT_KIND_RUNTIME_ADVANCED
+                NUX_SCREEN_OUTPUT_KIND_REPORTED_EVENT
+                    | NUX_SCREEN_OUTPUT_KIND_STATE_CHANGE
+                    | NUX_SCREEN_OUTPUT_KIND_VIEW_MODEL_CHANGE
+                    | NUX_SCREEN_OUTPUT_KIND_HOST_COMMAND
+                    | NUX_SCREEN_OUTPUT_KIND_RENDER_REQUEST
+                    | NUX_SCREEN_OUTPUT_KIND_RUNTIME_ADVANCED
             ) {
                 return Err(NuxStatus::RuntimeError);
             }
@@ -2070,24 +2106,26 @@ impl FlowSessionResultHandle {
                     .ok_or(NuxStatus::RuntimeError)?;
                 let is_scalar = matches!(
                     node.kind,
-                    NUX_FLOW_VALUE_KIND_NULL
-                        | NUX_FLOW_VALUE_KIND_STRING
-                        | NUX_FLOW_VALUE_KIND_NUMBER
-                        | NUX_FLOW_VALUE_KIND_BOOL
-                        | NUX_FLOW_VALUE_KIND_ENUM
-                        | NUX_FLOW_VALUE_KIND_COLOR
-                        | NUX_FLOW_VALUE_KIND_IMAGE
-                        | NUX_FLOW_VALUE_KIND_LIST_INDEX
+                    NUX_SCREEN_VALUE_KIND_NULL
+                        | NUX_SCREEN_VALUE_KIND_STRING
+                        | NUX_SCREEN_VALUE_KIND_NUMBER
+                        | NUX_SCREEN_VALUE_KIND_BOOL
+                        | NUX_SCREEN_VALUE_KIND_ENUM
+                        | NUX_SCREEN_VALUE_KIND_COLOR
+                        | NUX_SCREEN_VALUE_KIND_IMAGE
+                        | NUX_SCREEN_VALUE_KIND_LIST_INDEX
                 );
-                let is_view_model_reference = node.kind == NUX_FLOW_VALUE_KIND_VIEW_MODEL
+                let is_view_model_reference = node.kind == NUX_SCREEN_VALUE_KIND_VIEW_MODEL
                     && node.edge_count == 0
                     && node.instance_id.is_some_and(|instance_id| instance_id != 0)
                     && !node.schema_id.is_empty();
                 let valid_payload_root = match output.kind {
-                    NUX_FLOW_OUTPUT_KIND_STATE_CHANGE => is_scalar,
-                    NUX_FLOW_OUTPUT_KIND_VIEW_MODEL_CHANGE => is_scalar || is_view_model_reference,
-                    NUX_FLOW_OUTPUT_KIND_HOST_COMMAND => {
-                        node.kind == NUX_FLOW_VALUE_KIND_OBJECT
+                    NUX_SCREEN_OUTPUT_KIND_STATE_CHANGE => is_scalar,
+                    NUX_SCREEN_OUTPUT_KIND_VIEW_MODEL_CHANGE => {
+                        is_scalar || is_view_model_reference
+                    }
+                    NUX_SCREEN_OUTPUT_KIND_HOST_COMMAND => {
+                        node.kind == NUX_SCREEN_VALUE_KIND_OBJECT
                             && node.instance_id.is_none()
                             && node.schema_id.is_empty()
                     }
@@ -2097,7 +2135,7 @@ impl FlowSessionResultHandle {
                     return Err(NuxStatus::RuntimeError);
                 }
             }
-            if output.kind == NUX_FLOW_OUTPUT_KIND_HOST_COMMAND {
+            if output.kind == NUX_SCREEN_OUTPUT_KIND_HOST_COMMAND {
                 let content_bytes = validate_host_command_output(output, &self.value_arena)?;
                 if host_cycle != Some(output.cycle) {
                     host_cycle = Some(output.cycle);
@@ -2110,9 +2148,9 @@ impl FlowSessionResultHandle {
                 host_content_bytes_this_cycle = host_content_bytes_this_cycle
                     .checked_add(content_bytes)
                     .ok_or(NuxStatus::RuntimeError)?;
-                if host_commands_this_cycle > NUX_FLOW_MAX_HOST_COMMANDS_PER_CYCLE
+                if host_commands_this_cycle > NUX_SCREEN_MAX_HOST_COMMANDS_PER_CYCLE
                     || host_content_bytes_this_cycle
-                        > NUX_FLOW_MAX_OPERATION_PAYLOAD_BYTE_LENGTH as usize
+                        > NUX_SCREEN_MAX_OPERATION_PAYLOAD_BYTE_LENGTH as usize
                 {
                     return Err(NuxStatus::RuntimeError);
                 }
@@ -2125,29 +2163,29 @@ impl FlowSessionResultHandle {
             let property_end = property_start
                 .checked_add(property_count)
                 .ok_or(NuxStatus::RuntimeError)?;
-            if property_count > NUX_FLOW_MAX_EVENT_PROPERTY_COUNT as usize
+            if property_count > NUX_SCREEN_MAX_EVENT_PROPERTY_COUNT as usize
                 || property_end > self.event_properties.len()
-                || (output.kind != NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT && property_count != 0)
+                || (output.kind != NUX_SCREEN_OUTPUT_KIND_REPORTED_EVENT && property_count != 0)
             {
                 return Err(NuxStatus::RuntimeError);
             }
             charge_result_utf8(
                 &mut payload_bytes,
                 &output.name,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
             charge_result_utf8(
                 &mut payload_bytes,
                 &output.path,
-                NUX_FLOW_MAX_PATH_BYTE_LENGTH,
+                NUX_SCREEN_MAX_PATH_BYTE_LENGTH,
             )?;
             charge_result_bytes(
                 &mut payload_bytes,
                 &output.payload,
-                NUX_FLOW_MAX_OPERATION_PAYLOAD_BYTE_LENGTH,
+                NUX_SCREEN_MAX_OPERATION_PAYLOAD_BYTE_LENGTH,
             )?;
             if let Some(open_url) = &output.open_url {
-                if output.kind != NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT {
+                if output.kind != NUX_SCREEN_OUTPUT_KIND_REPORTED_EVENT {
                     return Err(NuxStatus::RuntimeError);
                 }
                 if !matches!(
@@ -2159,12 +2197,12 @@ impl FlowSessionResultHandle {
                 charge_result_utf8(
                     &mut payload_bytes,
                     &open_url.url,
-                    NUX_FLOW_MAX_STRING_BYTE_LENGTH,
+                    NUX_SCREEN_MAX_STRING_BYTE_LENGTH,
                 )?;
                 charge_result_utf8(
                     &mut payload_bytes,
                     &open_url.target,
-                    NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                    NUX_SCREEN_MAX_ID_BYTE_LENGTH,
                 )?;
             }
             prior_sequence = Some(output.sequence);
@@ -2181,19 +2219,19 @@ impl FlowSessionResultHandle {
             charge_result_utf8(
                 &mut payload_bytes,
                 &property.name,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
         }
         for diagnostic in &self.diagnostics {
             charge_result_utf8(
                 &mut payload_bytes,
                 &diagnostic.code,
-                NUX_FLOW_MAX_ID_BYTE_LENGTH,
+                NUX_SCREEN_MAX_ID_BYTE_LENGTH,
             )?;
             charge_result_utf8(
                 &mut payload_bytes,
                 &diagnostic.message,
-                NUX_FLOW_MAX_STRING_BYTE_LENGTH,
+                NUX_SCREEN_MAX_STRING_BYTE_LENGTH,
             )?;
         }
         Ok(())
@@ -2212,7 +2250,7 @@ fn validate_host_command_output(
     output: &OwnedOutput,
     arena: &OwnedValueArena,
 ) -> Result<usize, NuxStatus> {
-    if output.phase != NUX_FLOW_OUTPUT_PHASE_HOST_WORK
+    if output.phase != NUX_SCREEN_OUTPUT_PHASE_HOST_WORK
         || !output.path.is_empty()
         || !output.payload.is_empty()
         || output.origin_mutation_id.is_some()
@@ -2223,7 +2261,7 @@ fn validate_host_command_output(
         || output.delay_seconds.to_bits() != 0
         || output.open_url.is_some()
         || output.name.is_empty()
-        || output.name.len() > NUX_FLOW_MAX_ID_BYTE_LENGTH as usize
+        || output.name.len() > NUX_SCREEN_MAX_ID_BYTE_LENGTH as usize
         || std::str::from_utf8(&output.name).is_err()
     {
         return Err(NuxStatus::RuntimeError);
@@ -2232,7 +2270,7 @@ fn validate_host_command_output(
     if arena
         .nodes
         .get(root as usize)
-        .is_none_or(|node| node.kind != NUX_FLOW_VALUE_KIND_OBJECT)
+        .is_none_or(|node| node.kind != NUX_SCREEN_VALUE_KIND_OBJECT)
     {
         return Err(NuxStatus::RuntimeError);
     }
@@ -2251,14 +2289,14 @@ fn validate_host_value_tree(
     arena: &OwnedValueArena,
     validation: &mut HostValueValidation,
 ) -> Result<(), NuxStatus> {
-    if depth > NUX_FLOW_MAX_VALUE_DEPTH || !validation.visited.insert(node_index) {
+    if depth > NUX_SCREEN_MAX_VALUE_DEPTH || !validation.visited.insert(node_index) {
         return Err(NuxStatus::RuntimeError);
     }
     validation.nodes = validation
         .nodes
         .checked_add(1)
         .ok_or(NuxStatus::RuntimeError)?;
-    if validation.nodes > NUX_FLOW_MAX_BATCH_ITEM_COUNT as usize {
+    if validation.nodes > NUX_SCREEN_MAX_BATCH_ITEM_COUNT as usize {
         return Err(NuxStatus::RuntimeError);
     }
 
@@ -2277,20 +2315,20 @@ fn validate_host_value_tree(
         .ok_or(NuxStatus::RuntimeError)?;
 
     match node.kind {
-        NUX_FLOW_VALUE_KIND_BOOL | NUX_FLOW_VALUE_KIND_NUMBER => {
+        NUX_SCREEN_VALUE_KIND_BOOL | NUX_SCREEN_VALUE_KIND_NUMBER => {
             validation.content_bytes = validation
                 .content_bytes
                 .checked_add(16)
                 .ok_or(NuxStatus::RuntimeError)?;
         }
-        NUX_FLOW_VALUE_KIND_STRING => {
+        NUX_SCREEN_VALUE_KIND_STRING => {
             validation.content_bytes = validation
                 .content_bytes
                 .checked_add(node.string_value.len())
                 .ok_or(NuxStatus::RuntimeError)?;
         }
-        NUX_FLOW_VALUE_KIND_LIST => {
-            if edge_count > NUX_FLOW_MAX_LIST_ITEM_COUNT as usize
+        NUX_SCREEN_VALUE_KIND_LIST => {
+            if edge_count > NUX_SCREEN_MAX_LIST_ITEM_COUNT as usize
                 || !node.schema_id.is_empty()
                 || node.instance_id.is_some()
                 || edges.iter().any(|edge| !edge.key.is_empty())
@@ -2301,7 +2339,7 @@ fn validate_host_value_tree(
                 .edges
                 .checked_add(edge_count)
                 .ok_or(NuxStatus::RuntimeError)?;
-            if validation.edges > NUX_FLOW_MAX_VALUE_EDGE_COUNT as usize {
+            if validation.edges > NUX_SCREEN_MAX_VALUE_EDGE_COUNT as usize {
                 return Err(NuxStatus::RuntimeError);
             }
             for edge in edges {
@@ -2313,8 +2351,8 @@ fn validate_host_value_tree(
                 )?;
             }
         }
-        NUX_FLOW_VALUE_KIND_OBJECT => {
-            if edge_count > NUX_FLOW_MAX_LIST_ITEM_COUNT as usize
+        NUX_SCREEN_VALUE_KIND_OBJECT => {
+            if edge_count > NUX_SCREEN_MAX_LIST_ITEM_COUNT as usize
                 || !node.schema_id.is_empty()
                 || node.instance_id.is_some()
             {
@@ -2324,14 +2362,14 @@ fn validate_host_value_tree(
                 .edges
                 .checked_add(edge_count)
                 .ok_or(NuxStatus::RuntimeError)?;
-            if validation.edges > NUX_FLOW_MAX_VALUE_EDGE_COUNT as usize {
+            if validation.edges > NUX_SCREEN_MAX_VALUE_EDGE_COUNT as usize {
                 return Err(NuxStatus::RuntimeError);
             }
             let mut prior_key: Option<&[u8]> = None;
             for edge in edges {
                 let key = edge.key.as_slice();
                 if key.is_empty()
-                    || key.len() > NUX_FLOW_MAX_ID_BYTE_LENGTH as usize
+                    || key.len() > NUX_SCREEN_MAX_ID_BYTE_LENGTH as usize
                     || std::str::from_utf8(key).is_err()
                     || prior_key.is_some_and(|prior| prior >= key)
                 {
@@ -2352,7 +2390,7 @@ fn validate_host_value_tree(
         }
         _ => return Err(NuxStatus::RuntimeError),
     }
-    if validation.content_bytes > NUX_FLOW_MAX_OPERATION_PAYLOAD_BYTE_LENGTH as usize {
+    if validation.content_bytes > NUX_SCREEN_MAX_OPERATION_PAYLOAD_BYTE_LENGTH as usize {
         return Err(NuxStatus::RuntimeError);
     }
     Ok(())
@@ -2369,13 +2407,13 @@ fn validate_result_value_node(node: &OwnedValueNode) -> Result<(), NuxStatus> {
         && node.string_value.is_empty()
         && canonical_edge_start;
     let valid = match node.kind {
-        NUX_FLOW_VALUE_KIND_NULL => {
+        NUX_SCREEN_VALUE_KIND_NULL => {
             common_composite
                 && !has_edges
                 && node.instance_id.is_none()
                 && node.schema_id.is_empty()
         }
-        NUX_FLOW_VALUE_KIND_STRING => {
+        NUX_SCREEN_VALUE_KIND_STRING => {
             number_is_zero
                 && node.color_value == 0
                 && !node.bool_value
@@ -2385,7 +2423,7 @@ fn validate_result_value_node(node: &OwnedValueNode) -> Result<(), NuxStatus> {
                 && !has_edges
                 && canonical_edge_start
         }
-        NUX_FLOW_VALUE_KIND_NUMBER => {
+        NUX_SCREEN_VALUE_KIND_NUMBER => {
             node.number_value.is_finite()
                 && node.color_value == 0
                 && !node.bool_value
@@ -2396,7 +2434,7 @@ fn validate_result_value_node(node: &OwnedValueNode) -> Result<(), NuxStatus> {
                 && !has_edges
                 && canonical_edge_start
         }
-        NUX_FLOW_VALUE_KIND_BOOL => {
+        NUX_SCREEN_VALUE_KIND_BOOL => {
             number_is_zero
                 && node.color_value == 0
                 && node.identity_value == 0
@@ -2406,7 +2444,7 @@ fn validate_result_value_node(node: &OwnedValueNode) -> Result<(), NuxStatus> {
                 && !has_edges
                 && canonical_edge_start
         }
-        NUX_FLOW_VALUE_KIND_COLOR => {
+        NUX_SCREEN_VALUE_KIND_COLOR => {
             number_is_zero
                 && !node.bool_value
                 && node.identity_value == 0
@@ -2416,7 +2454,9 @@ fn validate_result_value_node(node: &OwnedValueNode) -> Result<(), NuxStatus> {
                 && !has_edges
                 && canonical_edge_start
         }
-        NUX_FLOW_VALUE_KIND_ENUM | NUX_FLOW_VALUE_KIND_IMAGE | NUX_FLOW_VALUE_KIND_LIST_INDEX => {
+        NUX_SCREEN_VALUE_KIND_ENUM
+        | NUX_SCREEN_VALUE_KIND_IMAGE
+        | NUX_SCREEN_VALUE_KIND_LIST_INDEX => {
             number_is_zero
                 && node.color_value == 0
                 && !node.bool_value
@@ -2426,11 +2466,11 @@ fn validate_result_value_node(node: &OwnedValueNode) -> Result<(), NuxStatus> {
                 && !has_edges
                 && canonical_edge_start
         }
-        NUX_FLOW_VALUE_KIND_OBJECT => common_composite && node.instance_id.is_none(),
-        NUX_FLOW_VALUE_KIND_VIEW_MODEL => {
+        NUX_SCREEN_VALUE_KIND_OBJECT => common_composite && node.instance_id.is_none(),
+        NUX_SCREEN_VALUE_KIND_VIEW_MODEL => {
             common_composite && node.instance_id.is_none_or(|instance_id| instance_id != 0)
         }
-        NUX_FLOW_VALUE_KIND_LIST => {
+        NUX_SCREEN_VALUE_KIND_LIST => {
             common_composite && node.instance_id.is_none() && node.schema_id.is_empty()
         }
         _ => false,
@@ -2456,7 +2496,7 @@ fn charge_result_bytes(total: &mut usize, bytes: &[u8], maximum: u64) -> Result<
     *total = total
         .checked_add(bytes.len())
         .ok_or(NuxStatus::RuntimeError)?;
-    if *total > NUX_FLOW_MAX_OPERATION_PAYLOAD_BYTE_LENGTH as usize {
+    if *total > NUX_SCREEN_MAX_OPERATION_PAYLOAD_BYTE_LENGTH as usize {
         return Err(NuxStatus::RuntimeError);
     }
     Ok(())
@@ -2473,14 +2513,14 @@ fn borrowed_view(bytes: &[u8]) -> NuxByteView {
 }
 
 fn replace_session_result(
-    out_result: *mut *mut NuxFlowSessionResult,
-    mut result: FlowSessionResultHandle,
+    out_result: *mut *mut NuxScreenSessionResult,
+    mut result: ScreenSessionResultHandle,
 ) -> NuxStatus {
     if out_result.is_null() {
         return result.status;
     }
     if result.validate().is_err() {
-        result = FlowSessionResultHandle::failure(
+        result = ScreenSessionResultHandle::failure(
             NuxStatus::RuntimeError,
             "runtime produced an invalid or oversized session result",
         );
@@ -2493,28 +2533,28 @@ fn replace_session_result(
 }
 
 fn write_session_failure(
-    out_result: *mut *mut NuxFlowSessionResult,
+    out_result: *mut *mut NuxScreenSessionResult,
     status: NuxStatus,
     diagnostic: impl Into<Vec<u8>>,
 ) -> NuxStatus {
     replace_session_result(
         out_result,
-        FlowSessionResultHandle::failure(status, diagnostic),
+        ScreenSessionResultHandle::failure(status, diagnostic),
     )
 }
 
 #[cfg(feature = "apple-product")]
 fn write_session_runtime_failure(
-    out_result: *mut *mut NuxFlowSessionResult,
+    out_result: *mut *mut NuxScreenSessionResult,
     failure: RuntimeFailure,
 ) -> NuxStatus {
     replace_session_result(
         out_result,
-        FlowSessionResultHandle::from_runtime_failure(failure),
+        ScreenSessionResultHandle::from_runtime_failure(failure),
     )
 }
 
-fn reset_session_result(out_result: *mut *mut NuxFlowSessionResult) {
+fn reset_session_result(out_result: *mut *mut NuxScreenSessionResult) {
     if !out_result.is_null() {
         unsafe {
             *out_result = ptr::null_mut();
@@ -2523,7 +2563,7 @@ fn reset_session_result(out_result: *mut *mut NuxFlowSessionResult) {
 }
 
 fn ffi_guard_with_session_result(
-    out_result: *mut *mut NuxFlowSessionResult,
+    out_result: *mut *mut NuxScreenSessionResult,
     on_panic: impl FnOnce(),
     body: impl FnOnce() -> NuxStatus,
 ) -> NuxStatus {
@@ -2543,9 +2583,9 @@ mod configured_session_seam {
     use nuxie::flow_session as core;
 
     pub(super) fn create(
-        context: &FlowRuntimeContextHandle,
+        context: &ExperienceRuntimeContextHandle,
         descriptor: OwnedConfiguredSessionDescriptor,
-    ) -> Result<(Box<FlowRenderSessionHandle>, FlowSessionResultHandle), RuntimeFailure> {
+    ) -> Result<(Box<ScreenSessionHandle>, ScreenSessionResultHandle), RuntimeFailure> {
         let worker = Arc::clone(&context.worker);
         let creation = worker.call(None, move |state| create_on_worker(state, descriptor));
         let (session_id, result) = match creation {
@@ -2557,7 +2597,7 @@ mod configured_session_seam {
                 return Err(RuntimeFailure::runtime("runtime worker is unavailable"));
             }
         };
-        let handle = Box::new(FlowRenderSessionHandle {
+        let handle = Box::new(ScreenSessionHandle {
             token: Arc::new(SessionToken {
                 worker,
                 id: session_id,
@@ -2569,7 +2609,7 @@ mod configured_session_seam {
     fn create_on_worker(
         state: &mut WorkerState,
         descriptor: OwnedConfiguredSessionDescriptor,
-    ) -> Result<(SessionId, FlowSessionResultHandle), RuntimeFailure> {
+    ) -> Result<(SessionId, ScreenSessionResultHandle), RuntimeFailure> {
         let player = descriptor.player.map(|selector| match selector {
             OwnedPlayerSelector::StateMachine(name) => core::FlowPlayerSelector::StateMachine(name),
             OwnedPlayerSelector::LinearAnimation(name) => {
@@ -2602,7 +2642,7 @@ mod configured_session_seam {
             SessionState {
                 is_fatal: false,
                 fatal_diagnostic: None,
-                flow_session: session,
+                screen_session: session,
                 factory,
                 renderer_generation,
                 legacy_timestamp_seconds: 0.0,
@@ -2619,26 +2659,26 @@ mod configured_session_seam {
     }
 
     pub(super) fn perform(
-        session: *const NuxFlowRenderSession,
+        session: *const NuxScreenSession,
         operation: OwnedSessionOperation,
-    ) -> (NuxStatus, FlowSessionResultHandle) {
-        let handle = unsafe { &*session.cast::<FlowRenderSessionHandle>() };
+    ) -> (NuxStatus, ScreenSessionResultHandle) {
+        let handle = unsafe { &*session.cast::<ScreenSessionHandle>() };
         let session_id = handle.token.id;
         match handle.token.worker.call(Some(session_id), move |state| {
             perform_on_worker(state, session_id, operation)
         }) {
             Ok(Ok(result)) => (NuxStatus::Ok, result),
             Ok(Err(failure)) => {
-                let result = FlowSessionResultHandle::from_runtime_failure(failure);
+                let result = ScreenSessionResultHandle::from_runtime_failure(failure);
                 (result.status, result)
             }
             Err(WorkerCallError::Panicked) => (
                 NuxStatus::RuntimeError,
-                FlowSessionResultHandle::failure(NuxStatus::RuntimeError, PANIC_DIAGNOSTIC),
+                ScreenSessionResultHandle::failure(NuxStatus::RuntimeError, PANIC_DIAGNOSTIC),
             ),
             Err(WorkerCallError::Unavailable) => (
                 NuxStatus::RuntimeError,
-                FlowSessionResultHandle::failure(
+                ScreenSessionResultHandle::failure(
                     NuxStatus::RuntimeError,
                     "runtime worker is unavailable",
                 ),
@@ -2650,7 +2690,7 @@ mod configured_session_seam {
         state: &mut WorkerState,
         session_id: SessionId,
         operation: OwnedSessionOperation,
-    ) -> Result<FlowSessionResultHandle, RuntimeFailure> {
+    ) -> Result<ScreenSessionResultHandle, RuntimeFailure> {
         state.require_live_session(session_id)?;
         #[cfg(test)]
         {
@@ -2663,18 +2703,18 @@ mod configured_session_seam {
             return perform_advance_on_worker(state, session_id, advance);
         }
         let session = state.session_mut(session_id)?;
-        let flow_session = &mut session.flow_session;
+        let screen_session = &mut session.screen_session;
         let factory = &mut session.factory;
         let core_result = match operation {
             OwnedSessionOperation::Query(queries) => {
-                let mut combined = FlowSessionResultHandle::empty_success();
+                let mut combined = ScreenSessionResultHandle::empty_success();
                 let mut deferred_player_inputs = None;
                 for query in queries {
                     let query = match query.kind {
-                        NUX_FLOW_QUERY_KIND_BOOTSTRAP => core::FlowQuery::Bootstrap,
-                        NUX_FLOW_QUERY_KIND_VALUES => core::FlowQuery::Values,
-                        NUX_FLOW_QUERY_KIND_CATALOG => core::FlowQuery::Catalog,
-                        NUX_FLOW_QUERY_KIND_PLAYER_INPUTS => core::FlowQuery::PlayerInputs,
+                        NUX_SCREEN_QUERY_KIND_BOOTSTRAP => core::FlowQuery::Bootstrap,
+                        NUX_SCREEN_QUERY_KIND_VALUES => core::FlowQuery::Values,
+                        NUX_SCREEN_QUERY_KIND_CATALOG => core::FlowQuery::Catalog,
+                        NUX_SCREEN_QUERY_KIND_PLAYER_INPUTS => core::FlowQuery::PlayerInputs,
                         _ => {
                             return Err(RuntimeFailure::new(
                                 NuxStatus::InvalidArgument,
@@ -2682,7 +2722,7 @@ mod configured_session_seam {
                             ));
                         }
                     };
-                    let mut result = flow_session
+                    let mut result = screen_session
                         .perform_with_factory(core::FlowOperation::Query(query), factory.as_mut())
                         .map_err(runtime_failure_from_core)?;
                     if result.player_inputs.is_some() {
@@ -2745,7 +2785,7 @@ mod configured_session_seam {
                 return Err(RuntimeFailure::runtime("advance dispatch is inconsistent"));
             }
         };
-        let result = flow_session
+        let result = screen_session
             .perform_with_factory(core_result, factory.as_mut())
             .map_err(runtime_failure_from_core)?;
         result_from_core(result)
@@ -2755,7 +2795,7 @@ mod configured_session_seam {
         state: &mut WorkerState,
         session_id: SessionId,
         mut advance: OwnedAdvanceOperation,
-    ) -> Result<FlowSessionResultHandle, RuntimeFailure> {
+    ) -> Result<ScreenSessionResultHandle, RuntimeFailure> {
         let completion = PendingFrameCompletion {
             callback: advance.completion_callback.take(),
             context_identity: advance.completion_context_identity,
@@ -2767,13 +2807,13 @@ mod configured_session_seam {
             None
         };
         if matches!(preflight_disposition, Some(SurfaceDisposition::DeviceLost)) {
-            let mut result = FlowSessionResultHandle::empty_success();
+            let mut result = ScreenSessionResultHandle::empty_success();
             result.surface_disposition = NUX_SURFACE_DISPOSITION_DEVICE_LOST;
-            result.is_settled = session.flow_session.is_settled();
+            result.is_settled = session.screen_session.is_settled();
             return Ok(result);
         }
         let mut core_result = session
-            .flow_session
+            .screen_session
             .perform_with_factory(
                 core::FlowOperation::Advance(core::FlowAdvance {
                     timestamp_seconds: advance.timestamp_seconds,
@@ -2804,7 +2844,7 @@ mod configured_session_seam {
                 failure,
             ));
         };
-        let bounds = session.flow_session.artboard_bounds();
+        let bounds = session.screen_session.artboard_bounds();
         let presentation_transform = match centered_contain_transform(
             bounds.x,
             bounds.y,
@@ -2828,7 +2868,7 @@ mod configured_session_seam {
         {
             session.render_attempts = session.render_attempts.saturating_add(1);
         }
-        let draw_result = session.flow_session.draw_into_result(
+        let draw_result = session.screen_session.draw_into_result(
             session.factory.as_mut(),
             &mut frame,
             &mut core_result,
@@ -2875,14 +2915,14 @@ mod configured_session_seam {
     fn committed_result_from_core(
         session: &mut SessionState,
         result: core::FlowResult,
-    ) -> Result<FlowSessionResultHandle, RuntimeFailure> {
+    ) -> Result<ScreenSessionResultHandle, RuntimeFailure> {
         result_from_core(result).map_err(|failure| {
             terminalize_after_committed_advance_failure(session, "result translation", failure)
         })
     }
 
     fn runtime_failure_from_core(error: core::FlowSessionError) -> RuntimeFailure {
-        RuntimeFailure::flow_session(error.kind(), error.message())
+        RuntimeFailure::screen_session(error.kind(), error.message())
     }
 
     fn state_batch_to_core(batch: OwnedStateBatch) -> Result<core::FlowStateBatch, RuntimeFailure> {
@@ -2930,14 +2970,14 @@ mod configured_session_seam {
     }
 
     fn pointer_kind_to_core(
-        kind: NuxFlowPointerEventKind,
+        kind: NuxScreenPointerEventKind,
     ) -> Result<core::FlowPointerKind, RuntimeFailure> {
         match kind {
-            NUX_FLOW_POINTER_EVENT_KIND_DOWN => Ok(core::FlowPointerKind::Down),
-            NUX_FLOW_POINTER_EVENT_KIND_MOVE => Ok(core::FlowPointerKind::Move),
-            NUX_FLOW_POINTER_EVENT_KIND_UP => Ok(core::FlowPointerKind::Up),
-            NUX_FLOW_POINTER_EVENT_KIND_CANCEL => Ok(core::FlowPointerKind::Cancel),
-            NUX_FLOW_POINTER_EVENT_KIND_EXIT => Ok(core::FlowPointerKind::Exit),
+            NUX_SCREEN_POINTER_EVENT_KIND_DOWN => Ok(core::FlowPointerKind::Down),
+            NUX_SCREEN_POINTER_EVENT_KIND_MOVE => Ok(core::FlowPointerKind::Move),
+            NUX_SCREEN_POINTER_EVENT_KIND_UP => Ok(core::FlowPointerKind::Up),
+            NUX_SCREEN_POINTER_EVENT_KIND_CANCEL => Ok(core::FlowPointerKind::Cancel),
+            NUX_SCREEN_POINTER_EVENT_KIND_EXIT => Ok(core::FlowPointerKind::Exit),
             _ => Err(RuntimeFailure::new(
                 NuxStatus::InvalidArgument,
                 "unknown pointer event kind",
@@ -2961,9 +3001,9 @@ mod configured_session_seam {
         } = mutation;
         if matches!(
             kind,
-            NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_BOOL
-                | NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_NUMBER
-                | NUX_FLOW_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER
+            NUX_SCREEN_STATE_MUTATION_KIND_SET_INPUT_BOOL
+                | NUX_SCREEN_STATE_MUTATION_KIND_SET_INPUT_NUMBER
+                | NUX_SCREEN_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER
         ) {
             let name = String::from_utf8(input_name.ok_or_else(|| {
                 RuntimeFailure::new(
@@ -2975,7 +3015,7 @@ mod configured_session_seam {
                 RuntimeFailure::new(NuxStatus::InvalidArgument, "player-input name is not UTF-8")
             })?;
             return match kind {
-                NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_BOOL => {
+                NUX_SCREEN_STATE_MUTATION_KIND_SET_INPUT_BOOL => {
                     let core::FlowScalarValue::Bool(value) =
                         scalar_value_at(arena, value_root_index)?
                     else {
@@ -2986,7 +3026,7 @@ mod configured_session_seam {
                     };
                     Ok(core::FlowStateMutation::SetInputBool { name, value })
                 }
-                NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_NUMBER => {
+                NUX_SCREEN_STATE_MUTATION_KIND_SET_INPUT_NUMBER => {
                     let core::FlowScalarValue::Number(value) =
                         scalar_value_at(arena, value_root_index)?
                     else {
@@ -2997,7 +3037,7 @@ mod configured_session_seam {
                     };
                     Ok(core::FlowStateMutation::SetInputNumber { name, value })
                 }
-                NUX_FLOW_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER => {
+                NUX_SCREEN_STATE_MUTATION_KIND_FIRE_INPUT_TRIGGER => {
                     Ok(core::FlowStateMutation::FireInputTrigger { name })
                 }
                 _ => Err(RuntimeFailure::new(
@@ -3022,15 +3062,15 @@ mod configured_session_seam {
             RuntimeFailure::new(NuxStatus::InvalidArgument, "mutation path is not UTF-8")
         })?;
         match kind {
-            NUX_FLOW_STATE_MUTATION_KIND_SET => Ok(core::FlowStateMutation::SetValue {
+            NUX_SCREEN_STATE_MUTATION_KIND_SET => Ok(core::FlowStateMutation::SetValue {
                 instance,
                 path,
                 value: scalar_value_at(arena, value_root_index)?,
             }),
-            NUX_FLOW_STATE_MUTATION_KIND_TRIGGER => {
+            NUX_SCREEN_STATE_MUTATION_KIND_TRIGGER => {
                 Ok(core::FlowStateMutation::FireTrigger { instance, path })
             }
-            NUX_FLOW_STATE_MUTATION_KIND_SET_VIEW_MODEL => {
+            NUX_SCREEN_STATE_MUTATION_KIND_SET_VIEW_MODEL => {
                 Ok(core::FlowStateMutation::SetViewModel {
                     instance,
                     path,
@@ -3042,7 +3082,7 @@ mod configured_session_seam {
                     })?)?,
                 })
             }
-            NUX_FLOW_STATE_MUTATION_KIND_LIST_INSERT => Ok(core::FlowStateMutation::ListInsert {
+            NUX_SCREEN_STATE_MUTATION_KIND_LIST_INSERT => Ok(core::FlowStateMutation::ListInsert {
                 instance,
                 path,
                 index: index as usize,
@@ -3050,24 +3090,24 @@ mod configured_session_seam {
                     RuntimeFailure::new(NuxStatus::InvalidArgument, "list insert item is missing")
                 })?)?,
             }),
-            NUX_FLOW_STATE_MUTATION_KIND_LIST_REMOVE => Ok(core::FlowStateMutation::ListRemove {
+            NUX_SCREEN_STATE_MUTATION_KIND_LIST_REMOVE => Ok(core::FlowStateMutation::ListRemove {
                 instance,
                 path,
                 index: index as usize,
             }),
-            NUX_FLOW_STATE_MUTATION_KIND_LIST_SWAP => Ok(core::FlowStateMutation::ListSwap {
+            NUX_SCREEN_STATE_MUTATION_KIND_LIST_SWAP => Ok(core::FlowStateMutation::ListSwap {
                 instance,
                 path,
                 first: index as usize,
                 second: other_index as usize,
             }),
-            NUX_FLOW_STATE_MUTATION_KIND_LIST_MOVE => Ok(core::FlowStateMutation::ListMove {
+            NUX_SCREEN_STATE_MUTATION_KIND_LIST_MOVE => Ok(core::FlowStateMutation::ListMove {
                 instance,
                 path,
                 from: index as usize,
                 to: other_index as usize,
             }),
-            NUX_FLOW_STATE_MUTATION_KIND_LIST_SET => Ok(core::FlowStateMutation::ListSet {
+            NUX_SCREEN_STATE_MUTATION_KIND_LIST_SET => Ok(core::FlowStateMutation::ListSet {
                 instance,
                 path,
                 index: index as usize,
@@ -3075,7 +3115,7 @@ mod configured_session_seam {
                     RuntimeFailure::new(NuxStatus::InvalidArgument, "list set item is missing")
                 })?)?,
             }),
-            NUX_FLOW_STATE_MUTATION_KIND_LIST_CLEAR => {
+            NUX_SCREEN_STATE_MUTATION_KIND_LIST_CLEAR => {
                 Ok(core::FlowStateMutation::ListClear { instance, path })
             }
             _ => Err(RuntimeFailure::new(
@@ -3109,22 +3149,22 @@ mod configured_session_seam {
             RuntimeFailure::new(NuxStatus::InvalidArgument, "set value root is out of range")
         })?;
         match node.kind {
-            NUX_FLOW_VALUE_KIND_NULL => Ok(core::FlowScalarValue::Null),
-            NUX_FLOW_VALUE_KIND_STRING => String::from_utf8(node.string_value.clone())
+            NUX_SCREEN_VALUE_KIND_NULL => Ok(core::FlowScalarValue::Null),
+            NUX_SCREEN_VALUE_KIND_STRING => String::from_utf8(node.string_value.clone())
                 .map(core::FlowScalarValue::String)
                 .map_err(|_| {
                     RuntimeFailure::new(NuxStatus::InvalidArgument, "string value is not UTF-8")
                 }),
-            NUX_FLOW_VALUE_KIND_NUMBER => {
+            NUX_SCREEN_VALUE_KIND_NUMBER => {
                 Ok(core::FlowScalarValue::Number(node.number_value as f32))
             }
-            NUX_FLOW_VALUE_KIND_BOOL => Ok(core::FlowScalarValue::Bool(node.bool_value)),
-            NUX_FLOW_VALUE_KIND_ENUM => Ok(core::FlowScalarValue::Enum(node.identity_value)),
-            NUX_FLOW_VALUE_KIND_LIST_INDEX => {
+            NUX_SCREEN_VALUE_KIND_BOOL => Ok(core::FlowScalarValue::Bool(node.bool_value)),
+            NUX_SCREEN_VALUE_KIND_ENUM => Ok(core::FlowScalarValue::Enum(node.identity_value)),
+            NUX_SCREEN_VALUE_KIND_LIST_INDEX => {
                 Ok(core::FlowScalarValue::ListIndex(node.identity_value))
             }
-            NUX_FLOW_VALUE_KIND_COLOR => Ok(core::FlowScalarValue::Color(node.color_value)),
-            NUX_FLOW_VALUE_KIND_IMAGE => Ok(core::FlowScalarValue::Image(node.identity_value)),
+            NUX_SCREEN_VALUE_KIND_COLOR => Ok(core::FlowScalarValue::Color(node.color_value)),
+            NUX_SCREEN_VALUE_KIND_IMAGE => Ok(core::FlowScalarValue::Image(node.identity_value)),
             _ => Err(RuntimeFailure::new(
                 NuxStatus::InvalidArgument,
                 "set values must be scalar",
@@ -3134,13 +3174,13 @@ mod configured_session_seam {
 
     fn result_from_bootstrap(
         bootstrap: &core::FlowBootstrap,
-    ) -> Result<FlowSessionResultHandle, RuntimeFailure> {
+    ) -> Result<ScreenSessionResultHandle, RuntimeFailure> {
         let max_x = bootstrap.bounds.x + bootstrap.bounds.width;
         let max_y = bootstrap.bounds.y + bootstrap.bounds.height;
         if !max_x.is_finite() || !max_y.is_finite() {
             return Err(RuntimeFailure::runtime("artboard bounds overflowed"));
         }
-        let mut result = FlowSessionResultHandle::empty_success();
+        let mut result = ScreenSessionResultHandle::empty_success();
         result.player_metadata = Some(OwnedPlayerMetadata {
             kind: player_kind_from_core(bootstrap.player.kind),
             selection: player_selection_from_core(bootstrap.player.selection),
@@ -3176,35 +3216,39 @@ mod configured_session_seam {
         Ok(result)
     }
 
-    fn player_kind_from_core(kind: core::FlowPlayerKind) -> NuxFlowPlayerKind {
+    fn player_kind_from_core(kind: core::FlowPlayerKind) -> NuxScreenPlayerKind {
         match kind {
-            core::FlowPlayerKind::StateMachine => NUX_FLOW_PLAYER_KIND_STATE_MACHINE,
-            core::FlowPlayerKind::LinearAnimation => NUX_FLOW_PLAYER_KIND_LINEAR_ANIMATION,
-            core::FlowPlayerKind::Static => NUX_FLOW_PLAYER_KIND_STATIC,
+            core::FlowPlayerKind::StateMachine => NUX_SCREEN_PLAYER_KIND_STATE_MACHINE,
+            core::FlowPlayerKind::LinearAnimation => NUX_SCREEN_PLAYER_KIND_LINEAR_ANIMATION,
+            core::FlowPlayerKind::Static => NUX_SCREEN_PLAYER_KIND_STATIC,
         }
     }
 
-    fn player_selection_from_core(selection: core::FlowPlayerSelection) -> NuxFlowPlayerSelection {
+    fn player_selection_from_core(
+        selection: core::FlowPlayerSelection,
+    ) -> NuxScreenPlayerSelection {
         match selection {
             core::FlowPlayerSelection::ExplicitStateMachine => {
-                NUX_FLOW_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE
+                NUX_SCREEN_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE
             }
             core::FlowPlayerSelection::AuthoredDefaultStateMachine => {
-                NUX_FLOW_PLAYER_SELECTION_AUTHORED_DEFAULT_STATE_MACHINE
+                NUX_SCREEN_PLAYER_SELECTION_AUTHORED_DEFAULT_STATE_MACHINE
             }
             core::FlowPlayerSelection::FirstStateMachine => {
-                NUX_FLOW_PLAYER_SELECTION_FIRST_STATE_MACHINE
+                NUX_SCREEN_PLAYER_SELECTION_FIRST_STATE_MACHINE
             }
-            core::FlowPlayerSelection::FirstAnimation => NUX_FLOW_PLAYER_SELECTION_FIRST_ANIMATION,
-            core::FlowPlayerSelection::Static => NUX_FLOW_PLAYER_SELECTION_STATIC,
+            core::FlowPlayerSelection::FirstAnimation => {
+                NUX_SCREEN_PLAYER_SELECTION_FIRST_ANIMATION
+            }
+            core::FlowPlayerSelection::Static => NUX_SCREEN_PLAYER_SELECTION_STATIC,
             core::FlowPlayerSelection::ExplicitLinearAnimation => {
-                NUX_FLOW_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION
+                NUX_SCREEN_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION
             }
         }
     }
 
     fn replace_catalog(
-        result: &mut FlowSessionResultHandle,
+        result: &mut ScreenSessionResultHandle,
         catalog: &core::FlowCatalog,
     ) -> Result<(), RuntimeFailure> {
         result.schemas.clear();
@@ -3284,25 +3328,25 @@ mod configured_session_seam {
         Ok(())
     }
 
-    fn schema_property_kind_from_core(kind: core::FlowValueType) -> NuxFlowSchemaPropertyKind {
+    fn schema_property_kind_from_core(kind: core::FlowValueType) -> NuxScreenSchemaPropertyKind {
         match kind {
-            core::FlowValueType::Null => NUX_FLOW_SCHEMA_PROPERTY_KIND_NULL,
-            core::FlowValueType::String => NUX_FLOW_SCHEMA_PROPERTY_KIND_STRING,
-            core::FlowValueType::Number => NUX_FLOW_SCHEMA_PROPERTY_KIND_NUMBER,
-            core::FlowValueType::Bool => NUX_FLOW_SCHEMA_PROPERTY_KIND_BOOL,
-            core::FlowValueType::Enum => NUX_FLOW_SCHEMA_PROPERTY_KIND_ENUM,
-            core::FlowValueType::ListIndex => NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST_INDEX,
-            core::FlowValueType::Color => NUX_FLOW_SCHEMA_PROPERTY_KIND_COLOR,
-            core::FlowValueType::Image => NUX_FLOW_SCHEMA_PROPERTY_KIND_IMAGE,
-            core::FlowValueType::Object => NUX_FLOW_SCHEMA_PROPERTY_KIND_OBJECT,
-            core::FlowValueType::ViewModel => NUX_FLOW_SCHEMA_PROPERTY_KIND_VIEW_MODEL,
-            core::FlowValueType::List => NUX_FLOW_SCHEMA_PROPERTY_KIND_LIST,
-            core::FlowValueType::Trigger => NUX_FLOW_SCHEMA_PROPERTY_KIND_TRIGGER,
+            core::FlowValueType::Null => NUX_SCREEN_SCHEMA_PROPERTY_KIND_NULL,
+            core::FlowValueType::String => NUX_SCREEN_SCHEMA_PROPERTY_KIND_STRING,
+            core::FlowValueType::Number => NUX_SCREEN_SCHEMA_PROPERTY_KIND_NUMBER,
+            core::FlowValueType::Bool => NUX_SCREEN_SCHEMA_PROPERTY_KIND_BOOL,
+            core::FlowValueType::Enum => NUX_SCREEN_SCHEMA_PROPERTY_KIND_ENUM,
+            core::FlowValueType::ListIndex => NUX_SCREEN_SCHEMA_PROPERTY_KIND_LIST_INDEX,
+            core::FlowValueType::Color => NUX_SCREEN_SCHEMA_PROPERTY_KIND_COLOR,
+            core::FlowValueType::Image => NUX_SCREEN_SCHEMA_PROPERTY_KIND_IMAGE,
+            core::FlowValueType::Object => NUX_SCREEN_SCHEMA_PROPERTY_KIND_OBJECT,
+            core::FlowValueType::ViewModel => NUX_SCREEN_SCHEMA_PROPERTY_KIND_VIEW_MODEL,
+            core::FlowValueType::List => NUX_SCREEN_SCHEMA_PROPERTY_KIND_LIST,
+            core::FlowValueType::Trigger => NUX_SCREEN_SCHEMA_PROPERTY_KIND_TRIGGER,
         }
     }
 
     fn append_value_arena(
-        result: &mut FlowSessionResultHandle,
+        result: &mut ScreenSessionResultHandle,
         arena: &core::FlowValueArena,
     ) -> Result<(), RuntimeFailure> {
         let mut indexes = HashMap::with_capacity(arena.nodes.len());
@@ -3326,10 +3370,10 @@ mod configured_session_seam {
             let (kind, number_value, color_value, bool_value, identity_value, string_value) =
                 match &node.value {
                     core::FlowValue::Null => {
-                        (NUX_FLOW_VALUE_KIND_NULL, 0.0, 0, false, 0, Vec::new())
+                        (NUX_SCREEN_VALUE_KIND_NULL, 0.0, 0, false, 0, Vec::new())
                     }
                     core::FlowValue::String(value) => (
-                        NUX_FLOW_VALUE_KIND_STRING,
+                        NUX_SCREEN_VALUE_KIND_STRING,
                         0.0,
                         0,
                         false,
@@ -3337,7 +3381,7 @@ mod configured_session_seam {
                         value.as_bytes().to_vec(),
                     ),
                     core::FlowValue::Number(value) => (
-                        NUX_FLOW_VALUE_KIND_NUMBER,
+                        NUX_SCREEN_VALUE_KIND_NUMBER,
                         f64::from(*value),
                         0,
                         false,
@@ -3345,32 +3389,54 @@ mod configured_session_seam {
                         Vec::new(),
                     ),
                     core::FlowValue::Bool(value) => {
-                        (NUX_FLOW_VALUE_KIND_BOOL, 0.0, 0, *value, 0, Vec::new())
+                        (NUX_SCREEN_VALUE_KIND_BOOL, 0.0, 0, *value, 0, Vec::new())
                     }
-                    core::FlowValue::Enum(value) => {
-                        (NUX_FLOW_VALUE_KIND_ENUM, 0.0, 0, false, *value, Vec::new())
-                    }
-                    core::FlowValue::ListIndex(value) => (
-                        NUX_FLOW_VALUE_KIND_LIST_INDEX,
+                    core::FlowValue::Enum(value) => (
+                        NUX_SCREEN_VALUE_KIND_ENUM,
                         0.0,
                         0,
                         false,
                         *value,
                         Vec::new(),
                     ),
-                    core::FlowValue::Color(value) => {
-                        (NUX_FLOW_VALUE_KIND_COLOR, 0.0, *value, false, 0, Vec::new())
-                    }
-                    core::FlowValue::Image(value) => {
-                        (NUX_FLOW_VALUE_KIND_IMAGE, 0.0, 0, false, *value, Vec::new())
-                    }
+                    core::FlowValue::ListIndex(value) => (
+                        NUX_SCREEN_VALUE_KIND_LIST_INDEX,
+                        0.0,
+                        0,
+                        false,
+                        *value,
+                        Vec::new(),
+                    ),
+                    core::FlowValue::Color(value) => (
+                        NUX_SCREEN_VALUE_KIND_COLOR,
+                        0.0,
+                        *value,
+                        false,
+                        0,
+                        Vec::new(),
+                    ),
+                    core::FlowValue::Image(value) => (
+                        NUX_SCREEN_VALUE_KIND_IMAGE,
+                        0.0,
+                        0,
+                        false,
+                        *value,
+                        Vec::new(),
+                    ),
                     core::FlowValue::Object(children) => {
                         append_named_edges(&mut result.value_arena.edges, children, &indexes)?;
-                        (NUX_FLOW_VALUE_KIND_OBJECT, 0.0, 0, false, 0, Vec::new())
+                        (NUX_SCREEN_VALUE_KIND_OBJECT, 0.0, 0, false, 0, Vec::new())
                     }
                     core::FlowValue::ViewModel(children) => {
                         append_named_edges(&mut result.value_arena.edges, children, &indexes)?;
-                        (NUX_FLOW_VALUE_KIND_VIEW_MODEL, 0.0, 0, false, 0, Vec::new())
+                        (
+                            NUX_SCREEN_VALUE_KIND_VIEW_MODEL,
+                            0.0,
+                            0,
+                            false,
+                            0,
+                            Vec::new(),
+                        )
                     }
                     core::FlowValue::List(children) => {
                         for child in children {
@@ -3382,7 +3448,7 @@ mod configured_session_seam {
                                 key: Vec::new(),
                             });
                         }
-                        (NUX_FLOW_VALUE_KIND_LIST, 0.0, 0, false, 0, Vec::new())
+                        (NUX_SCREEN_VALUE_KIND_LIST, 0.0, 0, false, 0, Vec::new())
                     }
                 };
             let edge_count = u32::try_from(result.value_arena.edges.len())
@@ -3408,7 +3474,7 @@ mod configured_session_seam {
                 .get(&root.get())
                 .ok_or_else(|| RuntimeFailure::runtime("value root references a missing node"))?;
             if let Some(node) = result.value_arena.nodes.get_mut(value_root_index as usize)
-                && node.kind == NUX_FLOW_VALUE_KIND_VIEW_MODEL
+                && node.kind == NUX_SCREEN_VALUE_KIND_VIEW_MODEL
             {
                 node.instance_id = Some(instance.get());
             }
@@ -3437,7 +3503,7 @@ mod configured_session_seam {
         Ok(())
     }
 
-    fn synchronize_instance_roots(result: &mut FlowSessionResultHandle) {
+    fn synchronize_instance_roots(result: &mut ScreenSessionResultHandle) {
         for instance in &mut result.instances {
             instance.value_root_index = result
                 .value_roots
@@ -3456,7 +3522,7 @@ mod configured_session_seam {
                 .value_arena
                 .nodes
                 .get_mut(root.value_root_index as usize)
-                && node.kind == NUX_FLOW_VALUE_KIND_VIEW_MODEL
+                && node.kind == NUX_SCREEN_VALUE_KIND_VIEW_MODEL
             {
                 node.instance_id = Some(root.instance_id);
                 node.schema_id = schema_id;
@@ -3466,14 +3532,14 @@ mod configured_session_seam {
 
     pub(super) fn result_from_core(
         result: core::FlowResult,
-    ) -> Result<FlowSessionResultHandle, RuntimeFailure> {
-        let mut translated = FlowSessionResultHandle::empty_success();
+    ) -> Result<ScreenSessionResultHandle, RuntimeFailure> {
+        let mut translated = ScreenSessionResultHandle::empty_success();
         merge_core_result(&mut translated, result)?;
         Ok(translated)
     }
 
     fn merge_core_result(
-        translated: &mut FlowSessionResultHandle,
+        translated: &mut ScreenSessionResultHandle,
         result: core::FlowResult,
     ) -> Result<(), RuntimeFailure> {
         translated.is_dirty = result.dirty;
@@ -3526,15 +3592,15 @@ mod configured_session_seam {
     }
 
     fn replace_player_inputs(
-        result: &mut FlowSessionResultHandle,
+        result: &mut ScreenSessionResultHandle,
         inputs: Vec<core::FlowInputSnapshot>,
     ) -> Result<(), RuntimeFailure> {
         result.player_inputs.clear();
         for input in inputs {
             let kind = match input.kind {
-                nuxie::StateMachineInputKind::Bool => NUX_FLOW_PLAYER_INPUT_KIND_BOOL,
-                nuxie::StateMachineInputKind::Number => NUX_FLOW_PLAYER_INPUT_KIND_NUMBER,
-                nuxie::StateMachineInputKind::Trigger => NUX_FLOW_PLAYER_INPUT_KIND_TRIGGER,
+                nuxie::StateMachineInputKind::Bool => NUX_SCREEN_PLAYER_INPUT_KIND_BOOL,
+                nuxie::StateMachineInputKind::Number => NUX_SCREEN_PLAYER_INPUT_KIND_NUMBER,
+                nuxie::StateMachineInputKind::Trigger => NUX_SCREEN_PLAYER_INPUT_KIND_TRIGGER,
             };
             let value_root_index = push_scalar(result, input.value)?;
             result.player_inputs.push(OwnedPlayerInput {
@@ -3547,24 +3613,26 @@ mod configured_session_seam {
     }
 
     fn append_outputs(
-        result: &mut FlowSessionResultHandle,
+        result: &mut ScreenSessionResultHandle,
         outputs: Vec<core::FlowOutput>,
     ) -> Result<(), RuntimeFailure> {
         for output in outputs {
             let phase = match output.phase {
                 core::FlowOutputPhase::DelayedEventCallbacks => {
-                    NUX_FLOW_OUTPUT_PHASE_DELAYED_EVENT_CALLBACKS
+                    NUX_SCREEN_OUTPUT_PHASE_DELAYED_EVENT_CALLBACKS
                 }
-                core::FlowOutputPhase::ReportedEvents => NUX_FLOW_OUTPUT_PHASE_REPORTED_EVENTS,
-                core::FlowOutputPhase::RuntimeAdvance => NUX_FLOW_OUTPUT_PHASE_RUNTIME_ADVANCE,
-                core::FlowOutputPhase::ViewModelChanges => NUX_FLOW_OUTPUT_PHASE_VIEW_MODEL_CHANGES,
-                core::FlowOutputPhase::HostWork => NUX_FLOW_OUTPUT_PHASE_HOST_WORK,
-                core::FlowOutputPhase::Render => NUX_FLOW_OUTPUT_PHASE_RENDER,
+                core::FlowOutputPhase::ReportedEvents => NUX_SCREEN_OUTPUT_PHASE_REPORTED_EVENTS,
+                core::FlowOutputPhase::RuntimeAdvance => NUX_SCREEN_OUTPUT_PHASE_RUNTIME_ADVANCE,
+                core::FlowOutputPhase::ViewModelChanges => {
+                    NUX_SCREEN_OUTPUT_PHASE_VIEW_MODEL_CHANGES
+                }
+                core::FlowOutputPhase::HostWork => NUX_SCREEN_OUTPUT_PHASE_HOST_WORK,
+                core::FlowOutputPhase::Render => NUX_SCREEN_OUTPUT_PHASE_RENDER,
             };
             let mut translated = OwnedOutput {
                 phase,
                 // Every payload branch below overwrites this placeholder.
-                kind: NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT,
+                kind: NUX_SCREEN_OUTPUT_KIND_REPORTED_EVENT,
                 payload_root_index: None,
                 sequence: output.sequence,
                 cycle: output.cycle,
@@ -3588,7 +3656,7 @@ mod configured_session_seam {
                     delay_seconds,
                     properties,
                 } => {
-                    translated.kind = NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT;
+                    translated.kind = NUX_SCREEN_OUTPUT_KIND_REPORTED_EVENT;
                     let open_url = match (url, target) {
                         (Some(url), Some(target)) => Some(OwnedOpenUrl {
                             url: url.into_bytes(),
@@ -3618,9 +3686,9 @@ mod configured_session_seam {
                     origin_mutation_id,
                 } => {
                     translated.kind = if instance_id.is_some() {
-                        NUX_FLOW_OUTPUT_KIND_VIEW_MODEL_CHANGE
+                        NUX_SCREEN_OUTPUT_KIND_VIEW_MODEL_CHANGE
                     } else {
-                        NUX_FLOW_OUTPUT_KIND_STATE_CHANGE
+                        NUX_SCREEN_OUTPUT_KIND_STATE_CHANGE
                     };
                     translated.instance_id = instance_id.map(core::FlowInstanceId::get);
                     translated.path = path.into_bytes();
@@ -3631,15 +3699,15 @@ mod configured_session_seam {
                     }
                 }
                 core::FlowOutputPayload::HostCommand { name, payload } => {
-                    translated.kind = NUX_FLOW_OUTPUT_KIND_HOST_COMMAND;
+                    translated.kind = NUX_SCREEN_OUTPUT_KIND_HOST_COMMAND;
                     translated.name = name.into_bytes();
                     translated.payload_root_index = Some(push_host_value(result, payload)?);
                 }
                 core::FlowOutputPayload::RenderRequested { .. } => {
-                    translated.kind = NUX_FLOW_OUTPUT_KIND_RENDER_REQUEST;
+                    translated.kind = NUX_SCREEN_OUTPUT_KIND_RENDER_REQUEST;
                 }
                 core::FlowOutputPayload::RuntimeAdvanced { delta_seconds } => {
-                    translated.kind = NUX_FLOW_OUTPUT_KIND_RUNTIME_ADVANCED;
+                    translated.kind = NUX_SCREEN_OUTPUT_KIND_RUNTIME_ADVANCED;
                     translated.delay_seconds = delta_seconds;
                 }
             }
@@ -3649,7 +3717,7 @@ mod configured_session_seam {
     }
 
     fn populate_event_output(
-        result: &mut FlowSessionResultHandle,
+        result: &mut ScreenSessionResultHandle,
         output: &mut OwnedOutput,
         name: Option<String>,
         event_type: u32,
@@ -3680,7 +3748,7 @@ mod configured_session_seam {
     }
 
     fn push_scalar(
-        result: &mut FlowSessionResultHandle,
+        result: &mut ScreenSessionResultHandle,
         value: core::FlowScalarValue,
     ) -> Result<u32, RuntimeFailure> {
         let index = u32::try_from(result.value_arena.nodes.len())
@@ -3688,10 +3756,10 @@ mod configured_session_seam {
         let (kind, number_value, color_value, bool_value, identity_value, string_value) =
             match value {
                 core::FlowScalarValue::Null => {
-                    (NUX_FLOW_VALUE_KIND_NULL, 0.0, 0, false, 0, Vec::new())
+                    (NUX_SCREEN_VALUE_KIND_NULL, 0.0, 0, false, 0, Vec::new())
                 }
                 core::FlowScalarValue::String(value) => (
-                    NUX_FLOW_VALUE_KIND_STRING,
+                    NUX_SCREEN_VALUE_KIND_STRING,
                     0.0,
                     0,
                     false,
@@ -3699,7 +3767,7 @@ mod configured_session_seam {
                     value.into_bytes(),
                 ),
                 core::FlowScalarValue::Number(value) => (
-                    NUX_FLOW_VALUE_KIND_NUMBER,
+                    NUX_SCREEN_VALUE_KIND_NUMBER,
                     f64::from(value),
                     0,
                     false,
@@ -3707,25 +3775,35 @@ mod configured_session_seam {
                     Vec::new(),
                 ),
                 core::FlowScalarValue::Bool(value) => {
-                    (NUX_FLOW_VALUE_KIND_BOOL, 0.0, 0, value, 0, Vec::new())
+                    (NUX_SCREEN_VALUE_KIND_BOOL, 0.0, 0, value, 0, Vec::new())
                 }
                 core::FlowScalarValue::Enum(value) => {
-                    (NUX_FLOW_VALUE_KIND_ENUM, 0.0, 0, false, value, Vec::new())
+                    (NUX_SCREEN_VALUE_KIND_ENUM, 0.0, 0, false, value, Vec::new())
                 }
                 core::FlowScalarValue::ListIndex(value) => (
-                    NUX_FLOW_VALUE_KIND_LIST_INDEX,
+                    NUX_SCREEN_VALUE_KIND_LIST_INDEX,
                     0.0,
                     0,
                     false,
                     value,
                     Vec::new(),
                 ),
-                core::FlowScalarValue::Color(value) => {
-                    (NUX_FLOW_VALUE_KIND_COLOR, 0.0, value, false, 0, Vec::new())
-                }
-                core::FlowScalarValue::Image(value) => {
-                    (NUX_FLOW_VALUE_KIND_IMAGE, 0.0, 0, false, value, Vec::new())
-                }
+                core::FlowScalarValue::Color(value) => (
+                    NUX_SCREEN_VALUE_KIND_COLOR,
+                    0.0,
+                    value,
+                    false,
+                    0,
+                    Vec::new(),
+                ),
+                core::FlowScalarValue::Image(value) => (
+                    NUX_SCREEN_VALUE_KIND_IMAGE,
+                    0.0,
+                    0,
+                    false,
+                    value,
+                    Vec::new(),
+                ),
                 core::FlowScalarValue::Trigger(_) => {
                     return Err(RuntimeFailure::runtime(
                         "trigger counts are valid only in event properties",
@@ -3748,7 +3826,7 @@ mod configured_session_seam {
     }
 
     fn push_state_change_value(
-        result: &mut FlowSessionResultHandle,
+        result: &mut ScreenSessionResultHandle,
         value: core::FlowStateChangeValue,
     ) -> Result<u32, RuntimeFailure> {
         match value {
@@ -3760,7 +3838,7 @@ mod configured_session_seam {
                 let index = u32::try_from(result.value_arena.nodes.len())
                     .map_err(|_| RuntimeFailure::runtime("value node index overflowed"))?;
                 result.value_arena.nodes.push(OwnedValueNode {
-                    kind: NUX_FLOW_VALUE_KIND_VIEW_MODEL,
+                    kind: NUX_SCREEN_VALUE_KIND_VIEW_MODEL,
                     number_value: 0.0,
                     color_value: 0,
                     bool_value: false,
@@ -3777,22 +3855,26 @@ mod configured_session_seam {
     }
 
     fn push_host_value(
-        result: &mut FlowSessionResultHandle,
+        result: &mut ScreenSessionResultHandle,
         value: core::FlowHostValue,
     ) -> Result<u32, RuntimeFailure> {
         let (kind, number_value, bool_value, string_value, child_edges) = match value {
-            core::FlowHostValue::Bool(value) => {
-                (NUX_FLOW_VALUE_KIND_BOOL, 0.0, value, Vec::new(), Vec::new())
-            }
+            core::FlowHostValue::Bool(value) => (
+                NUX_SCREEN_VALUE_KIND_BOOL,
+                0.0,
+                value,
+                Vec::new(),
+                Vec::new(),
+            ),
             core::FlowHostValue::Number(value) => (
-                NUX_FLOW_VALUE_KIND_NUMBER,
+                NUX_SCREEN_VALUE_KIND_NUMBER,
                 value,
                 false,
                 Vec::new(),
                 Vec::new(),
             ),
             core::FlowHostValue::String(value) => (
-                NUX_FLOW_VALUE_KIND_STRING,
+                NUX_SCREEN_VALUE_KIND_STRING,
                 0.0,
                 false,
                 value.into_bytes(),
@@ -3806,7 +3888,7 @@ mod configured_session_seam {
                         key: Vec::new(),
                     });
                 }
-                (NUX_FLOW_VALUE_KIND_LIST, 0.0, false, Vec::new(), edges)
+                (NUX_SCREEN_VALUE_KIND_LIST, 0.0, false, Vec::new(), edges)
             }
             core::FlowHostValue::Object(values) => {
                 let mut edges = Vec::with_capacity(values.len());
@@ -3816,7 +3898,7 @@ mod configured_session_seam {
                         key: key.into_bytes(),
                     });
                 }
-                (NUX_FLOW_VALUE_KIND_OBJECT, 0.0, false, Vec::new(), edges)
+                (NUX_SCREEN_VALUE_KIND_OBJECT, 0.0, false, Vec::new(), edges)
             }
         };
         let first_edge = u32::try_from(result.value_arena.edges.len())
@@ -3854,11 +3936,11 @@ mod configured_session_seam {
 ///
 /// `context` must be live. Non-null pointers must be properly aligned and valid
 /// for this synchronous call. Output pointers must address writable storage.
-pub unsafe extern "C" fn nux_flow_render_session_create_configured(
-    context: *const NuxFlowRuntimeContext,
-    descriptor: *const NuxFlowConfiguredSessionDescriptor,
-    out_session: *mut *mut NuxFlowRenderSession,
-    out_result: *mut *mut NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_create_configured(
+    context: *const NuxExperienceContext,
+    descriptor: *const NuxScreenConfiguredSessionDescriptor,
+    out_session: *mut *mut NuxScreenSession,
+    out_result: *mut *mut NuxScreenSessionResult,
 ) -> NuxStatus {
     ffi_guard_with_session_result(
         out_result,
@@ -3887,7 +3969,7 @@ pub unsafe extern "C" fn nux_flow_render_session_create_configured(
                     );
                 }
             };
-            let context = unsafe { &*context.cast::<FlowRuntimeContextHandle>() };
+            let context = unsafe { &*context.cast::<ExperienceRuntimeContextHandle>() };
             match configured_session_seam::create(context, descriptor) {
                 Ok((session, result)) => {
                     let result_status = replace_session_result(out_result, result);
@@ -3915,10 +3997,10 @@ pub unsafe extern "C" fn nux_flow_render_session_create_configured(
 ///
 /// `session` must be live. The operation and every selected nested array/view
 /// must remain readable for this synchronous call. `out_result` must be writable.
-pub unsafe extern "C" fn nux_flow_render_session_perform(
-    session: *const NuxFlowRenderSession,
-    operation: *const NuxFlowSessionOperation,
-    out_result: *mut *mut NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_perform(
+    session: *const NuxScreenSession,
+    operation: *const NuxScreenSessionOperation,
+    out_result: *mut *mut NuxScreenSessionResult,
 ) -> NuxStatus {
     ffi_guard_with_session_result(
         out_result,
@@ -3966,14 +4048,14 @@ pub unsafe extern "C" fn nux_flow_render_session_perform(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_status(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_status(
+    result: *const NuxScreenSessionResult,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         if result.is_null() {
             NuxStatus::NullArgument
         } else {
-            unsafe { (*result.cast::<FlowSessionResultHandle>()).status }
+            unsafe { (*result.cast::<ScreenSessionResultHandle>()).status }
         }
     })
 }
@@ -3984,14 +4066,14 @@ pub unsafe extern "C" fn nux_flow_session_result_status(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_surface_disposition(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_surface_disposition(
+    result: *const NuxScreenSessionResult,
 ) -> NuxSurfaceDisposition {
     ffi_guard(NuxSurfaceDisposition::Fatal, || {
         if result.is_null() {
             NuxSurfaceDisposition::Fatal
         } else {
-            unsafe { (*result.cast::<FlowSessionResultHandle>()).surface_disposition }
+            unsafe { (*result.cast::<ScreenSessionResultHandle>()).surface_disposition }
         }
     })
 }
@@ -4002,11 +4084,11 @@ pub unsafe extern "C" fn nux_flow_session_result_surface_disposition(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_is_dirty(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_is_dirty(
+    result: *const NuxScreenSessionResult,
 ) -> bool {
     ffi_guard(false, || {
-        !result.is_null() && unsafe { (*result.cast::<FlowSessionResultHandle>()).is_dirty }
+        !result.is_null() && unsafe { (*result.cast::<ScreenSessionResultHandle>()).is_dirty }
     })
 }
 
@@ -4016,11 +4098,11 @@ pub unsafe extern "C" fn nux_flow_session_result_is_dirty(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_is_settled(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_is_settled(
+    result: *const NuxScreenSessionResult,
 ) -> bool {
     ffi_guard(false, || {
-        !result.is_null() && unsafe { (*result.cast::<FlowSessionResultHandle>()).is_settled }
+        !result.is_null() && unsafe { (*result.cast::<ScreenSessionResultHandle>()).is_settled }
     })
 }
 
@@ -4031,11 +4113,11 @@ pub unsafe extern "C" fn nux_flow_session_result_is_settled(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_has_catalog(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_has_catalog(
+    result: *const NuxScreenSessionResult,
 ) -> bool {
     ffi_guard(false, || {
-        !result.is_null() && unsafe { (*result.cast::<FlowSessionResultHandle>()).has_catalog }
+        !result.is_null() && unsafe { (*result.cast::<ScreenSessionResultHandle>()).has_catalog }
     })
 }
 
@@ -4046,12 +4128,12 @@ pub unsafe extern "C" fn nux_flow_session_result_has_catalog(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_has_player_inputs(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_has_player_inputs(
+    result: *const NuxScreenSessionResult,
 ) -> bool {
     ffi_guard(false, || {
         !result.is_null()
-            && unsafe { (*result.cast::<FlowSessionResultHandle>()).has_player_inputs }
+            && unsafe { (*result.cast::<ScreenSessionResultHandle>()).has_player_inputs }
     })
 }
 
@@ -4062,11 +4144,11 @@ pub unsafe extern "C" fn nux_flow_session_result_has_player_inputs(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_has_values(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_has_values(
+    result: *const NuxScreenSessionResult,
 ) -> bool {
     ffi_guard(false, || {
-        !result.is_null() && unsafe { (*result.cast::<FlowSessionResultHandle>()).has_values }
+        !result.is_null() && unsafe { (*result.cast::<ScreenSessionResultHandle>()).has_values }
     })
 }
 
@@ -4077,8 +4159,8 @@ pub unsafe extern "C" fn nux_flow_session_result_has_values(
 /// # Safety
 ///
 /// `result` must be live and `out_wake_after_seconds` writable.
-pub unsafe extern "C" fn nux_flow_session_result_wake_after_seconds(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_wake_after_seconds(
+    result: *const NuxScreenSessionResult,
     out_wake_after_seconds: *mut f64,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
@@ -4091,7 +4173,8 @@ pub unsafe extern "C" fn nux_flow_session_result_wake_after_seconds(
         if result.is_null() {
             return NuxStatus::NullArgument;
         }
-        let Some(wake_after) = (unsafe { (*result.cast::<FlowSessionResultHandle>()).wake_after })
+        let Some(wake_after) =
+            (unsafe { (*result.cast::<ScreenSessionResultHandle>()).wake_after })
         else {
             return NuxStatus::NotFound;
         };
@@ -4110,31 +4193,31 @@ pub unsafe extern "C" fn nux_flow_session_result_wake_after_seconds(
 ///
 /// `result` must be live. `out_metadata` must be writable with its exact
 /// published `struct_size`; returned views expire when `result` is freed.
-pub unsafe extern "C" fn nux_flow_session_result_player_metadata(
-    result: *const NuxFlowSessionResult,
-    out_metadata: *mut NuxFlowPlayerMetadataView,
+pub unsafe extern "C" fn nux_screen_session_result_player_metadata(
+    result: *const NuxScreenSessionResult,
+    out_metadata: *mut NuxScreenPlayerMetadataView,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         if out_metadata.is_null() {
             return NuxStatus::NullArgument;
         }
-        if unsafe { read_struct_size(out_metadata) } != size_u32::<NuxFlowPlayerMetadataView>() {
+        if unsafe { read_struct_size(out_metadata) } != size_u32::<NuxScreenPlayerMetadataView>() {
             return NuxStatus::InvalidArgument;
         }
         unsafe {
             ptr::write_bytes(out_metadata, 0, 1);
-            (*out_metadata).struct_size = size_u32::<NuxFlowPlayerMetadataView>();
+            (*out_metadata).struct_size = size_u32::<NuxScreenPlayerMetadataView>();
         }
         if result.is_null() {
             return NuxStatus::NullArgument;
         }
-        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
         let Some(metadata) = handle.player_metadata.as_ref() else {
             return NuxStatus::NotFound;
         };
         unsafe {
-            *out_metadata = NuxFlowPlayerMetadataView {
-                struct_size: size_u32::<NuxFlowPlayerMetadataView>(),
+            *out_metadata = NuxScreenPlayerMetadataView {
+                struct_size: size_u32::<NuxScreenPlayerMetadataView>(),
                 kind: metadata.kind,
                 selection: metadata.selection,
                 player_index: metadata.player_index.unwrap_or(u32::MAX),
@@ -4156,15 +4239,15 @@ pub unsafe extern "C" fn nux_flow_session_result_player_metadata(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_player_input_count(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_player_input_count(
+    result: *const NuxScreenSessionResult,
 ) -> u64 {
     ffi_guard(0, || {
         if result.is_null() {
             0
         } else {
             u64::try_from(
-                unsafe { &*result.cast::<FlowSessionResultHandle>() }
+                unsafe { &*result.cast::<ScreenSessionResultHandle>() }
                     .player_inputs
                     .len(),
             )
@@ -4179,21 +4262,21 @@ pub unsafe extern "C" fn nux_flow_session_result_player_input_count(
 /// # Safety
 ///
 /// `result` must be live. `out_input` must have the exact published size.
-pub unsafe extern "C" fn nux_flow_session_result_player_input_at(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_player_input_at(
+    result: *const NuxScreenSessionResult,
     index: u64,
-    out_input: *mut NuxFlowPlayerInputView,
+    out_input: *mut NuxScreenPlayerInputView,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         if out_input.is_null() {
             return NuxStatus::NullArgument;
         }
-        if unsafe { read_struct_size(out_input) } != size_u32::<NuxFlowPlayerInputView>() {
+        if unsafe { read_struct_size(out_input) } != size_u32::<NuxScreenPlayerInputView>() {
             return NuxStatus::InvalidArgument;
         }
         unsafe {
             ptr::write_bytes(out_input, 0, 1);
-            (*out_input).struct_size = size_u32::<NuxFlowPlayerInputView>();
+            (*out_input).struct_size = size_u32::<NuxScreenPlayerInputView>();
         }
         if result.is_null() {
             return NuxStatus::NullArgument;
@@ -4201,13 +4284,13 @@ pub unsafe extern "C" fn nux_flow_session_result_player_input_at(
         let Ok(index) = usize::try_from(index) else {
             return NuxStatus::NotFound;
         };
-        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
         let Some(input) = handle.player_inputs.get(index) else {
             return NuxStatus::NotFound;
         };
         unsafe {
-            *out_input = NuxFlowPlayerInputView {
-                struct_size: size_u32::<NuxFlowPlayerInputView>(),
+            *out_input = NuxScreenPlayerInputView {
+                struct_size: size_u32::<NuxScreenPlayerInputView>(),
                 kind: input.kind,
                 value_root_index: input.value_root_index,
                 name: borrowed_view(&input.name),
@@ -4223,15 +4306,15 @@ pub unsafe extern "C" fn nux_flow_session_result_player_input_at(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_schema_count(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_schema_count(
+    result: *const NuxScreenSessionResult,
 ) -> u64 {
     ffi_guard(0, || {
         if result.is_null() {
             0
         } else {
             u64::try_from(
-                unsafe { &*result.cast::<FlowSessionResultHandle>() }
+                unsafe { &*result.cast::<ScreenSessionResultHandle>() }
                     .schemas
                     .len(),
             )
@@ -4246,21 +4329,21 @@ pub unsafe extern "C" fn nux_flow_session_result_schema_count(
 /// # Safety
 ///
 /// `result` must be live. `out_schema` must have the exact published size.
-pub unsafe extern "C" fn nux_flow_session_result_schema_at(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_schema_at(
+    result: *const NuxScreenSessionResult,
     index: u64,
-    out_schema: *mut NuxFlowSchemaView,
+    out_schema: *mut NuxScreenSchemaView,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         if out_schema.is_null() {
             return NuxStatus::NullArgument;
         }
-        if unsafe { read_struct_size(out_schema) } != size_u32::<NuxFlowSchemaView>() {
+        if unsafe { read_struct_size(out_schema) } != size_u32::<NuxScreenSchemaView>() {
             return NuxStatus::InvalidArgument;
         }
         unsafe {
             ptr::write_bytes(out_schema, 0, 1);
-            (*out_schema).struct_size = size_u32::<NuxFlowSchemaView>();
+            (*out_schema).struct_size = size_u32::<NuxScreenSchemaView>();
         }
         if result.is_null() {
             return NuxStatus::NullArgument;
@@ -4268,13 +4351,13 @@ pub unsafe extern "C" fn nux_flow_session_result_schema_at(
         let Ok(index) = usize::try_from(index) else {
             return NuxStatus::NotFound;
         };
-        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
         let Some(schema) = handle.schemas.get(index) else {
             return NuxStatus::NotFound;
         };
         unsafe {
-            *out_schema = NuxFlowSchemaView {
-                struct_size: size_u32::<NuxFlowSchemaView>(),
+            *out_schema = NuxScreenSchemaView {
+                struct_size: size_u32::<NuxScreenSchemaView>(),
                 first_property: schema.first_property,
                 property_count: schema.property_count,
                 schema_id: borrowed_view(&schema.schema_id),
@@ -4291,15 +4374,15 @@ pub unsafe extern "C" fn nux_flow_session_result_schema_at(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_schema_property_count(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_schema_property_count(
+    result: *const NuxScreenSessionResult,
 ) -> u64 {
     ffi_guard(0, || {
         if result.is_null() {
             0
         } else {
             u64::try_from(
-                unsafe { &*result.cast::<FlowSessionResultHandle>() }
+                unsafe { &*result.cast::<ScreenSessionResultHandle>() }
                     .schema_properties
                     .len(),
             )
@@ -4314,21 +4397,21 @@ pub unsafe extern "C" fn nux_flow_session_result_schema_property_count(
 /// # Safety
 ///
 /// `result` must be live. `out_property` must have the exact published size.
-pub unsafe extern "C" fn nux_flow_session_result_schema_property_at(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_schema_property_at(
+    result: *const NuxScreenSessionResult,
     index: u64,
-    out_property: *mut NuxFlowSchemaPropertyView,
+    out_property: *mut NuxScreenSchemaPropertyView,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         if out_property.is_null() {
             return NuxStatus::NullArgument;
         }
-        if unsafe { read_struct_size(out_property) } != size_u32::<NuxFlowSchemaPropertyView>() {
+        if unsafe { read_struct_size(out_property) } != size_u32::<NuxScreenSchemaPropertyView>() {
             return NuxStatus::InvalidArgument;
         }
         unsafe {
             ptr::write_bytes(out_property, 0, 1);
-            (*out_property).struct_size = size_u32::<NuxFlowSchemaPropertyView>();
+            (*out_property).struct_size = size_u32::<NuxScreenSchemaPropertyView>();
         }
         if result.is_null() {
             return NuxStatus::NullArgument;
@@ -4336,13 +4419,13 @@ pub unsafe extern "C" fn nux_flow_session_result_schema_property_at(
         let Ok(index) = usize::try_from(index) else {
             return NuxStatus::NotFound;
         };
-        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
         let Some(property) = handle.schema_properties.get(index) else {
             return NuxStatus::NotFound;
         };
         unsafe {
-            *out_property = NuxFlowSchemaPropertyView {
-                struct_size: size_u32::<NuxFlowSchemaPropertyView>(),
+            *out_property = NuxScreenSchemaPropertyView {
+                struct_size: size_u32::<NuxScreenSchemaPropertyView>(),
                 kind: property.kind,
                 schema_id: borrowed_view(&property.schema_id),
                 property_id: borrowed_view(&property.property_id),
@@ -4362,15 +4445,15 @@ pub unsafe extern "C" fn nux_flow_session_result_schema_property_at(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_enum_label_count(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_enum_label_count(
+    result: *const NuxScreenSessionResult,
 ) -> u64 {
     ffi_guard(0, || {
         if result.is_null() {
             0
         } else {
             u64::try_from(
-                unsafe { &*result.cast::<FlowSessionResultHandle>() }
+                unsafe { &*result.cast::<ScreenSessionResultHandle>() }
                     .enum_labels
                     .len(),
             )
@@ -4385,21 +4468,21 @@ pub unsafe extern "C" fn nux_flow_session_result_enum_label_count(
 /// # Safety
 ///
 /// `result` must be live. `out_label` must have the exact published size.
-pub unsafe extern "C" fn nux_flow_session_result_enum_label_at(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_enum_label_at(
+    result: *const NuxScreenSessionResult,
     index: u64,
-    out_label: *mut NuxFlowEnumLabelView,
+    out_label: *mut NuxScreenEnumLabelView,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         if out_label.is_null() {
             return NuxStatus::NullArgument;
         }
-        if unsafe { read_struct_size(out_label) } != size_u32::<NuxFlowEnumLabelView>() {
+        if unsafe { read_struct_size(out_label) } != size_u32::<NuxScreenEnumLabelView>() {
             return NuxStatus::InvalidArgument;
         }
         unsafe {
             ptr::write_bytes(out_label, 0, 1);
-            (*out_label).struct_size = size_u32::<NuxFlowEnumLabelView>();
+            (*out_label).struct_size = size_u32::<NuxScreenEnumLabelView>();
         }
         if result.is_null() {
             return NuxStatus::NullArgument;
@@ -4407,13 +4490,13 @@ pub unsafe extern "C" fn nux_flow_session_result_enum_label_at(
         let Ok(index) = usize::try_from(index) else {
             return NuxStatus::NotFound;
         };
-        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
         let Some(label) = handle.enum_labels.get(index) else {
             return NuxStatus::NotFound;
         };
         unsafe {
-            *out_label = NuxFlowEnumLabelView {
-                struct_size: size_u32::<NuxFlowEnumLabelView>(),
+            *out_label = NuxScreenEnumLabelView {
+                struct_size: size_u32::<NuxScreenEnumLabelView>(),
                 value: label.value,
                 label: borrowed_view(&label.label),
             };
@@ -4428,15 +4511,15 @@ pub unsafe extern "C" fn nux_flow_session_result_enum_label_at(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_instance_template_count(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_instance_template_count(
+    result: *const NuxScreenSessionResult,
 ) -> u64 {
     ffi_guard(0, || {
         if result.is_null() {
             0
         } else {
             u64::try_from(
-                unsafe { &*result.cast::<FlowSessionResultHandle>() }
+                unsafe { &*result.cast::<ScreenSessionResultHandle>() }
                     .instance_templates
                     .len(),
             )
@@ -4451,21 +4534,22 @@ pub unsafe extern "C" fn nux_flow_session_result_instance_template_count(
 /// # Safety
 ///
 /// `result` must be live. `out_template` must have the exact published size.
-pub unsafe extern "C" fn nux_flow_session_result_instance_template_at(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_instance_template_at(
+    result: *const NuxScreenSessionResult,
     index: u64,
-    out_template: *mut NuxFlowInstanceTemplateView,
+    out_template: *mut NuxScreenInstanceTemplateView,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         if out_template.is_null() {
             return NuxStatus::NullArgument;
         }
-        if unsafe { read_struct_size(out_template) } != size_u32::<NuxFlowInstanceTemplateView>() {
+        if unsafe { read_struct_size(out_template) } != size_u32::<NuxScreenInstanceTemplateView>()
+        {
             return NuxStatus::InvalidArgument;
         }
         unsafe {
             ptr::write_bytes(out_template, 0, 1);
-            (*out_template).struct_size = size_u32::<NuxFlowInstanceTemplateView>();
+            (*out_template).struct_size = size_u32::<NuxScreenInstanceTemplateView>();
         }
         if result.is_null() {
             return NuxStatus::NullArgument;
@@ -4473,13 +4557,13 @@ pub unsafe extern "C" fn nux_flow_session_result_instance_template_at(
         let Ok(index) = usize::try_from(index) else {
             return NuxStatus::NotFound;
         };
-        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
         let Some(template) = handle.instance_templates.get(index) else {
             return NuxStatus::NotFound;
         };
         unsafe {
-            *out_template = NuxFlowInstanceTemplateView {
-                struct_size: size_u32::<NuxFlowInstanceTemplateView>(),
+            *out_template = NuxScreenInstanceTemplateView {
+                struct_size: size_u32::<NuxScreenInstanceTemplateView>(),
                 authored_index: template.authored_index,
                 schema_id: borrowed_view(&template.schema_id),
                 authored_name: borrowed_view(&template.authored_name),
@@ -4495,15 +4579,15 @@ pub unsafe extern "C" fn nux_flow_session_result_instance_template_at(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_instance_count(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_instance_count(
+    result: *const NuxScreenSessionResult,
 ) -> u64 {
     ffi_guard(0, || {
         if result.is_null() {
             0
         } else {
             u64::try_from(
-                unsafe { &*result.cast::<FlowSessionResultHandle>() }
+                unsafe { &*result.cast::<ScreenSessionResultHandle>() }
                     .instances
                     .len(),
             )
@@ -4518,21 +4602,21 @@ pub unsafe extern "C" fn nux_flow_session_result_instance_count(
 /// # Safety
 ///
 /// `result` must be live. `out_instance` must have the exact published size.
-pub unsafe extern "C" fn nux_flow_session_result_instance_at(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_instance_at(
+    result: *const NuxScreenSessionResult,
     index: u64,
-    out_instance: *mut NuxFlowInstanceView,
+    out_instance: *mut NuxScreenInstanceView,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         if out_instance.is_null() {
             return NuxStatus::NullArgument;
         }
-        if unsafe { read_struct_size(out_instance) } != size_u32::<NuxFlowInstanceView>() {
+        if unsafe { read_struct_size(out_instance) } != size_u32::<NuxScreenInstanceView>() {
             return NuxStatus::InvalidArgument;
         }
         unsafe {
             ptr::write_bytes(out_instance, 0, 1);
-            (*out_instance).struct_size = size_u32::<NuxFlowInstanceView>();
+            (*out_instance).struct_size = size_u32::<NuxScreenInstanceView>();
         }
         if result.is_null() {
             return NuxStatus::NullArgument;
@@ -4540,13 +4624,13 @@ pub unsafe extern "C" fn nux_flow_session_result_instance_at(
         let Ok(index) = usize::try_from(index) else {
             return NuxStatus::NotFound;
         };
-        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
         let Some(instance) = handle.instances.get(index) else {
             return NuxStatus::NotFound;
         };
         unsafe {
-            *out_instance = NuxFlowInstanceView {
-                struct_size: size_u32::<NuxFlowInstanceView>(),
+            *out_instance = NuxScreenInstanceView {
+                struct_size: size_u32::<NuxScreenInstanceView>(),
                 value_root_index: instance.value_root_index.unwrap_or(NO_VALUE_ROOT),
                 is_root: u32::from(instance.is_root),
                 instance_id: instance.instance_id,
@@ -4564,15 +4648,15 @@ pub unsafe extern "C" fn nux_flow_session_result_instance_at(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_value_root_count(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_value_root_count(
+    result: *const NuxScreenSessionResult,
 ) -> u64 {
     ffi_guard(0, || {
         if result.is_null() {
             0
         } else {
             u64::try_from(
-                unsafe { &*result.cast::<FlowSessionResultHandle>() }
+                unsafe { &*result.cast::<ScreenSessionResultHandle>() }
                     .value_roots
                     .len(),
             )
@@ -4587,21 +4671,21 @@ pub unsafe extern "C" fn nux_flow_session_result_value_root_count(
 /// # Safety
 ///
 /// `result` must be live. `out_root` must have the exact published size.
-pub unsafe extern "C" fn nux_flow_session_result_value_root_at(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_value_root_at(
+    result: *const NuxScreenSessionResult,
     index: u64,
-    out_root: *mut NuxFlowValueRootView,
+    out_root: *mut NuxScreenValueRootView,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         if out_root.is_null() {
             return NuxStatus::NullArgument;
         }
-        if unsafe { read_struct_size(out_root) } != size_u32::<NuxFlowValueRootView>() {
+        if unsafe { read_struct_size(out_root) } != size_u32::<NuxScreenValueRootView>() {
             return NuxStatus::InvalidArgument;
         }
         unsafe {
             ptr::write_bytes(out_root, 0, 1);
-            (*out_root).struct_size = size_u32::<NuxFlowValueRootView>();
+            (*out_root).struct_size = size_u32::<NuxScreenValueRootView>();
         }
         if result.is_null() {
             return NuxStatus::NullArgument;
@@ -4609,13 +4693,13 @@ pub unsafe extern "C" fn nux_flow_session_result_value_root_at(
         let Ok(index) = usize::try_from(index) else {
             return NuxStatus::NotFound;
         };
-        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
         let Some(root) = handle.value_roots.get(index) else {
             return NuxStatus::NotFound;
         };
         unsafe {
-            *out_root = NuxFlowValueRootView {
-                struct_size: size_u32::<NuxFlowValueRootView>(),
+            *out_root = NuxScreenValueRootView {
+                struct_size: size_u32::<NuxScreenValueRootView>(),
                 value_root_index: root.value_root_index,
                 instance_id: root.instance_id,
             };
@@ -4630,15 +4714,15 @@ pub unsafe extern "C" fn nux_flow_session_result_value_root_at(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_created_instance_count(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_created_instance_count(
+    result: *const NuxScreenSessionResult,
 ) -> u64 {
     ffi_guard(0, || {
         if result.is_null() {
             0
         } else {
             u64::try_from(
-                unsafe { &*result.cast::<FlowSessionResultHandle>() }
+                unsafe { &*result.cast::<ScreenSessionResultHandle>() }
                     .created_instances
                     .len(),
             )
@@ -4653,21 +4737,21 @@ pub unsafe extern "C" fn nux_flow_session_result_created_instance_count(
 /// # Safety
 ///
 /// `result` must be live. `out_created` must have the exact published size.
-pub unsafe extern "C" fn nux_flow_session_result_created_instance_at(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_created_instance_at(
+    result: *const NuxScreenSessionResult,
     index: u64,
-    out_created: *mut NuxFlowCreatedInstanceView,
+    out_created: *mut NuxScreenCreatedInstanceView,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         if out_created.is_null() {
             return NuxStatus::NullArgument;
         }
-        if unsafe { read_struct_size(out_created) } != size_u32::<NuxFlowCreatedInstanceView>() {
+        if unsafe { read_struct_size(out_created) } != size_u32::<NuxScreenCreatedInstanceView>() {
             return NuxStatus::InvalidArgument;
         }
         unsafe {
             ptr::write_bytes(out_created, 0, 1);
-            (*out_created).struct_size = size_u32::<NuxFlowCreatedInstanceView>();
+            (*out_created).struct_size = size_u32::<NuxScreenCreatedInstanceView>();
         }
         if result.is_null() {
             return NuxStatus::NullArgument;
@@ -4675,13 +4759,13 @@ pub unsafe extern "C" fn nux_flow_session_result_created_instance_at(
         let Ok(index) = usize::try_from(index) else {
             return NuxStatus::NotFound;
         };
-        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
         let Some(created) = handle.created_instances.get(index) else {
             return NuxStatus::NotFound;
         };
         unsafe {
-            *out_created = NuxFlowCreatedInstanceView {
-                struct_size: size_u32::<NuxFlowCreatedInstanceView>(),
+            *out_created = NuxScreenCreatedInstanceView {
+                struct_size: size_u32::<NuxScreenCreatedInstanceView>(),
                 local_id: created.local_id,
                 instance_id: created.instance_id,
             };
@@ -4696,15 +4780,15 @@ pub unsafe extern "C" fn nux_flow_session_result_created_instance_at(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_value_node_count(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_value_node_count(
+    result: *const NuxScreenSessionResult,
 ) -> u64 {
     ffi_guard(0, || {
         if result.is_null() {
             0
         } else {
             u64::try_from(
-                unsafe { &*result.cast::<FlowSessionResultHandle>() }
+                unsafe { &*result.cast::<ScreenSessionResultHandle>() }
                     .value_arena
                     .nodes
                     .len(),
@@ -4720,21 +4804,21 @@ pub unsafe extern "C" fn nux_flow_session_result_value_node_count(
 /// # Safety
 ///
 /// `result` must be live. `out_node` must have the exact published size.
-pub unsafe extern "C" fn nux_flow_session_result_value_node_at(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_value_node_at(
+    result: *const NuxScreenSessionResult,
     index: u64,
-    out_node: *mut NuxFlowValueNode,
+    out_node: *mut NuxScreenValueNode,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         if out_node.is_null() {
             return NuxStatus::NullArgument;
         }
-        if unsafe { read_struct_size(out_node) } != size_u32::<NuxFlowValueNode>() {
+        if unsafe { read_struct_size(out_node) } != size_u32::<NuxScreenValueNode>() {
             return NuxStatus::InvalidArgument;
         }
         unsafe {
             ptr::write_bytes(out_node, 0, 1);
-            (*out_node).struct_size = size_u32::<NuxFlowValueNode>();
+            (*out_node).struct_size = size_u32::<NuxScreenValueNode>();
         }
         if result.is_null() {
             return NuxStatus::NullArgument;
@@ -4742,13 +4826,13 @@ pub unsafe extern "C" fn nux_flow_session_result_value_node_at(
         let Ok(index) = usize::try_from(index) else {
             return NuxStatus::NotFound;
         };
-        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
         let Some(node) = handle.value_arena.nodes.get(index) else {
             return NuxStatus::NotFound;
         };
         unsafe {
-            *out_node = NuxFlowValueNode {
-                struct_size: size_u32::<NuxFlowValueNode>(),
+            *out_node = NuxScreenValueNode {
+                struct_size: size_u32::<NuxScreenValueNode>(),
                 kind: node.kind,
                 number_value: node.number_value,
                 color_value: node.color_value,
@@ -4772,15 +4856,15 @@ pub unsafe extern "C" fn nux_flow_session_result_value_node_at(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_value_edge_count(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_value_edge_count(
+    result: *const NuxScreenSessionResult,
 ) -> u64 {
     ffi_guard(0, || {
         if result.is_null() {
             0
         } else {
             u64::try_from(
-                unsafe { &*result.cast::<FlowSessionResultHandle>() }
+                unsafe { &*result.cast::<ScreenSessionResultHandle>() }
                     .value_arena
                     .edges
                     .len(),
@@ -4796,21 +4880,21 @@ pub unsafe extern "C" fn nux_flow_session_result_value_edge_count(
 /// # Safety
 ///
 /// `result` must be live. `out_edge` must have the exact published size.
-pub unsafe extern "C" fn nux_flow_session_result_value_edge_at(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_value_edge_at(
+    result: *const NuxScreenSessionResult,
     index: u64,
-    out_edge: *mut NuxFlowValueEdge,
+    out_edge: *mut NuxScreenValueEdge,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         if out_edge.is_null() {
             return NuxStatus::NullArgument;
         }
-        if unsafe { read_struct_size(out_edge) } != size_u32::<NuxFlowValueEdge>() {
+        if unsafe { read_struct_size(out_edge) } != size_u32::<NuxScreenValueEdge>() {
             return NuxStatus::InvalidArgument;
         }
         unsafe {
             ptr::write_bytes(out_edge, 0, 1);
-            (*out_edge).struct_size = size_u32::<NuxFlowValueEdge>();
+            (*out_edge).struct_size = size_u32::<NuxScreenValueEdge>();
         }
         if result.is_null() {
             return NuxStatus::NullArgument;
@@ -4818,13 +4902,13 @@ pub unsafe extern "C" fn nux_flow_session_result_value_edge_at(
         let Ok(index) = usize::try_from(index) else {
             return NuxStatus::NotFound;
         };
-        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
         let Some(edge) = handle.value_arena.edges.get(index) else {
             return NuxStatus::NotFound;
         };
         unsafe {
-            *out_edge = NuxFlowValueEdge {
-                struct_size: size_u32::<NuxFlowValueEdge>(),
+            *out_edge = NuxScreenValueEdge {
+                struct_size: size_u32::<NuxScreenValueEdge>(),
                 node_index: edge.node_index,
                 key: borrowed_view(&edge.key),
             };
@@ -4839,15 +4923,15 @@ pub unsafe extern "C" fn nux_flow_session_result_value_edge_at(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_output_count(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_output_count(
+    result: *const NuxScreenSessionResult,
 ) -> u64 {
     ffi_guard(0, || {
         if result.is_null() {
             0
         } else {
             u64::try_from(
-                unsafe { &*result.cast::<FlowSessionResultHandle>() }
+                unsafe { &*result.cast::<ScreenSessionResultHandle>() }
                     .outputs
                     .len(),
             )
@@ -4862,21 +4946,21 @@ pub unsafe extern "C" fn nux_flow_session_result_output_count(
 /// # Safety
 ///
 /// `result` must be live. `out_output` must have the exact published size.
-pub unsafe extern "C" fn nux_flow_session_result_output_at(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_output_at(
+    result: *const NuxScreenSessionResult,
     index: u64,
-    out_output: *mut NuxFlowOutputView,
+    out_output: *mut NuxScreenOutputView,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         if out_output.is_null() {
             return NuxStatus::NullArgument;
         }
-        if unsafe { read_struct_size(out_output) } != size_u32::<NuxFlowOutputView>() {
+        if unsafe { read_struct_size(out_output) } != size_u32::<NuxScreenOutputView>() {
             return NuxStatus::InvalidArgument;
         }
         unsafe {
             ptr::write_bytes(out_output, 0, 1);
-            (*out_output).struct_size = size_u32::<NuxFlowOutputView>();
+            (*out_output).struct_size = size_u32::<NuxScreenOutputView>();
         }
         if result.is_null() {
             return NuxStatus::NullArgument;
@@ -4884,7 +4968,7 @@ pub unsafe extern "C" fn nux_flow_session_result_output_at(
         let Ok(index) = usize::try_from(index) else {
             return NuxStatus::NotFound;
         };
-        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
         let Some(output) = handle.outputs.get(index) else {
             return NuxStatus::NotFound;
         };
@@ -4893,8 +4977,8 @@ pub unsafe extern "C" fn nux_flow_session_result_output_at(
             |value| (1, borrowed_view(&value.url), borrowed_view(&value.target)),
         );
         unsafe {
-            *out_output = NuxFlowOutputView {
-                struct_size: size_u32::<NuxFlowOutputView>(),
+            *out_output = NuxScreenOutputView {
+                struct_size: size_u32::<NuxScreenOutputView>(),
                 phase: output.phase,
                 kind: output.kind,
                 payload_root_index: output.payload_root_index.unwrap_or(NO_VALUE_ROOT),
@@ -4926,15 +5010,15 @@ pub unsafe extern "C" fn nux_flow_session_result_output_at(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_event_property_count(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_event_property_count(
+    result: *const NuxScreenSessionResult,
 ) -> u64 {
     ffi_guard(0, || {
         if result.is_null() {
             0
         } else {
             u64::try_from(
-                unsafe { &*result.cast::<FlowSessionResultHandle>() }
+                unsafe { &*result.cast::<ScreenSessionResultHandle>() }
                     .event_properties
                     .len(),
             )
@@ -4949,21 +5033,21 @@ pub unsafe extern "C" fn nux_flow_session_result_event_property_count(
 /// # Safety
 ///
 /// `result` must be live. `out_property` must have the exact published size.
-pub unsafe extern "C" fn nux_flow_session_result_event_property_at(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_event_property_at(
+    result: *const NuxScreenSessionResult,
     index: u64,
-    out_property: *mut NuxFlowEventPropertyView,
+    out_property: *mut NuxScreenEventPropertyView,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         if out_property.is_null() {
             return NuxStatus::NullArgument;
         }
-        if unsafe { read_struct_size(out_property) } != size_u32::<NuxFlowEventPropertyView>() {
+        if unsafe { read_struct_size(out_property) } != size_u32::<NuxScreenEventPropertyView>() {
             return NuxStatus::InvalidArgument;
         }
         unsafe {
             ptr::write_bytes(out_property, 0, 1);
-            (*out_property).struct_size = size_u32::<NuxFlowEventPropertyView>();
+            (*out_property).struct_size = size_u32::<NuxScreenEventPropertyView>();
         }
         if result.is_null() {
             return NuxStatus::NullArgument;
@@ -4971,13 +5055,13 @@ pub unsafe extern "C" fn nux_flow_session_result_event_property_at(
         let Ok(index) = usize::try_from(index) else {
             return NuxStatus::NotFound;
         };
-        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
         let Some(property) = handle.event_properties.get(index) else {
             return NuxStatus::NotFound;
         };
         unsafe {
-            *out_property = NuxFlowEventPropertyView {
-                struct_size: size_u32::<NuxFlowEventPropertyView>(),
+            *out_property = NuxScreenEventPropertyView {
+                struct_size: size_u32::<NuxScreenEventPropertyView>(),
                 value_root_index: property.value_root_index.unwrap_or(NO_VALUE_ROOT),
                 has_trigger_count: u32::from(property.trigger_count.is_some()),
                 trigger_count: property.trigger_count.unwrap_or(0),
@@ -4994,15 +5078,15 @@ pub unsafe extern "C" fn nux_flow_session_result_event_property_at(
 /// # Safety
 ///
 /// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_flow_session_result_diagnostic_count(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_diagnostic_count(
+    result: *const NuxScreenSessionResult,
 ) -> u64 {
     ffi_guard(0, || {
         if result.is_null() {
             0
         } else {
             u64::try_from(
-                unsafe { &*result.cast::<FlowSessionResultHandle>() }
+                unsafe { &*result.cast::<ScreenSessionResultHandle>() }
                     .diagnostics
                     .len(),
             )
@@ -5018,8 +5102,8 @@ pub unsafe extern "C" fn nux_flow_session_result_diagnostic_count(
 ///
 /// `result` must be live. `out_diagnostic` must have the exact published
 /// diagnostic-view size; returned byte views expire when `result` is freed.
-pub unsafe extern "C" fn nux_flow_session_result_diagnostic_at(
-    result: *const NuxFlowSessionResult,
+pub unsafe extern "C" fn nux_screen_session_result_diagnostic_at(
+    result: *const NuxScreenSessionResult,
     index: u64,
     out_diagnostic: *mut NuxDiagnosticView,
 ) -> NuxStatus {
@@ -5039,7 +5123,7 @@ pub unsafe extern "C" fn nux_flow_session_result_diagnostic_at(
         let Ok(index) = usize::try_from(index) else {
             return NuxStatus::NotFound;
         };
-        let handle = unsafe { &*result.cast::<FlowSessionResultHandle>() };
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
         let Some(diagnostic) = handle.diagnostics.get(index) else {
             return NuxStatus::NotFound;
         };
@@ -5062,11 +5146,11 @@ pub unsafe extern "C" fn nux_flow_session_result_diagnostic_at(
 ///
 /// A non-null pointer must be an owned result returned by this library and must
 /// not have been freed before. No borrowed view may be used after this call.
-pub unsafe extern "C" fn nux_flow_session_result_free(result: *mut NuxFlowSessionResult) {
+pub unsafe extern "C" fn nux_screen_session_result_free(result: *mut NuxScreenSessionResult) {
     ffi_guard((), || {
         if !result.is_null() {
             unsafe {
-                drop(Box::from_raw(result.cast::<FlowSessionResultHandle>()));
+                drop(Box::from_raw(result.cast::<ScreenSessionResultHandle>()));
             }
         }
     })
@@ -5099,6 +5183,19 @@ mod tests {
     }
 
     #[cfg(feature = "apple-product")]
+    unsafe fn session_result_message(result: *const NuxScreenSessionResult) -> String {
+        if result.is_null() {
+            return "session operation returned no result".to_owned();
+        }
+        let handle = unsafe { &*result.cast::<ScreenSessionResultHandle>() };
+        handle
+            .diagnostics
+            .first()
+            .map(|diagnostic| String::from_utf8_lossy(&diagnostic.message).into_owned())
+            .unwrap_or_else(|| "session operation returned no diagnostic".to_owned())
+    }
+
+    #[cfg(feature = "apple-product")]
     fn flow_fixture(name: &str) -> Vec<u8> {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -5108,18 +5205,18 @@ mod tests {
             .unwrap_or_else(|error| panic!("read flow fixture {}: {error}", path.display()))
     }
 
-    fn configured_descriptor() -> NuxFlowConfiguredSessionDescriptor {
-        NuxFlowConfiguredSessionDescriptor {
-            struct_size: size_u32::<NuxFlowConfiguredSessionDescriptor>(),
-            player_kind: NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT,
+    fn configured_descriptor() -> NuxScreenConfiguredSessionDescriptor {
+        NuxScreenConfiguredSessionDescriptor {
+            struct_size: size_u32::<NuxScreenConfiguredSessionDescriptor>(),
+            player_kind: NUX_SCREEN_PLAYER_SELECTOR_KIND_DEFAULT,
             artboard_name: NuxByteView::default(),
             player_name: NuxByteView::default(),
         }
     }
 
-    fn operation(kind: NuxFlowSessionOperationKind) -> NuxFlowSessionOperation {
-        NuxFlowSessionOperation {
-            struct_size: size_u32::<NuxFlowSessionOperation>(),
+    fn operation(kind: NuxScreenSessionOperationKind) -> NuxScreenSessionOperation {
+        NuxScreenSessionOperation {
+            struct_size: size_u32::<NuxScreenSessionOperation>(),
             kind,
             state_batch: ptr::null(),
             pointer_batch: ptr::null(),
@@ -5129,9 +5226,9 @@ mod tests {
         }
     }
 
-    fn null_node(kind: NuxFlowValueKind) -> NuxFlowValueNode {
-        NuxFlowValueNode {
-            struct_size: size_u32::<NuxFlowValueNode>(),
+    fn null_node(kind: NuxScreenValueKind) -> NuxScreenValueNode {
+        NuxScreenValueNode {
+            struct_size: size_u32::<NuxScreenValueNode>(),
             kind,
             number_value: 0.0,
             color_value: 0,
@@ -5373,57 +5470,87 @@ mod tests {
 
     #[cfg(feature = "apple-product")]
     fn with_signed_scripted_apple_import_request<R>(
-        body: impl FnOnce(&NuxFlowImportRequest) -> R,
+        body: impl FnOnce(&NuxExperienceImportRequest) -> R,
     ) -> R {
-        use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-        use ed25519_dalek::{Signer as _, SigningKey};
-        use sha2::{Digest as _, Sha256};
+        use std::ffi::CString;
 
-        let artifact = signed_scripted_apple_seam_artifact();
-        let artifact_sha256 = Sha256::digest(&artifact)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        let manifest = serde_json::to_vec(&serde_json::json!({
-            "version": 1,
-            "flowId": "flow-scripted-apple-seam",
-            "buildId": "build-scripted-apple-seam",
-            "renderer": "rive",
-            "riv": {
-                "path": "flow.riv",
-                "sha256": artifact_sha256,
-                "sizeBytes": artifact.len(),
+        use nux_container::test_support::{TEST_ONLY_DEV_KEY_ID, TEST_ONLY_DEV_KEYPAIR};
+        use nux_container::{
+            Assets, Entry, Identity, JourneyMember, LuauProducer, NuxPackageManifestV1,
+            NuxPackageModel, Producer, SceneFormat, SceneMember, Screen, SignatureSource,
+            write_package,
+        };
+
+        let scene = signed_scripted_apple_seam_artifact();
+        let manifest = NuxPackageManifestV1 {
+            version: 1,
+            identity: Identity {
+                experience_id: "scripted-apple-seam".to_owned(),
+                build_id: "build-scripted-apple-seam".to_owned(),
+                app_id: "test-app".to_owned(),
+                environment: "test".to_owned(),
             },
-            "assets": { "images": [], "fonts": [] },
-        }))
-        .expect("fixture manifest encodes");
-        let signing_key = SigningKey::from_bytes(&[14; 32]);
-        let signature = signing_key.sign(&manifest);
-        let signature_envelope = serde_json::to_vec(&serde_json::json!({
-            "version": 1,
-            "signs": "nuxie-manifest.json",
-            "algorithm": "ed25519",
-            "keyId": "apple-seam-key",
-            "signatureBase64": BASE64.encode(signature.to_bytes()),
-        }))
-        .expect("fixture signature envelope encodes");
-        let flow_id = b"flow-scripted-apple-seam";
-        let build_id = b"build-scripted-apple-seam";
-        let key_id = b"apple-seam-key";
-        let public_key = signing_key.verifying_key().to_bytes();
-        let selected_key = NuxFlowAuthorizationKey {
-            struct_size: size_u32::<NuxFlowAuthorizationKey>(),
+            producer: Producer {
+                compiler_commit: "test".to_owned(),
+                compiler_version: "test".to_owned(),
+                runtime_revision: "test".to_owned(),
+                luau: LuauProducer {
+                    revision: "test".to_owned(),
+                    bytecode_versions: vec![3],
+                },
+                min_runtime: "0.2.0".to_owned(),
+            },
+            scene_format: SceneFormat { major: 7, minor: 0 },
+            required_capabilities: Vec::new(),
+            scene: SceneMember {
+                member: "scene".to_owned(),
+                sha256: "0".repeat(64),
+                size_bytes: 0,
+            },
+            journey: JourneyMember {
+                member: "journey".to_owned(),
+                sha256: "0".repeat(64),
+                size_bytes: 0,
+                schema_version: 1,
+            },
+            entry: Entry {
+                screen_id: "screen".to_owned(),
+            },
+            screens: vec![Screen {
+                screen_id: "screen".to_owned(),
+                artboard_id: "artboard".to_owned(),
+                artboard_name: "Root".to_owned(),
+                width: 100.0,
+                height: 100.0,
+            }],
+            text_inputs: Vec::new(),
+            assets: Assets::default(),
+            members: Vec::new(),
+        };
+        let package = write_package(&NuxPackageModel {
+            manifest,
+            scene: &scene,
+            journey: br#"{"schemaVersion":1}"#,
+            embedded_assets: Vec::new(),
+            signature: SignatureSource::Signer(&*TEST_ONLY_DEV_KEYPAIR),
+        })
+        .expect("fixture package encodes");
+        let experience_id = CString::new("scripted-apple-seam").expect("valid identity");
+        let build_id = CString::new("build-scripted-apple-seam").expect("valid build");
+        let key_id = TEST_ONLY_DEV_KEY_ID.as_bytes();
+        let public_key = TEST_ONLY_DEV_KEYPAIR.public_key();
+        let candidate_key = NuxExperienceAuthorizationKey {
+            struct_size: size_u32::<NuxExperienceAuthorizationKey>(),
             key_id: bytes(key_id),
             ed25519_public_key: bytes(&public_key),
         };
-        let request = NuxFlowImportRequest {
-            struct_size: size_u32::<NuxFlowImportRequest>(),
-            artifact_bytes: bytes(&artifact),
-            expected_flow_id: bytes(flow_id),
-            expected_build_id: bytes(build_id),
-            manifest_bytes: bytes(&manifest),
-            signature_envelope_bytes: bytes(&signature_envelope),
-            selected_key: &selected_key,
+        let request = NuxExperienceImportRequest {
+            struct_size: size_u32::<NuxExperienceImportRequest>(),
+            package_bytes: bytes(&package),
+            expected_experience_id: experience_id.as_ptr(),
+            expected_build_id: build_id.as_ptr(),
+            candidate_keys: &candidate_key,
+            candidate_key_count: 1,
             external_assets: ptr::null(),
             external_asset_count: 0,
         };
@@ -5440,32 +5567,38 @@ mod tests {
     }
 
     #[cfg(feature = "apple-product")]
-    fn public_output_at(result: *const NuxFlowSessionResult, index: u64) -> NuxFlowOutputView {
-        let mut output: NuxFlowOutputView = unsafe { std::mem::zeroed() };
-        output.struct_size = size_u32::<NuxFlowOutputView>();
+    fn public_output_at(result: *const NuxScreenSessionResult, index: u64) -> NuxScreenOutputView {
+        let mut output: NuxScreenOutputView = unsafe { std::mem::zeroed() };
+        output.struct_size = size_u32::<NuxScreenOutputView>();
         assert_eq!(
-            unsafe { nux_flow_session_result_output_at(result, index, &mut output) },
+            unsafe { nux_screen_session_result_output_at(result, index, &mut output) },
             NuxStatus::Ok
         );
         output
     }
 
     #[cfg(feature = "apple-product")]
-    fn public_value_node_at(result: *const NuxFlowSessionResult, index: u32) -> NuxFlowValueNode {
-        let mut node = null_node(NUX_FLOW_VALUE_KIND_NULL);
+    fn public_value_node_at(
+        result: *const NuxScreenSessionResult,
+        index: u32,
+    ) -> NuxScreenValueNode {
+        let mut node = null_node(NUX_SCREEN_VALUE_KIND_NULL);
         assert_eq!(
-            unsafe { nux_flow_session_result_value_node_at(result, u64::from(index), &mut node) },
+            unsafe { nux_screen_session_result_value_node_at(result, u64::from(index), &mut node) },
             NuxStatus::Ok
         );
         node
     }
 
     #[cfg(feature = "apple-product")]
-    fn public_value_edge_at(result: *const NuxFlowSessionResult, index: u32) -> NuxFlowValueEdge {
-        let mut edge: NuxFlowValueEdge = unsafe { std::mem::zeroed() };
-        edge.struct_size = size_u32::<NuxFlowValueEdge>();
+    fn public_value_edge_at(
+        result: *const NuxScreenSessionResult,
+        index: u32,
+    ) -> NuxScreenValueEdge {
+        let mut edge: NuxScreenValueEdge = unsafe { std::mem::zeroed() };
+        edge.struct_size = size_u32::<NuxScreenValueEdge>();
         assert_eq!(
-            unsafe { nux_flow_session_result_value_edge_at(result, u64::from(index), &mut edge) },
+            unsafe { nux_screen_session_result_value_edge_at(result, u64::from(index), &mut edge) },
             NuxStatus::Ok
         );
         edge
@@ -5473,12 +5606,12 @@ mod tests {
 
     #[cfg(feature = "apple-product")]
     fn public_object_child(
-        result: *const NuxFlowSessionResult,
+        result: *const NuxScreenSessionResult,
         object_index: u32,
         key: &[u8],
     ) -> u32 {
         let object = public_value_node_at(result, object_index);
-        assert_eq!(object.kind, NUX_FLOW_VALUE_KIND_OBJECT);
+        assert_eq!(object.kind, NUX_SCREEN_VALUE_KIND_OBJECT);
         for offset in 0..object.edge_count {
             let edge_index = object
                 .first_edge
@@ -5498,15 +5631,16 @@ mod tests {
     #[test]
     fn exact_runtime_identity_session_layouts_are_40_and_48_bytes() {
         assert_eq!(
-            std::mem::size_of::<NuxFlowConfiguredSessionDescriptor>(),
+            std::mem::size_of::<NuxScreenConfiguredSessionDescriptor>(),
             40
         );
-        assert_eq!(std::mem::size_of::<NuxFlowSessionOperation>(), 48);
+        assert_eq!(std::mem::size_of::<NuxScreenSessionOperation>(), 48);
     }
 
     #[test]
     fn legacy_session_layout_sizes_fail_before_trailing_fields_are_read() {
-        let mut descriptor = std::mem::MaybeUninit::<NuxFlowConfiguredSessionDescriptor>::uninit();
+        let mut descriptor =
+            std::mem::MaybeUninit::<NuxScreenConfiguredSessionDescriptor>::uninit();
         unsafe {
             descriptor.as_mut_ptr().cast::<u32>().write(48);
         }
@@ -5515,7 +5649,7 @@ mod tests {
             Err(NUX_STATUS_INVALID_ARGUMENT)
         ));
 
-        let mut operation = std::mem::MaybeUninit::<NuxFlowSessionOperation>::uninit();
+        let mut operation = std::mem::MaybeUninit::<NuxScreenSessionOperation>::uninit();
         unsafe {
             operation.as_mut_ptr().cast::<u32>().write(56);
         }
@@ -5553,7 +5687,7 @@ mod tests {
         assert!(matches!(
             unsafe {
                 copy_configured_session_descriptor(
-                    (&raw const legacy).cast::<NuxFlowConfiguredSessionDescriptor>(),
+                    (&raw const legacy).cast::<NuxScreenConfiguredSessionDescriptor>(),
                 )
             },
             Err(NUX_STATUS_INVALID_ARGUMENT)
@@ -5562,50 +5696,50 @@ mod tests {
 
     #[test]
     fn bound_runtime_layouts_keep_the_remaining_public_contract_stable() {
-        assert_eq!(std::mem::size_of::<NuxFlowSessionDescriptor>(), 40);
+        assert_eq!(std::mem::size_of::<NuxScreenSessionDescriptor>(), 40);
         assert_eq!(std::mem::size_of::<NuxFrameOperation>(), 40);
         assert_eq!(
-            std::mem::size_of::<NuxFlowConfiguredSessionDescriptor>(),
+            std::mem::size_of::<NuxScreenConfiguredSessionDescriptor>(),
             40
         );
         assert_eq!(
-            std::mem::offset_of!(NuxFlowConfiguredSessionDescriptor, player_kind),
+            std::mem::offset_of!(NuxScreenConfiguredSessionDescriptor, player_kind),
             4
         );
-        assert_eq!(std::mem::size_of::<NuxFlowValueNode>(), 88);
-        assert_eq!(std::mem::size_of::<NuxFlowValueEdge>(), 24);
-        assert_eq!(std::mem::size_of::<NuxFlowValueArena>(), 40);
-        assert_eq!(std::mem::size_of::<NuxFlowNewInstance>(), 40);
-        assert_eq!(std::mem::size_of::<NuxFlowInstanceReference>(), 16);
-        assert_eq!(std::mem::size_of::<NuxFlowStateMutation>(), 88);
-        assert_eq!(std::mem::size_of::<NuxFlowStateBatch>(), 56);
-        assert_eq!(std::mem::size_of::<NuxFlowTextRunMutation>(), 40);
-        assert_eq!(std::mem::offset_of!(NuxFlowTextRunMutation, name), 8);
-        assert_eq!(std::mem::offset_of!(NuxFlowTextRunMutation, text), 24);
-        assert_eq!(std::mem::size_of::<NuxFlowTextRunBatch>(), 24);
-        assert_eq!(std::mem::offset_of!(NuxFlowTextRunBatch, mutations), 8);
-        assert_eq!(std::mem::size_of::<NuxFlowPointerEvent>(), 24);
-        assert_eq!(std::mem::size_of::<NuxFlowPointerBatch>(), 24);
-        assert_eq!(std::mem::size_of::<NuxFlowAdvanceOperation>(), 48);
-        assert_eq!(std::mem::size_of::<NuxFlowQuery>(), 8);
-        assert_eq!(std::mem::size_of::<NuxFlowSessionOperation>(), 48);
+        assert_eq!(std::mem::size_of::<NuxScreenValueNode>(), 88);
+        assert_eq!(std::mem::size_of::<NuxScreenValueEdge>(), 24);
+        assert_eq!(std::mem::size_of::<NuxScreenValueArena>(), 40);
+        assert_eq!(std::mem::size_of::<NuxScreenNewInstance>(), 40);
+        assert_eq!(std::mem::size_of::<NuxScreenInstanceReference>(), 16);
+        assert_eq!(std::mem::size_of::<NuxScreenStateMutation>(), 88);
+        assert_eq!(std::mem::size_of::<NuxScreenStateBatch>(), 56);
+        assert_eq!(std::mem::size_of::<NuxScreenTextRunMutation>(), 40);
+        assert_eq!(std::mem::offset_of!(NuxScreenTextRunMutation, name), 8);
+        assert_eq!(std::mem::offset_of!(NuxScreenTextRunMutation, text), 24);
+        assert_eq!(std::mem::size_of::<NuxScreenTextRunBatch>(), 24);
+        assert_eq!(std::mem::offset_of!(NuxScreenTextRunBatch, mutations), 8);
+        assert_eq!(std::mem::size_of::<NuxScreenPointerEvent>(), 24);
+        assert_eq!(std::mem::size_of::<NuxScreenPointerBatch>(), 24);
+        assert_eq!(std::mem::size_of::<NuxScreenAdvanceOperation>(), 48);
+        assert_eq!(std::mem::size_of::<NuxScreenQuery>(), 8);
+        assert_eq!(std::mem::size_of::<NuxScreenSessionOperation>(), 48);
         assert_eq!(
-            std::mem::offset_of!(NuxFlowSessionOperation, text_run_batch),
+            std::mem::offset_of!(NuxScreenSessionOperation, text_run_batch),
             40
         );
-        assert_eq!(std::mem::size_of::<NuxFlowPlayerMetadataView>(), 64);
-        assert_eq!(std::mem::size_of::<NuxFlowPlayerInputView>(), 32);
-        assert_eq!(std::mem::size_of::<NuxFlowSchemaPropertyView>(), 80);
-        assert_eq!(std::mem::size_of::<NuxFlowEnumLabelView>(), 24);
-        assert_eq!(std::mem::size_of::<NuxFlowOutputView>(), 160);
+        assert_eq!(std::mem::size_of::<NuxScreenPlayerMetadataView>(), 64);
+        assert_eq!(std::mem::size_of::<NuxScreenPlayerInputView>(), 32);
+        assert_eq!(std::mem::size_of::<NuxScreenSchemaPropertyView>(), 80);
+        assert_eq!(std::mem::size_of::<NuxScreenEnumLabelView>(), 24);
+        assert_eq!(std::mem::size_of::<NuxScreenOutputView>(), 160);
         assert_eq!(
-            std::mem::offset_of!(NuxFlowOutputView, payload_root_index),
+            std::mem::offset_of!(NuxScreenOutputView, payload_root_index),
             12
         );
-        assert_eq!(std::mem::offset_of!(NuxFlowOutputView, has_open_url), 120);
-        assert_eq!(std::mem::offset_of!(NuxFlowOutputView, open_url), 128);
+        assert_eq!(std::mem::offset_of!(NuxScreenOutputView, has_open_url), 120);
+        assert_eq!(std::mem::offset_of!(NuxScreenOutputView, open_url), 128);
         assert_eq!(
-            std::mem::offset_of!(NuxFlowOutputView, open_url_target),
+            std::mem::offset_of!(NuxScreenOutputView, open_url_target),
             144
         );
     }
@@ -5653,12 +5787,12 @@ mod tests {
         })
         .expect("valid core outputs must translate");
         assert_eq!(result.validate(), Ok(()));
-        let result = Box::into_raw(Box::new(result)).cast::<NuxFlowSessionResult>();
+        let result = Box::into_raw(Box::new(result)).cast::<NuxScreenSessionResult>();
 
-        let mut open: NuxFlowOutputView = unsafe { std::mem::zeroed() };
-        open.struct_size = size_u32::<NuxFlowOutputView>();
+        let mut open: NuxScreenOutputView = unsafe { std::mem::zeroed() };
+        open.struct_size = size_u32::<NuxScreenOutputView>();
         assert_eq!(
-            unsafe { nux_flow_session_result_output_at(result, 0, &mut open) },
+            unsafe { nux_screen_session_result_output_at(result, 0, &mut open) },
             NuxStatus::Ok
         );
         assert_eq!(open.has_open_url, 1);
@@ -5673,10 +5807,10 @@ mod tests {
             b"_self"
         );
 
-        let mut ordinary: NuxFlowOutputView = unsafe { std::mem::zeroed() };
-        ordinary.struct_size = size_u32::<NuxFlowOutputView>();
+        let mut ordinary: NuxScreenOutputView = unsafe { std::mem::zeroed() };
+        ordinary.struct_size = size_u32::<NuxScreenOutputView>();
         assert_eq!(
-            unsafe { nux_flow_session_result_output_at(result, 1, &mut ordinary) },
+            unsafe { nux_screen_session_result_output_at(result, 1, &mut ordinary) },
             NuxStatus::Ok
         );
         assert_eq!(ordinary.has_open_url, 0);
@@ -5685,7 +5819,7 @@ mod tests {
         assert!(ordinary.open_url_target.data.is_null());
         assert_eq!(ordinary.open_url_target.len, 0);
 
-        unsafe { nux_flow_session_result_free(result) };
+        unsafe { nux_screen_session_result_free(result) };
     }
 
     #[cfg(feature = "apple-product")]
@@ -5731,12 +5865,12 @@ mod tests {
         assert!(!result.has_values, "host payloads are not state snapshots");
         assert_eq!(result.outputs.len(), 1);
         let output = &result.outputs[0];
-        assert_eq!(output.phase, NUX_FLOW_OUTPUT_PHASE_HOST_WORK);
-        assert_eq!(output.kind, NUX_FLOW_OUTPUT_KIND_HOST_COMMAND);
+        assert_eq!(output.phase, NUX_SCREEN_OUTPUT_PHASE_HOST_WORK);
+        assert_eq!(output.kind, NUX_SCREEN_OUTPUT_KIND_HOST_COMMAND);
         assert!(output.payload.is_empty());
         let root_index = output.payload_root_index.expect("host object root");
         let root = &result.value_arena.nodes[root_index as usize];
-        assert_eq!(root.kind, NUX_FLOW_VALUE_KIND_OBJECT);
+        assert_eq!(root.kind, NUX_SCREEN_VALUE_KIND_OBJECT);
         let root_edges = &result.value_arena.edges
             [root.first_edge as usize..(root.first_edge + root.edge_count) as usize];
         assert_eq!(
@@ -5747,7 +5881,7 @@ mod tests {
             vec![b"alpha".as_slice(), b"nested".as_slice()]
         );
         let nested = &result.value_arena.nodes[root_edges[1].node_index as usize];
-        assert_eq!(nested.kind, NUX_FLOW_VALUE_KIND_LIST);
+        assert_eq!(nested.kind, NUX_SCREEN_VALUE_KIND_LIST);
         assert_eq!(nested.edge_count, 2);
         assert_eq!(result.validate(), Ok(()));
 
@@ -5794,7 +5928,7 @@ mod tests {
         assert_eq!(scalar_root.validate(), Err(NuxStatus::RuntimeError));
 
         let mut wrong_phase = valid.clone();
-        wrong_phase.outputs[0].phase = NUX_FLOW_OUTPUT_PHASE_RENDER;
+        wrong_phase.outputs[0].phase = NUX_SCREEN_OUTPUT_PHASE_RENDER;
         assert_eq!(wrong_phase.validate(), Err(NuxStatus::RuntimeError));
 
         let mut empty_name = valid.clone();
@@ -5841,29 +5975,29 @@ mod tests {
         assert_eq!(nonfinite.validate(), Err(NuxStatus::RuntimeError));
 
         let mut null_value = valid.clone();
-        null_value.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_NULL;
+        null_value.value_arena.nodes[0].kind = NUX_SCREEN_VALUE_KIND_NULL;
         null_value.value_arena.nodes[0].number_value = 0.0;
         assert_eq!(null_value.validate(), Err(NuxStatus::RuntimeError));
 
         let mut enum_value = valid.clone();
-        enum_value.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_ENUM;
+        enum_value.value_arena.nodes[0].kind = NUX_SCREEN_VALUE_KIND_ENUM;
         enum_value.value_arena.nodes[0].number_value = 0.0;
         enum_value.value_arena.nodes[0].identity_value = 1;
         assert_eq!(enum_value.validate(), Err(NuxStatus::RuntimeError));
 
         let mut color_value = valid.clone();
-        color_value.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_COLOR;
+        color_value.value_arena.nodes[0].kind = NUX_SCREEN_VALUE_KIND_COLOR;
         color_value.value_arena.nodes[0].number_value = 0.0;
         color_value.value_arena.nodes[0].color_value = 0xff00ffff;
         assert_eq!(color_value.validate(), Err(NuxStatus::RuntimeError));
 
         let mut view_model_value = valid.clone();
-        view_model_value.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_VIEW_MODEL;
+        view_model_value.value_arena.nodes[0].kind = NUX_SCREEN_VALUE_KIND_VIEW_MODEL;
         view_model_value.value_arena.nodes[0].number_value = 0.0;
         assert_eq!(view_model_value.validate(), Err(NuxStatus::RuntimeError));
 
         let mut schema_object = valid.clone();
-        schema_object.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_OBJECT;
+        schema_object.value_arena.nodes[0].kind = NUX_SCREEN_VALUE_KIND_OBJECT;
         schema_object.value_arena.nodes[0].number_value = 0.0;
         schema_object.value_arena.nodes[0].schema_id = b"Payload".to_vec();
         assert_eq!(schema_object.validate(), Err(NuxStatus::RuntimeError));
@@ -5875,9 +6009,9 @@ mod tests {
 
     #[test]
     fn result_validation_rejects_malformed_state_change_payload_roots() {
-        let mut result = FlowSessionResultHandle::empty_success();
+        let mut result = ScreenSessionResultHandle::empty_success();
         result.value_arena.nodes.push(OwnedValueNode {
-            kind: NUX_FLOW_VALUE_KIND_VIEW_MODEL,
+            kind: NUX_SCREEN_VALUE_KIND_VIEW_MODEL,
             number_value: 0.0,
             color_value: 0,
             bool_value: false,
@@ -5889,8 +6023,8 @@ mod tests {
             schema_id: Vec::new(),
         });
         result.outputs.push(OwnedOutput {
-            phase: NUX_FLOW_OUTPUT_PHASE_VIEW_MODEL_CHANGES,
-            kind: NUX_FLOW_OUTPUT_KIND_VIEW_MODEL_CHANGE,
+            phase: NUX_SCREEN_OUTPUT_PHASE_VIEW_MODEL_CHANGES,
+            kind: NUX_SCREEN_OUTPUT_KIND_VIEW_MODEL_CHANGE,
             payload_root_index: Some(0),
             sequence: 1,
             cycle: 1,
@@ -5913,7 +6047,7 @@ mod tests {
 
         result.value_arena.nodes[0].edge_count = 1;
         result.value_arena.nodes.push(OwnedValueNode {
-            kind: NUX_FLOW_VALUE_KIND_NULL,
+            kind: NUX_SCREEN_VALUE_KIND_NULL,
             number_value: 0.0,
             color_value: 0,
             bool_value: false,
@@ -5933,7 +6067,7 @@ mod tests {
         result.value_arena.edges.clear();
         result.value_arena.nodes.truncate(1);
         let root = &mut result.value_arena.nodes[0];
-        root.kind = NUX_FLOW_VALUE_KIND_OBJECT;
+        root.kind = NUX_SCREEN_VALUE_KIND_OBJECT;
         root.edge_count = 0;
         root.instance_id = None;
         root.schema_id.clear();
@@ -5944,30 +6078,30 @@ mod tests {
         );
         assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
 
-        result.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_LIST;
+        result.value_arena.nodes[0].kind = NUX_SCREEN_VALUE_KIND_LIST;
         assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
 
-        result.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_STRING;
+        result.value_arena.nodes[0].kind = NUX_SCREEN_VALUE_KIND_STRING;
         result.value_arena.nodes[0].string_value = b"scalar".to_vec();
         assert_eq!(result.validate(), Ok(()));
 
-        result.outputs[0].kind = NUX_FLOW_OUTPUT_KIND_STATE_CHANGE;
+        result.outputs[0].kind = NUX_SCREEN_OUTPUT_KIND_STATE_CHANGE;
         assert_eq!(result.validate(), Ok(()));
-        result.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_OBJECT;
+        result.value_arena.nodes[0].kind = NUX_SCREEN_VALUE_KIND_OBJECT;
         result.value_arena.nodes[0].string_value.clear();
         assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
 
-        result.value_arena.nodes[0].kind = NUX_FLOW_VALUE_KIND_NULL;
-        result.outputs[0].kind = NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT;
+        result.value_arena.nodes[0].kind = NUX_SCREEN_VALUE_KIND_NULL;
+        result.outputs[0].kind = NUX_SCREEN_OUTPUT_KIND_REPORTED_EVENT;
         assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
     }
 
     #[test]
     fn result_validation_rejects_open_url_on_other_kinds_and_oversized_fields() {
-        let mut result = FlowSessionResultHandle::empty_success();
+        let mut result = ScreenSessionResultHandle::empty_success();
         result.outputs.push(OwnedOutput {
-            phase: NUX_FLOW_OUTPUT_PHASE_RUNTIME_ADVANCE,
-            kind: NUX_FLOW_OUTPUT_KIND_RUNTIME_ADVANCED,
+            phase: NUX_SCREEN_OUTPUT_PHASE_RUNTIME_ADVANCE,
+            kind: NUX_SCREEN_OUTPUT_KIND_RUNTIME_ADVANCED,
             payload_root_index: None,
             sequence: 1,
             cycle: 1,
@@ -5987,15 +6121,15 @@ mod tests {
         });
         assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
 
-        result.outputs[0].phase = NUX_FLOW_OUTPUT_PHASE_REPORTED_EVENTS;
-        result.outputs[0].kind = NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT;
+        result.outputs[0].phase = NUX_SCREEN_OUTPUT_PHASE_REPORTED_EVENTS;
+        result.outputs[0].kind = NUX_SCREEN_OUTPUT_KIND_REPORTED_EVENT;
         result.outputs[0].open_url.as_mut().unwrap().url =
-            vec![b'x'; NUX_FLOW_MAX_STRING_BYTE_LENGTH as usize + 1];
+            vec![b'x'; NUX_SCREEN_MAX_STRING_BYTE_LENGTH as usize + 1];
         assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
 
         let open_url = result.outputs[0].open_url.as_mut().unwrap();
         open_url.url.clear();
-        open_url.target = vec![b'x'; NUX_FLOW_MAX_ID_BYTE_LENGTH as usize + 1];
+        open_url.target = vec![b'x'; NUX_SCREEN_MAX_ID_BYTE_LENGTH as usize + 1];
         assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
 
         result.outputs[0].open_url.as_mut().unwrap().target = b"new-window".to_vec();
@@ -6010,7 +6144,7 @@ mod tests {
             unsafe { copy_configured_session_descriptor(&descriptor) },
             Err(NUX_STATUS_INVALID_ARGUMENT)
         ));
-        descriptor.player_kind = NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT;
+        descriptor.player_kind = NUX_SCREEN_PLAYER_SELECTOR_KIND_DEFAULT;
         descriptor.player_name = bytes(b"named");
         assert!(matches!(
             unsafe { copy_configured_session_descriptor(&descriptor) },
@@ -6018,8 +6152,8 @@ mod tests {
         ));
         descriptor.player_name = NuxByteView::default();
         for named_kind in [
-            NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE,
-            NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION,
+            NUX_SCREEN_PLAYER_SELECTOR_KIND_STATE_MACHINE,
+            NUX_SCREEN_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION,
         ] {
             descriptor.player_kind = named_kind;
             assert!(matches!(
@@ -6027,7 +6161,7 @@ mod tests {
                 Err(NUX_STATUS_INVALID_ARGUMENT)
             ));
         }
-        descriptor.player_kind = NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE;
+        descriptor.player_kind = NUX_SCREEN_PLAYER_SELECTOR_KIND_STATE_MACHINE;
         descriptor.player_name = NuxByteView {
             data: ptr::dangling(),
             len: 0,
@@ -6044,7 +6178,7 @@ mod tests {
                 .player,
             Some(OwnedPlayerSelector::StateMachine("Machine".to_owned()))
         );
-        descriptor.player_kind = NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION;
+        descriptor.player_kind = NUX_SCREEN_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION;
         assert_eq!(
             unsafe { copy_configured_session_descriptor(&descriptor) }
                 .expect("copy animation selector")
@@ -6052,7 +6186,7 @@ mod tests {
             Some(OwnedPlayerSelector::LinearAnimation("Machine".to_owned()))
         );
 
-        descriptor.struct_size = size_u32::<NuxFlowConfiguredSessionDescriptor>() + 8;
+        descriptor.struct_size = size_u32::<NuxScreenConfiguredSessionDescriptor>() + 8;
         assert!(matches!(
             unsafe { copy_configured_session_descriptor(&descriptor) },
             Err(NUX_STATUS_INVALID_ARGUMENT)
@@ -6061,8 +6195,8 @@ mod tests {
 
     #[test]
     fn session_operation_accepts_the_exact_current_layout() {
-        let advance = NuxFlowAdvanceOperation {
-            struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+        let advance = NuxScreenAdvanceOperation {
+            struct_size: size_u32::<NuxScreenAdvanceOperation>(),
             timestamp_seconds: 0.0,
             delta_seconds: 0.0,
             render: 0,
@@ -6070,13 +6204,13 @@ mod tests {
             completion_context: ptr::null_mut(),
             completion_callback: None,
         };
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_ADVANCE);
         request.advance = &advance;
         assert!(matches!(
             unsafe { copy_session_operation(&request) },
             Ok(OwnedSessionOperation::Advance(_))
         ));
-        request.struct_size = size_u32::<NuxFlowSessionOperation>() + 8;
+        request.struct_size = size_u32::<NuxScreenSessionOperation>() + 8;
         assert!(matches!(
             unsafe { copy_session_operation(&request) },
             Err(NUX_STATUS_INVALID_ARGUMENT)
@@ -6085,13 +6219,13 @@ mod tests {
 
     #[test]
     fn text_run_batch_copy_preserves_literal_names_empty_text_and_exclusive_tagging() {
-        let mutation = NuxFlowTextRunMutation {
-            struct_size: size_u32::<NuxFlowTextRunMutation>(),
+        let mutation = NuxScreenTextRunMutation {
+            struct_size: size_u32::<NuxScreenTextRunMutation>(),
             name: bytes(b"group//headline"),
             text: bytes(b""),
         };
-        let batch = NuxFlowTextRunBatch {
-            struct_size: size_u32::<NuxFlowTextRunBatch>(),
+        let batch = NuxScreenTextRunBatch {
+            struct_size: size_u32::<NuxScreenTextRunBatch>(),
             mutations: &mutation,
             mutation_count: 1,
         };
@@ -6103,7 +6237,7 @@ mod tests {
             }]
         );
 
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_TEXT_RUN_BATCH);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_TEXT_RUN_BATCH);
         request.text_run_batch = &batch;
         assert!(matches!(
             unsafe { copy_session_operation(&request) },
@@ -6114,8 +6248,8 @@ mod tests {
                     })
         ));
 
-        let query = NuxFlowQueryBatch {
-            struct_size: size_u32::<NuxFlowQueryBatch>(),
+        let query = NuxScreenQueryBatch {
+            struct_size: size_u32::<NuxScreenQueryBatch>(),
             queries: ptr::null(),
             query_count: 0,
         };
@@ -6128,15 +6262,15 @@ mod tests {
 
     #[test]
     fn text_run_batch_copy_enforces_exact_elements_and_published_byte_bounds() {
-        let name = vec![b'n'; NUX_FLOW_MAX_ID_BYTE_LENGTH as usize + 1];
-        let text = vec![b't'; NUX_FLOW_MAX_STRING_BYTE_LENGTH as usize + 1];
-        let mut mutation = NuxFlowTextRunMutation {
-            struct_size: size_u32::<NuxFlowTextRunMutation>(),
+        let name = vec![b'n'; NUX_SCREEN_MAX_ID_BYTE_LENGTH as usize + 1];
+        let text = vec![b't'; NUX_SCREEN_MAX_STRING_BYTE_LENGTH as usize + 1];
+        let mut mutation = NuxScreenTextRunMutation {
+            struct_size: size_u32::<NuxScreenTextRunMutation>(),
             name: bytes(b"headline"),
             text: bytes(b"updated"),
         };
-        let mut batch = NuxFlowTextRunBatch {
-            struct_size: size_u32::<NuxFlowTextRunBatch>(),
+        let mut batch = NuxScreenTextRunBatch {
+            struct_size: size_u32::<NuxScreenTextRunBatch>(),
             mutations: &mutation,
             mutation_count: 1,
         };
@@ -6146,7 +6280,7 @@ mod tests {
             unsafe { copy_text_run_batch(&batch) },
             Err(NUX_STATUS_INVALID_ARGUMENT)
         ));
-        mutation.struct_size = size_u32::<NuxFlowTextRunMutation>();
+        mutation.struct_size = size_u32::<NuxScreenTextRunMutation>();
         mutation.name = bytes(&name);
         assert!(matches!(
             unsafe { copy_text_run_batch(&batch) },
@@ -6159,7 +6293,7 @@ mod tests {
             Err(NUX_STATUS_INVALID_ARGUMENT)
         ));
 
-        let one_mib = vec![b't'; NUX_FLOW_MAX_STRING_BYTE_LENGTH as usize];
+        let one_mib = vec![b't'; NUX_SCREEN_MAX_STRING_BYTE_LENGTH as usize];
         mutation.text = bytes(&one_mib);
         let mutations = [mutation; 5];
         batch.mutations = mutations.as_ptr();
@@ -6170,7 +6304,7 @@ mod tests {
         ));
 
         batch.mutations = ptr::dangling();
-        batch.mutation_count = NUX_FLOW_MAX_BATCH_ITEM_COUNT + 1;
+        batch.mutation_count = NUX_SCREEN_MAX_BATCH_ITEM_COUNT + 1;
         assert!(matches!(
             unsafe { copy_text_run_batch(&batch) },
             Err(NUX_STATUS_INVALID_ARGUMENT)
@@ -6184,14 +6318,14 @@ mod tests {
             Ok(worker) => worker,
             Err(_) => panic!("import authored text-run fixture"),
         };
-        let context = Box::into_raw(Box::new(FlowRuntimeContextHandle { worker }))
-            .cast::<NuxFlowRuntimeContext>();
+        let context = Box::into_raw(Box::new(ExperienceRuntimeContextHandle { worker }))
+            .cast::<NuxExperienceContext>();
         let descriptor = configured_descriptor();
         let mut session = ptr::null_mut();
         let mut create_result = ptr::null_mut();
         assert_eq!(
             unsafe {
-                nux_flow_render_session_create_configured(
+                nux_screen_session_create_configured(
                     context,
                     &descriptor,
                     &mut session,
@@ -6202,73 +6336,75 @@ mod tests {
         );
         assert!(!session.is_null());
         assert_eq!(
-            unsafe { nux_flow_session_result_status(create_result) },
+            unsafe { nux_screen_session_result_status(create_result) },
             NuxStatus::Ok
         );
-        unsafe { nux_flow_session_result_free(create_result) };
+        unsafe { nux_screen_session_result_free(create_result) };
 
         let perform_text_batch = |pairs: &[(&[u8], &[u8])]| {
             let mutations = pairs
                 .iter()
-                .map(|(name, text)| NuxFlowTextRunMutation {
-                    struct_size: size_u32::<NuxFlowTextRunMutation>(),
+                .map(|(name, text)| NuxScreenTextRunMutation {
+                    struct_size: size_u32::<NuxScreenTextRunMutation>(),
                     name: bytes(name),
                     text: bytes(text),
                 })
                 .collect::<Vec<_>>();
-            let batch = NuxFlowTextRunBatch {
-                struct_size: size_u32::<NuxFlowTextRunBatch>(),
+            let batch = NuxScreenTextRunBatch {
+                struct_size: size_u32::<NuxScreenTextRunBatch>(),
                 mutations: mutations.as_ptr(),
                 mutation_count: mutations.len() as u64,
             };
-            let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_TEXT_RUN_BATCH);
+            let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_TEXT_RUN_BATCH);
             request.text_run_batch = &batch;
             let mut result = ptr::null_mut();
-            let status = unsafe { nux_flow_render_session_perform(session, &request, &mut result) };
+            let status = unsafe { nux_screen_session_perform(session, &request, &mut result) };
             (status, result)
         };
 
         let (status, changed_result) = perform_text_batch(&[(b"headline", b"updated")]);
         assert_eq!(status, NuxStatus::Ok);
         assert_eq!(
-            unsafe { nux_flow_session_result_status(changed_result) },
+            unsafe { nux_screen_session_result_status(changed_result) },
             NuxStatus::Ok
         );
-        assert!(unsafe { nux_flow_session_result_is_dirty(changed_result) });
+        assert!(unsafe { nux_screen_session_result_is_dirty(changed_result) });
         let mut wake_after = f64::NAN;
         assert_eq!(
-            unsafe { nux_flow_session_result_wake_after_seconds(changed_result, &mut wake_after) },
+            unsafe {
+                nux_screen_session_result_wake_after_seconds(changed_result, &mut wake_after)
+            },
             NuxStatus::Ok
         );
         assert_eq!(wake_after, 0.0);
-        unsafe { nux_flow_session_result_free(changed_result) };
+        unsafe { nux_screen_session_result_free(changed_result) };
 
         let (status, unchanged_result) = perform_text_batch(&[(b"headline", b"updated")]);
         assert_eq!(status, NuxStatus::Ok);
-        assert!(!unsafe { nux_flow_session_result_is_dirty(unchanged_result) });
+        assert!(!unsafe { nux_screen_session_result_is_dirty(unchanged_result) });
         assert_eq!(
             unsafe {
-                nux_flow_session_result_wake_after_seconds(unchanged_result, &mut wake_after)
+                nux_screen_session_result_wake_after_seconds(unchanged_result, &mut wake_after)
             },
             NuxStatus::NotFound
         );
-        unsafe { nux_flow_session_result_free(unchanged_result) };
+        unsafe { nux_screen_session_result_free(unchanged_result) };
 
         let (status, missing_result) =
             perform_text_batch(&[(b"headline", b"must-not-commit"), (b"missing", b"ignored")]);
         assert_eq!(status, NuxStatus::NotFound);
         assert_eq!(
-            unsafe { nux_flow_session_result_status(missing_result) },
+            unsafe { nux_screen_session_result_status(missing_result) },
             NuxStatus::NotFound
         );
-        assert!(!unsafe { nux_flow_session_result_is_dirty(missing_result) });
+        assert!(!unsafe { nux_screen_session_result_is_dirty(missing_result) });
         assert_eq!(
-            unsafe { nux_flow_session_result_diagnostic_count(missing_result) },
+            unsafe { nux_screen_session_result_diagnostic_count(missing_result) },
             1
         );
         let mut diagnostic = NuxDiagnosticView::default();
         assert_eq!(
-            unsafe { nux_flow_session_result_diagnostic_at(missing_result, 0, &mut diagnostic) },
+            unsafe { nux_screen_session_result_diagnostic_at(missing_result, 0, &mut diagnostic) },
             NuxStatus::Ok
         );
         assert_eq!(
@@ -6279,41 +6415,41 @@ mod tests {
             copied_byte_view(diagnostic.message),
             b"root TextValueRun 'missing' was not found"
         );
-        unsafe { nux_flow_session_result_free(missing_result) };
+        unsafe { nux_screen_session_result_free(missing_result) };
 
         // The rejected batch did not commit its first write or poison the
         // session: replaying the prior value remains a clean success.
         let (status, recovered_result) = perform_text_batch(&[(b"headline", b"updated")]);
         assert_eq!(status, NuxStatus::Ok);
         assert_eq!(
-            unsafe { nux_flow_session_result_status(recovered_result) },
+            unsafe { nux_screen_session_result_status(recovered_result) },
             NuxStatus::Ok
         );
-        assert!(!unsafe { nux_flow_session_result_is_dirty(recovered_result) });
+        assert!(!unsafe { nux_screen_session_result_is_dirty(recovered_result) });
         assert_eq!(
             unsafe {
-                nux_flow_session_result_wake_after_seconds(recovered_result, &mut wake_after)
+                nux_screen_session_result_wake_after_seconds(recovered_result, &mut wake_after)
             },
             NuxStatus::NotFound
         );
         unsafe {
-            nux_flow_session_result_free(recovered_result);
-            nux_flow_render_session_free(session);
-            nux_flow_runtime_context_free(context);
+            nux_screen_session_result_free(recovered_result);
+            nux_screen_session_free(session);
+            nux_experience_context_free(context);
         }
     }
 
     #[test]
     fn value_arena_rejects_cycles_nonfinite_values_and_total_payload_overflow() {
-        let edge = NuxFlowValueEdge {
-            struct_size: size_u32::<NuxFlowValueEdge>(),
+        let edge = NuxScreenValueEdge {
+            struct_size: size_u32::<NuxScreenValueEdge>(),
             node_index: 0,
             key: bytes(b"self"),
         };
-        let mut object = null_node(NUX_FLOW_VALUE_KIND_OBJECT);
+        let mut object = null_node(NUX_SCREEN_VALUE_KIND_OBJECT);
         object.edge_count = 1;
-        let arena = NuxFlowValueArena {
-            struct_size: size_u32::<NuxFlowValueArena>(),
+        let arena = NuxScreenValueArena {
+            struct_size: size_u32::<NuxScreenValueArena>(),
             nodes: &object,
             node_count: 1,
             edges: &edge,
@@ -6324,10 +6460,10 @@ mod tests {
             Err(NUX_STATUS_INVALID_ARGUMENT)
         ));
 
-        let mut number = null_node(NUX_FLOW_VALUE_KIND_NUMBER);
+        let mut number = null_node(NUX_SCREEN_VALUE_KIND_NUMBER);
         number.number_value = f64::NAN;
-        let arena = NuxFlowValueArena {
-            struct_size: size_u32::<NuxFlowValueArena>(),
+        let arena = NuxScreenValueArena {
+            struct_size: size_u32::<NuxScreenValueArena>(),
             nodes: &number,
             node_count: 1,
             edges: ptr::null(),
@@ -6338,9 +6474,9 @@ mod tests {
             Err(NUX_STATUS_INVALID_ARGUMENT)
         ));
 
-        let mut overflow_number = null_node(NUX_FLOW_VALUE_KIND_NUMBER);
+        let mut overflow_number = null_node(NUX_SCREEN_VALUE_KIND_NUMBER);
         overflow_number.number_value = f64::MAX;
-        let arena = NuxFlowValueArena {
+        let arena = NuxScreenValueArena {
             nodes: &overflow_number,
             ..arena
         };
@@ -6349,16 +6485,16 @@ mod tests {
             Err(NUX_STATUS_INVALID_ARGUMENT)
         ));
 
-        let megabyte = vec![b'x'; NUX_FLOW_MAX_STRING_BYTE_LENGTH as usize];
+        let megabyte = vec![b'x'; NUX_SCREEN_MAX_STRING_BYTE_LENGTH as usize];
         let nodes = (0..5)
             .map(|_| {
-                let mut node = null_node(NUX_FLOW_VALUE_KIND_STRING);
+                let mut node = null_node(NUX_SCREEN_VALUE_KIND_STRING);
                 node.string_value = bytes(&megabyte);
                 node
             })
             .collect::<Vec<_>>();
-        let arena = NuxFlowValueArena {
-            struct_size: size_u32::<NuxFlowValueArena>(),
+        let arena = NuxScreenValueArena {
+            struct_size: size_u32::<NuxScreenValueArena>(),
             nodes: nodes.as_ptr(),
             node_count: nodes.len() as u64,
             edges: ptr::null(),
@@ -6374,11 +6510,11 @@ mod tests {
     fn value_depth_counts_the_root_at_zero() {
         let arena_with_edge_depth = |edge_depth: usize| {
             let mut nodes = (0..=edge_depth)
-                .map(|_| null_node(NUX_FLOW_VALUE_KIND_LIST))
+                .map(|_| null_node(NUX_SCREEN_VALUE_KIND_LIST))
                 .collect::<Vec<_>>();
             let edges = (0..edge_depth)
-                .map(|index| NuxFlowValueEdge {
-                    struct_size: size_u32::<NuxFlowValueEdge>(),
+                .map(|index| NuxScreenValueEdge {
+                    struct_size: size_u32::<NuxScreenValueEdge>(),
                     node_index: (index + 1) as u32,
                     key: NuxByteView::default(),
                 })
@@ -6390,9 +6526,9 @@ mod tests {
             (nodes, edges)
         };
 
-        let (nodes, edges) = arena_with_edge_depth(NUX_FLOW_MAX_VALUE_DEPTH as usize);
-        let arena = NuxFlowValueArena {
-            struct_size: size_u32::<NuxFlowValueArena>(),
+        let (nodes, edges) = arena_with_edge_depth(NUX_SCREEN_MAX_VALUE_DEPTH as usize);
+        let arena = NuxScreenValueArena {
+            struct_size: size_u32::<NuxScreenValueArena>(),
             nodes: nodes.as_ptr(),
             node_count: nodes.len() as u64,
             edges: edges.as_ptr(),
@@ -6400,8 +6536,8 @@ mod tests {
         };
         assert!(unsafe { copy_value_arena(&arena, &mut PayloadBudget::default()) }.is_ok());
 
-        let (nodes, edges) = arena_with_edge_depth(NUX_FLOW_MAX_VALUE_DEPTH as usize + 1);
-        let arena = NuxFlowValueArena {
+        let (nodes, edges) = arena_with_edge_depth(NUX_SCREEN_MAX_VALUE_DEPTH as usize + 1);
+        let arena = NuxScreenValueArena {
             nodes: nodes.as_ptr(),
             node_count: nodes.len() as u64,
             edges: edges.as_ptr(),
@@ -6416,9 +6552,9 @@ mod tests {
 
     #[test]
     fn pointer_and_operation_bounds_fail_before_the_worker_seam() {
-        let event = NuxFlowPointerEvent {
-            struct_size: size_u32::<NuxFlowPointerEvent>(),
-            kind: NUX_FLOW_POINTER_EVENT_KIND_DOWN,
+        let event = NuxScreenPointerEvent {
+            struct_size: size_u32::<NuxScreenPointerEvent>(),
+            kind: NUX_SCREEN_POINTER_EVENT_KIND_DOWN,
             pointer_id: 1,
             x: 0.0,
             y: 0.0,
@@ -6426,25 +6562,25 @@ mod tests {
         };
         assert_eq!(
             unsafe {
-                copy_pointer_batch(&NuxFlowPointerBatch {
-                    struct_size: size_u32::<NuxFlowPointerBatch>(),
+                copy_pointer_batch(&NuxScreenPointerBatch {
+                    struct_size: size_u32::<NuxScreenPointerBatch>(),
                     events: &event,
                     event_count: 1,
                 })
             }
             .expect("valid pointer event copies"),
             [OwnedPointerEvent {
-                kind: NUX_FLOW_POINTER_EVENT_KIND_DOWN,
+                kind: NUX_SCREEN_POINTER_EVENT_KIND_DOWN,
                 pointer_id: 1,
                 x: 0.0,
                 y: 0.0,
                 timestamp_seconds: 12.5,
             }]
         );
-        let batch = NuxFlowPointerBatch {
-            struct_size: size_u32::<NuxFlowPointerBatch>(),
+        let batch = NuxScreenPointerBatch {
+            struct_size: size_u32::<NuxScreenPointerBatch>(),
             events: &event,
-            event_count: NUX_FLOW_MAX_POINTER_COUNT + 1,
+            event_count: NUX_SCREEN_MAX_POINTER_COUNT + 1,
         };
         assert!(matches!(
             unsafe { copy_pointer_batch(&batch) },
@@ -6453,8 +6589,8 @@ mod tests {
 
         let mut invalid_event = event;
         invalid_event.timestamp_seconds = -1.0;
-        let batch = NuxFlowPointerBatch {
-            struct_size: size_u32::<NuxFlowPointerBatch>(),
+        let batch = NuxScreenPointerBatch {
+            struct_size: size_u32::<NuxScreenPointerBatch>(),
             events: &invalid_event,
             event_count: 1,
         };
@@ -6465,8 +6601,8 @@ mod tests {
 
         invalid_event = event;
         invalid_event.pointer_id = 0;
-        let batch = NuxFlowPointerBatch {
-            struct_size: size_u32::<NuxFlowPointerBatch>(),
+        let batch = NuxScreenPointerBatch {
+            struct_size: size_u32::<NuxScreenPointerBatch>(),
             events: &invalid_event,
             event_count: 1,
         };
@@ -6475,7 +6611,7 @@ mod tests {
             Err(NUX_STATUS_INVALID_ARGUMENT)
         ));
 
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_POINTER_BATCH);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_POINTER_BATCH);
         request.pointer_batch = &batch;
         request.query_batch = ptr::dangling();
         assert!(matches!(
@@ -6487,24 +6623,24 @@ mod tests {
     #[cfg(feature = "apple-product")]
     #[test]
     fn state_batch_is_fully_validated_before_the_worker_seam() {
-        let mut value = null_node(NUX_FLOW_VALUE_KIND_NUMBER);
+        let mut value = null_node(NUX_SCREEN_VALUE_KIND_NUMBER);
         value.number_value = 42.0;
-        let arena = NuxFlowValueArena {
-            struct_size: size_u32::<NuxFlowValueArena>(),
+        let arena = NuxScreenValueArena {
+            struct_size: size_u32::<NuxScreenValueArena>(),
             nodes: &value,
             node_count: 1,
             edges: ptr::null(),
             edge_count: 0,
         };
-        let mutation = NuxFlowStateMutation {
-            struct_size: size_u32::<NuxFlowStateMutation>(),
-            kind: NUX_FLOW_STATE_MUTATION_KIND_SET,
-            instance: NuxFlowInstanceReference {
-                kind: NUX_FLOW_INSTANCE_REFERENCE_KIND_EXISTING,
+        let mutation = NuxScreenStateMutation {
+            struct_size: size_u32::<NuxScreenStateMutation>(),
+            kind: NUX_SCREEN_STATE_MUTATION_KIND_SET,
+            instance: NuxScreenInstanceReference {
+                kind: NUX_SCREEN_INSTANCE_REFERENCE_KIND_EXISTING,
                 local_id: 0,
                 instance_id: 7,
             },
-            item: NuxFlowInstanceReference {
+            item: NuxScreenInstanceReference {
                 kind: 0,
                 local_id: 0,
                 instance_id: 0,
@@ -6515,8 +6651,8 @@ mod tests {
             index: 0,
             other_index: 0,
         };
-        let batch = NuxFlowStateBatch {
-            struct_size: size_u32::<NuxFlowStateBatch>(),
+        let batch = NuxScreenStateBatch {
+            struct_size: size_u32::<NuxScreenStateBatch>(),
             has_host_mutation_id: 1,
             host_mutation_id: 99,
             value_arena: &arena,
@@ -6525,18 +6661,18 @@ mod tests {
             mutations: &mutation,
             mutation_count: 1,
         };
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_STATE_BATCH);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_STATE_BATCH);
         request.state_batch = &batch;
         let mut result = ptr::null_mut();
 
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(ptr::null(), &request, &mut result) },
+            unsafe { nux_screen_session_perform(ptr::null(), &request, &mut result) },
             NuxStatus::NullArgument,
             "a valid copied batch reaches live-session validation"
         );
-        unsafe { nux_flow_session_result_free(result) };
+        unsafe { nux_screen_session_result_free(result) };
 
-        let present_zero_batch = NuxFlowStateBatch {
+        let present_zero_batch = NuxScreenStateBatch {
             has_host_mutation_id: 1,
             host_mutation_id: 0,
             ..batch
@@ -6544,34 +6680,34 @@ mod tests {
         request.state_batch = &present_zero_batch;
         result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(ptr::null(), &request, &mut result) },
+            unsafe { nux_screen_session_perform(ptr::null(), &request, &mut result) },
             NuxStatus::NullArgument,
             "the presence bit preserves host mutation ID zero"
         );
-        unsafe { nux_flow_session_result_free(result) };
+        unsafe { nux_screen_session_result_free(result) };
 
-        let invalid_batch = NuxFlowStateBatch {
+        let invalid_batch = NuxScreenStateBatch {
             has_host_mutation_id: 0,
             ..batch
         };
         request.state_batch = &invalid_batch;
         result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(ptr::null(), &request, &mut result) },
+            unsafe { nux_screen_session_perform(ptr::null(), &request, &mut result) },
             NuxStatus::InvalidArgument,
             "noncanonical optional IDs are rejected before worker dispatch"
         );
-        unsafe { nux_flow_session_result_free(result) };
+        unsafe { nux_screen_session_result_free(result) };
 
-        let new_instance = NuxFlowNewInstance {
-            struct_size: size_u32::<NuxFlowNewInstance>(),
+        let new_instance = NuxScreenNewInstance {
+            struct_size: size_u32::<NuxScreenNewInstance>(),
             local_id: 0,
             schema_name: NuxByteView::default(),
             authored_instance_name: NuxByteView::default(),
         };
         let instances = vec![new_instance; 2_048];
         let mutations = vec![mutation; 2_049];
-        let oversized_batch = NuxFlowStateBatch {
+        let oversized_batch = NuxScreenStateBatch {
             new_instances: instances.as_ptr(),
             new_instance_count: instances.len() as u64,
             mutations: mutations.as_ptr(),
@@ -6581,33 +6717,33 @@ mod tests {
         request.state_batch = &oversized_batch;
         result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(ptr::null(), &request, &mut result) },
+            unsafe { nux_screen_session_perform(ptr::null(), &request, &mut result) },
             NuxStatus::InvalidArgument,
             "new instances and mutations share the 4096-item batch cap"
         );
-        unsafe { nux_flow_session_result_free(result) };
+        unsafe { nux_screen_session_result_free(result) };
     }
 
     #[cfg(feature = "apple-product")]
     #[test]
     fn player_input_mutations_require_a_name_and_matching_scalar_kind() {
-        let mut value = null_node(NUX_FLOW_VALUE_KIND_BOOL);
+        let mut value = null_node(NUX_SCREEN_VALUE_KIND_BOOL);
         value.bool_value = 1;
-        let arena = NuxFlowValueArena {
-            struct_size: size_u32::<NuxFlowValueArena>(),
+        let arena = NuxScreenValueArena {
+            struct_size: size_u32::<NuxScreenValueArena>(),
             nodes: &value,
             node_count: 1,
             edges: ptr::null(),
             edge_count: 0,
         };
-        let zero_reference = NuxFlowInstanceReference {
+        let zero_reference = NuxScreenInstanceReference {
             kind: 0,
             local_id: 0,
             instance_id: 0,
         };
-        let mutation = NuxFlowStateMutation {
-            struct_size: size_u32::<NuxFlowStateMutation>(),
-            kind: NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_BOOL,
+        let mutation = NuxScreenStateMutation {
+            struct_size: size_u32::<NuxScreenStateMutation>(),
+            kind: NUX_SCREEN_STATE_MUTATION_KIND_SET_INPUT_BOOL,
             instance: zero_reference,
             item: zero_reference,
             path: NuxByteView::default(),
@@ -6616,9 +6752,9 @@ mod tests {
             index: 0,
             other_index: 0,
         };
-        let perform_without_session = |mutation: &NuxFlowStateMutation| {
-            let batch = NuxFlowStateBatch {
-                struct_size: size_u32::<NuxFlowStateBatch>(),
+        let perform_without_session = |mutation: &NuxScreenStateMutation| {
+            let batch = NuxScreenStateBatch {
+                struct_size: size_u32::<NuxScreenStateBatch>(),
                 has_host_mutation_id: 0,
                 host_mutation_id: 0,
                 value_arena: &arena,
@@ -6627,19 +6763,18 @@ mod tests {
                 mutations: mutation,
                 mutation_count: 1,
             };
-            let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_STATE_BATCH);
+            let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_STATE_BATCH);
             request.state_batch = &batch;
             let mut result = ptr::null_mut();
-            let status =
-                unsafe { nux_flow_render_session_perform(ptr::null(), &request, &mut result) };
-            unsafe { nux_flow_session_result_free(result) };
+            let status = unsafe { nux_screen_session_perform(ptr::null(), &request, &mut result) };
+            unsafe { nux_screen_session_result_free(result) };
             status
         };
 
         assert_eq!(perform_without_session(&mutation), NuxStatus::NullArgument);
 
-        let wrong_kind = NuxFlowStateMutation {
-            kind: NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_NUMBER,
+        let wrong_kind = NuxScreenStateMutation {
+            kind: NUX_SCREEN_STATE_MUTATION_KIND_SET_INPUT_NUMBER,
             ..mutation
         };
         assert_eq!(
@@ -6647,7 +6782,7 @@ mod tests {
             NuxStatus::InvalidArgument
         );
 
-        let missing_name = NuxFlowStateMutation {
+        let missing_name = NuxScreenStateMutation {
             input_name: NuxByteView::default(),
             ..mutation
         };
@@ -6656,8 +6791,8 @@ mod tests {
             NuxStatus::InvalidArgument
         );
 
-        let oversized_name = vec![b'x'; NUX_FLOW_MAX_ID_BYTE_LENGTH as usize + 1];
-        let oversized = NuxFlowStateMutation {
+        let oversized_name = vec![b'x'; NUX_SCREEN_MAX_ID_BYTE_LENGTH as usize + 1];
+        let oversized = NuxScreenStateMutation {
             input_name: bytes(&oversized_name),
             ..mutation
         };
@@ -6676,8 +6811,8 @@ mod tests {
     #[test]
     fn rejected_advance_consumes_the_completion_exactly_once() {
         let counter = AtomicUsize::new(0);
-        let advance = NuxFlowAdvanceOperation {
-            struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+        let advance = NuxScreenAdvanceOperation {
+            struct_size: size_u32::<NuxScreenAdvanceOperation>(),
             timestamp_seconds: 1.0,
             delta_seconds: 0.0,
             render: 1,
@@ -6685,23 +6820,23 @@ mod tests {
             completion_context: (&counter as *const AtomicUsize).cast_mut().cast(),
             completion_callback: Some(count_completion),
         };
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_ADVANCE);
         request.advance = &advance;
         let mut result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(ptr::null(), &request, &mut result) },
+            unsafe { nux_screen_session_perform(ptr::null(), &request, &mut result) },
             NuxStatus::NullArgument
         );
         assert_eq!(counter.load(Ordering::SeqCst), 1);
         assert!(!result.is_null());
-        unsafe { nux_flow_session_result_free(result) };
+        unsafe { nux_screen_session_result_free(result) };
     }
 
     #[cfg(feature = "apple-product")]
     #[test]
     fn advance_rejects_noncanonical_render_flags_before_worker_dispatch() {
-        let advance = NuxFlowAdvanceOperation {
-            struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+        let advance = NuxScreenAdvanceOperation {
+            struct_size: size_u32::<NuxScreenAdvanceOperation>(),
             timestamp_seconds: 1.0,
             delta_seconds: 0.0,
             render: 2,
@@ -6709,14 +6844,14 @@ mod tests {
             completion_context: ptr::null_mut(),
             completion_callback: None,
         };
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_ADVANCE);
         request.advance = &advance;
         let mut result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(ptr::null(), &request, &mut result) },
+            unsafe { nux_screen_session_perform(ptr::null(), &request, &mut result) },
             NuxStatus::InvalidArgument
         );
-        unsafe { nux_flow_session_result_free(result) };
+        unsafe { nux_screen_session_result_free(result) };
     }
 
     #[cfg(feature = "apple-product")]
@@ -6742,36 +6877,36 @@ mod tests {
             assert_eq!(
                 write_session_runtime_failure(
                     &mut creation_result,
-                    RuntimeFailure::flow_session(kind, "configured creation failed"),
+                    RuntimeFailure::screen_session(kind, "configured creation failed"),
                 ),
                 NuxStatus::RuntimeError
             );
             assert_session_diagnostic_code(creation_result, expected_code);
-            unsafe { nux_flow_session_result_free(creation_result) };
+            unsafe { nux_screen_session_result_free(creation_result) };
 
             let perform_result =
-                Box::into_raw(Box::new(FlowSessionResultHandle::from_runtime_failure(
-                    RuntimeFailure::flow_session(kind, "configured perform failed"),
+                Box::into_raw(Box::new(ScreenSessionResultHandle::from_runtime_failure(
+                    RuntimeFailure::screen_session(kind, "configured perform failed"),
                 )))
-                .cast::<NuxFlowSessionResult>();
+                .cast::<NuxScreenSessionResult>();
             assert_session_diagnostic_code(perform_result, expected_code);
-            unsafe { nux_flow_session_result_free(perform_result) };
+            unsafe { nux_screen_session_result_free(perform_result) };
         }
     }
 
     #[cfg(feature = "apple-product")]
-    fn assert_session_diagnostic_code(result: *const NuxFlowSessionResult, expected_code: &[u8]) {
+    fn assert_session_diagnostic_code(result: *const NuxScreenSessionResult, expected_code: &[u8]) {
         assert_eq!(
-            unsafe { nux_flow_session_result_status(result) },
+            unsafe { nux_screen_session_result_status(result) },
             NuxStatus::RuntimeError
         );
         assert_eq!(
-            unsafe { nux_flow_session_result_diagnostic_count(result) },
+            unsafe { nux_screen_session_result_diagnostic_count(result) },
             1
         );
         let mut diagnostic = NuxDiagnosticView::default();
         assert_eq!(
-            unsafe { nux_flow_session_result_diagnostic_at(result, 0, &mut diagnostic) },
+            unsafe { nux_screen_session_result_diagnostic_at(result, 0, &mut diagnostic) },
             NuxStatus::Ok
         );
         let code =
@@ -6781,11 +6916,11 @@ mod tests {
 
     #[test]
     fn result_views_borrow_owned_storage_until_explicit_free() {
-        let mut result = FlowSessionResultHandle::empty_success();
+        let mut result = ScreenSessionResultHandle::empty_success();
         result.has_player_inputs = true;
         result.player_metadata = Some(OwnedPlayerMetadata {
-            kind: NUX_FLOW_PLAYER_KIND_STATIC,
-            selection: NUX_FLOW_PLAYER_SELECTION_STATIC,
+            kind: NUX_SCREEN_PLAYER_KIND_STATIC,
+            selection: NUX_SCREEN_PLAYER_SELECTION_STATIC,
             player_index: None,
             artboard_name: b"Owned Artboard".to_vec(),
             player_name: Vec::new(),
@@ -6795,7 +6930,7 @@ mod tests {
             max_y: 54.0,
         });
         result.value_arena.nodes.push(OwnedValueNode {
-            kind: NUX_FLOW_VALUE_KIND_BOOL,
+            kind: NUX_SCREEN_VALUE_KIND_BOOL,
             number_value: 0.0,
             color_value: 0,
             bool_value: true,
@@ -6807,15 +6942,15 @@ mod tests {
             schema_id: Vec::new(),
         });
         result.player_inputs.push(OwnedPlayerInput {
-            kind: NUX_FLOW_PLAYER_INPUT_KIND_BOOL,
+            kind: NUX_SCREEN_PLAYER_INPUT_KIND_BOOL,
             value_root_index: 0,
             name: b"enabled".to_vec(),
         });
-        let result = Box::into_raw(Box::new(result)).cast::<NuxFlowSessionResult>();
-        let mut metadata: NuxFlowPlayerMetadataView = unsafe { std::mem::zeroed() };
-        metadata.struct_size = size_u32::<NuxFlowPlayerMetadataView>();
+        let result = Box::into_raw(Box::new(result)).cast::<NuxScreenSessionResult>();
+        let mut metadata: NuxScreenPlayerMetadataView = unsafe { std::mem::zeroed() };
+        metadata.struct_size = size_u32::<NuxScreenPlayerMetadataView>();
         assert_eq!(
-            unsafe { nux_flow_session_result_player_metadata(result, &mut metadata) },
+            unsafe { nux_screen_session_result_player_metadata(result, &mut metadata) },
             NuxStatus::Ok
         );
         let copied = unsafe {
@@ -6827,15 +6962,15 @@ mod tests {
         .to_vec();
         assert_eq!(copied, b"Owned Artboard");
         assert_eq!(metadata.min_x, -10.0);
-        assert_eq!(metadata.selection, NUX_FLOW_PLAYER_SELECTION_STATIC);
+        assert_eq!(metadata.selection, NUX_SCREEN_PLAYER_SELECTION_STATIC);
         assert_eq!(metadata.player_index, u32::MAX);
-        let mut input: NuxFlowPlayerInputView = unsafe { std::mem::zeroed() };
-        input.struct_size = size_u32::<NuxFlowPlayerInputView>();
+        let mut input: NuxScreenPlayerInputView = unsafe { std::mem::zeroed() };
+        input.struct_size = size_u32::<NuxScreenPlayerInputView>();
         assert_eq!(
-            unsafe { nux_flow_session_result_player_input_at(result, 0, &mut input) },
+            unsafe { nux_screen_session_result_player_input_at(result, 0, &mut input) },
             NuxStatus::Ok
         );
-        assert_eq!(input.kind, NUX_FLOW_PLAYER_INPUT_KIND_BOOL);
+        assert_eq!(input.kind, NUX_SCREEN_PLAYER_INPUT_KIND_BOOL);
         let _noise = vec![0xA5_u8; 64 * 1024];
         let borrowed = unsafe {
             slice::from_raw_parts(
@@ -6846,48 +6981,51 @@ mod tests {
         assert_eq!(borrowed, b"Owned Artboard");
         let input_name = unsafe { slice::from_raw_parts(input.name.data, input.name.len as usize) };
         assert_eq!(input_name, b"enabled");
-        unsafe { nux_flow_session_result_free(result) };
+        unsafe { nux_screen_session_result_free(result) };
     }
 
     #[test]
     fn result_presence_accessors_distinguish_absent_from_present_empty_snapshots() {
-        let absent = Box::into_raw(Box::new(FlowSessionResultHandle::empty_success()))
-            .cast::<NuxFlowSessionResult>();
-        assert!(!unsafe { nux_flow_session_result_has_values(absent) });
-        assert!(!unsafe { nux_flow_session_result_has_catalog(absent) });
-        assert!(!unsafe { nux_flow_session_result_has_player_inputs(absent) });
-        unsafe { nux_flow_session_result_free(absent) };
+        let absent = Box::into_raw(Box::new(ScreenSessionResultHandle::empty_success()))
+            .cast::<NuxScreenSessionResult>();
+        assert!(!unsafe { nux_screen_session_result_has_values(absent) });
+        assert!(!unsafe { nux_screen_session_result_has_catalog(absent) });
+        assert!(!unsafe { nux_screen_session_result_has_player_inputs(absent) });
+        unsafe { nux_screen_session_result_free(absent) };
 
-        let mut present = FlowSessionResultHandle::empty_success();
+        let mut present = ScreenSessionResultHandle::empty_success();
         present.has_values = true;
         present.has_catalog = true;
         present.has_player_inputs = true;
-        let present = Box::into_raw(Box::new(present)).cast::<NuxFlowSessionResult>();
-        assert!(unsafe { nux_flow_session_result_has_values(present) });
-        assert!(unsafe { nux_flow_session_result_has_catalog(present) });
-        assert!(unsafe { nux_flow_session_result_has_player_inputs(present) });
+        let present = Box::into_raw(Box::new(present)).cast::<NuxScreenSessionResult>();
+        assert!(unsafe { nux_screen_session_result_has_values(present) });
+        assert!(unsafe { nux_screen_session_result_has_catalog(present) });
+        assert!(unsafe { nux_screen_session_result_has_player_inputs(present) });
         assert_eq!(
-            unsafe { nux_flow_session_result_value_root_count(present) },
+            unsafe { nux_screen_session_result_value_root_count(present) },
             0
         );
-        assert_eq!(unsafe { nux_flow_session_result_schema_count(present) }, 0);
         assert_eq!(
-            unsafe { nux_flow_session_result_player_input_count(present) },
+            unsafe { nux_screen_session_result_schema_count(present) },
             0
         );
-        unsafe { nux_flow_session_result_free(present) };
+        assert_eq!(
+            unsafe { nux_screen_session_result_player_input_count(present) },
+            0
+        );
+        unsafe { nux_screen_session_result_free(present) };
 
-        assert!(!unsafe { nux_flow_session_result_has_values(ptr::null()) });
-        assert!(!unsafe { nux_flow_session_result_has_catalog(ptr::null()) });
-        assert!(!unsafe { nux_flow_session_result_has_player_inputs(ptr::null()) });
+        assert!(!unsafe { nux_screen_session_result_has_values(ptr::null()) });
+        assert!(!unsafe { nux_screen_session_result_has_catalog(ptr::null()) });
+        assert!(!unsafe { nux_screen_session_result_has_player_inputs(ptr::null()) });
     }
 
     #[test]
     fn result_rejects_output_sequence_or_phase_regression_but_allows_new_cycles() {
-        let mut result = FlowSessionResultHandle::empty_success();
+        let mut result = ScreenSessionResultHandle::empty_success();
         let output = |sequence, cycle, phase| OwnedOutput {
             phase,
-            kind: NUX_FLOW_OUTPUT_KIND_RUNTIME_ADVANCED,
+            kind: NUX_SCREEN_OUTPUT_KIND_RUNTIME_ADVANCED,
             payload_root_index: None,
             sequence,
             cycle,
@@ -6903,8 +7041,8 @@ mod tests {
             open_url: None,
         };
         result.outputs = vec![
-            output(1, 1, NUX_FLOW_OUTPUT_PHASE_HOST_WORK),
-            output(2, 2, NUX_FLOW_OUTPUT_PHASE_REPORTED_EVENTS),
+            output(1, 1, NUX_SCREEN_OUTPUT_PHASE_HOST_WORK),
+            output(2, 2, NUX_SCREEN_OUTPUT_PHASE_REPORTED_EVENTS),
         ];
         assert_eq!(result.validate(), Ok(()));
         result.outputs[1].sequence = 1;
@@ -6921,10 +7059,10 @@ mod tests {
             Ok(worker) => worker,
             Err(_) => panic!("import configured-session panic fixture"),
         };
-        let context = Box::into_raw(Box::new(FlowRuntimeContextHandle {
+        let context = Box::into_raw(Box::new(ExperienceRuntimeContextHandle {
             worker: Arc::clone(&worker),
         }))
-        .cast::<NuxFlowRuntimeContext>();
+        .cast::<NuxExperienceContext>();
         let descriptor = configured_descriptor();
 
         let create_session = || {
@@ -6932,7 +7070,7 @@ mod tests {
             let mut creation = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_render_session_create_configured(
+                    nux_screen_session_create_configured(
                         context,
                         &descriptor,
                         &mut session,
@@ -6943,15 +7081,15 @@ mod tests {
             );
             assert!(!session.is_null());
             assert_eq!(
-                unsafe { nux_flow_session_result_status(creation) },
+                unsafe { nux_screen_session_result_status(creation) },
                 NuxStatus::Ok
             );
-            unsafe { nux_flow_session_result_free(creation) };
+            unsafe { nux_screen_session_result_free(creation) };
             session
         };
         let affected = create_session();
         let sibling = create_session();
-        let affected_handle = unsafe { &*affected.cast::<FlowRenderSessionHandle>() };
+        let affected_handle = unsafe { &*affected.cast::<ScreenSessionHandle>() };
         let affected_id = affected_handle.token.id;
         affected_handle
             .token
@@ -6964,8 +7102,8 @@ mod tests {
             .expect("worker accepts the test-only panic seam")
             .expect("affected session remains live before the panic");
 
-        let advance = NuxFlowAdvanceOperation {
-            struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+        let advance = NuxScreenAdvanceOperation {
+            struct_size: size_u32::<NuxScreenAdvanceOperation>(),
             timestamp_seconds: 0.25,
             delta_seconds: 0.25,
             render: 0,
@@ -6973,26 +7111,26 @@ mod tests {
             completion_context: ptr::null_mut(),
             completion_callback: None,
         };
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_ADVANCE);
         request.advance = &advance;
 
         let mut panic_result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(affected, &request, &mut panic_result) },
+            unsafe { nux_screen_session_perform(affected, &request, &mut panic_result) },
             NuxStatus::RuntimeError
         );
         assert!(!panic_result.is_null());
         assert_eq!(
-            unsafe { nux_flow_session_result_surface_disposition(panic_result) },
+            unsafe { nux_screen_session_result_surface_disposition(panic_result) },
             NUX_SURFACE_DISPOSITION_FATAL
         );
         assert_eq!(
-            unsafe { nux_flow_session_result_diagnostic_count(panic_result) },
+            unsafe { nux_screen_session_result_diagnostic_count(panic_result) },
             1
         );
         let mut diagnostic = NuxDiagnosticView::default();
         assert_eq!(
-            unsafe { nux_flow_session_result_diagnostic_at(panic_result, 0, &mut diagnostic) },
+            unsafe { nux_screen_session_result_diagnostic_at(panic_result, 0, &mut diagnostic) },
             NuxStatus::Ok
         );
         assert_eq!(diagnostic.severity, NUX_DIAGNOSTIC_SEVERITY_FATAL);
@@ -7004,17 +7142,17 @@ mod tests {
             copied_byte_view(diagnostic.message),
             PANIC_DIAGNOSTIC.as_bytes()
         );
-        unsafe { nux_flow_session_result_free(panic_result) };
+        unsafe { nux_screen_session_result_free(panic_result) };
 
         let mut terminal_retry = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(affected, &request, &mut terminal_retry) },
+            unsafe { nux_screen_session_perform(affected, &request, &mut terminal_retry) },
             NuxStatus::RuntimeError
         );
         let mut terminal_diagnostic = NuxDiagnosticView::default();
         assert_eq!(
             unsafe {
-                nux_flow_session_result_diagnostic_at(terminal_retry, 0, &mut terminal_diagnostic)
+                nux_screen_session_result_diagnostic_at(terminal_retry, 0, &mut terminal_diagnostic)
             },
             NuxStatus::Ok
         );
@@ -7022,29 +7160,29 @@ mod tests {
             copied_byte_view(terminal_diagnostic.message),
             PANIC_DIAGNOSTIC.as_bytes()
         );
-        unsafe { nux_flow_session_result_free(terminal_retry) };
+        unsafe { nux_screen_session_result_free(terminal_retry) };
 
         let mut sibling_result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(sibling, &request, &mut sibling_result) },
+            unsafe { nux_screen_session_perform(sibling, &request, &mut sibling_result) },
             NuxStatus::Ok
         );
         assert_eq!(
-            unsafe { nux_flow_session_result_status(sibling_result) },
+            unsafe { nux_screen_session_result_status(sibling_result) },
             NuxStatus::Ok
         );
         assert!(
-            (0..unsafe { nux_flow_session_result_output_count(sibling_result) })
+            (0..unsafe { nux_screen_session_result_output_count(sibling_result) })
                 .map(|index| public_output_at(sibling_result, index))
-                .any(|output| output.kind == NUX_FLOW_OUTPUT_KIND_RUNTIME_ADVANCED),
+                .any(|output| output.kind == NUX_SCREEN_OUTPUT_KIND_RUNTIME_ADVANCED),
             "the sibling must complete a real configured advance"
         );
 
         unsafe {
-            nux_flow_session_result_free(sibling_result);
-            nux_flow_render_session_free(sibling);
-            nux_flow_render_session_free(affected);
-            nux_flow_runtime_context_free(context);
+            nux_screen_session_result_free(sibling_result);
+            nux_screen_session_free(sibling);
+            nux_screen_session_free(affected);
+            nux_experience_context_free(context);
         }
     }
 
@@ -7055,16 +7193,16 @@ mod tests {
             Ok(worker) => worker,
             Err(_) => panic!("import configured-session device-loss fixture"),
         };
-        let context = Box::into_raw(Box::new(FlowRuntimeContextHandle {
+        let context = Box::into_raw(Box::new(ExperienceRuntimeContextHandle {
             worker: Arc::clone(&worker),
         }))
-        .cast::<NuxFlowRuntimeContext>();
+        .cast::<NuxExperienceContext>();
         let descriptor = configured_descriptor();
         let mut session = ptr::null_mut();
         let mut creation = ptr::null_mut();
         assert_eq!(
             unsafe {
-                nux_flow_render_session_create_configured(
+                nux_screen_session_create_configured(
                     context,
                     &descriptor,
                     &mut session,
@@ -7073,9 +7211,9 @@ mod tests {
             },
             NuxStatus::Ok
         );
-        unsafe { nux_flow_session_result_free(creation) };
+        unsafe { nux_screen_session_result_free(creation) };
 
-        let handle = unsafe { &*session.cast::<FlowRenderSessionHandle>() };
+        let handle = unsafe { &*session.cast::<ScreenSessionHandle>() };
         let session_id = handle.token.id;
         handle
             .token
@@ -7089,8 +7227,8 @@ mod tests {
             .expect("worker accepts the test-only device-loss seam")
             .expect("configured session remains live before loss");
 
-        let advance = NuxFlowAdvanceOperation {
-            struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+        let advance = NuxScreenAdvanceOperation {
+            struct_size: size_u32::<NuxScreenAdvanceOperation>(),
             timestamp_seconds: 0.25,
             delta_seconds: 0.25,
             render: 1,
@@ -7098,24 +7236,24 @@ mod tests {
             completion_context: ptr::null_mut(),
             completion_callback: None,
         };
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_ADVANCE);
         request.advance = &advance;
         let mut lost_result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(session, &request, &mut lost_result) },
+            unsafe { nux_screen_session_perform(session, &request, &mut lost_result) },
             NuxStatus::Ok
         );
         assert_eq!(
-            unsafe { nux_flow_session_result_surface_disposition(lost_result) },
+            unsafe { nux_screen_session_result_surface_disposition(lost_result) },
             NUX_SURFACE_DISPOSITION_DEVICE_LOST
         );
         assert_eq!(
-            unsafe { nux_flow_session_result_output_count(lost_result) },
+            unsafe { nux_screen_session_result_output_count(lost_result) },
             0,
             "device loss must be reported before the logical advance commits"
         );
-        assert!(!unsafe { nux_flow_session_result_is_dirty(lost_result) });
-        unsafe { nux_flow_session_result_free(lost_result) };
+        assert!(!unsafe { nux_screen_session_result_is_dirty(lost_result) });
+        unsafe { nux_screen_session_result_free(lost_result) };
 
         handle
             .token
@@ -7131,27 +7269,27 @@ mod tests {
             .expect("worker inspects configured device-loss preflight")
             .expect("device loss leaves the configured session retryable");
 
-        let retry = NuxFlowAdvanceOperation {
+        let retry = NuxScreenAdvanceOperation {
             render: 0,
             ..advance
         };
         request.advance = &retry;
         let mut retry_result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(session, &request, &mut retry_result) },
+            unsafe { nux_screen_session_perform(session, &request, &mut retry_result) },
             NuxStatus::Ok
         );
-        let runtime_advanced = (0..unsafe { nux_flow_session_result_output_count(retry_result) })
+        let runtime_advanced = (0..unsafe { nux_screen_session_result_output_count(retry_result) })
             .map(|index| public_output_at(retry_result, index))
-            .find(|output| output.kind == NUX_FLOW_OUTPUT_KIND_RUNTIME_ADVANCED)
+            .find(|output| output.kind == NUX_SCREEN_OUTPUT_KIND_RUNTIME_ADVANCED)
             .expect("the retry performs the first logical advance");
         assert_eq!(runtime_advanced.sequence, 1);
         assert_eq!(runtime_advanced.cycle, 1);
 
         unsafe {
-            nux_flow_session_result_free(retry_result);
-            nux_flow_render_session_free(session);
-            nux_flow_runtime_context_free(context);
+            nux_screen_session_result_free(retry_result);
+            nux_screen_session_free(session);
+            nux_experience_context_free(context);
         }
     }
 
@@ -7164,7 +7302,7 @@ mod tests {
             let mut import_result = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_runtime_context_create_bound(
+                    nux_experience_context_create_bound(
                         runtime_binding(),
                         request,
                         &mut context,
@@ -7174,10 +7312,6 @@ mod tests {
                 NuxStatus::Ok
             );
             assert!(!context.is_null());
-            assert_eq!(
-                unsafe { nux_operation_result_script_authorization(import_result) },
-                NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED
-            );
             assert_eq!(
                 unsafe { nux_operation_result_diagnostic_count(import_result) },
                 0
@@ -7189,7 +7323,7 @@ mod tests {
             let mut creation = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_render_session_create_configured(
+                    nux_screen_session_create_configured(
                         context,
                         &descriptor,
                         &mut session,
@@ -7200,34 +7334,37 @@ mod tests {
             );
             assert!(!session.is_null());
             assert_eq!(
-                unsafe { nux_flow_session_result_status(creation) },
+                unsafe { nux_screen_session_result_status(creation) },
                 NuxStatus::Ok
             );
-            assert_eq!(unsafe { nux_flow_session_result_output_count(creation) }, 2);
+            assert_eq!(
+                unsafe { nux_screen_session_result_output_count(creation) },
+                2
+            );
 
             let loaded = public_output_at(creation, 0);
-            assert_eq!(loaded.phase, NUX_FLOW_OUTPUT_PHASE_HOST_WORK);
-            assert_eq!(loaded.kind, NUX_FLOW_OUTPUT_KIND_HOST_COMMAND);
+            assert_eq!(loaded.phase, NUX_SCREEN_OUTPUT_PHASE_HOST_WORK);
+            assert_eq!(loaded.kind, NUX_SCREEN_OUTPUT_KIND_HOST_COMMAND);
             assert_eq!(loaded.sequence, 1);
             assert_eq!(loaded.cycle, 0);
             assert_eq!(copied_byte_view(loaded.name), b"fixture_loaded");
             assert_eq!(loaded.payload.len, 0);
             let loaded_root = public_value_node_at(creation, loaded.payload_root_index);
-            assert_eq!(loaded_root.kind, NUX_FLOW_VALUE_KIND_OBJECT);
+            assert_eq!(loaded_root.kind, NUX_SCREEN_VALUE_KIND_OBJECT);
             let authenticated = public_value_node_at(
                 creation,
                 public_object_child(creation, loaded.payload_root_index, b"authenticated"),
             );
-            assert_eq!(authenticated.kind, NUX_FLOW_VALUE_KIND_BOOL);
+            assert_eq!(authenticated.kind, NUX_SCREEN_VALUE_KIND_BOOL);
             assert_eq!(authenticated.bool_value, 1);
             let nested_index = public_object_child(creation, loaded.payload_root_index, b"nested");
             let nested = public_value_node_at(creation, nested_index);
-            assert_eq!(nested.kind, NUX_FLOW_VALUE_KIND_LIST);
+            assert_eq!(nested.kind, NUX_SCREEN_VALUE_KIND_LIST);
             assert_eq!(nested.edge_count, 2);
             let first_nested = public_value_edge_at(creation, nested.first_edge);
             assert!(copied_byte_view(first_nested.key).is_empty());
             let first_nested = public_value_node_at(creation, first_nested.node_index);
-            assert_eq!(first_nested.kind, NUX_FLOW_VALUE_KIND_STRING);
+            assert_eq!(first_nested.kind, NUX_SCREEN_VALUE_KIND_STRING);
             assert_eq!(copied_byte_view(first_nested.string_value), b"apple");
             let second_edge_index = nested
                 .first_edge
@@ -7235,12 +7372,12 @@ mod tests {
                 .expect("fixture list has a second edge");
             let second_nested = public_value_edge_at(creation, second_edge_index);
             let second_nested = public_value_node_at(creation, second_nested.node_index);
-            assert_eq!(second_nested.kind, NUX_FLOW_VALUE_KIND_NUMBER);
+            assert_eq!(second_nested.kind, NUX_SCREEN_VALUE_KIND_NUMBER);
             assert_eq!(second_nested.number_value, 14.0);
 
             let response = public_output_at(creation, 1);
-            assert_eq!(response.phase, NUX_FLOW_OUTPUT_PHASE_HOST_WORK);
-            assert_eq!(response.kind, NUX_FLOW_OUTPUT_KIND_HOST_COMMAND);
+            assert_eq!(response.phase, NUX_SCREEN_OUTPUT_PHASE_HOST_WORK);
+            assert_eq!(response.kind, NUX_SCREEN_OUTPUT_KIND_HOST_COMMAND);
             assert_eq!(response.sequence, 2);
             assert_eq!(response.cycle, 0);
             assert_eq!(copied_byte_view(response.name), b"$response_set");
@@ -7248,7 +7385,7 @@ mod tests {
                 creation,
                 public_object_child(creation, response.payload_root_index, b"field"),
             );
-            assert_eq!(field.kind, NUX_FLOW_VALUE_KIND_STRING);
+            assert_eq!(field.kind, NUX_SCREEN_VALUE_KIND_STRING);
             assert_eq!(copied_byte_view(field.string_value), b"welcome");
             let response_value =
                 public_object_child(creation, response.payload_root_index, b"value");
@@ -7256,27 +7393,27 @@ mod tests {
                 creation,
                 public_object_child(creation, response_value, b"title"),
             );
-            assert_eq!(title.kind, NUX_FLOW_VALUE_KIND_STRING);
+            assert_eq!(title.kind, NUX_SCREEN_VALUE_KIND_STRING);
             assert_eq!(copied_byte_view(title.string_value), b"Hello from Luau");
             let enabled = public_value_node_at(
                 creation,
                 public_object_child(creation, response_value, b"enabled"),
             );
-            assert_eq!(enabled.kind, NUX_FLOW_VALUE_KIND_BOOL);
+            assert_eq!(enabled.kind, NUX_SCREEN_VALUE_KIND_BOOL);
             assert_eq!(enabled.bool_value, 1);
             let count = public_value_node_at(
                 creation,
                 public_object_child(creation, response_value, b"count"),
             );
-            assert_eq!(count.kind, NUX_FLOW_VALUE_KIND_NUMBER);
+            assert_eq!(count.kind, NUX_SCREEN_VALUE_KIND_NUMBER);
             assert_eq!(count.number_value, 14.0);
-            unsafe { nux_flow_session_result_free(creation) };
+            unsafe { nux_screen_session_result_free(creation) };
 
             let mut sibling = ptr::null_mut();
             let mut sibling_creation = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_render_session_create_configured(
+                    nux_screen_session_create_configured(
                         context,
                         &descriptor,
                         &mut sibling,
@@ -7287,17 +7424,17 @@ mod tests {
             );
             assert!(!sibling.is_null());
             assert_eq!(
-                unsafe { nux_flow_session_result_status(sibling_creation) },
+                unsafe { nux_screen_session_result_status(sibling_creation) },
                 NuxStatus::Ok
             );
             assert_eq!(
-                unsafe { nux_flow_session_result_output_count(sibling_creation) },
+                unsafe { nux_screen_session_result_output_count(sibling_creation) },
                 2
             );
-            unsafe { nux_flow_session_result_free(sibling_creation) };
+            unsafe { nux_screen_session_result_free(sibling_creation) };
 
-            let overflowing_advance = NuxFlowAdvanceOperation {
-                struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+            let overflowing_advance = NuxScreenAdvanceOperation {
+                struct_size: size_u32::<NuxScreenAdvanceOperation>(),
                 timestamp_seconds: 1.0,
                 delta_seconds: 1.0,
                 render: 0,
@@ -7305,12 +7442,12 @@ mod tests {
                 completion_context: ptr::null_mut(),
                 completion_callback: None,
             };
-            let mut overflowing_operation = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+            let mut overflowing_operation = operation(NUX_SCREEN_SESSION_OPERATION_KIND_ADVANCE);
             overflowing_operation.advance = &overflowing_advance;
             let mut overflow_result = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_render_session_perform(
+                    nux_screen_session_perform(
                         session,
                         &overflowing_operation,
                         &mut overflow_result,
@@ -7320,14 +7457,14 @@ mod tests {
             );
             assert_session_diagnostic_code(overflow_result, SCRIPT_RESOURCE_DIAGNOSTIC_CODE);
             assert_eq!(
-                unsafe { nux_flow_session_result_output_count(overflow_result) },
+                unsafe { nux_screen_session_result_output_count(overflow_result) },
                 0,
                 "partial HostWork must not cross the public result seam"
             );
-            unsafe { nux_flow_session_result_free(overflow_result) };
+            unsafe { nux_screen_session_result_free(overflow_result) };
 
-            let sibling_advance = NuxFlowAdvanceOperation {
-                struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+            let sibling_advance = NuxScreenAdvanceOperation {
+                struct_size: size_u32::<NuxScreenAdvanceOperation>(),
                 timestamp_seconds: 0.25,
                 delta_seconds: 0.25,
                 render: 0,
@@ -7335,29 +7472,25 @@ mod tests {
                 completion_context: ptr::null_mut(),
                 completion_callback: None,
             };
-            let mut sibling_operation = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+            let mut sibling_operation = operation(NUX_SCREEN_SESSION_OPERATION_KIND_ADVANCE);
             sibling_operation.advance = &sibling_advance;
             let mut sibling_result = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_render_session_perform(
-                        sibling,
-                        &sibling_operation,
-                        &mut sibling_result,
-                    )
+                    nux_screen_session_perform(sibling, &sibling_operation, &mut sibling_result)
                 },
                 NuxStatus::Ok
             );
             assert_eq!(
-                unsafe { nux_flow_session_result_status(sibling_result) },
+                unsafe { nux_screen_session_result_status(sibling_result) },
                 NuxStatus::Ok
             );
             let sibling_host_output =
-                (0..unsafe { nux_flow_session_result_output_count(sibling_result) })
+                (0..unsafe { nux_screen_session_result_output_count(sibling_result) })
                     .map(|index| public_output_at(sibling_result, index))
-                    .find(|output| output.kind == NUX_FLOW_OUTPUT_KIND_HOST_COMMAND)
+                    .find(|output| output.kind == NUX_SCREEN_OUTPUT_KIND_HOST_COMMAND)
                     .expect("sibling advance emits its host command");
-            assert_eq!(sibling_host_output.phase, NUX_FLOW_OUTPUT_PHASE_HOST_WORK);
+            assert_eq!(sibling_host_output.phase, NUX_SCREEN_OUTPUT_PHASE_HOST_WORK);
             assert_eq!(sibling_host_output.cycle, 1);
             assert_eq!(copied_byte_view(sibling_host_output.name), b"sibling_ok");
             let sibling_delta = public_value_node_at(
@@ -7368,14 +7501,14 @@ mod tests {
                     b"delta",
                 ),
             );
-            assert_eq!(sibling_delta.kind, NUX_FLOW_VALUE_KIND_NUMBER);
+            assert_eq!(sibling_delta.kind, NUX_SCREEN_VALUE_KIND_NUMBER);
             assert_eq!(sibling_delta.number_value, 0.25);
 
             unsafe {
-                nux_flow_session_result_free(sibling_result);
-                nux_flow_render_session_free(sibling);
-                nux_flow_render_session_free(session);
-                nux_flow_runtime_context_free(context);
+                nux_screen_session_result_free(sibling_result);
+                nux_screen_session_free(sibling);
+                nux_screen_session_free(session);
+                nux_experience_context_free(context);
             }
         });
     }
@@ -7388,7 +7521,7 @@ mod tests {
             let mut import_result = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_runtime_context_create_bound(
+                    nux_experience_context_create_bound(
                         runtime_binding(),
                         request,
                         &mut context,
@@ -7404,7 +7537,7 @@ mod tests {
             let mut creation = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_render_session_create_configured(
+                    nux_screen_session_create_configured(
                         context,
                         &descriptor,
                         &mut session,
@@ -7413,11 +7546,14 @@ mod tests {
                 },
                 NuxStatus::Ok
             );
-            assert_eq!(unsafe { nux_flow_session_result_output_count(creation) }, 2);
-            unsafe { nux_flow_session_result_free(creation) };
+            assert_eq!(
+                unsafe { nux_screen_session_result_output_count(creation) },
+                2
+            );
+            unsafe { nux_screen_session_result_free(creation) };
 
-            let advance = NuxFlowAdvanceOperation {
-                struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+            let advance = NuxScreenAdvanceOperation {
+                struct_size: size_u32::<NuxScreenAdvanceOperation>(),
                 timestamp_seconds: 0.25,
                 delta_seconds: 0.25,
                 render: 1,
@@ -7425,39 +7561,39 @@ mod tests {
                 completion_context: ptr::null_mut(),
                 completion_callback: None,
             };
-            let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+            let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_ADVANCE);
             request.advance = &advance;
             let mut missing_surface_result = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_render_session_perform(session, &request, &mut missing_surface_result)
+                    nux_screen_session_perform(session, &request, &mut missing_surface_result)
                 },
                 NuxStatus::SurfaceError
             );
-            unsafe { nux_flow_session_result_free(missing_surface_result) };
+            unsafe { nux_screen_session_result_free(missing_surface_result) };
 
-            let retry_advance = NuxFlowAdvanceOperation {
+            let retry_advance = NuxScreenAdvanceOperation {
                 render: 0,
                 ..advance
             };
             request.advance = &retry_advance;
             let mut retry_result = ptr::null_mut();
             assert_eq!(
-                unsafe { nux_flow_render_session_perform(session, &request, &mut retry_result) },
+                unsafe { nux_screen_session_perform(session, &request, &mut retry_result) },
                 NuxStatus::Ok
             );
-            let host_output = (0..unsafe { nux_flow_session_result_output_count(retry_result) })
+            let host_output = (0..unsafe { nux_screen_session_result_output_count(retry_result) })
                 .map(|index| public_output_at(retry_result, index))
-                .find(|output| output.kind == NUX_FLOW_OUTPUT_KIND_HOST_COMMAND)
+                .find(|output| output.kind == NUX_SCREEN_OUTPUT_KIND_HOST_COMMAND)
                 .expect("the first committed advance emits its host command");
             assert_eq!(host_output.sequence, 4);
             assert_eq!(host_output.cycle, 1);
             assert_eq!(copied_byte_view(host_output.name), b"sibling_ok");
 
             unsafe {
-                nux_flow_session_result_free(retry_result);
-                nux_flow_render_session_free(session);
-                nux_flow_runtime_context_free(context);
+                nux_screen_session_result_free(retry_result);
+                nux_screen_session_free(session);
+                nux_experience_context_free(context);
             }
         });
     }
@@ -7470,7 +7606,7 @@ mod tests {
             let mut import_result = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_runtime_context_create_bound(
+                    nux_experience_context_create_bound(
                         runtime_binding(),
                         request,
                         &mut context,
@@ -7486,7 +7622,7 @@ mod tests {
             let mut creation = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_render_session_create_configured(
+                    nux_screen_session_create_configured(
                         context,
                         &descriptor,
                         &mut session,
@@ -7495,9 +7631,9 @@ mod tests {
                 },
                 NuxStatus::Ok
             );
-            unsafe { nux_flow_session_result_free(creation) };
+            unsafe { nux_screen_session_result_free(creation) };
 
-            let session_handle = unsafe { &*session.cast::<FlowRenderSessionHandle>() };
+            let session_handle = unsafe { &*session.cast::<ScreenSessionHandle>() };
             let session_id = session_handle.token.id;
             let surface_id = session_handle
                 .token
@@ -7523,8 +7659,8 @@ mod tests {
                 .expect("worker accepts preflight fault injection")
                 .expect("preflight fault injection succeeds");
 
-            let render_advance = NuxFlowAdvanceOperation {
-                struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+            let render_advance = NuxScreenAdvanceOperation {
+                struct_size: size_u32::<NuxScreenAdvanceOperation>(),
                 timestamp_seconds: 0.25,
                 delta_seconds: 0.25,
                 render: 1,
@@ -7532,39 +7668,37 @@ mod tests {
                 completion_context: ptr::null_mut(),
                 completion_callback: None,
             };
-            let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+            let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_ADVANCE);
             request.advance = &render_advance;
             let mut preflight_result = ptr::null_mut();
             assert_eq!(
-                unsafe {
-                    nux_flow_render_session_perform(session, &request, &mut preflight_result)
-                },
+                unsafe { nux_screen_session_perform(session, &request, &mut preflight_result) },
                 NuxStatus::SurfaceError
             );
-            unsafe { nux_flow_session_result_free(preflight_result) };
+            unsafe { nux_screen_session_result_free(preflight_result) };
 
-            let retry_advance = NuxFlowAdvanceOperation {
+            let retry_advance = NuxScreenAdvanceOperation {
                 render: 0,
                 ..render_advance
             };
             request.advance = &retry_advance;
             let mut retry_result = ptr::null_mut();
             assert_eq!(
-                unsafe { nux_flow_render_session_perform(session, &request, &mut retry_result) },
+                unsafe { nux_screen_session_perform(session, &request, &mut retry_result) },
                 NuxStatus::Ok
             );
-            let host_output = (0..unsafe { nux_flow_session_result_output_count(retry_result) })
+            let host_output = (0..unsafe { nux_screen_session_result_output_count(retry_result) })
                 .map(|index| public_output_at(retry_result, index))
-                .find(|output| output.kind == NUX_FLOW_OUTPUT_KIND_HOST_COMMAND)
+                .find(|output| output.kind == NUX_SCREEN_OUTPUT_KIND_HOST_COMMAND)
                 .expect("the first committed advance emits its host command");
             assert_eq!(host_output.sequence, 4);
             assert_eq!(host_output.cycle, 1);
             assert_eq!(copied_byte_view(host_output.name), b"sibling_ok");
 
             unsafe {
-                nux_flow_session_result_free(retry_result);
-                nux_flow_render_session_free(session);
-                nux_flow_runtime_context_free(context);
+                nux_screen_session_result_free(retry_result);
+                nux_screen_session_free(session);
+                nux_experience_context_free(context);
             }
         });
     }
@@ -7578,7 +7712,7 @@ mod tests {
                 let mut import_result = ptr::null_mut();
                 assert_eq!(
                     unsafe {
-                        nux_flow_runtime_context_create_bound(
+                        nux_experience_context_create_bound(
                             runtime_binding(),
                             request,
                             &mut context,
@@ -7594,7 +7728,7 @@ mod tests {
                 let mut creation = ptr::null_mut();
                 assert_eq!(
                     unsafe {
-                        nux_flow_render_session_create_configured(
+                        nux_screen_session_create_configured(
                             context,
                             &descriptor,
                             &mut session,
@@ -7603,7 +7737,7 @@ mod tests {
                     },
                     NuxStatus::Ok
                 );
-                unsafe { nux_flow_session_result_free(creation) };
+                unsafe { nux_screen_session_result_free(creation) };
 
                 let surface_descriptor = NuxAppleSurfaceDescriptor {
                     struct_size: size_u32::<NuxAppleSurfaceDescriptor>(),
@@ -7614,7 +7748,7 @@ mod tests {
                 let mut surface_result = ptr::null_mut();
                 assert_eq!(
                     unsafe {
-                        nux_flow_render_session_attach_apple_surface(
+                        nux_screen_session_attach_apple_surface(
                             session,
                             &surface_descriptor,
                             &mut surface,
@@ -7625,8 +7759,8 @@ mod tests {
                 );
                 unsafe { nux_operation_result_free(surface_result) };
 
-                let skipped_advance = NuxFlowAdvanceOperation {
-                    struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+                let skipped_advance = NuxScreenAdvanceOperation {
+                    struct_size: size_u32::<NuxScreenAdvanceOperation>(),
                     timestamp_seconds: 0.25,
                     delta_seconds: 0.25,
                     render: 1,
@@ -7634,28 +7768,26 @@ mod tests {
                     completion_context: ptr::null_mut(),
                     completion_callback: None,
                 };
-                let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+                let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_ADVANCE);
                 request.advance = &skipped_advance;
                 let mut skipped_result = ptr::null_mut();
                 assert_eq!(
-                    unsafe {
-                        nux_flow_render_session_perform(session, &request, &mut skipped_result)
-                    },
+                    unsafe { nux_screen_session_perform(session, &request, &mut skipped_result) },
                     NuxStatus::Ok
                 );
                 assert_eq!(
-                    unsafe { nux_flow_session_result_surface_disposition(skipped_result) },
+                    unsafe { nux_screen_session_result_surface_disposition(skipped_result) },
                     NUX_SURFACE_DISPOSITION_SKIPPED_TIMEOUT
                 );
                 let skipped_host_output =
-                    (0..unsafe { nux_flow_session_result_output_count(skipped_result) })
+                    (0..unsafe { nux_screen_session_result_output_count(skipped_result) })
                         .map(|index| public_output_at(skipped_result, index))
-                        .find(|output| output.kind == NUX_FLOW_OUTPUT_KIND_HOST_COMMAND)
+                        .find(|output| output.kind == NUX_SCREEN_OUTPUT_KIND_HOST_COMMAND)
                         .expect("a skipped presentation still returns committed host work");
                 assert_eq!(skipped_host_output.sequence, 4);
                 assert_eq!(skipped_host_output.cycle, 1);
                 assert_eq!(copied_byte_view(skipped_host_output.name), b"sibling_ok");
-                unsafe { nux_flow_session_result_free(skipped_result) };
+                unsafe { nux_screen_session_result_free(skipped_result) };
 
                 let mut metal_device = ptr::null_mut();
                 let mut device_result = ptr::null_mut();
@@ -7685,8 +7817,8 @@ mod tests {
                     .expect("configured CAMetalLayer provides a wrong-size drawable");
                 let drawable_pointer = Retained::as_ptr(&drawable).cast_mut().cast::<c_void>();
 
-                let render_advance = NuxFlowAdvanceOperation {
-                    struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+                let render_advance = NuxScreenAdvanceOperation {
+                    struct_size: size_u32::<NuxScreenAdvanceOperation>(),
                     timestamp_seconds: 0.5,
                     delta_seconds: 0.25,
                     render: 1,
@@ -7697,14 +7829,12 @@ mod tests {
                 request.advance = &render_advance;
                 let mut present_result = ptr::null_mut();
                 assert_eq!(
-                    unsafe {
-                        nux_flow_render_session_perform(session, &request, &mut present_result)
-                    },
+                    unsafe { nux_screen_session_perform(session, &request, &mut present_result) },
                     NuxStatus::SurfaceError
                 );
-                unsafe { nux_flow_session_result_free(present_result) };
+                unsafe { nux_screen_session_result_free(present_result) };
 
-                let session_handle = unsafe { &*session.cast::<FlowRenderSessionHandle>() };
+                let session_handle = unsafe { &*session.cast::<ScreenSessionHandle>() };
                 let session_id = session_handle.token.id;
                 let (is_fatal, fatal_diagnostic) = session_handle
                     .token
@@ -7721,7 +7851,7 @@ mod tests {
                 assert!(fatal_diagnostic.contains("committed advance failed during presentation"));
                 assert!(fatal_diagnostic.contains("texture is 4x4, expected 8x8"));
 
-                let retry_advance = NuxFlowAdvanceOperation {
+                let retry_advance = NuxScreenAdvanceOperation {
                     render: 0,
                     apple_drawable: ptr::null_mut(),
                     timestamp_seconds: 0.75,
@@ -7730,19 +7860,17 @@ mod tests {
                 request.advance = &retry_advance;
                 let mut retry_result = ptr::null_mut();
                 assert_eq!(
-                    unsafe {
-                        nux_flow_render_session_perform(session, &request, &mut retry_result)
-                    },
+                    unsafe { nux_screen_session_perform(session, &request, &mut retry_result) },
                     NuxStatus::RuntimeError
                 );
                 assert_eq!(
-                    unsafe { nux_flow_session_result_output_count(retry_result) },
+                    unsafe { nux_screen_session_result_output_count(retry_result) },
                     0
                 );
                 let mut diagnostic = NuxDiagnosticView::default();
                 assert_eq!(
                     unsafe {
-                        nux_flow_session_result_diagnostic_at(retry_result, 0, &mut diagnostic)
+                        nux_screen_session_result_diagnostic_at(retry_result, 0, &mut diagnostic)
                     },
                     NuxStatus::Ok
                 );
@@ -7752,10 +7880,10 @@ mod tests {
                 );
 
                 unsafe {
-                    nux_flow_session_result_free(retry_result);
+                    nux_screen_session_result_free(retry_result);
                     nux_apple_surface_free(surface);
-                    nux_flow_render_session_free(session);
-                    nux_flow_runtime_context_free(context);
+                    nux_screen_session_free(session);
+                    nux_experience_context_free(context);
                 }
             });
         });
@@ -7763,10 +7891,10 @@ mod tests {
 
     #[test]
     fn player_metadata_requires_consistent_kind_selection_and_index() {
-        let mut result = FlowSessionResultHandle::empty_success();
+        let mut result = ScreenSessionResultHandle::empty_success();
         result.player_metadata = Some(OwnedPlayerMetadata {
-            kind: NUX_FLOW_PLAYER_KIND_STATE_MACHINE,
-            selection: NUX_FLOW_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE,
+            kind: NUX_SCREEN_PLAYER_KIND_STATE_MACHINE,
+            selection: NUX_SCREEN_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE,
             player_index: Some(0),
             artboard_name: b"screen".to_vec(),
             player_name: b"machine".to_vec(),
@@ -7781,14 +7909,14 @@ mod tests {
             .player_metadata
             .as_mut()
             .expect("metadata is present");
-        metadata.selection = NUX_FLOW_PLAYER_SELECTION_STATIC;
+        metadata.selection = NUX_SCREEN_PLAYER_SELECTION_STATIC;
         assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
 
         let metadata = result
             .player_metadata
             .as_mut()
             .expect("metadata is present");
-        metadata.kind = NUX_FLOW_PLAYER_KIND_STATIC;
+        metadata.kind = NUX_SCREEN_PLAYER_KIND_STATIC;
         assert_eq!(result.validate(), Err(NuxStatus::RuntimeError));
         result
             .player_metadata
@@ -7806,18 +7934,18 @@ mod tests {
             Ok(worker) => worker,
             Err(_) => panic!("import player fixture"),
         };
-        let context = Box::into_raw(Box::new(FlowRuntimeContextHandle { worker }))
-            .cast::<NuxFlowRuntimeContext>();
+        let context = Box::into_raw(Box::new(ExperienceRuntimeContextHandle { worker }))
+            .cast::<NuxExperienceContext>();
 
         let mut descriptor = configured_descriptor();
         descriptor.artboard_name = bytes(b"artboard to nest");
-        descriptor.player_kind = NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE;
+        descriptor.player_kind = NUX_SCREEN_PLAYER_SELECTOR_KIND_STATE_MACHINE;
         descriptor.player_name = bytes(b"State Machine 1");
         let mut session = ptr::null_mut();
         let mut result = ptr::null_mut();
         assert_eq!(
             unsafe {
-                nux_flow_render_session_create_configured(
+                nux_screen_session_create_configured(
                     context,
                     &descriptor,
                     &mut session,
@@ -7826,29 +7954,29 @@ mod tests {
             },
             NuxStatus::Ok
         );
-        let mut metadata: NuxFlowPlayerMetadataView = unsafe { std::mem::zeroed() };
-        metadata.struct_size = size_u32::<NuxFlowPlayerMetadataView>();
+        let mut metadata: NuxScreenPlayerMetadataView = unsafe { std::mem::zeroed() };
+        metadata.struct_size = size_u32::<NuxScreenPlayerMetadataView>();
         assert_eq!(
-            unsafe { nux_flow_session_result_player_metadata(result, &mut metadata) },
+            unsafe { nux_screen_session_result_player_metadata(result, &mut metadata) },
             NuxStatus::Ok
         );
-        assert_eq!(metadata.kind, NUX_FLOW_PLAYER_KIND_STATE_MACHINE);
+        assert_eq!(metadata.kind, NUX_SCREEN_PLAYER_KIND_STATE_MACHINE);
         assert_eq!(
             metadata.selection,
-            NUX_FLOW_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE
+            NUX_SCREEN_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE
         );
         unsafe {
-            nux_flow_session_result_free(result);
-            nux_flow_render_session_free(session);
+            nux_screen_session_result_free(result);
+            nux_screen_session_free(session);
         }
 
-        descriptor.player_kind = NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION;
+        descriptor.player_kind = NUX_SCREEN_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION;
         descriptor.player_name = bytes(b"Timeline 1");
         session = ptr::null_mut();
         result = ptr::null_mut();
         assert_eq!(
             unsafe {
-                nux_flow_render_session_create_configured(
+                nux_screen_session_create_configured(
                     context,
                     &descriptor,
                     &mut session,
@@ -7857,33 +7985,33 @@ mod tests {
             },
             NuxStatus::Ok
         );
-        metadata.struct_size = size_u32::<NuxFlowPlayerMetadataView>();
+        metadata.struct_size = size_u32::<NuxScreenPlayerMetadataView>();
         assert_eq!(
-            unsafe { nux_flow_session_result_player_metadata(result, &mut metadata) },
+            unsafe { nux_screen_session_result_player_metadata(result, &mut metadata) },
             NuxStatus::Ok
         );
-        assert_eq!(metadata.kind, NUX_FLOW_PLAYER_KIND_LINEAR_ANIMATION);
+        assert_eq!(metadata.kind, NUX_SCREEN_PLAYER_KIND_LINEAR_ANIMATION);
         assert_eq!(
             metadata.selection,
-            NUX_FLOW_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION
+            NUX_SCREEN_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION
         );
         assert_eq!(copied_byte_view(metadata.player_name), b"Timeline 1");
         unsafe {
-            nux_flow_session_result_free(result);
-            nux_flow_render_session_free(session);
+            nux_screen_session_result_free(result);
+            nux_screen_session_free(session);
         }
 
         descriptor.player_name = bytes(b"missing");
         for player_kind in [
-            NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE,
-            NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION,
+            NUX_SCREEN_PLAYER_SELECTOR_KIND_STATE_MACHINE,
+            NUX_SCREEN_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION,
         ] {
             descriptor.player_kind = player_kind;
             session = ptr::null_mut();
             result = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_render_session_create_configured(
+                    nux_screen_session_create_configured(
                         context,
                         &descriptor,
                         &mut session,
@@ -7894,13 +8022,13 @@ mod tests {
             );
             assert!(session.is_null());
             assert_eq!(
-                unsafe { nux_flow_session_result_status(result) },
+                unsafe { nux_screen_session_result_status(result) },
                 NuxStatus::NotFound
             );
-            unsafe { nux_flow_session_result_free(result) };
+            unsafe { nux_screen_session_result_free(result) };
         }
 
-        unsafe { nux_flow_runtime_context_free(context) };
+        unsafe { nux_experience_context_free(context) };
     }
 
     #[cfg(feature = "apple-product")]
@@ -7911,17 +8039,17 @@ mod tests {
             Ok(worker) => worker,
             Err(_) => panic!("import fixture"),
         };
-        let context = Box::into_raw(Box::new(FlowRuntimeContextHandle { worker }))
-            .cast::<NuxFlowRuntimeContext>();
+        let context = Box::into_raw(Box::new(ExperienceRuntimeContextHandle { worker }))
+            .cast::<NuxExperienceContext>();
         let mut descriptor = configured_descriptor();
         descriptor.artboard_name = bytes(b"artboard to nest");
         descriptor.player_name = bytes(b"State Machine 1");
-        descriptor.player_kind = NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE;
+        descriptor.player_kind = NUX_SCREEN_PLAYER_SELECTOR_KIND_STATE_MACHINE;
         let mut session = ptr::null_mut();
         let mut create_result = ptr::null_mut();
         assert_eq!(
             unsafe {
-                nux_flow_render_session_create_configured(
+                nux_screen_session_create_configured(
                     context,
                     &descriptor,
                     &mut session,
@@ -7932,106 +8060,106 @@ mod tests {
         );
         assert!(!session.is_null());
         assert_eq!(
-            unsafe { nux_flow_session_result_status(create_result) },
+            unsafe { nux_screen_session_result_status(create_result) },
             NuxStatus::Ok
         );
-        let mut metadata: NuxFlowPlayerMetadataView = unsafe { std::mem::zeroed() };
-        metadata.struct_size = size_u32::<NuxFlowPlayerMetadataView>();
+        let mut metadata: NuxScreenPlayerMetadataView = unsafe { std::mem::zeroed() };
+        metadata.struct_size = size_u32::<NuxScreenPlayerMetadataView>();
         assert_eq!(
-            unsafe { nux_flow_session_result_player_metadata(create_result, &mut metadata) },
+            unsafe { nux_screen_session_result_player_metadata(create_result, &mut metadata) },
             NuxStatus::Ok
         );
-        assert_eq!(metadata.kind, NUX_FLOW_PLAYER_KIND_STATE_MACHINE);
+        assert_eq!(metadata.kind, NUX_SCREEN_PLAYER_KIND_STATE_MACHINE);
         assert_eq!(
             metadata.selection,
-            NUX_FLOW_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE
+            NUX_SCREEN_PLAYER_SELECTION_EXPLICIT_STATE_MACHINE
         );
         assert_ne!(metadata.player_index, u32::MAX);
-        assert!(unsafe { nux_flow_session_result_has_values(create_result) });
-        assert!(unsafe { nux_flow_session_result_has_catalog(create_result) });
-        assert!(!unsafe { nux_flow_session_result_has_player_inputs(create_result) });
+        assert!(unsafe { nux_screen_session_result_has_values(create_result) });
+        assert!(unsafe { nux_screen_session_result_has_catalog(create_result) });
+        assert!(!unsafe { nux_screen_session_result_has_player_inputs(create_result) });
         assert_eq!(
-            unsafe { nux_flow_session_result_output_count(create_result) },
+            unsafe { nux_screen_session_result_output_count(create_result) },
             0
         );
-        unsafe { nux_flow_session_result_free(create_result) };
+        unsafe { nux_screen_session_result_free(create_result) };
 
         let queries = [
-            NuxFlowQuery {
-                struct_size: size_u32::<NuxFlowQuery>(),
-                kind: NUX_FLOW_QUERY_KIND_PLAYER_INPUTS,
+            NuxScreenQuery {
+                struct_size: size_u32::<NuxScreenQuery>(),
+                kind: NUX_SCREEN_QUERY_KIND_PLAYER_INPUTS,
             },
-            NuxFlowQuery {
-                struct_size: size_u32::<NuxFlowQuery>(),
-                kind: NUX_FLOW_QUERY_KIND_BOOTSTRAP,
+            NuxScreenQuery {
+                struct_size: size_u32::<NuxScreenQuery>(),
+                kind: NUX_SCREEN_QUERY_KIND_BOOTSTRAP,
             },
         ];
-        let query_batch = NuxFlowQueryBatch {
-            struct_size: size_u32::<NuxFlowQueryBatch>(),
+        let query_batch = NuxScreenQueryBatch {
+            struct_size: size_u32::<NuxScreenQueryBatch>(),
             queries: queries.as_ptr(),
             query_count: queries.len() as u64,
         };
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_QUERY);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_QUERY);
         request.query_batch = &query_batch;
         let mut query_result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(session, &request, &mut query_result) },
+            unsafe { nux_screen_session_perform(session, &request, &mut query_result) },
             NuxStatus::Ok
         );
         assert_eq!(
-            unsafe { nux_flow_session_result_status(query_result) },
+            unsafe { nux_screen_session_result_status(query_result) },
             NuxStatus::Ok
         );
-        metadata.struct_size = size_u32::<NuxFlowPlayerMetadataView>();
+        metadata.struct_size = size_u32::<NuxScreenPlayerMetadataView>();
         assert_eq!(
-            unsafe { nux_flow_session_result_player_metadata(query_result, &mut metadata) },
+            unsafe { nux_screen_session_result_player_metadata(query_result, &mut metadata) },
             NuxStatus::Ok
         );
-        assert_eq!(metadata.kind, NUX_FLOW_PLAYER_KIND_STATE_MACHINE);
-        assert!(unsafe { nux_flow_session_result_has_values(query_result) });
-        assert!(unsafe { nux_flow_session_result_has_catalog(query_result) });
-        assert!(unsafe { nux_flow_session_result_has_player_inputs(query_result) });
-        assert!(unsafe { nux_flow_session_result_player_input_count(query_result) } >= 3);
-        unsafe { nux_flow_session_result_free(query_result) };
+        assert_eq!(metadata.kind, NUX_SCREEN_PLAYER_KIND_STATE_MACHINE);
+        assert!(unsafe { nux_screen_session_result_has_values(query_result) });
+        assert!(unsafe { nux_screen_session_result_has_catalog(query_result) });
+        assert!(unsafe { nux_screen_session_result_has_player_inputs(query_result) });
+        assert!(unsafe { nux_screen_session_result_player_input_count(query_result) } >= 3);
+        unsafe { nux_screen_session_result_free(query_result) };
 
         let query_player_inputs = || {
-            let query = NuxFlowQuery {
-                struct_size: size_u32::<NuxFlowQuery>(),
-                kind: NUX_FLOW_QUERY_KIND_PLAYER_INPUTS,
+            let query = NuxScreenQuery {
+                struct_size: size_u32::<NuxScreenQuery>(),
+                kind: NUX_SCREEN_QUERY_KIND_PLAYER_INPUTS,
             };
-            let query_batch = NuxFlowQueryBatch {
-                struct_size: size_u32::<NuxFlowQueryBatch>(),
+            let query_batch = NuxScreenQueryBatch {
+                struct_size: size_u32::<NuxScreenQueryBatch>(),
                 queries: &query,
                 query_count: 1,
             };
-            let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_QUERY);
+            let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_QUERY);
             request.query_batch = &query_batch;
             let mut result = ptr::null_mut();
             assert_eq!(
-                unsafe { nux_flow_render_session_perform(session, &request, &mut result) },
+                unsafe { nux_screen_session_perform(session, &request, &mut result) },
                 NuxStatus::Ok
             );
             result
         };
-        let bool_input_value = |result: *mut NuxFlowSessionResult| {
-            let input_count = unsafe { nux_flow_session_result_player_input_count(result) };
+        let bool_input_value = |result: *mut NuxScreenSessionResult| {
+            let input_count = unsafe { nux_screen_session_result_player_input_count(result) };
             assert!(input_count >= 3);
             for index in 0..input_count {
-                let mut input: NuxFlowPlayerInputView = unsafe { std::mem::zeroed() };
-                input.struct_size = size_u32::<NuxFlowPlayerInputView>();
+                let mut input: NuxScreenPlayerInputView = unsafe { std::mem::zeroed() };
+                input.struct_size = size_u32::<NuxScreenPlayerInputView>();
                 assert_eq!(
-                    unsafe { nux_flow_session_result_player_input_at(result, index, &mut input) },
+                    unsafe { nux_screen_session_result_player_input_at(result, index, &mut input) },
                     NuxStatus::Ok
                 );
                 let name =
                     unsafe { slice::from_raw_parts(input.name.data, input.name.len as usize) };
                 if name == b"bool" {
-                    assert_eq!(input.kind, NUX_FLOW_PLAYER_INPUT_KIND_BOOL);
-                    let mut node: NuxFlowValueNode = unsafe { std::mem::zeroed() };
-                    node.struct_size = size_u32::<NuxFlowValueNode>();
+                    assert_eq!(input.kind, NUX_SCREEN_PLAYER_INPUT_KIND_BOOL);
+                    let mut node: NuxScreenValueNode = unsafe { std::mem::zeroed() };
+                    node.struct_size = size_u32::<NuxScreenValueNode>();
                     assert_eq!(
                         unsafe {
-                            nux_flow_session_result_value_node_at(
+                            nux_screen_session_result_value_node_at(
                                 result,
                                 u64::from(input.value_root_index),
                                 &mut node,
@@ -8039,7 +8167,7 @@ mod tests {
                         },
                         NuxStatus::Ok
                     );
-                    assert_eq!(node.kind, NUX_FLOW_VALUE_KIND_BOOL);
+                    assert_eq!(node.kind, NUX_SCREEN_VALUE_KIND_BOOL);
                     return node.bool_value == 1;
                 }
             }
@@ -8048,25 +8176,25 @@ mod tests {
 
         let input_result = query_player_inputs();
         assert!(!bool_input_value(input_result));
-        unsafe { nux_flow_session_result_free(input_result) };
+        unsafe { nux_screen_session_result_free(input_result) };
 
-        let mut bool_value = null_node(NUX_FLOW_VALUE_KIND_BOOL);
+        let mut bool_value = null_node(NUX_SCREEN_VALUE_KIND_BOOL);
         bool_value.bool_value = 1;
-        let value_arena = NuxFlowValueArena {
-            struct_size: size_u32::<NuxFlowValueArena>(),
+        let value_arena = NuxScreenValueArena {
+            struct_size: size_u32::<NuxScreenValueArena>(),
             nodes: &bool_value,
             node_count: 1,
             edges: ptr::null(),
             edge_count: 0,
         };
-        let zero_reference = NuxFlowInstanceReference {
+        let zero_reference = NuxScreenInstanceReference {
             kind: 0,
             local_id: 0,
             instance_id: 0,
         };
-        let input_mutation = NuxFlowStateMutation {
-            struct_size: size_u32::<NuxFlowStateMutation>(),
-            kind: NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_BOOL,
+        let input_mutation = NuxScreenStateMutation {
+            struct_size: size_u32::<NuxScreenStateMutation>(),
+            kind: NUX_SCREEN_STATE_MUTATION_KIND_SET_INPUT_BOOL,
             instance: zero_reference,
             item: zero_reference,
             path: NuxByteView::default(),
@@ -8075,8 +8203,8 @@ mod tests {
             index: 0,
             other_index: 0,
         };
-        let state_batch = NuxFlowStateBatch {
-            struct_size: size_u32::<NuxFlowStateBatch>(),
+        let state_batch = NuxScreenStateBatch {
+            struct_size: size_u32::<NuxScreenStateBatch>(),
             has_host_mutation_id: 1,
             host_mutation_id: 0,
             value_arena: &value_arena,
@@ -8085,34 +8213,34 @@ mod tests {
             mutations: &input_mutation,
             mutation_count: 1,
         };
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_STATE_BATCH);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_STATE_BATCH);
         request.state_batch = &state_batch;
         let mut state_result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(session, &request, &mut state_result) },
+            unsafe { nux_screen_session_perform(session, &request, &mut state_result) },
             NuxStatus::Ok
         );
         assert_eq!(
-            unsafe { nux_flow_session_result_output_count(state_result) },
+            unsafe { nux_screen_session_result_output_count(state_result) },
             1
         );
-        let mut output: NuxFlowOutputView = unsafe { std::mem::zeroed() };
-        output.struct_size = size_u32::<NuxFlowOutputView>();
+        let mut output: NuxScreenOutputView = unsafe { std::mem::zeroed() };
+        output.struct_size = size_u32::<NuxScreenOutputView>();
         assert_eq!(
-            unsafe { nux_flow_session_result_output_at(state_result, 0, &mut output) },
+            unsafe { nux_screen_session_result_output_at(state_result, 0, &mut output) },
             NuxStatus::Ok
         );
-        assert_eq!(output.kind, NUX_FLOW_OUTPUT_KIND_STATE_CHANGE);
+        assert_eq!(output.kind, NUX_SCREEN_OUTPUT_KIND_STATE_CHANGE);
         assert_eq!(output.has_origin_mutation_id, 1);
         assert_eq!(output.origin_mutation_id, 0);
-        unsafe { nux_flow_session_result_free(state_result) };
+        unsafe { nux_screen_session_result_free(state_result) };
 
         let input_result = query_player_inputs();
         assert!(bool_input_value(input_result));
-        unsafe { nux_flow_session_result_free(input_result) };
+        unsafe { nux_screen_session_result_free(input_result) };
 
-        let advance = NuxFlowAdvanceOperation {
-            struct_size: size_u32::<NuxFlowAdvanceOperation>(),
+        let advance = NuxScreenAdvanceOperation {
+            struct_size: size_u32::<NuxScreenAdvanceOperation>(),
             timestamp_seconds: 0.0,
             delta_seconds: 0.0,
             render: 0,
@@ -8120,45 +8248,45 @@ mod tests {
             completion_context: ptr::null_mut(),
             completion_callback: None,
         };
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_ADVANCE);
         request.advance = &advance;
         let mut advance_result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(session, &request, &mut advance_result) },
+            unsafe { nux_screen_session_perform(session, &request, &mut advance_result) },
             NuxStatus::Ok
         );
         assert_eq!(
-            unsafe { nux_flow_session_result_status(advance_result) },
+            unsafe { nux_screen_session_result_status(advance_result) },
             NuxStatus::Ok
         );
-        assert!(unsafe { nux_flow_session_result_output_count(advance_result) } >= 1);
-        unsafe { nux_flow_session_result_free(advance_result) };
+        assert!(unsafe { nux_screen_session_result_output_count(advance_result) } >= 1);
+        unsafe { nux_screen_session_result_free(advance_result) };
 
-        let pointer = NuxFlowPointerEvent {
-            struct_size: size_u32::<NuxFlowPointerEvent>(),
-            kind: NUX_FLOW_POINTER_EVENT_KIND_DOWN,
+        let pointer = NuxScreenPointerEvent {
+            struct_size: size_u32::<NuxScreenPointerEvent>(),
+            kind: NUX_SCREEN_POINTER_EVENT_KIND_DOWN,
             pointer_id: 1,
             x: 0.0,
             y: 0.0,
             timestamp_seconds: 42.25,
         };
-        let pointer_batch = NuxFlowPointerBatch {
-            struct_size: size_u32::<NuxFlowPointerBatch>(),
+        let pointer_batch = NuxScreenPointerBatch {
+            struct_size: size_u32::<NuxScreenPointerBatch>(),
             events: &pointer,
             event_count: 1,
         };
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_POINTER_BATCH);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_POINTER_BATCH);
         request.pointer_batch = &pointer_batch;
         let mut pointer_result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(session, &request, &mut pointer_result) },
+            unsafe { nux_screen_session_perform(session, &request, &mut pointer_result) },
             NuxStatus::Ok
         );
         assert_eq!(
-            unsafe { nux_flow_session_result_status(pointer_result) },
+            unsafe { nux_screen_session_result_status(pointer_result) },
             NuxStatus::Ok
         );
-        unsafe { nux_flow_session_result_free(pointer_result) };
+        unsafe { nux_screen_session_result_free(pointer_result) };
 
         let legacy_advance = NuxFrameOperation {
             struct_size: size_u32::<NuxFrameOperation>(),
@@ -8170,39 +8298,35 @@ mod tests {
         };
         let mut legacy_result = ptr::null_mut();
         assert_eq!(
-            unsafe {
-                nux_flow_render_session_advance(session, &legacy_advance, &mut legacy_result)
-            },
+            unsafe { nux_screen_session_advance(session, &legacy_advance, &mut legacy_result) },
             NuxStatus::Ok
         );
         unsafe { nux_operation_result_free(legacy_result) };
 
-        let mixed_advance = NuxFlowAdvanceOperation {
+        let mixed_advance = NuxScreenAdvanceOperation {
             timestamp_seconds: 0.5,
             delta_seconds: 0.25,
             ..advance
         };
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_ADVANCE);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_ADVANCE);
         request.advance = &mixed_advance;
         let mut mixed_result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(session, &request, &mut mixed_result) },
+            unsafe { nux_screen_session_perform(session, &request, &mut mixed_result) },
             NuxStatus::Ok
         );
-        unsafe { nux_flow_session_result_free(mixed_result) };
+        unsafe { nux_screen_session_result_free(mixed_result) };
 
         legacy_result = ptr::null_mut();
         assert_eq!(
-            unsafe {
-                nux_flow_render_session_advance(session, &legacy_advance, &mut legacy_result)
-            },
+            unsafe { nux_screen_session_advance(session, &legacy_advance, &mut legacy_result) },
             NuxStatus::Ok
         );
         unsafe { nux_operation_result_free(legacy_result) };
 
         unsafe {
-            nux_flow_render_session_free(session);
-            nux_flow_runtime_context_free(context);
+            nux_screen_session_free(session);
+            nux_experience_context_free(context);
         }
     }
 
@@ -8214,15 +8338,15 @@ mod tests {
             Ok(worker) => worker,
             Err(_) => panic!("import fixture"),
         };
-        let context = Box::into_raw(Box::new(FlowRuntimeContextHandle { worker }))
-            .cast::<NuxFlowRuntimeContext>();
+        let context = Box::into_raw(Box::new(ExperienceRuntimeContextHandle { worker }))
+            .cast::<NuxExperienceContext>();
         let mut descriptor = configured_descriptor();
         descriptor.artboard_name = bytes(b"Item");
         let mut session = ptr::null_mut();
         let mut create_result = ptr::null_mut();
         assert_eq!(
             unsafe {
-                nux_flow_render_session_create_configured(
+                nux_screen_session_create_configured(
                     context,
                     &descriptor,
                     &mut session,
@@ -8232,52 +8356,52 @@ mod tests {
             NuxStatus::Ok
         );
 
-        let root_id = (0..unsafe { nux_flow_session_result_instance_count(create_result) })
+        let root_id = (0..unsafe { nux_screen_session_result_instance_count(create_result) })
             .find_map(|index| {
-                let mut instance: NuxFlowInstanceView = unsafe { std::mem::zeroed() };
-                instance.struct_size = size_u32::<NuxFlowInstanceView>();
+                let mut instance: NuxScreenInstanceView = unsafe { std::mem::zeroed() };
+                instance.struct_size = size_u32::<NuxScreenInstanceView>();
                 assert_eq!(
                     unsafe {
-                        nux_flow_session_result_instance_at(create_result, index, &mut instance)
+                        nux_screen_session_result_instance_at(create_result, index, &mut instance)
                     },
                     NuxStatus::Ok
                 );
                 (instance.is_root == 1).then_some(instance.instance_id)
             })
             .expect("root instance id");
-        let initial = (0..unsafe { nux_flow_session_result_value_node_count(create_result) })
+        let initial = (0..unsafe { nux_screen_session_result_value_node_count(create_result) })
             .find_map(|index| {
-                let mut node = null_node(NUX_FLOW_VALUE_KIND_NULL);
+                let mut node = null_node(NUX_SCREEN_VALUE_KIND_NULL);
                 assert_eq!(
                     unsafe {
-                        nux_flow_session_result_value_node_at(create_result, index, &mut node)
+                        nux_screen_session_result_value_node_at(create_result, index, &mut node)
                     },
                     NuxStatus::Ok
                 );
-                (node.kind == NUX_FLOW_VALUE_KIND_LIST_INDEX).then_some(node.identity_value)
+                (node.kind == NUX_SCREEN_VALUE_KIND_LIST_INDEX).then_some(node.identity_value)
             });
         assert_eq!(initial, Some(0));
-        unsafe { nux_flow_session_result_free(create_result) };
+        unsafe { nux_screen_session_result_free(create_result) };
 
-        let mut value = null_node(NUX_FLOW_VALUE_KIND_LIST_INDEX);
+        let mut value = null_node(NUX_SCREEN_VALUE_KIND_LIST_INDEX);
         value.identity_value = 7;
-        let arena = NuxFlowValueArena {
-            struct_size: size_u32::<NuxFlowValueArena>(),
+        let arena = NuxScreenValueArena {
+            struct_size: size_u32::<NuxScreenValueArena>(),
             nodes: &value,
             node_count: 1,
             edges: ptr::null(),
             edge_count: 0,
         };
-        let zero = NuxFlowInstanceReference {
+        let zero = NuxScreenInstanceReference {
             kind: 0,
             local_id: 0,
             instance_id: 0,
         };
-        let mutation = NuxFlowStateMutation {
-            struct_size: size_u32::<NuxFlowStateMutation>(),
-            kind: NUX_FLOW_STATE_MUTATION_KIND_SET,
-            instance: NuxFlowInstanceReference {
-                kind: NUX_FLOW_INSTANCE_REFERENCE_KIND_EXISTING,
+        let mutation = NuxScreenStateMutation {
+            struct_size: size_u32::<NuxScreenStateMutation>(),
+            kind: NUX_SCREEN_STATE_MUTATION_KIND_SET,
+            instance: NuxScreenInstanceReference {
+                kind: NUX_SCREEN_INSTANCE_REFERENCE_KIND_EXISTING,
                 local_id: 0,
                 instance_id: root_id,
             },
@@ -8288,8 +8412,8 @@ mod tests {
             index: 0,
             other_index: 0,
         };
-        let batch = NuxFlowStateBatch {
-            struct_size: size_u32::<NuxFlowStateBatch>(),
+        let batch = NuxScreenStateBatch {
+            struct_size: size_u32::<NuxScreenStateBatch>(),
             has_host_mutation_id: 1,
             host_mutation_id: 41,
             value_arena: &arena,
@@ -8298,24 +8422,24 @@ mod tests {
             mutations: &mutation,
             mutation_count: 1,
         };
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_STATE_BATCH);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_STATE_BATCH);
         request.state_batch = &batch;
         let mut result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(session, &request, &mut result) },
+            unsafe { nux_screen_session_perform(session, &request, &mut result) },
             NuxStatus::Ok
         );
-        assert_eq!(unsafe { nux_flow_session_result_output_count(result) }, 1);
-        let mut output: NuxFlowOutputView = unsafe { std::mem::zeroed() };
-        output.struct_size = size_u32::<NuxFlowOutputView>();
+        assert_eq!(unsafe { nux_screen_session_result_output_count(result) }, 1);
+        let mut output: NuxScreenOutputView = unsafe { std::mem::zeroed() };
+        output.struct_size = size_u32::<NuxScreenOutputView>();
         assert_eq!(
-            unsafe { nux_flow_session_result_output_at(result, 0, &mut output) },
+            unsafe { nux_screen_session_result_output_at(result, 0, &mut output) },
             NuxStatus::Ok
         );
-        let mut echoed = null_node(NUX_FLOW_VALUE_KIND_NULL);
+        let mut echoed = null_node(NUX_SCREEN_VALUE_KIND_NULL);
         assert_eq!(
             unsafe {
-                nux_flow_session_result_value_node_at(
+                nux_screen_session_result_value_node_at(
                     result,
                     u64::from(output.payload_root_index),
                     &mut echoed,
@@ -8323,13 +8447,13 @@ mod tests {
             },
             NuxStatus::Ok
         );
-        assert_eq!(echoed.kind, NUX_FLOW_VALUE_KIND_LIST_INDEX);
+        assert_eq!(echoed.kind, NUX_SCREEN_VALUE_KIND_LIST_INDEX);
         assert_eq!(echoed.identity_value, 7);
 
         unsafe {
-            nux_flow_session_result_free(result);
-            nux_flow_render_session_free(session);
-            nux_flow_runtime_context_free(context);
+            nux_screen_session_result_free(result);
+            nux_screen_session_free(session);
+            nux_experience_context_free(context);
         }
     }
 
@@ -8348,44 +8472,44 @@ mod tests {
             fixture_name: &str,
             artboard_name: &[u8],
         ) -> (
-            *mut NuxFlowRuntimeContext,
-            *mut NuxFlowRenderSession,
-            *mut NuxFlowSessionResult,
+            *mut NuxExperienceContext,
+            *mut NuxScreenSession,
+            *mut NuxScreenSessionResult,
         ) {
             let fixture = flow_fixture(fixture_name);
             let worker = match RuntimeWorker::spawn(fixture) {
                 Ok(worker) => worker,
                 Err(_) => panic!("import catalog fixture"),
             };
-            let context = Box::into_raw(Box::new(FlowRuntimeContextHandle { worker }))
-                .cast::<NuxFlowRuntimeContext>();
+            let context = Box::into_raw(Box::new(ExperienceRuntimeContextHandle { worker }))
+                .cast::<NuxExperienceContext>();
             let mut descriptor = configured_descriptor();
             descriptor.artboard_name = bytes(artboard_name);
             let mut session = ptr::null_mut();
             let mut result = ptr::null_mut();
-            assert_eq!(
-                unsafe {
-                    nux_flow_render_session_create_configured(
-                        context,
-                        &descriptor,
-                        &mut session,
-                        &mut result,
-                    )
-                },
-                NuxStatus::Ok
-            );
+            let status = unsafe {
+                nux_screen_session_create_configured(
+                    context,
+                    &descriptor,
+                    &mut session,
+                    &mut result,
+                )
+            };
+            assert_eq!(status, NuxStatus::Ok, "{}", unsafe {
+                session_result_message(result)
+            });
             (context, session, result)
         }
 
         let (enum_context, enum_session, enum_result) =
             create("data_binding_test.riv", b"artboard-5");
-        let state = (0..unsafe { nux_flow_session_result_schema_property_count(enum_result) })
+        let state = (0..unsafe { nux_screen_session_result_schema_property_count(enum_result) })
             .find_map(|index| {
-                let mut property: NuxFlowSchemaPropertyView = unsafe { std::mem::zeroed() };
-                property.struct_size = size_u32::<NuxFlowSchemaPropertyView>();
+                let mut property: NuxScreenSchemaPropertyView = unsafe { std::mem::zeroed() };
+                property.struct_size = size_u32::<NuxScreenSchemaPropertyView>();
                 assert_eq!(
                     unsafe {
-                        nux_flow_session_result_schema_property_at(
+                        nux_screen_session_result_schema_property_at(
                             enum_result,
                             index,
                             &mut property,
@@ -8396,16 +8520,16 @@ mod tests {
                 (view_bytes(property.name) == b"state").then_some(property)
             })
             .expect("state schema property");
-        assert_eq!(state.kind, NUX_FLOW_SCHEMA_PROPERTY_KIND_ENUM);
+        assert_eq!(state.kind, NUX_SCREEN_SCHEMA_PROPERTY_KIND_ENUM);
         assert!(view_bytes(state.referenced_schema_id).is_empty());
         assert_eq!(state.enum_label_count, 3);
         let labels = (0..state.enum_label_count)
             .map(|offset| {
-                let mut label: NuxFlowEnumLabelView = unsafe { std::mem::zeroed() };
-                label.struct_size = size_u32::<NuxFlowEnumLabelView>();
+                let mut label: NuxScreenEnumLabelView = unsafe { std::mem::zeroed() };
+                label.struct_size = size_u32::<NuxScreenEnumLabelView>();
                 assert_eq!(
                     unsafe {
-                        nux_flow_session_result_enum_label_at(
+                        nux_screen_session_result_enum_label_at(
                             enum_result,
                             u64::from(state.first_enum_label + offset),
                             &mut label,
@@ -8426,38 +8550,40 @@ mod tests {
             ]
         );
         unsafe {
-            nux_flow_session_result_free(enum_result);
-            nux_flow_render_session_free(enum_session);
-            nux_flow_runtime_context_free(enum_context);
+            nux_screen_session_result_free(enum_result);
+            nux_screen_session_free(enum_session);
+            nux_experience_context_free(enum_context);
         }
 
         let (reference_context, reference_session, reference_result) =
             create("replace_view_model.riv", b"Artboard");
-        let child = (0..unsafe { nux_flow_session_result_schema_property_count(reference_result) })
-            .find_map(|index| {
-                let mut property: NuxFlowSchemaPropertyView = unsafe { std::mem::zeroed() };
-                property.struct_size = size_u32::<NuxFlowSchemaPropertyView>();
-                assert_eq!(
-                    unsafe {
-                        nux_flow_session_result_schema_property_at(
-                            reference_result,
-                            index,
-                            &mut property,
-                        )
-                    },
-                    NuxStatus::Ok
-                );
-                (view_bytes(property.schema_id) == b"Main" && view_bytes(property.name) == b"child")
-                    .then_some(property)
-            })
-            .expect("child schema property");
-        assert_eq!(child.kind, NUX_FLOW_SCHEMA_PROPERTY_KIND_VIEW_MODEL);
+        let child =
+            (0..unsafe { nux_screen_session_result_schema_property_count(reference_result) })
+                .find_map(|index| {
+                    let mut property: NuxScreenSchemaPropertyView = unsafe { std::mem::zeroed() };
+                    property.struct_size = size_u32::<NuxScreenSchemaPropertyView>();
+                    assert_eq!(
+                        unsafe {
+                            nux_screen_session_result_schema_property_at(
+                                reference_result,
+                                index,
+                                &mut property,
+                            )
+                        },
+                        NuxStatus::Ok
+                    );
+                    (view_bytes(property.schema_id) == b"Main"
+                        && view_bytes(property.name) == b"child")
+                        .then_some(property)
+                })
+                .expect("child schema property");
+        assert_eq!(child.kind, NUX_SCREEN_SCHEMA_PROPERTY_KIND_VIEW_MODEL);
         assert_eq!(view_bytes(child.referenced_schema_id), b"Child");
         assert_eq!(child.enum_label_count, 0);
         unsafe {
-            nux_flow_session_result_free(reference_result);
-            nux_flow_render_session_free(reference_session);
-            nux_flow_runtime_context_free(reference_context);
+            nux_screen_session_result_free(reference_result);
+            nux_screen_session_free(reference_session);
+            nux_experience_context_free(reference_context);
         }
     }
 
@@ -8469,54 +8595,54 @@ mod tests {
             Ok(worker) => worker,
             Err(_) => panic!("import replacement fixture"),
         };
-        let context = Box::into_raw(Box::new(FlowRuntimeContextHandle { worker }))
-            .cast::<NuxFlowRuntimeContext>();
+        let context = Box::into_raw(Box::new(ExperienceRuntimeContextHandle { worker }))
+            .cast::<NuxExperienceContext>();
         let mut descriptor = configured_descriptor();
         descriptor.artboard_name = bytes(b"Artboard");
         let mut session = ptr::null_mut();
         let mut create_result = ptr::null_mut();
-        assert_eq!(
-            unsafe {
-                nux_flow_render_session_create_configured(
-                    context,
-                    &descriptor,
-                    &mut session,
-                    &mut create_result,
-                )
-            },
-            NuxStatus::Ok
-        );
-        let root_id = (0..unsafe { nux_flow_session_result_instance_count(create_result) })
+        let status = unsafe {
+            nux_screen_session_create_configured(
+                context,
+                &descriptor,
+                &mut session,
+                &mut create_result,
+            )
+        };
+        assert_eq!(status, NuxStatus::Ok, "{}", unsafe {
+            session_result_message(create_result)
+        });
+        let root_id = (0..unsafe { nux_screen_session_result_instance_count(create_result) })
             .find_map(|index| {
-                let mut instance: NuxFlowInstanceView = unsafe { std::mem::zeroed() };
-                instance.struct_size = size_u32::<NuxFlowInstanceView>();
+                let mut instance: NuxScreenInstanceView = unsafe { std::mem::zeroed() };
+                instance.struct_size = size_u32::<NuxScreenInstanceView>();
                 assert_eq!(
                     unsafe {
-                        nux_flow_session_result_instance_at(create_result, index, &mut instance)
+                        nux_screen_session_result_instance_at(create_result, index, &mut instance)
                     },
                     NuxStatus::Ok
                 );
                 (instance.is_root == 1).then_some(instance.instance_id)
             })
             .expect("root instance");
-        unsafe { nux_flow_session_result_free(create_result) };
+        unsafe { nux_screen_session_result_free(create_result) };
 
-        let new_instance = NuxFlowNewInstance {
-            struct_size: size_u32::<NuxFlowNewInstance>(),
+        let new_instance = NuxScreenNewInstance {
+            struct_size: size_u32::<NuxScreenNewInstance>(),
             local_id: 1,
             schema_name: bytes(b"Child"),
             authored_instance_name: bytes(b"child-2"),
         };
-        let mutation = NuxFlowStateMutation {
-            struct_size: size_u32::<NuxFlowStateMutation>(),
-            kind: NUX_FLOW_STATE_MUTATION_KIND_SET_VIEW_MODEL,
-            instance: NuxFlowInstanceReference {
-                kind: NUX_FLOW_INSTANCE_REFERENCE_KIND_EXISTING,
+        let mutation = NuxScreenStateMutation {
+            struct_size: size_u32::<NuxScreenStateMutation>(),
+            kind: NUX_SCREEN_STATE_MUTATION_KIND_SET_VIEW_MODEL,
+            instance: NuxScreenInstanceReference {
+                kind: NUX_SCREEN_INSTANCE_REFERENCE_KIND_EXISTING,
                 local_id: 0,
                 instance_id: root_id,
             },
-            item: NuxFlowInstanceReference {
-                kind: NUX_FLOW_INSTANCE_REFERENCE_KIND_NEW,
+            item: NuxScreenInstanceReference {
+                kind: NUX_SCREEN_INSTANCE_REFERENCE_KIND_NEW,
                 local_id: 1,
                 instance_id: 0,
             },
@@ -8526,8 +8652,8 @@ mod tests {
             index: 0,
             other_index: 0,
         };
-        let batch = NuxFlowStateBatch {
-            struct_size: size_u32::<NuxFlowStateBatch>(),
+        let batch = NuxScreenStateBatch {
+            struct_size: size_u32::<NuxScreenStateBatch>(),
             has_host_mutation_id: 0,
             host_mutation_id: 0,
             value_arena: ptr::null(),
@@ -8536,38 +8662,38 @@ mod tests {
             mutations: &mutation,
             mutation_count: 1,
         };
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_STATE_BATCH);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_STATE_BATCH);
         request.state_batch = &batch;
         let mut batch_result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(session, &request, &mut batch_result) },
+            unsafe { nux_screen_session_perform(session, &request, &mut batch_result) },
             NuxStatus::Ok
         );
-        let mut created: NuxFlowCreatedInstanceView = unsafe { std::mem::zeroed() };
-        created.struct_size = size_u32::<NuxFlowCreatedInstanceView>();
+        let mut created: NuxScreenCreatedInstanceView = unsafe { std::mem::zeroed() };
+        created.struct_size = size_u32::<NuxScreenCreatedInstanceView>();
         assert_eq!(
-            unsafe { nux_flow_session_result_created_instance_at(batch_result, 0, &mut created) },
+            unsafe { nux_screen_session_result_created_instance_at(batch_result, 0, &mut created) },
             NuxStatus::Ok
         );
         let child_id = created.instance_id;
         assert_eq!(
-            unsafe { nux_flow_session_result_output_count(batch_result) },
+            unsafe { nux_screen_session_result_output_count(batch_result) },
             1
         );
-        assert!(unsafe { nux_flow_session_result_has_values(batch_result) });
-        assert!(unsafe { nux_flow_session_result_value_root_count(batch_result) } >= 2);
-        let mut output: NuxFlowOutputView = unsafe { std::mem::zeroed() };
-        output.struct_size = size_u32::<NuxFlowOutputView>();
+        assert!(unsafe { nux_screen_session_result_has_values(batch_result) });
+        assert!(unsafe { nux_screen_session_result_value_root_count(batch_result) } >= 2);
+        let mut output: NuxScreenOutputView = unsafe { std::mem::zeroed() };
+        output.struct_size = size_u32::<NuxScreenOutputView>();
         assert_eq!(
-            unsafe { nux_flow_session_result_output_at(batch_result, 0, &mut output) },
+            unsafe { nux_screen_session_result_output_at(batch_result, 0, &mut output) },
             NuxStatus::Ok
         );
-        assert_eq!(output.kind, NUX_FLOW_OUTPUT_KIND_VIEW_MODEL_CHANGE);
+        assert_eq!(output.kind, NUX_SCREEN_OUTPUT_KIND_VIEW_MODEL_CHANGE);
         assert_ne!(output.payload_root_index, NO_VALUE_ROOT);
-        let mut reference = null_node(NUX_FLOW_VALUE_KIND_NULL);
+        let mut reference = null_node(NUX_SCREEN_VALUE_KIND_NULL);
         assert_eq!(
             unsafe {
-                nux_flow_session_result_value_node_at(
+                nux_screen_session_result_value_node_at(
                     batch_result,
                     u64::from(output.payload_root_index),
                     &mut reference,
@@ -8575,7 +8701,7 @@ mod tests {
             },
             NuxStatus::Ok
         );
-        assert_eq!(reference.kind, NUX_FLOW_VALUE_KIND_VIEW_MODEL);
+        assert_eq!(reference.kind, NUX_SCREEN_VALUE_KIND_VIEW_MODEL);
         assert_eq!(reference.has_instance_id, 1);
         assert_eq!(reference.instance_id, child_id);
         assert_eq!(reference.edge_count, 0);
@@ -8585,31 +8711,31 @@ mod tests {
             },
             b"Child"
         );
-        unsafe { nux_flow_session_result_free(batch_result) };
+        unsafe { nux_screen_session_result_free(batch_result) };
 
-        let query = NuxFlowQuery {
-            struct_size: size_u32::<NuxFlowQuery>(),
-            kind: NUX_FLOW_QUERY_KIND_VALUES,
+        let query = NuxScreenQuery {
+            struct_size: size_u32::<NuxScreenQuery>(),
+            kind: NUX_SCREEN_QUERY_KIND_VALUES,
         };
-        let query_batch = NuxFlowQueryBatch {
-            struct_size: size_u32::<NuxFlowQueryBatch>(),
+        let query_batch = NuxScreenQueryBatch {
+            struct_size: size_u32::<NuxScreenQueryBatch>(),
             queries: &query,
             query_count: 1,
         };
-        let mut request = operation(NUX_FLOW_SESSION_OPERATION_KIND_QUERY);
+        let mut request = operation(NUX_SCREEN_SESSION_OPERATION_KIND_QUERY);
         request.query_batch = &query_batch;
         let mut values = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_perform(session, &request, &mut values) },
+            unsafe { nux_screen_session_perform(session, &request, &mut values) },
             NuxStatus::Ok
         );
         let mut root_node_index = None;
         let mut child_node_index = None;
-        for index in 0..unsafe { nux_flow_session_result_value_root_count(values) } {
-            let mut root: NuxFlowValueRootView = unsafe { std::mem::zeroed() };
-            root.struct_size = size_u32::<NuxFlowValueRootView>();
+        for index in 0..unsafe { nux_screen_session_result_value_root_count(values) } {
+            let mut root: NuxScreenValueRootView = unsafe { std::mem::zeroed() };
+            root.struct_size = size_u32::<NuxScreenValueRootView>();
             assert_eq!(
-                unsafe { nux_flow_session_result_value_root_at(values, index, &mut root) },
+                unsafe { nux_screen_session_result_value_root_at(values, index, &mut root) },
                 NuxStatus::Ok
             );
             if root.instance_id == root_id {
@@ -8620,10 +8746,10 @@ mod tests {
         }
         let root_node_index = root_node_index.expect("owner value root");
         let child_node_index = child_node_index.expect("child value root");
-        let mut root_node = null_node(NUX_FLOW_VALUE_KIND_NULL);
+        let mut root_node = null_node(NUX_SCREEN_VALUE_KIND_NULL);
         assert_eq!(
             unsafe {
-                nux_flow_session_result_value_node_at(
+                nux_screen_session_result_value_node_at(
                     values,
                     u64::from(root_node_index),
                     &mut root_node,
@@ -8632,11 +8758,11 @@ mod tests {
             NuxStatus::Ok
         );
         let linked_child = (0..root_node.edge_count).find_map(|offset| {
-            let mut edge: NuxFlowValueEdge = unsafe { std::mem::zeroed() };
-            edge.struct_size = size_u32::<NuxFlowValueEdge>();
+            let mut edge: NuxScreenValueEdge = unsafe { std::mem::zeroed() };
+            edge.struct_size = size_u32::<NuxScreenValueEdge>();
             assert_eq!(
                 unsafe {
-                    nux_flow_session_result_value_edge_at(
+                    nux_screen_session_result_value_edge_at(
                         values,
                         u64::from(root_node.first_edge + offset),
                         &mut edge,
@@ -8650,9 +8776,9 @@ mod tests {
         assert_eq!(linked_child, Some(child_node_index));
 
         unsafe {
-            nux_flow_session_result_free(values);
-            nux_flow_render_session_free(session);
-            nux_flow_runtime_context_free(context);
+            nux_screen_session_result_free(values);
+            nux_screen_session_free(session);
+            nux_experience_context_free(context);
         }
     }
 

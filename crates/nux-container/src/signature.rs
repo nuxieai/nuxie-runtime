@@ -1,5 +1,5 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
+use ed25519_dalek::{Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
 use crate::NuxPackage;
@@ -27,15 +27,34 @@ where
     }
 }
 
+/// Scene bytes whose manifest inventory and Ed25519 signature were verified
+/// together by [`verify_signature`].
+///
+/// The private field prevents callers from manufacturing this proof without
+/// passing through the package verifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VerifiedScene<'a> {
+    bytes: &'a [u8],
+}
+
+impl<'a> VerifiedScene<'a> {
+    pub fn bytes(self) -> &'a [u8] {
+        self.bytes
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SignatureVerification {
-    Verified { key_id: String },
+pub enum SignatureVerification<'a> {
+    Verified {
+        key_id: String,
+        scene: VerifiedScene<'a>,
+    },
     UnknownKey,
     BadSignature,
     MalformedEnvelope,
 }
 
-pub fn verify_signature<I, K>(package: &NuxPackage<'_>, keys: I) -> SignatureVerification
+pub fn verify_signature<'a, I, K>(package: &NuxPackage<'a>, keys: I) -> SignatureVerification<'a>
 where
     I: IntoIterator<Item = (K, [u8; 32])>,
     K: AsRef<str>,
@@ -69,11 +88,15 @@ where
     };
 
     if verifying_key
-        .verify(package.manifest_bytes(), &signature)
+        .verify_strict(package.manifest_bytes(), &signature)
         .is_ok()
     {
+        let Some(scene) = package.member(&package.manifest().scene.member) else {
+            return SignatureVerification::BadSignature;
+        };
         SignatureVerification::Verified {
             key_id: envelope.key_id,
+            scene: VerifiedScene { bytes: scene },
         }
     } else {
         SignatureVerification::BadSignature

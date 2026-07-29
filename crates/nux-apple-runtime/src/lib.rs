@@ -1,7 +1,7 @@
-//! Product C ABI for the Nuxie Apple flow runtime.
+//! Product C ABI for the Nuxie Apple experience runtime.
 
 #[cfg(feature = "apple-product")]
-mod artifact;
+mod experience_package;
 mod session;
 
 pub use session::*;
@@ -11,16 +11,18 @@ compile_error!(
     "nux-apple-runtime's apple-product feature requires panic=unwind; use the release-apple profile"
 );
 
-use std::ffi::c_void;
+#[cfg(feature = "apple-product")]
+use std::ffi::CStr;
+use std::ffi::{c_char, c_void};
 use std::panic::{self, AssertUnwindSafe};
 use std::ptr;
 use std::slice;
 
 #[cfg(feature = "apple-product")]
-use artifact::{
-    ArtifactAuthorization, ArtifactDiagnosticSeverity, ExternalAssetInput, ExternalAssetKind,
-    FlowArtifactImportInput, MAX_EXTERNAL_ASSET_COUNT, SelectedArtifactSigningKey,
-    validate_flow_artifact_import,
+use experience_package::{
+    CandidateExperienceSigningKey, ExperiencePackageImportInput, ExternalAssetInput,
+    ExternalAssetKind, MAX_EXTERNAL_ASSET_COUNT, PackageDiagnosticSeverity,
+    validate_experience_package_import,
 };
 #[cfg(feature = "apple-product")]
 use nuxie::{
@@ -38,15 +40,14 @@ use std::{
     thread::{self, JoinHandle, ThreadId},
 };
 
-const MAX_ARTIFACT_BYTE_LENGTH: usize = 67_108_864;
-const MAX_MANIFEST_BYTE_LENGTH: usize = 4_194_304;
-const MAX_SIGNATURE_BYTE_LENGTH: usize = 65_536;
 const MAX_AUTHORIZATION_KEY_ID_BYTE_LENGTH: usize = 256;
+#[cfg(feature = "apple-product")]
+const MAX_CANDIDATE_KEY_COUNT: usize = 256;
 const ED25519_PUBLIC_KEY_BYTE_LENGTH: usize = 32;
 const MAX_EXTERNAL_ASSET_TOTAL_BYTE_LENGTH: usize = 134_217_728;
 const MAX_SELECTOR_BYTE_LENGTH: usize = 4_096;
-const MAX_ASSET_SOURCE_KEY_BYTE_LENGTH: usize = MAX_MANIFEST_BYTE_LENGTH;
-const PANIC_DIAGNOSTIC: &str = "runtime panicked; the affected flow session is terminated";
+const MAX_ASSET_SOURCE_KEY_BYTE_LENGTH: usize = 4_194_304;
+const PANIC_DIAGNOSTIC: &str = "runtime panicked; the affected screen session is terminated";
 const RESULT_LIMIT_DIAGNOSTIC_CODE: &[u8] = b"nux_runtime.result_limit_exceeded";
 const SCRIPT_RESOURCE_DIAGNOSTIC_CODE: &[u8] = b"nux_runtime.script_resource_exceeded";
 const RUNTIME_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -95,13 +96,6 @@ pub const NUX_STATUS_INVALID_ARGUMENT: NuxStatus = 5 as NuxStatus;
 pub const NUX_STATUS_RUNTIME_IDENTITY_MISMATCH: NuxStatus = 6 as NuxStatus;
 pub const NUX_STATUS_SURFACE_ERROR: NuxStatus = 7 as NuxStatus;
 
-/// Stable-width script authorization result set during artifact import.
-pub type NuxScriptAuthorization = u32;
-
-pub const NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE: NuxScriptAuthorization = 0;
-pub const NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY: NuxScriptAuthorization = 1;
-pub const NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED: NuxScriptAuthorization = 2;
-
 /// Stable-width structured diagnostic severity.
 pub type NuxDiagnosticSeverity = u32;
 
@@ -109,11 +103,11 @@ pub const NUX_DIAGNOSTIC_SEVERITY_DEBUG: NuxDiagnosticSeverity = 0;
 pub const NUX_DIAGNOSTIC_SEVERITY_WARNING: NuxDiagnosticSeverity = 1;
 pub const NUX_DIAGNOSTIC_SEVERITY_FATAL: NuxDiagnosticSeverity = 2;
 
-/// Stable-width external artifact asset kind.
-pub type NuxFlowExternalAssetKind = u32;
+/// Stable-width external experience asset kind.
+pub type NuxExperienceExternalAssetKind = u32;
 
-pub const NUX_FLOW_EXTERNAL_ASSET_KIND_IMAGE: NuxFlowExternalAssetKind = 1;
-pub const NUX_FLOW_EXTERNAL_ASSET_KIND_FONT: NuxFlowExternalAssetKind = 2;
+pub const NUX_EXPERIENCE_EXTERNAL_ASSET_KIND_IMAGE: NuxExperienceExternalAssetKind = 1;
+pub const NUX_EXPERIENCE_EXTERNAL_ASSET_KIND_FONT: NuxExperienceExternalAssetKind = 2;
 
 /// Stable-width C presentation outcome.
 pub type NuxSurfaceDisposition = u32;
@@ -202,7 +196,7 @@ impl NuxByteView {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowAuthorizationKey {
+pub struct NuxExperienceAuthorizationKey {
     pub struct_size: u32,
     pub key_id: NuxByteView,
     /// Exactly 32 raw Ed25519 public-key bytes.
@@ -211,11 +205,12 @@ pub struct NuxFlowAuthorizationKey {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-/// One element of `NuxFlowImportRequest.external_assets`. Because the array has
-/// no independent stride, every element must use this exact published size.
-pub struct NuxFlowExternalAsset {
+/// One element of `NuxExperienceImportRequest.external_assets`. Because the
+/// array has no independent stride, every element must use this exact
+/// published size.
+pub struct NuxExperienceExternalAsset {
     pub struct_size: u32,
-    pub kind: NuxFlowExternalAssetKind,
+    pub kind: NuxExperienceExternalAssetKind,
     /// Serialized `FileAsset.assetId`, not an asset-list ordinal.
     pub asset_id: u32,
     pub required: bool,
@@ -233,28 +228,22 @@ pub struct NuxFlowExternalAsset {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-/// Complete artifact-import request. `struct_size` must equal this published
-/// layout's exact size; the artifact manifest and acquisition identities are
-/// required for every import.
-pub struct NuxFlowImportRequest {
+/// Complete package-import request. `struct_size` must equal this published
+/// layout's exact size.
+pub struct NuxExperienceImportRequest {
     pub struct_size: u32,
-    /// Exact verified visual-runtime bytes. The field is container-neutral so
-    /// the current RIV adapter can later be replaced without changing sessions.
-    pub artifact_bytes: NuxByteView,
-    /// UTF-8 acquisition identity used to prevent cross-flow replay.
-    pub expected_flow_id: NuxByteView,
-    /// UTF-8 acquisition identity used to prevent cross-build replay.
-    pub expected_build_id: NuxByteView,
-    /// Exact signed artifact manifest bytes.
-    pub manifest_bytes: NuxByteView,
-    /// Optional exact detached signature-envelope bytes. Only `{NULL, 0}` is
-    /// absent; a non-null empty view is present malformed evidence.
-    pub signature_envelope_bytes: NuxByteView,
-    /// Optional Nuxie-selected validation material. This is evidence, never a
-    /// caller-supplied authorization decision.
-    pub selected_key: *const NuxFlowAuthorizationKey,
-    /// Ordered manifest asset inputs, already resolved to bytes or an explicit omission.
-    pub external_assets: *const NuxFlowExternalAsset,
+    /// The complete `.nux` package bytes.
+    pub package_bytes: NuxByteView,
+    /// NUL-terminated UTF-8 acquisition identity used to prevent
+    /// cross-experience replay.
+    pub expected_experience_id: *const c_char,
+    /// NUL-terminated UTF-8 acquisition build identity.
+    pub expected_build_id: *const c_char,
+    /// Candidate public keys used to verify the package signature.
+    pub candidate_keys: *const NuxExperienceAuthorizationKey,
+    pub candidate_key_count: u64,
+    /// Host-resolved external assets. Embedded assets are not included.
+    pub external_assets: *const NuxExperienceExternalAsset,
     pub external_asset_count: u64,
 }
 
@@ -282,7 +271,7 @@ impl Default for NuxDiagnosticView {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct NuxFlowSessionDescriptor {
+pub struct NuxScreenSessionDescriptor {
     pub struct_size: u32,
     /// UTF-8 authored artboard name. A null view selects the default artboard.
     pub artboard_name: NuxByteView,
@@ -301,7 +290,7 @@ pub struct NuxAppleSurfaceDescriptor {
 }
 
 /// Called exactly once when Metal has finished using a submitted drawable, or
-/// before `nux_flow_render_session_advance` returns when it cannot be submitted.
+/// before `nux_screen_session_advance` returns when it cannot be submitted.
 pub type NuxFrameCompletionCallback = unsafe extern "C" fn(context: *mut c_void);
 
 #[repr(C)]
@@ -360,7 +349,7 @@ impl Drop for PendingFrameCompletion {
 }
 
 /// Opaque C handle. Its storage is private and retained by child handles.
-pub struct NuxFlowRuntimeContext {
+pub struct NuxExperienceContext {
     _private: [u8; 0],
 }
 
@@ -371,7 +360,7 @@ pub struct NuxRuntimeBinding {
 }
 
 /// Opaque C handle. It retains its runtime context.
-pub struct NuxFlowRenderSession {
+pub struct NuxScreenSession {
     _private: [u8; 0],
 }
 
@@ -394,7 +383,7 @@ struct RuntimeWorker {
 }
 
 #[cfg(feature = "apple-product")]
-struct FlowRuntimeContextHandle {
+struct ExperienceRuntimeContextHandle {
     worker: Arc<RuntimeWorker>,
 }
 
@@ -405,7 +394,7 @@ struct SessionToken {
 }
 
 #[cfg(feature = "apple-product")]
-struct FlowRenderSessionHandle {
+struct ScreenSessionHandle {
     token: Arc<SessionToken>,
 }
 
@@ -435,7 +424,7 @@ struct WorkerState {
 struct SessionState {
     is_fatal: bool,
     fatal_diagnostic: Option<String>,
-    flow_session: FlowSession,
+    screen_session: FlowSession,
     // A stable address is part of the script renderer-domain contract. The
     // factory belongs to the logical session, not to its optional surface.
     factory: Box<WgpuFactory>,
@@ -497,7 +486,7 @@ fn terminalize_after_committed_advance_failure(
     failure: RuntimeFailure,
 ) -> RuntimeFailure {
     session.terminalize(format!(
-        "flow session is terminal after a committed advance failed during {phase}: {}",
+        "screen session is terminal after a committed advance failed during {phase}: {}",
         failure.diagnostic
     ));
     failure
@@ -539,8 +528,7 @@ struct RuntimeImportDiagnostic {
 
 #[cfg(feature = "apple-product")]
 struct RuntimeImportMetadata {
-    authorization: NuxScriptAuthorization,
-    authenticated_key_id: Option<String>,
+    authenticated_key_id: String,
     diagnostics: Vec<RuntimeImportDiagnostic>,
 }
 
@@ -552,10 +540,10 @@ struct WorkerInitialization {
 
 #[cfg(feature = "apple-product")]
 fn import_runtime_input(
-    input: FlowArtifactImportInput,
+    input: ExperiencePackageImportInput,
 ) -> Result<(File, RuntimeImportMetadata), WorkerStartError> {
     let validated =
-        validate_flow_artifact_import(input).map_err(|error| WorkerStartError::Import {
+        validate_experience_package_import(input).map_err(|error| WorkerStartError::Import {
             code: error.code.to_owned(),
             message: error.message,
         })?;
@@ -565,7 +553,7 @@ fn import_runtime_input(
         .into_iter()
         .map(|diagnostic| RuntimeImportDiagnostic {
             severity: match diagnostic.severity {
-                ArtifactDiagnosticSeverity::Warning => NUX_DIAGNOSTIC_SEVERITY_WARNING,
+                PackageDiagnosticSeverity::Warning => NUX_DIAGNOSTIC_SEVERITY_WARNING,
             },
             code: diagnostic.code.to_owned(),
             message: diagnostic.message,
@@ -594,7 +582,7 @@ fn import_runtime_input(
             if !asset.required {
                 diagnostics.push(RuntimeImportDiagnostic {
                     severity: NUX_DIAGNOSTIC_SEVERITY_WARNING,
-                    code: "artifact.asset.optional_invalid".to_owned(),
+                    code: "package.asset.optional_invalid".to_owned(),
                     message: format!(
                         "optional {kind_label} asset {} '{}' could not be decoded or attached: {error}",
                         asset.asset_id, asset.unique_name
@@ -603,7 +591,7 @@ fn import_runtime_input(
                 continue;
             }
             return Err(WorkerStartError::Import {
-                code: "artifact.asset.attach_failed".to_owned(),
+                code: "package.asset_table.mismatch".to_owned(),
                 message: format!(
                     "asset {} '{}' could not be attached: {error}",
                     asset.asset_id, asset.unique_name
@@ -611,17 +599,10 @@ fn import_runtime_input(
             });
         }
     }
-    let (authorization, authenticated_key_id) = match validated.authorization {
-        ArtifactAuthorization::Authenticated { key_id } => {
-            (NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED, Some(key_id))
-        }
-        ArtifactAuthorization::VisualOnly { .. } => (NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY, None),
-    };
     Ok((
         file,
         RuntimeImportMetadata {
-            authorization,
-            authenticated_key_id,
+            authenticated_key_id: validated.authenticated_key_id,
             diagnostics,
         },
     ))
@@ -653,7 +634,7 @@ impl RuntimeFailure {
         }
     }
 
-    fn flow_session(kind: FlowSessionErrorKind, diagnostic: impl Into<String>) -> Self {
+    fn screen_session(kind: FlowSessionErrorKind, diagnostic: impl Into<String>) -> Self {
         let (status, diagnostic_code) = match kind {
             FlowSessionErrorKind::NotFound => (
                 NuxStatus::NotFound,
@@ -689,10 +670,10 @@ impl RuntimeFailure {
 }
 
 #[cfg(feature = "apple-product")]
-fn runtime_failure_from_flow_session(
+fn runtime_failure_from_screen_session(
     error: nuxie::flow_session::FlowSessionError,
 ) -> RuntimeFailure {
-    RuntimeFailure::flow_session(error.kind(), error.message())
+    RuntimeFailure::screen_session(error.kind(), error.message())
 }
 
 #[cfg(feature = "apple-product")]
@@ -738,7 +719,7 @@ impl WorkerState {
     ) -> Result<SessionId, RuntimeFailure> {
         let mut factory = self.make_session_factory()?;
         let renderer_generation = self.gpu_generation;
-        let (flow_session, _) = FlowSession::create_with_factory(
+        let (screen_session, _) = FlowSession::create_with_factory(
             Arc::clone(&self.file),
             FlowSessionConfig {
                 artboard_name,
@@ -746,14 +727,14 @@ impl WorkerState {
             },
             factory.as_mut(),
         )
-        .map_err(runtime_failure_from_flow_session)?;
+        .map_err(runtime_failure_from_screen_session)?;
         let id = self.allocate_session_id()?;
         self.sessions.insert(
             id,
             SessionState {
                 is_fatal: false,
                 fatal_diagnostic: None,
-                flow_session,
+                screen_session,
                 factory,
                 renderer_generation,
                 legacy_timestamp_seconds: 0.0,
@@ -940,7 +921,7 @@ impl WorkerState {
         }
         *session.factory = candidate_factory;
         session.renderer_generation = candidate_generation;
-        session.flow_session.reset_renderer();
+        session.screen_session.reset_renderer();
         attachment.surface = candidate_surface;
         #[cfg(test)]
         {
@@ -1029,52 +1010,39 @@ impl Drop for WorkerState {
 #[cfg(feature = "apple-product")]
 impl RuntimeWorker {
     #[cfg(test)]
-    fn spawn(artifact_bytes: Vec<u8>) -> Result<Arc<Self>, WorkerStartError> {
-        use sha2::{Digest as _, Sha256};
-
-        let artifact_sha256 = Sha256::digest(&artifact_bytes)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
-            "version": 1,
-            "flowId": "test-flow",
-            "buildId": "test-build",
-            "renderer": "rive",
-            "riv": {
-                "path": "flow.riv",
-                "sha256": artifact_sha256,
-                "sizeBytes": artifact_bytes.len(),
-            },
-            "assets": {
-                "images": [],
-                "fonts": [],
-            },
-        }))
-        .map_err(|error| WorkerStartError::Runtime(error.to_string()))?;
-        Self::spawn_input(FlowArtifactImportInput {
-            expected_flow_id: "test-flow".to_owned(),
-            expected_build_id: "test-build".to_owned(),
-            artifact_bytes,
-            manifest_bytes,
-            signature_envelope_bytes: None,
-            selected_key: None,
-            external_assets: Vec::new(),
+    fn spawn(scene_bytes: Vec<u8>) -> Result<Arc<Self>, WorkerStartError> {
+        Self::spawn_with_initializer(move || {
+            let file = File::import(&scene_bytes)
+                .map_err(|error| WorkerStartError::Runtime(error.to_string()))?;
+            Ok((
+                file,
+                RuntimeImportMetadata {
+                    authenticated_key_id: String::new(),
+                    diagnostics: Vec::new(),
+                },
+            ))
         })
         .map(|(worker, _)| worker)
     }
 
     fn spawn_input(
-        input: FlowArtifactImportInput,
+        input: ExperiencePackageImportInput,
+    ) -> Result<(Arc<Self>, RuntimeImportMetadata), WorkerStartError> {
+        Self::spawn_with_initializer(move || import_runtime_input(input))
+    }
+
+    fn spawn_with_initializer(
+        initializer: impl FnOnce() -> Result<(File, RuntimeImportMetadata), WorkerStartError>
+        + Send
+        + 'static,
     ) -> Result<(Arc<Self>, RuntimeImportMetadata), WorkerStartError> {
         let (sender, receiver) = mpsc::channel();
         let (initialization_sender, initialization_receiver) = mpsc::sync_channel(1);
         let join_handle = thread::Builder::new()
-            .name("nuxie-flow-runtime".to_owned())
+            .name("nuxie-experience-runtime".to_owned())
             .spawn(move || {
                 let state = panic::catch_unwind(AssertUnwindSafe(|| {
-                    import_runtime_input(input)
-                        .map(|(file, metadata)| (WorkerState::new(file), metadata))
+                    initializer().map(|(file, metadata)| (WorkerState::new(file), metadata))
                 }));
                 let (state, metadata) = match state {
                     Ok(Ok(initialized)) => initialized,
@@ -1222,8 +1190,8 @@ fn worker_loop(mut state: WorkerState, receiver: Receiver<WorkerMessage>) {
 #[allow(dead_code)]
 fn assert_opaque_handle_storage_is_send_and_sync() {
     fn assert_send_and_sync<T: Send + Sync>() {}
-    assert_send_and_sync::<FlowRuntimeContextHandle>();
-    assert_send_and_sync::<FlowRenderSessionHandle>();
+    assert_send_and_sync::<ExperienceRuntimeContextHandle>();
+    assert_send_and_sync::<ScreenSessionHandle>();
     assert_send_and_sync::<AppleSurfaceHandle>();
 }
 
@@ -1238,7 +1206,6 @@ pub struct NuxOperationResult {
     status: NuxStatus,
     surface_disposition: NuxSurfaceDisposition,
     changed: bool,
-    script_authorization: NuxScriptAuthorization,
     authenticated_key_id: Vec<u8>,
     diagnostics: Vec<OwnedDiagnostic>,
     // Scalar compatibility view: the first structured diagnostic message.
@@ -1251,7 +1218,6 @@ impl NuxOperationResult {
             status: NuxStatus::Ok,
             surface_disposition,
             changed,
-            script_authorization: NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE,
             authenticated_key_id: Vec::new(),
             diagnostics: Vec::new(),
             diagnostic: Vec::new(),
@@ -1277,11 +1243,7 @@ impl NuxOperationResult {
             status: NuxStatus::Ok,
             surface_disposition: NuxSurfaceDisposition::None,
             changed: false,
-            script_authorization: metadata.authorization,
-            authenticated_key_id: metadata
-                .authenticated_key_id
-                .map(String::into_bytes)
-                .unwrap_or_default(),
+            authenticated_key_id: metadata.authenticated_key_id.into_bytes(),
             diagnostics,
             diagnostic,
         }
@@ -1301,7 +1263,6 @@ impl NuxOperationResult {
             status,
             surface_disposition: NuxSurfaceDisposition::Fatal,
             changed: false,
-            script_authorization: NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE,
             authenticated_key_id: Vec::new(),
             diagnostics: vec![OwnedDiagnostic {
                 severity: NUX_DIAGNOSTIC_SEVERITY_FATAL,
@@ -1322,7 +1283,6 @@ impl NuxOperationResult {
             status,
             surface_disposition: NuxSurfaceDisposition::Fatal,
             changed: false,
-            script_authorization: NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE,
             authenticated_key_id: Vec::new(),
             diagnostics: vec![OwnedDiagnostic {
                 severity: NUX_DIAGNOSTIC_SEVERITY_FATAL,
@@ -1444,19 +1404,44 @@ pub unsafe extern "C" fn nux_runtime_build_provenance(
 
 #[cfg(feature = "apple-product")]
 #[unsafe(no_mangle)]
-/// Imports one verified visual artifact into a retained runtime context.
-/// The request must use the exact current layout; the former artifact-only
-/// prefix is rejected.
+/// Imports one signed `.nux` package into a retained experience context.
+///
+/// This convenience entry binds against the linked runtime automatically.
 ///
 /// # Safety
 ///
-/// Non-null pointers must be properly aligned and valid for this call.
-/// `request.artifact_bytes` must be readable for its declared length. Output
-/// pointers must address writable handle storage.
-pub unsafe extern "C" fn nux_flow_runtime_context_create_bound(
+/// Non-null pointers must be properly aligned and valid for this call. Package
+/// and nested request views must remain readable through the call. Identity
+/// pointers must name readable NUL-terminated UTF-8 strings. Output pointers
+/// must address writable handle storage.
+pub unsafe extern "C" fn nux_experience_context_create(
+    request: *const NuxExperienceImportRequest,
+    out_context: *mut *mut NuxExperienceContext,
+    out_result: *mut *mut NuxOperationResult,
+) -> NuxStatus {
+    ffi_guard_with_result(
+        out_result,
+        || {},
+        || unsafe {
+            nux_experience_context_create_bound(runtime_binding(), request, out_context, out_result)
+        },
+    )
+}
+
+#[cfg(feature = "apple-product")]
+#[unsafe(no_mangle)]
+/// Imports one signed `.nux` package through an exact runtime binding.
+///
+/// # Safety
+///
+/// Non-null pointers must be properly aligned and valid for this call. Package
+/// and nested request views must remain readable through the call. Identity
+/// pointers must name readable NUL-terminated UTF-8 strings. Output pointers
+/// must address writable handle storage.
+pub unsafe extern "C" fn nux_experience_context_create_bound(
     binding: *const NuxRuntimeBinding,
-    request: *const NuxFlowImportRequest,
-    out_context: *mut *mut NuxFlowRuntimeContext,
+    request: *const NuxExperienceImportRequest,
+    out_context: *mut *mut NuxExperienceContext,
     out_result: *mut *mut NuxOperationResult,
 ) -> NuxStatus {
     ffi_guard_with_result(
@@ -1482,20 +1467,20 @@ pub unsafe extern "C" fn nux_flow_runtime_context_create_bound(
             if request.is_null() {
                 return NuxStatus::NullArgument;
             }
-            let input = match unsafe { copy_runtime_import_input(request) } {
+            let input = match unsafe { copy_experience_import_input(request) } {
                 Ok(input) => input,
-                Err(status) => {
+                Err(error) => {
                     return write_import_failure(
                         out_result,
-                        status,
-                        "artifact.request.invalid",
-                        "flow import request contains an invalid or oversized view",
+                        error.status,
+                        error.code,
+                        error.message,
                     );
                 }
             };
             match RuntimeWorker::spawn_input(input) {
                 Ok((worker, metadata)) => {
-                    let context = Box::new(FlowRuntimeContextHandle { worker });
+                    let context = Box::new(ExperienceRuntimeContextHandle { worker });
                     unsafe {
                         *out_context = Box::into_raw(context).cast();
                     }
@@ -1517,19 +1502,21 @@ pub unsafe extern "C" fn nux_flow_runtime_context_create_bound(
 }
 
 #[unsafe(no_mangle)]
-/// Releases one runtime-context handle. Null is a no-op.
+/// Releases one experience-context handle. Null is a no-op.
 ///
 /// # Safety
 ///
 /// A non-null pointer must be an owned handle returned by this library and
 /// must not have been released before. Release must not race a call using the
 /// same handle. Child handles may remain alive.
-pub unsafe extern "C" fn nux_flow_runtime_context_free(context: *mut NuxFlowRuntimeContext) {
+pub unsafe extern "C" fn nux_experience_context_free(context: *mut NuxExperienceContext) {
     ffi_guard((), || {
         if !context.is_null() {
             unsafe {
                 #[cfg(feature = "apple-product")]
-                drop(Box::from_raw(context.cast::<FlowRuntimeContextHandle>()));
+                drop(Box::from_raw(
+                    context.cast::<ExperienceRuntimeContextHandle>(),
+                ));
             }
         }
     })
@@ -1540,17 +1527,17 @@ pub unsafe extern "C" fn nux_flow_runtime_context_free(context: *mut NuxFlowRunt
 /// Creates an independent logical screen session from a context through the
 /// legacy unconfigured surface. Cycle-zero host outputs produced while scripts are
 /// initialized are intentionally not returned by this entry point; use
-/// `nux_flow_render_session_create_configured` when those outputs are needed.
+/// `nux_screen_session_create_configured` when those outputs are needed.
 ///
 /// # Safety
 ///
 /// `context` must be live. The descriptor and output pointers must be valid,
 /// aligned, and readable or writable as their direction requires. Calls may
 /// originate on arbitrary threads; this library serializes runtime state.
-pub unsafe extern "C" fn nux_flow_render_session_create(
-    context: *const NuxFlowRuntimeContext,
-    descriptor: *const NuxFlowSessionDescriptor,
-    out_session: *mut *mut NuxFlowRenderSession,
+pub unsafe extern "C" fn nux_screen_session_create(
+    context: *const NuxExperienceContext,
+    descriptor: *const NuxScreenSessionDescriptor,
+    out_session: *mut *mut NuxScreenSession,
     out_result: *mut *mut NuxOperationResult,
 ) -> NuxStatus {
     ffi_guard_with_result(
@@ -1562,13 +1549,13 @@ pub unsafe extern "C" fn nux_flow_render_session_create(
             if context.is_null() || descriptor.is_null() || out_session.is_null() {
                 return NuxStatus::NullArgument;
             }
-            let context = unsafe { &*context.cast::<FlowRuntimeContextHandle>() };
+            let context = unsafe { &*context.cast::<ExperienceRuntimeContextHandle>() };
             let struct_size = unsafe { read_struct_size(descriptor) };
-            if struct_size != size_u32::<NuxFlowSessionDescriptor>() {
+            if struct_size != size_u32::<NuxScreenSessionDescriptor>() {
                 return write_failure(
                     out_result,
                     NuxStatus::InvalidArgument,
-                    "flow session descriptor has the wrong exact size",
+                    "screen session descriptor has the wrong exact size",
                 );
             }
             let descriptor = unsafe { *descriptor };
@@ -1595,7 +1582,7 @@ pub unsafe extern "C" fn nux_flow_render_session_create(
                 Ok(Err(failure)) => return write_runtime_failure(out_result, failure),
                 Err(error) => return write_worker_call_failure(out_result, error),
             };
-            let session = Box::new(FlowRenderSessionHandle {
+            let session = Box::new(ScreenSessionHandle {
                 token: Arc::new(SessionToken {
                     worker: Arc::clone(&context.worker),
                     id: session_id,
@@ -1617,12 +1604,12 @@ pub unsafe extern "C" fn nux_flow_render_session_create(
 /// A non-null pointer must be an owned handle returned by this library and not
 /// previously released. Release must not race a call using the same handle.
 /// Child surfaces may remain alive.
-pub unsafe extern "C" fn nux_flow_render_session_free(session: *mut NuxFlowRenderSession) {
+pub unsafe extern "C" fn nux_screen_session_free(session: *mut NuxScreenSession) {
     ffi_guard((), || {
         if !session.is_null() {
             unsafe {
                 #[cfg(feature = "apple-product")]
-                drop(Box::from_raw(session.cast::<FlowRenderSessionHandle>()));
+                drop(Box::from_raw(session.cast::<ScreenSessionHandle>()));
             }
         }
     })
@@ -1637,8 +1624,8 @@ pub unsafe extern "C" fn nux_flow_render_session_free(session: *mut NuxFlowRende
 /// Handles and output pointers must be valid. Calls may originate on arbitrary
 /// threads; this library serializes runtime state. Swift remains responsible
 /// for configuring its `CAMetalLayer` and acquiring each drawable.
-pub unsafe extern "C" fn nux_flow_render_session_attach_apple_surface(
-    session: *const NuxFlowRenderSession,
+pub unsafe extern "C" fn nux_screen_session_attach_apple_surface(
+    session: *const NuxScreenSession,
     descriptor: *const NuxAppleSurfaceDescriptor,
     out_surface: *mut *mut NuxAppleSurface,
     out_result: *mut *mut NuxOperationResult,
@@ -1652,7 +1639,7 @@ pub unsafe extern "C" fn nux_flow_render_session_attach_apple_surface(
             if session.is_null() || descriptor.is_null() || out_surface.is_null() {
                 return NuxStatus::NullArgument;
             }
-            let session = unsafe { &*session.cast::<FlowRenderSessionHandle>() };
+            let session = unsafe { &*session.cast::<ScreenSessionHandle>() };
             let struct_size = unsafe { read_struct_size(descriptor) };
             if struct_size != size_u32::<NuxAppleSurfaceDescriptor>() {
                 return write_failure(
@@ -1838,7 +1825,7 @@ pub unsafe extern "C" fn nux_apple_surface_detach(
 /// Reattaches logical presentation state after a detach. If the session's GPU
 /// domain reported device loss, this call transactionally replaces the
 /// session's renderer and presentation resources, refreshing the shared base
-/// device when needed while preserving logical flow state and factory address.
+/// device when needed while preserving logical screen state and factory address.
 ///
 /// # Safety
 ///
@@ -1918,8 +1905,8 @@ pub unsafe extern "C" fn nux_apple_surface_free(surface: *mut NuxAppleSurface) {
 /// `id<CAMetalDrawable>` retained until this synchronous call returns. A
 /// drawable must not be supplied when rendering is disabled. Calls may
 /// originate on arbitrary threads; this library serializes runtime state.
-pub unsafe extern "C" fn nux_flow_render_session_advance(
-    session: *const NuxFlowRenderSession,
+pub unsafe extern "C" fn nux_screen_session_advance(
+    session: *const NuxScreenSession,
     operation: *const NuxFrameOperation,
     out_result: *mut *mut NuxOperationResult,
 ) -> NuxStatus {
@@ -1949,7 +1936,7 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
             if session.is_null() {
                 return NuxStatus::NullArgument;
             }
-            let session = unsafe { &*session.cast::<FlowRenderSessionHandle>() };
+            let session = unsafe { &*session.cast::<ScreenSessionHandle>() };
             if !operation.elapsed_seconds.is_finite() || operation.elapsed_seconds < 0.0 {
                 return write_failure(
                     out_result,
@@ -1992,7 +1979,7 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
                     return Ok((NUX_SURFACE_DISPOSITION_DEVICE_LOST, false));
                 }
                 let mut result = session
-                    .flow_session
+                    .screen_session
                     .perform_with_factory(
                         nuxie::flow_session::FlowOperation::Advance(
                             nuxie::flow_session::FlowAdvance {
@@ -2003,7 +1990,7 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
                         ),
                         session.factory.as_mut(),
                     )
-                    .map_err(runtime_failure_from_flow_session)?;
+                    .map_err(runtime_failure_from_screen_session)?;
                 session.legacy_timestamp_seconds = timestamp_seconds;
                 let changed = result.dirty;
                 if !render {
@@ -2024,7 +2011,7 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
                         failure,
                     ));
                 };
-                let bounds = session.flow_session.artboard_bounds();
+                let bounds = session.screen_session.artboard_bounds();
                 let presentation_transform = match centered_contain_transform(
                     bounds.x,
                     bounds.y,
@@ -2048,13 +2035,13 @@ pub unsafe extern "C" fn nux_flow_render_session_advance(
                 {
                     session.render_attempts = session.render_attempts.saturating_add(1);
                 }
-                let draw_result = session.flow_session.draw_into_result(
+                let draw_result = session.screen_session.draw_into_result(
                     session.factory.as_mut(),
                     &mut frame,
                     &mut result,
                 );
                 if let Err(error) = draw_result {
-                    let failure = runtime_failure_from_flow_session(error);
+                    let failure = runtime_failure_from_screen_session(error);
                     return Err(terminalize_after_committed_advance_failure(
                         session, "drawing", failure,
                     ));
@@ -2145,24 +2132,6 @@ pub unsafe extern "C" fn nux_operation_result_surface_disposition(
 /// A non-null pointer must identify a live result owned by this library.
 pub unsafe extern "C" fn nux_operation_result_changed(result: *const NuxOperationResult) -> bool {
     ffi_guard(false, || !result.is_null() && unsafe { (*result).changed })
-}
-
-#[unsafe(no_mangle)]
-/// Returns the artifact import's script authorization, or `NOT_APPLICABLE`.
-///
-/// # Safety
-///
-/// A non-null pointer must identify a live result owned by this library.
-pub unsafe extern "C" fn nux_operation_result_script_authorization(
-    result: *const NuxOperationResult,
-) -> NuxScriptAuthorization {
-    ffi_guard(NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE, || {
-        if result.is_null() {
-            NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE
-        } else {
-            unsafe { (*result).script_authorization }
-        }
-    })
 }
 
 #[unsafe(no_mangle)]
@@ -2357,68 +2326,127 @@ fn required_utf8_string(view: NuxByteView, maximum_length: usize) -> Result<Stri
 }
 
 #[cfg(feature = "apple-product")]
-fn optional_byte_vec(
-    view: NuxByteView,
+unsafe fn required_c_string(
+    value: *const c_char,
     maximum_length: usize,
-) -> Result<Option<Vec<u8>>, NuxStatus> {
-    if view.data.is_null() && view.len == 0 {
-        return Ok(None);
+) -> Result<String, NuxStatus> {
+    if value.is_null() {
+        return Err(NuxStatus::NullArgument);
     }
-    byte_vec(view, maximum_length).map(Some)
+    // SAFETY: the FFI contract requires a readable NUL-terminated string.
+    let value = unsafe { CStr::from_ptr(value) };
+    let bytes = value.to_bytes();
+    if bytes.is_empty() || bytes.len() > maximum_length {
+        return Err(NuxStatus::InvalidArgument);
+    }
+    value
+        .to_str()
+        .map(str::to_owned)
+        .map_err(|_| NuxStatus::InvalidArgument)
 }
 
 #[cfg(feature = "apple-product")]
-unsafe fn copy_runtime_import_input(
-    request: *const NuxFlowImportRequest,
-) -> Result<FlowArtifactImportInput, NuxStatus> {
+struct ImportRequestCopyError {
+    status: NuxStatus,
+    code: &'static str,
+    message: &'static str,
+}
+
+#[cfg(feature = "apple-product")]
+impl ImportRequestCopyError {
+    const fn invalid(status: NuxStatus) -> Self {
+        Self {
+            status,
+            code: "package.request.invalid",
+            message: "experience import request contains an invalid view or value",
+        }
+    }
+
+    const fn oversize() -> Self {
+        Self {
+            status: NuxStatus::InvalidArgument,
+            code: "package.oversize",
+            message: "experience package exceeds the published size limit",
+        }
+    }
+}
+
+#[cfg(feature = "apple-product")]
+unsafe fn copy_experience_import_input(
+    request: *const NuxExperienceImportRequest,
+) -> Result<ExperiencePackageImportInput, ImportRequestCopyError> {
     let struct_size = unsafe { read_struct_size(request) };
-    if struct_size != size_u32::<NuxFlowImportRequest>() {
-        return Err(NuxStatus::InvalidArgument);
+    if struct_size != size_u32::<NuxExperienceImportRequest>() {
+        return Err(ImportRequestCopyError::invalid(NuxStatus::InvalidArgument));
     }
 
     let request = unsafe { request.read() };
-    let artifact_bytes = byte_vec(request.artifact_bytes, MAX_ARTIFACT_BYTE_LENGTH)?;
-    if request.manifest_bytes.len == 0 {
-        return Err(NuxStatus::InvalidArgument);
+    if request.package_bytes.len > nux_container::NUX_MAX_PACKAGE_BYTES {
+        return Err(ImportRequestCopyError::oversize());
     }
-    let expected_flow_id =
-        required_utf8_string(request.expected_flow_id, MAX_SELECTOR_BYTE_LENGTH)?;
+    let package_bytes = byte_vec(
+        request.package_bytes,
+        usize::try_from(nux_container::NUX_MAX_PACKAGE_BYTES).unwrap_or(usize::MAX),
+    )
+    .map_err(ImportRequestCopyError::invalid)?;
+    let expected_experience_id =
+        unsafe { required_c_string(request.expected_experience_id, MAX_SELECTOR_BYTE_LENGTH) }
+            .map_err(ImportRequestCopyError::invalid)?;
     let expected_build_id =
-        required_utf8_string(request.expected_build_id, MAX_SELECTOR_BYTE_LENGTH)?;
-    let manifest_bytes = byte_vec(request.manifest_bytes, MAX_MANIFEST_BYTE_LENGTH)?;
-    let signature_envelope_bytes =
-        optional_byte_vec(request.signature_envelope_bytes, MAX_SIGNATURE_BYTE_LENGTH)?;
-    let selected_key = if request.selected_key.is_null() {
-        None
+        unsafe { required_c_string(request.expected_build_id, MAX_SELECTOR_BYTE_LENGTH) }
+            .map_err(ImportRequestCopyError::invalid)?;
+
+    let candidate_key_count = usize::try_from(request.candidate_key_count)
+        .map_err(|_| ImportRequestCopyError::invalid(NuxStatus::InvalidArgument))?;
+    if candidate_key_count > MAX_CANDIDATE_KEY_COUNT
+        || (candidate_key_count != 0 && request.candidate_keys.is_null())
+    {
+        return Err(ImportRequestCopyError::invalid(NuxStatus::InvalidArgument));
+    }
+    let candidate_key_array_size = candidate_key_count
+        .checked_mul(std::mem::size_of::<NuxExperienceAuthorizationKey>())
+        .ok_or_else(|| ImportRequestCopyError::invalid(NuxStatus::InvalidArgument))?;
+    if candidate_key_array_size > isize::MAX as usize {
+        return Err(ImportRequestCopyError::invalid(NuxStatus::InvalidArgument));
+    }
+    let candidate_key_views = if candidate_key_count == 0 {
+        &[][..]
     } else {
-        let struct_size = unsafe { read_struct_size(request.selected_key) };
-        if struct_size != size_u32::<NuxFlowAuthorizationKey>() {
-            return Err(NuxStatus::InvalidArgument);
+        // SAFETY: the caller promises an array of readable elements for this
+        // synchronous call; nested views are copied before returning.
+        unsafe { slice::from_raw_parts(request.candidate_keys, candidate_key_count) }
+    };
+    let mut candidate_keys = Vec::with_capacity(candidate_key_count);
+    for candidate_key in candidate_key_views {
+        if candidate_key.struct_size != size_u32::<NuxExperienceAuthorizationKey>() {
+            return Err(ImportRequestCopyError::invalid(NuxStatus::InvalidArgument));
         }
-        let selected_key = unsafe { request.selected_key.read() };
         let key_id =
-            required_utf8_string(selected_key.key_id, MAX_AUTHORIZATION_KEY_ID_BYTE_LENGTH)?;
+            required_utf8_string(candidate_key.key_id, MAX_AUTHORIZATION_KEY_ID_BYTE_LENGTH)
+                .map_err(ImportRequestCopyError::invalid)?;
         let public_key = byte_vec(
-            selected_key.ed25519_public_key,
+            candidate_key.ed25519_public_key,
             ED25519_PUBLIC_KEY_BYTE_LENGTH,
-        )?;
+        )
+        .map_err(ImportRequestCopyError::invalid)?;
         let public_key: [u8; ED25519_PUBLIC_KEY_BYTE_LENGTH] = public_key
             .try_into()
-            .map_err(|_| NuxStatus::InvalidArgument)?;
-        Some(SelectedArtifactSigningKey { key_id, public_key })
-    };
-    let external_asset_count =
-        usize::try_from(request.external_asset_count).map_err(|_| NuxStatus::InvalidArgument)?;
+            .map_err(|_| ImportRequestCopyError::invalid(NuxStatus::InvalidArgument))?;
+        candidate_keys.push(CandidateExperienceSigningKey { key_id, public_key });
+    }
+
+    let external_asset_count = usize::try_from(request.external_asset_count)
+        .map_err(|_| ImportRequestCopyError::invalid(NuxStatus::InvalidArgument))?;
     if external_asset_count > MAX_EXTERNAL_ASSET_COUNT
         || (external_asset_count != 0 && request.external_assets.is_null())
     {
-        return Err(NuxStatus::InvalidArgument);
+        return Err(ImportRequestCopyError::invalid(NuxStatus::InvalidArgument));
     }
     let external_asset_array_size = external_asset_count
-        .checked_mul(std::mem::size_of::<NuxFlowExternalAsset>())
-        .ok_or(NuxStatus::InvalidArgument)?;
+        .checked_mul(std::mem::size_of::<NuxExperienceExternalAsset>())
+        .ok_or_else(|| ImportRequestCopyError::invalid(NuxStatus::InvalidArgument))?;
     if external_asset_array_size > isize::MAX as usize {
-        return Err(NuxStatus::InvalidArgument);
+        return Err(ImportRequestCopyError::invalid(NuxStatus::InvalidArgument));
     }
     let external_asset_views = if external_asset_count == 0 {
         &[][..]
@@ -2434,25 +2462,36 @@ unsafe fn copy_runtime_import_input(
         // Array elements have no separate stride parameter. Accepting a larger
         // element declaration would make the second element start ambiguous,
         // so the runtime requires the exact published element size.
-        if asset.struct_size != size_u32::<NuxFlowExternalAsset>() {
-            return Err(NuxStatus::InvalidArgument);
+        if asset.struct_size != size_u32::<NuxExperienceExternalAsset>() {
+            return Err(ImportRequestCopyError::invalid(NuxStatus::InvalidArgument));
         }
         let kind = match asset.kind {
-            NUX_FLOW_EXTERNAL_ASSET_KIND_IMAGE => ExternalAssetKind::Image,
-            NUX_FLOW_EXTERNAL_ASSET_KIND_FONT => ExternalAssetKind::Font,
-            _ => return Err(NuxStatus::InvalidArgument),
+            NUX_EXPERIENCE_EXTERNAL_ASSET_KIND_IMAGE => ExternalAssetKind::Image,
+            NUX_EXPERIENCE_EXTERNAL_ASSET_KIND_FONT => ExternalAssetKind::Font,
+            _ => {
+                return Err(ImportRequestCopyError::invalid(NuxStatus::InvalidArgument));
+            }
         };
-        let unique_name = required_utf8_string(asset.unique_name, MAX_SELECTOR_BYTE_LENGTH)?;
-        let source_key = required_utf8_string(asset.source_key, MAX_ASSET_SOURCE_KEY_BYTE_LENGTH)?;
-        let expected_sha256 =
-            required_utf8_string(asset.expected_sha256, MAX_SELECTOR_BYTE_LENGTH)?;
+        let unique_name = required_utf8_string(asset.unique_name, MAX_SELECTOR_BYTE_LENGTH)
+            .map_err(ImportRequestCopyError::invalid)?;
+        let source_key = required_utf8_string(asset.source_key, MAX_ASSET_SOURCE_KEY_BYTE_LENGTH)
+            .map_err(ImportRequestCopyError::invalid)?;
+        let expected_sha256 = required_utf8_string(asset.expected_sha256, MAX_SELECTOR_BYTE_LENGTH)
+            .map_err(ImportRequestCopyError::invalid)?;
         let input = if asset.provided {
-            let bytes = byte_vec(asset.bytes, MAX_EXTERNAL_ASSET_TOTAL_BYTE_LENGTH)?;
+            if asset.bytes.len > nux_container::NUX_MAX_EXTERNAL_ASSET_BYTES {
+                return Err(ImportRequestCopyError::oversize());
+            }
+            let bytes = byte_vec(
+                asset.bytes,
+                usize::try_from(nux_container::NUX_MAX_EXTERNAL_ASSET_BYTES).unwrap_or(usize::MAX),
+            )
+            .map_err(ImportRequestCopyError::invalid)?;
             cumulative_asset_bytes = cumulative_asset_bytes
                 .checked_add(bytes.len())
-                .ok_or(NuxStatus::InvalidArgument)?;
+                .ok_or_else(|| ImportRequestCopyError::invalid(NuxStatus::InvalidArgument))?;
             if cumulative_asset_bytes > MAX_EXTERNAL_ASSET_TOTAL_BYTE_LENGTH {
-                return Err(NuxStatus::InvalidArgument);
+                return Err(ImportRequestCopyError::oversize());
             }
             ExternalAssetInput::Supplied {
                 kind,
@@ -2465,7 +2504,7 @@ unsafe fn copy_runtime_import_input(
             }
         } else {
             if !asset.bytes.data.is_null() || asset.bytes.len != 0 {
-                return Err(NuxStatus::InvalidArgument);
+                return Err(ImportRequestCopyError::invalid(NuxStatus::InvalidArgument));
             }
             ExternalAssetInput::Omitted {
                 kind,
@@ -2479,13 +2518,11 @@ unsafe fn copy_runtime_import_input(
         external_assets.push(input);
     }
 
-    Ok(FlowArtifactImportInput {
-        expected_flow_id,
+    Ok(ExperiencePackageImportInput {
+        expected_experience_id,
         expected_build_id,
-        artifact_bytes,
-        manifest_bytes,
-        signature_envelope_bytes,
-        selected_key,
+        package_bytes,
+        candidate_keys,
         external_assets,
     })
 }
@@ -2501,11 +2538,11 @@ fn optional_utf8_string(view: NuxByteView) -> Result<Option<String>, NuxStatus> 
 }
 
 #[cfg(feature = "apple-product")]
-unsafe fn poison_session_handle(session: *const NuxFlowRenderSession) {
+unsafe fn poison_session_handle(session: *const NuxScreenSession) {
     if session.is_null() {
         return;
     }
-    let handle = unsafe { &*session.cast::<FlowRenderSessionHandle>() };
+    let handle = unsafe { &*session.cast::<ScreenSessionHandle>() };
     handle.token.worker.poison_session(handle.token.id);
 }
 
@@ -2631,6 +2668,25 @@ mod tests {
     #[cfg(all(feature = "apple-product", any(target_os = "ios", target_os = "macos")))]
     use std::sync::atomic::{AtomicBool, Ordering};
 
+    unsafe fn operation_result_message(result: *const NuxOperationResult) -> String {
+        if result.is_null() {
+            return "operation returned no result".to_owned();
+        }
+        String::from_utf8_lossy(unsafe { &(*result).diagnostic }).into_owned()
+    }
+
+    #[cfg(feature = "apple-product")]
+    unsafe fn operation_result_code(result: *const NuxOperationResult) -> String {
+        let mut diagnostic = NuxDiagnosticView::default();
+        assert_eq!(
+            unsafe { nux_operation_result_diagnostic_at(result, 0, &mut diagnostic) },
+            NuxStatus::Ok
+        );
+        let code =
+            unsafe { slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize) };
+        String::from_utf8(code.to_vec()).expect("diagnostic code must be UTF-8")
+    }
+
     #[cfg(all(feature = "apple-product", any(target_os = "ios", target_os = "macos")))]
     unsafe extern "C" fn mark_frame_completed(context: *mut c_void) {
         if let Some(completed) = std::ptr::NonNull::new(context.cast::<AtomicBool>()) {
@@ -2661,307 +2717,117 @@ mod tests {
     }
 
     #[cfg(feature = "apple-product")]
-    fn current_import_request_without_manifest(bytes: &[u8]) -> NuxFlowImportRequest {
-        NuxFlowImportRequest {
-            struct_size: size_u32::<NuxFlowImportRequest>(),
-            artifact_bytes: NuxByteView {
-                data: bytes.as_ptr(),
-                len: bytes.len() as u64,
-            },
-            expected_flow_id: NuxByteView::default(),
-            expected_build_id: NuxByteView::default(),
-            manifest_bytes: NuxByteView::default(),
-            signature_envelope_bytes: NuxByteView::default(),
-            selected_key: ptr::null(),
-            external_assets: ptr::null(),
-            external_asset_count: 0,
-        }
+    struct SignedImportRequest {
+        request: NuxExperienceImportRequest,
+        _package: Vec<u8>,
+        _experience_id: std::ffi::CString,
+        _build_id: std::ffi::CString,
+        _key_id: Vec<u8>,
+        _public_key: Box<[u8; 32]>,
+        _candidate_key: Box<NuxExperienceAuthorizationKey>,
     }
 
     #[cfg(feature = "apple-product")]
-    #[repr(C)]
-    struct LegacyImportPrefix {
-        struct_size: u32,
-        artifact_bytes: NuxByteView,
-    }
-
-    #[cfg(feature = "apple-product")]
-    struct UnsignedImportRequest {
-        request: NuxFlowImportRequest,
-        _manifest_bytes: Vec<u8>,
-    }
-
-    #[cfg(feature = "apple-product")]
-    fn unsigned_import_request(bytes: &[u8]) -> UnsignedImportRequest {
-        use sha2::{Digest as _, Sha256};
-
-        let artifact_sha256 = Sha256::digest(bytes)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
-            "version": 1,
-            "flowId": "test-flow",
-            "buildId": "test-build",
-            "renderer": "rive",
-            "riv": {
-                "path": "flow.riv",
-                "sha256": artifact_sha256,
-                "sizeBytes": bytes.len(),
-            },
-            "assets": {
-                "images": [],
-                "fonts": [],
-            },
-        }))
-        .expect("test manifest encodes");
-        let flow_id = b"test-flow";
-        let build_id = b"test-build";
-        let request = NuxFlowImportRequest {
-            struct_size: size_u32::<NuxFlowImportRequest>(),
-            artifact_bytes: NuxByteView {
-                data: bytes.as_ptr(),
-                len: bytes.len() as u64,
-            },
-            expected_flow_id: NuxByteView {
-                data: flow_id.as_ptr(),
-                len: flow_id.len() as u64,
-            },
-            expected_build_id: NuxByteView {
-                data: build_id.as_ptr(),
-                len: build_id.len() as u64,
-            },
-            manifest_bytes: NuxByteView {
-                data: manifest_bytes.as_ptr(),
-                len: manifest_bytes.len() as u64,
-            },
-            signature_envelope_bytes: NuxByteView::default(),
-            selected_key: ptr::null(),
-            external_assets: ptr::null(),
-            external_asset_count: 0,
+    fn signed_import_request(scene: &[u8]) -> SignedImportRequest {
+        use nux_container::test_support::{TEST_ONLY_DEV_KEY_ID, TEST_ONLY_DEV_KEYPAIR};
+        use nux_container::{
+            Assets, Entry, Identity, JourneyMember, LuauProducer, NuxPackageManifestV1,
+            NuxPackageModel, Producer, SceneFormat, SceneMember, Screen, SignatureSource,
+            write_package,
         };
-        UnsignedImportRequest {
-            request,
-            _manifest_bytes: manifest_bytes,
-        }
-    }
 
-    #[cfg(feature = "apple-product")]
-    fn push_test_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
-        loop {
-            let mut byte = (value & 0x7f) as u8;
-            value >>= 7;
-            if value != 0 {
-                byte |= 0x80;
-            }
-            bytes.push(byte);
-            if value == 0 {
-                break;
-            }
-        }
-    }
-
-    #[cfg(feature = "apple-product")]
-    fn test_property_key(type_name: &str, property_name: &str) -> u16 {
-        let definition = nuxie_schema::definition_by_name(type_name).expect("fixture type exists");
-        definition
-            .properties
-            .iter()
-            .chain(definition.ancestors.iter().flat_map(|ancestor| {
-                nuxie_schema::definition_by_name(ancestor)
-                    .expect("fixture ancestor exists")
-                    .properties
-                    .iter()
-            }))
-            .find(|property| property.name == property_name)
-            .expect("fixture property exists")
-            .key
-            .int
-    }
-
-    #[cfg(feature = "apple-product")]
-    fn push_test_object(
-        bytes: &mut Vec<u8>,
-        type_name: &str,
-        properties: impl FnOnce(&mut Vec<u8>),
-    ) {
-        push_test_var_uint(
-            bytes,
-            u64::from(
-                nuxie_schema::definition_by_name(type_name)
-                    .expect("fixture type exists")
-                    .type_key
-                    .int,
-            ),
-        );
-        properties(bytes);
-        push_test_var_uint(bytes, 0);
-    }
-
-    #[cfg(feature = "apple-product")]
-    fn push_test_uint(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: u64) {
-        push_test_var_uint(bytes, u64::from(test_property_key(type_name, name)));
-        push_test_var_uint(bytes, value);
-    }
-
-    #[cfg(feature = "apple-product")]
-    fn push_test_string(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: &str) {
-        push_test_var_uint(bytes, u64::from(test_property_key(type_name, name)));
-        push_test_var_uint(bytes, value.len() as u64);
-        bytes.extend_from_slice(value.as_bytes());
-    }
-
-    #[cfg(feature = "apple-product")]
-    fn external_image_artifact_bytes() -> Vec<u8> {
-        let mut bytes = b"RIVE".to_vec();
-        push_test_var_uint(&mut bytes, 7);
-        push_test_var_uint(&mut bytes, 0);
-        push_test_var_uint(&mut bytes, 992);
-        push_test_var_uint(&mut bytes, 0);
-        push_test_object(&mut bytes, "Backboard", |_| {});
-        push_test_object(&mut bytes, "ImageAsset", |bytes| {
-            push_test_uint(bytes, "ImageAsset", "assetId", 1);
-            push_test_string(bytes, "ImageAsset", "name", "image.png");
+        let manifest = NuxPackageManifestV1 {
+            version: 1,
+            identity: Identity {
+                experience_id: "test-experience".to_owned(),
+                build_id: "test-build".to_owned(),
+                app_id: "test-app".to_owned(),
+                environment: "test".to_owned(),
+            },
+            producer: Producer {
+                compiler_commit: "test".to_owned(),
+                compiler_version: "test".to_owned(),
+                runtime_revision: "test".to_owned(),
+                luau: LuauProducer {
+                    revision: "test".to_owned(),
+                    bytecode_versions: vec![3],
+                },
+                min_runtime: "0.2.0".to_owned(),
+            },
+            scene_format: SceneFormat { major: 7, minor: 0 },
+            required_capabilities: Vec::new(),
+            scene: SceneMember {
+                member: "scene".to_owned(),
+                sha256: "0".repeat(64),
+                size_bytes: 0,
+            },
+            journey: JourneyMember {
+                member: "journey".to_owned(),
+                sha256: "0".repeat(64),
+                size_bytes: 0,
+                schema_version: 1,
+            },
+            entry: Entry {
+                screen_id: "screen".to_owned(),
+            },
+            screens: vec![Screen {
+                screen_id: "screen".to_owned(),
+                artboard_id: "artboard".to_owned(),
+                artboard_name: "Artboard".to_owned(),
+                width: 100.0,
+                height: 100.0,
+            }],
+            text_inputs: Vec::new(),
+            assets: Assets::default(),
+            members: Vec::new(),
+        };
+        let package = write_package(&NuxPackageModel {
+            manifest,
+            scene,
+            journey: br#"{"schemaVersion":1}"#,
+            embedded_assets: Vec::new(),
+            signature: SignatureSource::Signer(&*TEST_ONLY_DEV_KEYPAIR),
+        })
+        .expect("test package encodes");
+        let experience_id =
+            std::ffi::CString::new("test-experience").expect("valid experience identity");
+        let build_id = std::ffi::CString::new("test-build").expect("valid build identity");
+        let key_id = TEST_ONLY_DEV_KEY_ID.as_bytes().to_vec();
+        let public_key = Box::new(TEST_ONLY_DEV_KEYPAIR.public_key());
+        let candidate_key = Box::new(NuxExperienceAuthorizationKey {
+            struct_size: size_u32::<NuxExperienceAuthorizationKey>(),
+            key_id: NuxByteView {
+                data: key_id.as_ptr(),
+                len: key_id.len() as u64,
+            },
+            ed25519_public_key: NuxByteView {
+                data: public_key.as_ptr(),
+                len: public_key.len() as u64,
+            },
         });
-        push_test_object(&mut bytes, "Artboard", |_| {});
-        bytes
-    }
-
-    #[cfg(feature = "apple-product")]
-    fn with_external_image_import_request<R>(
-        image_bytes: &[u8],
-        required: bool,
-        body: impl FnOnce(&NuxFlowImportRequest) -> R,
-    ) -> R {
-        use sha2::{Digest as _, Sha256};
-
-        let artifact_bytes = external_image_artifact_bytes();
-        let artifact_sha256 = Sha256::digest(&artifact_bytes)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        let image_sha256 = Sha256::digest(image_bytes)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
-            "version": 1,
-            "flowId": "flow-image-validation",
-            "buildId": "build-image-validation",
-            "renderer": "rive",
-            "riv": {
-                "path": "flow.riv",
-                "sha256": artifact_sha256,
-                "sizeBytes": artifact_bytes.len(),
+        let request = NuxExperienceImportRequest {
+            struct_size: size_u32::<NuxExperienceImportRequest>(),
+            package_bytes: NuxByteView {
+                data: package.as_ptr(),
+                len: package.len() as u64,
             },
-            "assets": {
-                "images": [{
-                    "riveAssetId": 1,
-                    "riveUniqueName": "image-1",
-                    "sourceAssetKey": "hero",
-                    "sha256": image_sha256,
-                    "required": required,
-                }],
-                "fonts": [],
-            },
-        }))
-        .expect("manifest encodes");
-        let flow_id = b"flow-image-validation";
-        let build_id = b"build-image-validation";
-        let unique_name = b"image-1";
-        let source_key = b"hero";
-        let external_asset = NuxFlowExternalAsset {
-            struct_size: size_u32::<NuxFlowExternalAsset>(),
-            kind: NUX_FLOW_EXTERNAL_ASSET_KIND_IMAGE,
-            asset_id: 1,
-            required,
-            provided: true,
-            unique_name: NuxByteView {
-                data: unique_name.as_ptr(),
-                len: unique_name.len() as u64,
-            },
-            source_key: NuxByteView {
-                data: source_key.as_ptr(),
-                len: source_key.len() as u64,
-            },
-            expected_sha256: NuxByteView {
-                data: image_sha256.as_ptr(),
-                len: image_sha256.len() as u64,
-            },
-            bytes: NuxByteView {
-                data: image_bytes.as_ptr(),
-                len: image_bytes.len() as u64,
-            },
+            expected_experience_id: experience_id.as_ptr(),
+            expected_build_id: build_id.as_ptr(),
+            candidate_keys: ptr::from_ref(candidate_key.as_ref()),
+            candidate_key_count: 1,
+            external_assets: ptr::null(),
+            external_asset_count: 0,
         };
-        let request = NuxFlowImportRequest {
-            struct_size: size_u32::<NuxFlowImportRequest>(),
-            artifact_bytes: NuxByteView {
-                data: artifact_bytes.as_ptr(),
-                len: artifact_bytes.len() as u64,
-            },
-            expected_flow_id: NuxByteView {
-                data: flow_id.as_ptr(),
-                len: flow_id.len() as u64,
-            },
-            expected_build_id: NuxByteView {
-                data: build_id.as_ptr(),
-                len: build_id.len() as u64,
-            },
-            manifest_bytes: NuxByteView {
-                data: manifest_bytes.as_ptr(),
-                len: manifest_bytes.len() as u64,
-            },
-            signature_envelope_bytes: NuxByteView::default(),
-            selected_key: ptr::null(),
-            external_assets: &external_asset,
-            external_asset_count: 1,
-        };
-        body(&request)
-    }
-
-    #[cfg(feature = "apple-product")]
-    fn oversized_external_image_bytes() -> Vec<u8> {
-        const OVERSIZED_WIDTH: u32 = 8_193;
-
-        let mut encoded = Vec::new();
-        {
-            let mut encoder = png::Encoder::new(&mut encoded, OVERSIZED_WIDTH, 1);
-            encoder.set_color(png::ColorType::Grayscale);
-            encoder.set_depth(png::BitDepth::Eight);
-            encoder
-                .write_header()
-                .expect("oversized test PNG header encodes")
-                .write_image_data(&vec![0; OVERSIZED_WIDTH as usize])
-                .expect("oversized test PNG pixels encode");
+        SignedImportRequest {
+            request,
+            _package: package,
+            _experience_id: experience_id,
+            _build_id: build_id,
+            _key_id: key_id,
+            _public_key: public_key,
+            _candidate_key: candidate_key,
         }
-        assert!(encoded.len() < 256, "test PNG must remain compact");
-        encoded
     }
-
-    #[cfg(feature = "apple-product")]
-    fn oversized_pixel_budget_image_header_bytes() -> Vec<u8> {
-        const OVERSIZED_SQUARE_DIMENSION: u32 = 4_097;
-
-        let mut encoded = Vec::new();
-        {
-            let mut encoder = png::Encoder::new(
-                &mut encoded,
-                OVERSIZED_SQUARE_DIMENSION,
-                OVERSIZED_SQUARE_DIMENSION,
-            );
-            encoder.set_color(png::ColorType::Grayscale);
-            encoder.set_depth(png::BitDepth::Eight);
-            let mut writer = encoder
-                .write_header()
-                .expect("pixel-budget test PNG header encodes");
-            writer
-                .write_chunk(png::chunk::IDAT, &[])
-                .expect("pixel-budget test PNG writes an empty data chunk");
-        }
-        assert!(encoded.len() < 128, "test PNG header must remain compact");
-        encoded
-    }
-
     #[cfg(feature = "apple-product")]
     fn product_fixture_worker() -> Arc<RuntimeWorker> {
         match RuntimeWorker::spawn(product_fixture_bytes()) {
@@ -3118,13 +2984,13 @@ mod tests {
     #[test]
     fn context_creation_rejects_a_foreign_binding_before_reading_the_request() {
         let foreign_binding = ptr::dangling::<NuxRuntimeBinding>();
-        let unreadable_request = ptr::dangling::<NuxFlowImportRequest>();
+        let unreadable_request = ptr::dangling::<NuxExperienceImportRequest>();
         let mut context = ptr::null_mut();
         let mut result = ptr::null_mut();
 
         assert_eq!(
             unsafe {
-                nux_flow_runtime_context_create_bound(
+                nux_experience_context_create_bound(
                     foreign_binding,
                     unreadable_request,
                     &mut context,
@@ -3144,13 +3010,13 @@ mod tests {
     #[cfg(feature = "apple-product")]
     #[test]
     fn context_creation_requires_a_non_null_runtime_binding() {
-        let unreadable_request = ptr::dangling::<NuxFlowImportRequest>();
+        let unreadable_request = ptr::dangling::<NuxExperienceImportRequest>();
         let mut context = ptr::null_mut();
         let mut result = ptr::null_mut();
 
         assert_eq!(
             unsafe {
-                nux_flow_runtime_context_create_bound(
+                nux_experience_context_create_bound(
                     ptr::null(),
                     unreadable_request,
                     &mut context,
@@ -3165,613 +3031,19 @@ mod tests {
 
     #[cfg(feature = "apple-product")]
     #[test]
-    fn signed_import_crosses_the_public_c_seam_as_authenticated() {
-        use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-        use ed25519_dalek::{Signer as _, SigningKey};
-        use sha2::{Digest as _, Sha256};
-
-        let artifact_bytes = product_fixture_bytes();
-        let artifact_sha256 = Sha256::digest(&artifact_bytes)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
-            "version": 1,
-            "flowId": "flow-c-abi",
-            "buildId": "build-c-abi",
-            "renderer": "rive",
-            "riv": {
-                "path": "flow.riv",
-                "sha256": artifact_sha256,
-                "sizeBytes": artifact_bytes.len(),
-            },
-            "assets": { "images": [], "fonts": [] },
-        }))
-        .expect("manifest encodes");
-        let signing_key = SigningKey::from_bytes(&[9; 32]);
-        let signature = signing_key.sign(&manifest_bytes);
-        let signature_bytes = serde_json::to_vec(&serde_json::json!({
-            "version": 1,
-            "signs": "nuxie-manifest.json",
-            "algorithm": "ed25519",
-            "keyId": "test-key",
-            "signatureBase64": BASE64.encode(signature.to_bytes()),
-        }))
-        .expect("signature envelope encodes");
-        let flow_id = b"flow-c-abi";
-        let build_id = b"build-c-abi";
-        let key_id = b"test-key";
-        let public_key = signing_key.verifying_key().to_bytes();
-        let selected_key = NuxFlowAuthorizationKey {
-            struct_size: size_u32::<NuxFlowAuthorizationKey>(),
-            key_id: NuxByteView {
-                data: key_id.as_ptr(),
-                len: key_id.len() as u64,
-            },
-            ed25519_public_key: NuxByteView {
-                data: public_key.as_ptr(),
-                len: public_key.len() as u64,
-            },
-        };
-        let request = NuxFlowImportRequest {
-            struct_size: size_u32::<NuxFlowImportRequest>(),
-            artifact_bytes: NuxByteView {
-                data: artifact_bytes.as_ptr(),
-                len: artifact_bytes.len() as u64,
-            },
-            expected_flow_id: NuxByteView {
-                data: flow_id.as_ptr(),
-                len: flow_id.len() as u64,
-            },
-            expected_build_id: NuxByteView {
-                data: build_id.as_ptr(),
-                len: build_id.len() as u64,
-            },
-            manifest_bytes: NuxByteView {
-                data: manifest_bytes.as_ptr(),
-                len: manifest_bytes.len() as u64,
-            },
-            signature_envelope_bytes: NuxByteView {
-                data: signature_bytes.as_ptr(),
-                len: signature_bytes.len() as u64,
-            },
-            selected_key: &selected_key,
-            external_assets: ptr::null(),
-            external_asset_count: 0,
-        };
+    fn package_import_error_code_crosses_the_public_result_accessor() {
+        let scene = product_fixture_bytes();
+        let mut request = signed_import_request(&scene);
+        request.request.candidate_keys = ptr::null();
+        request.request.candidate_key_count = 0;
         let mut context = ptr::null_mut();
         let mut result = ptr::null_mut();
 
         assert_eq!(
             unsafe {
-                nux_flow_runtime_context_create_bound(
+                nux_experience_context_create_bound(
                     runtime_binding(),
-                    &request,
-                    &mut context,
-                    &mut result,
-                )
-            },
-            NuxStatus::Ok
-        );
-        assert!(!context.is_null());
-        assert_eq!(
-            unsafe { nux_operation_result_script_authorization(result) },
-            NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED
-        );
-        assert_eq!(unsafe { nux_operation_result_diagnostic_count(result) }, 0);
-        let mut authenticated_key_id = NuxByteView::default();
-        assert_eq!(
-            unsafe { nux_operation_result_authenticated_key_id(result, &mut authenticated_key_id) },
-            NuxStatus::Ok
-        );
-        let authenticated_key_id = unsafe {
-            slice::from_raw_parts(authenticated_key_id.data, authenticated_key_id.len as usize)
-        };
-        assert_eq!(authenticated_key_id, key_id);
-
-        unsafe {
-            nux_operation_result_free(result);
-            nux_flow_runtime_context_free(context);
-        }
-
-        let signature_sentinel = 0u8;
-        let malformed_signature_request = NuxFlowImportRequest {
-            signature_envelope_bytes: NuxByteView {
-                data: &signature_sentinel,
-                len: 0,
-            },
-            ..request
-        };
-        context = ptr::null_mut();
-        result = ptr::null_mut();
-        assert_eq!(
-            unsafe {
-                nux_flow_runtime_context_create_bound(
-                    runtime_binding(),
-                    &malformed_signature_request,
-                    &mut context,
-                    &mut result,
-                )
-            },
-            NuxStatus::Ok
-        );
-        let mut diagnostic = NuxDiagnosticView::default();
-        assert_eq!(
-            unsafe { nux_operation_result_diagnostic_at(result, 0, &mut diagnostic) },
-            NuxStatus::Ok
-        );
-        let code =
-            unsafe { slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize) };
-        assert_eq!(code, b"artifact.authentication.malformed");
-        unsafe {
-            nux_operation_result_free(result);
-            nux_flow_runtime_context_free(context);
-        }
-    }
-
-    #[cfg(feature = "apple-product")]
-    #[test]
-    fn signed_external_asset_views_are_copied_validated_and_attached() {
-        use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-        use ed25519_dalek::{Signer as _, SigningKey};
-        use sha2::{Digest as _, Sha256};
-
-        let artifact_bytes = external_image_artifact_bytes();
-        let image_bytes = include_bytes!(
-            "../../../fixtures/renderer/reference/metal/first-light-triangle-clockwise-atomic.png"
-        )
-        .as_slice();
-        let artifact_sha256 = Sha256::digest(&artifact_bytes)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        let image_sha256 = Sha256::digest(image_bytes)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
-            "version": 1,
-            "flowId": "flow-assets",
-            "buildId": "build-assets",
-            "renderer": "rive",
-            "riv": {
-                "path": "flow.riv",
-                "sha256": artifact_sha256,
-                "sizeBytes": artifact_bytes.len(),
-            },
-            "assets": {
-                "images": [{
-                    "riveAssetId": 1,
-                    "riveUniqueName": "image-1",
-                    "sourceAssetKey": "hero",
-                    "sha256": image_sha256,
-                    "required": true,
-                }],
-                "fonts": [],
-            },
-        }))
-        .expect("manifest encodes");
-        let signing_key = SigningKey::from_bytes(&[11; 32]);
-        let signature = signing_key.sign(&manifest_bytes);
-        let signature_bytes = serde_json::to_vec(&serde_json::json!({
-            "version": 1,
-            "signs": "nuxie-manifest.json",
-            "algorithm": "ed25519",
-            "keyId": "test-assets-key",
-            "signatureBase64": BASE64.encode(signature.to_bytes()),
-        }))
-        .expect("signature envelope encodes");
-        let flow_id = b"flow-assets";
-        let build_id = b"build-assets";
-        let key_id = b"test-assets-key";
-        let unique_name = b"image-1";
-        let source_key = b"hero";
-        let public_key = signing_key.verifying_key().to_bytes();
-        let selected_key = NuxFlowAuthorizationKey {
-            struct_size: size_u32::<NuxFlowAuthorizationKey>(),
-            key_id: NuxByteView {
-                data: key_id.as_ptr(),
-                len: key_id.len() as u64,
-            },
-            ed25519_public_key: NuxByteView {
-                data: public_key.as_ptr(),
-                len: public_key.len() as u64,
-            },
-        };
-        let external_asset = NuxFlowExternalAsset {
-            struct_size: size_u32::<NuxFlowExternalAsset>(),
-            kind: NUX_FLOW_EXTERNAL_ASSET_KIND_IMAGE,
-            asset_id: 1,
-            required: true,
-            provided: true,
-            unique_name: NuxByteView {
-                data: unique_name.as_ptr(),
-                len: unique_name.len() as u64,
-            },
-            source_key: NuxByteView {
-                data: source_key.as_ptr(),
-                len: source_key.len() as u64,
-            },
-            expected_sha256: NuxByteView {
-                data: image_sha256.as_ptr(),
-                len: image_sha256.len() as u64,
-            },
-            bytes: NuxByteView {
-                data: image_bytes.as_ptr(),
-                len: image_bytes.len() as u64,
-            },
-        };
-        let request = NuxFlowImportRequest {
-            struct_size: size_u32::<NuxFlowImportRequest>(),
-            artifact_bytes: NuxByteView {
-                data: artifact_bytes.as_ptr(),
-                len: artifact_bytes.len() as u64,
-            },
-            expected_flow_id: NuxByteView {
-                data: flow_id.as_ptr(),
-                len: flow_id.len() as u64,
-            },
-            expected_build_id: NuxByteView {
-                data: build_id.as_ptr(),
-                len: build_id.len() as u64,
-            },
-            manifest_bytes: NuxByteView {
-                data: manifest_bytes.as_ptr(),
-                len: manifest_bytes.len() as u64,
-            },
-            signature_envelope_bytes: NuxByteView {
-                data: signature_bytes.as_ptr(),
-                len: signature_bytes.len() as u64,
-            },
-            selected_key: &selected_key,
-            external_assets: &external_asset,
-            external_asset_count: 1,
-        };
-        let mut context = ptr::null_mut();
-        let mut result = ptr::null_mut();
-
-        assert_eq!(
-            unsafe {
-                nux_flow_runtime_context_create_bound(
-                    runtime_binding(),
-                    &request,
-                    &mut context,
-                    &mut result,
-                )
-            },
-            NuxStatus::Ok
-        );
-        assert!(!context.is_null());
-        assert_eq!(
-            unsafe { nux_operation_result_script_authorization(result) },
-            NUX_SCRIPT_AUTHORIZATION_AUTHENTICATED
-        );
-
-        unsafe {
-            nux_operation_result_free(result);
-            nux_flow_runtime_context_free(context);
-        }
-    }
-
-    #[cfg(feature = "apple-product")]
-    #[test]
-    fn required_undecodable_external_image_fails_trusted_import() {
-        with_external_image_import_request(b"not an encoded image", true, |request| {
-            let mut context = ptr::null_mut();
-            let mut result = ptr::null_mut();
-
-            assert_eq!(
-                unsafe {
-                    nux_flow_runtime_context_create_bound(
-                        runtime_binding(),
-                        request,
-                        &mut context,
-                        &mut result,
-                    )
-                },
-                NuxStatus::ImportError
-            );
-            assert!(context.is_null());
-            assert_eq!(unsafe { nux_operation_result_diagnostic_count(result) }, 1);
-            let mut diagnostic = NuxDiagnosticView::default();
-            assert_eq!(
-                unsafe { nux_operation_result_diagnostic_at(result, 0, &mut diagnostic) },
-                NuxStatus::Ok
-            );
-            let code = unsafe {
-                slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize)
-            };
-            assert_eq!(code, b"artifact.asset.attach_failed");
-            unsafe { nux_operation_result_free(result) };
-        });
-    }
-
-    #[cfg(feature = "apple-product")]
-    #[test]
-    fn optional_undecodable_external_image_is_omitted_with_a_warning() {
-        with_external_image_import_request(b"not an encoded image", false, |request| {
-            let mut context = ptr::null_mut();
-            let mut result = ptr::null_mut();
-
-            assert_eq!(
-                unsafe {
-                    nux_flow_runtime_context_create_bound(
-                        runtime_binding(),
-                        request,
-                        &mut context,
-                        &mut result,
-                    )
-                },
-                NuxStatus::Ok
-            );
-            assert!(!context.is_null());
-            let diagnostic_count = unsafe { nux_operation_result_diagnostic_count(result) };
-            let mut diagnostic_codes = Vec::new();
-            for index in 0..diagnostic_count {
-                let mut diagnostic = NuxDiagnosticView::default();
-                assert_eq!(
-                    unsafe { nux_operation_result_diagnostic_at(result, index, &mut diagnostic) },
-                    NuxStatus::Ok
-                );
-                diagnostic_codes.push(
-                    unsafe {
-                        slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize)
-                    }
-                    .to_vec(),
-                );
-            }
-            assert!(
-                diagnostic_codes
-                    .iter()
-                    .any(|code| code == b"artifact.asset.optional_invalid")
-            );
-            unsafe {
-                nux_operation_result_free(result);
-                nux_flow_runtime_context_free(context);
-            }
-        });
-    }
-
-    #[cfg(feature = "apple-product")]
-    #[test]
-    fn required_oversized_external_image_fails_trusted_import() {
-        let image_bytes = oversized_external_image_bytes();
-        with_external_image_import_request(&image_bytes, true, |request| {
-            let mut context = ptr::null_mut();
-            let mut result = ptr::null_mut();
-
-            assert_eq!(
-                unsafe {
-                    nux_flow_runtime_context_create_bound(
-                        runtime_binding(),
-                        request,
-                        &mut context,
-                        &mut result,
-                    )
-                },
-                NuxStatus::ImportError
-            );
-            assert!(context.is_null());
-            let mut diagnostic = NuxDiagnosticView::default();
-            assert_eq!(
-                unsafe { nux_operation_result_diagnostic_at(result, 0, &mut diagnostic) },
-                NuxStatus::Ok
-            );
-            let code = unsafe {
-                slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize)
-            };
-            assert_eq!(code, b"artifact.asset.attach_failed");
-            unsafe { nux_operation_result_free(result) };
-        });
-    }
-
-    #[cfg(feature = "apple-product")]
-    #[test]
-    fn optional_oversized_external_image_is_omitted_with_a_warning() {
-        let image_bytes = oversized_external_image_bytes();
-        with_external_image_import_request(&image_bytes, false, |request| {
-            let mut context = ptr::null_mut();
-            let mut result = ptr::null_mut();
-
-            assert_eq!(
-                unsafe {
-                    nux_flow_runtime_context_create_bound(
-                        runtime_binding(),
-                        request,
-                        &mut context,
-                        &mut result,
-                    )
-                },
-                NuxStatus::Ok
-            );
-            assert!(!context.is_null());
-            let diagnostic_count = unsafe { nux_operation_result_diagnostic_count(result) };
-            let mut found_optional_invalid = false;
-            for index in 0..diagnostic_count {
-                let mut diagnostic = NuxDiagnosticView::default();
-                assert_eq!(
-                    unsafe { nux_operation_result_diagnostic_at(result, index, &mut diagnostic) },
-                    NuxStatus::Ok
-                );
-                let code = unsafe {
-                    slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize)
-                };
-                found_optional_invalid |= code == b"artifact.asset.optional_invalid";
-            }
-            assert!(found_optional_invalid);
-            unsafe {
-                nux_operation_result_free(result);
-                nux_flow_runtime_context_free(context);
-            }
-        });
-    }
-
-    #[cfg(feature = "apple-product")]
-    #[test]
-    fn required_image_over_decoded_pixel_budget_fails_from_its_compact_header() {
-        let image_bytes = oversized_pixel_budget_image_header_bytes();
-        with_external_image_import_request(&image_bytes, true, |request| {
-            let mut context = ptr::null_mut();
-            let mut result = ptr::null_mut();
-
-            assert_eq!(
-                unsafe {
-                    nux_flow_runtime_context_create_bound(
-                        runtime_binding(),
-                        request,
-                        &mut context,
-                        &mut result,
-                    )
-                },
-                NuxStatus::ImportError
-            );
-            assert!(context.is_null());
-            let mut diagnostic = NuxDiagnosticView::default();
-            assert_eq!(
-                unsafe { nux_operation_result_diagnostic_at(result, 0, &mut diagnostic) },
-                NuxStatus::Ok
-            );
-            let code = unsafe {
-                slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize)
-            };
-            assert_eq!(code, b"artifact.asset.attach_failed");
-            unsafe { nux_operation_result_free(result) };
-        });
-    }
-
-    #[cfg(feature = "apple-product")]
-    #[test]
-    fn missing_signature_returns_visual_only_with_a_structured_warning() {
-        use sha2::{Digest as _, Sha256};
-
-        let artifact_bytes = product_fixture_bytes();
-        let artifact_sha256 = Sha256::digest(&artifact_bytes)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
-            "version": 1,
-            "flowId": "flow-unsigned",
-            "buildId": "build-unsigned",
-            "renderer": "rive",
-            "riv": {
-                "path": "flow.riv",
-                "sha256": artifact_sha256,
-                "sizeBytes": artifact_bytes.len(),
-            },
-            "assets": { "images": [], "fonts": [] },
-        }))
-        .expect("manifest encodes");
-        let flow_id = b"flow-unsigned";
-        let build_id = b"build-unsigned";
-        let request = NuxFlowImportRequest {
-            struct_size: size_u32::<NuxFlowImportRequest>(),
-            artifact_bytes: NuxByteView {
-                data: artifact_bytes.as_ptr(),
-                len: artifact_bytes.len() as u64,
-            },
-            expected_flow_id: NuxByteView {
-                data: flow_id.as_ptr(),
-                len: flow_id.len() as u64,
-            },
-            expected_build_id: NuxByteView {
-                data: build_id.as_ptr(),
-                len: build_id.len() as u64,
-            },
-            manifest_bytes: NuxByteView {
-                data: manifest_bytes.as_ptr(),
-                len: manifest_bytes.len() as u64,
-            },
-            signature_envelope_bytes: NuxByteView::default(),
-            selected_key: ptr::null(),
-            external_assets: ptr::null(),
-            external_asset_count: 0,
-        };
-        let mut context = ptr::null_mut();
-        let mut result = ptr::null_mut();
-
-        assert_eq!(
-            unsafe {
-                nux_flow_runtime_context_create_bound(
-                    runtime_binding(),
-                    &request,
-                    &mut context,
-                    &mut result,
-                )
-            },
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            unsafe { nux_operation_result_script_authorization(result) },
-            NUX_SCRIPT_AUTHORIZATION_VISUAL_ONLY
-        );
-        assert_eq!(unsafe { nux_operation_result_diagnostic_count(result) }, 1);
-        let mut diagnostic = NuxDiagnosticView::default();
-        assert_eq!(
-            unsafe { nux_operation_result_diagnostic_at(result, 0, &mut diagnostic) },
-            NuxStatus::Ok
-        );
-        assert_eq!(diagnostic.severity, NUX_DIAGNOSTIC_SEVERITY_WARNING);
-        let code =
-            unsafe { slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize) };
-        assert_eq!(code, b"artifact.authentication.missing");
-
-        unsafe {
-            nux_operation_result_free(result);
-            nux_flow_runtime_context_free(context);
-        }
-    }
-
-    #[cfg(feature = "apple-product")]
-    #[test]
-    fn artifact_integrity_failure_returns_a_structured_fatal_diagnostic() {
-        let artifact_bytes = product_fixture_bytes();
-        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
-            "version": 1,
-            "flowId": "flow-tampered",
-            "buildId": "build-tampered",
-            "renderer": "rive",
-            "riv": {
-                "path": "flow.riv",
-                "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-                "sizeBytes": artifact_bytes.len(),
-            },
-            "assets": { "images": [], "fonts": [] },
-        }))
-        .expect("manifest encodes");
-        let flow_id = b"flow-tampered";
-        let build_id = b"build-tampered";
-        let request = NuxFlowImportRequest {
-            struct_size: size_u32::<NuxFlowImportRequest>(),
-            artifact_bytes: NuxByteView {
-                data: artifact_bytes.as_ptr(),
-                len: artifact_bytes.len() as u64,
-            },
-            expected_flow_id: NuxByteView {
-                data: flow_id.as_ptr(),
-                len: flow_id.len() as u64,
-            },
-            expected_build_id: NuxByteView {
-                data: build_id.as_ptr(),
-                len: build_id.len() as u64,
-            },
-            manifest_bytes: NuxByteView {
-                data: manifest_bytes.as_ptr(),
-                len: manifest_bytes.len() as u64,
-            },
-            signature_envelope_bytes: NuxByteView::default(),
-            selected_key: ptr::null(),
-            external_assets: ptr::null(),
-            external_asset_count: 0,
-        };
-        let mut context = ptr::null_mut();
-        let mut result = ptr::null_mut();
-
-        assert_eq!(
-            unsafe {
-                nux_flow_runtime_context_create_bound(
-                    runtime_binding(),
-                    &request,
+                    &request.request,
                     &mut context,
                     &mut result,
                 )
@@ -3779,16 +3051,10 @@ mod tests {
             NuxStatus::ImportError
         );
         assert!(context.is_null());
-        assert_eq!(unsafe { nux_operation_result_diagnostic_count(result) }, 1);
-        let mut diagnostic = NuxDiagnosticView::default();
         assert_eq!(
-            unsafe { nux_operation_result_diagnostic_at(result, 0, &mut diagnostic) },
-            NuxStatus::Ok
+            unsafe { operation_result_code(result) },
+            "package.signature.unknown_key"
         );
-        assert_eq!(diagnostic.severity, NUX_DIAGNOSTIC_SEVERITY_FATAL);
-        let code =
-            unsafe { slice::from_raw_parts(diagnostic.code.data, diagnostic.code.len as usize) };
-        assert_eq!(code, b"artifact.riv.hash_mismatch");
         unsafe { nux_operation_result_free(result) };
     }
 
@@ -3892,16 +3158,12 @@ mod tests {
             NuxStatus::NotFound
         );
         assert!(structured.code.data.is_null());
-        assert_eq!(
-            unsafe { nux_operation_result_script_authorization(ptr::null()) },
-            NUX_SCRIPT_AUTHORIZATION_NOT_APPLICABLE
-        );
         unsafe { nux_operation_result_free(result) };
     }
 
     #[cfg(feature = "apple-product")]
     #[test]
-    fn flow_session_failure_codes_cross_the_legacy_structured_diagnostic_seam() {
+    fn screen_session_failure_codes_cross_the_structured_diagnostic_seam() {
         let cases = [
             (
                 FlowSessionErrorKind::ScriptResourceExceeded,
@@ -3919,7 +3181,7 @@ mod tests {
 
         for (kind, expected_code) in cases {
             let mut result = ptr::null_mut();
-            let failure = RuntimeFailure::flow_session(kind, "flow operation failed");
+            let failure = RuntimeFailure::screen_session(kind, "flow operation failed");
             assert_eq!(
                 write_runtime_failure(&mut result, failure),
                 NuxStatus::RuntimeError
@@ -3941,188 +3203,6 @@ mod tests {
             assert_eq!(code, expected_code);
             unsafe { nux_operation_result_free(result) };
         }
-    }
-
-    #[test]
-    fn byte_views_are_bounded_before_constructing_a_caller_slice() {
-        let pointer = std::ptr::NonNull::<u8>::dangling().as_ptr();
-        assert_eq!(
-            byte_vec(
-                NuxByteView {
-                    data: pointer,
-                    len: MAX_ARTIFACT_BYTE_LENGTH as u64 + 1,
-                },
-                MAX_ARTIFACT_BYTE_LENGTH,
-            ),
-            Err(NuxStatus::InvalidArgument)
-        );
-        assert_eq!(
-            optional_utf8_string(NuxByteView {
-                data: pointer,
-                len: MAX_SELECTOR_BYTE_LENGTH as u64 + 1,
-            }),
-            Err(NuxStatus::InvalidArgument)
-        );
-    }
-
-    #[cfg(feature = "apple-product")]
-    #[test]
-    fn versioned_inputs_reject_a_short_prefix_without_reading_the_full_struct() {
-        let mut storage = std::mem::MaybeUninit::<NuxFlowImportRequest>::uninit();
-        unsafe {
-            storage.as_mut_ptr().cast::<u32>().write(size_u32::<u32>());
-        }
-        let mut context = ptr::null_mut();
-        let mut result = ptr::null_mut();
-        assert_eq!(
-            unsafe {
-                nux_flow_runtime_context_create_bound(
-                    runtime_binding(),
-                    storage.as_ptr(),
-                    &mut context,
-                    &mut result,
-                )
-            },
-            NuxStatus::InvalidArgument
-        );
-        assert!(context.is_null());
-        assert!(!result.is_null());
-        unsafe { nux_operation_result_free(result) };
-    }
-
-    #[cfg(feature = "apple-product")]
-    #[test]
-    fn legacy_import_prefix_is_rejected() {
-        let artifact_bytes = product_fixture_bytes();
-        let request = LegacyImportPrefix {
-            struct_size: size_u32::<LegacyImportPrefix>(),
-            artifact_bytes: NuxByteView {
-                data: artifact_bytes.as_ptr(),
-                len: artifact_bytes.len() as u64,
-            },
-        };
-        let mut context = ptr::null_mut();
-        let mut result = ptr::null_mut();
-
-        assert_eq!(
-            unsafe {
-                nux_flow_runtime_context_create_bound(
-                    runtime_binding(),
-                    (&request as *const LegacyImportPrefix).cast(),
-                    &mut context,
-                    &mut result,
-                )
-            },
-            NuxStatus::InvalidArgument
-        );
-        assert!(context.is_null());
-        assert!(!result.is_null());
-        unsafe {
-            nux_operation_result_free(result);
-        }
-    }
-
-    #[cfg(feature = "apple-product")]
-    #[test]
-    fn current_and_truncated_import_requests_cannot_bypass_manifest_validation() {
-        let artifact_bytes = product_fixture_bytes();
-        for struct_size in [
-            size_u32::<LegacyImportPrefix>() + 1,
-            size_u32::<NuxFlowImportRequest>(),
-        ] {
-            let mut request = current_import_request_without_manifest(&artifact_bytes);
-            request.struct_size = struct_size;
-            let mut context = ptr::null_mut();
-            let mut result = ptr::null_mut();
-
-            assert_eq!(
-                unsafe {
-                    nux_flow_runtime_context_create_bound(
-                        runtime_binding(),
-                        &request,
-                        &mut context,
-                        &mut result,
-                    )
-                },
-                NuxStatus::InvalidArgument,
-                "request size {struct_size} must not bypass the exact manifest contract"
-            );
-            assert!(context.is_null());
-            assert!(!result.is_null());
-            unsafe { nux_operation_result_free(result) };
-        }
-    }
-
-    #[cfg(feature = "apple-product")]
-    #[test]
-    fn external_asset_arrays_reject_unknown_element_strides() {
-        let artifact_bytes = b"RIVE";
-        let manifest_bytes = b"{}";
-        let flow_id = b"flow";
-        let build_id = b"build";
-        let unique_name = b"image";
-        let source_key = b"hero";
-        let expected_sha256 = b"0000000000000000000000000000000000000000000000000000000000000000";
-        let external_asset = NuxFlowExternalAsset {
-            struct_size: size_u32::<NuxFlowExternalAsset>() + 1,
-            kind: NUX_FLOW_EXTERNAL_ASSET_KIND_IMAGE,
-            asset_id: 1,
-            required: false,
-            provided: false,
-            unique_name: NuxByteView {
-                data: unique_name.as_ptr(),
-                len: unique_name.len() as u64,
-            },
-            source_key: NuxByteView {
-                data: source_key.as_ptr(),
-                len: source_key.len() as u64,
-            },
-            expected_sha256: NuxByteView {
-                data: expected_sha256.as_ptr(),
-                len: expected_sha256.len() as u64,
-            },
-            bytes: NuxByteView::default(),
-        };
-        let request = NuxFlowImportRequest {
-            struct_size: size_u32::<NuxFlowImportRequest>(),
-            artifact_bytes: NuxByteView {
-                data: artifact_bytes.as_ptr(),
-                len: artifact_bytes.len() as u64,
-            },
-            expected_flow_id: NuxByteView {
-                data: flow_id.as_ptr(),
-                len: flow_id.len() as u64,
-            },
-            expected_build_id: NuxByteView {
-                data: build_id.as_ptr(),
-                len: build_id.len() as u64,
-            },
-            manifest_bytes: NuxByteView {
-                data: manifest_bytes.as_ptr(),
-                len: manifest_bytes.len() as u64,
-            },
-            signature_envelope_bytes: NuxByteView::default(),
-            selected_key: ptr::null(),
-            external_assets: &external_asset,
-            external_asset_count: 1,
-        };
-        let mut context = ptr::null_mut();
-        let mut result = ptr::null_mut();
-
-        assert_eq!(
-            unsafe {
-                nux_flow_runtime_context_create_bound(
-                    runtime_binding(),
-                    &request,
-                    &mut context,
-                    &mut result,
-                )
-            },
-            NuxStatus::InvalidArgument
-        );
-        assert!(context.is_null());
-        assert!(!result.is_null());
-        unsafe { nux_operation_result_free(result) };
     }
 
     #[test]
@@ -4354,10 +3434,10 @@ mod tests {
                 worker: Arc::clone(&worker),
                 id: affected_id,
             });
-            let affected_session = Box::into_raw(Box::new(FlowRenderSessionHandle {
+            let affected_session = Box::into_raw(Box::new(ScreenSessionHandle {
                 token: Arc::clone(&affected_token),
             }))
-            .cast::<NuxFlowRenderSession>();
+            .cast::<NuxScreenSession>();
             let affected_surface = Box::into_raw(Box::new(AppleSurfaceHandle {
                 token: Arc::new(SurfaceToken {
                     session: Arc::clone(&affected_token),
@@ -4370,10 +3450,10 @@ mod tests {
                 worker: Arc::clone(&worker),
                 id: sibling_id,
             });
-            let sibling_session = Box::into_raw(Box::new(FlowRenderSessionHandle {
+            let sibling_session = Box::into_raw(Box::new(ScreenSessionHandle {
                 token: Arc::clone(&sibling_token),
             }))
-            .cast::<NuxFlowRenderSession>();
+            .cast::<NuxScreenSession>();
             let sibling_surface = Box::into_raw(Box::new(AppleSurfaceHandle {
                 token: Arc::new(SurfaceToken {
                     session: Arc::clone(&sibling_token),
@@ -4416,16 +3496,14 @@ mod tests {
             };
             let mut result = ptr::null_mut();
             assert_eq!(
-                unsafe {
-                    nux_flow_render_session_advance(affected_session, &operation, &mut result)
-                },
+                unsafe { nux_screen_session_advance(affected_session, &operation, &mut result) },
                 NuxStatus::Ok
             );
             unsafe { nux_operation_result_free(result) };
 
             let (
                 factory_address,
-                flow_session_address,
+                screen_session_address,
                 original_generation,
                 original_gpu_generation,
             ) = worker
@@ -4435,7 +3513,7 @@ mod tests {
                     session.injected_device_loss = true;
                     Ok::<_, RuntimeFailure>((
                         (&mut *session.factory as *mut WgpuFactory).addr(),
-                        std::ptr::addr_of_mut!(session.flow_session).addr(),
+                        std::ptr::addr_of_mut!(session.screen_session).addr(),
                         session.renderer_generation,
                         gpu_generation,
                     ))
@@ -4456,9 +3534,7 @@ mod tests {
             operation.render = true;
             result = ptr::null_mut();
             assert_eq!(
-                unsafe {
-                    nux_flow_render_session_advance(affected_session, &operation, &mut result)
-                },
+                unsafe { nux_screen_session_advance(affected_session, &operation, &mut result) },
                 NuxStatus::Ok
             );
             assert_eq!(
@@ -4494,8 +3570,8 @@ mod tests {
                         factory_address
                     );
                     assert_eq!(
-                        std::ptr::addr_of_mut!(session.flow_session).addr(),
-                        flow_session_address
+                        std::ptr::addr_of_mut!(session.screen_session).addr(),
+                        screen_session_address
                     );
                     assert_eq!(session.renderer_generation, original_generation);
                     assert_eq!(gpu_generation, original_gpu_generation);
@@ -4536,8 +3612,8 @@ mod tests {
                         factory_address
                     );
                     assert_eq!(
-                        std::ptr::addr_of_mut!(session.flow_session).addr(),
-                        flow_session_address
+                        std::ptr::addr_of_mut!(session.screen_session).addr(),
+                        screen_session_address
                     );
                     assert_eq!(session.legacy_timestamp_seconds, 0.25);
                     assert_eq!(session.renderer_generation, recovered_generation);
@@ -4558,9 +3634,7 @@ mod tests {
                 .cast::<c_void>();
             result = ptr::null_mut();
             assert_eq!(
-                unsafe {
-                    nux_flow_render_session_advance(affected_session, &operation, &mut result)
-                },
+                unsafe { nux_screen_session_advance(affected_session, &operation, &mut result) },
                 NuxStatus::Ok
             );
             assert_eq!(
@@ -4577,9 +3651,7 @@ mod tests {
                 .cast::<c_void>();
             result = ptr::null_mut();
             assert_eq!(
-                unsafe {
-                    nux_flow_render_session_advance(sibling_session, &operation, &mut result)
-                },
+                unsafe { nux_screen_session_advance(sibling_session, &operation, &mut result) },
                 NuxStatus::Ok
             );
             assert_eq!(
@@ -4613,9 +3685,9 @@ mod tests {
 
             unsafe {
                 nux_apple_surface_free(sibling_surface);
-                nux_flow_render_session_free(sibling_session);
+                nux_screen_session_free(sibling_session);
                 nux_apple_surface_free(affected_surface);
-                nux_flow_render_session_free(affected_session);
+                nux_screen_session_free(affected_session);
             }
         });
     }
@@ -4667,24 +3739,24 @@ mod tests {
     fn public_c_abi_renders_to_cametal_layer_and_preserves_parent_first_ownership() {
         autoreleasepool(|_| {
             let bytes = product_fixture_bytes();
-            let request = unsigned_import_request(&bytes);
+            let request = signed_import_request(&bytes);
             let mut context = ptr::null_mut();
             let mut result = ptr::null_mut();
-            assert_eq!(
-                unsafe {
-                    nux_flow_runtime_context_create_bound(
-                        runtime_binding(),
-                        &request.request,
-                        &mut context,
-                        &mut result,
-                    )
-                },
-                NuxStatus::Ok
-            );
+            let status = unsafe {
+                nux_experience_context_create_bound(
+                    runtime_binding(),
+                    &request.request,
+                    &mut context,
+                    &mut result,
+                )
+            };
+            assert_eq!(status, NuxStatus::Ok, "{}", unsafe {
+                operation_result_message(result)
+            });
             unsafe { nux_operation_result_free(result) };
 
-            let session_descriptor = NuxFlowSessionDescriptor {
-                struct_size: size_u32::<NuxFlowSessionDescriptor>(),
+            let session_descriptor = NuxScreenSessionDescriptor {
+                struct_size: size_u32::<NuxScreenSessionDescriptor>(),
                 artboard_name: NuxByteView::default(),
                 state_machine_name: NuxByteView::default(),
             };
@@ -4692,7 +3764,7 @@ mod tests {
             result = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_render_session_create(
+                    nux_screen_session_create(
                         context,
                         &session_descriptor,
                         &mut session,
@@ -4713,7 +3785,7 @@ mod tests {
             result = ptr::null_mut();
             assert_eq!(
                 unsafe {
-                    nux_flow_render_session_attach_apple_surface(
+                    nux_screen_session_attach_apple_surface(
                         session,
                         &surface_descriptor,
                         &mut surface,
@@ -4758,9 +3830,7 @@ mod tests {
             };
             result = ptr::null_mut();
             assert_eq!(
-                unsafe {
-                    nux_flow_render_session_advance(session, &no_drawable_operation, &mut result)
-                },
+                unsafe { nux_screen_session_advance(session, &no_drawable_operation, &mut result) },
                 NuxStatus::Ok
             );
             assert_eq!(
@@ -4768,7 +3838,7 @@ mod tests {
                 NUX_SURFACE_DISPOSITION_SKIPPED_TIMEOUT
             );
             unsafe { nux_operation_result_free(result) };
-            let session_handle = unsafe { &*session.cast::<FlowRenderSessionHandle>() };
+            let session_handle = unsafe { &*session.cast::<ScreenSessionHandle>() };
             let session_id = session_handle.token.id;
             let render_attempts = session_handle
                 .token
@@ -4799,9 +3869,7 @@ mod tests {
             };
             result = ptr::null_mut();
             assert_eq!(
-                unsafe {
-                    nux_flow_render_session_advance(session, &invalid_operation, &mut result)
-                },
+                unsafe { nux_screen_session_advance(session, &invalid_operation, &mut result) },
                 NuxStatus::InvalidArgument
             );
             unsafe { nux_operation_result_free(result) };
@@ -4817,7 +3885,7 @@ mod tests {
             };
             result = ptr::null_mut();
             assert_eq!(
-                unsafe { nux_flow_render_session_advance(session, &operation, &mut result) },
+                unsafe { nux_screen_session_advance(session, &operation, &mut result) },
                 NuxStatus::Ok
             );
             assert_eq!(
@@ -4849,9 +3917,7 @@ mod tests {
 
             result = ptr::null_mut();
             assert_eq!(
-                unsafe {
-                    nux_flow_render_session_advance(session, &no_drawable_operation, &mut result)
-                },
+                unsafe { nux_screen_session_advance(session, &no_drawable_operation, &mut result) },
                 NuxStatus::SurfaceError,
                 "a detached surface must fail before considering zero size or drawable availability"
             );
@@ -4879,7 +3945,7 @@ mod tests {
                 .cast::<c_void>();
             result = ptr::null_mut();
             assert_eq!(
-                unsafe { nux_flow_render_session_advance(session, &operation, &mut result) },
+                unsafe { nux_screen_session_advance(session, &operation, &mut result) },
                 NuxStatus::Ok
             );
             assert_eq!(
@@ -4891,8 +3957,8 @@ mod tests {
             unsafe {
                 // The public ownership contract allows children to outlive
                 // their C parent handles. The surface retains both parents.
-                nux_flow_runtime_context_free(context);
-                nux_flow_render_session_free(session);
+                nux_experience_context_free(context);
+                nux_screen_session_free(session);
             }
             result = ptr::null_mut();
             assert_eq!(
@@ -4910,20 +3976,20 @@ mod tests {
     #[test]
     fn context_import_session_advance_and_parent_first_teardown_use_the_product_handles() {
         let bytes = product_fixture_bytes();
-        let request = unsigned_import_request(&bytes);
+        let request = signed_import_request(&bytes);
         let mut context = ptr::null_mut();
         let mut result = ptr::null_mut();
-        assert_eq!(
-            unsafe {
-                nux_flow_runtime_context_create_bound(
-                    runtime_binding(),
-                    &request.request,
-                    &mut context,
-                    &mut result,
-                )
-            },
-            NuxStatus::Ok
-        );
+        let status = unsafe {
+            nux_experience_context_create_bound(
+                runtime_binding(),
+                &request.request,
+                &mut context,
+                &mut result,
+            )
+        };
+        assert_eq!(status, NuxStatus::Ok, "{}", unsafe {
+            operation_result_message(result)
+        });
         assert!(!context.is_null());
         assert_eq!(
             unsafe { nux_operation_result_status(result) },
@@ -4933,8 +3999,8 @@ mod tests {
 
         let artboard_name = b"artboard to nest";
         let state_machine_name = b"State Machine 1";
-        let named_descriptor = NuxFlowSessionDescriptor {
-            struct_size: size_u32::<NuxFlowSessionDescriptor>(),
+        let named_descriptor = NuxScreenSessionDescriptor {
+            struct_size: size_u32::<NuxScreenSessionDescriptor>(),
             artboard_name: NuxByteView {
                 data: artboard_name.as_ptr(),
                 len: artboard_name.len() as u64,
@@ -4948,7 +4014,7 @@ mod tests {
         result = ptr::null_mut();
         assert_eq!(
             unsafe {
-                nux_flow_render_session_create(
+                nux_screen_session_create(
                     context,
                     &named_descriptor,
                     &mut named_session,
@@ -4959,12 +4025,12 @@ mod tests {
         );
         unsafe {
             nux_operation_result_free(result);
-            nux_flow_render_session_free(named_session);
+            nux_screen_session_free(named_session);
         }
 
         let missing_name = b"missing artboard";
-        let missing_descriptor = NuxFlowSessionDescriptor {
-            struct_size: size_u32::<NuxFlowSessionDescriptor>(),
+        let missing_descriptor = NuxScreenSessionDescriptor {
+            struct_size: size_u32::<NuxScreenSessionDescriptor>(),
             artboard_name: NuxByteView {
                 data: missing_name.as_ptr(),
                 len: missing_name.len() as u64,
@@ -4975,7 +4041,7 @@ mod tests {
         result = ptr::null_mut();
         assert_eq!(
             unsafe {
-                nux_flow_render_session_create(
+                nux_screen_session_create(
                     context,
                     &missing_descriptor,
                     &mut named_session,
@@ -4991,17 +4057,15 @@ mod tests {
         );
         unsafe { nux_operation_result_free(result) };
 
-        let descriptor = NuxFlowSessionDescriptor {
-            struct_size: size_u32::<NuxFlowSessionDescriptor>(),
+        let descriptor = NuxScreenSessionDescriptor {
+            struct_size: size_u32::<NuxScreenSessionDescriptor>(),
             artboard_name: NuxByteView::default(),
             state_machine_name: NuxByteView::default(),
         };
         let mut session = ptr::null_mut();
         result = ptr::null_mut();
         assert_eq!(
-            unsafe {
-                nux_flow_render_session_create(context, &descriptor, &mut session, &mut result)
-            },
+            unsafe { nux_screen_session_create(context, &descriptor, &mut session, &mut result) },
             NuxStatus::Ok
         );
         assert!(!session.is_null());
@@ -5009,7 +4073,7 @@ mod tests {
             nux_operation_result_free(result);
             // Child handles retain their parents, so Swift teardown ordering
             // cannot turn a live session into a dangling reference.
-            nux_flow_runtime_context_free(context);
+            nux_experience_context_free(context);
         }
 
         let operation = NuxFrameOperation {
@@ -5022,7 +4086,7 @@ mod tests {
         };
         result = ptr::null_mut();
         assert_eq!(
-            unsafe { nux_flow_render_session_advance(session, &operation, &mut result) },
+            unsafe { nux_screen_session_advance(session, &operation, &mut result) },
             NuxStatus::Ok
         );
         assert_eq!(
@@ -5031,7 +4095,7 @@ mod tests {
         );
         unsafe {
             nux_operation_result_free(result);
-            nux_flow_render_session_free(session);
+            nux_screen_session_free(session);
         }
     }
 }

@@ -6,33 +6,34 @@ func typecheckNuxieRuntimeModule(
     expectedRuntimeVersion: UnsafePointer<UInt8>,
     expectedRuntimeVersionCount: UInt64,
     expectedSourceRevision: UnsafePointer<UInt8>,
-    expectedSourceRevisionCount: UInt64
+    expectedSourceRevisionCount: UInt64,
+    expectedExperienceID: UnsafePointer<CChar>,
+    expectedBuildID: UnsafePointer<CChar>
 ) {
-    _ = NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT
-    _ = NUX_FLOW_PLAYER_SELECTOR_KIND_STATE_MACHINE
-    _ = NUX_FLOW_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION
-    _ = NUX_FLOW_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION
+    _ = NUX_SCREEN_PLAYER_SELECTOR_KIND_DEFAULT
+    _ = NUX_SCREEN_PLAYER_SELECTOR_KIND_STATE_MACHINE
+    _ = NUX_SCREEN_PLAYER_SELECTOR_KIND_LINEAR_ANIMATION
+    _ = NUX_SCREEN_PLAYER_SELECTION_EXPLICIT_LINEAR_ANIMATION
 
     let byteView = NuxByteView(data: bytes, len: count)
-    var importRequest = NuxFlowImportRequest(
-        struct_size: UInt32(MemoryLayout<NuxFlowImportRequest>.size),
-        artifact_bytes: byteView,
-        expected_flow_id: NuxByteView(data: nil, len: 0),
-        expected_build_id: NuxByteView(data: nil, len: 0),
-        manifest_bytes: NuxByteView(data: nil, len: 0),
-        signature_envelope_bytes: NuxByteView(data: nil, len: 0),
-        selected_key: nil,
+    var importRequest = NuxExperienceImportRequest(
+        struct_size: UInt32(MemoryLayout<NuxExperienceImportRequest>.size),
+        package_bytes: byteView,
+        expected_experience_id: expectedExperienceID,
+        expected_build_id: expectedBuildID,
+        candidate_keys: nil,
+        candidate_key_count: 0,
         external_assets: nil,
         external_asset_count: 0
     )
-    _ = NuxFlowAuthorizationKey(
-        struct_size: UInt32(MemoryLayout<NuxFlowAuthorizationKey>.size),
+    _ = NuxExperienceAuthorizationKey(
+        struct_size: UInt32(MemoryLayout<NuxExperienceAuthorizationKey>.size),
         key_id: NuxByteView(data: nil, len: 0),
         ed25519_public_key: NuxByteView(data: nil, len: 0)
     )
-    _ = NuxFlowExternalAsset(
-        struct_size: UInt32(MemoryLayout<NuxFlowExternalAsset>.size),
-        kind: UInt32(NUX_FLOW_EXTERNAL_ASSET_KIND_IMAGE),
+    _ = NuxExperienceExternalAsset(
+        struct_size: UInt32(MemoryLayout<NuxExperienceExternalAsset>.size),
+        kind: UInt32(NUX_EXPERIENCE_EXTERNAL_ASSET_KIND_IMAGE),
         asset_id: 0,
         required: false,
         provided: false,
@@ -47,8 +48,8 @@ func typecheckNuxieRuntimeModule(
         code: NuxByteView(data: nil, len: 0),
         message: NuxByteView(data: nil, len: 0)
     )
-    _ = NuxFlowSessionDescriptor(
-        struct_size: UInt32(MemoryLayout<NuxFlowSessionDescriptor>.size),
+    _ = NuxScreenSessionDescriptor(
+        struct_size: UInt32(MemoryLayout<NuxScreenSessionDescriptor>.size),
         artboard_name: NuxByteView(data: nil, len: 0),
         state_machine_name: NuxByteView(data: nil, len: 0)
     )
@@ -65,15 +66,15 @@ func typecheckNuxieRuntimeModule(
         pixel_width: 1,
         pixel_height: 1
     )
-    _ = NuxFlowConfiguredSessionDescriptor(
-        struct_size: UInt32(MemoryLayout<NuxFlowConfiguredSessionDescriptor>.size),
-        player_kind: UInt32(NUX_FLOW_PLAYER_SELECTOR_KIND_DEFAULT),
+    _ = NuxScreenConfiguredSessionDescriptor(
+        struct_size: UInt32(MemoryLayout<NuxScreenConfiguredSessionDescriptor>.size),
+        player_kind: UInt32(NUX_SCREEN_PLAYER_SELECTOR_KIND_DEFAULT),
         artboard_name: NuxByteView(data: nil, len: 0),
         player_name: NuxByteView(data: nil, len: 0)
     )
-    _ = NuxFlowValueNode(
-        struct_size: UInt32(MemoryLayout<NuxFlowValueNode>.size),
-        kind: UInt32(NUX_FLOW_VALUE_KIND_NULL),
+    _ = NuxScreenValueNode(
+        struct_size: UInt32(MemoryLayout<NuxScreenValueNode>.size),
+        kind: UInt32(NUX_SCREEN_VALUE_KIND_NULL),
         number_value: 0,
         color_value: 0,
         bool_value: 0,
@@ -85,16 +86,16 @@ func typecheckNuxieRuntimeModule(
         string_value: NuxByteView(data: nil, len: 0),
         schema_id: NuxByteView(data: nil, len: 0)
     )
-    _ = NuxFlowPointerEvent(
-        struct_size: UInt32(MemoryLayout<NuxFlowPointerEvent>.size),
-        kind: UInt32(NUX_FLOW_POINTER_EVENT_KIND_DOWN),
+    _ = NuxScreenPointerEvent(
+        struct_size: UInt32(MemoryLayout<NuxScreenPointerEvent>.size),
+        kind: UInt32(NUX_SCREEN_POINTER_EVENT_KIND_DOWN),
         pointer_id: 1,
         x: 0,
         y: 0,
         timestamp_seconds: 0
     )
-    _ = NuxFlowAdvanceOperation(
-        struct_size: UInt32(MemoryLayout<NuxFlowAdvanceOperation>.size),
+    _ = NuxScreenAdvanceOperation(
+        struct_size: UInt32(MemoryLayout<NuxScreenAdvanceOperation>.size),
         timestamp_seconds: 0,
         delta_seconds: 0,
         render: 0,
@@ -102,18 +103,18 @@ func typecheckNuxieRuntimeModule(
         completion_context: nil,
         completion_callback: nil
     )
-    _ = NuxFlowQuery(
-        struct_size: UInt32(MemoryLayout<NuxFlowQuery>.size),
-        kind: UInt32(NUX_FLOW_QUERY_KIND_PLAYER_INPUTS)
+    _ = NuxScreenQuery(
+        struct_size: UInt32(MemoryLayout<NuxScreenQuery>.size),
+        kind: UInt32(NUX_SCREEN_QUERY_KIND_PLAYER_INPUTS)
     )
-    let zeroInstanceReference = NuxFlowInstanceReference(
+    let zeroInstanceReference = NuxScreenInstanceReference(
         kind: 0,
         local_id: 0,
         instance_id: 0
     )
-    _ = NuxFlowStateMutation(
-        struct_size: UInt32(MemoryLayout<NuxFlowStateMutation>.size),
-        kind: UInt32(NUX_FLOW_STATE_MUTATION_KIND_SET_INPUT_BOOL),
+    _ = NuxScreenStateMutation(
+        struct_size: UInt32(MemoryLayout<NuxScreenStateMutation>.size),
+        kind: UInt32(NUX_SCREEN_STATE_MUTATION_KIND_SET_INPUT_BOOL),
         instance: zeroInstanceReference,
         item: zeroInstanceReference,
         path: NuxByteView(data: nil, len: 0),
@@ -122,29 +123,29 @@ func typecheckNuxieRuntimeModule(
         index: 0,
         other_index: 0
     )
-    _ = NuxFlowTextRunMutation(
-        struct_size: UInt32(MemoryLayout<NuxFlowTextRunMutation>.size),
+    _ = NuxScreenTextRunMutation(
+        struct_size: UInt32(MemoryLayout<NuxScreenTextRunMutation>.size),
         name: byteView,
         text: NuxByteView(data: nil, len: 0)
     )
-    _ = NuxFlowTextRunBatch(
-        struct_size: UInt32(MemoryLayout<NuxFlowTextRunBatch>.size),
+    _ = NuxScreenTextRunBatch(
+        struct_size: UInt32(MemoryLayout<NuxScreenTextRunBatch>.size),
         mutations: nil,
         mutation_count: 0
     )
-    _ = NuxFlowSessionOperation(
-        struct_size: UInt32(MemoryLayout<NuxFlowSessionOperation>.size),
-        kind: UInt32(NUX_FLOW_SESSION_OPERATION_KIND_QUERY),
+    _ = NuxScreenSessionOperation(
+        struct_size: UInt32(MemoryLayout<NuxScreenSessionOperation>.size),
+        kind: UInt32(NUX_SCREEN_SESSION_OPERATION_KIND_QUERY),
         state_batch: nil,
         pointer_batch: nil,
         advance: nil,
         query_batch: nil,
         text_run_batch: nil
     )
-    var playerMetadata = NuxFlowPlayerMetadataView(
-        struct_size: UInt32(MemoryLayout<NuxFlowPlayerMetadataView>.size),
-        kind: UInt32(NUX_FLOW_PLAYER_KIND_STATIC),
-        selection: UInt32(NUX_FLOW_PLAYER_SELECTION_STATIC),
+    var playerMetadata = NuxScreenPlayerMetadataView(
+        struct_size: UInt32(MemoryLayout<NuxScreenPlayerMetadataView>.size),
+        kind: UInt32(NUX_SCREEN_PLAYER_KIND_STATIC),
+        selection: UInt32(NUX_SCREEN_PLAYER_SELECTION_STATIC),
         player_index: UInt32.max,
         artboard_name: NuxByteView(data: nil, len: 0),
         player_name: NuxByteView(data: nil, len: 0),
@@ -153,10 +154,10 @@ func typecheckNuxieRuntimeModule(
         max_x: 0,
         max_y: 0
     )
-    var outputView = NuxFlowOutputView(
-        struct_size: UInt32(MemoryLayout<NuxFlowOutputView>.size),
-        phase: UInt32(NUX_FLOW_OUTPUT_PHASE_DELAYED_EVENT_CALLBACKS),
-        kind: UInt32(NUX_FLOW_OUTPUT_KIND_REPORTED_EVENT),
+    var outputView = NuxScreenOutputView(
+        struct_size: UInt32(MemoryLayout<NuxScreenOutputView>.size),
+        phase: UInt32(NUX_SCREEN_OUTPUT_PHASE_DELAYED_EVENT_CALLBACKS),
+        kind: UInt32(NUX_SCREEN_OUTPUT_KIND_REPORTED_EVENT),
         payload_root_index: UInt32.max,
         has_origin_mutation_id: 0,
         has_instance_id: 0,
@@ -175,9 +176,9 @@ func typecheckNuxieRuntimeModule(
         open_url: NuxByteView(data: nil, len: 0),
         open_url_target: NuxByteView(data: nil, len: 0)
     )
-    var playerInput = NuxFlowPlayerInputView(
-        struct_size: UInt32(MemoryLayout<NuxFlowPlayerInputView>.size),
-        kind: UInt32(NUX_FLOW_PLAYER_INPUT_KIND_BOOL),
+    var playerInput = NuxScreenPlayerInputView(
+        struct_size: UInt32(MemoryLayout<NuxScreenPlayerInputView>.size),
+        kind: UInt32(NUX_SCREEN_PLAYER_INPUT_KIND_BOOL),
         value_root_index: 0,
         name: NuxByteView(data: nil, len: 0)
     )
@@ -195,26 +196,26 @@ func typecheckNuxieRuntimeModule(
         &binding
     )
     if bindingStatus == NUX_STATUS_OK {
-        _ = nux_flow_runtime_context_create_bound(
+        _ = nux_experience_context_create_bound(
             binding,
             &importRequest,
             &context,
             &result
         )
     }
+    _ = nux_experience_context_create(&importRequest, &context, &result)
     _ = nux_apple_surface_copy_metal_device(nil, &metalDevice, &result)
-    _ = nux_operation_result_script_authorization(result)
     _ = nux_operation_result_authenticated_key_id(result, &authenticatedKeyID)
     _ = nux_operation_result_diagnostic_count(result)
     _ = nux_operation_result_diagnostic_at(result, 0, &diagnosticView)
-    _ = nux_flow_render_session_create_configured(nil, nil, nil, &sessionResult)
-    _ = nux_flow_render_session_perform(nil, nil, &sessionResult)
-    _ = nux_flow_session_result_status(sessionResult)
-    _ = nux_flow_session_result_player_metadata(sessionResult, &playerMetadata)
-    _ = nux_flow_session_result_player_input_count(sessionResult)
-    _ = nux_flow_session_result_player_input_at(sessionResult, 0, &playerInput)
-    _ = nux_flow_session_result_output_count(sessionResult)
-    _ = nux_flow_session_result_output_at(sessionResult, 0, &outputView)
-    nux_flow_session_result_free(sessionResult)
+    _ = nux_screen_session_create_configured(nil, nil, nil, &sessionResult)
+    _ = nux_screen_session_perform(nil, nil, &sessionResult)
+    _ = nux_screen_session_result_status(sessionResult)
+    _ = nux_screen_session_result_player_metadata(sessionResult, &playerMetadata)
+    _ = nux_screen_session_result_player_input_count(sessionResult)
+    _ = nux_screen_session_result_player_input_at(sessionResult, 0, &playerInput)
+    _ = nux_screen_session_result_output_count(sessionResult)
+    _ = nux_screen_session_result_output_at(sessionResult, 0, &outputView)
+    nux_screen_session_result_free(sessionResult)
     _ = NUX_SURFACE_DISPOSITION_PRESENTED
 }

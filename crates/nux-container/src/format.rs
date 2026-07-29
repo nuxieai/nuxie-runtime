@@ -28,8 +28,8 @@ pub struct TocEntry<'a> {
 #[derive(Debug)]
 pub struct NuxPackage<'a> {
     bytes: &'a [u8],
-    pub toc: Vec<TocEntry<'a>>,
-    pub manifest: NuxPackageManifestV1,
+    toc: Vec<TocEntry<'a>>,
+    manifest: NuxPackageManifestV1,
     manifest_index: usize,
     signature_index: usize,
 }

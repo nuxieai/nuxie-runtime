@@ -17,7 +17,9 @@ pub use manifest::{
     MemberInventoryEntry, MemberRole, NuxPackageManifestV1, Producer, SceneFormat, SceneMember,
     Screen, TextInput, TextInputStyle,
 };
-pub use signature::{ManifestSigner, SignatureEnvelopeV1, SignatureVerification, verify_signature};
+pub use signature::{
+    ManifestSigner, SignatureEnvelopeV1, SignatureVerification, VerifiedScene, verify_signature,
+};
 
 pub mod test_support;
 

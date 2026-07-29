@@ -14,21 +14,21 @@ default = []
 apple-product = ["nuxie/renderer", "nuxie/scripting"]
 
 [dependencies]
-base64 = "0.22"
+nux-container = { path = "../nux-container" }
 nuxie = { path = "../nuxie", default-features = false }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
 sha2 = "0.10"
 
 [dev-dependencies]
+base64 = "0.22"
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+nuxie = { path = "../nuxie", default-features = false, features = ["scripting"] }
 nuxie-schema = { path = "../nuxie-schema" }
 png = "0.18"
+serde_json = "1"
 
 [[test]]
-name = "artifact_validator"
-path = "tests/artifact_validator.rs"
-required-features = ["apple-product"]
+name = "experience_package_validator"
+path = "tests/experience_package_validator.rs"
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dev-dependencies]
 objc2 = "0.6.4"

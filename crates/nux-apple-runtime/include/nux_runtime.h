@@ -1,7 +1,7 @@
 #ifndef NUX_RUNTIME_H
 #define NUX_RUNTIME_H
 
-/* Product-shaped C ABI for Nuxie's Apple flow runtime. Declarations are
+/* Product-shaped C ABI for Nuxie's Apple experience runtime. Declarations are
  * generated from Rust and verified during every build. Handles own or retain
  * their parents; destruction is null-safe and never requires a child-first
  * order to avoid memory unsafety. Calls may enter from arbitrary caller

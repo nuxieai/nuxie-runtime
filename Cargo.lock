@@ -955,6 +955,7 @@ dependencies = [
  "base64",
  "cbindgen",
  "ed25519-dalek",
+ "nux-container",
  "nuxie",
  "nuxie-schema",
  "objc2",
@@ -962,7 +963,6 @@ dependencies = [
  "objc2-metal",
  "objc2-quartz-core",
  "png",
- "serde",
  "serde_json",
  "sha2",
 ]
@@ -995,6 +995,7 @@ dependencies = [
  "ed25519-dalek",
  "luaur-common",
  "luaur-compiler",
+ "nux-container",
  "nuxie-binary",
  "nuxie-graph",
  "nuxie-render-api",

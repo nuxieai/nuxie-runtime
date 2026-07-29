@@ -2548,12 +2548,256 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             textwrap.dedent(
                 """
-                fn schedule_post_update_probe() { attach_event_bubble_owner(); }
+                fn unrelated_setup() { attach_event_bubble_owner(); }
                 fn reported_event_count() { reported_events.len(); }
                 fn reported_event() { reported_events.get(index); }
                 """
             ),
         )
+
+    def test_fl_c5_advance_live_ratchets_and_negative_controls(self) -> None:
+        instance_source = (
+            "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+        )
+        required_cases = [
+            (
+                "state_machine_advance_instance_owner_required",
+                """
+                fn advance_on_artboard() {}
+                fn advance(artboard: &mut ArtboardInstance) {}
+                fn advance_artboard_frame_components() { nested_events; }
+                pub fn advance_and_apply() {}
+                pub fn advance_and_apply_with_view_models() {}
+                fn advance_and_apply_state_machines_with_view_models() {
+                    if advance_view_models {
+                        advance_detached_view_models();
+                    }
+                }
+                fn settle_artboard_update_passes() {}
+                """,
+                """
+                fn advance_on_artboard() {}
+                fn advance(artboard: &mut ArtboardInstance) {}
+                pub fn advance_and_apply() {}
+                pub fn advance_and_apply_with_view_models() {}
+                """,
+            ),
+            (
+                "state_machine_advance_raw_order_required",
+                """
+                fn advance_with_report_mode() {
+                    self.record_advance_phase("draw-sort-check");
+                    self.apply_local_event_listeners();
+                    self.record_advance_phase("clear-latch");
+                    self.record_advance_phase("pre-layer-binds");
+                    self.record_advance_phase("authored-layers");
+                    self.record_advance_phase("converter-advance");
+                    self.record_advance_phase("inputs-advanced");
+                }
+                """,
+                """
+                fn advance_with_report_mode() {
+                    self.record_advance_phase("draw-sort-check");
+                    self.apply_local_event_listeners();
+                    self.record_advance_phase("clear-latch");
+                    self.record_advance_phase("authored-layers");
+                    self.record_advance_phase("converter-advance");
+                    self.record_advance_phase("inputs-advanced");
+                }
+                """,
+            ),
+            (
+                "state_machine_advance_return_terms_required",
+                """
+                fn raw_return() {
+                    let advanced = keep_going
+                        || self.reported_event_count() != 0
+                        || self.has_pending_listener_view_model_reports();
+                }
+                fn advance_and_apply_return() {
+                    changed
+                        || elapsed_seconds == 0.0
+                        || instance.reported_event_count() != 0
+                        || instance.has_pending_listener_view_model_reports()
+                }
+                """,
+                """
+                fn raw_return() {
+                    let advanced = keep_going
+                        || self.reported_event_count() != 0
+                        || self.has_pending_listener_view_model_reports();
+                }
+                fn advance_and_apply_return() {
+                    changed
+                        || elapsed_seconds == 0.0
+                        || instance.has_pending_listener_view_model_reports()
+                }
+                """,
+            ),
+            (
+                "state_machine_advance_return_terms_required",
+                """
+                fn raw_return() {
+                    let advanced = keep_going
+                        || self.reported_event_count() != 0
+                        || self.has_pending_listener_view_model_reports();
+                }
+                fn advance_and_apply_return() {
+                    changed
+                        || elapsed_seconds == 0.0
+                        || instance.reported_event_count() != 0
+                        || instance.has_pending_listener_view_model_reports()
+                }
+                """,
+                """
+                fn raw_return() {
+                    let advanced = keep_going
+                        || self.reported_event_count() != 0
+                        || self.has_pending_listener_view_model_reports();
+                }
+                fn advance_and_apply_return() {
+                    changed
+                        || elapsed_seconds == 0.0
+                        || instance.reported_event_count() != 0
+                }
+                """,
+            ),
+            (
+                "state_machine_advance_return_terms_required",
+                """
+                fn raw_return() {
+                    let advanced = keep_going
+                        || self.reported_event_count() != 0
+                        || self.has_pending_listener_view_model_reports();
+                }
+                fn advance_and_apply_return() {
+                    changed
+                        || elapsed_seconds == 0.0
+                        || instance.reported_event_count() != 0
+                        || instance.has_pending_listener_view_model_reports()
+                }
+                """,
+                """
+                fn raw_return() {
+                    let advanced = keep_going
+                        || self.reported_event_count() != 0
+                        || self.has_pending_listener_view_model_reports();
+                }
+                fn advance_and_apply_return() {
+                    changed
+                        || instance.reported_event_count() != 0
+                        || instance.has_pending_listener_view_model_reports()
+                }
+                """,
+            ),
+            (
+                "state_machine_advance_unconditional_settlement_required",
+                """
+                fn settle_artboard_update_passes() {
+                    const MAX_SETTLEMENT_PASSES: usize = 5;
+                    for _ in 0..MAX_SETTLEMENT_PASSES {
+                        for state_machine in state_machines.iter_mut() {
+                            if artboard.try_change_state_machine_instance(state_machine) {
+                                artboard.advance_state_machine_instance_after_state_probe(
+                                    state_machine,
+                                    0.0,
+                                );
+                            }
+                        }
+                    }
+                }
+                """,
+                """
+                fn settle_artboard_update_passes() {
+                    const MAX_SETTLEMENT_PASSES: usize = 5;
+                    for _ in 0..MAX_SETTLEMENT_PASSES {
+                        for state_machine in state_machines.iter_mut() {
+                            if state_machine.requires_post_update_state_probe()
+                                && artboard.try_change_state_machine_instance(state_machine)
+                            {
+                                artboard.advance_state_machine_instance_after_state_probe(
+                                    state_machine,
+                                    0.0,
+                                );
+                            }
+                        }
+                    }
+                }
+                """,
+            ),
+        ]
+        for ratchet_id, required, missing in required_cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_required_production_ratchet_case(
+                    ratchet_id,
+                    instance_source,
+                    textwrap.dedent(required),
+                    textwrap.dedent(missing),
+                )
+
+        forbidden_cases = [
+            (
+                "state_machine_advance_clean_zero_fast_path",
+                """
+                fn advance(elapsed_seconds: f32) {
+                    if elapsed_seconds == 0.0 {
+                        return false;
+                    }
+                }
+                """,
+                "fn advance(elapsed_seconds: f32) { forward(elapsed_seconds); }\n",
+                instance_source,
+            ),
+            (
+                "state_machine_advance_capability_gated_probe",
+                """
+                fn settle_artboard_update_passes() {
+                    if state_machine.transition_probe_enabled()
+                        && artboard.try_change_state_machine_instance(state_machine)
+                    {}
+                }
+                """,
+                """
+                fn settle_artboard_update_passes() {
+                    if artboard.try_change_state_machine_instance(state_machine) {}
+                }
+                """,
+                instance_source,
+            ),
+            (
+                "state_machine_advance_nonfinite_rejection",
+                """
+                fn advance(elapsed_seconds: f32) {
+                    if !elapsed_seconds.is_finite() {
+                        return;
+                    }
+                }
+                """,
+                "fn advance(elapsed_seconds: f32) { forward(elapsed_seconds); }\n",
+                instance_source,
+            ),
+            (
+                "state_machine_advance_artboard_settlement_implementation",
+                """
+                fn settle() {
+                    for pass in 0..5 {
+                        update_pass(pass);
+                        try_change_state_machine_instance(state_machine);
+                    }
+                }
+                """,
+                "fn settle() { StateMachineInstance::settle(); }\n",
+                "crates/nuxie-runtime/src/artboard.rs",
+            ),
+        ]
+        for ratchet_id, forbidden, safe, source in forbidden_cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    textwrap.dedent(forbidden),
+                    textwrap.dedent(safe),
+                )
 
     def test_fl_c4_negative_ratchets_reject_displaced_listener_action_shapes(self) -> None:
         cases = [

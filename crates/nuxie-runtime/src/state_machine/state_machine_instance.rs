@@ -60,6 +60,7 @@ use crate::{
     runtime_default_view_model_view_model_property_path_for_name_path,
 };
 use nuxie_binary::RuntimeFile;
+use nuxie_render_api::Factory as RenderFactory;
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
@@ -1372,7 +1373,6 @@ pub struct StateMachineInstance {
     /// owner's domain intact.
     focus: RuntimeFocusTree,
     owns_focus_domain: bool,
-    requires_post_update_state_probe: bool,
     inputs: Vec<StateMachineInputInstance>,
     bindable_numbers: Vec<StateMachineBindableNumberInstance>,
     bindable_integers: Vec<StateMachineBindableIntegerInstance>,
@@ -1431,11 +1431,6 @@ pub struct StateMachineInstance {
     /// `applyEvents`, matching the later C++ DataBind occurrence update.
     post_apply_listener_view_models: Vec<usize>,
     pub(super) needs_advance: bool,
-    has_advanced_once: bool,
-    // A mounted NestedStateMachine is initialized before its parent binding
-    // settles. C++ gives that occurrence one outer-update probe after the
-    // mounted artboard updates, even when its authored conditions are stable.
-    post_update_probe_pending: bool,
     /// C++ `m_DataContext` can be mutated by the staged main/global setters
     /// before any DataBind is rebound. The existing Rust graph APIs used the
     /// bound source cells as their only context record, which collapsed that
@@ -1450,6 +1445,14 @@ pub struct StateMachineInstance {
     bind_phase_trace: Vec<&'static str>,
     #[cfg(test)]
     event_dispatch_phase_trace: Vec<&'static str>,
+    #[cfg(test)]
+    advance_phase_trace: Vec<&'static str>,
+    #[cfg(test)]
+    transition_probe_count: usize,
+    #[cfg(test)]
+    data_context_advance_call_count: usize,
+    #[cfg(test)]
+    bind_advance_test_report: Option<StateMachineReportedEvent>,
     /// C++ `ViewModelInstance::m_dependents` push channel: structural
     /// ViewModel replacement dirties this sink so the retained DataContext is
     /// relinked without polling a root mutation generation every frame.
@@ -2006,7 +2009,6 @@ impl Clone for StateMachineInstance {
                 .clone(),
             focus: self.focus.clone(),
             owns_focus_domain: self.owns_focus_domain,
-            requires_post_update_state_probe: self.requires_post_update_state_probe,
             inputs: self.inputs.clone(),
             bindable_numbers: self.bindable_numbers.clone(),
             bindable_integers: self.bindable_integers.clone(),
@@ -2043,8 +2045,6 @@ impl Clone for StateMachineInstance {
             reporting_listener_view_models: Vec::new(),
             post_apply_listener_view_models: self.post_apply_listener_view_models.clone(),
             needs_advance: self.needs_advance,
-            has_advanced_once: self.has_advanced_once,
-            post_update_probe_pending: self.post_update_probe_pending,
             // Public Rust Clone is an approved non-aliasing snapshot. Rebuild
             // the primary carrier so a clone cannot join the source
             // occurrence's dependent-container identity.
@@ -2059,6 +2059,14 @@ impl Clone for StateMachineInstance {
             bind_phase_trace: self.bind_phase_trace.clone(),
             #[cfg(test)]
             event_dispatch_phase_trace: self.event_dispatch_phase_trace.clone(),
+            #[cfg(test)]
+            advance_phase_trace: self.advance_phase_trace.clone(),
+            #[cfg(test)]
+            transition_probe_count: self.transition_probe_count,
+            #[cfg(test)]
+            data_context_advance_call_count: self.data_context_advance_call_count,
+            #[cfg(test)]
+            bind_advance_test_report: self.bind_advance_test_report.clone(),
             owned_view_model_rebind_sink: RuntimeCellDirtSink::new(),
             pointer_down_listener_hits: self.pointer_down_listener_hits.clone(),
             pointer_listener_states: self.pointer_listener_states.clone(),
@@ -2433,6 +2441,13 @@ impl StateMachineInstance {
         let _ = phase;
     }
 
+    fn record_advance_phase(&mut self, phase: &'static str) {
+        #[cfg(test)]
+        self.advance_phase_trace.push(phase);
+        #[cfg(not(test))]
+        let _ = phase;
+    }
+
     fn record_constructor_phase(&mut self, phase: RuntimeConstructorPhase) {
         #[cfg(test)]
         self.constructor_phases.push(phase);
@@ -2677,7 +2692,6 @@ impl StateMachineInstance {
             active_owned_view_model_advance_context: None,
             focus,
             owns_focus_domain: true,
-            requires_post_update_state_probe: state_machine.requires_post_update_state_probe(),
             inputs,
             bindable_numbers,
             bindable_integers,
@@ -2714,8 +2728,6 @@ impl StateMachineInstance {
             reporting_listener_view_models: Vec::new(),
             post_apply_listener_view_models: Vec::new(),
             needs_advance: false,
-            has_advanced_once: false,
-            post_update_probe_pending: false,
             primary_data_context: None,
             owned_data_context: None,
             #[cfg(test)]
@@ -2724,6 +2736,14 @@ impl StateMachineInstance {
             bind_phase_trace: Vec::new(),
             #[cfg(test)]
             event_dispatch_phase_trace: Vec::new(),
+            #[cfg(test)]
+            advance_phase_trace: Vec::new(),
+            #[cfg(test)]
+            transition_probe_count: 0,
+            #[cfg(test)]
+            data_context_advance_call_count: 0,
+            #[cfg(test)]
+            bind_advance_test_report: None,
             owned_view_model_rebind_sink: RuntimeCellDirtSink::new(),
             pointer_down_listener_hits: Vec::new(),
             pointer_listener_states: Vec::new(),
@@ -4668,10 +4688,6 @@ impl StateMachineInstance {
         self.state_machine_definitions.as_ref().map(Arc::clone)
     }
 
-    pub(crate) fn requires_post_update_state_probe(&self) -> bool {
-        self.requires_post_update_state_probe
-    }
-
     pub fn changed_state_count(&self) -> usize {
         self.layers
             .iter()
@@ -4900,6 +4916,7 @@ impl StateMachineInstance {
     }
 
     fn capture_focus_callbacks(&mut self) {
+        let pending_before_capture = self.queued_focus_events.len();
         for (target_local_id, focus_data_local_id, kind) in self.focus.take_owner_events() {
             for group in &self.focus_listener_groups {
                 if let Some(invocation) =
@@ -4913,7 +4930,7 @@ impl StateMachineInstance {
                 }
             }
         }
-        if !self.queued_focus_events.is_empty() {
+        if self.queued_focus_events.len() != pending_before_capture {
             self.needs_advance = true;
         }
     }
@@ -6866,6 +6883,7 @@ impl StateMachineInstance {
         if self.script_error.is_some() {
             return changed;
         }
+        self.record_advance_phase("apply-events");
         if next_event_index >= self.reported_events.len()
             && self.reported_listener_view_models.is_empty()
         {
@@ -6995,6 +7013,7 @@ impl StateMachineInstance {
         // resulting batch before dispatch so callbacks caused by these
         // actions remain queued for the next frame.
         self.capture_focus_callbacks();
+        self.record_advance_phase("focus-snapshot");
         let focus_events = std::mem::take(&mut self.queued_focus_events);
         let mut changed = false;
         for invocation in focus_events {
@@ -7027,6 +7046,7 @@ impl StateMachineInstance {
         // Therefore a focus action that queues a semantic callback reaches
         // this same frame, while another semantic callback queued during this
         // loop waits for the next frame.
+        self.record_advance_phase("semantic-snapshot");
         let semantic_events = std::mem::take(&mut self.queued_semantic_events);
         for invocation in semantic_events {
             let listener_index = match invocation {
@@ -10943,6 +10963,10 @@ impl StateMachineInstance {
     }
 
     pub(crate) fn reset_advanced_data_context(&mut self) {
+        #[cfg(test)]
+        {
+            self.data_context_advance_call_count += 1;
+        }
         if !self.data_bind_graph.default_view_model_context_bound() {
             return;
         }
@@ -11378,10 +11402,6 @@ impl StateMachineInstance {
         !self.reported_listener_view_models.is_empty()
     }
 
-    fn has_deferred_listener_view_model_boundary_reports(&self) -> bool {
-        !self.post_apply_listener_view_models.is_empty()
-    }
-
     #[cfg(test)]
     pub(crate) fn pending_listener_view_model_report_count(&self) -> usize {
         self.reported_listener_view_models.len()
@@ -11494,58 +11514,53 @@ impl StateMachineInstance {
             .map(|trigger| trigger.view_model_property_id)
     }
 
-    pub(crate) fn advance_with_owned_view_model_context(
+    /// C++-corresponding raw `StateMachineInstance::advance(seconds,
+    /// newFrame)`. The Artboard is explicit for Rust's borrow model; elapsed
+    /// seconds are forwarded without finite, sign, or zero validation.
+    pub(crate) fn advance_on_artboard(
         &mut self,
         artboard: &mut ArtboardInstance,
-        state_machine: &RuntimeStateMachine,
         elapsed_seconds: f32,
-        context: &mut RuntimeOwnedViewModelInstance,
+        new_frame: bool,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
-        self.bind_owned_view_model_context_mut(context);
-        let result = self.advance_with_report_mode(
+        let definitions = artboard.state_machine_definition_owner(self);
+        let Some(state_machine) = definitions.get(self.state_machine_index) else {
+            return false;
+        };
+        if new_frame && let Some(context) = owned_context.as_deref_mut() {
+            self.bind_owned_view_model_context_mut(context);
+        }
+        self.advance(
             artboard,
             state_machine,
             elapsed_seconds,
-            true,
-            Some(context),
-            &mut NoopScriptHost,
-        );
-        self.retain_script_result(result)
+            new_frame,
+            owned_context,
+        )
     }
 
-    pub(crate) fn advance_preserving_reported_events(
+    pub(crate) fn advance(
         &mut self,
         artboard: &mut ArtboardInstance,
         state_machine: &RuntimeStateMachine,
         elapsed_seconds: f32,
+        new_frame: bool,
         owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
         let result = self.advance_with_report_mode(
             artboard,
             state_machine,
             elapsed_seconds,
-            true,
+            new_frame,
             owned_context,
             &mut NoopScriptHost,
         );
         self.retain_script_result(result)
     }
 
-    pub(crate) fn advance_after_state_probe(
-        &mut self,
-        artboard: &mut ArtboardInstance,
-        state_machine: &RuntimeStateMachine,
-        elapsed_seconds: f32,
-    ) -> bool {
-        let result = self.advance_with_report_mode(
-            artboard,
-            state_machine,
-            elapsed_seconds,
-            false,
-            None,
-            &mut NoopScriptHost,
-        );
-        self.retain_script_result(result)
+    pub(crate) fn drop_hidden_focus_target(&mut self, artboard: &ArtboardInstance) {
+        self.focus.sync(artboard);
     }
 
     /// Probe authored transitions without advancing or reapplying the current
@@ -11574,7 +11589,10 @@ impl StateMachineInstance {
         if self.scripted_data_context_prepare_pending() {
             return Ok(false);
         }
-        self.post_update_probe_pending = false;
+        #[cfg(test)]
+        {
+            self.transition_probe_count += 1;
+        }
         if !self.focus.is_inert() {
             self.focus.sync(artboard);
         }
@@ -11646,20 +11664,9 @@ impl StateMachineInstance {
         }
         self.capture_focus_callbacks();
         if changed_state {
-            // The zero-time advance following a successful probe must not be
-            // elided by the steady-state fast path.
             self.needs_advance = true;
         }
         Ok(changed_state)
-    }
-
-    /// Whether C++'s one mandatory initial outer-update probe is still owed.
-    pub(crate) fn post_update_probe_pending(&self) -> bool {
-        self.post_update_probe_pending
-    }
-
-    pub(crate) fn schedule_post_update_probe(&mut self) {
-        self.post_update_probe_pending = true;
     }
 
     fn advance_with_report_mode(
@@ -11677,11 +11684,14 @@ impl StateMachineInstance {
         if self.scripted_data_context_prepare_pending() {
             return Ok(false);
         }
+        #[cfg(test)]
+        self.advance_phase_trace.clear();
         if new_frame {
             for layer in &mut self.layers {
                 layer.begin_new_frame();
             }
         }
+        self.record_advance_phase("draw-sort-check");
         let draw_order_change_counter = artboard.prepared_epoch();
         if self.draw_order_change_counter != draw_order_change_counter {
             self.sort_hit_components(artboard);
@@ -11690,24 +11700,29 @@ impl StateMachineInstance {
         if !self.focus.is_inert() {
             self.focus.sync(artboard);
         }
-        // A retained context can be mutated through any alias between
-        // frames. Collect its pushed source dirt before the clean-frame fast
-        // path so it schedules the ordinary updateDataBinds(false) work.
-        self.collect_retained_owned_view_model_dirt();
-        if self.has_advanced_once
-            && elapsed_seconds == 0.0
-            && !self.needs_advance
-            && !self.has_deferred_listener_view_model_boundary_reports()
-            && self.scripted_instances_by_global.is_empty()
-        {
-            return Ok(false);
+        if new_frame {
+            let next_event_index = self.next_unapplied_reported_event_index();
+            self.apply_local_event_listeners(
+                artboard,
+                next_event_index,
+                owned_context.as_deref_mut(),
+            );
+            let applied_report_count = self.next_unapplied_reported_event_index();
+            self.discard_reported_event_prefix(applied_report_count);
+            // C++ clears m_needsAdvance after focus, semantic, and event
+            // processing. Signals queued by those processors can therefore
+            // be lost unless later layer/bind work rearms the latch.
+            self.record_advance_phase("clear-latch");
+            self.needs_advance = false;
         }
-        self.has_advanced_once = true;
-        self.needs_advance = false;
+        // A retained context can be mutated through any alias between frames.
+        // Collect its pushed source dirt before the pre-layer bind pass.
+        self.collect_retained_owned_view_model_dirt();
         // One C++ DataBindContainer pass owns both ordinary and cloned
         // ScriptInput occurrences before layer advancement. Do not run a
         // separate scripted full-list walk here: it loses the container's
         // authored cross-family partition/order.
+        self.record_advance_phase("pre-layer-binds");
         self.update_data_binds_false(artboard, owned_context.as_deref(), host)?;
         // C++ has no graph-wide Before/After sweep here. The pre-layer
         // selected false update above owns propagation; converter advance is
@@ -11721,6 +11736,7 @@ impl StateMachineInstance {
                         .instance(view_model_index, instance_index)
                 });
         let mut keep_going = false;
+        self.record_advance_phase("authored-layers");
         for (layer_index, layer) in state_machine
             .layers
             .iter()
@@ -11782,6 +11798,7 @@ impl StateMachineInstance {
         // `updateDataBinds(false)` pass; raw advance does not perform a second
         // bind update after `advanceDataBinds`
         // (`state_machine_instance.cpp:2562-2574`).
+        self.record_advance_phase("converter-advance");
         let mut data_bind_advance =
             crate::data_bind_graph::RuntimeDataBindGraphStatefulAdvance::default();
         for occurrence in self.data_bind_occurrences.clone() {
@@ -11806,27 +11823,260 @@ impl StateMachineInstance {
             data_bind_advance.changed |= advance.changed;
             data_bind_advance.keep_going |= advance.keep_going;
         }
+        #[cfg(test)]
+        if let Some(report) = self.bind_advance_test_report.take() {
+            self.reported_events.push(report);
+        }
         // A focus action performed by a state/transition entry callback calls
         // FocusListenerGroup immediately in C++. Retain that callback's
         // markNeedsAdvance result after the layer loop; queued actions execute
         // at the next new-frame boundary.
         self.capture_focus_callbacks();
         let focus_needs_advance = self.needs_advance;
+        self.record_advance_phase("inputs-advanced");
         for input in &mut self.inputs {
             input.advanced();
         }
-        let advanced = focus_needs_advance
-            || data_bind_advance.keep_going
-            || keep_going
-            || !self.reported_events.is_empty()
+        let scheduled = focus_needs_advance || data_bind_advance.keep_going || keep_going;
+        self.needs_advance = scheduled;
+        let advanced = scheduled
+            || self.reported_event_count() != 0
             || self.has_pending_listener_view_model_reports();
         // A fully resolved nested-relative listener is discovered during
         // this raw advance in C++. Publish the report only after computing
         // the return value so it is applied by the next new-frame call
         // without making the discovery frame itself report `true`.
         self.finish_listener_view_model_firing_boundary();
-        self.needs_advance = advanced;
         Ok(advanced)
+    }
+
+    pub(crate) fn advance_artboard_frame_components(
+        artboard: &mut ArtboardInstance,
+        state_machines: &mut [Self],
+        elapsed_seconds: f32,
+    ) -> Result<bool, ScriptError> {
+        Self::advance_artboard_frame_components_with(
+            artboard,
+            state_machines,
+            elapsed_seconds,
+            |artboard, elapsed_seconds| {
+                artboard.advance_components_after_root_state_machines(elapsed_seconds)
+            },
+        )
+    }
+
+    pub(crate) fn advance_artboard_frame_components_with_factory(
+        artboard: &mut ArtboardInstance,
+        state_machines: &mut [Self],
+        elapsed_seconds: f32,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<bool, ScriptError> {
+        Self::advance_artboard_frame_components_with(
+            artboard,
+            state_machines,
+            elapsed_seconds,
+            |artboard, elapsed_seconds| {
+                artboard.advance_components_after_root_state_machines_with_factory(
+                    elapsed_seconds,
+                    factory,
+                )
+            },
+        )
+    }
+
+    fn advance_artboard_frame_components_with(
+        artboard: &mut ArtboardInstance,
+        state_machines: &mut [Self],
+        elapsed_seconds: f32,
+        mut advance_artboard: impl FnMut(
+            &mut ArtboardInstance,
+            f32,
+        ) -> Result<
+            (bool, Vec<(usize, Vec<StateMachineReportedEvent>)>),
+            ScriptError,
+        >,
+    ) -> Result<bool, ScriptError> {
+        let mut changed = false;
+        for state_machine in state_machines.iter_mut() {
+            changed |= state_machine.advance_on_artboard(artboard, elapsed_seconds, true, None);
+            state_machine.drop_hidden_focus_target(artboard);
+        }
+
+        let (artboard_changed, nested_events) = advance_artboard(artboard, elapsed_seconds)?;
+        changed |= artboard_changed;
+        for state_machine in state_machines.iter_mut() {
+            let mut notified = false;
+            for (host_local, events) in &nested_events {
+                notified |= state_machine.notify_events(artboard, Some(*host_local), events);
+            }
+            if notified {
+                changed |= state_machine.advance_on_artboard(artboard, 0.0, false, None);
+            }
+        }
+        Ok(changed)
+    }
+
+    /// C++-corresponding one-argument `advanceAndApply(seconds)` form.
+    ///
+    /// The explicit Artboard is Rust's borrow-model adaptation. The method
+    /// delegates exactly to the boolean form with ViewModel advancement
+    /// enabled.
+    pub fn advance_and_apply(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        elapsed_seconds: f32,
+    ) -> Result<bool, ScriptError> {
+        self.advance_and_apply_with_view_models(artboard, elapsed_seconds, true)
+    }
+
+    /// C++-corresponding `advanceAndApply(seconds, advanceViewModels)` form.
+    /// Elapsed seconds, including NaN, infinities, signed zero, and negatives,
+    /// are forwarded unchanged through the raw machine and Artboard passes.
+    pub fn advance_and_apply_with_view_models(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        elapsed_seconds: f32,
+        advance_view_models: bool,
+    ) -> Result<bool, ScriptError> {
+        let state_machines = std::slice::from_mut(self);
+        Self::advance_and_apply_state_machines_with_view_models(
+            artboard,
+            state_machines,
+            elapsed_seconds,
+            advance_view_models,
+            || false,
+        )
+    }
+
+    /// Instance-owned multi-occurrence form used by the Rust facade.
+    ///
+    /// `advance_detached_view_models` is the borrow-model seam for C++'s
+    /// Artboard-owned scripting VM. Rust's authenticated facade retains that
+    /// registry on `File`, so the instance owner invokes the supplied
+    /// operation at the exact C++ end-of-frame position.
+    pub fn advance_and_apply_state_machines_with_view_models(
+        artboard: &mut ArtboardInstance,
+        state_machines: &mut [Self],
+        elapsed_seconds: f32,
+        advance_view_models: bool,
+        advance_detached_view_models: impl FnOnce() -> bool,
+    ) -> Result<bool, ScriptError> {
+        let mut changed =
+            Self::advance_artboard_frame_components(artboard, state_machines, elapsed_seconds)?;
+        changed |= if advance_view_models {
+            artboard.settle_state_machine_update_passes_after_main_advance_with_script_errors(
+                state_machines,
+            )?
+        } else {
+            artboard
+                .settle_state_machine_update_passes_after_main_advance_without_root_view_model_reset_with_script_errors(
+                    state_machines,
+                )?
+        };
+        if advance_view_models {
+            changed |= advance_detached_view_models();
+        }
+        Ok(Self::advance_and_apply_return(
+            changed,
+            elapsed_seconds,
+            state_machines,
+        ))
+    }
+
+    pub fn advance_and_apply_state_machines_with_factory_and_view_models(
+        artboard: &mut ArtboardInstance,
+        state_machines: &mut [Self],
+        elapsed_seconds: f32,
+        factory: &mut dyn RenderFactory,
+        advance_view_models: bool,
+        advance_detached_view_models: impl FnOnce() -> bool,
+    ) -> Result<bool, ScriptError> {
+        let mut changed = Self::advance_artboard_frame_components_with_factory(
+            artboard,
+            state_machines,
+            elapsed_seconds,
+            factory,
+        )?;
+        changed |= if advance_view_models {
+            artboard.settle_state_machine_update_passes_after_main_advance_with_factory(
+                state_machines,
+                factory,
+            )?
+        } else {
+            artboard
+                .settle_state_machine_update_passes_after_main_advance_without_root_view_model_reset_with_script_errors(
+                    state_machines,
+                )?
+        };
+        if advance_view_models {
+            changed |= advance_detached_view_models();
+        }
+        Ok(Self::advance_and_apply_return(
+            changed,
+            elapsed_seconds,
+            state_machines,
+        ))
+    }
+
+    /// Pinned facade return terms. Exact equality deliberately forces both
+    /// signs of zero and does not classify or reject any other floating-point
+    /// value.
+    pub fn advance_and_apply_return(
+        changed: bool,
+        elapsed_seconds: f32,
+        state_machines: &[Self],
+    ) -> bool {
+        changed
+            || elapsed_seconds == 0.0
+            || state_machines.iter().any(|instance| {
+                instance.reported_event_count() != 0
+                    || instance.has_pending_listener_view_model_reports()
+            })
+    }
+
+    /// Instance-owned five-pass settlement policy for `advanceAndApply`.
+    ///
+    /// Artboard supplies only its update operation because factory/script
+    /// dispatch is Artboard-owned. Transition probing, zero-time follow-up,
+    /// optional ViewModel advancement, reset ordering, and the five-pass cap
+    /// remain together here.
+    pub(crate) fn settle_artboard_update_passes(
+        artboard: &mut ArtboardInstance,
+        state_machines: &mut [Self],
+        reset_root_view_models: bool,
+        mut update_pass: impl FnMut(&mut ArtboardInstance) -> bool,
+    ) -> bool {
+        const MAX_SETTLEMENT_PASSES: usize = 5;
+
+        let mut changed = false;
+        for _ in 0..MAX_SETTLEMENT_PASSES {
+            changed |= update_pass(artboard);
+            for state_machine in state_machines.iter_mut() {
+                // Pinned C++ calls tryChangeState on every settlement pass.
+                // There is deliberately no capability flag, pending bit, or
+                // definition scan guarding this probe.
+                if artboard.try_change_state_machine_instance(state_machine) {
+                    changed = true;
+                    changed |= artboard
+                        .advance_state_machine_instance_after_state_probe(state_machine, 0.0);
+                }
+            }
+            changed |= artboard.advance_outer_update_components_for_state_machine_settlement();
+            if reset_root_view_models {
+                for state_machine in state_machines.iter_mut() {
+                    state_machine.reset_advanced_data_context();
+                }
+            }
+            artboard.reset_retained_components_for_state_machine_settlement();
+            if !artboard.has_dirt(ComponentDirt::COMPONENTS)
+                && !state_machines
+                    .iter()
+                    .any(StateMachineInstance::has_pending_data_bind_work)
+            {
+                break;
+            }
+        }
+        changed
     }
 
     fn apply_default_view_model_bindings(
@@ -13683,6 +13933,286 @@ mod scripted_listener_action_tests {
             changing_layer(930, 2_000),
         ]);
         machine
+    }
+
+    fn fl_c5_advance_fixture() -> (ArtboardInstance, StateMachineInstance) {
+        let (mut artboard, _) = scripted_listener_artboard_and_machine();
+        artboard.state_machines = Arc::new(vec![reset_input_state_machine(Vec::new())]);
+        let machine = artboard
+            .state_machine_instance(0)
+            .expect("WP7 advance fixture state machine");
+        (artboard, machine)
+    }
+
+    #[test]
+    fn fl_c5_advance_raw_order_and_clean_zero_bookkeeping() {
+        let (mut artboard, mut machine) = fl_c5_advance_fixture();
+
+        let _ = artboard.advance_state_machine_instance(&mut machine, 0.25);
+        assert!(machine.fire_trigger(2));
+        let _ = artboard.advance_state_machine_instance(&mut machine, -0.0);
+
+        assert_eq!(
+            machine.advance_phase_trace,
+            [
+                "draw-sort-check",
+                "focus-snapshot",
+                "semantic-snapshot",
+                "apply-events",
+                "clear-latch",
+                "pre-layer-binds",
+                "authored-layers",
+                "converter-advance",
+                "inputs-advanced",
+            ],
+            "raw order matches state_machine_instance.cpp:2546-2585"
+        );
+        assert_eq!(
+            machine.input(2).and_then(|input| input.trigger_fired()),
+            Some(false),
+            "clean signed-zero advances still run every input advanced()"
+        );
+    }
+
+    #[test]
+    fn fl_c5_advance_new_frame_false_preserves_the_sticky_latch() {
+        let (mut artboard, mut machine) = fl_c5_advance_fixture();
+        let _ = artboard.advance_state_machine_instance(&mut machine, 0.25);
+        assert!(machine.set_bool(0, true));
+
+        let definitions = artboard.state_machine_definition_owner(&machine);
+        let definition = definitions.first().expect("advance definition");
+        assert!(machine.advance(&mut artboard, definition, 0.0, false, None));
+        assert!(machine.needs_advance());
+        assert!(
+            !machine.advance_phase_trace.contains(&"clear-latch"),
+            "newFrame=false must never clear m_needsAdvance"
+        );
+    }
+
+    #[test]
+    fn fl_c5_advance_fp_values_forward_without_validation_and_zero_forces_facade() {
+        let (mut artboard, mut machine) = fl_c5_advance_fixture();
+        let definitions = artboard.state_machine_definition_owner(&machine);
+        let definition = definitions.first().expect("advance definition");
+
+        for seconds in [
+            f32::NAN,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            -17.25,
+            0.0,
+            -0.0,
+        ] {
+            let _ = machine.advance(&mut artboard, definition, seconds, true, None);
+            assert_eq!(
+                machine.advance_phase_trace.last(),
+                Some(&"inputs-advanced"),
+                "every f32 value reaches the end of raw bookkeeping"
+            );
+        }
+
+        assert!(StateMachineInstance::advance_and_apply_return(
+            false,
+            0.0,
+            std::slice::from_ref(&machine),
+        ));
+        assert!(StateMachineInstance::advance_and_apply_return(
+            false,
+            -0.0,
+            std::slice::from_ref(&machine),
+        ));
+        assert!(!StateMachineInstance::advance_and_apply_return(
+            false,
+            f32::NAN,
+            &[],
+        ));
+        assert!(!StateMachineInstance::advance_and_apply_return(
+            false,
+            -1.0,
+            &[],
+        ));
+
+        machine.reported_events.push(fl_c5_test_reported_event(7));
+        assert!(
+            StateMachineInstance::advance_and_apply_return(
+                false,
+                0.25,
+                std::slice::from_ref(&machine),
+            ),
+            "a pending event keeps the facade going"
+        );
+        machine.reported_events.clear();
+        machine.reported_listener_view_models.report_data_bind(0);
+        assert!(
+            StateMachineInstance::advance_and_apply_return(
+                false,
+                0.25,
+                std::slice::from_ref(&machine),
+            ),
+            "a pending listener ViewModel keeps the facade going"
+        );
+    }
+
+    #[test]
+    fn fl_c5_advance_bind_generated_report_is_a_raw_return_term() {
+        let (mut artboard, mut machine) = fl_c5_advance_fixture();
+        machine.bind_advance_test_report = Some(fl_c5_test_reported_event(17));
+
+        assert!(
+            artboard.advance_state_machine_instance(&mut machine, 0.25),
+            "a report created during converter/bind advance is a raw return term"
+        );
+        assert_eq!(
+            machine.reported_event_count(),
+            1,
+            "the bind-generated report remains pending for the next applyEvents snapshot"
+        );
+    }
+
+    #[test]
+    fn fl_c5_advance_five_passes_probe_transitions_unconditionally() {
+        let (mut artboard, mut machine) = fl_c5_advance_fixture();
+        let probe_count = machine.transition_probe_count;
+
+        StateMachineInstance::settle_artboard_update_passes(
+            &mut artboard,
+            std::slice::from_mut(&mut machine),
+            true,
+            |artboard| {
+                let changed = artboard.update_pass();
+                let _ = artboard.add_dirt(0, ComponentDirt::COMPONENTS, false);
+                changed
+            },
+        );
+
+        assert_eq!(
+            machine.transition_probe_count - probe_count,
+            5,
+            "persistent sixth-pass dirt is capped after five unconditional probes"
+        );
+        assert_eq!(
+            machine.data_context_advance_call_count, 5,
+            "ViewModels advance once per settlement iteration before the Artboard reset"
+        );
+    }
+
+    #[test]
+    fn fl_c5_advance_view_models_false_skips_only_data_context_advancement() {
+        let (mut artboard, mut machine) = fl_c5_advance_fixture();
+        StateMachineInstance::settle_artboard_update_passes(
+            &mut artboard,
+            std::slice::from_mut(&mut machine),
+            false,
+            |artboard| artboard.update_pass(),
+        );
+        assert_eq!(machine.data_context_advance_call_count, 0);
+
+        StateMachineInstance::settle_artboard_update_passes(
+            &mut artboard,
+            std::slice::from_mut(&mut machine),
+            true,
+            |artboard| artboard.update_pass(),
+        );
+        assert_eq!(machine.data_context_advance_call_count, 1);
+
+        let detached_advance_calls = std::cell::Cell::new(0);
+        let (mut artboard, mut machine) = fl_c5_advance_fixture();
+        StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+            &mut artboard,
+            std::slice::from_mut(&mut machine),
+            0.25,
+            false,
+            || {
+                detached_advance_calls.set(detached_advance_calls.get() + 1);
+                true
+            },
+        )
+        .expect("advanceViewModels=false facade");
+        assert_eq!(
+            detached_advance_calls.get(),
+            0,
+            "advanceViewModels=false skips detached scripted ViewModels"
+        );
+
+        let (mut artboard, mut machine) = fl_c5_advance_fixture();
+        StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+            &mut artboard,
+            std::slice::from_mut(&mut machine),
+            0.25,
+            true,
+            || {
+                detached_advance_calls.set(detached_advance_calls.get() + 1);
+                true
+            },
+        )
+        .expect("advanceViewModels=true facade");
+        assert_eq!(
+            detached_advance_calls.get(),
+            1,
+            "advanceViewModels=true advances detached scripted ViewModels exactly once"
+        );
+    }
+
+    #[test]
+    fn fl_c5_advance_focus_chaining_and_hidden_target_boundaries() {
+        let (mut artboard, mut machine, _) =
+            scripted_drawable_subtype_input_artboard_and_machine_with_optional_script(
+                "ScriptedDrawable",
+                None,
+                true,
+            );
+        machine.focus.take_owner_events();
+        machine.queued_focus_events.clear();
+        machine.listener_definitions = Arc::new(vec![RuntimeStateMachineListener {
+            target_local_id: 1,
+            is_single: false,
+            listener_types: vec![RuntimeListenerType::Focus, RuntimeListenerType::Blur],
+            event_local_indices: Vec::new(),
+            view_model_path: None,
+            view_model_input_types: Vec::new(),
+            gamepad_input_types: Vec::new(),
+            keyboard_input_types: Vec::new(),
+            semantic_input_types: Vec::new(),
+            hit_paths: Vec::new(),
+            listener_actions: vec![RuntimeScheduledListenerAction::FocusClear(
+                RuntimeFocusActionClear::for_test(0),
+            )],
+        }]);
+        machine.focus_listener_groups = vec![
+            RuntimeFocusListenerGroup::new(0, 2, &machine.listener_definitions[0])
+                .expect("advance focus group"),
+        ];
+        assert!(machine.focus.clear_focus());
+        machine.capture_focus_callbacks();
+        machine.queued_focus_events.clear();
+        assert!(machine.focus.set_focus_target(1));
+        machine.capture_focus_callbacks();
+
+        assert!(
+            !artboard.advance_state_machine_instance(&mut machine, 0.25),
+            "C++ clears the continuation set by focus generated during the active focus snapshot"
+        );
+        assert_eq!(
+            machine.queued_focus_events,
+            [ScriptListenerInvocation::Focus {
+                listener_index: 0,
+                is_focus: false,
+            }],
+            "the chained blur callback remains queued despite the pinned lost-latch edge"
+        );
+
+        let opacity_key = crate::properties::property_key_for_name("Node", "opacity")
+            .expect("Node.opacity property key");
+        assert!(artboard.set_double_property(1, opacity_key, 0.0));
+        artboard.update_components();
+        let _ = machine
+            .advance_and_apply(&mut artboard, 0.25)
+            .expect("hidden-focus facade advance");
+        assert!(
+            machine.focus.focused_listener_chain().is_empty(),
+            "the facade drops a focus target made ineligible by retained Artboard state"
+        );
     }
 
     #[test]
@@ -16269,7 +16799,6 @@ mod scripted_listener_action_tests {
         assert_eq!(root_events.len(), 1);
         root_artboard.set_frame_origin(false);
         let _ = root_artboard.advance_state_machine_instance(&mut root, 0.0);
-        root.schedule_post_update_probe();
         root.notify_events(&mut root_artboard, Some(8), &root_events);
         assert!(
             root.take_bubbled_event_reports().is_empty(),

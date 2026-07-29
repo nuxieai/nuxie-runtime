@@ -30,10 +30,6 @@ impl RuntimeTransitionCondition {
         matches!(self, Self::Bool(_) | Self::Number(_) | Self::Trigger(_))
     }
 
-    pub(super) fn can_change_during_artboard_update(&self) -> bool {
-        !self.is_direct_input()
-    }
-
     pub(super) fn from_object(
         file: &RuntimeFile,
         graph: &ArtboardGraph,
@@ -124,32 +120,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn base_dispatch_classifies_direct_and_live_conditions() {
+    fn base_dispatch_classifies_direct_input_conditions() {
         assert!(
-            !RuntimeTransitionCondition::Number(RuntimeTransitionNumberCondition::new(
+            RuntimeTransitionCondition::Number(RuntimeTransitionNumberCondition::new(
                 0,
                 TransitionConditionOp::Equal,
                 1.0,
             ))
-            .can_change_during_artboard_update()
+            .is_direct_input()
         );
         assert!(
-            !RuntimeTransitionCondition::Bool(RuntimeTransitionBoolCondition::new(
+            RuntimeTransitionCondition::Bool(RuntimeTransitionBoolCondition::new(
                 0,
                 TransitionConditionOp::Equal,
             ))
-            .can_change_during_artboard_update()
+            .is_direct_input()
         );
         assert!(
-            RuntimeTransitionCondition::Focus(RuntimeTransitionFocusCondition::new(
+            !RuntimeTransitionCondition::Focus(RuntimeTransitionFocusCondition::new(
                 0,
                 TransitionConditionOp::Equal,
             ))
-            .can_change_during_artboard_update()
+            .is_direct_input()
         );
         assert!(
-            RuntimeTransitionCondition::Scripted(RuntimeScriptedTransitionCondition::new(7))
-                .can_change_during_artboard_update()
+            !RuntimeTransitionCondition::Scripted(RuntimeScriptedTransitionCondition::new(7))
+                .is_direct_input()
         );
     }
 }

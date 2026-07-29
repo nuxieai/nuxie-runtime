@@ -18,11 +18,13 @@ use nuxie_runtime::{
 use nuxie_schema::definition_by_name;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
+use std::thread;
+use std::time::{Duration, Instant};
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -1522,6 +1524,33 @@ fn push_animation_for_single_node_with_duration(
     push_object_with_properties(bytes, "LinearAnimation", |bytes| {
         push_uint_property(bytes, "LinearAnimation", "fps", 10);
         push_uint_property(bytes, "LinearAnimation", "duration", duration);
+    });
+    push_object_with_properties(bytes, "KeyedObject", |bytes| {
+        push_uint_property(bytes, "KeyedObject", "objectId", target_local_id);
+    });
+    push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+        push_uint_property(
+            bytes,
+            "KeyedProperty",
+            "propertyKey",
+            u64::from(property_key_for_name("Node", "x")),
+        );
+    });
+    push_keyframe_double(bytes, 0, first_value, 1);
+    push_keyframe_double(bytes, 10, second_value, 0);
+}
+
+fn push_animation_for_single_node_with_loop(
+    bytes: &mut Vec<u8>,
+    target_local_id: u64,
+    first_value: f32,
+    second_value: f32,
+    loop_value: u64,
+) {
+    push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+        push_uint_property(bytes, "LinearAnimation", "fps", 10);
+        push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        push_uint_property(bytes, "LinearAnimation", "loopValue", loop_value);
     });
     push_object_with_properties(bytes, "KeyedObject", |bytes| {
         push_uint_property(bytes, "KeyedObject", "objectId", target_local_id);
@@ -16322,6 +16351,26 @@ fn synthetic_fl_c5_empty_state_machine(file_id: u64) -> Vec<u8> {
         push_object_with_properties(bytes, "Backboard", |_| {});
         push_object_with_properties(bytes, "Artboard", |_| {});
         push_object_with_properties(bytes, "StateMachine", |_| {});
+    })
+}
+
+fn synthetic_fl_c5_state_machine_animation_loop(file_id: u64, loop_value: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node_with_loop(bytes, 1, 2.0, 12.0, loop_value);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
     })
 }
 
@@ -82201,6 +82250,392 @@ fn fl_c5_live_event_projection() {
         Some("latest"),
         "pinned C++ EventReport retains a live Event pointer across the mutation"
     );
+}
+
+fn fl_c5_bounded_command_completes(mut command: Command, timeout: Duration) -> bool {
+    command.stdout(Stdio::null()).stderr(Stdio::null());
+    let mut child = command
+        .spawn()
+        .unwrap_or_else(|error| panic!("spawn bounded WP7 probe: {error}"));
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .unwrap_or_else(|error| panic!("poll bounded WP7 probe: {error}"))
+        {
+            return status.success();
+        }
+        if Instant::now() >= deadline {
+            child
+                .kill()
+                .unwrap_or_else(|error| panic!("kill bounded WP7 probe: {error}"));
+            let _ = child.wait();
+            return false;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+fn fl_c5_bounded_cpp_state_machine_advance(
+    probe: &Path,
+    label: &str,
+    bytes: &[u8],
+    seconds: &str,
+) -> bool {
+    let path = std::env::temp_dir().join(format!(
+        "rive-rust-runtime-wp7-bounded-{}-{}.riv",
+        std::process::id(),
+        label
+    ));
+    std::fs::write(&path, bytes)
+        .unwrap_or_else(|error| panic!("write bounded WP7 fixture {}: {error}", path.display()));
+    let mut command = Command::new(probe);
+    command
+        .arg("--no-advance")
+        .arg("--instance-artboards")
+        .arg("--runtime-update")
+        .arg("--runtime-advance-state-machine")
+        .arg("0")
+        .arg("0")
+        .arg("--runtime-advance-state-machine")
+        .arg("0")
+        .arg(seconds)
+        .arg("--file")
+        .arg(&path);
+    let completed = fl_c5_bounded_command_completes(command, Duration::from_millis(1_500));
+    std::fs::remove_file(&path)
+        .unwrap_or_else(|error| panic!("remove bounded WP7 fixture {}: {error}", path.display()));
+    completed
+}
+
+fn fl_c5_bounded_rust_state_machine_advance(mode: &str) -> bool {
+    let mut command = Command::new(
+        std::env::current_exe().expect("resolve the current cpp_probe integration-test binary"),
+    );
+    command
+        .arg("fl_c5_advance_fp_matrix_bounded_child")
+        .arg("--exact")
+        .env("FLC5_ADVANCE_FP_BOUNDED_CHILD", mode);
+    fl_c5_bounded_command_completes(command, Duration::from_millis(1_500))
+}
+
+#[test]
+fn fl_c5_advance_fp_matrix_bounded_child() {
+    let Ok(mode) = std::env::var("FLC5_ADVANCE_FP_BOUNDED_CHILD") else {
+        return;
+    };
+    let (loop_value, seconds) = match mode.as_str() {
+        "one-shot-nan" => (0, f32::NAN),
+        "loop-positive-infinity" => (1, f32::INFINITY),
+        "ping-pong-positive-infinity" => (2, f32::INFINITY),
+        other => panic!("unknown WP7 bounded child mode {other}"),
+    };
+    let label = format!("synthetic/fl_c5_advance_fp_bounded_{mode}.riv");
+    let bytes = synthetic_fl_c5_state_machine_animation_loop(96_970 + loop_value, loop_value);
+    let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, &label);
+    let mut machine = artboard
+        .state_machine_instance(0)
+        .expect("bounded WP7 Rust state machine");
+    let _ = artboard.advance_state_machine_instance(&mut machine, 0.0);
+    let _ = artboard.advance_state_machine_instance(&mut machine, seconds);
+}
+
+#[test]
+fn fl_c5_raw_advance_order_matches_pinned_cpp() {
+    fl_c5_run_rust_unit_probe("fl_c5_advance_raw_order_and_clean_zero_bookkeeping");
+    fl_c5_run_rust_unit_probe("fl_c5_advance_new_frame_false_preserves_the_sticky_latch");
+
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let advance = fl_c5_cpp_member(
+        &source,
+        "bool StateMachineInstance::advance(float seconds, bool newFrame)",
+        "void StateMachineInstance::advancedDataContext()",
+    );
+    let phases = [
+        "m_drawOrderChangeCounter !=",
+        "processFocusEvents();",
+        "processSemanticEvents();",
+        "applyEvents();",
+        "m_needsAdvance = false;",
+        "updateDataBinds(false);",
+        "m_layers[i].advance(seconds, newFrame)",
+        "advanceDataBinds(seconds)",
+        "inst->advanced();",
+        "return m_needsAdvance || !m_reportedEvents.empty() ||",
+    ];
+    let mut cursor = 0;
+    for phase in phases {
+        let offset = advance[cursor..]
+            .find(phase)
+            .unwrap_or_else(|| panic!("pinned C++ raw advance omitted phase {phase:?}"));
+        cursor += offset + phase.len();
+    }
+}
+
+#[test]
+fn fl_c5_zero_delta_bookkeeping() {
+    fl_c5_run_rust_unit_probe("fl_c5_advance_raw_order_and_clean_zero_bookkeeping");
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping live C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (label, seconds) in [
+        ("synthetic/fl_c5_advance_idle_positive_zero.riv", "0"),
+        ("synthetic/fl_c5_advance_idle_negative_zero.riv", "-0"),
+    ] {
+        let bytes = synthetic_fl_c5_empty_state_machine(96_971);
+        let args = [
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            seconds.to_owned(),
+        ];
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, label);
+        let mut machine = artboard
+            .state_machine_instance(0)
+            .expect("idle WP7 Rust state machine");
+        let advanced = artboard.advance_state_machine_instance(
+            &mut machine,
+            if seconds.starts_with('-') { -0.0 } else { 0.0 },
+        );
+        compare_state_machine_advance(
+            &cpp.artboards[0].runtime_state_machine_advances[0],
+            &machine,
+            advanced,
+            label,
+        );
+    }
+
+    let label = "synthetic/fl_c5_advance_fired_trigger_negative_zero.riv";
+    let bytes =
+        synthetic_state_machine_input_transition(96_972, SyntheticInputTransitionKind::Trigger);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.25".to_owned(),
+        "--runtime-fire-state-machine-trigger".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "-0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, label);
+    let mut machine = artboard
+        .state_machine_instance(0)
+        .expect("trigger WP7 Rust state machine");
+    let first = artboard.advance_state_machine_instance(&mut machine, 0.25);
+    let first_machine = machine.clone();
+    assert!(machine.fire_trigger(0));
+    let second = artboard.advance_state_machine_instance(&mut machine, -0.0);
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    compare_state_machine_advance(&cpp_reports[0], &first_machine, first, label);
+    compare_state_machine_advance(&cpp_reports[1], &machine, second, label);
+    assert_eq!(
+        machine.input(0).and_then(|input| input.trigger_fired()),
+        Some(false),
+        "input advanced() must clear a trigger even at negative zero"
+    );
+}
+
+#[test]
+fn fl_c5_advance_fp_matrix() {
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_advance_fp_values_forward_without_validation_and_zero_forces_facade",
+    );
+
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let advance = fl_c5_cpp_member(
+        &source,
+        "bool StateMachineInstance::advance(float seconds, bool newFrame)",
+        "void StateMachineInstance::advancedDataContext()",
+    );
+    assert!(
+        !advance.contains("isfinite") && !advance.contains("isnan"),
+        "the pinned C++ path forwards every float classification"
+    );
+
+    if let Some(probe) = probe_path() {
+        let cases = [
+            ("one-shot-nan", 0, "nan", true),
+            ("loop-positive-infinity", 1, "inf", true),
+            ("ping-pong-positive-infinity", 2, "inf", false),
+        ];
+        for (case, loop_value, seconds, expected_completion) in cases {
+            let bytes =
+                synthetic_fl_c5_state_machine_animation_loop(96_973 + loop_value, loop_value);
+            assert_eq!(
+                fl_c5_bounded_cpp_state_machine_advance(&probe, case, &bytes, seconds),
+                expected_completion,
+                "pinned C++ bounded completion classification for {case}"
+            );
+            assert_eq!(
+                fl_c5_bounded_rust_state_machine_advance(case),
+                expected_completion,
+                "Rust bounded completion classification for {case}"
+            );
+        }
+    } else {
+        eprintln!("skipping bounded live C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+    }
+
+    let Some(probe) = probe_path() else {
+        return;
+    };
+    for (index, (seconds_text, seconds)) in [("-17.25", -17.25), ("0", 0.0), ("-0", -0.0)]
+        .into_iter()
+        .enumerate()
+    {
+        let label = format!("synthetic/fl_c5_advance_fp_finite_{index}.riv");
+        let bytes = synthetic_fl_c5_empty_state_machine(96_980 + index as u64);
+        let args = [
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            seconds_text.to_owned(),
+        ];
+        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &args);
+        let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut machine = artboard
+            .state_machine_instance(0)
+            .expect("finite-matrix WP7 Rust state machine");
+        let advanced = artboard.advance_state_machine_instance(&mut machine, seconds);
+        compare_state_machine_advance(
+            &cpp.artboards[0].runtime_state_machine_advances[0],
+            &machine,
+            advanced,
+            &label,
+        );
+    }
+}
+
+#[test]
+fn fl_c5_advance_return_terms() {
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_advance_fp_values_forward_without_validation_and_zero_forces_facade",
+    );
+    fl_c5_run_rust_unit_probe("fl_c5_advance_bind_generated_report_is_a_raw_return_term");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let raw = fl_c5_cpp_member(
+        &source,
+        "bool StateMachineInstance::advance(float seconds, bool newFrame)",
+        "void StateMachineInstance::advancedDataContext()",
+    );
+    assert!(raw.contains(
+        "return m_needsAdvance || !m_reportedEvents.empty() ||\n           !m_reportedListenerViewModels.empty();"
+    ));
+    let facade = fl_c5_cpp_member(
+        &source,
+        "bool StateMachineInstance::advanceAndApply(float seconds)",
+        "void StateMachineInstance::markNeedsAdvance()",
+    );
+    assert!(facade.contains("this->advance(seconds, true) || seconds == 0.0f"));
+    assert!(facade.contains(
+        "return keepGoing || !m_reportedEvents.empty() ||\n           !m_reportedListenerViewModels.empty();"
+    ));
+
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping live C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    for (index, (seconds_text, seconds)) in [("0", 0.0), ("-0", -0.0)].into_iter().enumerate() {
+        let label = format!("synthetic/fl_c5_advance_return_zero_{index}.riv");
+        let bytes = synthetic_fl_c5_empty_state_machine(96_990 + index as u64);
+        let args = [
+            "--runtime-advance-and-apply-state-machine".to_owned(),
+            "0".to_owned(),
+            seconds_text.to_owned(),
+        ];
+        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &args);
+        let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut machine = artboard
+            .state_machine_instance(0)
+            .expect("return-terms WP7 Rust state machine");
+        let advanced = machine
+            .advance_and_apply(&mut artboard, seconds)
+            .expect("WP7 Rust advanceAndApply");
+        compare_state_machine_advance(
+            &cpp.artboards[0].runtime_state_machine_advances[0],
+            &machine,
+            advanced,
+            &label,
+        );
+        assert!(advanced, "exact zero of either sign forces the facade true");
+    }
+
+    let label = "synthetic/fl_c5_advance_return_layer_report.riv";
+    let bytes = synthetic_state_machine_trigger_done_event(96_992);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.5".to_owned(),
+        "--runtime-fire-state-machine-trigger".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.25".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, label);
+    let mut machine = artboard
+        .state_machine_instance(0)
+        .expect("layer-report WP7 Rust state machine");
+    let first = artboard.advance_state_machine_instance(&mut machine, 0.5);
+    let first_machine = machine.clone();
+    assert!(machine.fire_trigger(0));
+    let second = artboard.advance_state_machine_instance(&mut machine, 0.25);
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    compare_state_machine_advance(&cpp_reports[0], &first_machine, first, label);
+    compare_state_machine_advance(&cpp_reports[1], &machine, second, label);
+    assert_eq!(machine.reported_event_count(), 1);
+    assert!(
+        second,
+        "a report created after applyEvents during layer advance is a raw return term"
+    );
+}
+
+#[test]
+fn fl_c5_five_pass_unconditional_probe() {
+    fl_c5_run_rust_unit_probe("fl_c5_advance_five_passes_probe_transitions_unconditionally");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let facade = fl_c5_cpp_member(
+        &source,
+        "bool StateMachineInstance::advanceAndApply(float seconds)",
+        "void StateMachineInstance::markNeedsAdvance()",
+    );
+    assert!(facade.contains("for (int outerOptionC = 0; outerOptionC < 5; outerOptionC++)"));
+    let update = facade
+        .find("m_artboardInstance->updatePass(true)")
+        .expect("pinned C++ update pass");
+    let probe = facade
+        .find("if (this->tryChangeState())")
+        .expect("pinned C++ unconditional transition probe");
+    let follow_up = facade
+        .find("this->advance(0.0f, false);")
+        .expect("pinned C++ zero-time state-machine follow-up");
+    let outer = facade
+        .rfind("m_artboardInstance->advanceInternal(")
+        .expect("pinned C++ zero-time Artboard follow-up");
+    assert!(update < probe && probe < follow_up && follow_up < outer);
+}
+
+#[test]
+fn fl_c5_advance_view_models_false() {
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_advance_view_models_false_skips_only_data_context_advancement",
+    );
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let facade = fl_c5_cpp_member(
+        &source,
+        "bool StateMachineInstance::advanceAndApply(float seconds)",
+        "void StateMachineInstance::markNeedsAdvance()",
+    );
+    assert!(facade.contains("if (advanceViewModels)"));
+    assert!(facade.contains("reset(); // advancedDataContext() (VM consume) + artboard reset"));
+    assert!(facade.contains("m_artboardInstance->reset(); // artboard component reset only"));
+    assert!(facade.contains("m_artboardInstance->advanceScriptedViewModels();"));
 }
 
 fn assert_close(actual: f32, expected: f32, label: &str) {

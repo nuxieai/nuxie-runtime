@@ -1116,10 +1116,6 @@ pub(crate) enum RuntimeNestedAnimationInstance {
     StateMachine(RuntimeNestedStateMachineInstance),
 }
 
-fn state_machine_requires_outer_update_probe(instance: &StateMachineInstance) -> bool {
-    instance.post_update_probe_pending() || instance.requires_post_update_state_probe()
-}
-
 impl ArtboardInstance {
     /// Thin borrow-model hook for C++
     /// `Artboard::clearDataContext` as called by the StateMachineInstance bind
@@ -5388,37 +5384,7 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
-        let definitions = self.state_machine_definition_owner(instance);
-        let Some(state_machine) = definitions.get(instance.state_machine_index()) else {
-            return false;
-        };
-        let mut owned_context = owned_context;
-        // C++ `applyEvents()` consumes only reports not delivered to
-        // listeners yet, at new-frame start, and loops chained reports before
-        // layer advance (`state_machine_instance.cpp:2320-2343,2555-2565`).
-        // Each C++ iteration clears the batch before notifying it. Drain the
-        // complete prefix consumed by the bounded chained loop; reports
-        // created later by the layer pass remain pending for the next frame's
-        // `applyEvents()`.
-        let next_event_index = instance.next_unapplied_reported_event_index();
-        instance.apply_local_event_listeners(self, next_event_index, owned_context.as_deref_mut());
-        let applied_report_count = instance.next_unapplied_reported_event_index();
-        instance.discard_reported_event_prefix(applied_report_count);
-
-        match owned_context.as_deref_mut() {
-            Some(context) => instance.advance_with_owned_view_model_context(
-                self,
-                state_machine,
-                elapsed_seconds,
-                context,
-            ),
-            None => instance.advance_preserving_reported_events(
-                self,
-                state_machine,
-                elapsed_seconds,
-                None,
-            ),
-        }
+        instance.advance_on_artboard(self, elapsed_seconds, true, owned_context)
     }
 
     fn advance_state_machine_instance_preserving_events(
@@ -5427,44 +5393,25 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
-        let definitions = self.state_machine_definition_owner(instance);
-        let Some(state_machine) = definitions.get(instance.state_machine_index()) else {
-            return false;
-        };
         // This is C++'s `newFrame=false` follow-up after direct nested-event
         // notification. It advances layers but does not call `applyEvents`;
         // reports created here remain queued for the next ordinary frame
         // (`state_machine_instance.cpp:2555-2565`).
-        instance.advance_preserving_reported_events(
-            self,
-            state_machine,
-            elapsed_seconds,
-            owned_context,
-        )
+        instance.advance_on_artboard(self, elapsed_seconds, false, owned_context)
     }
 
-    fn advance_state_machine_instance_after_state_probe(
+    pub(crate) fn advance_state_machine_instance_after_state_probe(
         &mut self,
         instance: &mut StateMachineInstance,
         elapsed_seconds: f32,
     ) -> bool {
-        let definitions = self.state_machine_definition_owner(instance);
-        let Some(state_machine) = definitions.get(instance.state_machine_index()) else {
-            return false;
-        };
-        instance.advance_after_state_probe(self, state_machine, elapsed_seconds)
+        instance.advance_on_artboard(self, elapsed_seconds, false, None)
     }
 
     pub(crate) fn try_change_state_machine_instance(
         &mut self,
         instance: &mut StateMachineInstance,
     ) -> bool {
-        // Root and component-list machines complete their direct-input
-        // transition loop during ordinary advance. Mounted nested machines
-        // additionally owe one C++-matching outer-update probe.
-        if !state_machine_requires_outer_update_probe(instance) {
-            return false;
-        }
         self.try_change_state_machine_instance_unconditionally(instance)
     }
 
@@ -5479,7 +5426,7 @@ impl ArtboardInstance {
         instance.try_change_state(self, state_machine)
     }
 
-    fn state_machine_definition_owner(
+    pub(crate) fn state_machine_definition_owner(
         &self,
         instance: &StateMachineInstance,
     ) -> Arc<Vec<RuntimeStateMachine>> {
@@ -5767,11 +5714,10 @@ impl ArtboardInstance {
         state_machines: &mut [StateMachineInstance],
         elapsed_seconds: f32,
     ) -> Result<bool, ScriptError> {
-        let mut script_mode = RuntimeScriptAdvanceMode::HostOnly;
-        self.advance_frame_components_with_state_machines_and_mode(
+        StateMachineInstance::advance_artboard_frame_components(
+            self,
             state_machines,
             elapsed_seconds,
-            &mut script_mode,
         )
     }
 
@@ -5781,42 +5727,41 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         factory: &mut dyn RenderFactory,
     ) -> Result<bool, ScriptError> {
-        let mut script_mode = RuntimeScriptAdvanceMode::Factory(factory);
-        self.advance_frame_components_with_state_machines_and_mode(
+        StateMachineInstance::advance_artboard_frame_components_with_factory(
+            self,
             state_machines,
             elapsed_seconds,
-            &mut script_mode,
+            factory,
         )
     }
 
-    fn advance_frame_components_with_state_machines_and_mode(
+    pub(crate) fn advance_components_after_root_state_machines(
         &mut self,
-        state_machines: &mut [StateMachineInstance],
         elapsed_seconds: f32,
-        script_mode: &mut RuntimeScriptAdvanceMode<'_>,
-    ) -> Result<bool, ScriptError> {
-        let mut changed = false;
-        for state_machine in state_machines.iter_mut() {
-            changed |= self.advance_state_machine_instance(state_machine, elapsed_seconds);
-        }
-
+    ) -> Result<(bool, Vec<(usize, Vec<StateMachineReportedEvent>)>), ScriptError> {
         let mut nested_events = Vec::new();
-        changed |= self.advance_frame_components_collect_events_with_mode(
+        let mut script_mode = RuntimeScriptAdvanceMode::HostOnly;
+        let changed = self.advance_frame_components_collect_events_with_mode(
             elapsed_seconds,
-            script_mode,
+            &mut script_mode,
             Some(&mut nested_events),
         )?;
-        for state_machine in state_machines.iter_mut() {
-            let mut notified = false;
-            for (host_local, events) in &nested_events {
-                notified |= state_machine.notify_events(self, Some(*host_local), events);
-            }
-            if notified {
-                changed |=
-                    self.advance_state_machine_instance_preserving_events(state_machine, 0.0, None);
-            }
-        }
-        Ok(changed)
+        Ok((changed, nested_events))
+    }
+
+    pub(crate) fn advance_components_after_root_state_machines_with_factory(
+        &mut self,
+        elapsed_seconds: f32,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<(bool, Vec<(usize, Vec<StateMachineReportedEvent>)>), ScriptError> {
+        let mut nested_events = Vec::new();
+        let mut script_mode = RuntimeScriptAdvanceMode::Factory(factory);
+        let changed = self.advance_frame_components_collect_events_with_mode(
+            elapsed_seconds,
+            &mut script_mode,
+            Some(&mut nested_events),
+        )?;
+        Ok((changed, nested_events))
     }
 
     fn advance_frame_components_collect_events_with_mode(
@@ -7657,12 +7602,6 @@ impl ArtboardInstance {
         state_machines: &mut [StateMachineInstance],
     ) -> bool {
         self.reset_outer_state_machine_changed_state_counts(state_machines);
-        // A standalone settlement has not performed the main advance that
-        // normally schedules root probes. Explicitly request one probe for
-        // every supplied root while retaining the guarded after-main path.
-        for state_machine in state_machines.iter_mut() {
-            state_machine.schedule_post_update_probe();
-        }
         self.settle_state_machine_update_passes_after_main_advance(state_machines)
     }
 
@@ -7699,45 +7638,12 @@ impl ArtboardInstance {
         script_mode: &mut RuntimeScriptUpdateMode<'_>,
         reset_root_view_models: bool,
     ) -> bool {
-        const MAX_OUTER_PASSES: usize = 5;
-
-        let mut changed = false;
-        for _ in 0..MAX_OUTER_PASSES {
-            changed |= self.update_pass_with_script_mode(script_mode, Mat2D::IDENTITY);
-            for state_machine in state_machines.iter_mut() {
-                // C++ calls `StateMachineInstance::tryChangeState()` on every
-                // outer pass, not only when a transition-specific probe was
-                // pre-scheduled. Besides evaluating transitions, that method
-                // runs `updateDataBinds(false)`, which propagates the
-                // suppressed ViewModelTrigger reset back to a retained
-                // ScriptInputTrigger before the next authored edge
-                // (`state_machine_instance.cpp:2306-2318,2629-2635`).
-                if self.try_change_state_machine_instance_unconditionally(state_machine) {
-                    changed = true;
-                    changed |=
-                        self.advance_state_machine_instance_after_state_probe(state_machine, 0.0);
-                }
-            }
-            changed |= self.advance_outer_update_components();
-            if reset_root_view_models {
-                for state_machine in state_machines.iter_mut() {
-                    state_machine.reset_advanced_data_context();
-                }
-            }
-            self.reset_retained_components();
-            // C++ cloned ScriptInput DataBinds are Components, so a trigger
-            // reset keeps the outer loop alive through their Bindings dirt.
-            // Rust stores those occurrences in the state-machine container;
-            // include its exact pending queue in the equivalent stop test.
-            if !self.has_dirt(ComponentDirt::COMPONENTS)
-                && !state_machines
-                    .iter()
-                    .any(StateMachineInstance::has_pending_data_bind_work)
-            {
-                break;
-            }
-        }
-        changed
+        StateMachineInstance::settle_artboard_update_passes(
+            self,
+            state_machines,
+            reset_root_view_models,
+            |artboard| artboard.update_pass_with_script_mode(script_mode, Mat2D::IDENTITY),
+        )
     }
 
     pub fn settle_state_machine_update_passes_after_main_advance_with_script_errors(
@@ -7805,7 +7711,7 @@ impl ArtboardInstance {
         }
     }
 
-    fn reset_retained_components(&mut self) {
+    pub(crate) fn reset_retained_components_for_state_machine_settlement(&mut self) {
         if self.resetting_components.is_empty() {
             return;
         }
@@ -7816,7 +7722,9 @@ impl ArtboardInstance {
                     let Some(nested) = self.nested_artboards.get_mut(&entry.local_id) else {
                         continue;
                     };
-                    nested.child.reset_retained_components();
+                    nested
+                        .child
+                        .reset_retained_components_for_state_machine_settlement();
                     if let Some(context) = nested.stateful_view_model_context.as_mut() {
                         context.advanced_data_context();
                     }
@@ -7870,7 +7778,7 @@ impl ArtboardInstance {
 
     /// Mirrors `Artboard::advanceInternal` for an outer state-machine update
     /// pass, where `AdvanceNested` is set but `NewFrame` is not.
-    fn advance_outer_update_components(&mut self) -> bool {
+    pub(crate) fn advance_outer_update_components_for_state_machine_settlement(&mut self) -> bool {
         // One insertion-ordered mixed-family walk, exactly like
         // `Artboard::m_advancingComponents`; NewFrame is deliberately absent
         // during the outer settlement pass (`artboard.cpp:1463-1480`).
@@ -9619,7 +9527,6 @@ impl ArtboardInstance {
         if !state_machine.set_bool(input_id, value) {
             return false;
         }
-        state_machine.schedule_post_update_probe();
         true
     }
 
@@ -9635,7 +9542,6 @@ impl ArtboardInstance {
         if !state_machine.set_number(input_id, value) {
             return false;
         }
-        state_machine.schedule_post_update_probe();
         true
     }
 
@@ -9650,7 +9556,6 @@ impl ArtboardInstance {
         if !state_machine.fire_trigger(input_id) {
             return false;
         }
-        state_machine.schedule_post_update_probe();
         true
     }
 
@@ -9998,7 +9903,8 @@ fn reset_component_list_instances(
                 bound_instance.borrow_mut().advanced_data_context();
             }
         }
-        item.child.reset_retained_components();
+        item.child
+            .reset_retained_components_for_state_machine_settlement();
     }
 }
 
@@ -10102,13 +10008,6 @@ impl RuntimeNestedArtboardInstance {
             // C++ returns before advancing nested animations on a quantized
             // NewFrame skip, then unconditionally probes nested state machines
             // during the following non-NewFrame outer pass.
-            for animation in &mut self.animations {
-                if let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation {
-                    if let Some(state_machine) = occurrence.state_machine_mut() {
-                        state_machine.schedule_post_update_probe();
-                    }
-                }
-            }
             return Ok(true);
         }
 
@@ -10184,7 +10083,9 @@ impl RuntimeNestedArtboardInstance {
                 );
             }
         }
-        changed |= self.child.advance_outer_update_components();
+        changed |= self
+            .child
+            .advance_outer_update_components_for_state_machine_settlement();
         changed
     }
 
@@ -11600,7 +11501,7 @@ mod tests {
     }
 
     #[test]
-    fn ordinary_direct_input_blend_does_not_require_outer_state_probe() {
+    fn ordinary_direct_input_blend_accepts_unconditional_outer_state_probes() {
         let definition = direct_input_blend_state_machine(11);
         let mut artboard = synthetic_instance(Vec::new(), Vec::new());
         let mut state_machine = StateMachineInstance::new(0, &definition, &mut artboard);
@@ -11608,18 +11509,12 @@ mod tests {
 
         assert!(artboard.advance_state_machine_instance(&mut state_machine, 0.0));
         assert!(state_machine.needs_advance());
-        assert!(!state_machine.requires_post_update_state_probe());
-        assert!(!state_machine.post_update_probe_pending());
-        assert!(!state_machine_requires_outer_update_probe(&state_machine));
-
-        state_machine.schedule_post_update_probe();
-        assert!(state_machine_requires_outer_update_probe(&state_machine));
         assert!(!artboard.try_change_state_machine_instance(&mut state_machine));
-        assert!(!state_machine.post_update_probe_pending());
+        assert!(!artboard.try_change_state_machine_instance(&mut state_machine));
     }
 
     #[test]
-    fn nested_host_input_write_schedules_outer_state_probe() {
+    fn nested_host_input_write_is_visible_to_unconditional_outer_state_probe() {
         let mut definition = empty_state_machine(11);
         definition.inputs = Arc::new(vec![
             Some(RuntimeStateMachineInput::new_bool(
@@ -11683,28 +11578,10 @@ mod tests {
         parent.nested_artboards.insert(3, nested);
 
         assert!(parent.set_nested_state_machine_bool(7, 0, true));
-        assert!(
-            parent
-                .nested_state_machine_mut(7)
-                .expect("mounted nested state machine")
-                .post_update_probe_pending()
-        );
         assert!(parent.set_nested_state_machine_number(8, 1, 1.0));
-        assert!(
-            parent
-                .nested_state_machine_mut(8)
-                .expect("mounted nested state machine")
-                .post_update_probe_pending()
-        );
         assert!(
             parent.fire_nested_trigger_input(2),
             "NestedTrigger::fire is a callback and must reach the nested occurrence without a stored-property write"
-        );
-        assert!(
-            parent
-                .nested_state_machine_mut(9)
-                .expect("mounted nested state machine")
-                .post_update_probe_pending()
         );
         assert_eq!(
             parent
@@ -12172,7 +12049,7 @@ mod tests {
     }
 
     #[test]
-    fn quantized_nested_skip_schedules_outer_state_probe() {
+    fn quantized_nested_skip_relies_on_unconditional_outer_state_probe() {
         let definition = empty_state_machine(11);
         let mut child = synthetic_instance(Vec::new(), Vec::new());
         let state_machine = StateMachineInstance::new(0, &definition, &mut child);
@@ -12207,26 +12084,17 @@ mod tests {
         let RuntimeNestedAnimationInstance::StateMachine(occurrence) = &nested.animations[0] else {
             panic!("nested animation remains a state machine");
         };
-        assert!(
-            occurrence
-                .state_machine()
-                .expect("valid nested state machine")
-                .post_update_probe_pending()
-        );
+        assert!(occurrence.state_machine().is_some());
     }
 
     #[test]
-    fn mounted_nested_state_probe_is_consumed_once() {
+    fn mounted_nested_state_probe_is_unconditional() {
         let definition = empty_state_machine(11);
         let mut artboard = synthetic_instance(Vec::new(), Vec::new());
         let mut state_machine = StateMachineInstance::new(0, &definition, &mut artboard);
         artboard.state_machines = Arc::new(vec![definition]);
 
-        assert!(!state_machine.post_update_probe_pending());
-        state_machine.schedule_post_update_probe();
-        assert!(state_machine.post_update_probe_pending());
         assert!(!artboard.try_change_state_machine_instance(&mut state_machine));
-        assert!(!state_machine.post_update_probe_pending());
         assert!(!artboard.try_change_state_machine_instance(&mut state_machine));
     }
 
@@ -13845,7 +13713,7 @@ mod tests {
         nested.child = Box::new(child);
         parent.nested_artboards.insert(0, nested);
 
-        parent.reset_retained_components();
+        parent.reset_retained_components_for_state_machine_settlement();
 
         assert_eq!(
             parent

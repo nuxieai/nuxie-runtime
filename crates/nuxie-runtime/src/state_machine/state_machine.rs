@@ -171,15 +171,6 @@ impl RuntimeStateMachine {
         }
         Ok(())
     }
-
-    pub(crate) fn requires_post_update_state_probe(&self) -> bool {
-        self.layers
-            .iter()
-            .flat_map(|layer| &layer.states)
-            .flat_map(|state| &state.transitions)
-            .flat_map(|transition| &transition.conditions)
-            .any(RuntimeTransitionCondition::can_change_during_artboard_update)
-    }
 }
 
 /// Retain one inert Rust slot for a C++ listener definition that the current

@@ -1217,6 +1217,58 @@ pattern = "\\b(?:play_audio|audio_playback|play_audio_event)\\s*\\("
 max_occurrences = 0
 
 [[ratchet]]
+id = "state_machine_advance_instance_owner_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+advance_on_artboard\\b)(?=[\\s\\S]*fn\\s+advance\\b[\\s\\S]{0,500}artboard:\\s*&mut\\s+ArtboardInstance)(?=[\\s\\S]*fn\\s+advance_artboard_frame_components\\b[\\s\\S]{0,3000}nested_events)(?=[\\s\\S]*pub\\s+fn\\s+advance_and_apply\\b)(?=[\\s\\S]*pub\\s+fn\\s+advance_and_apply_with_view_models\\b)(?=[\\s\\S]*fn\\s+advance_and_apply_state_machines_with_view_models\\b[\\s\\S]{0,1800}if\\s+advance_view_models[\\s\\S]{0,300}advance_detached_view_models\\(\\))(?=[\\s\\S]*fn\\s+settle_artboard_update_passes\\b)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_advance_raw_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+advance_with_report_mode\\b[\\s\\S]{0,1800}record_advance_phase\\(\"draw-sort-check\"\\)[\\s\\S]{0,1800}apply_local_event_listeners\\([\\s\\S]{0,800}record_advance_phase\\(\"clear-latch\"\\)[\\s\\S]{0,1800}record_advance_phase\\(\"pre-layer-binds\"\\)[\\s\\S]{0,3500}record_advance_phase\\(\"authored-layers\"\\)[\\s\\S]{0,7000}record_advance_phase\\(\"converter-advance\"\\)[\\s\\S]{0,3500}record_advance_phase\\(\"inputs-advanced\"\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_advance_return_terms_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*let\\s+advanced\\s*=[\\s\\S]{0,700}reported_event_count\\(\\)\\s*!=\\s*0[\\s\\S]{0,200}has_pending_listener_view_model_reports\\(\\))(?=[\\s\\S]*fn\\s+advance_and_apply_return\\b[\\s\\S]{0,500}elapsed_seconds\\s*==\\s*0\\.0[\\s\\S]{0,500}reported_event_count\\(\\)\\s*!=\\s*0[\\s\\S]{0,200}has_pending_listener_view_model_reports\\(\\))"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_advance_unconditional_settlement_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+settle_artboard_update_passes\\b[\\s\\S]{0,700}const\\s+MAX_SETTLEMENT_PASSES:\\s*usize\\s*=\\s*5[\\s\\S]{0,800}for\\s+_\\s+in\\s+0\\.\\.MAX_SETTLEMENT_PASSES[\\s\\S]{0,800}for\\s+state_machine\\s+in\\s+state_machines\\.iter_mut\\(\\)(?![\\s\\S]{0,600}(?:requires_post_update_state_probe|post_update_probe_pending|state_machine_requires_outer_update_probe))[\\s\\S]{0,500}try_change_state_machine_instance\\(state_machine\\)[\\s\\S]{0,300}advance_state_machine_instance_after_state_probe\\([\\s\\S]{0,200}0\\.0"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_advance_clean_zero_fast_path"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "elapsed_seconds\\s*==\\s*0\\.0[\\s\\S]{0,300}return\\s+(?:Ok\\()?false"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_advance_capability_gated_probe"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "(?:\\b(?:requires_post_update_state_probe|post_update_probe_pending|state_machine_requires_outer_update_probe|schedule_post_update_probe|has_advanced_once)\\b|fn\\s+settle_artboard_update_passes\\b[\\s\\S]{0,1800}if\\s+(?!artboard\\.try_change_state_machine_instance\\(state_machine\\))[^{;]{0,500}\\btry_change_state_machine_instance\\(state_machine\\))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_advance_nonfinite_rejection"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+(?:advance|advance_on_artboard|advance_and_apply|advance_and_apply_with_view_models)\\b[\\s\\S]{0,900}\\.(?:is_finite|is_nan)\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_advance_artboard_settlement_implementation"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "fn\\s+\\w*settle\\w*\\b(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,4000}\\b(?:try_change_state_machine_instance|advance_state_machine_instance_after_state_probe)\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
 id = "data_bind_per_type_target_to_source_path"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "(?m)^\\s*(?:pub\\(crate\\)\\s+)?fn\\s+apply_default_view_model_(?:number|symbol_list_index|boolean|string|color|enum|asset|artboard|list|trigger|view_model)(?:_public_update)?_targets_to_sources(?:_with_options)?\\b"

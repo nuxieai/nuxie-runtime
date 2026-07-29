@@ -104,7 +104,6 @@ impl RuntimeNestedStateMachineInstance {
             .unwrap_or(u32::MAX as usize);
         let mut state_machine = child.state_machine_instance(animation_id);
         if let Some(state_machine) = state_machine.as_mut() {
-            state_machine.schedule_post_update_probe();
             state_machine.bind_default_view_model_context();
             state_machine.advance_data_context();
         }
@@ -149,7 +148,6 @@ impl RuntimeNestedStateMachineInstance {
     pub(crate) fn cold_clone(&self, child: &mut ArtboardInstance) -> Self {
         let mut state_machine = child.state_machine_instance(self.animation_id);
         if let Some(state_machine) = state_machine.as_mut() {
-            state_machine.schedule_post_update_probe();
             state_machine.bind_default_view_model_context();
             state_machine.advance_data_context();
         }

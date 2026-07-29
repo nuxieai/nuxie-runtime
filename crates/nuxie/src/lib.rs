@@ -94,24 +94,6 @@ pub use nuxie_runtime::{
 };
 use nuxie_runtime::{RuntimeFileStateMachineActionCatalog, RuntimeFileViewModelInstanceCatalog};
 
-fn advance_and_apply_keep_going(
-    changed: bool,
-    elapsed_seconds: f32,
-    state_machines: &[StateMachineInstance],
-) -> bool {
-    // C++ `advanceAndApply` forces zero-second frames to keep going and
-    // includes reports created by this frame in the facade return
-    // (`state_machine_instance.cpp:2608-2613,2663-2665`). Raw
-    // `StateMachineInstance::advance` deliberately retains its own return
-    // semantics for callers that do not run the full apply pipeline.
-    changed
-        || elapsed_seconds == 0.0
-        || state_machines.iter().any(|instance| {
-            instance.reported_event_count() != 0
-                || instance.has_pending_listener_view_model_reports()
-        })
-}
-
 #[cfg(feature = "scripting")]
 use nuxie_scripting::vm::{
     HostCommand as LuaHostCommand, HostCycleCheckpoint, HostValue as LuaHostValue, ScriptProgram,
@@ -2506,19 +2488,13 @@ impl nuxie_runtime::ScriptArtboard for FileScriptArtboard {
                 None,
             )?;
             let state_machines = std::slice::from_mut(state_machine);
-            let mut changed = self
-                .instance
-                .advance_frame_components_with_state_machines(state_machines, seconds)?;
-            changed |= self
-                .instance
-                .settle_state_machine_update_passes_after_main_advance_without_root_view_model_reset_with_script_errors(
-                    state_machines,
-                )?;
-            Ok(advance_and_apply_keep_going(
-                changed,
-                seconds,
+            StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+                &mut self.instance,
                 state_machines,
-            ))
+                seconds,
+                false,
+                || false,
+            )
         } else {
             let mut changed = self.instance.advance_frame_components(seconds)?;
             changed |= self.instance.update_pass_with_script_errors()?;
@@ -2993,22 +2969,22 @@ fn advance_scripted_artboard_frame_with_factory(
             root_view_model,
         )?;
     }
-    let mut changed = if state_machines.is_empty() {
+    let changed = if state_machines.is_empty() {
         instance.advance_frame_components_with_factory(elapsed_seconds, factory)?
     } else {
-        instance.advance_frame_components_with_state_machines_and_factory(
+        StateMachineInstance::advance_and_apply_state_machines_with_factory_and_view_models(
+            instance,
             state_machines,
             elapsed_seconds,
             factory,
+            true,
+            || file.advance_detached_view_models(),
         )?
     };
-    changed |= if state_machines.is_empty() {
-        instance.update_pass_with_factory(factory)?
+    let changed = if state_machines.is_empty() {
+        changed | instance.update_pass_with_factory(factory)?
     } else {
-        instance.settle_state_machine_update_passes_after_main_advance_with_factory(
-            state_machines,
-            factory,
-        )?
+        changed
     };
     verify_scripted_artboard_tree_attached(file, root_graph, instance)?;
     Ok(changed)
@@ -4127,7 +4103,7 @@ impl<'a> ArtboardInstance<'a> {
         if state_machines.is_empty() {
             return self.advance(elapsed_seconds);
         }
-        let mut changed = false;
+        let changed = false;
         #[cfg(feature = "scripting")]
         for state_machine in state_machines.iter_mut() {
             let prepared = try_prepare_state_machine_scripted_data_context_without_factory(
@@ -4140,21 +4116,24 @@ impl<'a> ArtboardInstance<'a> {
                 return false;
             }
         }
-        changed |= self
-            .raw
-            .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
-            .unwrap_or(false);
-        changed |= self
-            .raw
-            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
-                state_machines,
-            )
-            .unwrap_or(false);
         #[cfg(feature = "scripting")]
-        {
-            self.file.advance_detached_view_models();
-        }
-        advance_and_apply_keep_going(changed, elapsed_seconds, state_machines)
+        let file = self.file;
+        changed
+            | StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+                &mut self.raw,
+                state_machines,
+                elapsed_seconds,
+                true,
+                || {
+                    #[cfg(feature = "scripting")]
+                    {
+                        return file.advance_detached_view_models();
+                    }
+                    #[cfg(not(feature = "scripting"))]
+                    false
+                },
+            )
+            .unwrap_or(false)
     }
 
     /// Advance retained machines while allowing listener actions to mutate
@@ -4188,21 +4167,24 @@ impl<'a> ArtboardInstance<'a> {
                 return false;
             }
         }
-        changed |= self
-            .raw
-            .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
-            .unwrap_or(false);
-        changed |= self
-            .raw
-            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
-                state_machines,
-            )
-            .unwrap_or(false);
         #[cfg(feature = "scripting")]
-        {
-            self.file.advance_detached_view_models();
-        }
-        advance_and_apply_keep_going(changed, elapsed_seconds, state_machines)
+        let file = self.file;
+        changed
+            | StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+                &mut self.raw,
+                state_machines,
+                elapsed_seconds,
+                true,
+                || {
+                    #[cfg(feature = "scripting")]
+                    {
+                        return file.advance_detached_view_models();
+                    }
+                    #[cfg(not(feature = "scripting"))]
+                    false
+                },
+            )
+            .unwrap_or(false)
     }
 
     /// Factory-bearing mirror of [`Self::advance_with_state_machine`].
@@ -4242,24 +4224,21 @@ impl<'a> ArtboardInstance<'a> {
                 None,
             )
             .context("failed to advance scripted drawables")?;
-            self.file.advance_detached_view_models();
         }
         #[cfg(not(feature = "scripting"))]
         {
-            let _ = factory;
-            changed |= self
-                .raw
-                .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
+            changed |=
+                StateMachineInstance::advance_and_apply_state_machines_with_factory_and_view_models(
+                    &mut self.raw,
+                    state_machines,
+                    elapsed_seconds,
+                    factory,
+                    true,
+                    || false,
+                )
                 .context("failed to advance retained artboard components")?;
-            changed |= self
-                .raw
-                .settle_state_machine_update_passes_after_main_advance(state_machines);
         }
-        Ok(advance_and_apply_keep_going(
-            changed,
-            elapsed_seconds,
-            state_machines,
-        ))
+        Ok(changed)
     }
 
     /// Factory-bearing mirror of
@@ -4297,24 +4276,21 @@ impl<'a> ArtboardInstance<'a> {
                 Some(view_model),
             )
             .context("failed to advance scripted drawables")?;
-            self.file.advance_detached_view_models();
         }
         #[cfg(not(feature = "scripting"))]
         {
-            let _ = factory;
-            changed |= self
-                .raw
-                .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
+            changed |=
+                StateMachineInstance::advance_and_apply_state_machines_with_factory_and_view_models(
+                    &mut self.raw,
+                    state_machines,
+                    elapsed_seconds,
+                    factory,
+                    true,
+                    || false,
+                )
                 .context("failed to advance retained artboard components")?;
-            changed |= self
-                .raw
-                .settle_state_machine_update_passes_after_main_advance(state_machines);
         }
-        Ok(advance_and_apply_keep_going(
-            changed,
-            elapsed_seconds,
-            state_machines,
-        ))
+        Ok(changed)
     }
 
     pub fn draw(&mut self, factory: &mut dyn Factory, renderer: &mut dyn Renderer) -> Result<()> {
@@ -4792,7 +4768,7 @@ impl OwnedArtboardInstance {
         if state_machines.is_empty() {
             return self.advance(elapsed_seconds);
         }
-        let mut changed = false;
+        let changed = false;
         #[cfg(feature = "scripting")]
         for state_machine in state_machines.iter_mut() {
             let prepared = try_prepare_state_machine_scripted_data_context_without_factory(
@@ -4805,21 +4781,24 @@ impl OwnedArtboardInstance {
                 return false;
             }
         }
-        changed |= self
-            .raw
-            .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
-            .unwrap_or(false);
-        changed |= self
-            .raw
-            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
-                state_machines,
-            )
-            .unwrap_or(false);
         #[cfg(feature = "scripting")]
-        {
-            self.file.advance_detached_view_models();
-        }
-        advance_and_apply_keep_going(changed, elapsed_seconds, state_machines)
+        let file = Arc::clone(&self.file);
+        changed
+            | StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+                &mut self.raw,
+                state_machines,
+                elapsed_seconds,
+                true,
+                || {
+                    #[cfg(feature = "scripting")]
+                    {
+                        return file.advance_detached_view_models();
+                    }
+                    #[cfg(not(feature = "scripting"))]
+                    false
+                },
+            )
+            .unwrap_or(false)
     }
 
     /// Owning mirror of
@@ -4853,21 +4832,24 @@ impl OwnedArtboardInstance {
                 return false;
             }
         }
-        changed |= self
-            .raw
-            .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
-            .unwrap_or(false);
-        changed |= self
-            .raw
-            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
-                state_machines,
-            )
-            .unwrap_or(false);
         #[cfg(feature = "scripting")]
-        {
-            self.file.advance_detached_view_models();
-        }
-        advance_and_apply_keep_going(changed, elapsed_seconds, state_machines)
+        let file = Arc::clone(&self.file);
+        changed
+            | StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+                &mut self.raw,
+                state_machines,
+                elapsed_seconds,
+                true,
+                || {
+                    #[cfg(feature = "scripting")]
+                    {
+                        return file.advance_detached_view_models();
+                    }
+                    #[cfg(not(feature = "scripting"))]
+                    false
+                },
+            )
+            .unwrap_or(false)
     }
 
     /// Owning mirror of
@@ -4916,24 +4898,21 @@ impl OwnedArtboardInstance {
                 None,
             )
             .context("failed to advance scripted drawables")?;
-            self.file.advance_detached_view_models();
         }
         #[cfg(not(feature = "scripting"))]
         {
-            let _ = factory;
-            changed |= self
-                .raw
-                .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
+            changed |=
+                StateMachineInstance::advance_and_apply_state_machines_with_factory_and_view_models(
+                    &mut self.raw,
+                    state_machines,
+                    elapsed_seconds,
+                    factory,
+                    true,
+                    || false,
+                )
                 .context("failed to advance retained artboard components")?;
-            changed |= self
-                .raw
-                .settle_state_machine_update_passes_after_main_advance(state_machines);
         }
-        Ok(advance_and_apply_keep_going(
-            changed,
-            elapsed_seconds,
-            state_machines,
-        ))
+        Ok(changed)
     }
 
     /// Owning mirror of
@@ -4978,24 +4957,21 @@ impl OwnedArtboardInstance {
                 Some(view_model),
             )
             .context("failed to advance scripted drawables")?;
-            self.file.advance_detached_view_models();
         }
         #[cfg(not(feature = "scripting"))]
         {
-            let _ = factory;
-            changed |= self
-                .raw
-                .advance_frame_components_with_state_machines(state_machines, elapsed_seconds)
+            changed |=
+                StateMachineInstance::advance_and_apply_state_machines_with_factory_and_view_models(
+                    &mut self.raw,
+                    state_machines,
+                    elapsed_seconds,
+                    factory,
+                    true,
+                    || false,
+                )
                 .context("failed to advance retained artboard components")?;
-            changed |= self
-                .raw
-                .settle_state_machine_update_passes_after_main_advance(state_machines);
         }
-        Ok(advance_and_apply_keep_going(
-            changed,
-            elapsed_seconds,
-            state_machines,
-        ))
+        Ok(changed)
     }
 
     pub fn draw(&mut self, factory: &mut dyn Factory, renderer: &mut dyn Renderer) -> Result<()> {

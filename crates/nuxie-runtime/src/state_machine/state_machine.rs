@@ -436,7 +436,15 @@ pub(crate) fn build_state_machines_with_action_catalog<'a>(
                                 );
                                 RuntimeLayerState {
                                     global_id: state.object.map(|object| object.id),
-                                    type_name: state.object.map(|object| object.type_name),
+                                    // C++ retains a concrete LayerState for
+                                    // the base/no-op state and reports its
+                                    // core type. The importer represents that
+                                    // occurrence with no concrete object.
+                                    type_name: Some(
+                                        state
+                                            .object
+                                            .map_or("LayerState", |object| object.type_name),
+                                    ),
                                     animation,
                                     blend_state_1d,
                                     blend_state_direct,

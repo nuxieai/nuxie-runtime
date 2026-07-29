@@ -5655,9 +5655,7 @@ impl StateMachineInstance {
         if owner.type_name != "Shape" {
             return artboard.component_hit_test_point(component, position, true, true);
         }
-        if owner.is_collapsed()
-            || !artboard.component_hit_test_point(component, position, true, true)
-        {
+        if !artboard.component_hit_test_point(component, position, true, true) {
             return false;
         }
         let Some(shape) = owner.concrete.shape.as_ref() else {
@@ -11585,15 +11583,22 @@ impl StateMachineInstance {
         // sinks. Structural ViewModel replacement separately pushes the
         // parent relay's DataContext-rebind sink; no root generation is
         // sampled or compared on the steady frame.
-        let mut collected = self.data_bind_graph.collect_retained_source_dirt();
+        let (mut collected, mut schedules_advance) = self
+            .data_bind_graph
+            .collect_retained_source_dirt_with_schedule();
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
-            collected |= graph.collect_retained_source_dirt();
+            let (graph_collected, graph_schedules_advance) =
+                graph.collect_retained_source_dirt_with_schedule();
+            collected |= graph_collected;
+            schedules_advance |= graph_schedules_advance;
         }
         for binding in &mut self.scripted_object_bindings {
-            collected |= binding.collect_source_dirt();
+            let binding_collected = binding.collect_source_dirt();
+            collected |= binding_collected;
+            schedules_advance |= binding_collected;
         }
         if self.owned_data_context.is_none() {
-            if collected {
+            if schedules_advance {
                 self.needs_advance = true;
             }
             return collected;
@@ -11619,7 +11624,7 @@ impl StateMachineInstance {
             self.bind_view_model_listener_cells_for_data_context(&data_context);
             self.retain_owned_view_model_advance_context(&data_context);
         }
-        if collected || structural_rebind {
+        if schedules_advance || structural_rebind {
             self.needs_advance = true;
         }
         collected || structural_rebind

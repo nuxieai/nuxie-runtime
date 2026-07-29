@@ -6727,14 +6727,30 @@ impl RuntimeDataBindGraph {
     /// the direction-engine replacement for mutation-clock value-copy
     /// refresh.
     pub(crate) fn collect_retained_source_dirt(&mut self) -> bool {
+        self.collect_retained_source_dirt_with_schedule().0
+    }
+
+    /// Fold retained source dirt and separately identify mutations that
+    /// schedule another state-machine advance.
+    ///
+    /// C++ trigger values are reset by `DataContext::advanced()` with
+    /// delegation suppressed. Their DataBind still receives Bindings dirt
+    /// and must refresh on the current advance, but that reset does not call
+    /// `StateMachineInstance::markNeedsAdvance`. Explicit trigger setters
+    /// already arm the machine at their public boundary.
+    pub(crate) fn collect_retained_source_dirt_with_schedule(&mut self) -> (bool, bool) {
         let mut changed = false;
+        let mut schedules_advance = false;
         for source in &mut self.sources {
-            changed |= Self::refresh_retained_source_from_cell(source);
+            let source_changed = Self::refresh_retained_source_from_cell(source);
+            changed |= source_changed;
+            schedules_advance |= source_changed
+                && !matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_));
         }
         if changed {
             self.mark_default_view_model_bindings_dirty();
         }
-        changed
+        (changed, schedules_advance)
     }
 
     /// One migrated source's dirt-driven refresh: `collect_source_dirt()`,

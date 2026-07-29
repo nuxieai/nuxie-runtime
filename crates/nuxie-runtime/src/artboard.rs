@@ -638,6 +638,7 @@ impl Clone for ArtboardInstance {
             cloned.initialize_path_target_flags(&graph);
             cloned.initialize_component_data_bind_collapsables(&file, &graph);
         }
+        cloned.initialize_root_layout_bounds();
 
         // Generated C++ clones start with `ComponentDirt::Filthy` and clear
         // custom DataBind flags. Re-run authored Solo/Layout collapse only
@@ -2545,6 +2546,7 @@ impl ArtboardInstance {
             layout_constraint_bounds_enabled,
             layout_constraint_bounds: None,
         };
+        instance.initialize_root_layout_bounds();
         instance
             .runtime_shapes
             .rebuild_component_memberships(&instance.objects);
@@ -2562,6 +2564,20 @@ impl ArtboardInstance {
         }
 
         Ok(instance)
+    }
+
+    fn initialize_root_layout_bounds(&self) {
+        let Some(layout) = self
+            .component(0)
+            .and_then(|component| component.concrete.layout.as_ref())
+        else {
+            return;
+        };
+        // Artboard::initialize seeds its root Layout from the authored
+        // dimensions before any pointer hit test or layout solve
+        // (`src/artboard.cpp:264-273`). Occurrence cloning reruns that same
+        // initialize lifecycle.
+        layout.retain_bounds(0.0, 0.0, self.width, self.height);
     }
 
     fn initialize_path_target_flags(&mut self, graph: &ArtboardGraph) {

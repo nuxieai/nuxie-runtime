@@ -180,6 +180,11 @@ impl StateMachineReportedEvent {
         self.event_core_type
     }
 
+    pub(crate) fn is_audio_event(&self) -> bool {
+        nuxie_schema::definition_by_name("AudioEvent")
+            .is_some_and(|definition| self.event_core_type == u32::from(definition.type_key.int))
+    }
+
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }

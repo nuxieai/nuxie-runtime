@@ -28,9 +28,12 @@ void addRandomProviderValue(float value);
 size_t randomProviderTotalCalls();
 } // namespace rive_probe
 
+#define private public
 #define protected public
 #include "rive/component.hpp"
 #undef protected
+#undef private
+#include "rive/advancing_component.hpp"
 #define protected public
 #include "rive/drawable.hpp"
 #undef protected
@@ -95,8 +98,10 @@ size_t randomProviderTotalCalls();
 #include "rive/animation/state_machine_layer.hpp"
 #include "rive/animation/state_machine_listener.hpp"
 #include "rive/animation/state_machine_listener_single.hpp"
+#include "rive/animation/state_machine_number.hpp"
 #include "rive/animation/state_machine.hpp"
 #include "rive/animation/state_machine_instance.hpp"
+#include "rive/animation/state_machine_trigger.hpp"
 #include "rive/animation/state_transition.hpp"
 #include "rive/animation/transition_condition.hpp"
 #define private public
@@ -160,6 +165,7 @@ size_t randomProviderTotalCalls();
 #include "rive/data_bind/converters/data_converter_trigger.hpp"
 #include "rive/data_bind/data_bind.hpp"
 #include "rive/data_bind_flags.hpp"
+#include "rive/importers/state_machine_importer.hpp"
 #include "rive/data_bind/bindable_property_list.hpp"
 #include "rive/data_bind/data_bind_list_item_consumer.hpp"
 #include "rive/data_bind/bindable_property_artboard.hpp"
@@ -283,6 +289,23 @@ namespace
 {
 using LocalIds = std::unordered_map<const rive::Core*, size_t>;
 
+class PersistentDirtProbeComponent final : public rive::Component,
+                                           public rive::AdvancingComponent
+{
+public:
+    size_t advanceCount = 0;
+    size_t updateCount = 0;
+
+    void update(rive::ComponentDirt) override { ++updateCount; }
+
+    bool advanceComponent(float, rive::AdvanceFlags) override
+    {
+        ++advanceCount;
+        addDirt(rive::ComponentDirt::WorldTransform);
+        return true;
+    }
+};
+
 struct RuntimeDoubleMutation
 {
     size_t localId;
@@ -348,6 +371,8 @@ enum class RuntimeStateMachineActionKind
 {
     Advance,
     AdvanceAndApply,
+    AdvanceAndApplyPersistentDirt,
+    SnapshotNamedInputs,
     SnapshotStateMachineScripts,
     UpdateArtboardPass,
     ResetArtboard,
@@ -760,6 +785,16 @@ struct RuntimeStateMachineAdvanceReport
     float seconds;
     bool needsAdvanceBefore;
     bool advanced;
+    bool persistentDirtProbe = false;
+    size_t persistentDirtAdvanceCount = 0;
+    size_t persistentDirtUpdateCount = 0;
+    bool persistentDirtRemaining = false;
+    bool namedInputProbe = false;
+    int namedBoolInputIndex = -1;
+    int namedNumberInputIndex = -1;
+    int namedTriggerInputIndex = -1;
+    bool pointerInputProbe = false;
+    int pointerHitResult = -1;
     size_t currentAnimationCount;
     size_t changedStateCount;
     std::vector<uint16_t> changedStateCoreTypes;
@@ -7483,6 +7518,21 @@ apply_runtime_state_machine_advances(rive::File* file,
         }
 
         bool advanced = false;
+        bool pointerInputProbe = false;
+        int pointerHitResult = -1;
+        std::unique_ptr<PersistentDirtProbeComponent> persistentDirtProbe;
+        if (action.kind ==
+            RuntimeStateMachineActionKind::AdvanceAndApplyPersistentDirt)
+        {
+            persistentDirtProbe =
+                std::make_unique<PersistentDirtProbeComponent>();
+            persistentDirtProbe->m_Artboard = instance;
+            persistentDirtProbe->m_Parent = instance;
+            persistentDirtProbe->m_Dirt = rive::ComponentDirt::None;
+            instance->m_DependencyOrder.push_back(persistentDirtProbe.get());
+            instance->m_advancingComponents.push_back(
+                persistentDirtProbe.get());
+        }
         if (action.kind == RuntimeStateMachineActionKind::SetObjectString)
         {
             // Mutation-only report: preserve the pending EventReport and
@@ -7490,7 +7540,9 @@ apply_runtime_state_machine_advances(rive::File* file,
         }
         else if (action.kind == RuntimeStateMachineActionKind::PointerDown)
         {
-            stateMachine->pointerDown(rive::Vec2D(action.x, action.y));
+            pointerInputProbe = true;
+            pointerHitResult = static_cast<int>(
+                stateMachine->pointerDown(rive::Vec2D(action.x, action.y)));
         }
         else if (action.kind == RuntimeStateMachineActionKind::PointerUp)
         {
@@ -7506,7 +7558,9 @@ apply_runtime_state_machine_advances(rive::File* file,
             stateMachine->updateDataBinds(true);
         }
         else if (action.kind ==
-                 RuntimeStateMachineActionKind::SnapshotStateMachineScripts)
+                     RuntimeStateMachineActionKind::SnapshotStateMachineScripts ||
+                 action.kind ==
+                     RuntimeStateMachineActionKind::SnapshotNamedInputs)
         {
             // Construction/lifecycle snapshot only. In particular, do not
             // turn this probe operation into an ordinary zero-second advance.
@@ -7542,7 +7596,9 @@ apply_runtime_state_machine_advances(rive::File* file,
             instance->reset();
         }
         else if (action.kind ==
-                 RuntimeStateMachineActionKind::AdvanceAndApply)
+                     RuntimeStateMachineActionKind::AdvanceAndApply ||
+                 action.kind == RuntimeStateMachineActionKind::
+                                    AdvanceAndApplyPersistentDirt)
         {
             advanced = stateMachine->advanceAndApply(action.seconds);
         }
@@ -7555,8 +7611,45 @@ apply_runtime_state_machine_advances(rive::File* file,
         report.seconds = action.seconds;
         report.needsAdvanceBefore = needsAdvanceBefore;
         report.advanced = advanced;
+        report.pointerInputProbe = pointerInputProbe;
+        report.pointerHitResult = pointerHitResult;
+        if (persistentDirtProbe != nullptr)
+        {
+            report.persistentDirtProbe = true;
+            report.persistentDirtAdvanceCount =
+                persistentDirtProbe->advanceCount;
+            report.persistentDirtUpdateCount = persistentDirtProbe->updateCount;
+            report.persistentDirtRemaining =
+                instance->hasDirt(rive::ComponentDirt::Components);
+        }
         report.currentAnimationCount = stateMachine->currentAnimationCount();
         report.changedStateCount = stateMachine->stateChangedCount();
+        if (action.kind == RuntimeStateMachineActionKind::SnapshotNamedInputs)
+        {
+            report.namedInputProbe = true;
+            auto inputIndex = [stateMachine =
+                                   stateMachine.get()](rive::SMIInput* needle) {
+                if (needle == nullptr)
+                {
+                    return -1;
+                }
+                for (size_t index = 0; index < stateMachine->inputCount();
+                     ++index)
+                {
+                    if (stateMachine->input(index) == needle)
+                    {
+                        return static_cast<int>(index);
+                    }
+                }
+                return -1;
+            };
+            report.namedBoolInputIndex =
+                inputIndex(stateMachine->getBool(action.stringValue));
+            report.namedNumberInputIndex =
+                inputIndex(stateMachine->getNumber(action.stringValue));
+            report.namedTriggerInputIndex =
+                inputIndex(stateMachine->getTrigger(action.stringValue));
+        }
         for (size_t i = 0; i < report.changedStateCount; ++i)
         {
             auto state = stateMachine->stateChangedByIndex(i);
@@ -7723,6 +7816,19 @@ apply_runtime_state_machine_advances(rive::File* file,
                 collect_scripted_converter_reports(
                     stateMachine.get(),
                     &scriptOrdinals[action.stateMachineIndex]);
+        }
+        if (persistentDirtProbe != nullptr)
+        {
+            instance->m_DependencyOrder.erase(
+                std::remove(instance->m_DependencyOrder.begin(),
+                            instance->m_DependencyOrder.end(),
+                            persistentDirtProbe.get()),
+                instance->m_DependencyOrder.end());
+            instance->m_advancingComponents.erase(
+                std::remove(instance->m_advancingComponents.begin(),
+                            instance->m_advancingComponents.end(),
+                            persistentDirtProbe.get()),
+                instance->m_advancingComponents.end());
         }
         reports.push_back(report);
     }
@@ -8186,6 +8292,24 @@ void write_runtime_state_machine_advance_reports(
         out << ",\"needsAdvanceBefore\":"
             << (report.needsAdvanceBefore ? "true" : "false");
         out << ",\"advanced\":" << (report.advanced ? "true" : "false");
+        out << ",\"persistentDirtProbe\":"
+            << (report.persistentDirtProbe ? "true" : "false");
+        out << ",\"persistentDirtAdvanceCount\":"
+            << report.persistentDirtAdvanceCount;
+        out << ",\"persistentDirtUpdateCount\":"
+            << report.persistentDirtUpdateCount;
+        out << ",\"persistentDirtRemaining\":"
+            << (report.persistentDirtRemaining ? "true" : "false");
+        out << ",\"namedInputProbe\":"
+            << (report.namedInputProbe ? "true" : "false");
+        out << ",\"namedBoolInputIndex\":" << report.namedBoolInputIndex;
+        out << ",\"namedNumberInputIndex\":"
+            << report.namedNumberInputIndex;
+        out << ",\"namedTriggerInputIndex\":"
+            << report.namedTriggerInputIndex;
+        out << ",\"pointerInputProbe\":"
+            << (report.pointerInputProbe ? "true" : "false");
+        out << ",\"pointerHitResult\":" << report.pointerHitResult;
         out << ",\"currentAnimationCount\":"
             << report.currentAnimationCount;
         out << ",\"changedStateCount\":" << report.changedStateCount;
@@ -14909,6 +15033,97 @@ void write_transition_integer_comparison_samples(std::ostream& out)
         << (greaterThan.compareUints32(left, right) ? "true" : "false");
     out << "}\n";
 }
+
+void write_state_machine_definition_null_hole_sample(std::ostream& out)
+{
+    rive::StateMachine stateMachine;
+    rive::StateMachineImporter importer(&stateMachine);
+
+    auto number = std::make_unique<rive::StateMachineNumber>();
+    number->name("x");
+    importer.addInput(std::move(number));
+    importer.readNullObject();
+    auto boolean = std::make_unique<rive::StateMachineBool>();
+    boolean->name("x");
+    importer.addInput(std::move(boolean));
+    auto trigger = std::make_unique<rive::StateMachineTrigger>();
+    trigger->name("x");
+    importer.addInput(std::move(trigger));
+
+    for (const char* name : {"duplicate", "duplicate", "Case"})
+    {
+        auto layer = std::make_unique<rive::StateMachineLayer>();
+        layer->name(name);
+        importer.addLayer(std::move(layer));
+    }
+
+    importer.addListener(std::make_unique<rive::StateMachineListener>());
+    auto concreteListener =
+        std::make_unique<rive::StateMachineListenerSingle>();
+    concreteListener->targetId(0);
+    importer.addListener(std::move(concreteListener));
+
+    for (size_t i = 0; i < 2; ++i)
+    {
+        auto dataBind = std::make_unique<rive::DataBind>();
+        dataBind->propertyKey(586);
+        importer.addDataBind(std::move(dataBind));
+    }
+
+    out << "{\"inputCount\":" << stateMachine.inputCount();
+    out << ",\"inputs\":[";
+    for (size_t i = 0; i < stateMachine.inputCount(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        auto input = stateMachine.input(i);
+        if (input == nullptr)
+        {
+            out << "null";
+            continue;
+        }
+        out << "{\"index\":" << i;
+        out << ",\"coreType\":" << input->coreType();
+        out << ",\"name\":";
+        write_json_string(out, input->name());
+        out << '}';
+    }
+    out << "],\"layers\":[";
+    for (size_t i = 0; i < stateMachine.layerCount(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        auto layer = stateMachine.layer(i);
+        out << "{\"index\":" << i << ",\"name\":";
+        write_json_string(out, layer->name());
+        out << '}';
+    }
+    out << "],\"listeners\":[";
+    for (size_t i = 0; i < stateMachine.listenerCount(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        auto listener = stateMachine.listener(i);
+        out << "{\"index\":" << i;
+        out << ",\"targetId\":" << listener->targetId() << '}';
+    }
+    out << "],\"dataBindPropertyKeys\":[";
+    for (size_t i = 0; i < stateMachine.dataBindCount(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        out << stateMachine.dataBind(i)->propertyKey();
+    }
+    out << "]}\n";
+}
 } // namespace
 
 int main(int argc, const char* argv[])
@@ -14919,6 +15134,7 @@ int main(int argc, const char* argv[])
     bool numberToListSamples = false;
     bool animationResetColorRoundtrip = false;
     bool transitionIntegerComparisonSamples = false;
+    bool stateMachineDefinitionNullHoleSample = false;
     uint32_t animationResetColor = 0;
 
     for (int i = 1; i < argc; ++i)
@@ -14952,6 +15168,12 @@ int main(int argc, const char* argv[])
         if (is_arg(argv[i], "--transition-integer-comparison-samples"))
         {
             transitionIntegerComparisonSamples = true;
+            continue;
+        }
+
+        if (is_arg(argv[i], "--state-machine-definition-null-hole-sample"))
+        {
+            stateMachineDefinitionNullHoleSample = true;
             continue;
         }
 
@@ -15155,6 +15377,27 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-snapshot-named-inputs"))
+        {
+            if (i + 2 >= argc)
+            {
+                std::cerr << "--runtime-snapshot-named-inputs requires stateMachineIndex name\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::SnapshotNamedInputs;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.stringValue = argv[++i];
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-update-artboard-pass"))
         {
             if (i + 1 >= argc)
@@ -15225,6 +15468,28 @@ int main(int argc, const char* argv[])
             }
             RuntimeStateMachineAction action;
             action.kind = RuntimeStateMachineActionKind::AdvanceAndApply;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = std::strtof(argv[++i], nullptr);
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i],
+                   "--runtime-advance-and-apply-persistent-dirt"))
+        {
+            if (i + 2 >= argc)
+            {
+                std::cerr << "--runtime-advance-and-apply-persistent-dirt requires stateMachineIndex seconds\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::AdvanceAndApplyPersistentDirt;
             action.stateMachineIndex =
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
             action.inputIndex = 0;
@@ -18529,6 +18794,12 @@ int main(int argc, const char* argv[])
     if (transitionIntegerComparisonSamples)
     {
         write_transition_integer_comparison_samples(std::cout);
+        return 0;
+    }
+
+    if (stateMachineDefinitionNullHoleSample)
+    {
+        write_state_machine_definition_null_hole_sample(std::cout);
         return 0;
     }
 

@@ -3991,7 +3991,19 @@ impl<'a> ArtboardInstance<'a> {
     }
 
     pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
-        self.raw.state_machine_instance(index)
+        let mut machine = self.raw.state_machine_instance(index)?;
+        #[cfg(feature = "scripting")]
+        if try_prepare_state_machine_scripted_data_context_without_factory(
+            &self.script_file,
+            &self.raw,
+            &mut machine,
+            None,
+        )
+        .is_err()
+        {
+            return None;
+        }
+        Some(machine)
     }
 
     /// Instantiate the first exact-name state machine, mirroring C++
@@ -4684,7 +4696,19 @@ impl OwnedArtboardInstance {
     }
 
     pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
-        self.raw.state_machine_instance(index)
+        let mut machine = self.raw.state_machine_instance(index)?;
+        #[cfg(feature = "scripting")]
+        if try_prepare_state_machine_scripted_data_context_without_factory(
+            &self.file,
+            &self.raw,
+            &mut machine,
+            None,
+        )
+        .is_err()
+        {
+            return None;
+        }
+        Some(machine)
     }
 
     /// Owning mirror of [`ArtboardInstance::state_machine_instance_named`].

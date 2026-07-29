@@ -935,7 +935,7 @@ status = "faithful"
 upstream = "src/animation/state_machine.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
 dynamically_reached = false
 status = "pending"
 
@@ -977,7 +977,7 @@ source_set = "state-machine"
 wave = "FL-C"
 rust_modules = [
   "crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs",
-  "crates/nuxie-runtime/src/state_machine/instance.rs",
+  "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
   "crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs",
 ]
 dynamically_reached = true

@@ -925,13 +925,13 @@ max_occurrences = 0
 [[ratchet]]
 id = "state_machine_definition_owner_in_root"
 globs = ["crates/nuxie-runtime/src/state_machine.rs"]
-pattern = "(?m)(?:^\\s*(?:pub(?:\\([^)]*\\))?\\s+)?struct\\s+RuntimeStateMachine\\b|^\\s*impl\\s+RuntimeStateMachine\\b|^\\s*(?:pub(?:\\([^)]*\\))?\\s+)?fn\\s+build_state_machines\\b)"
+pattern = "(?m)(?:^\\s*(?:(?:pub(?:\\([^)]*\\))?|const|async|unsafe|extern(?:\\s+\"[^\"]*\")?)\\s+)*fn\\s+|^\\s*impl\\s+|^\\s*(?:pub(?:\\([^)]*\\))?\\s+)?(?:struct|enum|union|trait)\\s+)"
 max_occurrences = 0
 
 [[ratchet]]
 id = "state_machine_instance_owner_in_compat_entry"
 globs = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
-pattern = "(?m)(?:^\\s*(?:pub(?:\\([^)]*\\))?\\s+)?struct\\s+StateMachineInstance\\b|^\\s*impl\\s+(?:Clone\\s+for\\s+)?StateMachineInstance\\b|^\\s*(?:pub(?:\\([^)]*\\))?\\s+)?fn\\s+advance_with_report_mode\\b)"
+pattern = "(?m)(?:^\\s*(?:(?:pub(?:\\([^)]*\\))?|const|async|unsafe|extern(?:\\s+\"[^\"]*\")?)\\s+)*fn\\s+|^\\s*impl\\s+|^\\s*(?:pub(?:\\([^)]*\\))?\\s+)?(?:struct|enum|union|trait)\\s+)"
 max_occurrences = 0
 
 [[ratchet]]
@@ -958,9 +958,19 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_public_api_inventory_required"
 globs = ["crates/nuxie-runtime/tests/public_api_fl_c5.rs"]
-pattern = "fn\\s+fl_c5_public_reexports_are_downstream_visible_after_file_split\\s*\\(\\)"
+pattern = "\\A(?=[\\s\\S]*macro_rules!\\s+exact_public_signature\\s*\\{[\\s\\S]{0,240}let\\s+_\\s*:\\s*\\$signature\\s*=\\s*\\$method\\s*;)(?=[\\s\\S]*BEGIN exhaustive W4 exact signatures)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}try_pointer_down_with_timestamp_and_script_host)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}scripted_listener_data_converter_occurrences)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}bind_owned_view_model_context_handle)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}bindable_view_model_instance_index_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}default_view_model_symbol_list_index_source_handle_by_property_name_path)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}set_imported_view_model_context_list_source_item_count_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}set_owned_view_model_context_view_model_source_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}view_model_trigger_property_id)(?=[\\s\\S]*END exhaustive W4 exact signatures)"
+content_begin = "// BEGIN exhaustive W4 exact signatures"
+content_end = "// END exhaustive W4 exact signatures"
+content_sha256 = "de9ad50c07208de1ecdefb9b6f466308e1aeb76ee3440d37c5ddb4af3d31b8f4"
 min_occurrences = 1
 max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_public_api_exact_signature_count_required"
+globs = ["crates/nuxie-runtime/tests/public_api_fl_c5.rs"]
+pattern = "exact_public_signature!\\s*\\("
+min_occurrences = 328
+max_occurrences = 328
 
 [[ratchet]]
 id = "state_machine_instance_constructor_phase_reorder"
@@ -1199,7 +1209,7 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_event_local_bubble_audio_order_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "fn\\s+notify_events_with_context_and_script_host\\b[\\s\\S]{0,4800}record_event_dispatch_phase\\(\"local-dispatch\"\\)[\\s\\S]{0,4000}bubble_events_to_owner_seam\\(events\\);\\s*self\\.reach_recorded_audio_event_seam\\(events\\)[\\s\\S]{0,1800}pub\\s+fn\\s+plays_audio\\(&self\\)\\s*->\\s*bool\\s*\\{\\s*true"
+pattern = "fn\\s+notify_events_with_context_and_script_host\\b[\\s\\S]{0,4800}record_event_dispatch_phase\\(\"local-dispatch\"\\)[\\s\\S]{0,4000}bubble_events_to_owner_seam\\(events\\);\\s*self\\.reach_recorded_audio_event_seam\\(events\\)[\\s\\S]{0,1800}fn\\s+reach_recorded_audio_event_seam\\b[\\s\\S]{0,400}events\\.iter\\(\\)\\.filter\\(\\|event\\|\\s*event\\.is_audio_event\\(\\)\\)[\\s\\S]{0,800}pub\\s+fn\\s+plays_audio\\(&self\\)\\s*->\\s*bool\\s*\\{\\s*true"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1299,7 +1309,7 @@ max_occurrences = 0
 [[ratchet]]
 id = "state_machine_advance_artboard_settlement_implementation"
 globs = ["crates/nuxie-runtime/src/artboard.rs"]
-pattern = "fn\\s+\\w*settle\\w*\\b(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,4000}\\b(?:try_change_state_machine_instance|advance_state_machine_instance_after_state_probe)\\s*\\("
+pattern = "(?:fn\\s+\\w*settle\\w*\\b(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,4000}\\b(?:try_change_state_machine_instance|advance_state_machine_instance_after_state_probe)\\s*\\(|fn\\s+advance_state_machine_instances_with_nested_context\\b)"
 max_occurrences = 0
 
 [[ratchet]]
@@ -1456,7 +1466,7 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_semantic_recorded_seams_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "\\A(?=[\\s\\S]*pub\\s+fn\\s+semantic_manager\\(&self\\)\\s*->\\s*bool)(?=[\\s\\S]*pub\\s+fn\\s+enable_semantics\\b[\\s\\S]{0,1000}create-internal-recorded-seam[\\s\\S]{0,180}build-tree-recorded-seam)(?=[\\s\\S]*pub\\s+fn\\s+set_external_semantic_manager\\b[\\s\\S]{0,1300}clean-tree-recorded-seam[\\s\\S]{0,300}external_semantic_manager_identity\\s*=\\s*manager_identity[\\s\\S]{0,300}build-tree-recorded-seam)(?=[\\s\\S]*pub\\s+fn\\s+fire_semantic_action\\b)(?=[\\s\\S]*RECORDED[\\s\\S]{0,120}B6-0329[\\s\\S]{0,120}`src/semantic/semantic_manager\\.cpp`)(?=[\\s\\S]*RECORDED[\\s\\S]{0,120}B6-0327[\\s\\S]{0,120}`src/semantic/semantic_data\\.cpp`)"
+pattern = "\\A(?=[\\s\\S]*pub\\s+fn\\s+semantic_manager\\(&self\\)\\s*->\\s*bool)(?=[\\s\\S]*pub\\s+fn\\s+enable_semantics\\b[\\s\\S]{0,1000}create-internal-recorded-seam[\\s\\S]{0,180}build-tree-recorded-seam)(?=[\\s\\S]*pub\\s+fn\\s+set_external_semantic_manager\\b[\\s\\S]{0,1300}clean-tree-recorded-seam[\\s\\S]{0,300}external_semantic_manager_identity\\s*=\\s*manager_identity[\\s\\S]{0,300}build-tree-recorded-seam)(?=[\\s\\S]*pub\\s+fn\\s+fire_semantic_action\\b[\\s\\S]{0,500}node-by-id-recorded-seam[\\s\\S]{0,500}group\\.semantic_node_id\\s*==\\s*semantic_node_id[\\s\\S]{0,500}group\\.semantic_data_local_id[\\s\\S]{0,700}match\\s+action_type\\s*\\{[\\s\\S]{0,300}0\\s*=>[\\s\\S]{0,160}1\\s*=>[\\s\\S]{0,160}2\\s*=>[\\s\\S]{0,160}_\\s*=>\\s*return\\s+false[\\s\\S]{0,1000}semantic_action_for_target\\()(?=[\\s\\S]*RECORDED[\\s\\S]{0,120}B6-0329[\\s\\S]{0,120}`src/semantic/semantic_manager\\.cpp`)(?=[\\s\\S]*RECORDED[\\s\\S]{0,120}B6-0327[\\s\\S]{0,120}`src/semantic/semantic_data\\.cpp`)"
 min_occurrences = 1
 max_occurrences = 1
 

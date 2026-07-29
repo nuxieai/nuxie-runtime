@@ -1045,6 +1045,92 @@ fn prepared_machine(
     (file, instance, machine, RecordingFactory::new())
 }
 
+#[test]
+fn public_machine_construction_synchronously_prepares_scripted_data_without_blocking_ordinary_input()
+ {
+    let bytes = scripted_listener_file(
+        br#"
+            return function(_context)
+                return {
+                    performAction = function(_self, _invocation) end,
+                }
+            end
+        "#,
+        1,
+    );
+    let runtime = read_runtime_file_for_facade(&bytes).expect("import public construction fixture");
+    let file = Arc::new(File::from_runtime(runtime).expect("build public construction file"));
+    let mut instance = OwnedArtboardInstance::instantiate_default(file)
+        .expect("instantiate public construction artboard");
+    let mut factory = RecordingFactory::new();
+    instance
+        .prepare_flow_scripts(&mut factory)
+        .expect("make the public runtime file resolver available");
+    let mut machine = instance
+        .default_state_machine_instance()
+        .expect("the public constructor synchronously prepares scripted data");
+
+    assert!(
+        machine.scripted_object_initialization_complete(),
+        "a machine returned by the public facade must not expose its preparation window"
+    );
+    let rust_pointer_hit = machine.pointer_down(&mut instance.raw, 50.0, 50.0, 1);
+    assert!(
+        rust_pointer_hit,
+        "an ordinary authored pointer listener remains live immediately after construction"
+    );
+    let rust_advanced = machine
+        .advance_and_apply(&mut instance.raw, 0.25)
+        .expect("ordinary advance remains callable immediately after construction");
+
+    if let Some(probe) = scripted_cpp_probe_path() {
+        let fixture = std::env::temp_dir().join(format!(
+            "nuxie-scripted-mount-ordinary-input-{}.riv",
+            std::process::id()
+        ));
+        std::fs::write(&fixture, &bytes).expect("write scripted mount differential fixture");
+        let output = std::process::Command::new(&probe)
+            .arg("--instance-artboards")
+            .arg("--runtime-pointer-down-state-machine")
+            .arg("0")
+            .arg("50")
+            .arg("50")
+            .arg("--runtime-advance-and-apply-state-machine")
+            .arg("0")
+            .arg("0.25")
+            .arg("--file")
+            .arg(&fixture)
+            .output();
+        let _ = std::fs::remove_file(&fixture);
+        let output = output.expect("run scripted mount C++ differential");
+        assert!(
+            output.status.success(),
+            "scripted mount C++ differential failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let report: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("decode scripted mount C++ differential");
+        let reports = report
+            .get("artboards")
+            .and_then(serde_json::Value::as_array)
+            .and_then(|artboards| artboards.first())
+            .and_then(|artboard| artboard.get("runtimeStateMachineAdvances"))
+            .and_then(serde_json::Value::as_array)
+            .expect("C++ scripted mount reports");
+        assert_eq!(reports.len(), 2);
+        let cpp_pointer_hit = reports[0]
+            .get("pointerHitResult")
+            .and_then(serde_json::Value::as_i64)
+            .is_some_and(|result| result != 0);
+        let cpp_advanced = reports[1]
+            .get("advanced")
+            .and_then(serde_json::Value::as_bool)
+            .expect("C++ advanceAndApply result");
+        assert_eq!(rust_pointer_hit, cpp_pointer_hit);
+        assert_eq!(rust_advanced, cpp_advanced);
+    }
+}
+
 fn scripted_cpp_probe_path() -> Option<std::path::PathBuf> {
     if let Some(path) = std::env::var_os("RIVE_CPP_PROBE_SCRIPTED") {
         let path = std::path::PathBuf::from(path);

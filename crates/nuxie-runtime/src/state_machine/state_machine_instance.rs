@@ -1504,7 +1504,11 @@ pub struct StateMachineInstance {
     #[cfg(test)]
     event_dispatch_phase_trace: Vec<&'static str>,
     #[cfg(test)]
+    audio_event_seam_receipts: Vec<(usize, u32)>,
+    #[cfg(test)]
     advance_phase_trace: Vec<&'static str>,
+    #[cfg(test)]
+    raw_advance_call_count: usize,
     #[cfg(test)]
     transition_probe_count: usize,
     #[cfg(test)]
@@ -2129,7 +2133,11 @@ impl Clone for StateMachineInstance {
             #[cfg(test)]
             event_dispatch_phase_trace: self.event_dispatch_phase_trace.clone(),
             #[cfg(test)]
+            audio_event_seam_receipts: self.audio_event_seam_receipts.clone(),
+            #[cfg(test)]
             advance_phase_trace: self.advance_phase_trace.clone(),
+            #[cfg(test)]
+            raw_advance_call_count: self.raw_advance_call_count,
             #[cfg(test)]
             transition_probe_count: self.transition_probe_count,
             #[cfg(test)]
@@ -2276,6 +2284,34 @@ fn listener_target_direct_child(
         let child = artboard.component_at(child);
         (child.type_name == child_type).then_some(child.local_id)
     })
+}
+
+/// Project the manager-local ID assigned by an empty internal
+/// `SemanticManager::buildSemanticTree` to one authored SemanticData.
+///
+/// C++ registers every SemanticData in `Artboard::m_Objects` order and the
+/// manager assigns IDs starting at one. This mapping is deliberately distinct
+/// from component local IDs: `fireSemanticAction` receives the former, then
+/// `nodeById(...)->semanticData()` reaches the latter. A later external-manager
+/// rebuild preserves the node's assigned ID unless that recorded manager seam
+/// resolves a collision.
+fn internal_semantic_node_id(
+    artboard: &ArtboardInstance,
+    semantic_data_local_id: usize,
+) -> Option<u32> {
+    let mut semantic_node_id = 1u32;
+    for component in artboard.components().iter() {
+        if !nuxie_schema::definition_by_name(component.type_name)
+            .is_some_and(|definition| definition.is_a("SemanticData"))
+        {
+            continue;
+        }
+        if component.local_id == semantic_data_local_id {
+            return Some(semantic_node_id);
+        }
+        semantic_node_id = semantic_node_id.checked_add(1)?;
+    }
+    None
 }
 
 fn listener_uses_report_queue(listener: &RuntimeStateMachineListener) -> bool {
@@ -2945,7 +2981,11 @@ impl StateMachineInstance {
             #[cfg(test)]
             event_dispatch_phase_trace: Vec::new(),
             #[cfg(test)]
+            audio_event_seam_receipts: Vec::new(),
+            #[cfg(test)]
             advance_phase_trace: Vec::new(),
+            #[cfg(test)]
+            raw_advance_call_count: 0,
             #[cfg(test)]
             transition_probe_count: 0,
             #[cfg(test)]
@@ -3357,8 +3397,14 @@ impl StateMachineInstance {
             else {
                 continue;
             };
+            let Some(semantic_node_id) =
+                internal_semantic_node_id(artboard, semantic_data_local_id)
+            else {
+                continue;
+            };
             if let Some(group) = semantic_listener_group::RuntimeSemanticListenerGroup::new(
                 listener_index,
+                semantic_node_id,
                 semantic_data_local_id,
                 listener,
             ) {
@@ -5046,6 +5092,36 @@ impl StateMachineInstance {
             .find(|input| !input.is_null() && input.name() == Some(name))
     }
 
+    fn get_named_input(
+        &self,
+        name: &str,
+        kind: StateMachineInputKind,
+    ) -> Option<&StateMachineInputInstance> {
+        self.inputs
+            .iter()
+            .find(|input| !input.is_null() && input.kind() == kind && input.name() == Some(name))
+    }
+
+    /// Exact type-and-name first-match lookup matching C++ `getBool`.
+    ///
+    /// A same-name Number or Trigger occurrence does not shadow a later Bool
+    /// (`state_machine_instance.cpp:2689-2706`).
+    pub fn get_bool(&self, name: &str) -> Option<&StateMachineInputInstance> {
+        self.get_named_input(name, StateMachineInputKind::Bool)
+    }
+
+    /// Exact type-and-name first-match lookup matching C++ `getNumber`
+    /// (`state_machine_instance.cpp:2689-2710`).
+    pub fn get_number(&self, name: &str) -> Option<&StateMachineInputInstance> {
+        self.get_named_input(name, StateMachineInputKind::Number)
+    }
+
+    /// Exact type-and-name first-match lookup matching C++ `getTrigger`
+    /// (`state_machine_instance.cpp:2689-2714`).
+    pub fn get_trigger(&self, name: &str) -> Option<&StateMachineInputInstance> {
+        self.get_named_input(name, StateMachineInputKind::Trigger)
+    }
+
     pub fn input_index_named(&self, name: &str) -> Option<usize> {
         self.inputs
             .iter()
@@ -5271,14 +5347,50 @@ impl StateMachineInstance {
     /// RECORDED seam: absent manifest row B6-0327,
     /// `src/semantic/semantic_data.cpp`, owns action validation and
     /// `fireSemanticTap`/`fireSemanticIncrease`/`fireSemanticDecrease`.
-    /// Until those owners land, missing manager, node, or data is an
-    /// owner-safe no-op and no local semantic tree is fabricated here.
+    /// The retained listener groups are the owner-safe `SemanticData` seam:
+    /// their authored SemanticData local identity stands in for the manager's
+    /// resolved node/data pointer. Missing manager, node, or data and
+    /// out-of-range actions remain no-ops.
     pub fn fire_semantic_action(&mut self, semantic_node_id: u32, action_type: u32) -> bool {
         if !self.semantic_manager() {
             return false;
         }
-        let _ = (semantic_node_id, action_type);
-        false
+        self.record_semantic_manager_phase("node-by-id-recorded-seam");
+        let Some(semantic_data_local_id) = self
+            .semantic_listener_groups
+            .iter()
+            .find(|group| group.semantic_node_id == semantic_node_id)
+            .map(|group| group.semantic_data_local_id)
+        else {
+            return false;
+        };
+        // This is the owner-safe projection of
+        // `nodeById(semantic_node_id)->semanticData()`: the lookup key is the
+        // manager node ID while the retained value is the distinct authored
+        // SemanticData component identity.
+        let Some(target_local_id) = self
+            .semantic_listener_groups
+            .iter()
+            .find(|group| group.semantic_data_local_id == semantic_data_local_id)
+            .map(|group| group.target_local_id)
+        else {
+            return false;
+        };
+        self.record_semantic_manager_phase("semantic-data-recorded-seam");
+        let phase = match action_type {
+            0 => "fire-tap-recorded-data-seam",
+            1 => "fire-increase-recorded-data-seam",
+            2 => "fire-decrease-recorded-data-seam",
+            _ => return false,
+        };
+
+        // The switch itself is family-owned (`state_machine_instance.cpp:
+        // 2509-2544`). Concrete manager/node lookup and SemanticData fire
+        // internals stay at their recorded rows, while the existing listener
+        // seam makes the selected action observable.
+        self.record_semantic_manager_phase(phase);
+        self.semantic_action_for_target(target_local_id, action_type);
+        true
     }
 
     fn record_semantic_manager_phase(&mut self, phase: &'static str) {
@@ -5333,9 +5445,6 @@ impl StateMachineInstance {
         if self.script_error.is_some() {
             return false;
         }
-        if self.scripted_data_context_prepare_pending() {
-            return false;
-        }
         self.ensure_scripted_input_groups_current(artboard);
         if self.script_error.is_some() {
             return false;
@@ -5386,9 +5495,6 @@ impl StateMachineInstance {
         if self.script_error.is_some() {
             return RuntimeInputDispatchOutcome::terminal();
         }
-        if self.scripted_data_context_prepare_pending() {
-            return RuntimeInputDispatchOutcome::default();
-        }
         self.ensure_scripted_input_groups_current(artboard);
         if self.script_error.is_some() {
             return RuntimeInputDispatchOutcome::terminal();
@@ -5411,9 +5517,6 @@ impl StateMachineInstance {
     /// Dispatch owned committed text to the currently focused listener groups.
     pub fn text_input(&mut self, artboard: &mut ArtboardInstance, text: &str) -> bool {
         if self.script_error.is_some() {
-            return false;
-        }
-        if self.scripted_data_context_prepare_pending() {
             return false;
         }
         self.ensure_scripted_input_groups_current(artboard);
@@ -5449,9 +5552,6 @@ impl StateMachineInstance {
         if self.script_error.is_some() {
             return RuntimeInputDispatchOutcome::terminal();
         }
-        if self.scripted_data_context_prepare_pending() {
-            return RuntimeInputDispatchOutcome::default();
-        }
         self.ensure_scripted_input_groups_current(artboard);
         if self.script_error.is_some() {
             return RuntimeInputDispatchOutcome::terminal();
@@ -5482,9 +5582,6 @@ impl StateMachineInstance {
         invocation: ScriptListenerInvocation,
     ) -> bool {
         if self.script_error.is_some() {
-            return false;
-        }
-        if self.scripted_data_context_prepare_pending() {
             return false;
         }
         self.ensure_scripted_input_groups_current(artboard);
@@ -5532,9 +5629,6 @@ impl StateMachineInstance {
     ) -> RuntimeInputDispatchOutcome {
         if self.script_error.is_some() {
             return RuntimeInputDispatchOutcome::terminal();
-        }
-        if self.scripted_data_context_prepare_pending() {
-            return RuntimeInputDispatchOutcome::default();
         }
         self.ensure_scripted_input_groups_current(artboard);
         if self.script_error.is_some() {
@@ -5600,9 +5694,6 @@ impl StateMachineInstance {
     ) -> (RuntimeInputDispatchOutcome, Option<(u64, u32)>) {
         if self.script_error.is_some() {
             return (RuntimeInputDispatchOutcome::terminal(), None);
-        }
-        if self.scripted_data_context_prepare_pending() {
-            return (RuntimeInputDispatchOutcome::default(), None);
         }
         self.ensure_scripted_input_groups_current(artboard);
         if self.script_error.is_some() {
@@ -5860,9 +5951,6 @@ impl StateMachineInstance {
         event_context: Option<&StateMachineEventContext>,
         host: &mut dyn ScriptHost,
     ) -> Result<HitResult, ScriptError> {
-        if self.scripted_data_context_prepare_pending() {
-            return Ok(HitResult::None);
-        }
         if !self.focus.is_inert() {
             self.focus.sync(artboard);
         }
@@ -7193,11 +7281,20 @@ impl StateMachineInstance {
         std::mem::take(&mut self.bubbled_event_reports)
     }
 
-    /// Audio playback remains owned by the deferred audio subsystem. WP6
-    /// records only that event bubbling reaches this seam afterward.
+    /// Select the C++ `AudioEvent` occurrences after local dispatch and
+    /// bubbling, then invoke the recorded playback seam once per occurrence.
+    ///
+    /// Playback internals remain owned by the deferred audio subsystem; the
+    /// family-owned type selection and call multiplicity live here
+    /// (`state_machine_instance.cpp:3155-3169`).
     fn reach_recorded_audio_event_seam(&mut self, events: &[StateMachineReportedEvent]) {
-        if !events.is_empty() {
+        for event in events.iter().filter(|event| event.is_audio_event()) {
             self.record_event_dispatch_phase("recorded-audio-seam");
+            #[cfg(not(test))]
+            let _ = event;
+            #[cfg(test)]
+            self.audio_event_seam_receipts
+                .push((event.event_local_index(), event.event_core_type()));
         }
     }
 
@@ -7539,9 +7636,6 @@ impl StateMachineInstance {
         host: &mut dyn ScriptHost,
         event_context: Option<&StateMachineEventContext>,
     ) -> Result<bool, ScriptError> {
-        if self.scripted_data_context_prepare_pending() {
-            return Ok(false);
-        }
         let mut changed = false;
         for action in listener_actions {
             match action {
@@ -7641,6 +7735,16 @@ impl StateMachineInstance {
                     definition: Some(definition),
                     ..
                 } => {
+                    if self.scripted_data_context_prepare_pending()
+                        && !self
+                            .scripted_listener_action_instances
+                            .contains_key(&definition.action_global_id())
+                    {
+                        // Only the unavailable script-facing callback is inert.
+                        // Ordinary actions in this same listener occurrence have
+                        // already run and later ordinary actions must continue.
+                        continue;
+                    }
                     let result = super::scripted_listener_action::perform_scripted_listener_action(
                         &self.scripted_listener_action_instances,
                         definition,
@@ -12003,9 +12107,6 @@ impl StateMachineInstance {
         if let Some(error) = self.script_error.as_ref() {
             return Err(error.clone());
         }
-        if self.scripted_data_context_prepare_pending() {
-            return Ok(false);
-        }
         #[cfg(test)]
         {
             self.transition_probe_count += 1;
@@ -12098,8 +12199,9 @@ impl StateMachineInstance {
         if let Some(error) = self.script_error.as_ref() {
             return Err(error.clone());
         }
-        if self.scripted_data_context_prepare_pending() {
-            return Ok(false);
+        #[cfg(test)]
+        {
+            self.raw_advance_call_count += 1;
         }
         #[cfg(test)]
         self.advance_phase_trace.clear();
@@ -12293,6 +12395,7 @@ impl StateMachineInstance {
             artboard,
             state_machines,
             elapsed_seconds,
+            None,
             |artboard, elapsed_seconds| {
                 artboard.advance_components_after_root_state_machines(elapsed_seconds)
             },
@@ -12309,6 +12412,7 @@ impl StateMachineInstance {
             artboard,
             state_machines,
             elapsed_seconds,
+            None,
             |artboard, elapsed_seconds| {
                 artboard.advance_components_after_root_state_machines_with_factory(
                     elapsed_seconds,
@@ -12318,10 +12422,11 @@ impl StateMachineInstance {
         )
     }
 
-    fn advance_artboard_frame_components_with(
+    pub(crate) fn advance_artboard_frame_components_with(
         artboard: &mut ArtboardInstance,
         state_machines: &mut [Self],
         elapsed_seconds: f32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         mut advance_artboard: impl FnMut(
             &mut ArtboardInstance,
             f32,
@@ -12332,7 +12437,12 @@ impl StateMachineInstance {
     ) -> Result<bool, ScriptError> {
         let mut changed = false;
         for state_machine in state_machines.iter_mut() {
-            changed |= state_machine.advance_on_artboard(artboard, elapsed_seconds, true, None);
+            changed |= state_machine.advance_on_artboard(
+                artboard,
+                elapsed_seconds,
+                true,
+                owned_context.as_deref_mut(),
+            );
             state_machine.drop_hidden_focus_target(artboard);
         }
 
@@ -12341,10 +12451,23 @@ impl StateMachineInstance {
         for state_machine in state_machines.iter_mut() {
             let mut notified = false;
             for (host_local, events) in &nested_events {
-                notified |= state_machine.notify_events(artboard, Some(*host_local), events);
+                notified |= match owned_context.as_deref_mut() {
+                    Some(context) => state_machine.notify_events_with_owned_view_model_context(
+                        artboard,
+                        Some(*host_local),
+                        events,
+                        context,
+                    ),
+                    None => state_machine.notify_events(artboard, Some(*host_local), events),
+                };
             }
             if notified {
-                changed |= state_machine.advance_on_artboard(artboard, 0.0, false, None);
+                changed |= state_machine.advance_on_artboard(
+                    artboard,
+                    0.0,
+                    false,
+                    owned_context.as_deref_mut(),
+                );
             }
         }
         Ok(changed)
@@ -12449,6 +12572,45 @@ impl StateMachineInstance {
             changed,
             elapsed_seconds,
             state_machines,
+        ))
+    }
+
+    /// Live FL-C5 masking differential for the C++ five-pass settlement cap.
+    ///
+    /// The injected advancing occurrence re-dirties the root after every
+    /// update, so a sixth settlement pass would be required to clear it. The
+    /// tuple is `(advanced, advancing_calls, update_calls, dirt_remaining)`.
+    #[doc(hidden)]
+    pub fn runtime_persistent_dirt_settlement_probe(
+        artboard: &mut ArtboardInstance,
+        state_machine: &mut Self,
+        elapsed_seconds: f32,
+    ) -> Result<(bool, usize, usize, bool), ScriptError> {
+        let mut changed = Self::advance_artboard_frame_components(
+            artboard,
+            std::slice::from_mut(state_machine),
+            elapsed_seconds,
+        )?;
+        let mut advancing_calls = 1;
+        let mut update_calls = 0;
+        let _ = artboard.add_dirt(0, ComponentDirt::COMPONENTS, false);
+        changed |= Self::settle_artboard_update_passes(
+            artboard,
+            std::slice::from_mut(state_machine),
+            true,
+            |artboard| {
+                update_calls += 1;
+                let updated = artboard.update_pass();
+                advancing_calls += 1;
+                let _ = artboard.add_dirt(0, ComponentDirt::COMPONENTS, false);
+                updated
+            },
+        );
+        Ok((
+            changed,
+            advancing_calls,
+            update_calls,
+            artboard.has_dirt(ComponentDirt::COMPONENTS),
         ))
     }
 
@@ -13746,15 +13908,9 @@ mod scripted_listener_action_tests {
             &graph.artboards,
         )
         .expect("instantiate listener artboard");
-        let mut machine = artboard
+        let machine = artboard
             .state_machine_instance(0)
             .expect("fixture state machine");
-        // This low-level fixture bypasses the facade that normally performs
-        // C++'s complete synchronous ScriptedObject constructor pass before
-        // exposing the instance. Treat the fixture as post-construction so
-        // direct listener dispatch does not exercise Rust's otherwise
-        // unobservable preparation seam.
-        machine.mark_scripted_object_initialization_complete(None);
         (artboard, machine)
     }
 
@@ -13767,6 +13923,7 @@ mod scripted_listener_action_tests {
         label: &'static str,
         result: HitResult,
         trace: Rc<RefCell<Vec<String>>>,
+        component: Option<ComponentHandle>,
     }
 
     impl HitComponent for RecordingHitComponent {
@@ -13775,7 +13932,7 @@ mod scripted_listener_action_tests {
         }
 
         fn component(&self) -> Option<ComponentHandle> {
-            None
+            self.component
         }
 
         fn prepare_event(
@@ -13859,11 +14016,13 @@ mod scripted_listener_action_tests {
                 label: "front",
                 result: HitResult::HitOpaque,
                 trace: Rc::clone(&trace),
+                component: None,
             }),
             Box::new(RecordingHitComponent {
                 label: "back",
                 result: HitResult::Hit,
                 trace: Rc::clone(&trace),
+                component: None,
             }),
         ];
 
@@ -13894,6 +14053,62 @@ mod scripted_listener_action_tests {
     }
 
     #[test]
+    fn fl_c5_hit_sort_preserves_the_exact_adversarial_swap_order() {
+        let (artboard, mut machine) = scripted_listener_artboard_and_machine();
+        let artboard_component = artboard
+            .components()
+            .iter()
+            .find(|component| component.type_name == "Artboard")
+            .and_then(|component| artboard.component_handle(component.local_id))
+            .expect("fixture root artboard component");
+        let drawables = artboard
+            .runtime_hit_component_order()
+            .into_iter()
+            .filter(|component| *component != artboard_component)
+            .take(3)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            drawables.len(),
+            3,
+            "the adversarial fixture needs three distinct draw-order identities"
+        );
+        let trace = Rc::new(RefCell::new(Vec::new()));
+        let hit = |label, component| {
+            Box::new(RecordingHitComponent {
+                label,
+                result: HitResult::None,
+                trace: Rc::clone(&trace),
+                component: Some(component),
+            }) as Box<dyn HitComponent>
+        };
+        machine.hit_components = vec![
+            hit("third", drawables[2]),
+            hit("root", artboard_component),
+            hit("first-a", drawables[0]),
+            hit("first-b", drawables[0]),
+            hit("second", drawables[1]),
+        ];
+
+        machine.sort_hit_components(&artboard);
+
+        assert_eq!(
+            machine
+                .hit_components
+                .iter()
+                .map(|hit| hit.component())
+                .collect::<Vec<_>>(),
+            [
+                Some(artboard_component),
+                Some(drawables[0]),
+                Some(drawables[0]),
+                Some(drawables[1]),
+                Some(drawables[2]),
+            ],
+            "the in-place scan must continue after each swap so duplicate identities retain the pinned swap sequence"
+        );
+    }
+
+    #[test]
     fn fl_c5_pointer_drag_discards_event_timestamps_then_follows_with_move() {
         let (mut artboard, mut machine) = scripted_listener_artboard_and_machine();
         let trace = Rc::new(RefCell::new(Vec::new()));
@@ -13902,6 +14117,7 @@ mod scripted_listener_action_tests {
             label: "drag",
             result: HitResult::None,
             trace: Rc::clone(&trace),
+            component: None,
         })];
 
         assert!(!machine.drag_start(&mut artboard, 4.0, 5.0, 9.5, 11));
@@ -14236,6 +14452,58 @@ mod scripted_listener_action_tests {
             scripted_object_bindings: Vec::new(),
             action_owners: RuntimeActionCoreArena::empty(),
         }
+    }
+
+    #[test]
+    fn typed_named_inputs_match_type_and_name_in_authored_order() {
+        let (_, mut artboard) = fl_c5_bind_file_and_artboard();
+        let mut definition = reset_input_state_machine(Vec::new());
+        definition.inputs = Arc::new(vec![
+            Some(RuntimeStateMachineInput::new_number(
+                901,
+                Some("x".to_owned()),
+                7.0,
+            )),
+            Some(RuntimeStateMachineInput::new_bool(
+                902,
+                Some("x".to_owned()),
+                true,
+            )),
+            Some(RuntimeStateMachineInput::new_trigger(
+                903,
+                Some("x".to_owned()),
+            )),
+        ]);
+        artboard.state_machines = Arc::new(vec![definition]);
+        let machine = artboard
+            .state_machine_instance(0)
+            .expect("typed named-input machine");
+
+        assert_eq!(
+            machine
+                .input_named("x")
+                .and_then(|input| input.number_value()),
+            Some(7.0),
+            "the untyped Rust convenience keeps first-name semantics"
+        );
+        assert_eq!(
+            machine.get_bool("x").and_then(|input| input.bool_value()),
+            Some(true),
+            "getBool skips the earlier same-name Number occurrence"
+        );
+        assert_eq!(
+            machine
+                .get_number("x")
+                .and_then(|input| input.number_value()),
+            Some(7.0)
+        );
+        assert_eq!(
+            machine
+                .get_trigger("x")
+                .and_then(|input| input.trigger_fired()),
+            Some(false)
+        );
+        assert!(machine.get_bool("missing").is_none());
     }
 
     fn reset_input_actions() -> Vec<RuntimeScheduledListenerAction> {
@@ -16005,11 +16273,50 @@ mod scripted_listener_action_tests {
             .state_machine_instance(0)
             .expect("semantic listener machine");
 
+        assert!(machine.enable_semantics());
+        assert_eq!(
+            machine.semantic_listener_groups[0].semantic_data_local_id,
+            2
+        );
+        assert_eq!(
+            machine.semantic_listener_groups[0].semantic_node_id, 1,
+            "manager node IDs are not authored component local IDs"
+        );
+        assert!(
+            !machine.fire_semantic_action(2, 0),
+            "the authored SemanticData local ID is not a manager node ID"
+        );
+        assert!(
+            machine.fire_semantic_action(1, 1),
+            "increase dispatch reaches SemanticData even though this listener accepts only tap"
+        );
+        assert!(
+            machine.queued_semantic_events.is_empty(),
+            "SemanticData applies the listener's action constraint"
+        );
         assert!(
             !machine.semantic_action_for_target(1, 1),
             "a nonmatching action is not registered"
         );
-        assert!(machine.semantic_action_for_target(1, 0));
+        assert!(
+            machine.fire_semantic_action(1, 0),
+            "tap selects the SemanticData action and queues its listener callback"
+        );
+        assert_eq!(
+            machine.semantic_manager_phase_trace,
+            [
+                "create-internal-recorded-seam",
+                "build-tree-recorded-seam",
+                "node-by-id-recorded-seam",
+                "node-by-id-recorded-seam",
+                "semantic-data-recorded-seam",
+                "fire-increase-recorded-data-seam",
+                "node-by-id-recorded-seam",
+                "semantic-data-recorded-seam",
+                "fire-tap-recorded-data-seam",
+            ],
+            "the family-owned action switch selects the recorded SemanticData callback"
+        );
         assert_eq!(
             machine
                 .input(0)
@@ -16025,8 +16332,8 @@ mod scripted_listener_action_tests {
             Some(true)
         );
 
-        assert!(machine.semantic_action_for_target(1, 0));
-        assert!(machine.semantic_action_for_target(1, 0));
+        assert!(machine.fire_semantic_action(1, 0));
+        assert!(machine.fire_semantic_action(1, 0));
         assert!(
             machine.apply_local_event_listeners(&mut artboard, 0, None),
             "both duplicate callback occurrences execute in FIFO order"
@@ -17175,9 +17482,10 @@ mod scripted_listener_action_tests {
         let (mut root_artboard, mut root) = scripted_listener_artboard_and_machine();
         leaf.attach_event_bubble_owner();
         parent.attach_event_bubble_owner();
+        let ordinary_event = fl_c5_test_reported_event(6);
         let mut audio_event = fl_c5_test_reported_event(7);
         audio_event.event_core_type = 407;
-        let event = [audio_event];
+        let event = [ordinary_event, audio_event];
         let calls = Rc::new(RefCell::new(Vec::new()));
         let mut mismatch = scripted_test_listener(
             &mut parent,
@@ -17227,10 +17535,23 @@ mod scripted_listener_action_tests {
 
         leaf.notify_events(&mut leaf_artboard, None, &event);
         let parent_events = leaf.take_bubbled_event_reports();
-        assert_eq!(parent_events.len(), 1);
+        assert_eq!(
+            parent_events
+                .iter()
+                .map(StateMachineReportedEvent::event_local_index)
+                .collect::<Vec<_>>(),
+            [6, 7],
+            "ordinary and audio reports both bubble in authored order"
+        );
         parent.notify_events(&mut parent_artboard, Some(7), &parent_events);
         let root_events = parent.take_bubbled_event_reports();
-        assert_eq!(root_events.len(), 1);
+        assert_eq!(
+            root_events
+                .iter()
+                .map(StateMachineReportedEvent::event_local_index)
+                .collect::<Vec<_>>(),
+            [6, 7]
+        );
         root_artboard.set_frame_origin(false);
         let _ = root_artboard.advance_state_machine_instance(&mut root, 0.0);
         root.notify_events(&mut root_artboard, Some(8), &root_events);
@@ -17252,12 +17573,18 @@ mod scripted_listener_action_tests {
                 machine.event_dispatch_phase_trace,
                 ["local-dispatch", "bubble-to-owner", "recorded-audio-seam"]
             );
+            assert_eq!(
+                machine.audio_event_seam_receipts,
+                [(7, 407)],
+                "only the AudioEvent reaches the recorded playback seam"
+            );
             assert!(machine.plays_audio());
         }
         assert_eq!(
             root.event_dispatch_phase_trace,
             ["local-dispatch", "recorded-audio-seam"]
         );
+        assert_eq!(root.audio_event_seam_receipts, [(7, 407)]);
         assert!(root.plays_audio());
 
         root.event_dispatch_phase_trace.clear();
@@ -17268,13 +17595,13 @@ mod scripted_listener_action_tests {
         assert!(root.event_dispatch_phase_trace.is_empty());
 
         leaf.notify_events(&mut leaf_artboard, None, &event);
-        assert_eq!(leaf.reported_event_count(), 1);
-        assert!(leaf.reported_event(&leaf_artboard, 0).is_some());
+        assert_eq!(leaf.reported_event_count(), 2);
+        assert!(leaf.reported_event(&leaf_artboard, 1).is_some());
         assert_eq!(leaf.reported_event_count(), 0);
         leaf.notify_events(&mut leaf_artboard, None, &event);
         assert_eq!(
             leaf.bubbled_event_reports.len(),
-            1,
+            2,
             "the next bubble batch reclaims the production cursor's consumed prefix"
         );
     }
@@ -17792,6 +18119,19 @@ mod scripted_listener_action_tests {
     #[test]
     fn matched_pointer_listener_marks_advance_even_when_actions_are_noops() {
         let (mut artboard, mut machine) = scripted_listener_artboard_and_machine();
+        let scripted_calls = Rc::new(RefCell::new(Vec::new()));
+        let _scripted_object = scripted_test_listener(
+            &mut machine,
+            98_700,
+            "unmounted scripted object",
+            ListenerFailure::None,
+            Vec::new(),
+            &scripted_calls,
+        );
+        assert!(
+            machine.scripted_data_context_prepare_pending(),
+            "the exposing fixture must retain one not-yet-mounted scripted object"
+        );
         let mut listeners = machine.listener_definitions.as_ref().clone();
         assert!(
             listeners.iter_mut().any(|listener| {
@@ -17813,6 +18153,14 @@ mod scripted_listener_action_tests {
             machine.needs_advance(),
             "C++ ListenerGroup::processEvent marks the machine after every matched listener, \
              even when its action list is empty (`listener_group.cpp:218-225`)"
+        );
+        let raw_advance_calls_before = machine.raw_advance_call_count;
+        let _ = machine
+            .advance_and_apply(&mut artboard, 0.25)
+            .expect("ordinary bookkeeping is independent of script mount");
+        assert!(
+            machine.raw_advance_call_count > raw_advance_calls_before,
+            "raw advance bookkeeping runs immediately through the public path while the unrelated scripted object remains unavailable"
         );
     }
 
@@ -18024,6 +18372,12 @@ mod scripted_listener_action_tests {
     #[test]
     fn fl_c5_clone_teardown_rebuilds_mutable_state_without_aliasing() {
         let mut original = scripted_listener_machine();
+        original.reported_events = vec![fl_c5_test_reported_event(10)];
+        original.reporting_events = vec![fl_c5_test_reported_event(11)];
+        original.bubbled_event_reports = vec![fl_c5_test_reported_event(12)];
+        original.reporting_listener_view_models = vec![13];
+        original.post_apply_listener_view_models = vec![14];
+        original.primary_data_context = Some(RuntimeStateMachineDataContext::default());
         original.queued_focus_events = vec![RuntimeQueuedFocusEvent {
             listener_index: 3,
             is_focus: true,
@@ -18086,6 +18440,58 @@ mod scripted_listener_action_tests {
             .expect("attach original occurrence");
 
         let mut cloned = original.clone();
+        assert_eq!(
+            cloned
+                .reported_events
+                .iter()
+                .map(StateMachineReportedEvent::event_local_index)
+                .collect::<Vec<_>>(),
+            [10]
+        );
+        assert_eq!(
+            cloned
+                .reporting_events
+                .iter()
+                .map(StateMachineReportedEvent::event_local_index)
+                .collect::<Vec<_>>(),
+            [11]
+        );
+        assert_eq!(
+            cloned
+                .bubbled_event_reports
+                .iter()
+                .map(StateMachineReportedEvent::event_local_index)
+                .collect::<Vec<_>>(),
+            [12]
+        );
+        assert_ne!(
+            cloned.reported_events.as_ptr(),
+            original.reported_events.as_ptr(),
+            "pending host reports are copied into distinct Vec storage"
+        );
+        assert_ne!(
+            cloned.reporting_events.as_ptr(),
+            original.reporting_events.as_ptr(),
+            "the active event batch is copied into distinct Vec storage"
+        );
+        assert_ne!(
+            cloned.bubbled_event_reports.as_ptr(),
+            original.bubbled_event_reports.as_ptr(),
+            "the nested bubbling FIFO is copied into distinct Vec storage"
+        );
+        assert!(
+            cloned.reporting_listener_view_models.is_empty(),
+            "an in-flight callback batch cannot be replayed by a snapshot"
+        );
+        assert_eq!(
+            cloned.post_apply_listener_view_models,
+            original.post_apply_listener_view_models
+        );
+        assert_ne!(
+            cloned.post_apply_listener_view_models.as_ptr(),
+            original.post_apply_listener_view_models.as_ptr(),
+            "post-apply listener reports are copied into distinct Vec storage"
+        );
         assert_eq!(cloned.queued_focus_events, original.queued_focus_events);
         assert_eq!(
             cloned.queued_semantic_events,
@@ -18124,6 +18530,45 @@ mod scripted_listener_action_tests {
             cloned.nested_event_registrations.as_ptr(),
             original.nested_event_registrations.as_ptr(),
             "nested registrations are copied into distinct Vec storage"
+        );
+        assert_ne!(
+            cloned.hit_components.as_ptr(),
+            original.hit_components.as_ptr(),
+            "the polymorphic hit-owner list has distinct Vec storage"
+        );
+        assert!(
+            cloned
+                .hit_components
+                .iter()
+                .zip(&original.hit_components)
+                .all(|(clone, source)| !std::ptr::eq(&**clone, &**source)),
+            "every polymorphic hit owner is cloned rather than shared"
+        );
+        assert_ne!(
+            cloned.listener_groups.as_ptr(),
+            original.listener_groups.as_ptr(),
+            "mutable listener-group state has distinct Vec storage"
+        );
+        let original_context = original
+            .primary_data_context
+            .as_ref()
+            .expect("source primary context");
+        let cloned_context = cloned
+            .primary_data_context
+            .as_ref()
+            .expect("snapshot primary context");
+        assert!(
+            !Rc::ptr_eq(&original_context.state, &cloned_context.state),
+            "the primary DataContext carrier is rebuilt with detached state"
+        );
+        original.owned_view_model_rebind_sink.take_dirt();
+        cloned.owned_view_model_rebind_sink.take_dirt();
+        cloned
+            .owned_view_model_rebind_sink
+            .add_dirt(RuntimeCellDirt::BINDINGS);
+        assert!(
+            original.owned_view_model_rebind_sink.peek_dirt().is_empty(),
+            "the snapshot callback dirt sink cannot dirty the source occurrence"
         );
         assert!(
             cloned.scripted_listener_action_instances.is_empty()

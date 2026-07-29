@@ -16356,6 +16356,82 @@ fn synthetic_fl_c5_state_machine_definition(file_id: u64) -> Vec<u8> {
     })
 }
 
+fn synthetic_fl_c5_state_machine_definition_null_hole(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "StateMachine", |bytes| {
+            push_string_property(bytes, "StateMachine", "name", "definition");
+        });
+        push_object_with_properties(bytes, "StateMachineNumber", |bytes| {
+            push_string_property(bytes, "StateMachineNumber", "name", "x");
+        });
+        push_object_with_properties(bytes, "StateMachineInput", |bytes| {
+            push_string_property(bytes, "StateMachineInput", "name", "hole");
+        });
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "x");
+        });
+        push_object_with_properties(bytes, "StateMachineTrigger", |bytes| {
+            push_string_property(bytes, "StateMachineTrigger", "name", "x");
+        });
+        for name in ["duplicate", "duplicate", "Case"] {
+            push_object_with_properties(bytes, "StateMachineLayer", |bytes| {
+                push_string_property(bytes, "StateMachineLayer", "name", name);
+            });
+            push_object_with_properties(bytes, "AnyState", |_| {});
+            push_object_with_properties(bytes, "EntryState", |_| {});
+            push_object_with_properties(bytes, "ExitState", |_| {});
+        }
+        push_object_with_properties(bytes, "StateMachineListener", |_| {});
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+        });
+        // The binary replay identifies StateMachine-owned DataBinds through
+        // their latest bindable target. The focused C++ seam can call
+        // StateMachineImporter::addDataBind directly, so this inert carrier
+        // exists only to express the same ownership in a serialized stream.
+        push_object_with_properties(bytes, "BindablePropertyNumber", |_| {});
+        for _ in 0..2 {
+            push_object_with_properties(bytes, "DataBind", |bytes| {
+                push_uint_property(bytes, "DataBind", "propertyKey", 586);
+            });
+        }
+    })
+}
+
+fn synthetic_fl_c5_malformed_listener(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        // No listener input type makes the first authored listener inert. Its
+        // generated targetId remains u32::MAX. The second occurrence is valid
+        // and must remain at authored index one.
+        push_object_with_properties(bytes, "StateMachineListener", |_| {});
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+        });
+    })
+}
+
+fn synthetic_fl_c5_typed_named_inputs(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineNumber", |bytes| {
+            push_string_property(bytes, "StateMachineNumber", "name", "x");
+        });
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "x");
+        });
+        push_object_with_properties(bytes, "StateMachineTrigger", |bytes| {
+            push_string_property(bytes, "StateMachineTrigger", "name", "x");
+        });
+    })
+}
+
 fn synthetic_fl_c5_empty_state_machine(file_id: u64) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
@@ -22257,6 +22333,8 @@ fn assert_fl_c5_pointer_down_up_fixture_matches_cpp(
     let bytes = std::fs::read(cpp_runtime_fixture(label))
         .unwrap_or_else(|error| panic!("failed to read C++ pointer fixture {label}: {error}"));
     let args = [
+        "--runtime-update-artboard-pass".to_owned(),
+        "0".to_owned(),
         "--runtime-pointer-down-state-machine".to_owned(),
         "0".to_owned(),
         x_argument.to_owned(),
@@ -22271,17 +22349,35 @@ fn assert_fl_c5_pointer_down_up_fixture_matches_cpp(
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let rust_updated = rust.update_components();
+    let after_update = state_machine.clone();
 
-    let _ = state_machine.pointer_down(&mut rust, x, y, 0);
+    let rust_pointer_down_hit = state_machine.pointer_down(&mut rust, x, y, 0);
     let after_down = state_machine.clone();
     let _ = state_machine.pointer_up(&mut rust, x, y, 0);
     let after_up = state_machine.clone();
     let rust_reports = [(false, after_down), (false, after_up)];
-    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    let all_cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(all_cpp_reports.len(), 3, "{label} action count");
+    assert!(!all_cpp_reports[0].pointer_input_probe);
+    compare_state_machine_advance(
+        &all_cpp_reports[0],
+        &after_update,
+        rust_updated.did_update,
+        &format!("{label} WP3 initial update"),
+    );
+    let cpp_reports = &all_cpp_reports[1..];
     assert_eq!(
         cpp_reports.len(),
         rust_reports.len(),
         "{label} action count"
+    );
+    assert!(cpp_reports[0].pointer_input_probe);
+    assert_eq!(
+        rust_pointer_down_hit,
+        cpp_reports[0].pointer_hit_result != 0,
+        "{label} pointer-down tri-state/boolean projection at ({x}, {y}); C++ raw HitResult={}",
+        cpp_reports[0].pointer_hit_result
     );
     for (step, (cpp_report, (advanced, rust_report))) in
         cpp_reports.iter().zip(&rust_reports).enumerate()
@@ -80386,6 +80482,32 @@ fn fl_c5_state_machine_definition_authored_collections_match_cpp() {
         return;
     };
 
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct DefinitionSample {
+        input_count: usize,
+        inputs: Vec<Option<DefinitionInput>>,
+        layers: Vec<DefinitionLayer>,
+        listeners: Vec<DefinitionListener>,
+        data_bind_property_keys: Vec<u32>,
+    }
+    #[derive(Deserialize)]
+    struct DefinitionInput {
+        index: usize,
+        name: String,
+    }
+    #[derive(Deserialize)]
+    struct DefinitionLayer {
+        index: usize,
+        name: String,
+    }
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct DefinitionListener {
+        index: usize,
+        target_id: u32,
+    }
+
     let label = "synthetic/fl_c5_state_machine_definition_collections.riv";
     let bytes = synthetic_fl_c5_state_machine_definition(90_503);
     let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
@@ -80438,6 +80560,175 @@ fn fl_c5_state_machine_definition_authored_collections_match_cpp() {
         rust_machine.layer_at(0).map(|layer| layer.global_id)
     );
     assert!(rust_machine.layer_named("case").is_none());
+
+    // Importing an unsupported input through the full pinned C++ file
+    // lifecycle would make StateMachine::onAddedDirty dereference its null
+    // clone. Exercise that authored collection with the focused C++ seam,
+    // while Rust reads the equivalent serialized object sequence.
+    let null_hole_label = "synthetic/fl_c5_state_machine_definition_null_hole.riv";
+    let null_hole_bytes = synthetic_fl_c5_state_machine_definition_null_hole(90_509);
+    let output = Command::new(&probe)
+        .arg("--state-machine-definition-null-hole-sample")
+        .output()
+        .unwrap_or_else(|error| panic!("failed to run {}: {error}", probe.display()));
+    assert!(
+        output.status.success(),
+        "C++ definition-seam probe failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let cpp: DefinitionSample = serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|error| panic!("invalid C++ definition-seam JSON: {error}"));
+    let (_, rust) = read_rust_instance_from_bytes(&null_hole_bytes, null_hole_label);
+    let rust_machine = rust.state_machine(0).expect("Rust StateMachine definition");
+
+    assert_eq!(rust_machine.name.as_deref(), Some("definition"));
+    assert_eq!(cpp.input_count, rust_machine.input_count());
+    assert_eq!(cpp.layers.len(), rust_machine.layer_count());
+    assert_eq!(cpp.listeners.len(), rust_machine.listener_count());
+    assert_eq!(
+        cpp.data_bind_property_keys.len(),
+        rust_machine.data_bind_count(),
+        "the Rust definition must retain both duplicate bind occurrences exercised by the C++ seam",
+    );
+    assert_eq!(rust_machine.scripted_object_count(), 0);
+    let cpp_inputs = cpp
+        .inputs
+        .iter()
+        .map(|input| {
+            input
+                .as_ref()
+                .map(|input| (input.index, input.name.clone()))
+        })
+        .collect::<Vec<_>>();
+    let rust_inputs = (0..rust_machine.input_count())
+        .map(|index| {
+            rust_machine
+                .input_at(index)
+                .map(|input| (index, input.name.as_deref().unwrap_or("").to_owned()))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(cpp_inputs, rust_inputs);
+    assert_eq!(
+        cpp_inputs,
+        vec![
+            Some((0, "x".to_owned())),
+            None,
+            Some((2, "x".to_owned())),
+            Some((3, "x".to_owned())),
+        ]
+    );
+    let cpp_layers = cpp
+        .layers
+        .iter()
+        .map(|layer| (layer.index, layer.name.clone()))
+        .collect::<Vec<_>>();
+    let rust_layers = (0..rust_machine.layer_count())
+        .map(|index| {
+            let layer = rust_machine
+                .layer_at(index)
+                .expect("authored layer slot must be populated");
+            (index, layer.name.as_deref().unwrap_or("").to_owned())
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(cpp_layers, rust_layers);
+    assert_eq!(
+        cpp_layers,
+        vec![
+            (0, "duplicate".to_owned()),
+            (1, "duplicate".to_owned()),
+            (2, "Case".to_owned()),
+        ]
+    );
+    assert_eq!(
+        cpp.inputs
+            .iter()
+            .map(|input| input
+                .as_ref()
+                .map(|input| (input.index, input.name.as_str())))
+            .collect::<Vec<_>>(),
+        vec![Some((0, "x")), None, Some((2, "x")), Some((3, "x")),]
+    );
+    assert_eq!(
+        cpp.listeners
+            .iter()
+            .map(|listener| (listener.index, listener.target_id))
+            .collect::<Vec<_>>(),
+        [(0, u32::MAX), (1, 0)]
+    );
+    assert_eq!(
+        cpp.data_bind_property_keys,
+        [586, 586],
+        "the definition importer retains duplicate authored binds"
+    );
+    assert_eq!(
+        rust_machine.input_named("x").map(|input| input.global_id),
+        rust_machine.input_at(0).map(|input| input.global_id)
+    );
+    assert_eq!(rust_machine.input_count(), 4);
+    assert!(
+        rust_machine.input_at(1).is_none(),
+        "the uncloneable generic input retains an authored null hole"
+    );
+    assert!(rust_machine.input_named("X").is_none());
+    assert_eq!(
+        rust_machine
+            .layer_named("duplicate")
+            .map(|layer| layer.global_id),
+        rust_machine.layer_at(0).map(|layer| layer.global_id)
+    );
+    assert!(rust_machine.layer_named("case").is_none());
+}
+
+#[test]
+fn fl_c5_typed_named_inputs_match_cpp_with_an_earlier_wrong_type() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping live C++ typed-input comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_typed_named_inputs_wrong_type_first.riv";
+    let bytes = synthetic_fl_c5_typed_named_inputs(90_508);
+    let args = [
+        "--runtime-snapshot-named-inputs".to_owned(),
+        "0".to_owned(),
+        "x".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let cpp = &cpp.artboards[0].runtime_state_machine_advances[0];
+    assert!(cpp.named_input_probe);
+
+    let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, label);
+    let machine = artboard
+        .state_machine_instance(0)
+        .expect("Rust typed-input state machine");
+    let input_index = |input: Option<&nuxie_runtime::StateMachineInputInstance>| {
+        input
+            .and_then(|input| {
+                (0..machine.input_count()).find(|index| {
+                    machine
+                        .input(*index)
+                        .is_some_and(|slot| std::ptr::eq(slot, input))
+                })
+            })
+            .map_or(-1, |index| index as i32)
+    };
+    let rust = (
+        input_index(machine.get_bool("x")),
+        input_index(machine.get_number("x")),
+        input_index(machine.get_trigger("x")),
+    );
+    assert_eq!(
+        rust,
+        (
+            cpp.named_bool_input_index,
+            cpp.named_number_input_index,
+            cpp.named_trigger_input_index,
+        )
+    );
+    assert_eq!(
+        rust,
+        (1, 0, 2),
+        "typed lookup ignores the earlier wrong type"
+    );
 }
 
 #[test]
@@ -80448,7 +80739,7 @@ fn malformed_listener_retains_authored_index() {
     };
 
     let label = "synthetic/fl_c5_malformed_listener_index.riv";
-    let bytes = synthetic_fl_c5_state_machine_definition(90_504);
+    let bytes = synthetic_fl_c5_malformed_listener(90_504);
     let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
     let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
     let cpp_machine = &cpp.artboards[0].state_machines[0];
@@ -82004,6 +82295,14 @@ fn fl_c5_focus_state() {
 }
 
 fn push_fl_c5_keyframe_data_bind_context(bytes: &mut Vec<u8>, path: &[u32]) {
+    push_fl_c5_keyframe_data_bind_context_with_converter(bytes, path, None);
+}
+
+fn push_fl_c5_keyframe_data_bind_context_with_converter(
+    bytes: &mut Vec<u8>,
+    path: &[u32],
+    converter_id: Option<u64>,
+) {
     let mut source_path_ids = Vec::new();
     for path_id in path {
         push_var_uint(&mut source_path_ids, u64::from(*path_id));
@@ -82016,6 +82315,9 @@ fn push_fl_c5_keyframe_data_bind_context(bytes: &mut Vec<u8>, path: &[u32]) {
             u64::from(property_key_for_name("KeyFrameDouble", "value")),
         );
         push_bytes_property(bytes, "DataBindContext", "sourcePathIds", &source_path_ids);
+        if let Some(converter_id) = converter_id {
+            push_uint_property(bytes, "DataBindContext", "converterId", converter_id);
+        }
     });
 }
 
@@ -82023,6 +82325,7 @@ fn synthetic_fl_c5_keyframe_data_bind(
     file_id: u64,
     duplicate_source_bind: bool,
     transition_after_bind: bool,
+    multiply_source: bool,
 ) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
@@ -82049,6 +82352,12 @@ fn synthetic_fl_c5_keyframe_data_bind(
                 push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", value);
             });
         }
+        if multiply_source {
+            push_object_with_properties(bytes, "DataConverterOperationValue", |bytes| {
+                push_uint_property(bytes, "DataConverterOperationValue", "operationType", 2);
+                push_f32_property(bytes, "DataConverterOperationValue", "operationValue", 2.0);
+            });
+        }
         push_object_with_properties(bytes, "Artboard", |bytes| {
             push_uint_property(bytes, "Artboard", "viewModelId", 0);
         });
@@ -82069,7 +82378,11 @@ fn synthetic_fl_c5_keyframe_data_bind(
             );
         });
         push_keyframe_double(bytes, 0, 2.0, 1);
-        push_fl_c5_keyframe_data_bind_context(bytes, &[0, 0]);
+        push_fl_c5_keyframe_data_bind_context_with_converter(
+            bytes,
+            &[0, 0],
+            multiply_source.then_some(0),
+        );
         if duplicate_source_bind {
             push_fl_c5_keyframe_data_bind_context(bytes, &[0, 1]);
         }
@@ -82185,7 +82498,7 @@ fn fl_c5_keyframe_first_source_bind() {
         return;
     };
     let label = "synthetic/fl_c5_keyframe_first_source_bind.riv";
-    let bytes = synthetic_fl_c5_keyframe_data_bind(96_980, true, false);
+    let bytes = synthetic_fl_c5_keyframe_data_bind(96_980, true, false, false);
     let args = [
         "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
         "0".to_owned(),
@@ -82211,6 +82524,62 @@ fn fl_c5_keyframe_first_source_bind() {
         "C++ first source bind",
     );
     assert_close(transform_x(&rust, 1), 11.0, "Rust first source bind");
+}
+
+#[test]
+fn fl_c5_keyframe_initialize_converter_and_enrollment_are_observed_end_to_end() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_keyframe_initialize_converter_enrollment.riv";
+    let bytes = synthetic_fl_c5_keyframe_data_bind(96_982, false, false, true);
+    let args = [
+        "--runtime-bind-owned-view-model-number-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "11".to_owned(),
+        "--runtime-advance-then-set-owned-view-model-source-number-by-name".to_owned(),
+        "0".to_owned(),
+        "first".to_owned(),
+        "0".to_owned(),
+        "13".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-update".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (file, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&file, 0).expect("Rust owned ViewModel context"),
+    );
+    assert!(context.borrow_mut().set_number_by_property_index(0, 11.0));
+    assert!(state_machine.bind_owned_view_model_handle(&context));
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    assert_close(
+        transform_x(&rust, 1),
+        22.0,
+        "the initialized keyframe clone exposes its converted source",
+    );
+    assert!(context.borrow_mut().set_number_by_property_index(0, 13.0));
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust.update_components();
+
+    assert_close(
+        cpp_runtime_update_transform_x(&cpp, 1),
+        26.0,
+        "C++ initialized, converted, enrolled keyframe bind",
+    );
+    assert_close(
+        transform_x(&rust, 1),
+        26.0,
+        "Rust initialized, converted, enrolled keyframe bind",
+    );
 }
 
 #[test]
@@ -82258,7 +82627,7 @@ fn fl_c5_keyframe_bound_context_lifecycle() {
         return;
     };
     let label = "synthetic/fl_c5_keyframe_bound_context_lifecycle.riv";
-    let bytes = synthetic_fl_c5_keyframe_data_bind(96_981, false, true);
+    let bytes = synthetic_fl_c5_keyframe_data_bind(96_981, false, true, false);
     let args = [
         "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
         "0".to_owned(),
@@ -83066,7 +83435,6 @@ fn fl_c5_advance_return_terms() {
 
 #[test]
 fn fl_c5_five_pass_unconditional_probe() {
-    fl_c5_run_rust_unit_probe("fl_c5_advance_five_passes_probe_transitions_unconditionally");
     let source = fl_c5_cpp_state_machine_instance_source();
     let facade = fl_c5_cpp_member(
         &source,
@@ -83087,6 +83455,48 @@ fn fl_c5_five_pass_unconditional_probe() {
         .rfind("m_artboardInstance->advanceInternal(")
         .expect("pinned C++ zero-time Artboard follow-up");
     assert!(update < probe && probe < follow_up && follow_up < outer);
+
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping live C++ persistent-dirt comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_sixth_settlement_pass_required.riv";
+    let bytes = synthetic_fl_c5_empty_state_machine(96_993);
+    let args = [
+        "--runtime-advance-and-apply-persistent-dirt".to_owned(),
+        "0".to_owned(),
+        "0.25".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let cpp = &cpp.artboards[0].runtime_state_machine_advances[0];
+    assert!(cpp.persistent_dirt_probe);
+
+    let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, label);
+    let mut machine = artboard
+        .state_machine_instance(0)
+        .expect("persistent-dirt Rust state machine");
+    let rust = StateMachineInstance::runtime_persistent_dirt_settlement_probe(
+        &mut artboard,
+        &mut machine,
+        0.25,
+    )
+    .expect("persistent-dirt Rust settlement");
+
+    assert_eq!(
+        (rust.0, rust.1, rust.2, rust.3,),
+        (
+            cpp.advanced,
+            cpp.persistent_dirt_advance_count,
+            cpp.persistent_dirt_update_count,
+            cpp.persistent_dirt_remaining,
+        ),
+        "both runtimes must expose the same five-pass cap under dirt that requires a sixth pass"
+    );
+    assert_eq!(
+        (rust.1, rust.2, rust.3),
+        (6, 5, true),
+        "one main advance plus five settlement advances leaves sixth-pass dirt pending"
+    );
 }
 
 #[test]
@@ -84382,6 +84792,26 @@ struct CppRuntimeStateMachineAdvance {
     #[serde(default, rename = "needsAdvanceBefore")]
     needs_advance_before: bool,
     advanced: bool,
+    #[serde(default, rename = "persistentDirtProbe")]
+    persistent_dirt_probe: bool,
+    #[serde(default, rename = "persistentDirtAdvanceCount")]
+    persistent_dirt_advance_count: usize,
+    #[serde(default, rename = "persistentDirtUpdateCount")]
+    persistent_dirt_update_count: usize,
+    #[serde(default, rename = "persistentDirtRemaining")]
+    persistent_dirt_remaining: bool,
+    #[serde(default, rename = "namedInputProbe")]
+    named_input_probe: bool,
+    #[serde(default, rename = "namedBoolInputIndex")]
+    named_bool_input_index: i32,
+    #[serde(default, rename = "namedNumberInputIndex")]
+    named_number_input_index: i32,
+    #[serde(default, rename = "namedTriggerInputIndex")]
+    named_trigger_input_index: i32,
+    #[serde(default, rename = "pointerInputProbe")]
+    pointer_input_probe: bool,
+    #[serde(default, rename = "pointerHitResult")]
+    pointer_hit_result: i32,
     #[serde(rename = "currentAnimationCount")]
     current_animation_count: usize,
     #[serde(rename = "changedStateCount")]

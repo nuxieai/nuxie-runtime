@@ -5403,19 +5403,6 @@ impl ArtboardInstance {
         instance.advance_on_artboard(self, elapsed_seconds, true, owned_context)
     }
 
-    fn advance_state_machine_instance_preserving_events(
-        &mut self,
-        instance: &mut StateMachineInstance,
-        elapsed_seconds: f32,
-        owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
-    ) -> bool {
-        // This is C++'s `newFrame=false` follow-up after direct nested-event
-        // notification. It advances layers but does not call `applyEvents`;
-        // reports created here remain queued for the next ordinary frame
-        // (`state_machine_instance.cpp:2555-2565`).
-        instance.advance_on_artboard(self, elapsed_seconds, false, owned_context)
-    }
-
     pub(crate) fn advance_state_machine_instance_after_state_probe(
         &mut self,
         instance: &mut StateMachineInstance,
@@ -5463,7 +5450,21 @@ impl ArtboardInstance {
         instances: &mut [StateMachineInstance],
         elapsed_seconds: f32,
     ) -> bool {
-        self.advance_state_machine_instances_with_nested_context(instances, elapsed_seconds, None)
+        StateMachineInstance::advance_artboard_frame_components_with(
+            self,
+            instances,
+            elapsed_seconds,
+            None,
+            |artboard, elapsed_seconds| {
+                let mut nested_events = Vec::new();
+                let changed = artboard.advance_nested_artboards_collect_events(
+                    elapsed_seconds,
+                    Some(&mut nested_events),
+                );
+                Ok((changed, nested_events))
+            },
+        )
+        .expect("disabled script dispatch cannot fail")
     }
 
     pub fn advance_state_machine_instances_with_nested_and_owned_view_model_context(
@@ -5472,53 +5473,21 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         context: &mut RuntimeOwnedViewModelInstance,
     ) -> bool {
-        self.advance_state_machine_instances_with_nested_context(
+        StateMachineInstance::advance_artboard_frame_components_with(
+            self,
             instances,
             elapsed_seconds,
             Some(context),
-        )
-    }
-
-    fn advance_state_machine_instances_with_nested_context(
-        &mut self,
-        instances: &mut [StateMachineInstance],
-        elapsed_seconds: f32,
-        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
-    ) -> bool {
-        let mut changed = false;
-        for instance in instances.iter_mut() {
-            changed |= self.advance_state_machine_instance_with_context(
-                instance,
-                elapsed_seconds,
-                owned_context.as_deref_mut(),
-            );
-        }
-
-        let mut nested_events = Vec::new();
-        changed |=
-            self.advance_nested_artboards_collect_events(elapsed_seconds, Some(&mut nested_events));
-        for instance in instances.iter_mut() {
-            let mut notified = false;
-            for (host_local, events) in &nested_events {
-                notified |= match owned_context.as_deref_mut() {
-                    Some(context) => instance.notify_events_with_owned_view_model_context(
-                        self,
-                        Some(*host_local),
-                        events,
-                        context,
-                    ),
-                    None => instance.notify_events(self, Some(*host_local), events),
-                };
-            }
-            if notified {
-                changed |= self.advance_state_machine_instance_preserving_events(
-                    instance,
-                    0.0,
-                    owned_context.as_deref_mut(),
+            |artboard, elapsed_seconds| {
+                let mut nested_events = Vec::new();
+                let changed = artboard.advance_nested_artboards_collect_events(
+                    elapsed_seconds,
+                    Some(&mut nested_events),
                 );
-            }
-        }
-        changed
+                Ok((changed, nested_events))
+            },
+        )
+        .expect("disabled script dispatch cannot fail")
     }
 
     pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {

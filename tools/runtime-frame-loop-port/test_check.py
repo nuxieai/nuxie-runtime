@@ -15,7 +15,8 @@ import unittest
 
 TOOL = pathlib.Path(__file__).with_name("check.py")
 TOOL_DIR = pathlib.Path(__file__).resolve().parent
-PRODUCTION_GAPS = TOOL_DIR.parents[1] / "docs/runtime-frame-loop-gaps.toml"
+PRODUCTION_ROOT = TOOL_DIR.parents[1]
+PRODUCTION_GAPS = PRODUCTION_ROOT / "docs/runtime-frame-loop-gaps.toml"
 if str(TOOL_DIR) not in sys.path:
     sys.path.insert(0, str(TOOL_DIR))
 
@@ -250,6 +251,13 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             id = {json.dumps(row["id"])}
             globs = {json.dumps(row["globs"])}
             pattern = {json.dumps(row["pattern"])}
+            {
+                f"content_begin = {json.dumps(row['content_begin'])}\n"
+                f"content_end = {json.dumps(row['content_end'])}\n"
+                f"content_sha256 = {json.dumps(row['content_sha256'])}"
+                if "content_sha256" in row
+                else ""
+            }
             min_occurrences = {row.get("min_occurrences", 0)}
             max_occurrences = {row["max_occurrences"]}
             """
@@ -1656,9 +1664,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "state_machine_definition_owner_in_root",
                 "crates/nuxie-runtime/src/state_machine.rs",
                 """
-                impl RuntimeStateMachine {
-                    fn layer_count(&self) -> usize { 0 }
-                }
+                fn unrelated_displaced_helper() {}
                 """,
                 """
                 pub use state_machine::RuntimeStateMachine;
@@ -1678,7 +1684,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         self.assert_production_ratchet_case(
             "state_machine_instance_owner_in_compat_entry",
             "crates/nuxie-runtime/src/state_machine/instance.rs",
-            "pub struct StateMachineInstance;\n",
+            "fn unrelated_displaced_helper() {}\n",
             (
                 "pub use super::state_machine_instance::"
                 "{FocusState, StateMachineInstance};\n"
@@ -1715,15 +1721,6 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     "StateMachineInstance, StateMachineReportedEvent};\n"
                 ),
             ),
-            (
-                "state_machine_public_api_inventory_required",
-                "crates/nuxie-runtime/tests/public_api_fl_c5.rs",
-                (
-                    "fn fl_c5_public_reexports_are_downstream_visible_"
-                    "after_file_split() {}\n"
-                ),
-                "fn unrelated_test() {}\n",
-            ),
         ]
         for ratchet_id, source, required, missing in required_cases:
             with self.subTest(ratchet=ratchet_id):
@@ -1733,6 +1730,121 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     required,
                     missing,
                 )
+
+        production_inventory_path = (
+            PRODUCTION_ROOT
+            / "crates/nuxie-runtime/tests/public_api_fl_c5.rs"
+        )
+        production_inventory = production_inventory_path.read_text()
+        relative_inventory = (
+            "crates/nuxie-runtime/tests/public_api_fl_c5.rs"
+        )
+        for ratchet_id, missing_inventory in [
+            (
+                "state_machine_public_api_inventory_required",
+                production_inventory.replace(
+                    "let _: $signature = $method;",
+                    "let _ = $method;",
+                    1,
+                ),
+            ),
+            (
+                "state_machine_public_api_exact_signature_count_required",
+                production_inventory.replace(
+                    "    exact_public_signature!(StateMachineInstance::"
+                    "set_owned_view_model_context_view_model_source_for_data_bind",
+                    "    removed_signature!(StateMachineInstance::"
+                    "set_owned_view_model_context_view_model_source_for_data_bind",
+                    1,
+                ),
+            ),
+        ]:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_required_production_ratchet_case(
+                    ratchet_id,
+                    relative_inventory,
+                    production_inventory,
+                    missing_inventory,
+                )
+
+        base_gaps = self.gaps.read_text()
+        try:
+            self.install_production_ratchet(
+                "state_machine_public_api_inventory_required"
+            )
+            source = self.repo / relative_inventory
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(production_inventory)
+            result = self.run_check()
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            for label, count_preserving_substitution in [
+                (
+                    "central inventory signature",
+                    production_inventory.replace(
+                        "    exact_public_signature!(StateMachineInstance::"
+                        "set_owned_view_model_context_asset_source_for_data_bind"
+                        " => fn(&mut StateMachineInstance, &mut "
+                        "RuntimeOwnedViewModelInstance, usize, u64) -> bool);",
+                        "    exact_public_signature!(StateMachineInstance::"
+                        "set_owned_view_model_context_enum_source_for_data_bind"
+                        " => fn(&mut StateMachineInstance, &mut "
+                        "RuntimeOwnedViewModelInstance, usize, u64) -> bool);",
+                        1,
+                    ),
+                ),
+                (
+                    "generic hydration signature",
+                    production_inventory.replace(
+                        "StateMachineInstance::"
+                        "hydrate_and_initialize_scripted_listener_action_instance"
+                        "::<HydrationFactory>",
+                        "StateMachineInstance::"
+                        "hydrate_and_initialize_scripted_object_instance"
+                        "::<HydrationFactory>",
+                        1,
+                    ),
+                ),
+            ]:
+                with self.subTest(count_preserving_substitution=label):
+                    self.assertNotEqual(
+                        count_preserving_substitution,
+                        production_inventory,
+                        "the negative must replace one real exact signature",
+                    )
+                    source.write_text(count_preserving_substitution)
+                    result = self.run_check()
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(
+                        "ratchet state_machine_public_api_inventory_required "
+                        "content digest changed",
+                        result.stderr,
+                    )
+        finally:
+            self.gaps.write_text(base_gaps)
+
+        for ratchet_id, source_path in [
+            (
+                "state_machine_definition_owner_in_root",
+                "crates/nuxie-runtime/src/state_machine.rs",
+            ),
+            (
+                "state_machine_instance_owner_in_compat_entry",
+                "crates/nuxie-runtime/src/state_machine/instance.rs",
+            ),
+        ]:
+            for qualifier in [
+                "pub const",
+                "pub unsafe",
+                'pub extern "C"',
+            ]:
+                with self.subTest(ratchet=ratchet_id, qualifier=qualifier):
+                    self.assert_production_ratchet_case(
+                        ratchet_id,
+                        source_path,
+                        f"{qualifier} fn unrelated_displaced_helper() {{}}\n",
+                        "pub use owner::Item;\n",
+                    )
 
     def test_fl_c5_instance_lifecycle_live_ratchets_reject_forbidden_shapes(
         self,
@@ -2463,16 +2575,26 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     self.bubble_events_to_owner_seam(events);
                     self.reach_recorded_audio_event_seam(events)
                 }
+                fn reach_recorded_audio_event_seam() {
+                    for event in events.iter().filter(|event| event.is_audio_event()) {
+                        record(event);
+                    }
+                }
                 pub fn plays_audio(&self) -> bool { true }
                 """,
                 """
                 fn notify_events_with_context_and_script_host() {
                     self.record_event_dispatch_phase("local-dispatch");
                     dispatch();
-                    self.reach_recorded_audio_event_seam(events);
-                    self.bubble_events_to_owner_seam(events)
+                    self.bubble_events_to_owner_seam(events);
+                    self.reach_recorded_audio_event_seam(events)
                 }
-                pub fn plays_audio(&self) -> bool { false }
+                fn reach_recorded_audio_event_seam() {
+                    for event in events {
+                        record(event);
+                    }
+                }
+                pub fn plays_audio(&self) -> bool { true }
                 """,
             ),
             (
@@ -2847,6 +2969,23 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 }
                 """,
                 "fn settle() { StateMachineInstance::settle(); }\n",
+                "crates/nuxie-runtime/src/artboard.rs",
+            ),
+            (
+                "state_machine_advance_artboard_settlement_implementation",
+                """
+                fn advance_state_machine_instances_with_nested_context() {
+                    for instance in instances {
+                        instance.advance();
+                    }
+                    advance_nested();
+                }
+                """,
+                """
+                fn advance_state_machine_instances_with_nested() {
+                    StateMachineInstance::advance_artboard_frame_components_with();
+                }
+                """,
                 "crates/nuxie-runtime/src/artboard.rs",
             ),
         ]
@@ -3393,12 +3532,37 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     self.external_semantic_manager_identity = manager_identity;
                     record("build-tree-recorded-seam");
                 }
-                pub fn fire_semantic_action() {}
+                pub fn fire_semantic_action(
+                    semantic_node_id: u32,
+                    action_type: u32,
+                ) {
+                    record("node-by-id-recorded-seam");
+                    let semantic_data_local_id = self.groups
+                        .iter()
+                        .find(|group| {
+                            group.semantic_node_id == semantic_node_id
+                        })
+                        .map(|group| group.semantic_data_local_id)
+                        .unwrap();
+                    let phase = match action_type {
+                        0 => "tap",
+                        1 => "increase",
+                        2 => "decrease",
+                        _ => return false,
+                    };
+                    self.semantic_action_for_target(target, action_type);
+                }
                 """,
                 """
                 pub fn enable_semantics() {}
                 pub fn set_external_semantic_manager() {}
-                pub fn fire_semantic_action() {}
+                pub fn fire_semantic_action(
+                    semantic_node_id: u32,
+                    action_type: u32,
+                ) {
+                    let target = semantic_node_id as usize;
+                    self.semantic_action_for_target(target, action_type);
+                }
                 """,
             ),
         ]

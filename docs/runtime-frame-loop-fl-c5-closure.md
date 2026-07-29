@@ -24,7 +24,21 @@ The complete family is one publication unit. A subset does not close either
 whole C++ source row. No performance measurement belongs in this family.
 
 The already separately handled FL-C1 claimed-`DataBindPath` correction (W6) is
-not part of FL-C5 and is not claimed here.
+not part of FL-C5 and is not claimed here. The branch history interleaves the
+following separately audited FL-C1 family commits:
+
+- `82e229f3` resolves relative claimed paths by name;
+- `69fee252` preserves unmapped name IDs as empty path names;
+- `20cd8c02` makes the claimed-path probes live differentials;
+- `efd87746` pins the per-step firing boundary and is the independently
+  accepted FL-C1 family candidate after six audit rounds; and
+- `e67ba822` promotes only that already accepted input/listener family.
+
+Their acceptance is recorded in `docs/runtime-frame-loop-status.md` and
+`docs/parity-closeout-status.md`. They are ancestry, not FL-C5 package work:
+the FL-C5 implementation range itself did not take ownership of or promote an
+FL-C1 owner. This clarification resolves the W33 S6 history-range ambiguity
+without reclassifying the separately accepted work.
 
 ## Binding Rust ownership
 
@@ -89,18 +103,18 @@ rewriting history.
 
 | Proof key | Landed behavioral receipt and source citation |
 | --- | --- |
-| `B-DEF` | `fl_c5_definition_*` (5 focused tests) and `fl_c5_state_machine_definition_*` plus the exact malformed-listener and added-phase probes (4 pinned-C++ comparisons) cover `state_machine.cpp:12-165` and `state_machine.hpp:20-55`. |
+| `B-DEF` | `fl_c5_definition_*` (5 focused tests), `fl_c5_state_machine_definition_authored_collections_match_cpp` (a full same-byte definition comparison plus a separate safe authored-null definition seam), `fl_c5_typed_named_inputs_match_cpp_with_an_earlier_wrong_type`, and the exact malformed-listener and added-phase probes cover `state_machine.cpp:12-165`, `state_machine.hpp:20-55`, and typed instance lookup at `state_machine_instance.cpp:2689-2714`. |
 | `B-LAYER` | `fl_c5_state_changed_*` (5 focused tests), `fl_c5_state_changed_layers_and_convergence_match_cpp_probe`, `fl_c5_current_state_and_animation_authored_compression_match_cpp_probe`, and `fl_c5_random_transition_edges_weighted_boundaries_and_wraparound_match_cpp_probe` cover `state_machine_instance.cpp:140-711`. The accepted FL-C3 transition differentials remain the base proof for unchanged private-layer behavior. |
 | `B-CTOR` | `fl_c5_constructor_order_phase_trace_and_explicit_fields`, `fl_c5_constructor_order_retains_unresolved_pointer_group_occurrence`, and `fl_c5_constructor_order_source_and_runtime_boundaries_match_cpp` cover `state_machine_instance.cpp:1707-2128`. |
-| `B-HIT` | `fl_c5_hit_*` and `fl_c5_pointer_*` focused tests plus the shared-target, nested-routing, reverse-component-list, and nonfinite pointer probes cover `state_machine_instance.hpp:479-505` and `.cpp:712-1616,2255-2318,3173-3187`. |
+| `B-HIT` | `fl_c5_hit_*` and `fl_c5_pointer_*` focused tests, including `fl_c5_hit_sort_preserves_the_exact_adversarial_swap_order`, plus the shared-target, nested-routing, reverse-component-list, and nonfinite pointer probes cover `state_machine_instance.hpp:479-505` and `.cpp:712-1616,2255-2318,3173-3187`. |
 | `B-LVM` | `fl_c5_event_trigger_zero_suppression_and_duplicate_listener_fifo`, `fl_c5_event_mid_callback_visibility_excludes_the_reporting_snapshot`, the bind/relink focused tests, and the trigger-zero/mid-callback pinned probes cover `.cpp:1324-1545,2320-2344,3021-3060`. |
-| `B-ADV` | The seven `fl_c5_advance_*` focused tests and six pinned probes (`fl_c5_raw_advance_order_matches_pinned_cpp`, `fl_c5_advance_return_terms`, `fl_c5_advance_fp_matrix`, `fl_c5_advance_view_models_false`, `fl_c5_five_pass_unconditional_probe`, `fl_c5_zero_delta_bookkeeping`) cover `.cpp:2546-2668`. |
+| `B-ADV` | The `fl_c5_advance_*` focused tests and pinned probes (`fl_c5_raw_advance_order_matches_pinned_cpp`, `fl_c5_advance_return_terms`, `fl_c5_advance_fp_matrix`, `fl_c5_advance_view_models_false`, the live two-runtime `fl_c5_five_pass_unconditional_probe`, and `fl_c5_zero_delta_bookkeeping`) cover `.cpp:2546-2668`. The public scripted-mount differential additionally proves immediate `pointer_down` and `advance_and_apply` are not suppressed by facade preparation state. |
 | `B-BIND` | The seven `fl_c5_bind_*` focused tests and four bind-family pinned probes cover `.cpp:2716-2976`, including the inherited A→B prior-registration hazard. |
-| `B-EVENT` | The seven `fl_c5_event_*` focused tests and the chaining, 100-batch, trigger-zero, visibility, live-projection, and bubbling/audio-seam probes cover `.cpp:2320-2344,3016-3187`. The nested-relative claimed-path differential is strict per-step equality. |
-| `B-KEY` | The four `fl_c5_keyframe_data_bind_*` focused tests and the first-source, initialize/converter-order, bound-context, and supported-holder/removal pinned probes cover `.cpp:3189-3390`. |
-| `B-FOCUS` | The five `fl_c5_focus_semantic_*` focused tests and the six focus/semantic queue, manager-switch, and `FocusState` probes cover only `.cpp:2346-2544,3392-3418`; manager/data internals remain `RECORDED` below. |
-| `B-LIFE` | `fl_c5_clone_teardown_rebuilds_mutable_state_without_aliasing`, `fl_c5_clone_teardown_dispose_is_repeatable_and_drop_order_is_observable`, `fl_c5_dispose_nested_event_source_order_and_rust_idempotence`, and the constructor/disposal source probe cover `.cpp:1707-2243`. |
-| `B-API` | The exhaustive in-crate `fl_c5_public_reexports_survive_file_split` signature inventory plus the external-crate `fl_c5_public_reexports_are_downstream_visible_after_file_split` representative for every W4 §C group prove both names and downstream visibility through the public export hub and thin compatibility entry points; `cargo test -p nuxie --test public_api` supplies the downstream facade receipt. |
+| `B-EVENT` | The `fl_c5_event_*` focused tests, including `fl_c5_event_bubbling_precedes_the_recorded_audio_seam_through_two_ancestors` with one ordinary Event and one AudioEvent, and the chaining, 100-batch, trigger-zero, visibility, live-projection, and bubbling probes cover `.cpp:2320-2344,3016-3187`. The nested-relative claimed-path differential is strict per-step equality. |
+| `B-KEY` | The `fl_c5_keyframe_data_bind_*` focused tests and the first-source, bound-context, supported-holder/removal, source-order, and live `fl_c5_keyframe_initialize_converter_and_enrollment_are_observed_end_to_end` probes cover `.cpp:3189-3390`. |
+| `B-FOCUS` | The `fl_c5_focus_semantic_*` focused tests, including the distinct manager-node-ID → SemanticData-local-ID lookup, action 0/1/2/invalid switch, and observable semantic-listener callback in `semantic_callbacks_apply_constraints_preserve_duplicates_and_defer_actions`, plus the focus/semantic queue, manager-switch, and `FocusState` probes cover only `.cpp:2346-2544,3392-3418`; manager/data internals remain `RECORDED` below. |
+| `B-LIFE` | `fl_c5_clone_teardown_rebuilds_mutable_state_without_aliasing` now exercises report/current/bubble queues, listener reports, pointer state, hit owners, listener groups, nested registrations, detached primary context state, callback dirt sinks, layers, and cold script tables; `fl_c5_clone_teardown_dispose_is_repeatable_and_drop_order_is_observable`, `fl_c5_dispose_nested_event_source_order_and_rust_idempotence`, and the constructor/disposal source probe cover `.cpp:1707-2243`. |
+| `B-API` | The downstream `fl_c5_public_reexports_are_downstream_visible_after_file_split` contains 328 exact typed coercions covering every W4 §C item—including the generic hydration functions—so receiver, parameter, return, ownership, or visibility changes fail compilation. The structural checker requires the real coercion body, exact inventory count, and SHA-256 digest of the complete exhaustive signature block; its count-preserving still-compiling substitution negative proves a missing signature cannot hide behind a duplicate. `cargo test -p nuxie --test public_api` supplies the facade receipt. |
 | `B-SOURCE` | The exact member citation in each such row is the proof for profiler-only, deleted, undefined, test/tools-only, intentionally empty, constant, or out-of-scope members. `S-TOOLS`, `S-SEAM`, and the public API inventory prevent those source-only decisions from becoming silent production claims. |
 
 All structural keys are exercised by the runtime-frame-loop checker. Its
@@ -370,9 +384,9 @@ instance-level Rust implementation.
 | `stateMachine` (`state_machine_instance.hpp:123`) | [x] CLOSED; W4: scattered, approved index/arena adaptation | `B-API`: stable `state_machine_index`/arena | `S-API`, `S-FIELDS` | Snapshot/remount retains resolvable definition. |
 | `inputCount` (`state_machine_instance.hpp:125`) | [x] CLOSED; W4: faithful-looking | `B-DEF`: slot count | `S-SLOTS` | Null slot counts. |
 | `input(index)` (`state_machine_instance.hpp:126`; `.cpp:2680-2687`) | [x] CLOSED; W4: faithful-looking | `B-DEF`: optional indexed occurrence | `S-API` | In-range null vs out-of-range. |
-| `getBool` (`state_machine_instance.hpp:127`; `.cpp:2703-2706`) | [x] CLOSED; W4: scattered | `B-DEF`: typed first-name lookup | `S-API` | Number then bool same name; null hole. |
+| `getBool` (`state_machine_instance.hpp:127`; `.cpp:2703-2706`) | [x] CLOSED; W4: scattered | `B-DEF`: typed first-name lookup | `S-API` | Number then bool same name. The pinned typed loop dereferences every occurrence, so null definition slots are proven separately rather than passed into this undefined malformed-instance path. |
 | `getNumber` (`state_machine_instance.hpp:128`; `.cpp:2707-2710`) | [x] CLOSED; W4: scattered | `B-DEF`: typed first-name lookup | `S-API` | Duplicate number names. |
-| `getTrigger` (`state_machine_instance.hpp:129`; `.cpp:2711-2714`) | [x] CLOSED; W4: scattered | `B-DEF`: typed first-name lookup | `S-API` | Null hole before trigger. |
+| `getTrigger` (`state_machine_instance.hpp:129`; `.cpp:2711-2714`) | [x] CLOSED; W4: scattered | `B-DEF`: typed first-name lookup | `S-API` | Exact type/name and authored first match on well-formed occurrences; null definition slots are a separate definition-seam proof. |
 | `bindViewModelInstance` (`state_machine_instance.hpp:130-131`; `.cpp:2831-2842`) | [x] CLOSED; W4: divergent | `B-BIND`: distinct null/non-null branches | `S-BIND` | Null clears machine context/listeners and artboard unbind only; does not explicitly unbind machine binds. |
 | `setViewModelInstance` (`state_machine_instance.hpp:135`; `.cpp:2716-2733`) | [x] CLOSED; W4: missing | `B-BIND`: null no-op; stage without bind | `S-BIND` | Replace main then inspect stale paths before explicit bind. |
 | `setGlobalViewModelInstance` (`state_machine_instance.hpp:140-141`; `.cpp:2735-2774`) | [x] CLOSED; W4: missing | `B-BIND`: validation and named-slot replacement | `S-BIND`, `S-ORDER` | Null/file/name/non-global failures; put type B in slot A; preserve other slot order. |
@@ -432,6 +446,7 @@ instance-level Rust implementation.
 | `clearDataContext` (`state_machine_instance.hpp:262`; `.cpp:2923-2934`) | [x] CLOSED; W4: scattered | `B-BIND`: unregister/null then clear listener cells only | `S-BIND`, `S-ORDER` | State-machine binds/artboard/scripts retain their pinned state. |
 | `relinkDataContext` (`state_machine_instance.hpp:263`; `.cpp:2936-2939`) | [x] CLOSED; W4: scattered | `B-BIND`: artboard-only delegation | `S-BIND` | Nested VM reference used only by state-machine listener remains unaffected here. |
 | `rebuildDataBind` (`state_machine_instance.hpp:264`; `.cpp:2941-2947`) | [x] CLOSED; W4: scattered | `B-BIND`: context-bind subtype only | `S-BIND` | Plain bind ignored; null malformed; cleared context forwarded. |
+| private `unbind` (`state_machine_instance.cpp:2949-2953`) | [x] CLOSED; W3 lifecycle inventory | `B-BIND`, `B-LIFE`: `unbind` calls `clearDataContext` before the complete machine DataBind unbind; destructor receipt observes the same order | `S-BIND`, `S-LIFE` | Context/listener registrations disappear before source/observer/converter bindings; no artboard unbind or scripted-context clear is invented. |
 | `internalDataContext` (`state_machine_instance.hpp:265`; `.cpp:2901-2914`) | [x] CLOSED — `first_factory_pointer_prepares_and_applies_fixed_bindings_before_callback` observes the fixed source and `listener_missing_context_hydration_keeps_the_table_until_context_arrives` retains the deferred listener through hydration; W4: scattered | `B-BIND`: assign → binds → listener cells → script contexts → init/hydrate | `S-BIND`, `S-ORDER` | Null with VM listeners; script mutates context; multiple script visits. |
 | `scriptedObject` (`state_machine_instance.hpp:266`; `.cpp:2130-2139`) | [x] CLOSED; W4: scattered | `B-CTOR`: exact source/global identity adaptation | `S-FIELDS`, `S-API` | Equivalent different source returns none. |
 | `queueFocusEvent` (`state_machine_instance.hpp:269`; `.cpp:2409-2414`) | [x] CLOSED; W4: faithful-looking | `B-FOCUS`: FIFO append and mark | `S-EVENT` | Null malformed group; duplicates. |
@@ -762,6 +777,51 @@ compile after the split.
 | `bindable_*_value_for_data_bind` and default-source query families | `state_machine/state_machine_instance.rs:8204-8438`; differential probes | Keep graph introspection. |
 | `StateMachineEventContext`, `StateMachineReportedEvent` accessors | `state_machine/event_report.rs:45-67,175-210`; flow/scene | Re-export ownership-safe report/context projections unchanged. |
 
+## W34 proof-gap disposition
+
+The W32 non-blocking observations are not silently promoted into stronger
+claims than the receipts establish:
+
+- [x] Definition null-slot behavior is now live at the safe definition seam:
+  `--state-machine-definition-null-hole-sample` drives the pinned C++
+  `StateMachineImporter::readNullObject` and observes the exact indexed null
+  slot, duplicate layer names, listener indices, and duplicate DataBind
+  property keys without entering C++ `onAddedDirty`, whose authored null
+  dereference is itself malformed behavior. The serialized Rust fixture
+  preserves the corresponding indexed `None` hole and both duplicate bind
+  occurrences, and its exact input/layer sequences are compared with the C++
+  seam. The original well-formed same-byte definition differential also
+  retains all name, count, order, duplicate-first-match, and case-sensitivity
+  comparisons. Typed lookup uses a separate well-formed live fixture because
+  pinned C++ `getNamedInput` dereferences every instantiated slot.
+- [ ] A single live definition fixture spanning null and duplicate
+  DataBind/ScriptedObject occurrences is still absent. Existing focused tests
+  prove duplicate listener/bind occurrences and script occurrence ownership
+  independently, but combining malformed nullable imports across all
+  collections would enter pinned C++ null-dereference paths rather than add a
+  safe observable oracle.
+- [ ] The hardest cross-collection duplicate/null fixture remains absent for
+  the same reason. Closure relies on per-collection authored-order receipts
+  and does not claim a live all-collections malformed execution.
+- [ ] The complete bind null matrix is not live in one table-driven
+  differential. The distinct implemented null branches and inherited A→B
+  registration hazard remain covered by focused and live probes, but
+  unconstructed null combinations remain source-cited rather than checked.
+- [x] Clone isolation now mutates or identity-checks reporting/current/bubble
+  queues, listener-report queues, pointer state, hit owners, listener groups,
+  nested registrations, detached primary context state, callback dirt sinks,
+  layer identities, and cold script tables. Converter/bind-graph isolation is
+  also exercised by the existing state-machine snapshot differentials; no
+  shallow-all-fields claim is inferred from a single pointer comparison.
+- [x] `fl_c5_hit_sort_preserves_the_exact_adversarial_swap_order` observes the
+  actual in-place algorithm with the Artboard-first swap, duplicate drawable
+  identities, and three reversed drawable identities. It would fail under a
+  stable sort or a scan that stops after the first duplicate.
+- [x] `fl_c5_keyframe_initialize_converter_and_enrollment_are_observed_end_to_end`
+  first observes the initialized clone's converted source value, then dirties
+  the live source and requires both runtimes to produce a second converted
+  value through the enrolled state-machine container.
+
 ## Permanent enforcement required before publication
 
 The structural checker and injected negatives must permanently reject:
@@ -797,10 +857,12 @@ The structural checker and injected negatives must permanently reject:
 
 ## Publication packet
 
-Immutable candidate identity:
+Candidate identity:
 
-- candidate commit (current `HEAD`):
-  `41f2aeaf6edcfb0cca3b2c9e173b842760e73b11`;
+- fix-round base `HEAD`: `dc96e571`; the W34 repair is intentionally an
+  uncommitted working-tree delta because the implementation request forbids
+  committing. The eventual publication commit must contain this closure and
+  the tracked `docs/runtime-frame-loop-fl-c5-evidence/` receipts together;
 - pinned C++:
   `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
 - trace source fingerprint and Rust runner provenance:
@@ -812,17 +874,18 @@ Gate receipts:
 
 | Gate | Green receipt |
 | --- | --- |
+| W34 family-review repairs | `docs/runtime-frame-loop-fl-c5-evidence/W34-fix-round-report.md` maps O1–O4 and S1–S5/S7 (plus the S6 clarification) to their production changes, pinned C++ citations, strengthened tests, honest proof-gap dispositions, and refreshed acceptance receipts. |
 | Seven reopened member behaviors | This W31 run executes one passing test for each named receipt: `state_machine_generic_layer_state_occurrence_matches_cpp_probe` (`currentState`, `stateChangedByIndex`), `state_machine_viewmodel_trigger_conditions_match_cpp_probe` (`advance(seconds,newFrame)`), `flow_pointer_callbacks_receive_event_time_and_the_prior_delivered_position` (`pointerDown`), both `synchronous_*` event-cycle tests (`applyEvents`), `first_factory_pointer_prepares_and_applies_fixed_bindings_before_callback` (`internalDataContext`), and `listener_missing_context_hydration_keeps_the_table_until_context_arrives` (`pointerDown`, `internalDataContext`, `initScriptedObjects`). |
-| Focused and broad behavioral floor | `.flc5/out/W30-report.md`: C++ probes 804/804, `nuxie --lib` 146/146, runtime library 713/713, scripting library 205/205, and `sound` 1/1 exact. W31 reruns the complete runtime library and C++ probe gates below. |
+| Focused and broad behavioral floor | `docs/runtime-frame-loop-fl-c5-evidence/W30-report.md`: C++ probes 804/804, `nuxie --lib` 146/146, runtime library 713/713, scripting library 205/205, and `sound` 1/1 exact. W31 reruns the complete runtime library and C++ probe gates below. |
 | Structural checker and provenance | W31 `make runtime-frame-loop-port-check`: 56/56 checker tests; files 341 (105 faithful, 236 pending), members 75 (40 adapted, 13 faithful, 22 pending), gaps 10; all 209 ratchets in `docs/runtime-frame-loop-gaps.toml` are within their declared ranges. The current trace fingerprint and Rust runner provenance are accepted. |
-| Public/downstream API | `.flc5/out/floor-public-api.log`: 15 passed, 0 failed. |
-| Renderer corpus | `.flc5/out/floor-renderer-golden.log`: exact=1,468, byte-exact=837, diverges=0, gated=0. |
-| Scripted golden corpus | `.flc5/out/floor-scripted-golden.log`: 317/317 exact entries, 647 exact segments, diverges=0, unsupported=0, not-yet=0. |
-| Same-runner pixel corpus | `.flc5/out/floor-pixel-same-runner.log`: exact=1,468, byte-exact=1,370, diverges=0, gated=0. |
-| Browser/WebGPU | `.flc5/out/floor-browser.log`: browser smoke pass, GPU smoke pass, prohibited surface/CPU presentation=0, typed readback=1, clean error-scope and bounded surface recovery invariants hold. |
-| Link-closure size | `.flc5/out/floor-size.log`: scripting off=8,201,416 bytes; scripting on=9,302,152 bytes; both below the 9 MiB (9,437,184-byte) budget. |
-| Apple | `.flc5/out/floor-apple.log`: build green; release panic-firewall 1/1; debug unit tests 66/66; artifact validator 15/15; doc tests and `-D warnings` product clippy green. |
-| Final named W31 commands | `cargo test -p nuxie-runtime --lib`: 713/713; `cargo test -p nuxie-runtime --test cpp_probe`: 804/804; `make runtime-frame-loop-port-check`: 56/56 plus ownership/ratchets green; `cargo fmt --all -- --check`: green; `git diff --check`: green. |
+| Public/downstream API | `docs/runtime-frame-loop-fl-c5-evidence/floor-public-api.log`: 15 passed, 0 failed. |
+| Renderer corpus | `docs/runtime-frame-loop-fl-c5-evidence/floor-renderer-golden.log`: exact=1,468, byte-exact=837, diverges=0, gated=0. |
+| Scripted golden corpus | `docs/runtime-frame-loop-fl-c5-evidence/floor-scripted-golden.log`: 317/317 exact entries, 647 exact segments, diverges=0, unsupported=0, not-yet=0. |
+| Same-runner pixel corpus | `docs/runtime-frame-loop-fl-c5-evidence/floor-pixel-same-runner.log`: exact=1,468, byte-exact=1,370, diverges=0, gated=0. |
+| Browser/WebGPU | `docs/runtime-frame-loop-fl-c5-evidence/floor-browser.log`: browser smoke pass, GPU smoke pass, prohibited surface/CPU presentation=0, typed readback=1, clean error-scope and bounded surface recovery invariants hold. |
+| Link-closure size | `docs/runtime-frame-loop-fl-c5-evidence/floor-size.log`: scripting off=8,201,416 bytes; scripting on=9,302,152 bytes; both below the 9 MiB (9,437,184-byte) budget. |
+| Apple | `docs/runtime-frame-loop-fl-c5-evidence/floor-apple.log`: build green; release panic-firewall 1/1; debug unit tests 66/66; artifact validator 15/15; doc tests and `-D warnings` product clippy green. |
+| Final named commands | W34 refresh: `cargo test -p nuxie-runtime --lib`: 715/715; live `cargo test -p nuxie-runtime --test cpp_probe`: 806/806; `make runtime-frame-loop-port-check`: 56/56 plus ownership/ratchets/provenance green; `cargo fmt --all -- --check`: green; `git diff --check`: green. Earlier W31 counts remain preserved in the tracked W31 report rather than silently rewritten. |
 
 Remaining out-of-scope work is unchanged and explicitly `RECORDED`: pending
 rows `B6-0259` (`listener_group.cpp`), `B6-0083`

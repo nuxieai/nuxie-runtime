@@ -1050,6 +1050,9 @@ def check(
         ratchet_id = str(row.get("id", ""))
         pattern_text = str(row.get("pattern", ""))
         globs = [str(value) for value in row.get("globs", [])]
+        content_begin = str(row.get("content_begin", ""))
+        content_end = str(row.get("content_end", ""))
+        content_sha256 = str(row.get("content_sha256", ""))
         maximum = row.get("max_occurrences")
         minimum = row.get("min_occurrences", 0)
         if (
@@ -1063,6 +1066,15 @@ def check(
         ):
             errors.append(f"ratchet {ratchet_id!r} is incomplete")
             continue
+        if content_sha256 and (
+            not content_begin
+            or not content_end
+            or re.fullmatch(r"[0-9a-f]{64}", content_sha256) is None
+        ):
+            errors.append(
+                f"ratchet {ratchet_id} has incomplete content digest metadata"
+            )
+            continue
         try:
             pattern = re.compile(pattern_text)
         except re.error as error:
@@ -1070,6 +1082,7 @@ def check(
             continue
         count = 0
         hits: list[str] = []
+        content_regions: list[bytes] = []
         for glob in globs:
             for path in sorted(repo_root.glob(glob)):
                 if not path.is_file():
@@ -1085,7 +1098,51 @@ def check(
                 for offset in found_offsets:
                     line_number = source.count("\n", 0, offset) + 1
                     hits.append(f"{path.relative_to(repo_root)}:{line_number}")
+                if content_sha256:
+                    begin_offsets = [
+                        match.start()
+                        for match in re.finditer(
+                            re.escape(content_begin), source
+                        )
+                    ]
+                    end_offsets = [
+                        match.start()
+                        for match in re.finditer(re.escape(content_end), source)
+                    ]
+                    if len(begin_offsets) != 1 or len(end_offsets) != 1:
+                        errors.append(
+                            f"ratchet {ratchet_id} content delimiters must "
+                            f"occur exactly once in {path.relative_to(repo_root)}"
+                        )
+                        continue
+                    begin_offset = begin_offsets[0]
+                    end_offset = end_offsets[0] + len(content_end)
+                    if end_offset <= begin_offset:
+                        errors.append(
+                            f"ratchet {ratchet_id} content delimiters are "
+                            f"out of order in {path.relative_to(repo_root)}"
+                        )
+                        continue
+                    content_regions.append(
+                        source[begin_offset:end_offset].encode("utf-8")
+                    )
         ratchet_results.append((ratchet_id, count, minimum, maximum))
+        if content_sha256:
+            if len(content_regions) != 1:
+                errors.append(
+                    f"ratchet {ratchet_id} content digest requires exactly "
+                    f"one delimited source region, found {len(content_regions)}"
+                )
+            else:
+                actual_content_sha256 = hashlib.sha256(
+                    content_regions[0]
+                ).hexdigest()
+                if actual_content_sha256 != content_sha256:
+                    errors.append(
+                        f"ratchet {ratchet_id} content digest changed: "
+                        f"expected {content_sha256}, got "
+                        f"{actual_content_sha256}"
+                    )
         if count < minimum:
             errors.append(
                 f"ratchet {ratchet_id} decreased to {count} < {minimum}; "

@@ -959,6 +959,67 @@ pattern = "impl\\s+Drop\\s+for\\s+StateMachineInstance[\\s\\S]{0,1000}(?:self\\.
 max_occurrences = 0
 
 [[ratchet]]
+id = "state_machine_layer_changed_flag_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "state_changed_on_advance\\s*:\\s*bool"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_layer_new_frame_clear_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "fn\\s+begin_new_frame\\s*\\(&mut\\s+self\\)\\s*\\{\\s*self\\.state_changed_on_advance\\s*=\\s*false\\s*;"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_layer_current_state_access_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "fn\\s+current_state\\s*<'a>\\s*\\([\\s\\S]{0,180}&'a\\s+RuntimeLayerState"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_changed_count_scans_layer_flags_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "pub\\s+fn\\s+changed_state_count\\s*\\(&self\\)\\s*->\\s*usize\\s*\\{[\\s\\S]{0,360}state_changed_on_advance\\(\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_cached_changed_count"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?m)^\\s*changed_state_count\\s*:\\s*usize\\s*,"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_changed_state_query_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "pub\\s+fn\\s+changed_state\\s*\\(&self,\\s*index:\\s*usize\\)\\s*->\\s*Option\\s*<\\s*&RuntimeLayerState\\s*>\\s*\\{[\\s\\S]{0,1500}state_changed_on_advance\\(\\)[\\s\\S]{0,500}current_state\\("
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_stale_transition_query_alias"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+(?:random_value|randomValue|find_random_transition|findRandomTransition|find_allowed_transition|findAllowedTransition)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_layer_random_scratch_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "evaluated_random_weights\\s*:\\s*Vec\\s*<\\s*u32\\s*>"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_layer_trigger_identity_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "view_model_trigger_layer_id\\s*:\\s*u64"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
 id = "state_machine_hit_trait_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
 pattern = "trait\\s+HitComponent\\b"

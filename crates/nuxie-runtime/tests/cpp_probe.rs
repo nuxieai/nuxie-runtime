@@ -15713,6 +15713,70 @@ fn synthetic_state_machine_weighted_random_wait_then_select(file_id: u64) -> Vec
     })
 }
 
+fn synthetic_fl_c5_layer_state_queries(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "enabled");
+        });
+
+        // Layer 0: one conditional edge followed by an unconditional edge.
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 4);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+
+        // Layer 1: an interleaved non-animation current state.
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+
+        // Layer 2: starts on the same animation definition as layer 0, then
+        // changes to a non-animation state.
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_nested_state_machines_without_child_instances(file_id: u64) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
@@ -80460,6 +80524,145 @@ fn fl_c5_dispose_nested_event_source_order_and_rust_idempotence() {
 }
 
 #[test]
+fn fl_c5_state_changed_layers_and_convergence_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/fl_c5_state_changed_layers_and_convergence.riv";
+    let bytes = synthetic_fl_c5_layer_state_queries(90_508);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    let mut reports = vec![(
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    )];
+    assert!(state_machine.set_bool(0, true));
+    reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), reports.len());
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&reports).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} action {step}"),
+        );
+    }
+    assert_eq!(reports[0].1.changed_state_count(), 3);
+    assert_eq!(
+        reports[1].1.changed_state_count(),
+        2,
+        "layers 0 and 2 changed, while multiple layer-0 transitions count once"
+    );
+    assert_eq!(
+        reports[1]
+            .1
+            .changed_state(0)
+            .and_then(|state| state.type_name),
+        Some("AnimationState")
+    );
+    assert_eq!(
+        reports[1]
+            .1
+            .changed_state(1)
+            .and_then(|state| state.type_name),
+        Some("ExitState")
+    );
+    assert!(reports[1].1.changed_state(2).is_none());
+    assert_eq!(
+        reports[2].1.changed_state_count(),
+        0,
+        "a later new frame clears every retained layer flag"
+    );
+}
+
+#[test]
+fn fl_c5_current_state_and_animation_authored_compression_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/fl_c5_current_state_and_animation.riv";
+    let bytes = synthetic_fl_c5_layer_state_queries(90_509);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    let cpp_report = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("C++ state-machine report");
+    compare_state_machine_advance(cpp_report, &state_machine, advanced, label);
+
+    assert_eq!(state_machine.current_animation_count(), 2);
+    assert_eq!(
+        state_machine
+            .current_animation(0)
+            .map(|animation| animation.animation_index()),
+        Some(0)
+    );
+    assert_eq!(
+        state_machine
+            .current_animation(1)
+            .map(|animation| animation.animation_index()),
+        Some(0),
+        "two authored layers using one animation remain two occurrences"
+    );
+    assert!(state_machine.current_animation(2).is_none());
+    assert_eq!(
+        (0..state_machine.changed_state_count())
+            .map(|index| state_machine
+                .changed_state(index)
+                .and_then(|state| state.type_name))
+            .collect::<Vec<_>>(),
+        [
+            Some("AnimationState"),
+            Some("ExitState"),
+            Some("AnimationState")
+        ],
+        "current states retain compressed authored-layer order across a non-animation layer"
+    );
+}
+
+#[test]
 fn state_machine_required_system_states_reject_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -80576,7 +80779,7 @@ fn state_machine_generic_layer_state_occurrence_matches_cpp_probe() {
 }
 
 #[test]
-fn state_machine_weighted_random_selection_and_u32_overflow_match_cpp_probe() {
+fn fl_c5_random_transition_edges_weighted_boundaries_and_wraparound_match_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -80587,6 +80790,13 @@ fn state_machine_weighted_random_selection_and_u32_overflow_match_cpp_probe() {
             "synthetic/runtime_state_machine_weighted_random_zero_draw_cpp.riv",
             synthetic_state_machine_weighted_random_transition(8278, 1, 3),
             0.0_f32,
+            1_usize,
+            1_usize,
+        ),
+        (
+            "synthetic/runtime_state_machine_weighted_random_negative_draw_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(82_780, 1, 3),
+            -0.25_f32,
             1_usize,
             1_usize,
         ),
@@ -80608,6 +80818,13 @@ fn state_machine_weighted_random_selection_and_u32_overflow_match_cpp_probe() {
             "synthetic/runtime_state_machine_weighted_random_one_draw_selects_none_cpp.riv",
             synthetic_state_machine_weighted_random_transition(8281, 1, 3),
             1.0_f32,
+            0_usize,
+            1_usize,
+        ),
+        (
+            "synthetic/runtime_state_machine_weighted_random_nan_selects_none_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(82_810, 1, 3),
+            f32::NAN,
             0_usize,
             1_usize,
         ),
@@ -81574,6 +81791,18 @@ fn compare_state_machine_advance(
         cpp.changed_state_count,
         rust.changed_state_count(),
         "{label} changedStateCount mismatch"
+    );
+    let rust_changed_state_core_types = (0..rust.changed_state_count())
+        .map(|index| {
+            rust.changed_state(index)
+                .and_then(|state| state.type_name)
+                .and_then(nuxie_schema::definition_by_name)
+                .map_or(0, |definition| definition.type_key.int)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cpp.changed_state_core_types, rust_changed_state_core_types,
+        "{label} stateChangedByIndex current-state order mismatch"
     );
     assert_eq!(
         cpp.reported_event_count,
@@ -82735,6 +82964,8 @@ struct CppRuntimeStateMachineAdvance {
     current_animation_count: usize,
     #[serde(rename = "changedStateCount")]
     changed_state_count: usize,
+    #[serde(default, rename = "changedStateCoreTypes")]
+    changed_state_core_types: Vec<u16>,
     #[serde(default, rename = "reportedEventCount")]
     reported_event_count: usize,
     #[serde(default, rename = "randomTotalCalls")]

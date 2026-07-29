@@ -747,6 +747,7 @@ struct RuntimeStateMachineAdvanceReport
     bool advanced;
     size_t currentAnimationCount;
     size_t changedStateCount;
+    std::vector<uint16_t> changedStateCoreTypes;
     size_t randomTotalCalls;
     std::vector<std::pair<size_t, bool>> boolInputs;
     std::vector<RuntimeStateMachineCurrentAnimationReport> currentAnimations;
@@ -7404,6 +7405,13 @@ apply_runtime_state_machine_advances(rive::File* file,
         report.advanced = advanced;
         report.currentAnimationCount = stateMachine->currentAnimationCount();
         report.changedStateCount = stateMachine->stateChangedCount();
+        for (size_t i = 0; i < report.changedStateCount; ++i)
+        {
+            auto state = stateMachine->stateChangedByIndex(i);
+            report.changedStateCoreTypes.push_back(state == nullptr
+                                                       ? 0
+                                                       : state->coreType());
+        }
         report.randomTotalCalls = rive_probe::randomProviderTotalCalls();
         for (size_t i = 0; i < stateMachine->inputCount(); ++i)
         {
@@ -7953,6 +7961,16 @@ void write_runtime_state_machine_advance_reports(
         out << ",\"currentAnimationCount\":"
             << report.currentAnimationCount;
         out << ",\"changedStateCount\":" << report.changedStateCount;
+        out << ",\"changedStateCoreTypes\":[";
+        for (size_t j = 0; j < report.changedStateCoreTypes.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            out << report.changedStateCoreTypes[j];
+        }
+        out << ']';
         out << ",\"randomTotalCalls\":" << report.randomTotalCalls;
         out << ",\"reportedEventCount\":" << report.reportedEvents.size();
         out << ",\"boolInputs\":[";

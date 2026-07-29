@@ -45,6 +45,10 @@ pub(crate) struct StateMachineLayerInstance {
     transition_completed: bool,
     transition_animation_reset: Option<AnimationReset>,
     waiting_for_exit: bool,
+    /// Pinned C++ retains one changed flag per authored layer occurrence.
+    /// A new-frame advance clears it; zero-time convergence in the same frame
+    /// can only set it, so several transitions still report one changed layer.
+    state_changed_on_advance: bool,
     /// C++ temporarily writes `evaluatedRandomWeight` onto shared
     /// StateTransition definitions. Rust retains the same authored-order,
     /// `uint32_t` scratch on the layer occurrence so concurrent instances do
@@ -54,7 +58,6 @@ pub(crate) struct StateMachineLayerInstance {
 
 #[derive(Debug, Clone)]
 pub(crate) struct StateMachineLayerAdvance {
-    pub(crate) changed_state: bool,
     pub(crate) keep_going: bool,
 }
 
@@ -102,6 +105,7 @@ impl StateMachineLayerInstance {
             transition_completed: false,
             transition_animation_reset: None,
             waiting_for_exit: false,
+            state_changed_on_advance: false,
             evaluated_random_weights: Vec::new(),
         }
     }
@@ -115,6 +119,11 @@ impl StateMachineLayerInstance {
         self.view_model_trigger_layer_id
     }
 
+    #[cfg(test)]
+    pub(crate) fn evaluated_random_weights(&self) -> &[u32] {
+        &self.evaluated_random_weights
+    }
+
     pub(crate) fn has_current_animation(&self) -> bool {
         self.current_state
             .as_ref()
@@ -126,6 +135,21 @@ impl StateMachineLayerInstance {
         self.current_state
             .as_ref()
             .and_then(RuntimeStateInstance::plain_animation)
+    }
+
+    pub(crate) fn state_changed_on_advance(&self) -> bool {
+        self.state_changed_on_advance
+    }
+
+    pub(crate) fn begin_new_frame(&mut self) {
+        self.state_changed_on_advance = false;
+    }
+
+    pub(crate) fn current_state<'a>(
+        &self,
+        layer: &'a RuntimeStateMachineLayer,
+    ) -> Option<&'a RuntimeLayerState> {
+        self.current_state.as_ref()?.state(layer)
     }
 
     pub(crate) fn perform_initial_entry_actions(
@@ -221,10 +245,7 @@ impl StateMachineLayerInstance {
             changed_state = true;
             self.apply_animations(artboard, layer, key_frame_data_bind_graphs);
             if iteration == 100 {
-                return Ok(StateMachineLayerAdvance {
-                    changed_state: true,
-                    keep_going: false,
-                });
+                return Ok(StateMachineLayerAdvance { keep_going: false });
             }
         }
         if let Some(current_state) = self.current_state.as_mut() {
@@ -232,7 +253,6 @@ impl StateMachineLayerInstance {
         }
 
         Ok(StateMachineLayerAdvance {
-            changed_state,
             keep_going: changed_state
                 || input_changed
                 || key_frame_data_bind_keep_going
@@ -327,9 +347,10 @@ impl StateMachineLayerInstance {
             targets.reborrow(),
             executor,
         )? {
+            self.state_changed_on_advance = true;
             return Ok(true);
         }
-        self.try_change_state(
+        let changed = self.try_change_state(
             artboard,
             layer,
             key_frame_data_bind_graphs,
@@ -340,7 +361,9 @@ impl StateMachineLayerInstance {
             layer_index,
             targets,
             executor,
-        )
+        )?;
+        self.state_changed_on_advance |= changed;
+        Ok(changed)
     }
 
     fn try_change_state(

@@ -1815,6 +1815,127 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     textwrap.dedent(safe),
                 )
 
+    def test_fl_c5_layer_state_live_ratchets_require_occurrence_queries(
+        self,
+    ) -> None:
+        layer_source = (
+            "crates/nuxie-runtime/src/state_machine/"
+            "state_machine_layer_instance.rs"
+        )
+        instance_source = (
+            "crates/nuxie-runtime/src/state_machine/"
+            "state_machine_instance.rs"
+        )
+        required_cases = [
+            (
+                "state_machine_layer_changed_flag_required",
+                layer_source,
+                "struct Layer { state_changed_on_advance: bool }\n",
+                "struct Layer { changed_count: usize }\n",
+            ),
+            (
+                "state_machine_layer_new_frame_clear_required",
+                layer_source,
+                (
+                    "fn begin_new_frame(&mut self) {\n"
+                    "    self.state_changed_on_advance = false;\n"
+                    "}\n"
+                ),
+                "fn begin_new_frame(&mut self) {}\n",
+            ),
+            (
+                "state_machine_layer_current_state_access_required",
+                layer_source,
+                (
+                    "fn current_state<'a>(&self, layer: &'a RuntimeLayerState) "
+                    "-> Option<&'a RuntimeLayerState> { Some(layer) }\n"
+                ),
+                "fn current_state_index(&self) -> Option<usize> { None }\n",
+            ),
+            (
+                "state_machine_changed_count_scans_layer_flags_required",
+                instance_source,
+                (
+                    "pub fn changed_state_count(&self) -> usize {\n"
+                    "    self.layers.iter().filter(|layer| "
+                    "layer.state_changed_on_advance()).count()\n"
+                    "}\n"
+                ),
+                (
+                    "pub fn changed_state_count(&self) -> usize {\n"
+                    "    self.changed_state_count\n"
+                    "}\n"
+                ),
+            ),
+            (
+                "state_machine_changed_state_query_required",
+                instance_source,
+                (
+                    "pub fn changed_state(&self, index: usize) "
+                    "-> Option<&RuntimeLayerState> {\n"
+                    "    for layer in self.layers.iter() {\n"
+                    "        if layer.state_changed_on_advance() {\n"
+                    "            return layer.current_state(definition);\n"
+                    "        }\n"
+                    "    }\n"
+                    "    None\n"
+                    "}\n"
+                ),
+                "pub fn current_state(&self) -> Option<&RuntimeLayerState> { None }\n",
+            ),
+            (
+                "state_machine_layer_random_scratch_required",
+                layer_source,
+                "struct Layer { evaluated_random_weights: Vec<u32> }\n",
+                "struct Layer;\n",
+            ),
+            (
+                "state_machine_layer_trigger_identity_required",
+                layer_source,
+                "struct Layer { view_model_trigger_layer_id: u64 }\n",
+                "struct Layer;\n",
+            ),
+        ]
+        for ratchet_id, source, required, missing in required_cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_required_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    required,
+                    missing,
+                )
+
+        forbidden_cases = [
+            (
+                "state_machine_cached_changed_count",
+                "struct Machine {\n    changed_state_count: usize,\n}\n",
+                "struct Machine { layers: Vec<Layer> }\n",
+            ),
+            (
+                "state_machine_stale_transition_query_alias",
+                "impl Machine { fn random_value(&self) {} }\n",
+                "impl Machine { fn changed_state(&self) {} }\n",
+            ),
+            (
+                "state_machine_stale_transition_query_alias",
+                "impl Machine { fn find_random_transition(&self) {} }\n",
+                "impl Machine { fn changed_state(&self) {} }\n",
+            ),
+            (
+                "state_machine_stale_transition_query_alias",
+                "impl Machine { fn find_allowed_transition(&self) {} }\n",
+                "impl Machine { fn changed_state(&self) {} }\n",
+            ),
+        ]
+        for ratchet_id, forbidden, safe in forbidden_cases:
+            with self.subTest(ratchet=ratchet_id, source=instance_source):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    instance_source,
+                    forbidden,
+                    safe,
+                )
+
     def test_fl_c5_hit_live_ratchets_require_complete_hierarchy_and_routing(
         self,
     ) -> None:

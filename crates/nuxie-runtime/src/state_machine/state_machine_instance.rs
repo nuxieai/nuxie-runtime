@@ -1168,7 +1168,6 @@ pub struct StateMachineInstance {
     reported_listener_view_models: RuntimeCellNotificationQueue,
     /// Retained C++ `m_reportingListenerViewModels` batch buffer.
     reporting_listener_view_models: Vec<usize>,
-    changed_state_count: usize,
     pub(super) needs_advance: bool,
     has_advanced_once: bool,
     // A mounted NestedStateMachine is initialized before its parent binding
@@ -1765,7 +1764,6 @@ impl Clone for StateMachineInstance {
             reporting_events: self.reporting_events.clone(),
             reported_listener_view_models,
             reporting_listener_view_models: Vec::new(),
-            changed_state_count: self.changed_state_count,
             needs_advance: self.needs_advance,
             has_advanced_once: self.has_advanced_once,
             post_update_probe_pending: self.post_update_probe_pending,
@@ -2402,7 +2400,6 @@ impl StateMachineInstance {
             reporting_events: Vec::new(),
             reported_listener_view_models: RuntimeCellNotificationQueue::default(),
             reporting_listener_view_models: Vec::new(),
-            changed_state_count: 0,
             needs_advance: false,
             has_advanced_once: false,
             post_update_probe_pending: false,
@@ -4358,7 +4355,28 @@ impl StateMachineInstance {
     }
 
     pub fn changed_state_count(&self) -> usize {
-        self.changed_state_count
+        self.layers
+            .iter()
+            .filter(|layer| layer.state_changed_on_advance())
+            .count()
+    }
+
+    /// Return the current state of the Nth changed layer in compressed
+    /// authored-layer order, matching C++ `stateChangedByIndex`.
+    pub fn changed_state(&self, index: usize) -> Option<&RuntimeLayerState> {
+        let definitions = self.state_machine_definitions.as_deref()?;
+        let state_machine = definitions.get(self.state_machine_index)?;
+        let mut changed_index = 0;
+        for (layer, layer_definition) in self.layers.iter().zip(state_machine.layers.iter()) {
+            if !layer.state_changed_on_advance() {
+                continue;
+            }
+            if changed_index == index {
+                return layer.current_state(layer_definition);
+            }
+            changed_index += 1;
+        }
+        None
     }
 
     /// Re-enter every layer's retained EntryState occurrence.
@@ -4437,7 +4455,9 @@ impl StateMachineInstance {
     }
 
     pub(crate) fn reset_changed_state_count_for_outer_settlement(&mut self) {
-        self.changed_state_count = 0;
+        for layer in &mut self.layers {
+            layer.begin_new_frame();
+        }
     }
 
     pub fn needs_advance(&self) -> bool {
@@ -4456,6 +4476,16 @@ impl StateMachineInstance {
     #[cfg(test)]
     fn hit_component(&self, index: usize) -> Option<&dyn HitComponent> {
         self.hit_components.get(index).map(Box::as_ref)
+    }
+
+    /// C++ exposes this only under TESTING. Bound against the retained machine
+    /// definition before reading the occurrence, matching `layerState`.
+    #[cfg(test)]
+    fn layer_state(&self, index: usize) -> Option<&RuntimeLayerState> {
+        let definitions = self.state_machine_definitions.as_deref()?;
+        let state_machine = definitions.get(self.state_machine_index)?;
+        let layer_definition = state_machine.layers.get(index)?;
+        self.layers.get(index)?.current_state(layer_definition)
     }
 
     pub fn input_count(&self) -> usize {
@@ -10504,6 +10534,7 @@ impl StateMachineInstance {
             artboard,
             state_machine,
             elapsed_seconds,
+            true,
             Some(context),
             &mut NoopScriptHost,
         );
@@ -10521,6 +10552,7 @@ impl StateMachineInstance {
             artboard,
             state_machine,
             elapsed_seconds,
+            true,
             owned_context,
             &mut NoopScriptHost,
         );
@@ -10533,21 +10565,15 @@ impl StateMachineInstance {
         state_machine: &RuntimeStateMachine,
         elapsed_seconds: f32,
     ) -> bool {
-        let probed_state_count = self.changed_state_count;
         let result = self.advance_with_report_mode(
             artboard,
             state_machine,
             elapsed_seconds,
+            false,
             None,
             &mut NoopScriptHost,
         );
-        let changed = self.retain_script_result(result);
-        // The first state reported by the zero-delta apply is the transition
-        // already counted by `try_change_state`. Keep the cumulative main and
-        // outer count, then add only transitions chained after that duplicate.
-        self.changed_state_count =
-            probed_state_count.saturating_add(self.changed_state_count.saturating_sub(1));
-        changed
+        self.retain_script_result(result)
     }
 
     /// Probe authored transitions without advancing or reapplying the current
@@ -10644,7 +10670,6 @@ impl StateMachineInstance {
             };
             if layer_changed {
                 changed_state = true;
-                self.changed_state_count += 1;
             }
         }
         self.capture_focus_callbacks();
@@ -10670,6 +10695,7 @@ impl StateMachineInstance {
         artboard: &mut ArtboardInstance,
         state_machine: &RuntimeStateMachine,
         elapsed_seconds: f32,
+        new_frame: bool,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         host: &mut dyn ScriptHost,
     ) -> Result<bool, ScriptError> {
@@ -10678,6 +10704,11 @@ impl StateMachineInstance {
         }
         if self.scripted_data_context_prepare_pending() {
             return Ok(false);
+        }
+        if new_frame {
+            for layer in &mut self.layers {
+                layer.begin_new_frame();
+            }
         }
         let draw_order_change_counter = artboard.prepared_epoch();
         if self.draw_order_change_counter != draw_order_change_counter {
@@ -10696,11 +10727,9 @@ impl StateMachineInstance {
             && !self.needs_advance
             && self.scripted_instances_by_global.is_empty()
         {
-            self.changed_state_count = 0;
             return Ok(false);
         }
         self.has_advanced_once = true;
-        self.changed_state_count = 0;
         self.needs_advance = false;
         // One C++ DataBindContainer pass owns both ordinary and cloned
         // ScriptInput occurrences before layer advancement. Do not run a
@@ -10773,9 +10802,6 @@ impl StateMachineInstance {
                     return Err(error);
                 }
             };
-            if layer_result.changed_state {
-                self.changed_state_count += 1;
-            }
             keep_going |= layer_result.keep_going;
         }
         // `StateMachineInstance::advance` advances layers first, then every
@@ -12509,6 +12535,332 @@ mod scripted_listener_action_tests {
                 direct(2),
             )),
         ]
+    }
+
+    fn fl_c5_state_transition(
+        global_id: u32,
+        state_to_index: usize,
+        conditions: Vec<RuntimeTransitionCondition>,
+    ) -> RuntimeStateTransition {
+        RuntimeStateTransition {
+            global_id,
+            state_to_index: Some(state_to_index),
+            exit_blend_animation_index: None,
+            duration: 0,
+            exit_time: 0,
+            flags: 0,
+            random_weight: 0,
+            direct_input_conditions_only: conditions
+                .iter()
+                .all(RuntimeTransitionCondition::is_direct_input),
+            conditions,
+            fire_actions: Vec::new(),
+            listener_actions: Vec::new(),
+            interpolator: None,
+            has_unsupported_interpolator: false,
+        }
+    }
+
+    fn fl_c5_state(
+        global_id: u32,
+        type_name: &'static str,
+        animation: bool,
+        transitions: Vec<RuntimeStateTransition>,
+    ) -> RuntimeLayerState {
+        RuntimeLayerState {
+            global_id: Some(global_id),
+            type_name: Some(type_name),
+            animation: animation.then(RuntimeLinearAnimationHandle::empty),
+            blend_state_1d: None,
+            blend_state_direct: None,
+            speed: 1.0,
+            flags: 0,
+            fire_actions: Vec::new(),
+            listener_actions: Vec::new(),
+            transitions,
+        }
+    }
+
+    fn fl_c5_state_query_machine() -> RuntimeStateMachine {
+        let enabled = || {
+            RuntimeTransitionCondition::Bool(RuntimeTransitionBoolCondition::new(
+                0,
+                TransitionConditionOp::Equal,
+            ))
+        };
+        let changing_layer = |layer_global_id, state_global_id| RuntimeStateMachineLayer {
+            global_id: layer_global_id,
+            name: None,
+            states: vec![
+                fl_c5_state(
+                    state_global_id,
+                    "EntryState",
+                    false,
+                    vec![fl_c5_state_transition(state_global_id + 1, 1, Vec::new())],
+                ),
+                fl_c5_state(
+                    state_global_id + 2,
+                    "AnimationState",
+                    true,
+                    vec![fl_c5_state_transition(
+                        state_global_id + 3,
+                        2,
+                        vec![enabled()],
+                    )],
+                ),
+                fl_c5_state(
+                    state_global_id + 4,
+                    "AnimationState",
+                    true,
+                    vec![fl_c5_state_transition(state_global_id + 5, 3, Vec::new())],
+                ),
+                fl_c5_state(state_global_id + 6, "AnimationState", true, Vec::new()),
+            ],
+            entry_state_index: Some(0),
+            any_state_index: None,
+            exit_state_index: None,
+        };
+        let inert_layer = RuntimeStateMachineLayer {
+            global_id: 920,
+            name: None,
+            states: vec![
+                fl_c5_state(
+                    921,
+                    "EntryState",
+                    false,
+                    vec![fl_c5_state_transition(922, 1, Vec::new())],
+                ),
+                fl_c5_state(923, "ExitState", false, Vec::new()),
+            ],
+            entry_state_index: Some(0),
+            any_state_index: None,
+            exit_state_index: Some(1),
+        };
+        let mut machine = reset_input_state_machine(Vec::new());
+        machine.layers = Arc::new(vec![
+            changing_layer(910, 1_000),
+            inert_layer,
+            changing_layer(930, 2_000),
+        ]);
+        machine
+    }
+
+    #[test]
+    fn fl_c5_state_changed_queries_retain_same_frame_flags_in_authored_layer_order() {
+        let (mut artboard, _) = scripted_listener_artboard_and_machine();
+        artboard.state_machines = Arc::new(vec![fl_c5_state_query_machine()]);
+        let mut machine = artboard
+            .state_machine_instance(0)
+            .expect("state query machine");
+
+        assert!(artboard.advance_state_machine_instance(&mut machine, 0.0));
+        assert_eq!(machine.changed_state_count(), 3);
+        assert_eq!(
+            machine.changed_state(1).and_then(|state| state.global_id),
+            Some(923),
+            "initial Entry convergence includes the authored non-animation layer"
+        );
+
+        assert!(machine.set_bool(0, true));
+        assert!(
+            artboard.settle_state_machine_update_passes_with_state_machines(std::slice::from_mut(
+                &mut machine
+            ),)
+        );
+        assert_eq!(
+            machine.changed_state_count(),
+            2,
+            "several transitions in one layer still count one changed layer"
+        );
+        assert_eq!(
+            machine.changed_state(0).and_then(|state| state.global_id),
+            Some(1_006)
+        );
+        assert_eq!(
+            machine.changed_state(1).and_then(|state| state.global_id),
+            Some(2_006),
+            "the compressed index skips unchanged authored layer 1"
+        );
+        assert!(machine.changed_state(2).is_none());
+        assert_eq!(
+            machine.layer_state(0).and_then(|state| state.global_id),
+            Some(1_006)
+        );
+        assert_eq!(
+            machine.layer_state(1).and_then(|state| state.global_id),
+            Some(923)
+        );
+        assert_eq!(
+            machine.layer_state(2).and_then(|state| state.global_id),
+            Some(2_006)
+        );
+        assert!(machine.layer_state(3).is_none());
+
+        assert!(
+            !artboard.settle_state_machine_update_passes_with_state_machines(std::slice::from_mut(
+                &mut machine
+            ),)
+        );
+        assert_eq!(
+            machine.changed_state_count(),
+            0,
+            "the next standalone new-frame settlement clears retained flags"
+        );
+    }
+
+    #[test]
+    fn fl_c5_state_changed_current_animation_queries_compress_the_same_authored_layers() {
+        let (mut artboard, _) = scripted_listener_artboard_and_machine();
+        artboard.state_machines = Arc::new(vec![fl_c5_state_query_machine()]);
+        let mut machine = artboard
+            .state_machine_instance(0)
+            .expect("state query machine");
+
+        assert!(artboard.advance_state_machine_instance(&mut machine, 0.0));
+        assert_eq!(machine.current_animation_count(), 2);
+        assert!(machine.current_animation(0).is_some());
+        assert!(machine.current_animation(1).is_some());
+        assert!(machine.current_animation(2).is_none());
+        assert_eq!(
+            machine.layer_state(1).and_then(|state| state.global_id),
+            Some(923),
+            "the interleaved non-animation layer remains visible by raw layer index"
+        );
+    }
+
+    #[test]
+    fn fl_c5_state_changed_layer_state_handles_null_current_and_owner_length_disagreement() {
+        let (mut artboard, _) = scripted_listener_artboard_and_machine();
+        artboard.state_machines = Arc::new(vec![fl_c5_state_query_machine()]);
+        let mut machine = artboard
+            .state_machine_instance(0)
+            .expect("state query machine");
+
+        machine.layers.truncate(2);
+        assert!(
+            machine.layer_state(2).is_none(),
+            "a retained definition without an occurrence is safely absent"
+        );
+
+        let extra_layer = machine.layers[0].clone();
+        machine.layers.push(extra_layer.clone());
+        machine.layers.push(extra_layer);
+        assert!(
+            machine.layer_state(3).is_none(),
+            "the retained machine definition bounds the testing query"
+        );
+
+        let null_layer = RuntimeStateMachineLayer {
+            global_id: 940,
+            name: None,
+            states: Vec::new(),
+            entry_state_index: None,
+            any_state_index: None,
+            exit_state_index: None,
+        };
+        let mut null_machine = reset_input_state_machine(Vec::new());
+        null_machine.layers = Arc::new(vec![null_layer]);
+        artboard.state_machines = Arc::new(vec![null_machine]);
+        let null_instance = artboard
+            .state_machine_instance(0)
+            .expect("null-current state query machine");
+        assert!(
+            null_instance.layer_state(0).is_none(),
+            "a layer occurrence with no current state projects null"
+        );
+        assert!(null_instance.layer_state(1).is_none());
+    }
+
+    #[test]
+    fn fl_c5_state_changed_reset_during_active_transition_keeps_current_state_query_live() {
+        let (mut artboard, _) = scripted_listener_artboard_and_machine();
+        let mut definition = fl_c5_state_query_machine();
+        Arc::make_mut(&mut definition.layers)[0].states[1].transitions[0].duration = 1_000;
+        artboard.state_machines = Arc::new(vec![definition]);
+        let mut machine = artboard
+            .state_machine_instance(0)
+            .expect("state query machine");
+
+        assert!(artboard.advance_state_machine_instance(&mut machine, 0.0));
+        assert!(machine.set_bool(0, true));
+        assert!(artboard.advance_state_machine_instance(&mut machine, 0.0));
+        assert_eq!(machine.changed_state_count(), 2);
+
+        machine.reset_state(&mut artboard);
+        assert_eq!(
+            machine.layer_state(0).and_then(|state| state.type_name),
+            Some("EntryState")
+        );
+        assert_eq!(
+            machine.changed_state(0).and_then(|state| state.type_name),
+            Some("EntryState"),
+            "reset replaces the current occurrence without clearing this frame's flag"
+        );
+        assert_eq!(
+            machine.changed_state_count(),
+            2,
+            "reset during an active transition does not invent or erase changed layers"
+        );
+    }
+
+    #[test]
+    fn fl_c5_state_changed_random_weight_scratch_is_isolated_between_instances() {
+        let (mut artboard, _) = scripted_listener_artboard_and_machine();
+        let mut definition = reset_input_state_machine(Vec::new());
+        let mut first = fl_c5_state_transition(3_003, 2, Vec::new());
+        first.random_weight = 1;
+        let mut second = fl_c5_state_transition(3_004, 3, Vec::new());
+        second.random_weight = 3;
+        definition.layers = Arc::new(vec![RuntimeStateMachineLayer {
+            global_id: 3_000,
+            name: None,
+            states: vec![
+                fl_c5_state(
+                    3_001,
+                    "EntryState",
+                    false,
+                    vec![fl_c5_state_transition(3_002, 1, Vec::new())],
+                ),
+                RuntimeLayerState {
+                    flags: 1,
+                    transitions: vec![first, second],
+                    ..fl_c5_state(3_005, "AnimationState", true, Vec::new())
+                },
+                fl_c5_state(3_006, "AnimationState", true, Vec::new()),
+                fl_c5_state(3_007, "AnimationState", true, Vec::new()),
+            ],
+            entry_state_index: Some(0),
+            any_state_index: None,
+            exit_state_index: None,
+        }]);
+        artboard.state_machines = Arc::new(vec![definition]);
+        let mut first = artboard
+            .state_machine_instance(0)
+            .expect("first random state-machine instance");
+        let mut second = artboard
+            .state_machine_instance(0)
+            .expect("second random state-machine instance");
+        let _random_values = crate::set_runtime_random_test_values(&[0.0, 0.75]);
+
+        assert!(artboard.advance_state_machine_instance(&mut first, 0.0));
+        assert!(artboard.advance_state_machine_instance(&mut second, 0.0));
+        assert_eq!(
+            first.layer_state(0).and_then(|state| state.global_id),
+            Some(3_006)
+        );
+        assert_eq!(
+            second.layer_state(0).and_then(|state| state.global_id),
+            Some(3_007)
+        );
+        let first_scratch = first.layers[0].evaluated_random_weights();
+        let second_scratch = second.layers[0].evaluated_random_weights();
+        assert_eq!(first_scratch, [1, 3]);
+        assert_eq!(second_scratch, [1, 3]);
+        assert_ne!(
+            first_scratch.as_ptr(),
+            second_scratch.as_ptr(),
+            "shared definitions never own mutable evaluated-weight scratch"
+        );
     }
 
     #[test]

@@ -59,6 +59,119 @@ use std::rc::Rc;
 
 #[cfg(test)]
 use crate::{ScriptListenerActionMethod, ScriptMethod};
+#[cfg(test)]
+use std::cell::RefCell;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeHitOwnershipKind {
+    AuthoredListener,
+    ComponentProvided,
+    NestedArtboard,
+    ComponentList,
+    TextInput,
+}
+
+/// WP2 retains only the identity/category skeleton needed by the complete
+/// polymorphic hit owners in WP3. It deliberately has no hit-test or pointer
+/// routing behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeHitOwnership {
+    source_local_id: usize,
+    kind: RuntimeHitOwnershipKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeNestedEventNotifierKind {
+    StateMachine,
+    LinearAnimation,
+}
+
+/// One value-owned registration corresponding to one C++ nested animation
+/// notifier. Rust polls nested reports rather than storing a raw listener
+/// back-pointer in the child, so retaining the exact source/notifier identity
+/// here is the ownership-safe adaptation. `dispose` explicitly removes every
+/// occurrence before this owner can receive another nested report.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeNestedEventRegistration {
+    source_local_id: usize,
+    notifier_local_id: usize,
+    kind: RuntimeNestedEventNotifierKind,
+}
+
+/// C++ aggregate fields have no header initializers. These constructors force
+/// both values to be supplied and intentionally do not implement `Default`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeQueuedFocusEvent {
+    listener_index: usize,
+    is_focus: bool,
+}
+
+impl RuntimeQueuedFocusEvent {
+    fn from_invocation(invocation: ScriptListenerInvocation) -> Option<Self> {
+        let ScriptListenerInvocation::Focus {
+            listener_index,
+            is_focus,
+        } = invocation
+        else {
+            return None;
+        };
+        Some(Self {
+            listener_index,
+            is_focus,
+        })
+    }
+
+    fn into_invocation(self) -> ScriptListenerInvocation {
+        ScriptListenerInvocation::Focus {
+            listener_index: self.listener_index,
+            is_focus: self.is_focus,
+        }
+    }
+}
+
+/// C++ aggregate fields have no header initializers. These constructors force
+/// both values to be supplied and intentionally do not implement `Default`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeQueuedSemanticEvent {
+    listener_index: usize,
+    action_type: u32,
+}
+
+impl RuntimeQueuedSemanticEvent {
+    fn from_invocation(invocation: ScriptListenerInvocation) -> Option<Self> {
+        let ScriptListenerInvocation::Semantic {
+            listener_index,
+            action_type,
+        } = invocation
+        else {
+            return None;
+        };
+        Some(Self {
+            listener_index,
+            action_type,
+        })
+    }
+
+    fn into_invocation(self) -> ScriptListenerInvocation {
+        ScriptListenerInvocation::Semantic {
+            listener_index: self.listener_index,
+            action_type: self.action_type,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeConstructorPhase {
+    Inputs,
+    LayersAnyEntry,
+    MachineBinds,
+    AuthoredListenerCategories,
+    ComponentProvidedGroups,
+    NestedListTextHits,
+    ScriptedClonesAndFacilities,
+    HitSort,
+    FocusTree,
+}
 
 fn listener_property_path_for_resolved_name_path(
     context: &RuntimeOwnedViewModelInstance,
@@ -129,6 +242,12 @@ pub struct StateMachineInstance {
     default_view_model_trigger_instance: Option<RuntimeViewModelInstanceCells>,
     active_file_view_model_binding: Option<(usize, usize)>,
     active_owned_view_model_advance_context: Option<RuntimeOwnedViewModelAdvanceContext>,
+    /// The internal focus domain exists before layer entry. `Drop` explicitly
+    /// releases this value before bind/layer/script state; an external
+    /// projection releases only its `Rc` reference and leaves the shared
+    /// owner's domain intact.
+    focus: RuntimeFocusTree,
+    owns_focus_domain: bool,
     requires_post_update_state_probe: bool,
     inputs: Vec<StateMachineInputInstance>,
     bindable_numbers: Vec<StateMachineBindableNumberInstance>,
@@ -144,6 +263,17 @@ pub struct StateMachineInstance {
     bindable_booleans: Vec<StateMachineBindableBooleanInstance>,
     default_view_model_triggers: Arc<Vec<RuntimeViewModelTrigger>>,
     transition_durations: Vec<StateMachineTransitionDurationInstance>,
+    /// Rust initialization for C++ `m_layerCount`, which has no header
+    /// initializer. It is derived from the supplied machine before access.
+    layer_count: usize,
+    /// Bind owners are declared before layers so their retained cells and
+    /// converter tables drop first, matching C++ teardown.
+    pub(super) data_bind_graph: RuntimeDataBindGraph,
+    /// One C++ `DataBindContainer` queue shared by ordinary state-machine
+    /// binds and every DataBind cloned with a scripted listener action.
+    data_bind_container: RuntimeDataBindContainerQueue,
+    data_bind_occurrences: Vec<RuntimeStateMachineDataBindOccurrence>,
+    key_frame_data_bind_graphs: Vec<Option<RuntimeDataBindGraph>>,
     layers: Vec<StateMachineLayerInstance>,
     reported_events: Vec<StateMachineReportedEvent>,
     /// Prefix of `reported_events` already consumed by C++ `applyEvents`.
@@ -169,12 +299,6 @@ pub struct StateMachineInstance {
     // settles. C++ gives that occurrence one outer-update probe after the
     // mounted artboard updates, even when its authored conditions are stable.
     post_update_probe_pending: bool,
-    pub(super) data_bind_graph: RuntimeDataBindGraph,
-    /// One C++ `DataBindContainer` queue shared by ordinary state-machine
-    /// binds and every DataBind cloned with a scripted listener action.
-    data_bind_container: RuntimeDataBindContainerQueue,
-    data_bind_occurrences: Vec<RuntimeStateMachineDataBindOccurrence>,
-    key_frame_data_bind_graphs: Vec<Option<RuntimeDataBindGraph>>,
     pub(super) owned_data_context: Option<RuntimeOwnedDataContext>,
     #[cfg(test)]
     owned_data_bind_context_bind_count: usize,
@@ -188,7 +312,23 @@ pub struct StateMachineInstance {
     /// Fresh component-provided listener/proxy owners constructed for this
     /// StateMachineInstance (`state_machine_instance.cpp:1969-2013`).
     draggable_proxies: Vec<RuntimeDraggableProxy>,
-    focus: RuntimeFocusTree,
+    /// WP2 ownership-only inventory. WP3 replaces this with the complete hit
+    /// trait/concrete hierarchy and routing behavior.
+    hit_ownership: Vec<RuntimeHitOwnership>,
+    /// Retain one group occurrence for every authored pointer listener,
+    /// including unresolved targets and duplicates.
+    pointer_listener_group_occurrences: Vec<usize>,
+    /// Explicitly detachable, value-owned adaptation of nested notifier
+    /// registrations.
+    nested_event_registrations: Vec<RuntimeNestedEventRegistration>,
+    disposed: bool,
+    /// Explicit zero initialization for C++ `m_drawOrderChangeCounter`.
+    /// WP3 owns constructor sorting and change-triggered re-sorting.
+    draw_order_change_counter: u64,
+    #[cfg(test)]
+    constructor_phases: Vec<RuntimeConstructorPhase>,
+    #[cfg(test)]
+    drop_phase_receipt: Option<Rc<RefCell<Vec<&'static str>>>>,
     pub(super) scripted_object_definitions: Vec<ScriptListenerActionDefinition>,
     scripted_listener_action_definitions: Vec<ScriptListenerActionDefinition>,
     /// C++ deletes the cloned DataBinds before deleting the cloned
@@ -717,6 +857,8 @@ impl Clone for StateMachineInstance {
             active_owned_view_model_advance_context: self
                 .active_owned_view_model_advance_context
                 .clone(),
+            focus: self.focus.clone(),
+            owns_focus_domain: self.owns_focus_domain,
             requires_post_update_state_probe: self.requires_post_update_state_probe,
             inputs: self.inputs.clone(),
             bindable_numbers: self.bindable_numbers.clone(),
@@ -732,6 +874,11 @@ impl Clone for StateMachineInstance {
             bindable_booleans: self.bindable_booleans.clone(),
             default_view_model_triggers: Arc::clone(&self.default_view_model_triggers),
             transition_durations: self.transition_durations.clone(),
+            layer_count: self.layer_count,
+            data_bind_graph: self.data_bind_graph.clone_for_state_machine_snapshot(),
+            data_bind_container: RuntimeDataBindContainerQueue::default(),
+            data_bind_occurrences: Vec::new(),
+            key_frame_data_bind_graphs: self.key_frame_data_bind_graphs.clone(),
             layers: self.layers.clone(),
             // Public Clone is Rust's explicit state-snapshot adaptation (C++
             // has no StateMachineInstance copy constructor). Copy report
@@ -747,10 +894,6 @@ impl Clone for StateMachineInstance {
             needs_advance: self.needs_advance,
             has_advanced_once: self.has_advanced_once,
             post_update_probe_pending: self.post_update_probe_pending,
-            data_bind_graph: self.data_bind_graph.clone_for_state_machine_snapshot(),
-            data_bind_container: RuntimeDataBindContainerQueue::default(),
-            data_bind_occurrences: Vec::new(),
-            key_frame_data_bind_graphs: self.key_frame_data_bind_graphs.clone(),
             owned_data_context: self.owned_data_context.clone(),
             #[cfg(test)]
             owned_data_bind_context_bind_count: self.owned_data_bind_context_bind_count,
@@ -763,8 +906,20 @@ impl Clone for StateMachineInstance {
                 .iter()
                 .map(RuntimeDraggableProxy::clone_cold)
                 .collect(),
+            hit_ownership: self.hit_ownership.clone(),
+            pointer_listener_group_occurrences: self
+                .pointer_listener_group_occurrences
+                .clone(),
+            // Registration identities are snapshot state, but the owning Vec
+            // must never alias the source instance.
+            nested_event_registrations: self.nested_event_registrations.clone(),
+            disposed: self.disposed,
+            draw_order_change_counter: self.draw_order_change_counter,
+            #[cfg(test)]
+            constructor_phases: self.constructor_phases.clone(),
+            #[cfg(test)]
+            drop_phase_receipt: None,
             scripted_instances_by_global: BTreeMap::new(),
-            focus: self.focus.clone(),
             scripted_object_definitions: self.scripted_object_definitions.clone(),
             scripted_listener_action_definitions: self.scripted_listener_action_definitions.clone(),
             scripted_object_bindings: self
@@ -807,6 +962,26 @@ impl Clone for StateMachineInstance {
         cloned.register_owned_view_model_rebind_dependents();
         cloned.initialize_data_bind_container();
         cloned
+    }
+}
+
+impl Drop for StateMachineInstance {
+    fn drop(&mut self) {
+        // C++ cleans only its internally owned focus/semantic trees, then
+        // unbinds/deletes bind occurrences, deletes layers, and finally
+        // deletes scripted clones (`state_machine_instance.cpp:2141-2199`).
+        // An internal manager performs focus cleanup before its value is
+        // released; an external projection releases only its `Rc` reference.
+        // The explicit calls below make the observable Rust order deterministic.
+        self.record_drop_phase("focus");
+        if self.owns_focus_domain {
+            self.focus.clear_focus();
+        }
+        drop(std::mem::take(&mut self.focus));
+        self.dispose();
+        self.teardown_bind_occurrences();
+        self.teardown_layers();
+        self.teardown_script_occurrences();
     }
 }
 
@@ -1083,6 +1258,72 @@ fn apply_scripted_input_update(
 }
 
 impl StateMachineInstance {
+    fn record_constructor_phase(&mut self, phase: RuntimeConstructorPhase) {
+        #[cfg(test)]
+        self.constructor_phases.push(phase);
+        #[cfg(not(test))]
+        let _ = phase;
+    }
+
+    fn record_drop_phase(&self, phase: &'static str) {
+        #[cfg(test)]
+        if let Some(receipt) = self.drop_phase_receipt.as_ref() {
+            receipt.borrow_mut().push(phase);
+        }
+        #[cfg(not(test))]
+        let _ = phase;
+    }
+
+    /// Explicitly detach this occurrence from every nested notifier identity.
+    ///
+    /// Rust polls nested reports rather than installing a raw child→parent
+    /// pointer, but the lifetime boundary remains observable: after dispose,
+    /// nested reports are rejected and repeated disposal is a no-op.
+    pub fn dispose(&mut self) {
+        self.detach_nested_event_registrations();
+        self.disposed = true;
+    }
+
+    fn detach_nested_event_registrations(&mut self) {
+        if self.nested_event_registrations.is_empty() {
+            return;
+        }
+        self.record_drop_phase("nested-detach");
+        self.nested_event_registrations.clear();
+    }
+
+    fn nested_event_source_registered(&self, source_local_id: usize) -> bool {
+        self.nested_event_registrations
+            .iter()
+            .any(|registration| registration.source_local_id == source_local_id)
+    }
+
+    fn teardown_bind_occurrences(&mut self) {
+        self.record_drop_phase("binds");
+        self.owned_data_context = None;
+        self.data_bind_occurrences.clear();
+        self.data_bind_container = RuntimeDataBindContainerQueue::default();
+        self.key_frame_data_bind_graphs.clear();
+        self.data_bind_graph.sources.clear();
+        self.data_bind_graph.targets.clear();
+        self.data_bind_graph.default_view_model_bindings.clear();
+        self.data_bind_graph.imported_view_model_overrides.clear();
+        self.scripted_object_bindings.clear();
+    }
+
+    fn teardown_layers(&mut self) {
+        self.record_drop_phase("layers");
+        self.layers.clear();
+    }
+
+    fn teardown_script_occurrences(&mut self) {
+        self.record_drop_phase("scripts");
+        self.scripted_listener_action_instances.clear();
+        self.scripted_instances_by_global.clear();
+        self.scripted_facade_root_view_model = None;
+        self.script_error = None;
+    }
+
     #[cfg(test)]
     pub(crate) fn reset_layer_construction_number_snapshots() {
         super::state_machine_layer_instance::reset_layer_construction_number_snapshots();
@@ -1099,6 +1340,7 @@ impl StateMachineInstance {
         owner_identity: u64,
     ) {
         self.focus = parent_focus.external_for_owner(owner_identity);
+        self.owns_focus_domain = false;
     }
 
     #[cfg(test)]
@@ -1242,29 +1484,13 @@ impl StateMachineInstance {
             key_frame_data_bind_graphs.clear();
         }
         let layer_capacity = state_machine.layers.len();
+        let layer_count = state_machine.layers.len();
         let listener_definitions = Arc::clone(&state_machine.listeners);
-        let view_model_listeners = (0..listener_definitions.len())
-            .filter_map(|listener_index| {
-                let listener = listener_definitions.get(listener_index)?;
-                if listener.has_listener(RuntimeListenerType::Event) {
-                    return None;
-                }
-                RuntimeViewModelListenerInstance::new(
-                    Arc::clone(&listener_definitions),
-                    listener_index,
-                )
-            })
-            .collect();
         // Pinned C++ retains the FocusManager identity during layer entry
         // callbacks but does not build the complete artboard focus topology
         // until every layer has initialized
         // (`state_machine_instance.cpp:1747-1752,2123-2127`).
         let focus = RuntimeFocusTree::new_unsynchronized(artboard);
-        let scripted_object_bindings = state_machine
-            .scripted_object_bindings
-            .iter()
-            .map(|binding| binding.instantiate())
-            .collect::<Vec<_>>();
         let mut instance = Self {
             state_machine_index,
             state_machine_definitions,
@@ -1274,6 +1500,8 @@ impl StateMachineInstance {
             default_view_model_trigger_instance,
             active_file_view_model_binding: None,
             active_owned_view_model_advance_context: None,
+            focus,
+            owns_focus_domain: true,
             requires_post_update_state_probe: state_machine.requires_post_update_state_probe(),
             inputs,
             bindable_numbers,
@@ -1289,6 +1517,11 @@ impl StateMachineInstance {
             bindable_booleans,
             default_view_model_triggers,
             transition_durations,
+            layer_count,
+            data_bind_graph,
+            data_bind_container: RuntimeDataBindContainerQueue::default(),
+            data_bind_occurrences: Vec::new(),
+            key_frame_data_bind_graphs,
             layers: Vec::with_capacity(layer_capacity),
             reported_events: Vec::new(),
             reported_event_listener_index: 0,
@@ -1300,10 +1533,6 @@ impl StateMachineInstance {
             needs_advance: false,
             has_advanced_once: false,
             post_update_probe_pending: false,
-            data_bind_graph,
-            data_bind_container: RuntimeDataBindContainerQueue::default(),
-            data_bind_occurrences: Vec::new(),
-            key_frame_data_bind_graphs,
             owned_data_context: None,
             #[cfg(test)]
             owned_data_bind_context_bind_count: 0,
@@ -1311,12 +1540,20 @@ impl StateMachineInstance {
             pointer_down_listener_hits: Vec::new(),
             pointer_listener_states: Vec::new(),
             pointer_positions: Vec::new(),
-            draggable_proxies: runtime_draggable_proxies(artboard),
+            draggable_proxies: Vec::new(),
+            hit_ownership: Vec::new(),
+            pointer_listener_group_occurrences: Vec::new(),
+            nested_event_registrations: Vec::new(),
+            disposed: false,
+            draw_order_change_counter: 0,
+            #[cfg(test)]
+            constructor_phases: Vec::new(),
+            #[cfg(test)]
+            drop_phase_receipt: None,
             scripted_instances_by_global: BTreeMap::new(),
-            focus,
             scripted_object_definitions: state_machine.scripted_objects.clone(),
             scripted_listener_action_definitions: state_machine.scripted_listener_actions.clone(),
-            scripted_object_bindings,
+            scripted_object_bindings: Vec::new(),
             scripted_listener_action_instances: BTreeMap::new(),
             scripted_object_initialization_complete: false,
             scripted_constructor_context_was_prebound: false,
@@ -1325,7 +1562,7 @@ impl StateMachineInstance {
             scripted_listener_runtime_file: artboard.runtime_file_arc(),
             scripted_listener_artboard_resolver: None,
             script_error: None,
-            view_model_listeners,
+            view_model_listeners: Vec::new(),
             focus_listener_groups: Vec::new(),
             keyboard_listener_groups: Vec::new(),
             gamepad_listener_groups: Vec::new(),
@@ -1335,20 +1572,26 @@ impl StateMachineInstance {
             queued_focus_events: Vec::new(),
             queued_semantic_events: Vec::new(),
         };
+        instance.record_constructor_phase(RuntimeConstructorPhase::Inputs);
         instance.initialize_layers_in_authored_order(artboard, state_machine);
-        // Ordinary StateMachine binds are added immediately after layers.
-        // Scripted-object binds join only once the listener/hit/TextInput
-        // facilities exist, matching cloneScriptedObject's later C++ point.
+        instance.record_constructor_phase(RuntimeConstructorPhase::LayersAnyEntry);
         instance.initialize_ordinary_data_bind_container();
+        instance.record_constructor_phase(RuntimeConstructorPhase::MachineBinds);
         // Entry focus actions ran before C++ constructs listener groups. Do
         // not replay their manager callbacks into groups registered below.
         instance.focus.discard_unregistered_events();
-        instance.initialize_listener_groups(artboard);
-        instance.append_scripted_data_binds_to_container();
-        instance.scripted_input_group_generation = artboard.script_attachment_generation();
-        instance
-            .focus
-            .synchronize_after_layer_initialization(artboard);
+        instance.initialize_authored_listener_categories(artboard);
+        instance.record_constructor_phase(RuntimeConstructorPhase::AuthoredListenerCategories);
+        instance.initialize_component_provided_groups(artboard);
+        instance.record_constructor_phase(RuntimeConstructorPhase::ComponentProvidedGroups);
+        instance.initialize_nested_list_text_hit_ownership(artboard);
+        instance.record_constructor_phase(RuntimeConstructorPhase::NestedListTextHits);
+        instance.initialize_scripted_clones_and_facilities(artboard, state_machine);
+        instance.record_constructor_phase(RuntimeConstructorPhase::ScriptedClonesAndFacilities);
+        instance.sort_hit_ownership_skeleton();
+        instance.record_constructor_phase(RuntimeConstructorPhase::HitSort);
+        instance.build_initial_focus_tree(artboard);
+        instance.record_constructor_phase(RuntimeConstructorPhase::FocusTree);
         // `Artboard::buildFocusTree` installs the parent's manager while it
         // visits nested artboards. Rust's retained projection is built above,
         // then the nested state-machine occurrences are pointed at that same
@@ -1376,6 +1619,122 @@ impl StateMachineInstance {
         self.append_scripted_data_binds_to_container();
     }
 
+    fn initialize_component_provided_groups(&mut self, artboard: &ArtboardInstance) {
+        self.draggable_proxies = runtime_draggable_proxies(artboard);
+        let source_local_ids = self
+            .draggable_proxies
+            .iter()
+            .map(|proxy| artboard.component_at(proxy.hittable).local_id)
+            .collect::<Vec<_>>();
+        for source_local_id in source_local_ids {
+            Self::push_reused_hit_ownership_if_absent(
+                &mut self.hit_ownership,
+                source_local_id,
+                RuntimeHitOwnershipKind::ComponentProvided,
+            );
+        }
+    }
+
+    fn initialize_nested_list_text_hit_ownership(&mut self, artboard: &ArtboardInstance) {
+        // Pinned C++ appends every nested-artboard owner (and its notifier
+        // registrations) before component-list owners, then appends the
+        // optional TextInput owner. Keep those category passes distinct even
+        // when local IDs from different categories are interleaved.
+        for source_local_id in artboard.nested_artboards.keys().copied() {
+            self.hit_ownership.push(RuntimeHitOwnership {
+                source_local_id,
+                kind: RuntimeHitOwnershipKind::NestedArtboard,
+            });
+            let Some(nested) = artboard.nested_artboards.get(&source_local_id) else {
+                continue;
+            };
+            for animation in &nested.animations {
+                let (notifier_local_id, kind) = match animation {
+                    crate::artboard::RuntimeNestedAnimationInstance::StateMachine(occurrence) => (
+                        occurrence.local_id(),
+                        RuntimeNestedEventNotifierKind::StateMachine,
+                    ),
+                    crate::artboard::RuntimeNestedAnimationInstance::Simple {
+                        local_id, ..
+                    }
+                    | crate::artboard::RuntimeNestedAnimationInstance::Remap { local_id, .. } => {
+                        (*local_id, RuntimeNestedEventNotifierKind::LinearAnimation)
+                    }
+                };
+                self.nested_event_registrations
+                    .push(RuntimeNestedEventRegistration {
+                        source_local_id,
+                        notifier_local_id,
+                        kind,
+                    });
+            }
+        }
+        for component in artboard
+            .components()
+            .iter()
+            .filter(|component| component.type_name == "ArtboardComponentList")
+        {
+            self.hit_ownership.push(RuntimeHitOwnership {
+                source_local_id: component.local_id,
+                kind: RuntimeHitOwnershipKind::ComponentList,
+            });
+        }
+        for component in artboard
+            .components()
+            .iter()
+            .filter(|component| component.type_name == "TextInput")
+        {
+            self.hit_ownership.push(RuntimeHitOwnership {
+                source_local_id: component.local_id,
+                kind: RuntimeHitOwnershipKind::TextInput,
+            });
+        }
+    }
+
+    fn push_reused_hit_ownership_if_absent(
+        hit_ownership: &mut Vec<RuntimeHitOwnership>,
+        source_local_id: usize,
+        kind: RuntimeHitOwnershipKind,
+    ) {
+        if hit_ownership
+            .iter()
+            .any(|owner| owner.source_local_id == source_local_id)
+        {
+            return;
+        }
+        hit_ownership.push(RuntimeHitOwnership {
+            source_local_id,
+            kind,
+        });
+    }
+
+    fn initialize_scripted_clones_and_facilities(
+        &mut self,
+        artboard: &ArtboardInstance,
+        state_machine: &RuntimeStateMachine,
+    ) {
+        self.scripted_object_bindings = state_machine
+            .scripted_object_bindings
+            .iter()
+            .map(|binding| binding.instantiate())
+            .collect();
+        // Scripted-object binds join only after listener/hit/TextInput
+        // facilities, matching cloneScriptedObject's C++ constructor phase.
+        self.append_scripted_data_binds_to_container();
+        self.initialize_scripted_input_groups(artboard);
+        self.scripted_input_group_generation = artboard.script_attachment_generation();
+    }
+
+    fn sort_hit_ownership_skeleton(&mut self) {
+        // WP2 establishes the constructor boundary but intentionally does not
+        // implement C++ hit ordering. WP3 replaces this no-op ownership seam
+        // with `sortHitComponents` and draw-order counter synchronization.
+    }
+
+    fn build_initial_focus_tree(&mut self, artboard: &ArtboardInstance) {
+        self.focus.synchronize_after_layer_initialization(artboard);
+    }
+
     /// cloneScriptedObject appends its binds after the ordinary StateMachine
     /// binds; it does not rebuild/re-home the ordinary container prefix.
     fn append_scripted_data_binds_to_container(&mut self) {
@@ -1395,7 +1754,20 @@ impl StateMachineInstance {
         }
     }
 
-    fn initialize_listener_groups(&mut self, artboard: &ArtboardInstance) {
+    fn initialize_authored_listener_categories(&mut self, artboard: &ArtboardInstance) {
+        self.view_model_listeners = (0..self.listener_definitions.len())
+            .filter_map(|listener_index| {
+                let listener = self.listener_definitions.get(listener_index)?;
+                if listener.has_listener(RuntimeListenerType::Event) {
+                    return None;
+                }
+                RuntimeViewModelListenerInstance::new(
+                    Arc::clone(&self.listener_definitions),
+                    listener_index,
+                )
+            })
+            .collect();
+
         for (listener_index, listener) in self.listener_definitions.iter().enumerate() {
             // Pinned C++ gives reported-event and ViewModel listeners their
             // own constructor paths and immediately continues the listener
@@ -1404,6 +1776,29 @@ impl StateMachineInstance {
             // (`state_machine_instance.cpp:1829-1842`).
             if listener_uses_report_queue(listener) {
                 continue;
+            }
+            if listener.listener_types.iter().any(|listener_type| {
+                matches!(
+                    listener_type,
+                    RuntimeListenerType::Enter
+                        | RuntimeListenerType::Exit
+                        | RuntimeListenerType::Down
+                        | RuntimeListenerType::Up
+                        | RuntimeListenerType::Move
+                        | RuntimeListenerType::Click
+                        | RuntimeListenerType::DragStart
+                        | RuntimeListenerType::DragEnd
+                        | RuntimeListenerType::Drag
+                )
+            }) {
+                self.pointer_listener_group_occurrences.push(listener_index);
+                if artboard.component(listener.target_local_id).is_some() {
+                    Self::push_reused_hit_ownership_if_absent(
+                        &mut self.hit_ownership,
+                        listener.target_local_id,
+                        RuntimeHitOwnershipKind::AuthoredListener,
+                    );
+                }
             }
             let Some(focus_data_local_id) =
                 listener_target_direct_child(artboard, listener.target_local_id, "FocusData")
@@ -1449,8 +1844,6 @@ impl StateMachineInstance {
                 self.semantic_listener_groups.push(group);
             }
         }
-
-        self.initialize_scripted_input_groups(artboard);
     }
 
     fn initialize_scripted_input_groups(&mut self, artboard: &ArtboardInstance) {
@@ -3174,7 +3567,11 @@ impl StateMachineInstance {
                 if let Some(invocation) =
                     group.invocation_for(target_local_id, focus_data_local_id, kind)
                 {
-                    self.queued_focus_events.push(invocation);
+                    self.queued_focus_events.push(
+                        RuntimeQueuedFocusEvent::from_invocation(invocation)
+                            .expect("focus group creates a focus invocation")
+                            .into_invocation(),
+                    );
                 }
             }
         }
@@ -3203,7 +3600,11 @@ impl StateMachineInstance {
                 continue;
             };
             if let Some(invocation) = group.invocation(listener, action_type) {
-                self.queued_semantic_events.push(invocation);
+                self.queued_semantic_events.push(
+                    RuntimeQueuedSemanticEvent::from_invocation(invocation)
+                        .expect("semantic group creates a semantic invocation")
+                        .into_invocation(),
+                );
                 queued = true;
             }
         }
@@ -4762,7 +5163,11 @@ impl StateMachineInstance {
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         host: &mut dyn ScriptHost,
     ) -> Result<bool, ScriptError> {
-        if self.script_error.is_some() || events.is_empty() {
+        if source_local_id
+            .is_some_and(|source_local_id| !self.nested_event_source_registered(source_local_id))
+            || self.script_error.is_some()
+            || events.is_empty()
+        {
             return Ok(false);
         }
         let listener_definitions = Arc::clone(&self.listener_definitions);
@@ -10385,6 +10790,133 @@ mod scripted_listener_action_tests {
         scripted_listener_artboard_and_machine().1
     }
 
+    #[test]
+    fn fl_c5_constructor_order_phase_trace_and_explicit_fields() {
+        let (artboard, machine) = scripted_listener_artboard_and_machine();
+        assert_eq!(
+            machine.constructor_phases,
+            [
+                RuntimeConstructorPhase::Inputs,
+                RuntimeConstructorPhase::LayersAnyEntry,
+                RuntimeConstructorPhase::MachineBinds,
+                RuntimeConstructorPhase::AuthoredListenerCategories,
+                RuntimeConstructorPhase::ComponentProvidedGroups,
+                RuntimeConstructorPhase::NestedListTextHits,
+                RuntimeConstructorPhase::ScriptedClonesAndFacilities,
+                RuntimeConstructorPhase::HitSort,
+                RuntimeConstructorPhase::FocusTree,
+            ],
+            "constructor boundaries follow state_machine_instance.cpp:1711-2127"
+        );
+        assert_eq!(machine.layer_count, machine.layers.len());
+        assert_eq!(
+            machine.layer_count,
+            artboard.state_machine(0).unwrap().layers.len()
+        );
+        assert_eq!(machine.draw_order_change_counter, 0);
+        assert!(!machine.disposed);
+    }
+
+    #[test]
+    fn fl_c5_constructor_order_retains_unresolved_pointer_group_occurrence() {
+        let (mut artboard, _) = scripted_listener_artboard_and_machine();
+        let mut definition = reset_input_state_machine(reset_input_actions());
+        definition.listeners = Arc::new(vec![RuntimeStateMachineListener {
+            target_local_id: usize::MAX,
+            is_single: false,
+            listener_types: vec![RuntimeListenerType::Down],
+            event_local_indices: Vec::new(),
+            view_model_path: None,
+            view_model_input_types: Vec::new(),
+            gamepad_input_types: Vec::new(),
+            keyboard_input_types: Vec::new(),
+            semantic_input_types: Vec::new(),
+            hit_paths: Vec::new(),
+            listener_actions: Vec::new(),
+        }]);
+        artboard.state_machines = Arc::new(vec![definition]);
+        let machine = artboard
+            .state_machine_instance(0)
+            .expect("state machine with unresolved pointer target");
+
+        assert_eq!(
+            machine
+                .input(0)
+                .and_then(StateMachineInputInstance::bool_value),
+            Some(true),
+            "entry actions execute during the layer phase"
+        );
+        assert_eq!(machine.pointer_listener_group_occurrences, [0]);
+        assert!(
+            machine
+                .hit_ownership
+                .iter()
+                .all(|owner| owner.kind != RuntimeHitOwnershipKind::AuthoredListener),
+            "an unresolved target retains its group but creates no hit owner"
+        );
+    }
+
+    #[test]
+    fn fl_c5_constructor_order_retains_duplicate_groups_but_one_hit_owner() {
+        let (mut artboard, _) = scripted_listener_artboard_and_machine();
+        let target_local_id = artboard
+            .components()
+            .iter()
+            .find(|component| component.type_name != "Artboard")
+            .expect("fixture pointer target")
+            .local_id;
+        let listener = RuntimeStateMachineListener {
+            target_local_id,
+            is_single: false,
+            listener_types: vec![RuntimeListenerType::Down],
+            event_local_indices: Vec::new(),
+            view_model_path: None,
+            view_model_input_types: Vec::new(),
+            gamepad_input_types: Vec::new(),
+            keyboard_input_types: Vec::new(),
+            semantic_input_types: Vec::new(),
+            hit_paths: Vec::new(),
+            listener_actions: Vec::new(),
+        };
+        let mut definition = reset_input_state_machine(reset_input_actions());
+        definition.listeners = Arc::new(vec![listener.clone(), listener]);
+        definition.transition_duration_bindings = Arc::new(vec![
+            RuntimeTransitionDurationBinding {
+                data_bind_index: 3,
+                transition_global_id: 44,
+            },
+            RuntimeTransitionDurationBinding {
+                data_bind_index: 7,
+                transition_global_id: 44,
+            },
+        ]);
+        artboard.state_machines = Arc::new(vec![definition]);
+
+        let machine = artboard
+            .state_machine_instance(0)
+            .expect("state machine with duplicate pointer and bind occurrences");
+
+        assert_eq!(machine.pointer_listener_group_occurrences, [0, 1]);
+        assert_eq!(
+            machine
+                .hit_ownership
+                .iter()
+                .filter(|owner| owner.source_local_id == target_local_id)
+                .count(),
+            1,
+            "duplicate groups share one component-identity hit owner"
+        );
+        assert_eq!(
+            machine
+                .transition_durations
+                .iter()
+                .map(|occurrence| occurrence.transition_global_id)
+                .collect::<Vec<_>>(),
+            [44, 44],
+            "duplicate transition-property binds retain distinct authored occurrences"
+        );
+    }
+
     fn reset_input_state_machine(
         listener_actions: Vec<RuntimeScheduledListenerAction>,
     ) -> RuntimeStateMachine {
@@ -11467,7 +11999,7 @@ mod scripted_listener_action_tests {
         machine.gamepad_listener_groups.clear();
         machine.semantic_listener_groups.clear();
 
-        machine.initialize_listener_groups(&artboard);
+        machine.initialize_authored_listener_categories(&artboard);
 
         assert!(machine.focus_listener_groups.is_empty());
         assert!(
@@ -11530,7 +12062,7 @@ mod scripted_listener_action_tests {
         machine.keyboard_listener_groups.clear();
         machine.gamepad_listener_groups.clear();
         machine.semantic_listener_groups.clear();
-        machine.initialize_listener_groups(&artboard);
+        machine.initialize_authored_listener_categories(&artboard);
 
         assert!(
             !machine.pointer_down(&mut artboard, 0.0, 0.0, 1),
@@ -13186,8 +13718,51 @@ mod scripted_listener_action_tests {
     }
 
     #[test]
-    fn cloned_snapshot_rebuilds_mutable_listener_tables_without_aliasing() {
+    fn fl_c5_clone_teardown_rebuilds_mutable_state_without_aliasing() {
         let mut original = scripted_listener_machine();
+        original.queued_focus_events = vec![
+            RuntimeQueuedFocusEvent {
+                listener_index: 3,
+                is_focus: true,
+            }
+            .into_invocation(),
+        ];
+        original.queued_semantic_events = vec![
+            RuntimeQueuedSemanticEvent {
+                listener_index: 4,
+                action_type: 2,
+            }
+            .into_invocation(),
+        ];
+        original.pointer_positions.push(RuntimePointerPosition {
+            pointer_id: 5,
+            x: 1.0,
+            y: 2.0,
+        });
+        original
+            .pointer_listener_states
+            .push(RuntimePointerListenerState {
+                pointer_id: 5,
+                listener_index: 2,
+                is_hovered: true,
+                previous_x: -1.0,
+                previous_y: -2.0,
+            });
+        original
+            .pointer_down_listener_hits
+            .push(RuntimePointerDownListenerHit {
+                pointer_id: 5,
+                listener_index: 2,
+                drag_phase: Some(RuntimePointerDragPhase::Armed),
+                event_context: None,
+            });
+        original
+            .nested_event_registrations
+            .push(RuntimeNestedEventRegistration {
+                source_local_id: 7,
+                notifier_local_id: 8,
+                kind: RuntimeNestedEventNotifierKind::StateMachine,
+            });
         let original_layer_ids = original
             .layers
             .iter()
@@ -13213,6 +13788,50 @@ mod scripted_listener_action_tests {
             .expect("attach original occurrence");
 
         let mut cloned = original.clone();
+        assert_eq!(cloned.queued_focus_events, original.queued_focus_events);
+        assert_eq!(
+            cloned.queued_semantic_events,
+            original.queued_semantic_events
+        );
+        assert_ne!(
+            cloned.queued_focus_events.as_ptr(),
+            original.queued_focus_events.as_ptr(),
+            "pending focus values are copied into distinct Vec storage"
+        );
+        assert_ne!(
+            cloned.queued_semantic_events.as_ptr(),
+            original.queued_semantic_events.as_ptr(),
+            "pending semantic values are copied into distinct Vec storage"
+        );
+        assert_ne!(
+            cloned.pointer_positions.as_ptr(),
+            original.pointer_positions.as_ptr(),
+            "pointer positions are copied into distinct Vec storage"
+        );
+        assert_ne!(
+            cloned.pointer_listener_states.as_ptr(),
+            original.pointer_listener_states.as_ptr(),
+            "pointer listener state is copied into distinct Vec storage"
+        );
+        assert_ne!(
+            cloned.pointer_down_listener_hits.as_ptr(),
+            original.pointer_down_listener_hits.as_ptr(),
+            "pointer captures are copied into distinct Vec storage"
+        );
+        assert_eq!(
+            cloned.nested_event_registrations, original.nested_event_registrations,
+            "snapshot registration identities are retained"
+        );
+        assert_ne!(
+            cloned.nested_event_registrations.as_ptr(),
+            original.nested_event_registrations.as_ptr(),
+            "nested registrations are copied into distinct Vec storage"
+        );
+        assert!(
+            cloned.scripted_listener_action_instances.is_empty()
+                && cloned.scripted_instances_by_global.is_empty(),
+            "mutable script tables stay cold"
+        );
         let cloned_layer_ids = cloned
             .layers
             .iter()
@@ -13233,6 +13852,162 @@ mod scripted_listener_action_tests {
                 script("clone", true, false, ListenerFailure::None, &cloned_calls),
             )
             .expect("clone must accept a fresh table");
+
+        let cold_remount = scripted_listener_machine();
+        assert!(
+            cold_remount.queued_focus_events.is_empty()
+                && cold_remount.queued_semantic_events.is_empty()
+                && cold_remount.pointer_positions.is_empty()
+                && cold_remount.pointer_listener_states.is_empty()
+                && cold_remount.pointer_down_listener_hits.is_empty(),
+            "a cold remount starts without the snapshot's pending owned values"
+        );
+        assert!(
+            cold_remount.scripted_listener_action_instances.is_empty()
+                && cold_remount.scripted_instances_by_global.is_empty(),
+            "a cold remount also starts with cold script occurrence state"
+        );
+    }
+
+    #[test]
+    fn fl_c5_clone_teardown_dispose_is_repeatable_and_drop_order_is_observable() {
+        let receipt = Rc::new(RefCell::new(Vec::new()));
+        {
+            let mut machine = scripted_listener_machine();
+            machine.drop_phase_receipt = Some(Rc::clone(&receipt));
+            machine
+                .nested_event_registrations
+                .push(RuntimeNestedEventRegistration {
+                    source_local_id: 7,
+                    notifier_local_id: 8,
+                    kind: RuntimeNestedEventNotifierKind::LinearAnimation,
+                });
+            machine.dispose();
+            machine.dispose();
+            assert!(machine.disposed);
+            assert!(machine.nested_event_registrations.is_empty());
+        }
+        assert_eq!(
+            receipt.borrow().as_slice(),
+            ["nested-detach", "focus", "binds", "layers", "scripts"],
+            "manual dispose detaches once; Drop then preserves focus → binds → layers → scripts"
+        );
+
+        let implicit_receipt = Rc::new(RefCell::new(Vec::new()));
+        {
+            let mut machine = scripted_listener_machine();
+            machine.drop_phase_receipt = Some(Rc::clone(&implicit_receipt));
+            machine
+                .nested_event_registrations
+                .push(RuntimeNestedEventRegistration {
+                    source_local_id: 9,
+                    notifier_local_id: 10,
+                    kind: RuntimeNestedEventNotifierKind::StateMachine,
+                });
+        }
+        assert_eq!(
+            implicit_receipt.borrow().as_slice(),
+            ["focus", "nested-detach", "binds", "layers", "scripts"],
+            "Drop prevents a stale nested registration when explicit dispose was omitted"
+        );
+
+        let event_calls = Rc::new(RefCell::new(Vec::new()));
+        let (mut event_artboard, mut event_machine, _) =
+            scripted_drawable_input_artboard_and_machine(Box::new(RecordingDrawableInputScript {
+                label: "dispose event",
+                methods: Vec::new(),
+                handled: false,
+                calls: event_calls,
+            }));
+        let event_listener = |target_local_id| RuntimeStateMachineListener {
+            target_local_id,
+            is_single: false,
+            listener_types: vec![RuntimeListenerType::Event],
+            event_local_indices: vec![7],
+            view_model_path: None,
+            view_model_input_types: Vec::new(),
+            gamepad_input_types: Vec::new(),
+            keyboard_input_types: Vec::new(),
+            semantic_input_types: Vec::new(),
+            hit_paths: Vec::new(),
+            listener_actions: vec![RuntimeScheduledListenerAction::FocusClear(
+                RuntimeFocusActionClear::for_test(0),
+            )],
+        };
+        let event = StateMachineReportedEvent {
+            event_local_index: 7,
+            event_core_type: 128,
+            name: Some("nested".to_owned()),
+            url: None,
+            target: None,
+            properties: Vec::new(),
+            string_properties: Vec::new(),
+            seconds_delay: 0.0,
+            context: None,
+        };
+        event_machine.listener_definitions = Arc::new(vec![event_listener(7)]);
+        event_machine
+            .nested_event_registrations
+            .push(RuntimeNestedEventRegistration {
+                source_local_id: 7,
+                notifier_local_id: 8,
+                kind: RuntimeNestedEventNotifierKind::StateMachine,
+            });
+        assert!(event_machine.notify_events(&mut event_artboard, Some(7), &[event.clone()]));
+        assert!(!event_machine.focus.target_has_focus(1));
+        assert!(event_machine.focus.set_focus_target(1));
+        event_machine.dispose();
+        event_machine.dispose();
+        assert!(!event_machine.notify_events(&mut event_artboard, Some(7), &[event.clone()]));
+        assert!(
+            event_machine.focus.target_has_focus(1),
+            "a detached child source can no longer clear the parent's focus"
+        );
+        event_machine.listener_definitions = Arc::new(vec![event_listener(0)]);
+        assert!(event_machine.notify_events(&mut event_artboard, None, &[event]));
+        assert!(
+            !event_machine.focus.target_has_focus(1),
+            "dispose detaches nested sources without disabling unrelated local events"
+        );
+
+        let focus_calls = Rc::new(RefCell::new(Vec::new()));
+        let (_artboard, mut focus_owner, _) =
+            scripted_drawable_input_artboard_and_machine(Box::new(RecordingDrawableInputScript {
+                label: "focus owner",
+                methods: Vec::new(),
+                handled: false,
+                calls: focus_calls,
+            }));
+        {
+            let mut externally_managed = scripted_listener_machine();
+            externally_managed.install_external_focus(&focus_owner.focus, 99);
+        }
+        assert!(
+            focus_owner.focus.target_has_focus(1),
+            "dropping an external focus projection leaves its owner's tree intact"
+        );
+
+        let mut retained_external = scripted_listener_machine();
+        {
+            let focus_calls = Rc::new(RefCell::new(Vec::new()));
+            let (_artboard, internal_owner, _) = scripted_drawable_input_artboard_and_machine(
+                Box::new(RecordingDrawableInputScript {
+                    label: "internal focus owner",
+                    methods: Vec::new(),
+                    handled: false,
+                    calls: focus_calls,
+                }),
+            );
+            retained_external.install_external_focus(&internal_owner.focus, 101);
+            assert!(
+                !retained_external.focus.focused_listener_chain().is_empty(),
+                "the retained projection observes the internal owner's focus"
+            );
+        }
+        assert!(
+            retained_external.focus.focused_listener_chain().is_empty(),
+            "dropping the internal owner clears focus before external Rc projections survive"
+        );
     }
 
     #[test]

@@ -80184,6 +80184,128 @@ fn state_machine_added_phases_match_cpp() {
 }
 
 #[test]
+fn fl_c5_constructor_order_source_and_runtime_boundaries_match_cpp() {
+    let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let cpp_path = PathBuf::from(runtime_root).join("src/animation/state_machine_instance.cpp");
+    let cpp_source = std::fs::read_to_string(&cpp_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", cpp_path.display()));
+    let constructor_start = cpp_source
+        .find("StateMachineInstance::StateMachineInstance")
+        .expect("pinned C++ constructor");
+    let constructor_end = cpp_source[constructor_start..]
+        .find("StateMachineInstance::scriptedObject")
+        .map(|offset| constructor_start + offset)
+        .expect("pinned C++ constructor end");
+    let constructor = &cpp_source[constructor_start..constructor_end];
+    let positions = [
+        "m_inputInstances.resize(count)",
+        "m_layers = new StateMachineLayerInstance",
+        "auto dataBindCount = machine->dataBindCount()",
+        "for (std::size_t i = 0; i < machine->listenerCount(); i++)",
+        "component->listenerGroups()",
+        "for (auto nestedArtboard : instance->nestedArtboards())",
+        "for (auto& scriptedOb : machine->scriptedObjects())",
+        "sortHitComponents()",
+        "m_artboardInstance->buildFocusTree",
+    ]
+    .map(|needle| {
+        constructor
+            .find(needle)
+            .unwrap_or_else(|| panic!("missing C++ constructor phase {needle}"))
+    });
+    assert!(
+        positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "pinned C++ constructor phases must remain strictly ordered"
+    );
+
+    let rust_path =
+        repo_root().join("crates/nuxie-runtime/src/state_machine/state_machine_instance.rs");
+    let rust_source = std::fs::read_to_string(&rust_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", rust_path.display()));
+    let rust_constructor_start = rust_source
+        .find("pub(crate) fn new(")
+        .expect("Rust StateMachineInstance::new");
+    let rust_constructor_end = rust_source[rust_constructor_start..]
+        .find("fn initialize_ordinary_data_bind_container")
+        .map(|offset| rust_constructor_start + offset)
+        .expect("Rust constructor end");
+    let rust_constructor = &rust_source[rust_constructor_start..rust_constructor_end];
+    let rust_positions = [
+        "RuntimeConstructorPhase::Inputs",
+        "initialize_layers_in_authored_order",
+        "initialize_ordinary_data_bind_container",
+        "initialize_authored_listener_categories",
+        "initialize_component_provided_groups",
+        "initialize_nested_list_text_hit_ownership",
+        "initialize_scripted_clones_and_facilities",
+        "sort_hit_ownership_skeleton",
+        "build_initial_focus_tree",
+    ]
+    .map(|needle| {
+        rust_constructor
+            .find(needle)
+            .unwrap_or_else(|| panic!("missing Rust constructor phase {needle}"))
+    });
+    assert!(
+        rust_positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "Rust constructor phase ownership must match the pinned C++ order"
+    );
+
+    let bytes = synthetic_fl_c5_empty_state_machine(90_506);
+    let (_, mut rust) =
+        read_rust_instance_from_bytes(&bytes, "synthetic/fl_c5_wp2_empty_instance.riv");
+    let mut machine = rust
+        .state_machine_instance(0)
+        .expect("Rust empty state-machine occurrence");
+    assert_eq!(machine.input_count(), 0);
+    assert!(machine.current_animation(0).is_none());
+    machine.dispose();
+    machine.dispose();
+}
+
+#[test]
+fn fl_c5_dispose_nested_event_source_order_and_rust_idempotence() {
+    let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let cpp_path = PathBuf::from(runtime_root).join("src/animation/state_machine_instance.cpp");
+    let cpp_source = std::fs::read_to_string(&cpp_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", cpp_path.display()));
+    let dispose_start = cpp_source
+        .find("void StateMachineInstance::dispose()")
+        .expect("pinned C++ dispose");
+    let dispose_end = cpp_source[dispose_start..]
+        .find("#ifdef WITH_RIVE_TOOLS")
+        .map(|offset| dispose_start + offset)
+        .expect("pinned C++ removeEventListeners end");
+    let lifecycle = &cpp_source[dispose_start..dispose_end];
+    assert!(
+        lifecycle.find("removeEventListeners();") < lifecycle.find("nestedArtboards()")
+            && lifecycle.find("nestedArtboards()") < lifecycle.find("nestedAnimations()")
+            && lifecycle.find("nestedAnimations()")
+                < lifecycle.find("removeNestedEventListener(this)"),
+        "dispose must delegate to current nested traversal before removing every notifier registration"
+    );
+    assert_eq!(
+        lifecycle.matches("removeNestedEventListener(this)").count(),
+        2,
+        "state-machine and linear-animation notifiers both detach"
+    );
+
+    let bytes = synthetic_fl_c5_empty_state_machine(90_507);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, "synthetic/fl_c5_wp2_dispose.riv");
+    let mut machine = rust
+        .state_machine_instance(0)
+        .expect("Rust empty state-machine occurrence");
+    machine.dispose();
+    machine.dispose();
+    assert!(
+        !rust.advance_state_machine_instance(&mut machine, 0.0),
+        "a repeatedly disposed empty occurrence remains inert"
+    );
+}
+
+#[test]
 fn state_machine_required_system_states_reject_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");

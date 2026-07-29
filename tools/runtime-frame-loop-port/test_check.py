@@ -1616,6 +1616,147 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     textwrap.dedent(safe),
                 )
 
+    def test_fl_c5_instance_lifecycle_live_ratchets_reject_forbidden_shapes(
+        self,
+    ) -> None:
+        source = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+        cases = [
+            (
+                "state_machine_instance_constructor_phase_reorder",
+                """
+                fn new(&mut self) {
+                    self.initialize_ordinary_data_bind_container();
+                    self.initialize_layers_in_authored_order(machine);
+                }
+                """,
+                """
+                fn new(&mut self) {
+                    self.initialize_layers_in_authored_order(machine);
+                    self.initialize_ordinary_data_bind_container();
+                }
+                """,
+            ),
+            (
+                "state_machine_queued_event_default_sentinel",
+                """
+                #[derive(Debug, Default)]
+                struct RuntimeQueuedFocusEvent {
+                    listener_index: usize,
+                    is_focus: bool,
+                }
+                """,
+                """
+                #[derive(Debug)]
+                struct RuntimeQueuedFocusEvent {
+                    listener_index: usize,
+                    is_focus: bool,
+                }
+                """,
+            ),
+            (
+                "state_machine_lifecycle_shallow_clone",
+                """
+                fn clone(&self) {
+                    let queue = Rc::clone(&self.queued_focus_events);
+                }
+                """,
+                """
+                fn clone(&self) {
+                    let queue = self.queued_focus_events.clone();
+                }
+                """,
+            ),
+            (
+                "state_machine_dispose_missing_nested_detach",
+                """
+                impl StateMachineInstance {
+                    pub fn dispose(&mut self) {
+                        self.disposed = true;
+                    }
+                }
+                """,
+                """
+                impl StateMachineInstance {
+                    pub fn dispose(&mut self) {
+                        self.detach_nested_event_registrations();
+                        self.disposed = true;
+                    }
+                }
+                """,
+            ),
+            (
+                "state_machine_teardown_bind_layer_script_reorder",
+                """
+                impl Drop for StateMachineInstance {
+                    fn drop(&mut self) {
+                        self.teardown_layers();
+                        self.teardown_bind_occurrences();
+                        self.teardown_script_occurrences();
+                    }
+                }
+                """,
+                """
+                impl Drop for StateMachineInstance {
+                    fn drop(&mut self) {
+                        self.teardown_bind_occurrences();
+                        self.teardown_layers();
+                        self.teardown_script_occurrences();
+                    }
+                }
+                """,
+            ),
+            (
+                "state_machine_teardown_bind_layer_script_reorder",
+                """
+                impl Drop for StateMachineInstance {
+                    fn drop(&mut self) {
+                        self.teardown_bind_occurrences();
+                        self.teardown_script_occurrences();
+                        self.teardown_layers();
+                    }
+                }
+                """,
+                """
+                impl Drop for StateMachineInstance {
+                    fn drop(&mut self) {
+                        self.teardown_bind_occurrences();
+                        self.teardown_layers();
+                        self.teardown_script_occurrences();
+                    }
+                }
+                """,
+            ),
+            (
+                "state_machine_teardown_bind_layer_script_reorder",
+                """
+                impl Drop for StateMachineInstance {
+                    fn drop(&mut self) {
+                        self.teardown_script_occurrences();
+                        self.teardown_bind_occurrences();
+                        self.teardown_layers();
+                    }
+                }
+                """,
+                """
+                impl Drop for StateMachineInstance {
+                    fn drop(&mut self) {
+                        self.teardown_bind_occurrences();
+                        self.teardown_layers();
+                        self.teardown_script_occurrences();
+                    }
+                }
+                """,
+            ),
+        ]
+        for ratchet_id, forbidden, safe in cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    textwrap.dedent(forbidden),
+                    textwrap.dedent(safe),
+                )
+
     def test_fl_c4_negative_ratchets_reject_displaced_listener_action_shapes(self) -> None:
         cases = [
             (

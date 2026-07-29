@@ -929,6 +929,36 @@ pattern = "(?m)(?:^\\s*(?:pub(?:\\([^)]*\\))?\\s+)?struct\\s+RuntimeStateMachine
 max_occurrences = 0
 
 [[ratchet]]
+id = "state_machine_instance_constructor_phase_reorder"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "initialize_ordinary_data_bind_container\\(\\);[\\s\\S]{0,500}initialize_layers_in_authored_order\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_queued_event_default_sentinel"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:#\\s*\\[\\s*derive\\([^)]*Default[^)]*\\)\\][\\s\\S]{0,160}struct\\s+RuntimeQueued(?:Focus|Semantic)Event\\b|impl\\s+Default\\s+for\\s+RuntimeQueued(?:Focus|Semantic)Event\\b)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_lifecycle_shallow_clone"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:Arc|Rc)::clone\\(\\s*&self\\.(?:queued_focus_events|queued_semantic_events|nested_event_registrations|pointer_down_listener_hits|pointer_listener_states|pointer_positions|scripted_listener_action_instances|scripted_instances_by_global)\\s*\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_dispose_missing_nested_detach"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "pub\\s+fn\\s+dispose\\s*\\([^)]*\\)\\s*\\{(?:(?!detach_nested_event_registrations)[\\s\\S]){0,500}\\}"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_teardown_bind_layer_script_reorder"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "impl\\s+Drop\\s+for\\s+StateMachineInstance[\\s\\S]{0,1000}(?:self\\.teardown_layers\\(\\);[\\s\\S]{0,200}self\\.teardown_bind_occurrences\\(\\)|self\\.teardown_script_occurrences\\(\\);[\\s\\S]{0,200}self\\.teardown_(?:bind_occurrences|layers)\\(\\))"
+max_occurrences = 0
+
+[[ratchet]]
 id = "data_bind_per_type_target_to_source_path"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "(?m)^\\s*(?:pub\\(crate\\)\\s+)?fn\\s+apply_default_view_model_(?:number|symbol_list_index|boolean|string|color|enum|asset|artboard|list|trigger|view_model)(?:_public_update)?_targets_to_sources(?:_with_options)?\\b"

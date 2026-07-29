@@ -16076,6 +16076,48 @@ fn synthetic_state_machine_blend_state_pause_on_exit(file_id: u64) -> Vec<u8> {
     })
 }
 
+fn synthetic_fl_c5_state_machine_definition(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "StateMachine", |bytes| {
+            push_string_property(bytes, "StateMachine", "name", "definition");
+        });
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "duplicate");
+        });
+        push_object_with_properties(bytes, "StateMachineNumber", |bytes| {
+            push_string_property(bytes, "StateMachineNumber", "name", "duplicate");
+        });
+        push_object_with_properties(bytes, "StateMachineTrigger", |bytes| {
+            push_string_property(bytes, "StateMachineTrigger", "name", "Case");
+        });
+        for name in ["duplicate", "duplicate", "Case"] {
+            push_object_with_properties(bytes, "StateMachineLayer", |bytes| {
+                push_string_property(bytes, "StateMachineLayer", "name", name);
+            });
+            push_object_with_properties(bytes, "AnyState", |_| {});
+            push_object_with_properties(bytes, "EntryState", |_| {});
+            push_object_with_properties(bytes, "ExitState", |_| {});
+        }
+        // No listener input type makes the first authored listener inert. Its
+        // generated targetId remains u32::MAX. The second occurrence is valid
+        // and must remain at authored index one.
+        push_object_with_properties(bytes, "StateMachineListener", |_| {});
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+        });
+    })
+}
+
+fn synthetic_fl_c5_empty_state_machine(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+    })
+}
+
 fn read_cpp_probe_bytes(probe: &Path, label: &str, bytes: &[u8]) -> CppProbeFile {
     read_cpp_probe_bytes_with_args(probe, label, bytes, &[])
 }
@@ -79700,6 +79742,231 @@ fn state_machine_direct_blend_state_transition_matches_cpp_probe() {
 }
 
 #[test]
+fn fl_c5_state_machine_definition_empty_and_missing_importer_match_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let empty_label = "synthetic/fl_c5_empty_state_machine.riv";
+    let empty_bytes = synthetic_fl_c5_empty_state_machine(90_501);
+    let cpp = read_cpp_probe_bytes(&probe, empty_label, &empty_bytes);
+    let (_, rust) = read_rust_instance_from_bytes(&empty_bytes, empty_label);
+    let cpp_machine = &cpp.artboards[0].state_machines[0];
+    let rust_machine = rust.state_machine(0).expect("Rust empty StateMachine");
+    assert_eq!(cpp_machine.index, 0);
+    assert_eq!(cpp_machine.name, "");
+    assert_eq!(cpp_machine.layer_count, rust_machine.layer_count());
+    assert_eq!(cpp_machine.input_count, rust_machine.input_count());
+    assert_eq!(cpp_machine.listener_count, rust_machine.listener_count());
+    assert_eq!(cpp_machine.data_bind_count, rust_machine.data_bind_count());
+    assert_eq!(
+        cpp_machine.scripted_object_count,
+        rust_machine.scripted_object_count()
+    );
+    assert_eq!(
+        (
+            cpp_machine.layer_count,
+            cpp_machine.input_count,
+            cpp_machine.listener_count,
+            cpp_machine.data_bind_count,
+            cpp_machine.scripted_object_count,
+        ),
+        (0, 0, 0, 0, 0)
+    );
+
+    let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let source = std::fs::read_to_string(
+        PathBuf::from(runtime_root).join("src/animation/state_machine.cpp"),
+    )
+    .expect("read pinned C++ StateMachine source");
+    let import_start = source
+        .find("StatusCode StateMachine::import")
+        .expect("C++ StateMachine::import");
+    let import_end = source[import_start..]
+        .find("void StateMachine::addLayer")
+        .map(|offset| import_start + offset)
+        .expect("end of C++ StateMachine::import");
+    let import_body = &source[import_start..import_end];
+    assert!(
+        import_body.contains("if (artboardImporter == nullptr)")
+            && import_body.contains("return StatusCode::MissingObject;")
+            && import_body.find("return StatusCode::MissingObject;")
+                < import_body.find("artboardImporter->addStateMachine(this);"),
+        "pinned C++ must reject a missing ArtboardImporter before attachment"
+    );
+    assert!(
+        import_body.contains("return Super::import(importStack);"),
+        "successful C++ attachment must still delegate to Super::import"
+    );
+}
+
+#[test]
+fn fl_c5_state_machine_definition_authored_collections_match_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/fl_c5_state_machine_definition_collections.riv";
+    let bytes = synthetic_fl_c5_state_machine_definition(90_503);
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let cpp_machine = &cpp.artboards[0].state_machines[0];
+    let rust_machine = rust.state_machine(0).expect("Rust StateMachine definition");
+
+    assert_eq!(cpp_machine.name, "definition");
+    assert_eq!(cpp_machine.layer_count, rust_machine.layer_count());
+    assert_eq!(cpp_machine.input_count, rust_machine.input_count());
+    assert_eq!(cpp_machine.listener_count, rust_machine.listener_count());
+    assert_eq!(cpp_machine.data_bind_count, rust_machine.data_bind_count());
+    assert_eq!(
+        cpp_machine.scripted_object_count,
+        rust_machine.scripted_object_count()
+    );
+    assert_eq!(
+        cpp_machine
+            .inputs
+            .iter()
+            .map(|input| input
+                .as_ref()
+                .map(|input| (input.index, input.name.as_str())))
+            .collect::<Vec<_>>(),
+        vec![
+            Some((0, "duplicate")),
+            Some((1, "duplicate")),
+            Some((2, "Case")),
+        ]
+    );
+    assert_eq!(
+        cpp_machine
+            .layers
+            .iter()
+            .map(|layer| (layer.index, layer.name.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(0, "duplicate"), (1, "duplicate"), (2, "Case")]
+    );
+    assert_eq!(
+        rust_machine
+            .input_named("duplicate")
+            .map(|input| input.global_id),
+        rust_machine.input_at(0).map(|input| input.global_id)
+    );
+    assert!(rust_machine.input_named("DUPLICATE").is_none());
+    assert_eq!(
+        rust_machine
+            .layer_named("duplicate")
+            .map(|layer| layer.global_id),
+        rust_machine.layer_at(0).map(|layer| layer.global_id)
+    );
+    assert!(rust_machine.layer_named("case").is_none());
+}
+
+#[test]
+fn malformed_listener_retains_authored_index() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/fl_c5_malformed_listener_index.riv";
+    let bytes = synthetic_fl_c5_state_machine_definition(90_504);
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let cpp_machine = &cpp.artboards[0].state_machines[0];
+    let rust_machine = rust.state_machine(0).expect("Rust StateMachine definition");
+
+    assert_eq!(
+        cpp_machine
+            .listeners
+            .iter()
+            .map(|listener| (listener.index, listener.target_id))
+            .collect::<Vec<_>>(),
+        [(0, u64::from(u32::MAX)), (1, 0)]
+    );
+    assert_eq!(cpp_machine.listener_count, 2);
+    assert_eq!(
+        rust_machine.listener_count(),
+        2,
+        "the inert listener must not compact the later valid listener out of authored index one"
+    );
+}
+
+#[test]
+fn state_machine_added_phases_match_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let source_path = PathBuf::from(runtime_root).join("src/animation/state_machine.cpp");
+    let source = std::fs::read_to_string(&source_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", source_path.display()));
+    let member_body = |start: &str, end: &str| {
+        let start = source.find(start).expect("pinned member start");
+        let end = source[start..]
+            .find(end)
+            .map(|offset| start + offset)
+            .expect("pinned member end");
+        &source[start..end]
+    };
+
+    for (member, next) in [
+        (
+            "StatusCode StateMachine::onAddedDirty",
+            "StatusCode StateMachine::onAddedClean",
+        ),
+        (
+            "StatusCode StateMachine::onAddedClean",
+            "StatusCode StateMachine::import",
+        ),
+    ] {
+        let body = member_body(member, next);
+        let inputs = body.find("m_Inputs").expect("inputs phase");
+        let layers = body.find("m_Layers").expect("layers phase");
+        let listeners = body.find("m_Listeners").expect("listeners phase");
+        assert!(
+            inputs < layers && layers < listeners,
+            "{member} phase order"
+        );
+        assert_eq!(
+            body.matches("return code;").count(),
+            3,
+            "{member} must stop on the first child failure"
+        );
+        assert!(
+            !body.contains("m_dataBinds") && !body.contains("m_scriptedObjects"),
+            "{member} must not visit definition collections outside the pinned three phases"
+        );
+    }
+
+    let import = member_body(
+        "StatusCode StateMachine::import",
+        "void StateMachine::addLayer",
+    );
+    assert!(
+        import.find("artboardImporter == nullptr") < import.find("addStateMachine(this)"),
+        "missing importer must fail before attachment"
+    );
+    assert!(
+        import.find("addStateMachine(this)") < import.find("Super::import(importStack)"),
+        "attachment must precede the superclass import status"
+    );
+
+    // A layer failure is observable through both real runtimes. The source
+    // comparison above locks the earlier input callbacks and later-listener
+    // suppression; the focused Rust unit test records the retained earlier
+    // callbacks to prove the documented no-rollback adaptation.
+    let label = "synthetic/fl_c5_added_dirty_invalid_layer.riv";
+    let bytes = synthetic_state_machine_missing_system_state(90_505, "ExitState");
+    assert!(!cpp_probe_accepts_bytes(&probe, label, &bytes));
+    assert!(!rust_accepts_artboard_instance(&bytes));
+}
+
+#[test]
 fn state_machine_required_system_states_reject_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -81534,6 +81801,8 @@ struct CppArtboard {
     #[serde(rename = "objectCount")]
     object_count: usize,
     objects: Vec<Option<CppObject>>,
+    #[serde(default, rename = "stateMachines")]
+    state_machines: Vec<CppStateMachineDefinition>,
     #[serde(default, rename = "drawCommandStream")]
     draw_command_stream: Vec<CppDrawCommand>,
     #[serde(rename = "runtimeUpdate")]
@@ -81546,6 +81815,35 @@ struct CppArtboard {
     data_binds: Vec<CppArtboardDataBind>,
     #[serde(default, rename = "nestedStateMachines")]
     nested_state_machines: Vec<CppNestedStateMachine>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppStateMachineDefinition {
+    index: usize,
+    name: String,
+    layer_count: usize,
+    input_count: usize,
+    listener_count: usize,
+    data_bind_count: usize,
+    scripted_object_count: usize,
+    layers: Vec<CppStateMachineDefinitionComponent>,
+    inputs: Vec<Option<CppStateMachineDefinitionComponent>>,
+    listeners: Vec<CppStateMachineDefinitionListener>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppStateMachineDefinitionComponent {
+    index: usize,
+    name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppStateMachineDefinitionListener {
+    index: usize,
+    target_id: u64,
 }
 
 #[derive(Debug, Deserialize)]

@@ -899,6 +899,36 @@ pattern = "(?m)^pub\\(super\\) fn runtime_state_machine_data_bind_templates\\b(?
 max_occurrences = 0
 
 [[ratchet]]
+id = "state_machine_listener_slot_compaction"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "state_machine\\s*\\.\\s*listeners\\s*\\.\\s*(?:iter|into_iter)\\(\\)(?:\\s*\\.\\s*(?:enumerate|cloned|copied|inspect|map)\\s*\\([^)]*\\)){0,3}\\s*\\.\\s*(?:filter|filter_map|flatten|map_while|dedup|dedup_by|dedup_by_key|sort|sort_by|sort_by_key|sort_unstable|sort_unstable_by|sort_unstable_by_key)\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_input_slot_flattening"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "state_machine\\s*\\.\\s*inputs\\s*\\.\\s*(?:iter|into_iter)\\(\\)(?:\\s*\\.\\s*(?:enumerate|cloned|copied|inspect|map)\\s*\\([^)]*\\)){0,3}\\s*\\.\\s*(?:filter|filter_map|flatten|map_while|dedup|dedup_by|dedup_by_key|sort|sort_by|sort_by_key|sort_unstable|sort_unstable_by|sort_unstable_by_key)\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_other_authored_collection_drop_or_reorder"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "state_machine\\s*\\.\\s*(?:layers|data_binds|scripted_objects)\\s*\\.\\s*(?:iter|into_iter)\\(\\)(?:\\s*\\.\\s*(?:enumerate|cloned|copied|inspect|map)\\s*\\([^)]*\\)){0,3}\\s*\\.\\s*(?:filter|filter_map|flatten|map_while|dedup|dedup_by|dedup_by_key|sort|sort_by|sort_by_key|sort_unstable|sort_unstable_by|sort_unstable_by_key)\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_authored_collection_map_or_set"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "(?:(?:inputs|listeners|layers|data_bind_templates|scripted_objects)\\s*:\\s*(?:Arc\\s*<\\s*)?(?:BTreeMap|HashMap|BTreeSet|HashSet|IndexMap|IndexSet)\\s*<|state_machine\\s*\\.\\s*(?:layers|inputs|listeners|data_binds|scripted_objects)\\s*\\.\\s*(?:iter|into_iter)\\(\\)(?:(?!;)[\\s\\S]){0,500}collect\\s*::\\s*<\\s*(?:BTreeMap|HashMap|BTreeSet|HashSet|IndexMap|IndexSet))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_definition_owner_in_root"
+globs = ["crates/nuxie-runtime/src/state_machine.rs"]
+pattern = "(?m)(?:^\\s*(?:pub(?:\\([^)]*\\))?\\s+)?struct\\s+RuntimeStateMachine\\b|^\\s*impl\\s+RuntimeStateMachine\\b|^\\s*(?:pub(?:\\([^)]*\\))?\\s+)?fn\\s+build_state_machines\\b)"
+max_occurrences = 0
+
+[[ratchet]]
 id = "data_bind_per_type_target_to_source_path"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "(?m)^\\s*(?:pub\\(crate\\)\\s+)?fn\\s+apply_default_view_model_(?:number|symbol_list_index|boolean|string|color|enum|asset|artboard|list|trigger|view_model)(?:_public_update)?_targets_to_sources(?:_with_options)?\\b"

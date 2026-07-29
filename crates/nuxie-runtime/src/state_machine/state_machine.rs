@@ -39,7 +39,81 @@ pub struct RuntimeStateMachine {
 }
 
 impl RuntimeStateMachine {
+    /// Number of authored layer definition occurrences.
+    pub fn layer_count(&self) -> usize {
+        self.layers.len()
+    }
+
+    /// Authored-index layer lookup. Out-of-range indices return `None`.
+    pub fn layer_at(&self, index: usize) -> Option<&RuntimeStateMachineLayer> {
+        self.layers.get(index)
+    }
+
+    /// Exact, case-sensitive, first-authored layer lookup.
+    pub fn layer_named(&self, name: &str) -> Option<&RuntimeStateMachineLayer> {
+        self.layers
+            .iter()
+            .find(|layer| layer.name.as_deref() == Some(name))
+    }
+
+    /// Number of authored input slots, including unsupported/null slots.
+    pub fn input_count(&self) -> usize {
+        self.inputs.len()
+    }
+
+    /// Authored-index input lookup.
+    ///
+    /// Both an out-of-range index and an in-range null compatibility slot
+    /// return `None`, matching the observable result of C++ `input(size_t)`.
+    pub fn input_at(&self, index: usize) -> Option<&RuntimeStateMachineInput> {
+        self.inputs.get(index).and_then(Option::as_ref)
+    }
+
+    /// Exact, case-sensitive, first-authored input lookup.
+    ///
+    /// Rust deliberately skips a retained null compatibility slot instead of
+    /// reproducing C++'s undefined null dereference in `input(std::string)`.
+    pub fn input_named(&self, name: &str) -> Option<&RuntimeStateMachineInput> {
+        self.inputs.iter().find_map(|input| {
+            input
+                .as_ref()
+                .filter(|input| input.name.as_deref() == Some(name))
+        })
+    }
+
+    /// Number of authored listener slots, including inert unbuildable slots.
+    pub fn listener_count(&self) -> usize {
+        self.listeners.len()
+    }
+
+    /// Authored-index listener lookup used by instance construction.
+    pub(crate) fn listener_at(&self, index: usize) -> Option<&RuntimeStateMachineListener> {
+        self.listeners.get(index)
+    }
+
+    /// Number of authored StateMachine DataBind occurrences.
+    pub fn data_bind_count(&self) -> usize {
+        self.data_bind_templates.len()
+    }
+
+    /// Authored-index lookup over the typed immutable DataBind adaptation.
+    pub(crate) fn data_bind_at(
+        &self,
+        index: usize,
+    ) -> Option<&RuntimeStateMachineDataBindTemplate> {
+        self.data_bind_templates.get(index)
+    }
+
+    /// Number of authored scripted-object occurrences.
+    pub fn scripted_object_count(&self) -> usize {
+        self.scripted_objects.len()
+    }
+
     /// Complete state-machine `ScriptedObject` collection in imported order.
+    ///
+    /// The immutable slice is the Rust equivalent of C++ returning a copied
+    /// pointer vector: callers can copy or clear their own `Vec` without
+    /// changing this definition owner.
     #[doc(hidden)]
     pub fn scripted_objects(&self) -> &[ScriptListenerActionDefinition] {
         &self.scripted_objects
@@ -50,9 +124,54 @@ impl RuntimeStateMachine {
     pub fn scripted_listener_actions(&self) -> &[ScriptListenerActionDefinition] {
         &self.scripted_listener_actions
     }
-}
 
-impl RuntimeStateMachine {
+    /// Existing-import-architecture adaptation of
+    /// `StateMachine::onAddedDirty`.
+    ///
+    /// Child owners supply their phase operation. This owner fixes the C++
+    /// traversal boundary: inputs, then layers, then listeners, returning the
+    /// first failure without rolling back successful earlier callbacks.
+    #[allow(dead_code)]
+    pub(crate) fn on_added_dirty<E>(
+        &self,
+        on_input: impl FnMut(usize, Option<&RuntimeStateMachineInput>) -> Result<(), E>,
+        on_layer: impl FnMut(usize, &RuntimeStateMachineLayer) -> Result<(), E>,
+        on_listener: impl FnMut(usize, &RuntimeStateMachineListener) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.visit_added_children(on_input, on_layer, on_listener)
+    }
+
+    /// Existing-import-architecture adaptation of
+    /// `StateMachine::onAddedClean`; ordering and first-error behavior are
+    /// intentionally identical to the dirty phase.
+    #[allow(dead_code)]
+    pub(crate) fn on_added_clean<E>(
+        &self,
+        on_input: impl FnMut(usize, Option<&RuntimeStateMachineInput>) -> Result<(), E>,
+        on_layer: impl FnMut(usize, &RuntimeStateMachineLayer) -> Result<(), E>,
+        on_listener: impl FnMut(usize, &RuntimeStateMachineListener) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.visit_added_children(on_input, on_layer, on_listener)
+    }
+
+    fn visit_added_children<E>(
+        &self,
+        mut on_input: impl FnMut(usize, Option<&RuntimeStateMachineInput>) -> Result<(), E>,
+        mut on_layer: impl FnMut(usize, &RuntimeStateMachineLayer) -> Result<(), E>,
+        mut on_listener: impl FnMut(usize, &RuntimeStateMachineListener) -> Result<(), E>,
+    ) -> Result<(), E> {
+        for (index, input) in self.inputs.iter().enumerate() {
+            on_input(index, input.as_ref())?;
+        }
+        for (index, layer) in self.layers.iter().enumerate() {
+            on_layer(index, layer)?;
+        }
+        for (index, listener) in self.listeners.iter().enumerate() {
+            on_listener(index, listener)?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn requires_post_update_state_probe(&self) -> bool {
         self.layers
             .iter()
@@ -61,6 +180,42 @@ impl RuntimeStateMachine {
             .flat_map(|transition| &transition.conditions)
             .any(RuntimeTransitionCondition::can_change_during_artboard_update)
     }
+}
+
+/// Retain one inert Rust slot for a C++ listener definition that the current
+/// Rust listener adaptation cannot build.
+///
+/// Generated C++ initializes an absent `targetId` to `u32::MAX`; malformed
+/// target/input/action relationships can still make the current Rust lowering
+/// return `None`. The source listener owner nevertheless occupies its authored
+/// vector index, so dropping it here would renumber every later listener.
+fn inert_state_machine_listener(
+    listener: &nuxie_binary::RuntimeStateMachineListener<'_>,
+) -> RuntimeStateMachineListener {
+    RuntimeStateMachineListener {
+        target_local_id: listener
+            .object
+            .uint_property("targetId")
+            .and_then(|target| usize::try_from(target).ok())
+            .unwrap_or(usize::MAX),
+        is_single: listener.object.type_name == "StateMachineListenerSingle",
+        listener_types: Vec::new(),
+        event_local_indices: Vec::new(),
+        view_model_path: None,
+        view_model_input_types: Vec::new(),
+        gamepad_input_types: Vec::new(),
+        keyboard_input_types: Vec::new(),
+        semantic_input_types: Vec::new(),
+        hit_paths: Vec::new(),
+        listener_actions: Vec::new(),
+    }
+}
+
+fn retain_state_machine_listener_slot(
+    listener: &nuxie_binary::RuntimeStateMachineListener<'_>,
+    built: Option<RuntimeStateMachineListener>,
+) -> RuntimeStateMachineListener {
+    built.unwrap_or_else(|| inert_state_machine_listener(listener))
 }
 
 pub(crate) fn build_state_machines<'a>(
@@ -167,19 +322,25 @@ pub(crate) fn build_state_machines_with_action_catalog<'a>(
             let scripted_listener_actions = state_machine
                 .scripted_objects
                 .iter()
-                .filter_map(|scripted| {
-                    Some((
+                .map(|scripted| {
+                    (
                         runtime_scripted_object_definition(
                             file,
                             scripted.object,
                             &scripted.inputs,
-                        )?,
+                        )
+                        .expect(
+                            "binary StateMachine scripted-object inventory contains supported kinds",
+                        ),
                         runtime_scripted_object_binding_definition(
                             file,
                             scripted.object,
                             &scripted.inputs,
-                        )?,
-                    ))
+                        )
+                        .expect(
+                            "every supported StateMachine scripted object has a binding recipe",
+                        ),
+                    )
                 })
                 .collect::<Vec<_>>();
             let scripted_object_bindings = scripted_listener_actions
@@ -216,14 +377,17 @@ pub(crate) fn build_state_machines_with_action_catalog<'a>(
                     state_machine
                         .listeners
                         .iter()
-                        .filter_map(|listener| {
-                            runtime_state_machine_listener(
-                                file,
-                                graph,
-                                &state_machine.inputs,
-                                &state_machine_data_binds,
+                        .map(|listener| {
+                            retain_state_machine_listener_slot(
                                 listener,
-                                &action_owners,
+                                runtime_state_machine_listener(
+                                    file,
+                                    graph,
+                                    &state_machine.inputs,
+                                    &state_machine_data_binds,
+                                    listener,
+                                    &action_owners,
+                                ),
                             )
                         })
                         .collect(),
@@ -1368,11 +1532,14 @@ mod animation_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data_bind_graph::{RuntimeDataBindGraphTarget, RuntimeDataBindGraphValue};
+    use crate::data_converter::RuntimeDataConverterDataBindDefinition;
     use crate::properties::property_key_for_name;
     use nuxie_binary::{
         AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile, read_runtime_file,
     };
     use nuxie_graph::GraphFile;
+    use std::cell::RefCell;
     use std::path::PathBuf;
 
     fn rive_runtime_fixture(name: &str) -> PathBuf {
@@ -1382,6 +1549,376 @@ mod tests {
         )
         .join("tests/unit_tests/assets")
         .join(name)
+    }
+
+    fn fl_c5_empty_listener(target_local_id: usize) -> RuntimeStateMachineListener {
+        RuntimeStateMachineListener {
+            target_local_id,
+            is_single: false,
+            listener_types: Vec::new(),
+            event_local_indices: Vec::new(),
+            view_model_path: None,
+            view_model_input_types: Vec::new(),
+            gamepad_input_types: Vec::new(),
+            keyboard_input_types: Vec::new(),
+            semantic_input_types: Vec::new(),
+            hit_paths: Vec::new(),
+            listener_actions: Vec::new(),
+        }
+    }
+
+    fn fl_c5_definition_machine(
+        inputs: Vec<Option<RuntimeStateMachineInput>>,
+        listeners: Vec<RuntimeStateMachineListener>,
+        layers: Vec<RuntimeStateMachineLayer>,
+        scripted_objects: Vec<ScriptListenerActionDefinition>,
+    ) -> RuntimeStateMachine {
+        RuntimeStateMachine {
+            global_id: 1,
+            name: Some(Arc::from("definition")),
+            default_view_model_index: None,
+            inputs: Arc::new(inputs),
+            listeners: Arc::new(listeners),
+            layers: Arc::new(layers),
+            bindable_numbers: Arc::new(Vec::new()),
+            bindable_integers: Arc::new(Vec::new()),
+            bindable_colors: Arc::new(Vec::new()),
+            bindable_strings: Arc::new(Vec::new()),
+            bindable_enums: Arc::new(Vec::new()),
+            bindable_assets: Arc::new(Vec::new()),
+            bindable_artboards: Arc::new(Vec::new()),
+            bindable_lists: Arc::new(Vec::new()),
+            bindable_triggers: Arc::new(Vec::new()),
+            bindable_view_models: Arc::new(Vec::new()),
+            bindable_booleans: Arc::new(Vec::new()),
+            view_model_triggers: Arc::new(Vec::new()),
+            transition_duration_bindings: Arc::new(Vec::new()),
+            data_bind_templates: Arc::new(Vec::new()),
+            scripted_object_bindings: Vec::new(),
+            scripted_listener_actions: scripted_objects
+                .iter()
+                .filter(|definition| {
+                    definition.scripted_object_kind()
+                        == crate::ScriptedStateMachineObjectKind::ListenerAction
+                })
+                .cloned()
+                .collect(),
+            scripted_objects,
+            action_owners: RuntimeActionCoreArena::empty(),
+        }
+    }
+
+    fn fl_c5_layer(global_id: u32, name: &str) -> RuntimeStateMachineLayer {
+        RuntimeStateMachineLayer {
+            global_id,
+            name: Some(name.to_owned()),
+            states: Vec::new(),
+            entry_state_index: None,
+            any_state_index: None,
+            exit_state_index: None,
+        }
+    }
+
+    #[test]
+    fn fl_c5_definition_empty_machine_count_and_index_views() {
+        let machine = fl_c5_definition_machine(Vec::new(), Vec::new(), Vec::new(), Vec::new());
+
+        assert_eq!(machine.layer_count(), 0);
+        assert_eq!(machine.input_count(), 0);
+        assert_eq!(machine.listener_count(), 0);
+        assert_eq!(machine.data_bind_count(), 0);
+        assert_eq!(machine.scripted_object_count(), 0);
+        assert!(machine.layer_at(0).is_none());
+        assert!(machine.layer_at(usize::MAX).is_none());
+        assert!(machine.input_at(0).is_none());
+        assert!(machine.input_at(usize::MAX).is_none());
+        assert!(machine.listener_at(0).is_none());
+        assert!(machine.listener_at(usize::MAX).is_none());
+        assert!(machine.data_bind_at(0).is_none());
+        assert!(machine.data_bind_at(usize::MAX).is_none());
+        assert!(machine.input_named("missing").is_none());
+        assert!(machine.layer_named("missing").is_none());
+    }
+
+    #[test]
+    fn fl_c5_definition_authored_order_duplicates_names_and_null_slots() {
+        let scripted = ScriptListenerActionDefinition::with_inputs_and_kind(
+            70,
+            crate::ScriptedStateMachineObjectKind::ListenerAction,
+            usize::MAX,
+            String::new(),
+            false,
+            0,
+            Vec::new(),
+        );
+        let mut machine = fl_c5_definition_machine(
+            vec![
+                None,
+                Some(RuntimeStateMachineInput::new_bool(
+                    10,
+                    Some("duplicate".to_owned()),
+                    false,
+                )),
+                Some(RuntimeStateMachineInput::new_number(
+                    11,
+                    Some("duplicate".to_owned()),
+                    0.0,
+                )),
+                Some(RuntimeStateMachineInput::new_trigger(
+                    12,
+                    Some("Case".to_owned()),
+                )),
+            ],
+            vec![fl_c5_empty_listener(40), fl_c5_empty_listener(40)],
+            vec![
+                fl_c5_layer(20, "duplicate"),
+                fl_c5_layer(21, "duplicate"),
+                fl_c5_layer(22, "Case"),
+            ],
+            vec![scripted.clone(), scripted],
+        );
+        let duplicate_bind = |data_bind_index| RuntimeStateMachineDataBindTemplate {
+            data_bind_index,
+            authored_path: vec![1, 2],
+            resolved_path: vec![1, 2],
+            name_based: false,
+            context_bindable: true,
+            flags: 0,
+            converter: None,
+            converter_data_binds: RuntimeDataConverterDataBindDefinition::default(),
+            target: RuntimeDataBindGraphTarget::Number { global_id: 90 },
+            source_seed: RuntimeDataBindGraphValue::Untyped,
+            source_bound: false,
+            view_model_instance_ids: Vec::new(),
+        };
+        machine.data_bind_templates = Arc::new(vec![duplicate_bind(0), duplicate_bind(1)]);
+
+        assert_eq!(machine.input_count(), 4);
+        assert!(machine.input_at(0).is_none());
+        assert_eq!(machine.input_at(1).map(|input| input.global_id), Some(10));
+        assert_eq!(
+            machine
+                .input_named("duplicate")
+                .map(|input| input.global_id),
+            Some(10),
+            "the first authored duplicate wins"
+        );
+        assert!(machine.input_named("DUPLICATE").is_none());
+        assert_eq!(machine.layer_count(), 3);
+        assert_eq!(
+            machine
+                .layer_named("duplicate")
+                .map(|layer| layer.global_id),
+            Some(20),
+            "the first authored duplicate wins"
+        );
+        assert!(machine.layer_named("case").is_none());
+        assert_eq!(machine.listener_count(), 2);
+        assert_eq!(
+            machine
+                .listener_at(1)
+                .map(|listener| listener.target_local_id),
+            Some(40)
+        );
+        assert_eq!(machine.data_bind_count(), 2);
+        assert_eq!(
+            machine
+                .data_bind_at(1)
+                .map(|data_bind| data_bind.data_bind_index),
+            Some(1),
+            "duplicate-target DataBind occurrences retain authored indices"
+        );
+        assert_eq!(machine.scripted_object_count(), 2);
+        assert_eq!(
+            machine
+                .scripted_objects()
+                .iter()
+                .map(ScriptListenerActionDefinition::scripted_object_global_id)
+                .collect::<Vec<_>>(),
+            [70, 70]
+        );
+        let mut returned = machine.scripted_objects().to_vec();
+        returned.clear();
+        assert_eq!(
+            machine.scripted_object_count(),
+            2,
+            "caller mutation of a copied view cannot mutate the definition"
+        );
+    }
+
+    #[test]
+    fn fl_c5_definition_malformed_listener_retains_authored_slot() {
+        let type_key = |name: &str| {
+            nuxie_schema::definition_by_name(name)
+                .unwrap_or_else(|| panic!("missing schema definition {name}"))
+                .type_key
+                .int
+        };
+        let mut file = RuntimeFile::from_authoring_records(vec![
+            AuthoringRecord {
+                type_key: type_key("Backboard"),
+                properties: Vec::new(),
+            },
+            AuthoringRecord {
+                type_key: type_key("Artboard"),
+                properties: Vec::new(),
+            },
+            AuthoringRecord {
+                type_key: type_key("StateMachine"),
+                properties: Vec::new(),
+            },
+            AuthoringRecord {
+                type_key: type_key("StateMachineListener"),
+                properties: vec![AuthoringProperty {
+                    key: property_key_for_name("StateMachineListener", "targetId")
+                        .expect("targetId property"),
+                    value: AuthoringValue::Uint(7),
+                }],
+            },
+            AuthoringRecord {
+                type_key: type_key("StateMachineListenerSingle"),
+                properties: vec![AuthoringProperty {
+                    key: property_key_for_name("StateMachineListenerSingle", "targetId")
+                        .expect("targetId property"),
+                    value: AuthoringValue::Uint(0),
+                }],
+            },
+        ])
+        .expect("import listener-slot fixture");
+        let malformed = file
+            .objects
+            .iter_mut()
+            .flatten()
+            .find(|object| object.type_name == "StateMachineListener")
+            .expect("malformed listener object");
+        malformed
+            .properties
+            .iter_mut()
+            .find(|property| property.name == "targetId")
+            .expect("explicit targetId")
+            .value = nuxie_binary::FieldValue::Bool(false);
+        assert!(
+            malformed.uint_property("targetId").is_none(),
+            "fixture must exercise the unbuildable-listener branch"
+        );
+        let graph = GraphFile::from_runtime_file(&file).expect("build listener-slot graph");
+        let mut converter_cache = RuntimeDataBindGraphConverterBuildCache::default();
+        let machines = build_state_machines(
+            &file,
+            graph.artboards.first().expect("fixture artboard"),
+            &[],
+            &mut converter_cache,
+        );
+        let machine = machines.first().expect("fixture state machine");
+
+        assert_eq!(machine.listener_count(), 2);
+        let inert = machine.listener_at(0).expect("retained inert listener");
+        assert_eq!(inert.target_local_id, usize::MAX);
+        assert!(inert.listener_types.is_empty());
+        assert!(inert.listener_actions.is_empty());
+        assert_eq!(
+            machine
+                .listener_at(1)
+                .map(|listener| listener.target_local_id),
+            Some(0),
+            "the later valid listener keeps authored index one"
+        );
+    }
+
+    #[test]
+    fn fl_c5_definition_added_phases_keep_order_first_error_and_no_rollback() {
+        let machine = fl_c5_definition_machine(
+            vec![
+                Some(RuntimeStateMachineInput::new_trigger(10, None)),
+                Some(RuntimeStateMachineInput::new_trigger(11, None)),
+            ],
+            vec![fl_c5_empty_listener(30), fl_c5_empty_listener(31)],
+            vec![fl_c5_layer(20, "first"), fl_c5_layer(21, "second")],
+            Vec::new(),
+        );
+        let dirty_log = RefCell::new(Vec::new());
+        let dirty = machine.on_added_dirty(
+            |index, _| {
+                dirty_log.borrow_mut().push(("input", index));
+                Ok::<_, &'static str>(())
+            },
+            |index, _| {
+                dirty_log.borrow_mut().push(("layer", index));
+                if index == 1 {
+                    return Err("dirty layer failure");
+                }
+                Ok(())
+            },
+            |index, _| {
+                dirty_log.borrow_mut().push(("listener", index));
+                Ok(())
+            },
+        );
+        assert_eq!(dirty, Err("dirty layer failure"));
+        assert_eq!(
+            dirty_log.into_inner(),
+            [("input", 0), ("input", 1), ("layer", 0), ("layer", 1)],
+            "earlier callbacks stay observable and later collections do not run"
+        );
+
+        let clean_log = RefCell::new(Vec::new());
+        let clean = machine.on_added_clean(
+            |index, _| {
+                clean_log.borrow_mut().push(("input", index));
+                Ok::<_, &'static str>(())
+            },
+            |index, _| {
+                clean_log.borrow_mut().push(("layer", index));
+                Ok(())
+            },
+            |index, _| {
+                clean_log.borrow_mut().push(("listener", index));
+                if index == 0 {
+                    return Err("clean listener failure");
+                }
+                Ok(())
+            },
+        );
+        assert_eq!(clean, Err("clean listener failure"));
+        assert_eq!(
+            clean_log.into_inner(),
+            [
+                ("input", 0),
+                ("input", 1),
+                ("layer", 0),
+                ("layer", 1),
+                ("listener", 0)
+            ]
+        );
+    }
+
+    #[test]
+    fn fl_c5_definition_missing_importer_does_not_attach() {
+        let type_key = |name: &str| {
+            nuxie_schema::definition_by_name(name)
+                .unwrap_or_else(|| panic!("missing schema definition {name}"))
+                .type_key
+                .int
+        };
+        let error = RuntimeFile::from_authoring_records(vec![
+            AuthoringRecord {
+                type_key: type_key("Backboard"),
+                properties: Vec::new(),
+            },
+            AuthoringRecord {
+                type_key: type_key("StateMachine"),
+                properties: Vec::new(),
+            },
+            AuthoringRecord {
+                type_key: type_key("Artboard"),
+                properties: Vec::new(),
+            },
+        ])
+        .expect_err("a StateMachine without an ArtboardImporter must fail import");
+        assert!(
+            error.to_string().contains("MissingObject"),
+            "missing importer status was not retained: {error:#}"
+        );
     }
 
     #[test]

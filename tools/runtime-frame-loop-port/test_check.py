@@ -1492,6 +1492,130 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     safe,
                 )
 
+    def test_fl_c5_definition_collection_live_ratchets_reject_forbidden_shapes(
+        self,
+    ) -> None:
+        cases = [
+            (
+                "state_machine_listener_slot_compaction",
+                "crates/nuxie-runtime/src/state_machine/state_machine.rs",
+                """
+                fn build(state_machine: &Definition) {
+                    let listeners = state_machine
+                        .listeners
+                        .iter()
+                        .filter_map(build_listener);
+                }
+                """,
+                """
+                fn build(state_machine: &Definition) {
+                    let listeners = state_machine.listeners.iter().map(build_listener);
+                }
+                """,
+            ),
+            (
+                "state_machine_input_slot_flattening",
+                "crates/nuxie-runtime/src/state_machine/state_machine.rs",
+                """
+                fn build(state_machine: &Definition) {
+                    let inputs = state_machine
+                        .inputs
+                        .iter()
+                        .flatten();
+                }
+                """,
+                """
+                fn build(state_machine: &Definition) {
+                    let inputs = state_machine.inputs.iter().map(|input| input.as_ref());
+                }
+                """,
+            ),
+            (
+                "state_machine_authored_collection_map_or_set",
+                "crates/nuxie-runtime/src/state_machine/state_machine.rs",
+                """
+                struct RuntimeStateMachine {
+                    layers: HashSet<u32>,
+                }
+                """,
+                """
+                struct Definition {
+                    layers: Vec<u32>,
+                }
+                """,
+            ),
+            (
+                "state_machine_authored_collection_map_or_set",
+                "crates/nuxie-runtime/src/state_machine/state_machine.rs",
+                """
+                struct RuntimeStateMachine {
+                    inputs: Arc<HashMap<String, Input>>,
+                }
+                """,
+                """
+                struct Definition {
+                    inputs: Arc<Vec<Option<Input>>>,
+                }
+                """,
+            ),
+            (
+                "state_machine_other_authored_collection_drop_or_reorder",
+                "crates/nuxie-runtime/src/state_machine/state_machine.rs",
+                """
+                fn build(state_machine: &Definition) {
+                    let layers = state_machine
+                        .layers
+                        .iter()
+                        .enumerate()
+                        .filter_map(build_layer);
+                }
+                """,
+                """
+                fn build(state_machine: &Definition) {
+                    let layers = state_machine.layers.iter().map(build_layer);
+                }
+                """,
+            ),
+            (
+                "state_machine_other_authored_collection_drop_or_reorder",
+                "crates/nuxie-runtime/src/state_machine/state_machine.rs",
+                """
+                fn build(state_machine: &Definition) {
+                    let scripts = state_machine
+                        .scripted_objects
+                        .iter()
+                        .cloned()
+                        .filter_map(build_script);
+                }
+                """,
+                """
+                fn build(state_machine: &Definition) {
+                    let scripts = state_machine.scripted_objects.iter().map(build_script);
+                }
+                """,
+            ),
+            (
+                "state_machine_definition_owner_in_root",
+                "crates/nuxie-runtime/src/state_machine.rs",
+                """
+                impl RuntimeStateMachine {
+                    fn layer_count(&self) -> usize { 0 }
+                }
+                """,
+                """
+                pub use state_machine::RuntimeStateMachine;
+                """,
+            ),
+        ]
+        for ratchet_id, source, forbidden, safe in cases:
+            with self.subTest(ratchet=ratchet_id, source=source):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    textwrap.dedent(forbidden),
+                    textwrap.dedent(safe),
+                )
+
     def test_fl_c4_negative_ratchets_reject_displaced_listener_action_shapes(self) -> None:
         cases = [
             (

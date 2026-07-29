@@ -976,6 +976,33 @@ struct RuntimeNestedEventRegistration {
     kind: RuntimeNestedEventNotifierKind,
 }
 
+/// Cheap, owner-safe host projection of the selected focus manager.
+///
+/// This projects pinned C++ `StateMachineInstance::FocusState` without
+/// returning a borrowed manager or node pointer. Cross-owner/intrinsic
+/// `Focusable::acceptsKeyboardInput` lookup remains in the RECORDED
+/// `src/input/focus_manager.cpp` seam owned by manifest row B6-0238
+/// (`focus.rs`, DIVERGENT); the current Rust boundary reports registered
+/// keyboard/text capability only for this occurrence.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FocusState {
+    pub has_focus: bool,
+    pub expects_keyboard_input: bool,
+}
+
+/// Identity-only projection of the selected semantic-manager boundary.
+///
+/// The manager/tree/node implementation remains the RECORDED
+/// `src/semantic/semantic_manager.cpp` dependency, owned by absent manifest
+/// row B6-0329. This enum exists only so the owning StateMachineInstance can
+/// preserve selection and call order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeSemanticManagerSelection {
+    None,
+    InternalRecorded,
+    ExternalRecorded(u64),
+}
+
 /// C++ aggregate fields have no header initializers. These constructors force
 /// both values to be supplied and intentionally do not implement `Default`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1011,7 +1038,7 @@ impl RuntimeQueuedFocusEvent {
 /// both values to be supplied and intentionally do not implement `Default`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RuntimeQueuedSemanticEvent {
-    listener_index: usize,
+    listener_index: Option<usize>,
     action_type: u32,
 }
 
@@ -1025,17 +1052,30 @@ impl RuntimeQueuedSemanticEvent {
             return None;
         };
         Some(Self {
-            listener_index,
+            listener_index: Some(listener_index),
             action_type,
         })
     }
 
-    fn into_invocation(self) -> ScriptListenerInvocation {
-        ScriptListenerInvocation::Semantic {
-            listener_index: self.listener_index,
+    fn into_invocation(self) -> Option<ScriptListenerInvocation> {
+        Some(ScriptListenerInvocation::Semantic {
+            listener_index: self.listener_index?,
             action_type: self.action_type,
-        }
+        })
     }
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeDeferredCallbackProbe {
+    FocusQueuesSemantic {
+        listener_index: Option<usize>,
+        action_type: u32,
+    },
+    SemanticQueuesSemantic {
+        listener_index: Option<usize>,
+        action_type: u32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1372,7 +1412,24 @@ pub struct StateMachineInstance {
     /// projection releases only its `Rc` reference and leaves the shared
     /// owner's domain intact.
     focus: RuntimeFocusTree,
+    /// Retained C++ `m_focusManager` adaptation while an external manager is
+    /// selected. This stores the owner-safe internal projection, not manager
+    /// internals from the RECORDED `src/input/focus_manager.cpp` seam owned by
+    /// manifest row B6-0238 (`focus.rs`, DIVERGENT).
+    internal_focus: Option<RuntimeFocusTree>,
+    /// Selection flag paired with RuntimeFocusTree's owner-safe shared-domain
+    /// identity check for the C++ same-pointer no-op.
+    external_focus_manager_selected: bool,
     owns_focus_domain: bool,
+    #[cfg(test)]
+    focus_manager_phase_trace: Vec<&'static str>,
+    /// Instance-owned selection state only. Semantic manager/tree/node
+    /// internals remain the RECORDED `src/semantic/semantic_manager.cpp`
+    /// dependency owned by absent manifest row B6-0329.
+    internal_semantic_manager_enabled: bool,
+    external_semantic_manager_identity: Option<u64>,
+    #[cfg(test)]
+    semantic_manager_phase_trace: Vec<&'static str>,
     inputs: Vec<StateMachineInputInstance>,
     bindable_numbers: Vec<StateMachineBindableNumberInstance>,
     bindable_integers: Vec<StateMachineBindableIntegerInstance>,
@@ -1531,8 +1588,10 @@ pub struct StateMachineInstance {
     gamepad_scripted_drawables: Vec<gamepad_listener_group::RuntimeGamepadScriptedDrawable>,
     scripted_input_group_generation: u64,
     semantic_listener_groups: Vec<semantic_listener_group::RuntimeSemanticListenerGroup>,
-    queued_focus_events: Vec<ScriptListenerInvocation>,
-    queued_semantic_events: Vec<ScriptListenerInvocation>,
+    queued_focus_events: Vec<RuntimeQueuedFocusEvent>,
+    queued_semantic_events: Vec<RuntimeQueuedSemanticEvent>,
+    #[cfg(test)]
+    deferred_callback_probe: Option<RuntimeDeferredCallbackProbe>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2009,7 +2068,15 @@ impl Clone for StateMachineInstance {
                 .active_owned_view_model_advance_context
                 .clone(),
             focus: self.focus.clone(),
+            internal_focus: self.internal_focus.clone(),
+            external_focus_manager_selected: self.external_focus_manager_selected,
             owns_focus_domain: self.owns_focus_domain,
+            #[cfg(test)]
+            focus_manager_phase_trace: self.focus_manager_phase_trace.clone(),
+            internal_semantic_manager_enabled: self.internal_semantic_manager_enabled,
+            external_semantic_manager_identity: self.external_semantic_manager_identity,
+            #[cfg(test)]
+            semantic_manager_phase_trace: self.semantic_manager_phase_trace.clone(),
             inputs: self.inputs.clone(),
             bindable_numbers: self.bindable_numbers.clone(),
             bindable_integers: self.bindable_integers.clone(),
@@ -2124,6 +2191,8 @@ impl Clone for StateMachineInstance {
             // `StateMachineInstance::new` remains the cold-remount boundary.
             queued_focus_events: self.queued_focus_events.clone(),
             queued_semantic_events: self.queued_semantic_events.clone(),
+            #[cfg(test)]
+            deferred_callback_probe: self.deferred_callback_probe,
         };
         for layer in &mut cloned.layers {
             layer.refresh_view_model_trigger_layer_id();
@@ -2597,8 +2666,70 @@ impl StateMachineInstance {
         parent_focus: &RuntimeFocusTree,
         owner_identity: u64,
     ) {
+        if self.external_focus_manager_selected && self.focus.shares_manager(parent_focus) {
+            return;
+        }
+
+        // C++ calls cleanupFocusTree before assigning the new manager. The
+        // manager-owned cleanup algorithm remains RECORDED under
+        // `src/input/focus_manager.cpp`, manifest row B6-0238 (`focus.rs`,
+        // DIVERGENT); at this instance seam we preserve its observable
+        // focused-owner notification before selection changes.
+        self.clean_selected_focus_before_manager_switch();
+        self.record_focus_manager_phase("clean-tree-recorded-seam");
+        if !self.external_focus_manager_selected {
+            self.internal_focus = Some(std::mem::take(&mut self.focus));
+        }
         self.focus = parent_focus.external_for_owner(owner_identity);
+        self.external_focus_manager_selected = true;
         self.owns_focus_domain = false;
+        self.record_focus_manager_phase("assign-external");
+        // RECORDED seam: manifest row B6-0238 owns the manager/tree rebuild.
+        self.record_focus_manager_phase("rebuild-tree-recorded-seam");
+    }
+
+    /// Owner-safe external-to-null form of C++ `setExternalFocusManager`.
+    ///
+    /// The retained internal projection is selected again; no manager pointer
+    /// crosses the public Rust API.
+    pub fn clear_external_focus_manager(&mut self) -> bool {
+        if !self.external_focus_manager_selected {
+            return false;
+        }
+        self.clean_selected_focus_before_manager_switch();
+        self.record_focus_manager_phase("clean-tree-recorded-seam");
+        self.focus = self
+            .internal_focus
+            .take()
+            .expect("external focus selection retains its internal fallback");
+        self.external_focus_manager_selected = false;
+        self.owns_focus_domain = true;
+        self.record_focus_manager_phase("assign-internal");
+        // RECORDED seam: manifest row B6-0238 owns the manager/tree rebuild.
+        self.record_focus_manager_phase("rebuild-tree-recorded-seam");
+        true
+    }
+
+    fn record_focus_manager_phase(&mut self, phase: &'static str) {
+        #[cfg(test)]
+        self.focus_manager_phase_trace.push(phase);
+        #[cfg(not(test))]
+        let _ = phase;
+    }
+
+    fn clean_selected_focus_before_manager_switch(&mut self) {
+        // Queue callbacks that this occurrence can translate owner-safely.
+        // Cross-owner subtree cleanup remains inside RECORDED manifest row
+        // B6-0238 rather than approximating focus_manager.cpp tree removal.
+        let selected_owner = self.focus.owner_identity();
+        let focused_by_this_projection = self
+            .focus
+            .focused_listener_chain()
+            .first()
+            .is_some_and(|(owner, _, _)| *owner == selected_owner);
+        if focused_by_this_projection && self.focus.clear_focus() {
+            self.capture_focus_callbacks();
+        }
     }
 
     #[cfg(test)]
@@ -2759,7 +2890,15 @@ impl StateMachineInstance {
             active_file_view_model_binding: None,
             active_owned_view_model_advance_context: None,
             focus,
+            internal_focus: None,
+            external_focus_manager_selected: false,
             owns_focus_domain: true,
+            #[cfg(test)]
+            focus_manager_phase_trace: Vec::new(),
+            internal_semantic_manager_enabled: false,
+            external_semantic_manager_identity: None,
+            #[cfg(test)]
+            semantic_manager_phase_trace: Vec::new(),
             inputs,
             bindable_numbers,
             bindable_integers,
@@ -2848,6 +2987,8 @@ impl StateMachineInstance {
             semantic_listener_groups: Vec::new(),
             queued_focus_events: Vec::new(),
             queued_semantic_events: Vec::new(),
+            #[cfg(test)]
+            deferred_callback_probe: None,
         };
         instance.record_constructor_phase(RuntimeConstructorPhase::Inputs);
         instance.initialize_layers_in_authored_order(artboard, state_machine);
@@ -4976,6 +5117,51 @@ impl StateMachineInstance {
         self.change_focus(RuntimeFocusTree::clear_focus)
     }
 
+    /// Owner-safe adaptation of C++ `setFocus(FocusData*)`.
+    ///
+    /// Rust uses the target's mounted local identity instead of exposing a
+    /// borrowed `FocusData*`. `None`, or a retained FocusData whose node is no
+    /// longer present in this projection, follows the C++ clear-focus branch.
+    pub fn set_focus(&mut self, target_local_id: Option<usize>) -> bool {
+        self.change_focus(|focus| match target_local_id {
+            Some(target_local_id) if focus.has_focus_target(target_local_id) => {
+                focus.set_focus_target(target_local_id)
+            }
+            Some(_) | None => focus.clear_focus(),
+        })
+    }
+
+    /// C++ always owns an internal manager even while an external manager is
+    /// selected. Returning availability rather than a borrowed manager keeps
+    /// the Rust ownership boundary explicit.
+    pub fn internal_focus_manager(&self) -> bool {
+        true
+    }
+
+    pub fn has_external_focus_manager(&self) -> bool {
+        self.external_focus_manager_selected
+    }
+
+    /// Poll the selected manager without exposing manager/node ownership.
+    pub fn focus_state(&self) -> FocusState {
+        let focused_chain = self.focus.focused_listener_chain();
+        let has_focus = self.focus.has_primary_focus();
+        let expects_keyboard_input =
+            focused_chain
+                .iter()
+                .any(|(owner_identity, _, focus_data_local_id)| {
+                    *owner_identity == self.focus.owner_identity()
+                        && self
+                            .keyboard_listener_groups
+                            .iter()
+                            .any(|group| group.focus_data_local_id == *focus_data_local_id)
+                });
+        FocusState {
+            has_focus,
+            expects_keyboard_input,
+        }
+    }
+
     fn change_focus(&mut self, change: impl FnOnce(&mut RuntimeFocusTree) -> bool) -> bool {
         let changed = change(&mut self.focus);
         if changed {
@@ -4985,37 +5171,134 @@ impl StateMachineInstance {
     }
 
     fn capture_focus_callbacks(&mut self) {
-        let pending_before_capture = self.queued_focus_events.len();
+        let mut captured = Vec::new();
         for (target_local_id, focus_data_local_id, kind) in self.focus.take_owner_events() {
             for group in &self.focus_listener_groups {
                 if let Some(invocation) =
                     group.invocation_for(target_local_id, focus_data_local_id, kind)
                 {
-                    self.queued_focus_events.push(
-                        RuntimeQueuedFocusEvent::from_invocation(invocation)
-                            .expect("focus group creates a focus invocation")
-                            .into_invocation(),
-                    );
+                    let event = RuntimeQueuedFocusEvent::from_invocation(invocation)
+                        .expect("focus group creates a focus invocation");
+                    captured.push(event);
                 }
             }
         }
-        if self.queued_focus_events.len() != pending_before_capture {
-            self.needs_advance = true;
+        for event in captured {
+            self.queue_focus_event(event.listener_index, event.is_focus);
         }
+    }
+
+    fn queue_focus_event(&mut self, listener_index: usize, is_focus: bool) {
+        self.queued_focus_events.push(RuntimeQueuedFocusEvent {
+            listener_index,
+            is_focus,
+        });
+        self.needs_advance = true;
+    }
+
+    fn queue_semantic_event(&mut self, listener_index: Option<usize>, action_type: u32) {
+        self.queued_semantic_events
+            .push(RuntimeQueuedSemanticEvent {
+                listener_index,
+                action_type,
+            });
+        self.needs_advance = true;
+    }
+
+    fn semantic_manager_selection(&self) -> RuntimeSemanticManagerSelection {
+        if let Some(identity) = self.external_semantic_manager_identity {
+            RuntimeSemanticManagerSelection::ExternalRecorded(identity)
+        } else if self.internal_semantic_manager_enabled {
+            RuntimeSemanticManagerSelection::InternalRecorded
+        } else {
+            RuntimeSemanticManagerSelection::None
+        }
+    }
+
+    /// Owner-safe availability projection of C++ `semanticManager()`.
+    ///
+    /// The selected manager pointer and its internals remain at the RECORDED
+    /// absent-manifest-row B6-0329 boundary.
+    pub fn semantic_manager(&self) -> bool {
+        self.semantic_manager_selection() != RuntimeSemanticManagerSelection::None
+    }
+
+    /// Preserve the C++ idempotent create-then-build orchestration without
+    /// inventing semantic manager or tree internals in this owner.
+    pub fn enable_semantics(&mut self) -> bool {
+        if self.semantic_manager() {
+            return false;
+        }
+
+        // RECORDED seam: absent manifest row B6-0329,
+        // `src/semantic/semantic_manager.cpp`, owns manager construction and
+        // all tree/node internals.
+        self.internal_semantic_manager_enabled = true;
+        self.record_semantic_manager_phase("create-internal-recorded-seam");
+        self.record_semantic_manager_phase("build-tree-recorded-seam");
+        true
+    }
+
+    /// Owner-safe form of C++ `setExternalSemanticManager`.
+    ///
+    /// Only manager identity and clean/assign/rebuild order are represented
+    /// here. `parent_node_id` is carried to the RECORDED tree-building seam;
+    /// the owning implementation remains absent manifest row B6-0329,
+    /// `src/semantic/semantic_manager.cpp`.
+    pub fn set_external_semantic_manager(
+        &mut self,
+        manager_identity: Option<u64>,
+        parent_node_id: Option<u32>,
+    ) -> bool {
+        if self.external_semantic_manager_identity == manager_identity {
+            return false;
+        }
+
+        if self.semantic_manager() {
+            self.record_semantic_manager_phase("clean-tree-recorded-seam");
+        }
+        self.external_semantic_manager_identity = manager_identity;
+        self.record_semantic_manager_phase("assign-external");
+        let _ = parent_node_id;
+        self.record_semantic_manager_phase("build-tree-recorded-seam");
+        true
+    }
+
+    /// Dispatch orchestration up to the recorded manager/data boundaries.
+    ///
+    /// RECORDED seam: absent manifest row B6-0329,
+    /// `src/semantic/semantic_manager.cpp`, owns `nodeById`.
+    /// RECORDED seam: absent manifest row B6-0327,
+    /// `src/semantic/semantic_data.cpp`, owns action validation and
+    /// `fireSemanticTap`/`fireSemanticIncrease`/`fireSemanticDecrease`.
+    /// Until those owners land, missing manager, node, or data is an
+    /// owner-safe no-op and no local semantic tree is fabricated here.
+    pub fn fire_semantic_action(&mut self, semantic_node_id: u32, action_type: u32) -> bool {
+        if !self.semantic_manager() {
+            return false;
+        }
+        let _ = (semantic_node_id, action_type);
+        false
+    }
+
+    fn record_semantic_manager_phase(&mut self, phase: &'static str) {
+        #[cfg(test)]
+        self.semantic_manager_phase_trace.push(phase);
+        #[cfg(not(test))]
+        let _ = phase;
     }
 
     /// Queue one callback from an already-resolved SemanticData occurrence.
     ///
     /// C++ `SemanticListenerGroup` receives this callback from SemanticData.
-    /// The separate public `fireSemanticAction(semanticNodeId, ...)` manager
-    /// lookup belongs to the still-pending whole StateMachineInstance owner;
-    /// do not expose this local-id callback as that API.
+    /// The public node-id lookup above stops at the explicitly recorded
+    /// manager/data seams; do not expose this local-id callback as that API.
     pub(crate) fn semantic_action_for_target(
         &mut self,
         target_local_id: usize,
         action_type: u32,
     ) -> bool {
-        let mut queued = false;
+        let mut captured = Vec::new();
         for group in &self.semantic_listener_groups {
             if group.target_local_id != target_local_id {
                 continue;
@@ -5024,16 +5307,15 @@ impl StateMachineInstance {
                 continue;
             };
             if let Some(invocation) = group.invocation(listener, action_type) {
-                self.queued_semantic_events.push(
-                    RuntimeQueuedSemanticEvent::from_invocation(invocation)
-                        .expect("semantic group creates a semantic invocation")
-                        .into_invocation(),
-                );
-                queued = true;
+                let event = RuntimeQueuedSemanticEvent::from_invocation(invocation)
+                    .expect("semantic group creates a semantic invocation");
+                captured.push(event);
             }
         }
-        self.needs_advance |= queued;
-        queued
+        for event in &captured {
+            self.queue_semantic_event(event.listener_index, event.action_type);
+        }
+        !captured.is_empty()
     }
 
     /// Dispatch a keyboard event to the currently focused listener groups.
@@ -7083,29 +7365,7 @@ impl StateMachineInstance {
         // actions remain queued for the next frame.
         self.capture_focus_callbacks();
         self.record_advance_phase("focus-snapshot");
-        let focus_events = std::mem::take(&mut self.queued_focus_events);
-        let mut changed = false;
-        for invocation in focus_events {
-            let listener_index = match invocation {
-                ScriptListenerInvocation::Focus { listener_index, .. } => listener_index,
-                _ => continue,
-            };
-            let Some(listener) = self.listener_definitions.get(listener_index) else {
-                continue;
-            };
-            let actions = listener.listener_actions.clone();
-            let result = self.perform_listener_actions(
-                artboard,
-                &actions,
-                owned_context.as_deref_mut(),
-                &invocation,
-                &mut NoopScriptHost,
-            );
-            changed |= self.retain_script_result(result);
-            if self.script_error.is_some() {
-                break;
-            }
-        }
+        let mut changed = self.process_focus_events(artboard, owned_context.as_deref_mut());
         if self.script_error.is_some() {
             return changed;
         }
@@ -7116,11 +7376,63 @@ impl StateMachineInstance {
         // this same frame, while another semantic callback queued during this
         // loop waits for the next frame.
         self.record_advance_phase("semantic-snapshot");
+        changed |= self.process_semantic_events(artboard, owned_context);
+        changed
+    }
+
+    fn process_focus_events(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> bool {
+        // Snapshot-and-clear before the first callback. Focus generated while
+        // this batch runs remains in the member queue for a later new frame.
+        let focus_events = std::mem::take(&mut self.queued_focus_events);
+        let mut changed = false;
+        for event in focus_events {
+            let Some(listener) = self.listener_definitions.get(event.listener_index) else {
+                continue;
+            };
+            if (event.is_focus && !listener.has_listener(RuntimeListenerType::Focus))
+                || (!event.is_focus && !listener.has_listener(RuntimeListenerType::Blur))
+            {
+                continue;
+            }
+            let actions = listener.listener_actions.clone();
+            let invocation = event.into_invocation();
+            let result = self.perform_listener_actions(
+                artboard,
+                &actions,
+                owned_context.as_deref_mut(),
+                &invocation,
+                &mut NoopScriptHost,
+            );
+            changed |= self.retain_script_result(result);
+            #[cfg(test)]
+            self.run_deferred_callback_probe(true);
+            if self.script_error.is_some() {
+                break;
+            }
+        }
+        changed
+    }
+
+    fn process_semantic_events(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> bool {
+        // Snapshot-and-clear before the first callback. Null group/listener
+        // adaptations are retained in the batch and skipped in FIFO order;
+        // semantic work queued by callbacks waits for a later new frame.
         let semantic_events = std::mem::take(&mut self.queued_semantic_events);
-        for invocation in semantic_events {
-            let listener_index = match invocation {
-                ScriptListenerInvocation::Semantic { listener_index, .. } => listener_index,
-                _ => continue,
+        let mut changed = false;
+        for event in semantic_events {
+            let Some(invocation) = event.into_invocation() else {
+                continue;
+            };
+            let ScriptListenerInvocation::Semantic { listener_index, .. } = invocation else {
+                unreachable!("typed semantic queue creates semantic invocations");
             };
             let Some(listener) = self.listener_definitions.get(listener_index) else {
                 continue;
@@ -7134,11 +7446,42 @@ impl StateMachineInstance {
                 &mut NoopScriptHost,
             );
             changed |= self.retain_script_result(result);
+            #[cfg(test)]
+            self.run_deferred_callback_probe(false);
             if self.script_error.is_some() {
                 break;
             }
         }
         changed
+    }
+
+    #[cfg(test)]
+    fn run_deferred_callback_probe(&mut self, focus_phase: bool) {
+        let Some(probe) = self.deferred_callback_probe else {
+            return;
+        };
+        let event = match (focus_phase, probe) {
+            (
+                true,
+                RuntimeDeferredCallbackProbe::FocusQueuesSemantic {
+                    listener_index,
+                    action_type,
+                },
+            )
+            | (
+                false,
+                RuntimeDeferredCallbackProbe::SemanticQueuesSemantic {
+                    listener_index,
+                    action_type,
+                },
+            ) => Some((listener_index, action_type)),
+            _ => None,
+        };
+        let Some((listener_index, action_type)) = event else {
+            return;
+        };
+        self.deferred_callback_probe = None;
+        self.queue_semantic_event(listener_index, action_type);
     }
 
     fn update_pointer_listener_hover(
@@ -14281,7 +14624,7 @@ mod scripted_listener_action_tests {
         );
         assert_eq!(
             machine.queued_focus_events,
-            [ScriptListenerInvocation::Focus {
+            [RuntimeQueuedFocusEvent {
                 listener_index: 0,
                 is_focus: false,
             }],
@@ -15734,11 +16077,11 @@ mod scripted_listener_action_tests {
         assert_eq!(
             machine.queued_focus_events,
             [
-                ScriptListenerInvocation::Focus {
+                RuntimeQueuedFocusEvent {
                     listener_index: 0,
                     is_focus: false,
                 },
-                ScriptListenerInvocation::Focus {
+                RuntimeQueuedFocusEvent {
                     listener_index: 1,
                     is_focus: false,
                 },
@@ -15752,11 +16095,11 @@ mod scripted_listener_action_tests {
         assert_eq!(
             machine.queued_focus_events,
             [
-                ScriptListenerInvocation::Focus {
+                RuntimeQueuedFocusEvent {
                     listener_index: 0,
                     is_focus: true,
                 },
-                ScriptListenerInvocation::Focus {
+                RuntimeQueuedFocusEvent {
                     listener_index: 1,
                     is_focus: true,
                 },
@@ -15847,7 +16190,7 @@ mod scripted_listener_action_tests {
         assert!(machine.needs_advance);
         assert_eq!(
             machine.queued_focus_events,
-            [ScriptListenerInvocation::Focus {
+            [RuntimeQueuedFocusEvent {
                 listener_index: 0,
                 is_focus: false,
             }]
@@ -15920,7 +16263,7 @@ mod scripted_listener_action_tests {
         assert_eq!(error.resource_code(), Some("script.resource.host_commands"));
         assert_eq!(
             machine.queued_focus_events,
-            [ScriptListenerInvocation::Focus {
+            [RuntimeQueuedFocusEvent {
                 listener_index: 0,
                 is_focus: false,
             }],
@@ -17016,17 +17359,17 @@ mod scripted_listener_action_tests {
         ];
         machine.listener_definitions = Arc::new(listeners);
         machine.queued_focus_events = vec![
-            ScriptListenerInvocation::Focus {
+            RuntimeQueuedFocusEvent {
                 listener_index: 0,
                 is_focus: true,
             },
-            ScriptListenerInvocation::Focus {
+            RuntimeQueuedFocusEvent {
                 listener_index: 1,
                 is_focus: true,
             },
         ];
-        machine.queued_semantic_events = vec![ScriptListenerInvocation::Semantic {
-            listener_index: 2,
+        machine.queued_semantic_events = vec![RuntimeQueuedSemanticEvent {
+            listener_index: Some(2),
             action_type: 1,
         }];
 
@@ -17076,17 +17419,17 @@ mod scripted_listener_action_tests {
         ];
         machine.listener_definitions = Arc::new(listeners);
         machine.queued_focus_events = vec![
-            ScriptListenerInvocation::Focus {
+            RuntimeQueuedFocusEvent {
                 listener_index: 0,
                 is_focus: true,
             },
-            ScriptListenerInvocation::Focus {
+            RuntimeQueuedFocusEvent {
                 listener_index: 1,
                 is_focus: true,
             },
         ];
-        machine.queued_semantic_events = vec![ScriptListenerInvocation::Semantic {
-            listener_index: 2,
+        machine.queued_semantic_events = vec![RuntimeQueuedSemanticEvent {
+            listener_index: Some(2),
             action_type: 1,
         }];
 
@@ -17133,17 +17476,17 @@ mod scripted_listener_action_tests {
             ),
         ];
         machine.listener_definitions = Arc::new(listeners);
-        machine.queued_focus_events = vec![ScriptListenerInvocation::Focus {
+        machine.queued_focus_events = vec![RuntimeQueuedFocusEvent {
             listener_index: 0,
             is_focus: true,
         }];
         machine.queued_semantic_events = vec![
-            ScriptListenerInvocation::Semantic {
-                listener_index: 1,
+            RuntimeQueuedSemanticEvent {
+                listener_index: Some(1),
                 action_type: 1,
             },
-            ScriptListenerInvocation::Semantic {
-                listener_index: 2,
+            RuntimeQueuedSemanticEvent {
+                listener_index: Some(2),
                 action_type: 1,
             },
         ];
@@ -17262,12 +17605,12 @@ mod scripted_listener_action_tests {
             RuntimeViewModelListenerInstance::new(Arc::clone(&listeners), 2)
                 .expect("ViewModel listener occurrence"),
         ];
-        machine.queued_focus_events = vec![ScriptListenerInvocation::Focus {
+        machine.queued_focus_events = vec![RuntimeQueuedFocusEvent {
             listener_index: 0,
             is_focus: true,
         }];
-        machine.queued_semantic_events = vec![ScriptListenerInvocation::Semantic {
-            listener_index: 1,
+        machine.queued_semantic_events = vec![RuntimeQueuedSemanticEvent {
+            listener_index: Some(1),
             action_type: 1,
         }];
         machine.reported_listener_view_models.report_data_bind(0);
@@ -17676,20 +18019,14 @@ mod scripted_listener_action_tests {
     #[test]
     fn fl_c5_clone_teardown_rebuilds_mutable_state_without_aliasing() {
         let mut original = scripted_listener_machine();
-        original.queued_focus_events = vec![
-            RuntimeQueuedFocusEvent {
-                listener_index: 3,
-                is_focus: true,
-            }
-            .into_invocation(),
-        ];
-        original.queued_semantic_events = vec![
-            RuntimeQueuedSemanticEvent {
-                listener_index: 4,
-                action_type: 2,
-            }
-            .into_invocation(),
-        ];
+        original.queued_focus_events = vec![RuntimeQueuedFocusEvent {
+            listener_index: 3,
+            is_focus: true,
+        }];
+        original.queued_semantic_events = vec![RuntimeQueuedSemanticEvent {
+            listener_index: Some(4),
+            action_type: 2,
+        }];
         original.pointer_positions.push(RuntimePointerPosition {
             pointer_id: 5,
             x: 1.0,
@@ -18662,5 +18999,295 @@ mod scripted_listener_action_tests {
         let _: bool = machine
             .bind_script_artboard_data_context(&ScriptArtboardDataContext::root(&context_handle));
         assert!(machine.owned_data_context.is_some());
+    }
+
+    #[test]
+    fn fl_c5_focus_semantic_focus_state_and_owner_safe_focus_accessors() {
+        let (_artboard, mut machine, _) =
+            scripted_drawable_input_artboard_and_machine(Box::new(RecordingDrawableInputScript {
+                label: "focus state",
+                methods: Vec::new(),
+                handled: false,
+                calls: Rc::new(RefCell::new(Vec::new())),
+            }));
+        machine.keyboard_listener_groups.clear();
+
+        assert_eq!(
+            machine.focus_state(),
+            FocusState {
+                has_focus: true,
+                expects_keyboard_input: false,
+            },
+            "a focused FocusData without key/text listeners is not a keyboard consumer"
+        );
+        assert!(machine.internal_focus_manager());
+        assert!(!machine.has_external_focus_manager());
+
+        machine.keyboard_listener_groups.push(
+            RuntimeKeyboardListenerGroup::scripted(1, 2, 90_901, true, false)
+                .expect("keyboard-consuming focus group"),
+        );
+        assert_eq!(
+            machine.focus_state(),
+            FocusState {
+                has_focus: true,
+                expects_keyboard_input: true,
+            }
+        );
+        let pending_focus_events = machine.queued_focus_events.len();
+        assert!(
+            !machine.set_focus(Some(1)),
+            "setting the already-focused valid FocusData is a no-op"
+        );
+        assert!(machine.focus_state().has_focus);
+        assert_eq!(machine.queued_focus_events.len(), pending_focus_events);
+
+        assert!(machine.set_focus(None));
+        assert_eq!(machine.focus_state(), FocusState::default());
+        assert!(machine.set_focus(Some(1)));
+        assert!(
+            machine.set_focus(Some(usize::MAX)),
+            "a missing owner-safe FocusData/node projection clears current focus"
+        );
+        assert_eq!(machine.focus_state(), FocusState::default());
+    }
+
+    #[test]
+    fn fl_c5_focus_semantic_manager_switch_is_identity_noop_and_restores_internal() {
+        let (_artboard, mut machine, _) =
+            scripted_drawable_input_artboard_and_machine(Box::new(RecordingDrawableInputScript {
+                label: "internal",
+                methods: Vec::new(),
+                handled: false,
+                calls: Rc::new(RefCell::new(Vec::new())),
+            }));
+        let (_parent_artboard, parent, _) =
+            scripted_drawable_input_artboard_and_machine(Box::new(RecordingDrawableInputScript {
+                label: "external",
+                methods: Vec::new(),
+                handled: false,
+                calls: Rc::new(RefCell::new(Vec::new())),
+            }));
+        machine.focus_manager_phase_trace.clear();
+        machine.install_external_focus(&parent.focus, 90_910);
+        assert!(machine.has_external_focus_manager());
+        assert_eq!(machine.focus.owner_identity(), 90_910);
+        assert_eq!(
+            machine.focus_manager_phase_trace,
+            [
+                "clean-tree-recorded-seam",
+                "assign-external",
+                "rebuild-tree-recorded-seam",
+            ]
+        );
+
+        machine.focus_manager_phase_trace.clear();
+        let same_manager_other_projection = parent.focus.external_for_owner(90_999);
+        machine.install_external_focus(&same_manager_other_projection, 90_911);
+        assert_eq!(
+            machine.focus.owner_identity(),
+            90_910,
+            "the same shared manager is a no-op even through a different owner projection"
+        );
+        assert!(machine.focus_manager_phase_trace.is_empty());
+
+        assert!(machine.clear_external_focus_manager());
+        assert!(!machine.has_external_focus_manager());
+        assert!(machine.internal_focus_manager());
+        assert_eq!(
+            machine.focus_manager_phase_trace,
+            [
+                "clean-tree-recorded-seam",
+                "assign-internal",
+                "rebuild-tree-recorded-seam",
+            ]
+        );
+        assert_eq!(
+            machine.focus_state(),
+            FocusState::default(),
+            "cleanup clears old focus before external-to-null restores the retained internal manager"
+        );
+        assert!(machine.has_focus_nodes());
+        assert!(
+            !machine.clear_external_focus_manager(),
+            "null-to-null is the same-manager no-op"
+        );
+    }
+
+    #[test]
+    fn fl_c5_focus_semantic_batches_snapshot_clear_and_keep_focus_then_semantic_fifo() {
+        let (mut artboard, mut machine) = scripted_listener_artboard_and_machine();
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        machine.listener_definitions = Arc::new(vec![
+            scripted_test_listener(
+                &mut machine,
+                90_920,
+                "focus",
+                ListenerFailure::None,
+                vec![RuntimeListenerType::Focus],
+                &calls,
+            ),
+            scripted_test_listener(
+                &mut machine,
+                90_921,
+                "semantic",
+                ListenerFailure::None,
+                vec![RuntimeListenerType::SemanticAction],
+                &calls,
+            ),
+        ]);
+
+        machine.queue_focus_event(0, true);
+        machine.queue_focus_event(0, true);
+        machine.queue_semantic_event(None, 0);
+        machine.queue_semantic_event(Some(usize::MAX), 0);
+        machine.queue_semantic_event(Some(1), 0);
+        machine.queue_semantic_event(Some(1), 0);
+        assert!(machine.needs_advance);
+
+        assert!(machine.process_focus_events(&mut artboard, None));
+        assert!(machine.queued_focus_events.is_empty());
+        assert!(
+            machine.process_semantic_events(&mut artboard, None),
+            "null group/listener records are skipped without suppressing later valid duplicates"
+        );
+        assert!(machine.queued_semantic_events.is_empty());
+        assert_eq!(
+            calls
+                .borrow()
+                .iter()
+                .map(|call| call.label)
+                .collect::<Vec<_>>(),
+            ["focus", "focus", "semantic", "semantic"]
+        );
+    }
+
+    #[test]
+    fn fl_c5_focus_semantic_callback_generated_batches_obey_phase_snapshots() {
+        let (mut artboard, mut machine) = scripted_listener_artboard_and_machine();
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        machine.listener_definitions = Arc::new(vec![
+            scripted_test_listener(
+                &mut machine,
+                90_925,
+                "focus",
+                ListenerFailure::None,
+                vec![RuntimeListenerType::Focus],
+                &calls,
+            ),
+            scripted_test_listener(
+                &mut machine,
+                90_926,
+                "semantic",
+                ListenerFailure::None,
+                vec![RuntimeListenerType::SemanticAction],
+                &calls,
+            ),
+        ]);
+        machine.queue_focus_event(0, true);
+        machine.deferred_callback_probe = Some(RuntimeDeferredCallbackProbe::FocusQueuesSemantic {
+            listener_index: Some(1),
+            action_type: 0,
+        });
+
+        assert!(machine.process_deferred_listener_group_events(&mut artboard, None));
+        assert_eq!(
+            calls
+                .borrow()
+                .iter()
+                .map(|call| call.label)
+                .collect::<Vec<_>>(),
+            ["focus", "semantic"],
+            "semantic work generated by a focus callback joins the later same-frame snapshot"
+        );
+        assert!(machine.queued_semantic_events.is_empty());
+
+        calls.borrow_mut().clear();
+        machine.queue_semantic_event(Some(1), 0);
+        machine.deferred_callback_probe =
+            Some(RuntimeDeferredCallbackProbe::SemanticQueuesSemantic {
+                listener_index: Some(1),
+                action_type: 0,
+            });
+        assert!(machine.process_semantic_events(&mut artboard, None));
+        assert_eq!(calls.borrow().len(), 1);
+        assert_eq!(
+            machine.queued_semantic_events,
+            [RuntimeQueuedSemanticEvent {
+                listener_index: Some(1),
+                action_type: 0,
+            }],
+            "semantic work generated inside the active semantic batch waits for a later frame"
+        );
+        assert!(machine.process_semantic_events(&mut artboard, None));
+        assert_eq!(calls.borrow().len(), 2);
+        assert!(machine.queued_semantic_events.is_empty());
+    }
+
+    #[test]
+    fn fl_c5_focus_semantic_recorded_semantic_manager_boundaries_keep_call_order() {
+        let mut machine = scripted_listener_machine();
+        assert_eq!(
+            machine.semantic_manager_selection(),
+            RuntimeSemanticManagerSelection::None
+        );
+        assert!(!machine.semantic_manager());
+        assert!(machine.enable_semantics());
+        assert!(!machine.enable_semantics());
+        assert!(machine.semantic_manager());
+        assert_eq!(
+            machine.semantic_manager_selection(),
+            RuntimeSemanticManagerSelection::InternalRecorded
+        );
+        assert_eq!(
+            machine.semantic_manager_phase_trace,
+            ["create-internal-recorded-seam", "build-tree-recorded-seam"]
+        );
+        assert!(
+            !machine.fire_semantic_action(77, 0),
+            "node lookup and SemanticData callbacks stop at their recorded seams"
+        );
+
+        machine.semantic_manager_phase_trace.clear();
+        assert!(machine.set_external_semantic_manager(Some(90_930), Some(4)));
+        assert_eq!(
+            machine.semantic_manager_phase_trace,
+            [
+                "clean-tree-recorded-seam",
+                "assign-external",
+                "build-tree-recorded-seam",
+            ]
+        );
+        machine.semantic_manager_phase_trace.clear();
+        assert!(
+            !machine.set_external_semantic_manager(Some(90_930), Some(9)),
+            "same manager identity is a no-op even when the desired parent changes"
+        );
+        assert!(machine.semantic_manager_phase_trace.is_empty());
+
+        assert!(machine.set_external_semantic_manager(None, None));
+        assert_eq!(
+            machine.semantic_manager_selection(),
+            RuntimeSemanticManagerSelection::InternalRecorded
+        );
+
+        let mut without_internal = scripted_listener_machine();
+        assert!(without_internal.set_external_semantic_manager(Some(90_931), None));
+        without_internal.semantic_manager_phase_trace.clear();
+        assert!(
+            !without_internal.enable_semantics(),
+            "an already-selected external manager suppresses internal creation"
+        );
+        assert!(
+            without_internal.semantic_manager_phase_trace.is_empty(),
+            "external-first enable does not create or rebuild an internal manager"
+        );
+        assert!(without_internal.set_external_semantic_manager(None, None));
+        assert_eq!(
+            without_internal.semantic_manager_selection(),
+            RuntimeSemanticManagerSelection::None
+        );
+        assert!(!without_internal.semantic_manager());
+        assert!(!without_internal.fire_semantic_action(77, 99));
     }
 }

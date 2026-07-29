@@ -3175,6 +3175,250 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
         )
 
+    def test_fl_c5_focus_semantic_live_ratchets_and_negative_controls(self) -> None:
+        instance_source = (
+            "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+        )
+        required_cases = [
+            (
+                "state_machine_focus_semantic_typed_queues_required",
+                """
+                struct RuntimeQueuedFocusEvent {
+                    listener_index: usize,
+                    is_focus: bool,
+                }
+                struct RuntimeQueuedSemanticEvent {
+                    listener_index: Option<usize>,
+                    action_type: u32,
+                }
+                struct StateMachineInstance {
+                    queued_focus_events: Vec<RuntimeQueuedFocusEvent>,
+                    queued_semantic_events: Vec<RuntimeQueuedSemanticEvent>,
+                }
+                """,
+                """
+                struct StateMachineInstance {
+                    queued_focus_events: Vec<ScriptListenerInvocation>,
+                    queued_semantic_events: Vec<ScriptListenerInvocation>,
+                }
+                """,
+            ),
+            (
+                "state_machine_focus_snapshot_clear_required",
+                """
+                fn process_focus_events() {
+                    let focus_events =
+                        std::mem::take(&mut self.queued_focus_events);
+                    for event in focus_events {
+                        perform(event);
+                    }
+                }
+                """,
+                """
+                fn process_focus_events() {
+                    for event in self.queued_focus_events.drain(..) {
+                        perform(event);
+                    }
+                }
+                """,
+            ),
+            (
+                "state_machine_semantic_snapshot_clear_required",
+                """
+                fn process_semantic_events() {
+                    let semantic_events =
+                        std::mem::take(&mut self.queued_semantic_events);
+                    for event in semantic_events {
+                        perform(event);
+                    }
+                }
+                """,
+                """
+                fn process_semantic_events() {
+                    while let Some(event) = self.queued_semantic_events.pop() {
+                        perform(event);
+                    }
+                }
+                """,
+            ),
+            (
+                "state_machine_focus_then_semantic_phase_required",
+                """
+                fn process_deferred_listener_group_events() {
+                    self.process_focus_events();
+                    if self.script_error.is_some() {
+                        return;
+                    }
+                    self.process_semantic_events();
+                }
+                """,
+                """
+                fn process_deferred_listener_group_events() {
+                    self.process_semantic_events();
+                    self.process_focus_events();
+                }
+                """,
+            ),
+            (
+                "state_machine_focus_state_owner_safe_required",
+                """
+                // RECORDED `src/input/focus_manager.cpp`, row B6-0238
+                pub struct FocusState {
+                    pub has_focus: bool,
+                    pub expects_keyboard_input: bool,
+                }
+                pub fn internal_focus_manager(&self) -> bool {
+                    true
+                }
+                pub fn focus_state(&self) -> FocusState {
+                    FocusState {
+                        has_focus,
+                        expects_keyboard_input,
+                    }
+                }
+                """,
+                """
+                pub fn focus_state(&self) -> *const FocusNode {
+                    self.primary_focus
+                }
+                """,
+            ),
+            (
+                "state_machine_focus_manager_switch_fallback_required",
+                """
+                fn install_external_focus(parent_focus: &RuntimeFocusTree) {
+                    if self.external_focus_manager_selected
+                        && self.focus.shares_manager(parent_focus)
+                    {
+                        return;
+                    }
+                    self.clean_selected_focus_before_manager_switch();
+                    self.record("clean-tree-recorded-seam");
+                    self.internal_focus =
+                        Some(std::mem::take(&mut self.focus));
+                    self.external_focus_manager_selected = true;
+                    self.record("assign-external");
+                    self.record("rebuild-tree-recorded-seam");
+                }
+                fn clear_external_focus_manager() {
+                    self.clean_selected_focus_before_manager_switch();
+                    self.record("clean-tree-recorded-seam");
+                    self.focus = self.internal_focus.take().unwrap();
+                    self.external_focus_manager_selected = false;
+                    self.record("assign-internal");
+                    self.record("rebuild-tree-recorded-seam");
+                }
+                """,
+                """
+                fn install_external_focus(parent_focus: RuntimeFocusTree) {
+                    self.focus = parent_focus;
+                }
+                fn clear_external_focus_manager() {}
+                """,
+            ),
+            (
+                "state_machine_semantic_recorded_seams_required",
+                """
+                // RECORDED absent row B6-0329 `src/semantic/semantic_manager.cpp`
+                // RECORDED absent row B6-0327 `src/semantic/semantic_data.cpp`
+                pub fn semantic_manager(&self) -> bool {
+                    self.selection.is_some()
+                }
+                pub fn enable_semantics() {
+                    record("create-internal-recorded-seam");
+                    record("build-tree-recorded-seam");
+                }
+                pub fn set_external_semantic_manager() {
+                    record("clean-tree-recorded-seam");
+                    self.external_semantic_manager_identity = manager_identity;
+                    record("build-tree-recorded-seam");
+                }
+                pub fn fire_semantic_action() {}
+                """,
+                """
+                pub fn enable_semantics() {}
+                pub fn set_external_semantic_manager() {}
+                pub fn fire_semantic_action() {}
+                """,
+            ),
+        ]
+        for ratchet_id, required, missing in required_cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_required_production_ratchet_case(
+                    ratchet_id,
+                    instance_source,
+                    textwrap.dedent(required),
+                    textwrap.dedent(missing),
+                )
+
+        self.assert_required_production_ratchet_case(
+            "state_machine_focus_owner_safe_identity_projection_required",
+            "crates/nuxie-runtime/src/focus.rs",
+            textwrap.dedent(
+                """
+                fn shares_manager(&self, other: &Self) -> bool {
+                    Rc::ptr_eq(&self.domain, &other.domain)
+                }
+                fn has_focus_target(&self, target_local: usize) -> bool {
+                    self.domain
+                        .borrow()
+                        .targets
+                        .contains_key(&(self.owner_identity, target_local))
+                }
+                fn has_primary_focus(&self) -> bool {
+                    self.domain.borrow().manager.primary_focus().is_some()
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                fn has_focus_target(&self, target_local: usize) -> bool {
+                    self.focused_target == Some(target_local)
+                }
+                fn has_primary_focus(&self) -> bool {
+                    !self.focused_listener_chain().is_empty()
+                }
+                """
+            ),
+        )
+
+        forbidden_cases = [
+            (
+                "state_machine_focus_semantic_queue_default_sentinel",
+                """
+                #[derive(Default)]
+                struct RuntimeQueuedFocusEvent {
+                    listener_index: usize,
+                    is_focus: bool,
+                }
+                """,
+                """
+                struct RuntimeQueuedFocusEvent {
+                    listener_index: usize,
+                    is_focus: bool,
+                }
+                """,
+            ),
+            (
+                "state_machine_semantic_manager_internal_implementation",
+                "enum SemanticTree { Node(SemanticNode) }\n",
+                "enum RuntimeSemanticManagerSelection { None, InternalRecorded }\n",
+            ),
+            (
+                "state_machine_focus_manager_internal_implementation",
+                "struct RuntimeFocusManager { nodes: Vec<RuntimeFocusNode> }\n",
+                "pub struct FocusState { has_focus: bool }\n",
+            ),
+        ]
+        for ratchet_id, forbidden, safe in forbidden_cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    instance_source,
+                    textwrap.dedent(forbidden),
+                    textwrap.dedent(safe),
+                )
+
     def test_fl_c4_negative_ratchets_reject_displaced_listener_action_shapes(self) -> None:
         cases = [
             (

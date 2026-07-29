@@ -81832,6 +81832,175 @@ fn fl_c5_run_rust_unit_probe(filter: &str) -> String {
         .unwrap_or_else(|error| panic!("Rust WP5 probe {filter} emitted non-UTF-8 output: {error}"))
 }
 
+#[test]
+fn fl_c5_focus_queue_snapshot_and_duplicate_source_contract() {
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_focus_semantic_batches_snapshot_clear_and_keep_focus_then_semantic_fifo",
+    );
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let queue = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::queueFocusEvent",
+        "void StateMachineInstance::setFocus",
+    );
+    assert!(queue.contains("m_queuedFocusEvents.push_back({group, isFocus});"));
+    assert!(queue.contains("m_needsAdvance = true;"));
+
+    let process = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::processFocusEvents",
+        "void StateMachineInstance::queueSemanticEvent",
+    );
+    let move_batch = process
+        .find("auto events = std::move(m_queuedFocusEvents);")
+        .expect("focus batch move");
+    let clear_member = process
+        .find("m_queuedFocusEvents.clear();")
+        .expect("focus member clear");
+    let callback_loop = process
+        .find("for (const auto& event : events)")
+        .expect("focus callback loop");
+    assert!(move_batch < clear_member && clear_member < callback_loop);
+    assert!(process.contains("event.group->listener()"));
+    assert!(process.contains("ListenerType::focus"));
+    assert!(process.contains("ListenerType::blur"));
+}
+
+#[test]
+fn fl_c5_focus_queue_chained_callback_waits_source_contract() {
+    fl_c5_run_rust_unit_probe("fl_c5_advance_focus_chaining_and_hidden_target_boundaries");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let process = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::processFocusEvents",
+        "void StateMachineInstance::queueSemanticEvent",
+    );
+    assert!(process.contains("auto events = std::move(m_queuedFocusEvents);"));
+    assert!(process.contains("ListenerInvocation::focus(event.group, event.isFocus)"));
+    assert!(
+        !process.contains("while (!m_queuedFocusEvents.empty())"),
+        "focus callbacks do not drain a newly queued batch in the same phase"
+    );
+}
+
+#[test]
+fn fl_c5_semantic_queue_snapshot_null_and_duplicate_source_contract() {
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_focus_semantic_batches_snapshot_clear_and_keep_focus_then_semantic_fifo",
+    );
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_focus_semantic_recorded_semantic_manager_boundaries_keep_call_order",
+    );
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let queue = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::queueSemanticEvent",
+        "void StateMachineInstance::processSemanticEvents",
+    );
+    assert!(queue.contains("m_queuedSemanticEvents.push_back({group, actionType});"));
+    assert!(queue.contains("m_needsAdvance = true;"));
+
+    let process = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::processSemanticEvents",
+        "void StateMachineInstance::fireSemanticAction",
+    );
+    let move_batch = process
+        .find("auto events = std::move(m_queuedSemanticEvents);")
+        .expect("semantic batch move");
+    let clear_member = process
+        .find("m_queuedSemanticEvents.clear();")
+        .expect("semantic member clear");
+    let callback_loop = process
+        .find("for (const auto& event : events)")
+        .expect("semantic callback loop");
+    assert!(move_batch < clear_member && clear_member < callback_loop);
+    assert!(process.contains("if (event.group == nullptr)"));
+    assert!(process.contains("if (listener == nullptr)"));
+    assert!(
+        !process.contains("while (!m_queuedSemanticEvents.empty())"),
+        "semantic callbacks do not drain a newly queued batch in the same phase"
+    );
+}
+
+#[test]
+fn fl_c5_semantic_queue_focus_then_semantic_phase_contract() {
+    fl_c5_run_rust_unit_probe("fl_c5_advance_raw_order_and_clean_zero_bookkeeping");
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_focus_semantic_callback_generated_batches_obey_phase_snapshots",
+    );
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let advance = fl_c5_cpp_member(
+        &source,
+        "bool StateMachineInstance::advance(float seconds, bool newFrame)",
+        "bool StateMachineInstance::advanceAndApply",
+    );
+    let focus = advance
+        .find("processFocusEvents();")
+        .expect("focus processing phase");
+    let semantic = advance
+        .find("processSemanticEvents();")
+        .expect("semantic processing phase");
+    assert!(
+        focus < semantic,
+        "focus-generated semantic work can join the later same-frame semantic snapshot"
+    );
+}
+
+#[test]
+fn fl_c5_focus_manager_switch_order() {
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_focus_semantic_manager_switch_is_identity_noop_and_restores_internal",
+    );
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let switch = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::setExternalFocusManager",
+        "void StateMachineInstance::enableSemantics",
+    );
+    let identity_noop = switch
+        .find("if (m_externalFocusManager == manager)")
+        .expect("same-manager no-op");
+    let cleanup = switch
+        .find("m_artboardInstance->cleanupFocusTree();")
+        .expect("old-tree cleanup");
+    let assign = switch
+        .find("m_externalFocusManager = manager;")
+        .expect("external manager assignment");
+    let rebuild = switch
+        .find("m_artboardInstance->buildFocusTree(focusManager(), nullptr);")
+        .expect("selected-manager rebuild");
+    assert!(identity_noop < cleanup && cleanup < assign && assign < rebuild);
+}
+
+#[test]
+fn fl_c5_focus_state() {
+    fl_c5_run_rust_unit_probe("fl_c5_focus_semantic_focus_state_and_owner_safe_focus_accessors");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let focus_state = fl_c5_cpp_member(
+        &source,
+        "StateMachineInstance::FocusState StateMachineInstance::focusState() const",
+        "void StateMachineInstance::processFocusEvents",
+    );
+    let poll = focus_state
+        .find("primaryFocusPtr()")
+        .expect("poll-friendly primary focus");
+    let missing = focus_state
+        .find("if (focus == nullptr)")
+        .expect("missing focus return");
+    let has_focus = focus_state
+        .find("state.hasFocus = true;")
+        .expect("focused state");
+    let focusable = focus_state
+        .find("if (Focusable* focusable = focus->focusable())")
+        .expect("optional focusable");
+    let keyboard = focus_state
+        .find("focusable->acceptsKeyboardInput()")
+        .expect("keyboard capability");
+    assert!(poll < missing && missing < has_focus);
+    assert!(has_focus < focusable && focusable < keyboard);
+}
+
 fn push_fl_c5_keyframe_data_bind_context(bytes: &mut Vec<u8>, path: &[u32]) {
     let mut source_path_ids = Vec::new();
     for path_id in path {

@@ -871,6 +871,13 @@ impl RuntimeFocusTree {
         self.owner_identity
     }
 
+    /// Owner-safe identity comparison for the StateMachineInstance selection
+    /// seam. This observes shared ownership only; it does not expose or port
+    /// RECORDED focus-manager internals from manifest row B6-0238.
+    pub(crate) fn shares_manager(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.domain, &other.domain)
+    }
+
     /// Create the focus-manager identity used by one state-machine occurrence
     /// without building the authored focus topology yet.
     ///
@@ -1143,6 +1150,23 @@ impl RuntimeFocusTree {
             .get(&(self.owner_identity, target_local))
             .copied()
             .is_some_and(|node_id| domain.manager.has_focus(node_id))
+    }
+
+    /// Owner-safe existence projection for StateMachineInstance::setFocus.
+    ///
+    /// This does not expose or implement the RECORDED focus-manager tree/node
+    /// seam owned by manifest row B6-0238. It only distinguishes a retained
+    /// FocusData occurrence from the C++ null-FocusData/null-node branch.
+    pub(crate) fn has_focus_target(&self, target_local: usize) -> bool {
+        self.domain
+            .borrow()
+            .targets
+            .contains_key(&(self.owner_identity, target_local))
+    }
+
+    /// Cheap owner-safe projection used by host FocusState polling.
+    pub(crate) fn has_primary_focus(&self) -> bool {
+        self.domain.borrow().manager.primary_focus().is_some()
     }
 
     /// Return focused listener targets from the primary leaf toward the root.

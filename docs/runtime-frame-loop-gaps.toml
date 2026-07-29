@@ -1371,6 +1371,80 @@ min_occurrences = 1
 max_occurrences = 1
 
 [[ratchet]]
+id = "state_machine_focus_semantic_typed_queues_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*struct\\s+RuntimeQueuedFocusEvent\\s*\\{\\s*listener_index:\\s*usize,\\s*is_focus:\\s*bool,?\\s*\\})(?=[\\s\\S]*struct\\s+RuntimeQueuedSemanticEvent\\s*\\{\\s*listener_index:\\s*Option<usize>,\\s*action_type:\\s*u32,?\\s*\\})(?=[\\s\\S]*queued_focus_events:\\s*Vec<RuntimeQueuedFocusEvent>)(?=[\\s\\S]*queued_semantic_events:\\s*Vec<RuntimeQueuedSemanticEvent>)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_focus_snapshot_clear_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+process_focus_events\\b[\\s\\S]{0,900}let\\s+focus_events\\s*=\\s*std::mem::take\\(&mut\\s+self\\.queued_focus_events\\);[\\s\\S]{0,180}for\\s+event\\s+in\\s+focus_events"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_semantic_snapshot_clear_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+process_semantic_events\\b[\\s\\S]{0,900}let\\s+semantic_events\\s*=\\s*std::mem::take\\(&mut\\s+self\\.queued_semantic_events\\);[\\s\\S]{0,180}for\\s+event\\s+in\\s+semantic_events"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_focus_then_semantic_phase_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+process_deferred_listener_group_events\\b[\\s\\S]{0,1600}process_focus_events\\([\\s\\S]{0,700}process_semantic_events\\("
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_focus_state_owner_safe_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*pub\\s+struct\\s+FocusState\\s*\\{\\s*pub\\s+has_focus:\\s*bool,\\s*pub\\s+expects_keyboard_input:\\s*bool,?\\s*\\})(?=[\\s\\S]*pub\\s+fn\\s+internal_focus_manager\\(&self\\)\\s*->\\s*bool)(?=[\\s\\S]*pub\\s+fn\\s+focus_state\\(&self\\)\\s*->\\s*FocusState[\\s\\S]{0,900}FocusState\\s*\\{\\s*has_focus,\\s*expects_keyboard_input,?\\s*\\})(?=[\\s\\S]*RECORDED[\\s\\S]{0,120}`src/input/focus_manager\\.cpp`[\\s\\S]{0,120}B6-0238)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_focus_manager_switch_fallback_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+install_external_focus\\b[\\s\\S]{0,700}external_focus_manager_selected\\s*&&\\s*self\\.focus\\.shares_manager\\(parent_focus\\)[\\s\\S]{0,900}clean_selected_focus_before_manager_switch\\(\\)[\\s\\S]{0,250}clean-tree-recorded-seam[\\s\\S]{0,500}internal_focus\\s*=\\s*Some\\(std::mem::take\\(&mut\\s+self\\.focus\\)\\)[\\s\\S]{0,500}external_focus_manager_selected\\s*=\\s*true[\\s\\S]{0,250}assign-external[\\s\\S]{0,250}rebuild-tree-recorded-seam[\\s\\S]{0,700}fn\\s+clear_external_focus_manager\\b[\\s\\S]{0,500}clean_selected_focus_before_manager_switch\\(\\)[\\s\\S]{0,500}internal_focus\\s*\\.\\s*take\\(\\)[\\s\\S]{0,350}external_focus_manager_selected\\s*=\\s*false[\\s\\S]{0,250}assign-internal[\\s\\S]{0,250}rebuild-tree-recorded-seam"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_focus_owner_safe_identity_projection_required"
+globs = ["crates/nuxie-runtime/src/focus.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+shares_manager\\(&self,\\s*other:\\s*&Self\\)\\s*->\\s*bool\\s*\\{\\s*Rc::ptr_eq\\(&self\\.domain,\\s*&other\\.domain\\)\\s*\\})(?=[\\s\\S]*fn\\s+has_focus_target\\b[\\s\\S]{0,350}targets[\\s\\S]{0,180}contains_key\\(&\\(self\\.owner_identity,\\s*target_local\\)\\))(?=[\\s\\S]*fn\\s+has_primary_focus\\(&self\\)\\s*->\\s*bool\\s*\\{[\\s\\S]{0,180}manager\\.primary_focus\\(\\)\\.is_some\\(\\))"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_semantic_recorded_seams_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*pub\\s+fn\\s+semantic_manager\\(&self\\)\\s*->\\s*bool)(?=[\\s\\S]*pub\\s+fn\\s+enable_semantics\\b[\\s\\S]{0,1000}create-internal-recorded-seam[\\s\\S]{0,180}build-tree-recorded-seam)(?=[\\s\\S]*pub\\s+fn\\s+set_external_semantic_manager\\b[\\s\\S]{0,1300}clean-tree-recorded-seam[\\s\\S]{0,300}external_semantic_manager_identity\\s*=\\s*manager_identity[\\s\\S]{0,300}build-tree-recorded-seam)(?=[\\s\\S]*pub\\s+fn\\s+fire_semantic_action\\b)(?=[\\s\\S]*RECORDED[\\s\\S]{0,120}B6-0329[\\s\\S]{0,120}`src/semantic/semantic_manager\\.cpp`)(?=[\\s\\S]*RECORDED[\\s\\S]{0,120}B6-0327[\\s\\S]{0,120}`src/semantic/semantic_data\\.cpp`)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_focus_semantic_queue_default_sentinel"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:derive\\([^)]*Default[^)]*\\)\\s*\\]\\s*struct\\s+RuntimeQueued(?:Focus|Semantic)Event|impl\\s+Default\\s+for\\s+RuntimeQueued(?:Focus|Semantic)Event)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_semantic_manager_internal_implementation"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:struct|enum)\\s+(?:Runtime)?Semantic(?:Manager|Tree|Node|Data)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_focus_manager_internal_implementation"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:struct|enum)\\s+(?:Runtime)?Focus(?:Manager|Tree|Node)\\b"
+max_occurrences = 0
+
+[[ratchet]]
 id = "data_bind_per_type_target_to_source_path"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "(?m)^\\s*(?:pub\\(crate\\)\\s+)?fn\\s+apply_default_view_model_(?:number|symbol_list_index|boolean|string|color|enum|asset|artboard|list|trigger|view_model)(?:_public_update)?_targets_to_sources(?:_with_options)?\\b"

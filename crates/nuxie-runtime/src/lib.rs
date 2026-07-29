@@ -116,7 +116,7 @@ pub use scripting::{
 #[doc(hidden)]
 pub use state_machine::RuntimeFileStateMachineActionCatalog;
 pub use state_machine::{
-    RuntimeLayerState, RuntimeNestedStateMachineReport,
+    FocusState, RuntimeLayerState, RuntimeNestedStateMachineReport,
     RuntimeScriptedListenerDataConverterBindStep, RuntimeStateMachine,
     RuntimeStateMachineDataConverterBindStep, RuntimeStateMachineInput, RuntimeStateMachineLayer,
     ScriptGamepadInputChange, ScriptGamepadMappingKind, ScriptGamepadSnapshot,
@@ -196,8 +196,9 @@ pub use view_model_cell::RuntimeFileViewModelInstanceCatalog;
 #[test]
 fn fl_c5_public_reexports_survive_file_split() {
     use crate::{
-        RuntimeStateMachine, ScriptError, ScriptListenerActionHydration, StateMachineEventContext,
-        StateMachineEventStringProperty, StateMachineInstance, StateMachineReportedEvent,
+        FocusState, RuntimeStateMachine, ScriptError, ScriptListenerActionHydration,
+        StateMachineEventContext, StateMachineEventStringProperty, StateMachineInstance,
+        StateMachineReportedEvent,
     };
 
     macro_rules! methods_are_reachable {
@@ -215,6 +216,8 @@ fn fl_c5_public_reexports_survive_file_split() {
     let _ = definition_fields_are_reachable as fn(&RuntimeStateMachine);
     fn is_clone<T: Clone>() {}
     is_clone::<StateMachineInstance>();
+    let focus_state = FocusState::default();
+    let _ = (focus_state.has_focus, focus_state.expects_keyboard_input);
 
     methods_are_reachable!(RuntimeStateMachine;
         scripted_objects,
@@ -230,6 +233,15 @@ fn fl_c5_public_reexports_survive_file_split() {
         focus_down,
         focus_left,
         focus_right,
+        set_focus,
+        focus_state,
+        internal_focus_manager,
+        has_external_focus_manager,
+        clear_external_focus_manager,
+        semantic_manager,
+        enable_semantics,
+        set_external_semantic_manager,
+        fire_semantic_action,
         key_input,
         text_input,
         gamepad_dispatch,

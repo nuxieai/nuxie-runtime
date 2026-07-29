@@ -98,7 +98,7 @@ use event_report::open_url_target;
 pub use event_report::{
     StateMachineEventContext, StateMachineEventStringProperty, StateMachineReportedEvent,
 };
-pub use instance::StateMachineInstance;
+pub use instance::{FocusState, StateMachineInstance};
 pub use layer_state::RuntimeLayerState;
 pub(crate) use listener_action::{
     RuntimeScheduledListenerAction, RuntimeScheduledListenerActionExecutor,

@@ -44,6 +44,12 @@ The writer may change production code only where required by these packages:
 - update the FL-C5 closure/status/ownership/manifest evidence only after the
   corresponding production behavior and proof are green.
 
+Orchestrator decision (2026-07-29): `crates/nuxie/src/lib.rs` is authorized
+exactly for the O1 construction-time scripted-preparation hookup. Both public
+facade constructors must return an already-constructed machine even when
+preparation fails, retaining that failure in the established terminal
+`script_error` channel.
+
 No package authorizes a broad cleanup, formatting sweep, public API redesign,
 or opportunistic port from a later family.
 
@@ -633,4 +639,3 @@ are accepted in order and every closure row is checked. The handoff must state:
 - compensation KEEP/DELETE verification;
 - complete non-performance floor receipts; and
 - confirmation that W6 and all other out-of-scope owners were untouched.
-

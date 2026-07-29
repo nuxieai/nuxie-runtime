@@ -3993,16 +3993,14 @@ impl<'a> ArtboardInstance<'a> {
     pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
         let mut machine = self.raw.state_machine_instance(index)?;
         #[cfg(feature = "scripting")]
-        if try_prepare_state_machine_scripted_data_context_without_factory(
+        let _ = try_prepare_state_machine_scripted_data_context_without_factory(
             &self.script_file,
             &self.raw,
             &mut machine,
             None,
-        )
-        .is_err()
-        {
-            return None;
-        }
+        );
+        // W41 O1: C++ construction cannot fail after the machine exists.
+        // Preparation retains any terminal failure in `script_error`.
         Some(machine)
     }
 
@@ -4698,16 +4696,14 @@ impl OwnedArtboardInstance {
     pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
         let mut machine = self.raw.state_machine_instance(index)?;
         #[cfg(feature = "scripting")]
-        if try_prepare_state_machine_scripted_data_context_without_factory(
+        let _ = try_prepare_state_machine_scripted_data_context_without_factory(
             &self.file,
             &self.raw,
             &mut machine,
             None,
-        )
-        .is_err()
-        {
-            return None;
-        }
+        );
+        // W41 O1: C++ construction cannot fail after the machine exists.
+        // Preparation retains any terminal failure in `script_error`.
         Some(machine)
     }
 

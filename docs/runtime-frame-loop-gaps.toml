@@ -958,10 +958,10 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_public_api_inventory_required"
 globs = ["crates/nuxie-runtime/tests/public_api_fl_c5.rs"]
-pattern = "\\A(?=[\\s\\S]*macro_rules!\\s+exact_public_signature\\s*\\{[\\s\\S]{0,240}let\\s+_\\s*:\\s*\\$signature\\s*=\\s*\\$method\\s*;)(?=[\\s\\S]*BEGIN exhaustive W4 exact signatures)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}try_pointer_down_with_timestamp_and_script_host)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}scripted_listener_data_converter_occurrences)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}bind_owned_view_model_context_handle)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}bindable_view_model_instance_index_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}default_view_model_symbol_list_index_source_handle_by_property_name_path)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}set_imported_view_model_context_list_source_item_count_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}set_owned_view_model_context_view_model_source_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}view_model_trigger_property_id)(?=[\\s\\S]*END exhaustive W4 exact signatures)"
+pattern = "\\A(?=[\\s\\S]*macro_rules!\\s+exact_public_signature\\s*\\{[\\s\\S]{0,240}let\\s+_\\s*:\\s*\\$signature\\s*=\\s*\\$method\\s*;)(?=[\\s\\S]*BEGIN exhaustive W4 exact signatures[\\s\\S]{0,1200}let\\s+_:\\s*&u32\\s*=\\s*&machine\\.global_id[\\s\\S]{0,300}let\\s+_:\\s*&Option<Arc<str>>\\s*=\\s*&machine\\.name[\\s\\S]{0,300}let\\s+_:\\s*&Arc<Vec<Option<RuntimeStateMachineInput>>>\\s*=\\s*&machine\\.inputs[\\s\\S]{0,300}let\\s+_:\\s*&Arc<Vec<RuntimeStateMachineLayer>>\\s*=\\s*&machine\\.layers)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}try_pointer_down_with_timestamp_and_script_host)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}scripted_listener_data_converter_occurrences)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}bind_owned_view_model_context_handle)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}bindable_view_model_instance_index_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}default_view_model_symbol_list_index_source_handle_by_property_name_path)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}set_imported_view_model_context_list_source_item_count_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}set_owned_view_model_context_view_model_source_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}view_model_trigger_property_id)(?=[\\s\\S]*fn\\s+hydration_methods_accept_fn_once\\b[\\s\\S]{0,7000}move\\s*\\|_\\|[\\s\\S]{0,300}drop\\(token\\)[\\s\\S]{0,5000}END exhaustive W4 exact signatures)"
 content_begin = "// BEGIN exhaustive W4 exact signatures"
 content_end = "// END exhaustive W4 exact signatures"
-content_sha256 = "de9ad50c07208de1ecdefb9b6f466308e1aeb76ee3440d37c5ddb4af3d31b8f4"
+content_sha256 = "cb189189cdd04ac2dbda7aa25b722824a3906994ad507021b8ebbbbe66216e3e"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1209,7 +1209,7 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_event_local_bubble_audio_order_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "fn\\s+notify_events_with_context_and_script_host\\b[\\s\\S]{0,4800}record_event_dispatch_phase\\(\"local-dispatch\"\\)[\\s\\S]{0,4000}bubble_events_to_owner_seam\\(events\\);\\s*self\\.reach_recorded_audio_event_seam\\(events\\)[\\s\\S]{0,1800}fn\\s+reach_recorded_audio_event_seam\\b[\\s\\S]{0,400}events\\.iter\\(\\)\\.filter\\(\\|event\\|\\s*event\\.is_audio_event\\(\\)\\)[\\s\\S]{0,800}pub\\s+fn\\s+plays_audio\\(&self\\)\\s*->\\s*bool\\s*\\{\\s*true"
+pattern = "\\A(?=[\\s\\S]*trait\\s+AudioEventSeam\\b[\\s\\S]{0,500}fn\\s+selected\\b)(?=[\\s\\S]*impl\\s+AudioEventSeam\\s+for\\s+RecordingAudioEventSeam[\\s\\S]{0,700}\\*selection_count\\s*=\\s*selection_count\\.saturating_add\\(1\\)[\\s\\S]{0,180}\\*last_occurrence\\s*=\\s*Some\\(occurrence\\))(?=[\\s\\S]*audio_event_selection_count:\\s*usize)(?=[\\s\\S]*audio_event_last_occurrence:\\s*Option<AudioEventOccurrence>)(?=[\\s\\S]*audio_event_seam:\\s*Rc::new\\(RecordingAudioEventSeam\\))(?=[\\s\\S]*fn\\s+notify_events_with_context_and_script_host\\b[\\s\\S]{0,4800}record_event_dispatch_phase\\(\"local-dispatch\"\\)[\\s\\S]{0,4000}bubble_events_to_owner_seam\\(events\\);\\s*self\\.reach_recorded_audio_event_seam\\(events\\))(?=[\\s\\S]*fn\\s+reach_recorded_audio_event_seam\\b[\\s\\S]{0,500}events\\.iter\\(\\)\\.filter\\(\\|event\\|\\s*event\\.is_audio_event\\(\\)\\)[\\s\\S]{0,700}self\\.audio_event_seam\\.selected\\()"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1268,6 +1268,19 @@ min_occurrences = 1
 max_occurrences = 1
 
 [[ratchet]]
+id = "state_machine_facade_constructor_retains_preparation_error_required"
+globs = ["crates/nuxie/src/lib.rs"]
+pattern = "pub\\s+fn\\s+state_machine_instance\\(&mut\\s+self,\\s*index:\\s*usize\\)\\s*->\\s*Option<StateMachineInstance>\\s*\\{[\\s\\S]{0,900}?let\\s+_\\s*=\\s*try_prepare_state_machine_scripted_data_context_without_factory\\([\\s\\S]{0,400}?Some\\(machine\\)"
+min_occurrences = 2
+max_occurrences = 2
+
+[[ratchet]]
+id = "state_machine_facade_constructor_drops_preparation_error"
+globs = ["crates/nuxie/src/lib.rs"]
+pattern = "pub\\s+fn\\s+state_machine_instance\\b[\\s\\S]{0,900}try_prepare_state_machine_scripted_data_context_without_factory\\([\\s\\S]{0,300}\\.is_err\\(\\)[\\s\\S]{0,180}return\\s+None"
+max_occurrences = 0
+
+[[ratchet]]
 id = "state_machine_advance_raw_order_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
 pattern = "fn\\s+advance_with_report_mode\\b[\\s\\S]{0,1800}record_advance_phase\\(\"draw-sort-check\"\\)[\\s\\S]{0,1800}apply_local_event_listeners\\([\\s\\S]{0,800}record_advance_phase\\(\"clear-latch\"\\)[\\s\\S]{0,1800}record_advance_phase\\(\"pre-layer-binds\"\\)[\\s\\S]{0,3500}record_advance_phase\\(\"authored-layers\"\\)[\\s\\S]{0,7000}record_advance_phase\\(\"converter-advance\"\\)[\\s\\S]{0,3500}record_advance_phase\\(\"inputs-advanced\"\\)"
@@ -1287,6 +1300,19 @@ globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
 pattern = "fn\\s+settle_artboard_update_passes\\b[\\s\\S]{0,700}const\\s+MAX_SETTLEMENT_PASSES:\\s*usize\\s*=\\s*5[\\s\\S]{0,800}for\\s+_\\s+in\\s+0\\.\\.MAX_SETTLEMENT_PASSES[\\s\\S]{0,800}for\\s+state_machine\\s+in\\s+state_machines\\.iter_mut\\(\\)(?![\\s\\S]{0,600}(?:requires_post_update_state_probe|post_update_probe_pending|state_machine_requires_outer_update_probe))[\\s\\S]{0,500}try_change_state_machine_instance\\(state_machine\\)[\\s\\S]{0,300}advance_state_machine_instance_after_state_probe\\([\\s\\S]{0,200}0\\.0"
 min_occurrences = 1
 max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_advance_persistent_dirt_real_facade_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+fl_c5_advance_and_apply_persistent_dirt_component_stops_after_five_passes\\b[\\s\\S]{0,800}install_persistent_dirt_component_fixture\\(\\)[\\s\\S]{0,800}\\.advance_and_apply\\(&mut\\s+artboard,\\s*0\\.25\\)[\\s\\S]{0,800}persistent_dirt_component_fixture_receipt\\(\\)[\\s\\S]{0,800}\\(true,\\s*6,\\s*5,\\s*true\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_advance_public_persistent_dirt_probe"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "pub\\s+fn\\s+runtime_persistent_dirt_settlement_probe\\b"
+max_occurrences = 0
 
 [[ratchet]]
 id = "state_machine_advance_clean_zero_fast_path"
@@ -1309,8 +1335,41 @@ max_occurrences = 0
 [[ratchet]]
 id = "state_machine_advance_artboard_settlement_implementation"
 globs = ["crates/nuxie-runtime/src/artboard.rs"]
-pattern = "(?:fn\\s+\\w*settle\\w*\\b(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,4000}\\b(?:try_change_state_machine_instance|advance_state_machine_instance_after_state_probe)\\s*\\(|fn\\s+advance_state_machine_instances_with_nested_context\\b)"
+pattern = "fn\\s+\\w*settle\\w*\\b(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,4000}\\b(?:try_change_state_machine_instance|advance_state_machine_instance_after_state_probe)\\s*\\("
 max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_artboard_nested_collect_dispatch_orchestration"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "fn\\s+\\w+\\b(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,5000}let\\s+mut\\s+\\w*events\\w*\\s*=\\s*Vec::new\\(\\)(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,2500}advance_(?:nested_artboards|frame_components)[\\w]*collect[\\w]*\\((?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,2500}for\\s*\\([^)]*\\)\\s+in\\s+\\w*events\\w*(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,1200}notify_events"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_artboard_single_nested_delegation_required"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "\\A(?=[\\s\\S]*pub\\s+fn\\s+advance_nested_artboards_with_state_machine\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_collected_nested_events_with\\([\\s\\S]{0,1000}advance_nested_artboards_collect_events)(?=[\\s\\S]*pub\\s+fn\\s+advance_frame_components_with_state_machine\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_collected_nested_events_with\\([\\s\\S]{0,1200}advance_frame_components_collect_events_with_mode)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_nested_event_dispatch_retained_scratch_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*nested_event_dispatch_scratch:\\s*Vec<\\(usize,\\s*Vec<StateMachineReportedEvent>\\)>)(?=[\\s\\S]*fn\\s+dispatch_collected_nested_events_with\\b[\\s\\S]{0,1800}std::mem::take\\(\\s*&mut\\s+state_machine\\.nested_event_dispatch_scratch,?\\s*\\)[\\s\\S]{0,1800}nested_events\\.drain\\(\\.\\.\\)[\\s\\S]{0,800}state_machine\\.nested_event_dispatch_scratch\\s*=\\s*nested_events)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_nested_event_dispatch_fresh_vec"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+dispatch_collected_nested_events_with\\b[\\s\\S]{0,1800}let\\s+mut\\s+nested_events\\s*=\\s*Vec::new\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_persistent_dirt_component_schedule_required"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "\\A(?=[\\s\\S]*struct\\s+PersistentDirtComponentFixture\\b[\\s\\S]{0,300}local_id:\\s*usize)(?=[\\s\\S]*fn\\s+install_persistent_dirt_component_fixture\\b[\\s\\S]{0,1800}dependency_order\\.push\\(root\\)[\\s\\S]{0,1800}advancing_components\\.push\\(RuntimeAdvancingComponent[\\s\\S]{0,500}kind:\\s*AdvancingComponentKind::Artboard)(?=[\\s\\S]*AdvancingComponentKind::Artboard\\s*=>[\\s\\S]{0,500}advance_persistent_dirt_component_fixture\\(\\s*entry\\.local_id,?\\s*\\))(?=[\\s\\S]*fn\\s+update_components_with_hook_recording\\b[\\s\\S]{0,5000}update_persistent_dirt_component_fixture\\(local_id\\))"
+min_occurrences = 1
+max_occurrences = 1
 
 [[ratchet]]
 id = "state_machine_keyframe_first_source_bind_required"
@@ -1464,11 +1523,17 @@ min_occurrences = 1
 max_occurrences = 1
 
 [[ratchet]]
-id = "state_machine_semantic_recorded_seams_required"
+id = "state_machine_semantic_resolver_seam_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "\\A(?=[\\s\\S]*pub\\s+fn\\s+semantic_manager\\(&self\\)\\s*->\\s*bool)(?=[\\s\\S]*pub\\s+fn\\s+enable_semantics\\b[\\s\\S]{0,1000}create-internal-recorded-seam[\\s\\S]{0,180}build-tree-recorded-seam)(?=[\\s\\S]*pub\\s+fn\\s+set_external_semantic_manager\\b[\\s\\S]{0,1300}clean-tree-recorded-seam[\\s\\S]{0,300}external_semantic_manager_identity\\s*=\\s*manager_identity[\\s\\S]{0,300}build-tree-recorded-seam)(?=[\\s\\S]*pub\\s+fn\\s+fire_semantic_action\\b[\\s\\S]{0,500}node-by-id-recorded-seam[\\s\\S]{0,500}group\\.semantic_node_id\\s*==\\s*semantic_node_id[\\s\\S]{0,500}group\\.semantic_data_local_id[\\s\\S]{0,700}match\\s+action_type\\s*\\{[\\s\\S]{0,300}0\\s*=>[\\s\\S]{0,160}1\\s*=>[\\s\\S]{0,160}2\\s*=>[\\s\\S]{0,160}_\\s*=>\\s*return\\s+false[\\s\\S]{0,1000}semantic_action_for_target\\()(?=[\\s\\S]*RECORDED[\\s\\S]{0,120}B6-0329[\\s\\S]{0,120}`src/semantic/semantic_manager\\.cpp`)(?=[\\s\\S]*RECORDED[\\s\\S]{0,120}B6-0327[\\s\\S]{0,120}`src/semantic/semantic_data\\.cpp`)"
+pattern = "\\A(?=[\\s\\S]*trait\\s+SemanticNodeResolver\\b[\\s\\S]{0,300}semantic_data_local_id\\(\\s*&self,\\s*semantic_node_id:\\s*u32,?\\s*\\)\\s*->\\s*Option<usize>)(?=[\\s\\S]*semantic_node_resolver:\\s*Option<Rc<dyn\\s+SemanticNodeResolver>>)(?=[\\s\\S]*semantic_node_resolver:\\s*None)(?=[\\s\\S]*pub\\s+fn\\s+fire_semantic_action\\b[\\s\\S]{0,2500}self\\.semantic_node_resolver\\.clone\\(\\))(?=[\\s\\S]*pub\\s+fn\\s+fire_semantic_action\\b[\\s\\S]{0,2500}resolver\\.semantic_data_local_id\\(semantic_node_id\\))(?=[\\s\\S]*pub\\s+fn\\s+fire_semantic_action\\b[\\s\\S]{0,2500}match\\s+action_type\\s*\\{[\\s\\S]{0,300}0\\s*=>[\\s\\S]{0,160}1\\s*=>[\\s\\S]{0,160}2\\s*=>[\\s\\S]{0,160}_\\s*=>\\s*return\\s+false)(?=[\\s\\S]*pub\\s+fn\\s+fire_semantic_action\\b[\\s\\S]{0,2500}semantic_action_for_target\\()(?=[\\s\\S]*RECORDED[\\s\\S]{0,180}B6-0329[\\s\\S]{0,180}`src/semantic/semantic_manager\\.cpp`)"
 min_occurrences = 1
 max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_semantic_ordinal_projection"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "(?:fn\\s+internal_semantic_node_id\\b|group\\.semantic_node_id\\b|semantic_node_id:\\s*u32,\\s*semantic_data_local_id)"
+max_occurrences = 0
 
 [[ratchet]]
 id = "state_machine_focus_semantic_queue_default_sentinel"

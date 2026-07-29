@@ -6,14 +6,12 @@ use super::{RuntimeStateMachineListener, ScriptListenerInvocation};
 pub(crate) struct RuntimeSemanticListenerGroup {
     pub(crate) listener_index: usize,
     pub(crate) target_local_id: usize,
-    pub(crate) semantic_node_id: u32,
     pub(crate) semantic_data_local_id: usize,
 }
 
 impl RuntimeSemanticListenerGroup {
     pub(crate) fn new(
         listener_index: usize,
-        semantic_node_id: u32,
         semantic_data_local_id: usize,
         listener: &RuntimeStateMachineListener,
     ) -> Option<Self> {
@@ -22,7 +20,6 @@ impl RuntimeSemanticListenerGroup {
             .then_some(Self {
                 listener_index,
                 target_local_id: listener.target_local_id,
-                semantic_node_id,
                 semantic_data_local_id,
             })
     }

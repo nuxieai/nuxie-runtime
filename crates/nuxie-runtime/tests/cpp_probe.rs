@@ -83965,6 +83965,11 @@ fn fl_c5_five_pass_unconditional_probe() {
         .expect("pinned C++ zero-time Artboard follow-up");
     assert!(update < probe && probe < follow_up && follow_up < outer);
 
+    let rust_output = fl_c5_run_rust_unit_probe(
+        "fl_c5_advance_and_apply_persistent_dirt_component_stops_after_five_passes",
+    );
+    let rust_receipt = fl_c5_rust_probe_receipt(&rust_output, "FL_C5_PERSISTENT_DIRT_RECEIPT ");
+
     let Some(probe) = probe_path() else {
         eprintln!("skipping live C++ persistent-dirt comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -83980,20 +83985,10 @@ fn fl_c5_five_pass_unconditional_probe() {
     let cpp = &cpp.artboards[0].runtime_state_machine_advances[0];
     assert!(cpp.persistent_dirt_probe);
 
-    let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, label);
-    let mut machine = artboard
-        .state_machine_instance(0)
-        .expect("persistent-dirt Rust state machine");
-    let rust = StateMachineInstance::runtime_persistent_dirt_settlement_probe(
-        &mut artboard,
-        &mut machine,
-        0.25,
-    )
-    .expect("persistent-dirt Rust settlement");
-
     assert_eq!(
-        (rust.0, rust.1, rust.2, rust.3,),
-        (
+        rust_receipt,
+        format!(
+            "advanced={} advance_count={} update_count={} dirt_remaining={}",
             cpp.advanced,
             cpp.persistent_dirt_advance_count,
             cpp.persistent_dirt_update_count,
@@ -84002,7 +83997,11 @@ fn fl_c5_five_pass_unconditional_probe() {
         "both runtimes must expose the same five-pass cap under dirt that requires a sixth pass"
     );
     assert_eq!(
-        (rust.1, rust.2, rust.3),
+        (
+            cpp.persistent_dirt_advance_count,
+            cpp.persistent_dirt_update_count,
+            cpp.persistent_dirt_remaining,
+        ),
         (6, 5, true),
         "one main advance plus five settlement advances leaves sixth-pass dirt pending"
     );

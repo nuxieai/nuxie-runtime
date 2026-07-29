@@ -2154,6 +2154,39 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     missing,
                 )
 
+        self.assert_required_production_ratchet_case(
+            "state_machine_artboard_single_nested_delegation_required",
+            "crates/nuxie-runtime/src/artboard.rs",
+            textwrap.dedent(
+                """
+                pub fn advance_nested_artboards_with_state_machine() {
+                    StateMachineInstance::dispatch_collected_nested_events_with(
+                        |artboard, events| {
+                            artboard.advance_nested_artboards_collect_events(events);
+                        },
+                    );
+                }
+                pub fn advance_frame_components_with_state_machine() {
+                    StateMachineInstance::dispatch_collected_nested_events_with(
+                        |artboard, events| {
+                            artboard.advance_frame_components_collect_events_with_mode(events);
+                        },
+                    );
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                pub fn advance_nested_artboards_with_state_machine() {
+                    advance_nested_artboards_collect_events();
+                }
+                pub fn advance_frame_components_with_state_machine() {
+                    advance_frame_components_collect_events_with_mode();
+                }
+                """
+            ),
+        )
+
         forbidden_cases = [
             (
                 "state_machine_cached_changed_count",
@@ -2654,10 +2687,25 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 }
                 fn reach_recorded_audio_event_seam() {
                     for event in events.iter().filter(|event| event.is_audio_event()) {
-                        record(event);
+                        self.audio_event_seam.selected(
+                            occurrence,
+                            &mut self.audio_event_selection_count,
+                            &mut self.audio_event_last_occurrence,
+                        );
                     }
                 }
-                pub fn plays_audio(&self) -> bool { true }
+                trait AudioEventSeam {
+                    fn selected();
+                }
+                impl AudioEventSeam for RecordingAudioEventSeam {
+                    fn selected() {
+                        *selection_count = selection_count.saturating_add(1);
+                        *last_occurrence = Some(occurrence);
+                    }
+                }
+                audio_event_selection_count: usize,
+                audio_event_last_occurrence: Option<AudioEventOccurrence>,
+                audio_event_seam: Rc::new(RecordingAudioEventSeam),
                 """,
                 """
                 fn notify_events_with_context_and_script_host() {
@@ -2671,7 +2719,6 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                         record(event);
                     }
                 }
-                pub fn plays_audio(&self) -> bool { true }
                 """,
             ),
             (
@@ -2984,6 +3031,35 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 }
                 """,
             ),
+            (
+                "state_machine_advance_persistent_dirt_real_facade_required",
+                """
+                fn fl_c5_advance_and_apply_persistent_dirt_component_stops_after_five_passes() {
+                    artboard.install_persistent_dirt_component_fixture();
+                    let advanced = machine
+                        .advance_and_apply(&mut artboard, 0.25);
+                    let receipt =
+                        artboard.persistent_dirt_component_fixture_receipt();
+                    assert_eq!(
+                        (advanced, receipt.0, receipt.1, receipt.2),
+                        (true, 6, 5, true),
+                    );
+                }
+                """,
+                """
+                fn fl_c5_advance_and_apply_persistent_dirt_component_stops_after_five_passes() {
+                    artboard.install_persistent_dirt_component_fixture();
+                    let advanced =
+                        StateMachineInstance::settle_artboard_update_passes();
+                    let receipt =
+                        artboard.persistent_dirt_component_fixture_receipt();
+                    assert_eq!(
+                        (advanced, receipt.0, receipt.1, receipt.2),
+                        (true, 6, 5, true),
+                    );
+                }
+                """,
+            ),
         ]
         for ratchet_id, required, missing in required_cases:
             with self.subTest(ratchet=ratchet_id):
@@ -2994,7 +3070,182 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     textwrap.dedent(missing),
                 )
 
+        self.assert_required_production_ratchet_case(
+            "state_machine_nested_event_dispatch_retained_scratch_required",
+            instance_source,
+            textwrap.dedent(
+                """
+                nested_event_dispatch_scratch:
+                    Vec<(usize, Vec<StateMachineReportedEvent>)>,
+                fn dispatch_collected_nested_events_with() {
+                    let mut nested_events = std::mem::take(
+                        &mut state_machine.nested_event_dispatch_scratch,
+                    );
+                    for (host, events) in nested_events.drain(..) {
+                        notify(host, events);
+                    }
+                    state_machine.nested_event_dispatch_scratch = nested_events;
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                fn dispatch_collected_nested_events_with() {
+                    let mut nested_events = Vec::new();
+                    for (host, events) in nested_events {
+                        notify(host, events);
+                    }
+                }
+                """
+            ),
+        )
+
+        self.assert_required_production_ratchet_case(
+            "state_machine_persistent_dirt_component_schedule_required",
+            "crates/nuxie-runtime/src/artboard.rs",
+            textwrap.dedent(
+                """
+                struct PersistentDirtComponentFixture {
+                    local_id: usize,
+                }
+                fn install_persistent_dirt_component_fixture() {
+                    dependency_order.push(root);
+                    advancing_components.push(RuntimeAdvancingComponent {
+                        kind: AdvancingComponentKind::Artboard,
+                    });
+                }
+                fn advance_components() {
+                    match kind {
+                        AdvancingComponentKind::Artboard => {
+                            self.advance_persistent_dirt_component_fixture(
+                                entry.local_id,
+                            )
+                        }
+                    }
+                }
+                fn update_components_with_hook_recording() {
+                    self.update_persistent_dirt_component_fixture(local_id);
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                struct PersistentDirtComponentFixture {
+                    local_id: usize,
+                }
+                fn install_persistent_dirt_component_fixture() {}
+                fn advance_components() {
+                    self.advance_persistent_dirt_component_fixture(0);
+                }
+                fn update_pass() {
+                    self.update_persistent_dirt_component_fixture(0);
+                }
+                """
+            ),
+        )
+
+        self.assert_required_production_ratchet_case(
+            "state_machine_facade_constructor_retains_preparation_error_required",
+            "crates/nuxie/src/lib.rs",
+            textwrap.dedent(
+                """
+                pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
+                    let mut machine = self.raw.state_machine_instance(index)?;
+                    let _ =
+                        try_prepare_state_machine_scripted_data_context_without_factory(
+                            file,
+                            artboard,
+                            &mut machine,
+                        );
+                    Some(machine)
+                }
+                pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
+                    let mut machine = self.raw.state_machine_instance(index)?;
+                    let _ =
+                        try_prepare_state_machine_scripted_data_context_without_factory(
+                            file,
+                            artboard,
+                            &mut machine,
+                        );
+                    Some(machine)
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
+                    let mut machine = self.raw.state_machine_instance(index)?;
+                    if try_prepare_state_machine_scripted_data_context_without_factory(
+                        file,
+                        artboard,
+                        &mut machine,
+                    ).is_err() {
+                        return None;
+                    }
+                    Some(machine)
+                }
+                """
+            ),
+        )
+
         forbidden_cases = [
+            (
+                "state_machine_nested_event_dispatch_fresh_vec",
+                """
+                fn dispatch_collected_nested_events_with() {
+                    let mut nested_events = Vec::new();
+                    collect(&mut nested_events);
+                }
+                """,
+                """
+                fn dispatch_collected_nested_events_with() {
+                    let mut nested_events = std::mem::take(
+                        &mut self.nested_event_dispatch_scratch,
+                    );
+                    collect(&mut nested_events);
+                }
+                """,
+                instance_source,
+            ),
+            (
+                "state_machine_facade_constructor_drops_preparation_error",
+                """
+                pub fn state_machine_instance() {
+                    if try_prepare_state_machine_scripted_data_context_without_factory(
+                        file,
+                        artboard,
+                        machine,
+                    ).is_err() {
+                        return None;
+                    }
+                }
+                """,
+                """
+                pub fn state_machine_instance() {
+                    let _ =
+                        try_prepare_state_machine_scripted_data_context_without_factory(
+                            file,
+                            artboard,
+                            machine,
+                        );
+                    Some(machine)
+                }
+                """,
+                "crates/nuxie/src/lib.rs",
+            ),
+            (
+                "state_machine_advance_public_persistent_dirt_probe",
+                """
+                pub fn runtime_persistent_dirt_settlement_probe() {
+                    settle_artboard_update_passes();
+                }
+                """,
+                """
+                #[cfg(test)]
+                fn persistent_dirt_component_fixture_receipt() {}
+                """,
+                instance_source,
+            ),
             (
                 "state_machine_advance_clean_zero_fast_path",
                 """
@@ -3051,16 +3302,50 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             (
                 "state_machine_advance_artboard_settlement_implementation",
                 """
-                fn advance_state_machine_instances_with_nested_context() {
-                    for instance in instances {
-                        instance.advance();
+                fn renamed_settlement_owner() {
+                    for pass in 0..5 {
+                        update_pass(pass);
+                        advance_state_machine_instance_after_state_probe(
+                            state_machine,
+                        );
                     }
-                    advance_nested();
                 }
                 """,
                 """
-                fn advance_state_machine_instances_with_nested() {
-                    StateMachineInstance::advance_artboard_frame_components_with();
+                fn renamed_settlement_owner() {
+                    StateMachineInstance::settle_artboard_update_passes();
+                }
+                """,
+                "crates/nuxie-runtime/src/artboard.rs",
+            ),
+            (
+                "state_machine_artboard_nested_collect_dispatch_orchestration",
+                """
+                fn renamed_duplicate_orchestration_helper() {
+                    let mut forwarded_events = Vec::new();
+                    advance_frame_components_collect_events_with_mode(
+                        elapsed,
+                        mode,
+                        Some(&mut forwarded_events),
+                    );
+                    for (host, reports) in forwarded_events {
+                        machine.notify_events(self, Some(host), &reports);
+                    }
+                }
+                """,
+                """
+                fn renamed_duplicate_orchestration_helper() {
+                    StateMachineInstance::dispatch_collected_nested_events_with(
+                        self,
+                        machine,
+                        |artboard, forwarded_events| {
+                            artboard.advance_frame_components_collect_events_with_mode(
+                                elapsed,
+                                mode,
+                                Some(forwarded_events),
+                            )
+                        },
+                    );
                 }
                 """,
                 "crates/nuxie-runtime/src/artboard.rs",
@@ -3593,34 +3878,27 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 """,
             ),
             (
-                "state_machine_semantic_recorded_seams_required",
+                "state_machine_semantic_resolver_seam_required",
                 """
                 // RECORDED absent row B6-0329 `src/semantic/semantic_manager.cpp`
-                // RECORDED absent row B6-0327 `src/semantic/semantic_data.cpp`
-                pub fn semantic_manager(&self) -> bool {
-                    self.selection.is_some()
+                trait SemanticNodeResolver {
+                    fn semantic_data_local_id(
+                        &self,
+                        semantic_node_id: u32,
+                    ) -> Option<usize>;
                 }
-                pub fn enable_semantics() {
-                    record("create-internal-recorded-seam");
-                    record("build-tree-recorded-seam");
-                }
-                pub fn set_external_semantic_manager() {
-                    record("clean-tree-recorded-seam");
-                    self.external_semantic_manager_identity = manager_identity;
-                    record("build-tree-recorded-seam");
-                }
+                semantic_node_resolver: Option<Rc<dyn SemanticNodeResolver>>,
+                semantic_node_resolver: None,
                 pub fn fire_semantic_action(
                     semantic_node_id: u32,
                     action_type: u32,
                 ) {
+                    let Some(resolver) = self.semantic_node_resolver.clone() else {
+                        return false;
+                    };
                     record("node-by-id-recorded-seam");
-                    let semantic_data_local_id = self.groups
-                        .iter()
-                        .find(|group| {
-                            group.semantic_node_id == semantic_node_id
-                        })
-                        .map(|group| group.semantic_data_local_id)
-                        .unwrap();
+                    let semantic_data_local_id =
+                        resolver.semantic_data_local_id(semantic_node_id);
                     let phase = match action_type {
                         0 => "tap",
                         1 => "increase",
@@ -3631,8 +3909,6 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 }
                 """,
                 """
-                pub fn enable_semantics() {}
-                pub fn set_external_semantic_manager() {}
                 pub fn fire_semantic_action(
                     semantic_node_id: u32,
                     action_type: u32,
@@ -3651,6 +3927,23 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     textwrap.dedent(required),
                     textwrap.dedent(missing),
                 )
+
+        self.assert_production_ratchet_case(
+            "state_machine_semantic_ordinal_projection",
+            instance_source,
+            textwrap.dedent(
+                """
+                fn internal_semantic_node_id() {}
+                """
+            ),
+            textwrap.dedent(
+                """
+                trait SemanticNodeResolver {
+                    fn semantic_data_local_id(&self, id: u32) -> Option<usize>;
+                }
+                """
+            ),
+        )
 
         self.assert_required_production_ratchet_case(
             "state_machine_focus_owner_safe_identity_projection_required",

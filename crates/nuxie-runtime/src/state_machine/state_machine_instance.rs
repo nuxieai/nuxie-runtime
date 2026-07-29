@@ -67,6 +67,46 @@ use std::rc::{Rc, Weak};
 #[cfg(test)]
 use crate::{ScriptListenerActionMethod, ScriptMethod};
 
+/// Instance-owned boundary for C++ `semanticManager()->nodeById(id)`.
+///
+/// The deferred semantic-manager family installs the production resolver.
+/// FL-C5 owns only the node-id lookup contract and the action switch after a
+/// resolver returns the authored `SemanticData` occurrence identity.
+pub(crate) trait SemanticNodeResolver: std::fmt::Debug {
+    fn semantic_data_local_id(&self, semantic_node_id: u32) -> Option<usize>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct AudioEventOccurrence {
+    event_local_index: usize,
+    event_core_type: u32,
+}
+
+/// Instance-owned production boundary later replaced by `AudioEvent::play`.
+trait AudioEventSeam: std::fmt::Debug {
+    fn selected(
+        &self,
+        occurrence: AudioEventOccurrence,
+        selection_count: &mut usize,
+        last_occurrence: &mut Option<AudioEventOccurrence>,
+    );
+}
+
+#[derive(Debug)]
+struct RecordingAudioEventSeam;
+
+impl AudioEventSeam for RecordingAudioEventSeam {
+    fn selected(
+        &self,
+        occurrence: AudioEventOccurrence,
+        selection_count: &mut usize,
+        last_occurrence: &mut Option<AudioEventOccurrence>,
+    ) {
+        *selection_count = selection_count.saturating_add(1);
+        *last_occurrence = Some(occurrence);
+    }
+}
+
 /// Exact C++ pointer result strength. Keep this tri-state internally even
 /// though the established Rust facade projects it to `bool`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -1428,6 +1468,9 @@ pub struct StateMachineInstance {
     /// dependency owned by absent manifest row B6-0329.
     internal_semantic_manager_enabled: bool,
     external_semantic_manager_identity: Option<u64>,
+    /// RECORDED seam: the deferred semantic-manager row supplies this hook.
+    /// Production defaults to absent; FL-C5 must not fabricate manager IDs.
+    semantic_node_resolver: Option<Rc<dyn SemanticNodeResolver>>,
     #[cfg(test)]
     semantic_manager_phase_trace: Vec<&'static str>,
     inputs: Vec<StateMachineInputInstance>,
@@ -1473,6 +1516,9 @@ pub struct StateMachineInstance {
     /// values here avoids a raw child-to-parent pointer.
     bubbled_event_reports: Vec<StateMachineReportedEvent>,
     bubbled_event_report_index: usize,
+    /// Reused outer buffer for Artboard-collected nested reports. The
+    /// instance-owned dispatch policy retains its per-frame scratch capacity.
+    nested_event_dispatch_scratch: Vec<(usize, Vec<StateMachineReportedEvent>)>,
     /// Whether this occurrence is owned by a `NestedStateMachine` notifier.
     /// Root occurrences have no upward event edge and must not accumulate an
     /// outgoing bubble batch.
@@ -1503,8 +1549,9 @@ pub struct StateMachineInstance {
     bind_phase_trace: Vec<&'static str>,
     #[cfg(test)]
     event_dispatch_phase_trace: Vec<&'static str>,
-    #[cfg(test)]
-    audio_event_seam_receipts: Vec<(usize, u32)>,
+    audio_event_seam: Rc<dyn AudioEventSeam>,
+    audio_event_selection_count: usize,
+    audio_event_last_occurrence: Option<AudioEventOccurrence>,
     #[cfg(test)]
     advance_phase_trace: Vec<&'static str>,
     #[cfg(test)]
@@ -2079,6 +2126,7 @@ impl Clone for StateMachineInstance {
             focus_manager_phase_trace: self.focus_manager_phase_trace.clone(),
             internal_semantic_manager_enabled: self.internal_semantic_manager_enabled,
             external_semantic_manager_identity: self.external_semantic_manager_identity,
+            semantic_node_resolver: self.semantic_node_resolver.clone(),
             #[cfg(test)]
             semantic_manager_phase_trace: self.semantic_manager_phase_trace.clone(),
             inputs: self.inputs.clone(),
@@ -2112,6 +2160,7 @@ impl Clone for StateMachineInstance {
             reporting_events: self.reporting_events.clone(),
             bubbled_event_reports: self.bubbled_event_reports.clone(),
             bubbled_event_report_index: self.bubbled_event_report_index,
+            nested_event_dispatch_scratch: Vec::new(),
             event_bubble_owner_attached: self.event_bubble_owner_attached,
             notifying_event_listeners: false,
             reported_listener_view_models,
@@ -2132,8 +2181,9 @@ impl Clone for StateMachineInstance {
             bind_phase_trace: self.bind_phase_trace.clone(),
             #[cfg(test)]
             event_dispatch_phase_trace: self.event_dispatch_phase_trace.clone(),
-            #[cfg(test)]
-            audio_event_seam_receipts: self.audio_event_seam_receipts.clone(),
+            audio_event_seam: self.audio_event_seam.clone(),
+            audio_event_selection_count: self.audio_event_selection_count,
+            audio_event_last_occurrence: self.audio_event_last_occurrence,
             #[cfg(test)]
             advance_phase_trace: self.advance_phase_trace.clone(),
             #[cfg(test)]
@@ -2284,34 +2334,6 @@ fn listener_target_direct_child(
         let child = artboard.component_at(child);
         (child.type_name == child_type).then_some(child.local_id)
     })
-}
-
-/// Project the manager-local ID assigned by an empty internal
-/// `SemanticManager::buildSemanticTree` to one authored SemanticData.
-///
-/// C++ registers every SemanticData in `Artboard::m_Objects` order and the
-/// manager assigns IDs starting at one. This mapping is deliberately distinct
-/// from component local IDs: `fireSemanticAction` receives the former, then
-/// `nodeById(...)->semanticData()` reaches the latter. A later external-manager
-/// rebuild preserves the node's assigned ID unless that recorded manager seam
-/// resolves a collision.
-fn internal_semantic_node_id(
-    artboard: &ArtboardInstance,
-    semantic_data_local_id: usize,
-) -> Option<u32> {
-    let mut semantic_node_id = 1u32;
-    for component in artboard.components().iter() {
-        if !nuxie_schema::definition_by_name(component.type_name)
-            .is_some_and(|definition| definition.is_a("SemanticData"))
-        {
-            continue;
-        }
-        if component.local_id == semantic_data_local_id {
-            return Some(semantic_node_id);
-        }
-        semantic_node_id = semantic_node_id.checked_add(1)?;
-    }
-    None
 }
 
 fn listener_uses_report_queue(listener: &RuntimeStateMachineListener) -> bool {
@@ -2933,6 +2955,7 @@ impl StateMachineInstance {
             focus_manager_phase_trace: Vec::new(),
             internal_semantic_manager_enabled: false,
             external_semantic_manager_identity: None,
+            semantic_node_resolver: None,
             #[cfg(test)]
             semantic_manager_phase_trace: Vec::new(),
             inputs,
@@ -2962,6 +2985,7 @@ impl StateMachineInstance {
             reporting_events: Vec::new(),
             bubbled_event_reports: Vec::new(),
             bubbled_event_report_index: 0,
+            nested_event_dispatch_scratch: Vec::new(),
             // Capture the mounted-owner boundary once, while the occurrence
             // is constructed. `frame_origin` is later reused as mutable draw
             // state, so consulting it from `advance` could accidentally turn
@@ -2980,8 +3004,9 @@ impl StateMachineInstance {
             bind_phase_trace: Vec::new(),
             #[cfg(test)]
             event_dispatch_phase_trace: Vec::new(),
-            #[cfg(test)]
-            audio_event_seam_receipts: Vec::new(),
+            audio_event_seam: Rc::new(RecordingAudioEventSeam),
+            audio_event_selection_count: 0,
+            audio_event_last_occurrence: None,
             #[cfg(test)]
             advance_phase_trace: Vec::new(),
             #[cfg(test)]
@@ -3397,14 +3422,8 @@ impl StateMachineInstance {
             else {
                 continue;
             };
-            let Some(semantic_node_id) =
-                internal_semantic_node_id(artboard, semantic_data_local_id)
-            else {
-                continue;
-            };
             if let Some(group) = semantic_listener_group::RuntimeSemanticListenerGroup::new(
                 listener_index,
-                semantic_node_id,
                 semantic_data_local_id,
                 listener,
             ) {
@@ -5340,34 +5359,24 @@ impl StateMachineInstance {
         true
     }
 
-    /// Dispatch orchestration up to the recorded manager/data boundaries.
+    /// Dispatch through the instance-owned recorded manager/data boundary.
     ///
     /// RECORDED seam: absent manifest row B6-0329,
     /// `src/semantic/semantic_manager.cpp`, owns `nodeById`.
     /// RECORDED seam: absent manifest row B6-0327,
     /// `src/semantic/semantic_data.cpp`, owns action validation and
     /// `fireSemanticTap`/`fireSemanticIncrease`/`fireSemanticDecrease`.
-    /// The retained listener groups are the owner-safe `SemanticData` seam:
-    /// their authored SemanticData local identity stands in for the manager's
-    /// resolved node/data pointer. Missing manager, node, or data and
-    /// out-of-range actions remain no-ops.
+    /// Missing resolver, node, or data and out-of-range actions are silent
+    /// no-ops, matching C++'s missing-manager branch. The deferred semantic
+    /// manager row installs the production resolver.
     pub fn fire_semantic_action(&mut self, semantic_node_id: u32, action_type: u32) -> bool {
-        if !self.semantic_manager() {
-            return false;
-        }
-        self.record_semantic_manager_phase("node-by-id-recorded-seam");
-        let Some(semantic_data_local_id) = self
-            .semantic_listener_groups
-            .iter()
-            .find(|group| group.semantic_node_id == semantic_node_id)
-            .map(|group| group.semantic_data_local_id)
-        else {
+        let Some(resolver) = self.semantic_node_resolver.clone() else {
             return false;
         };
-        // This is the owner-safe projection of
-        // `nodeById(semantic_node_id)->semanticData()`: the lookup key is the
-        // manager node ID while the retained value is the distinct authored
-        // SemanticData component identity.
+        self.record_semantic_manager_phase("node-by-id-recorded-seam");
+        let Some(semantic_data_local_id) = resolver.semantic_data_local_id(semantic_node_id) else {
+            return false;
+        };
         let Some(target_local_id) = self
             .semantic_listener_groups
             .iter()
@@ -5391,6 +5400,11 @@ impl StateMachineInstance {
         self.record_semantic_manager_phase(phase);
         self.semantic_action_for_target(target_local_id, action_type);
         true
+    }
+
+    #[cfg(test)]
+    fn set_semantic_node_resolver(&mut self, resolver: Option<Rc<dyn SemanticNodeResolver>>) {
+        self.semantic_node_resolver = resolver;
     }
 
     fn record_semantic_manager_phase(&mut self, phase: &'static str) {
@@ -7281,25 +7295,35 @@ impl StateMachineInstance {
         std::mem::take(&mut self.bubbled_event_reports)
     }
 
-    /// Select the C++ `AudioEvent` occurrences after local dispatch and
-    /// bubbling, then invoke the recorded playback seam once per occurrence.
+    /// Select C++ `AudioEvent` occurrences after local dispatch and bubbling,
+    /// then invoke the production handoff once per occurrence.
     ///
-    /// Playback internals remain owned by the deferred audio subsystem; the
-    /// family-owned type selection and call multiplicity live here
+    /// Playback internals remain owned by deferred `audio_event.cpp`; the
+    /// production default records the selected occurrence until that row
+    /// replaces this boundary with `play()`
     /// (`state_machine_instance.cpp:3155-3169`).
     fn reach_recorded_audio_event_seam(&mut self, events: &[StateMachineReportedEvent]) {
         for event in events.iter().filter(|event| event.is_audio_event()) {
             self.record_event_dispatch_phase("recorded-audio-seam");
-            #[cfg(not(test))]
-            let _ = event;
-            #[cfg(test)]
-            self.audio_event_seam_receipts
-                .push((event.event_local_index(), event.event_core_type()));
+            let occurrence = AudioEventOccurrence {
+                event_local_index: event.event_local_index(),
+                event_core_type: event.event_core_type(),
+            };
+            self.audio_event_seam.selected(
+                occurrence,
+                &mut self.audio_event_selection_count,
+                &mut self.audio_event_last_occurrence,
+            );
         }
     }
 
-    pub fn plays_audio(&self) -> bool {
-        true
+    #[cfg(test)]
+    fn audio_event_seam_receipt(&self) -> (usize, Option<(usize, u32)>) {
+        (
+            self.audio_event_selection_count,
+            self.audio_event_last_occurrence
+                .map(|occurrence| (occurrence.event_local_index, occurrence.event_core_type)),
+        )
     }
 
     fn finish_listener_view_model_firing_boundary(&mut self) {
@@ -12386,6 +12410,32 @@ impl StateMachineInstance {
         Ok(advanced)
     }
 
+    /// Instance-owned policy for a single root machine consuming nested
+    /// reports. Artboard retains only the borrow closure needed to run its
+    /// advancing-component collector.
+    pub(crate) fn dispatch_collected_nested_events_with(
+        artboard: &mut ArtboardInstance,
+        state_machine: &mut Self,
+        collect: impl FnOnce(
+            &mut ArtboardInstance,
+            &mut Vec<(usize, Vec<StateMachineReportedEvent>)>,
+        ) -> Result<(), ScriptError>,
+    ) -> Result<bool, ScriptError> {
+        let mut nested_events = std::mem::take(&mut state_machine.nested_event_dispatch_scratch);
+        nested_events.clear();
+        if let Err(error) = collect(artboard, &mut nested_events) {
+            nested_events.clear();
+            state_machine.nested_event_dispatch_scratch = nested_events;
+            return Err(error);
+        }
+        let mut notified = false;
+        for (host_local, events) in nested_events.drain(..) {
+            notified |= state_machine.notify_events(artboard, Some(host_local), &events);
+        }
+        state_machine.nested_event_dispatch_scratch = nested_events;
+        Ok(notified)
+    }
+
     pub(crate) fn advance_artboard_frame_components(
         artboard: &mut ArtboardInstance,
         state_machines: &mut [Self],
@@ -12572,45 +12622,6 @@ impl StateMachineInstance {
             changed,
             elapsed_seconds,
             state_machines,
-        ))
-    }
-
-    /// Live FL-C5 masking differential for the C++ five-pass settlement cap.
-    ///
-    /// The injected advancing occurrence re-dirties the root after every
-    /// update, so a sixth settlement pass would be required to clear it. The
-    /// tuple is `(advanced, advancing_calls, update_calls, dirt_remaining)`.
-    #[doc(hidden)]
-    pub fn runtime_persistent_dirt_settlement_probe(
-        artboard: &mut ArtboardInstance,
-        state_machine: &mut Self,
-        elapsed_seconds: f32,
-    ) -> Result<(bool, usize, usize, bool), ScriptError> {
-        let mut changed = Self::advance_artboard_frame_components(
-            artboard,
-            std::slice::from_mut(state_machine),
-            elapsed_seconds,
-        )?;
-        let mut advancing_calls = 1;
-        let mut update_calls = 0;
-        let _ = artboard.add_dirt(0, ComponentDirt::COMPONENTS, false);
-        changed |= Self::settle_artboard_update_passes(
-            artboard,
-            std::slice::from_mut(state_machine),
-            true,
-            |artboard| {
-                update_calls += 1;
-                let updated = artboard.update_pass();
-                advancing_calls += 1;
-                let _ = artboard.add_dirt(0, ComponentDirt::COMPONENTS, false);
-                updated
-            },
-        );
-        Ok((
-            changed,
-            advancing_calls,
-            update_calls,
-            artboard.has_dirt(ComponentDirt::COMPONENTS),
         ))
     }
 
@@ -14773,20 +14784,16 @@ mod scripted_listener_action_tests {
     }
 
     #[test]
-    fn fl_c5_advance_five_passes_probe_transitions_unconditionally() {
+    fn fl_c5_advance_and_apply_persistent_dirt_component_stops_after_five_passes() {
         let (mut artboard, mut machine) = fl_c5_advance_fixture();
+        artboard.install_persistent_dirt_component_fixture();
         let probe_count = machine.transition_probe_count;
 
-        StateMachineInstance::settle_artboard_update_passes(
-            &mut artboard,
-            std::slice::from_mut(&mut machine),
-            true,
-            |artboard| {
-                let changed = artboard.update_pass();
-                let _ = artboard.add_dirt(0, ComponentDirt::COMPONENTS, false);
-                changed
-            },
-        );
+        let advanced = machine
+            .advance_and_apply(&mut artboard, 0.25)
+            .expect("public advance_and_apply facade");
+        let (advance_count, update_count, dirt_remaining) =
+            artboard.persistent_dirt_component_fixture_receipt();
 
         assert_eq!(
             machine.transition_probe_count - probe_count,
@@ -14796,6 +14803,16 @@ mod scripted_listener_action_tests {
         assert_eq!(
             machine.data_context_advance_call_count, 5,
             "ViewModels advance once per settlement iteration before the Artboard reset"
+        );
+        assert_eq!(
+            (advanced, advance_count, update_count, dirt_remaining),
+            (true, 6, 5, true),
+            "one main component advance plus five settlement advances leaves sixth-pass dirt pending"
+        );
+        println!(
+            "FL_C5_PERSISTENT_DIRT_RECEIPT advanced={advanced} \
+             advance_count={advance_count} update_count={update_count} \
+             dirt_remaining={dirt_remaining}"
         );
     }
 
@@ -16212,6 +16229,18 @@ mod scripted_listener_action_tests {
 
     #[test]
     fn semantic_callbacks_apply_constraints_preserve_duplicates_and_defer_actions() {
+        #[derive(Debug)]
+        struct StubSemanticNodeResolver {
+            calls: Rc<RefCell<Vec<u32>>>,
+        }
+
+        impl SemanticNodeResolver for StubSemanticNodeResolver {
+            fn semantic_data_local_id(&self, semantic_node_id: u32) -> Option<usize> {
+                self.calls.borrow_mut().push(semantic_node_id);
+                (semantic_node_id == 77).then_some(2)
+            }
+        }
+
         fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
             AuthoringRecord {
                 type_key: nuxie_schema::definition_by_name(type_name)
@@ -16278,29 +16307,42 @@ mod scripted_listener_action_tests {
             machine.semantic_listener_groups[0].semantic_data_local_id,
             2
         );
-        assert_eq!(
-            machine.semantic_listener_groups[0].semantic_node_id, 1,
-            "manager node IDs are not authored component local IDs"
-        );
         assert!(
-            !machine.fire_semantic_action(2, 0),
-            "the authored SemanticData local ID is not a manager node ID"
+            !machine.fire_semantic_action(77, 0),
+            "W41's recorded-seam contract makes the production-default absent resolver a silent no-op"
         );
+        let resolver_calls = Rc::new(RefCell::new(Vec::new()));
+        machine.set_semantic_node_resolver(Some(Rc::new(StubSemanticNodeResolver {
+            calls: Rc::clone(&resolver_calls),
+        })));
         assert!(
-            machine.fire_semantic_action(1, 1),
+            machine.fire_semantic_action(77, 1),
             "increase dispatch reaches SemanticData even though this listener accepts only tap"
+        );
+        assert!(
+            machine.fire_semantic_action(77, 2),
+            "decrease dispatch reaches the injected SemanticData resolver seam"
         );
         assert!(
             machine.queued_semantic_events.is_empty(),
             "SemanticData applies the listener's action constraint"
         );
         assert!(
+            !machine.fire_semantic_action(77, 3),
+            "an out-of-range action is a no-op after resolving a valid node"
+        );
+        assert!(
             !machine.semantic_action_for_target(1, 1),
             "a nonmatching action is not registered"
         );
         assert!(
-            machine.fire_semantic_action(1, 0),
+            machine.fire_semantic_action(77, 0),
             "tap selects the SemanticData action and queues its listener callback"
+        );
+        assert_eq!(
+            resolver_calls.borrow().as_slice(),
+            [77, 77, 77, 77],
+            "tap, increase, decrease, and invalid actions all reach the injected node resolver"
         );
         assert_eq!(
             machine.semantic_manager_phase_trace,
@@ -16308,9 +16350,13 @@ mod scripted_listener_action_tests {
                 "create-internal-recorded-seam",
                 "build-tree-recorded-seam",
                 "node-by-id-recorded-seam",
-                "node-by-id-recorded-seam",
                 "semantic-data-recorded-seam",
                 "fire-increase-recorded-data-seam",
+                "node-by-id-recorded-seam",
+                "semantic-data-recorded-seam",
+                "fire-decrease-recorded-data-seam",
+                "node-by-id-recorded-seam",
+                "semantic-data-recorded-seam",
                 "node-by-id-recorded-seam",
                 "semantic-data-recorded-seam",
                 "fire-tap-recorded-data-seam",
@@ -16332,8 +16378,8 @@ mod scripted_listener_action_tests {
             Some(true)
         );
 
-        assert!(machine.fire_semantic_action(1, 0));
-        assert!(machine.fire_semantic_action(1, 0));
+        assert!(machine.fire_semantic_action(77, 0));
+        assert!(machine.fire_semantic_action(77, 0));
         assert!(
             machine.apply_local_event_listeners(&mut artboard, 0, None),
             "both duplicate callback occurrences execute in FIFO order"
@@ -17483,8 +17529,41 @@ mod scripted_listener_action_tests {
         leaf.attach_event_bubble_owner();
         parent.attach_event_bubble_owner();
         let ordinary_event = fl_c5_test_reported_event(6);
-        let mut audio_event = fl_c5_test_reported_event(7);
-        audio_event.event_core_type = 407;
+        let audio_file = RuntimeFile::from_authoring_records(vec![
+            AuthoringRecord {
+                type_key: nuxie_schema::definition_by_name("Backboard")
+                    .expect("Backboard schema definition")
+                    .type_key
+                    .int,
+                properties: Vec::new(),
+            },
+            AuthoringRecord {
+                type_key: nuxie_schema::definition_by_name("Artboard")
+                    .expect("Artboard schema definition")
+                    .type_key
+                    .int,
+                properties: Vec::new(),
+            },
+            AuthoringRecord {
+                type_key: nuxie_schema::definition_by_name("AudioEvent")
+                    .expect("AudioEvent schema definition")
+                    .type_key
+                    .int,
+                properties: vec![AuthoringProperty {
+                    key: crate::properties::property_key_for_name("AudioEvent", "parentId")
+                        .expect("AudioEvent.parentId"),
+                    value: AuthoringValue::Uint(0),
+                }],
+            },
+        ])
+        .expect("import live AudioEvent fixture");
+        let audio_object = audio_file
+            .objects
+            .iter()
+            .flatten()
+            .find(|object| object.type_name == "AudioEvent")
+            .expect("live AudioEvent-typed object");
+        let audio_event = StateMachineReportedEvent::from_runtime_event(7, audio_object);
         let event = [ordinary_event, audio_event];
         let calls = Rc::new(RefCell::new(Vec::new()));
         let mut mismatch = scripted_test_listener(
@@ -17574,18 +17653,19 @@ mod scripted_listener_action_tests {
                 ["local-dispatch", "bubble-to-owner", "recorded-audio-seam"]
             );
             assert_eq!(
-                machine.audio_event_seam_receipts,
-                [(7, 407)],
-                "only the AudioEvent reaches the recorded playback seam"
+                machine.audio_event_seam_receipt(),
+                (1, Some((7, u32::from(audio_object.type_key)))),
+                "only the imported AudioEvent occurrence reaches the production handoff"
             );
-            assert!(machine.plays_audio());
         }
         assert_eq!(
             root.event_dispatch_phase_trace,
             ["local-dispatch", "recorded-audio-seam"]
         );
-        assert_eq!(root.audio_event_seam_receipts, [(7, 407)]);
-        assert!(root.plays_audio());
+        assert_eq!(
+            root.audio_event_seam_receipt(),
+            (1, Some((7, u32::from(audio_object.type_key))))
+        );
 
         root.event_dispatch_phase_trace.clear();
         assert!(

@@ -1131,6 +1131,38 @@ fn public_machine_construction_synchronously_prepares_scripted_data_without_bloc
     }
 }
 
+#[test]
+fn public_machine_construction_retains_preparation_failure_without_dropping_the_machine() {
+    let bytes = scripted_listener_file(
+        br#"
+            return function(_context)
+                while true do end
+            end
+        "#,
+        1,
+    );
+    let runtime =
+        read_runtime_file_for_facade(&bytes).expect("import failed public construction fixture");
+    let file =
+        Arc::new(File::from_runtime(runtime).expect("build failed public construction file"));
+    let mut instance = OwnedArtboardInstance::instantiate_default(file)
+        .expect("instantiate failed public construction artboard");
+    let mut factory = RecordingFactory::new();
+    instance
+        .prepare_flow_scripts(&mut factory)
+        .expect("make the public runtime file resolver available");
+
+    let machine = instance
+        .default_state_machine_instance()
+        .expect("C++-shaped construction cannot fail after the machine exists");
+    assert!(
+        machine
+            .script_error()
+            .is_some_and(|error| error.resource_code().is_some()),
+        "the established terminal script_error channel retains preparation failure"
+    );
+}
+
 fn scripted_cpp_probe_path() -> Option<std::path::PathBuf> {
     if let Some(path) = std::env::var_os("RIVE_CPP_PROBE_SCRIPTED") {
         let path = std::path::PathBuf::from(path);

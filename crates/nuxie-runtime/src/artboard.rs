@@ -285,6 +285,18 @@ pub(crate) struct RuntimeAdvancingComponent {
     pub(crate) kind: AdvancingComponentKind,
 }
 
+/// Test-owned equivalent of the C++ `PersistentDirtProbeComponent`.
+///
+/// It participates in the ordinary Artboard advance/update phases; it does
+/// not reproduce the settlement loop or call its policy directly.
+#[cfg(test)]
+#[derive(Debug, Clone, Default)]
+struct PersistentDirtComponentFixture {
+    local_id: usize,
+    advance_count: usize,
+    update_count: usize,
+}
+
 enum RuntimeScriptAdvanceMode<'a> {
     Disabled,
     HostOnly,
@@ -382,6 +394,8 @@ pub struct ArtboardInstance {
     /// C++ `Artboard::m_advancingComponents`, retained in authored object
     /// order and rebuilt against clone-owned occurrences.
     pub(crate) advancing_components: Vec<RuntimeAdvancingComponent>,
+    #[cfg(test)]
+    persistent_dirt_component_fixture: Option<PersistentDirtComponentFixture>,
     /// C++ `Artboard::m_Resettables`, retained in authored object order.
     pub(crate) resetting_components: Vec<RuntimeResettingComponent>,
     /// C++ `Artboard::m_ComponentLists`, retained in authored object order.
@@ -519,6 +533,8 @@ impl Clone for ArtboardInstance {
             objects: self.objects.clone(),
             joysticks: self.joysticks.clone(),
             advancing_components: self.advancing_components.clone(),
+            #[cfg(test)]
+            persistent_dirt_component_fixture: self.persistent_dirt_component_fixture.clone(),
             resetting_components: self.resetting_components.clone(),
             component_lists: self.component_lists.clone(),
             joysticks_apply_before_update: self.joysticks_apply_before_update,
@@ -2481,6 +2497,8 @@ impl ArtboardInstance {
             objects,
             joysticks,
             advancing_components,
+            #[cfg(test)]
+            persistent_dirt_component_fixture: None,
             resetting_components,
             component_lists,
             joysticks_apply_before_update: graph.joysticks_apply_before_update,
@@ -5663,13 +5681,16 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         state_machine: &mut StateMachineInstance,
     ) -> bool {
-        let mut nested_events = Vec::new();
-        self.advance_nested_artboards_collect_events(elapsed_seconds, Some(&mut nested_events));
-        let mut notified_state_machine = false;
-        for (host_local, events) in nested_events {
-            notified_state_machine |= state_machine.notify_events(self, Some(host_local), &events);
-        }
-        notified_state_machine
+        StateMachineInstance::dispatch_collected_nested_events_with(
+            self,
+            state_machine,
+            |artboard, nested_events| {
+                let _ = artboard
+                    .advance_nested_artboards_collect_events(elapsed_seconds, Some(nested_events));
+                Ok(())
+            },
+        )
+        .expect("nested-artboard collection cannot dispatch scripts")
     }
 
     /// Advances the complete retained `Artboard::m_advancingComponents`
@@ -5706,18 +5727,20 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         state_machine: &mut StateMachineInstance,
     ) -> Result<bool, ScriptError> {
-        let mut nested_events = Vec::new();
-        let mut script_mode = RuntimeScriptAdvanceMode::HostOnly;
-        self.advance_frame_components_collect_events_with_mode(
-            elapsed_seconds,
-            &mut script_mode,
-            Some(&mut nested_events),
-        )?;
-        let mut notified_state_machine = false;
-        for (host_local, events) in nested_events {
-            notified_state_machine |= state_machine.notify_events(self, Some(host_local), &events);
-        }
-        Ok(notified_state_machine)
+        StateMachineInstance::dispatch_collected_nested_events_with(
+            self,
+            state_machine,
+            |artboard, nested_events| {
+                let mut script_mode = RuntimeScriptAdvanceMode::HostOnly;
+                artboard
+                    .advance_frame_components_collect_events_with_mode(
+                        elapsed_seconds,
+                        &mut script_mode,
+                        Some(nested_events),
+                    )
+                    .map(|_| ())
+            },
+        )
     }
 
     /// Complete factory-bearing frame advance for several root state-machine
@@ -5831,8 +5854,9 @@ impl ArtboardInstance {
         script_mode: &mut RuntimeScriptAdvanceMode<'_>,
         mut nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
     ) -> Result<bool, ScriptError> {
+        let mut changed = false;
         if self.advancing_components.is_empty() {
-            return Ok(false);
+            return Ok(changed);
         }
         let has_nested = self
             .advancing_components
@@ -5878,7 +5902,6 @@ impl ArtboardInstance {
                 }
             }
         }
-        let mut changed = false;
         let mut script_host = NoopScriptHost;
         for index in 0..self.advancing_components.len() {
             let entry = self.advancing_components[index];
@@ -5933,8 +5956,17 @@ impl ArtboardInstance {
                 // Root Artboard participates in the C++ advancing interface
                 // only when a concrete root owner adds work; ordinary roots
                 // have no additional advance body.
-                AdvancingComponentKind::Artboard
-                | AdvancingComponentKind::ScriptedDrawable
+                AdvancingComponentKind::Artboard => {
+                    #[cfg(test)]
+                    {
+                        self.advance_persistent_dirt_component_fixture(entry.local_id)
+                    }
+                    #[cfg(not(test))]
+                    {
+                        false
+                    }
+                }
+                AdvancingComponentKind::ScriptedDrawable
                 | AdvancingComponentKind::ScriptedLayout
                 | AdvancingComponentKind::ScriptedPathEffect => false,
             };
@@ -7498,6 +7530,82 @@ impl ArtboardInstance {
         did_update
     }
 
+    #[cfg(test)]
+    fn advance_persistent_dirt_component_fixture(&mut self, local_id: usize) -> bool {
+        let Some(fixture) = self.persistent_dirt_component_fixture.as_mut() else {
+            return false;
+        };
+        if fixture.local_id != local_id {
+            return false;
+        }
+        fixture.advance_count += 1;
+        let _ = self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, false);
+        true
+    }
+
+    #[cfg(test)]
+    fn update_persistent_dirt_component_fixture(&mut self, local_id: usize) {
+        if let Some(fixture) = self.persistent_dirt_component_fixture.as_mut()
+            && fixture.local_id == local_id
+        {
+            fixture.update_count += 1;
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn install_persistent_dirt_component_fixture(&mut self) {
+        let root = self
+            .objects
+            .root()
+            .expect("fixture Artboard root component");
+        let root_local_id = self
+            .objects
+            .component(root)
+            .expect("fixture Artboard root occurrence")
+            .local_id;
+        if !self
+            .objects
+            .dependency_order()
+            .iter()
+            .any(|&component| component == root)
+        {
+            let mut dependency_order = self.objects.dependency_order().to_vec();
+            dependency_order.push(root);
+            self.objects.set_dependency_order(dependency_order);
+        }
+        if !self.advancing_components.iter().any(|entry| {
+            entry.local_id == root_local_id && entry.kind == AdvancingComponentKind::Artboard
+        }) {
+            self.advancing_components.push(RuntimeAdvancingComponent {
+                local_id: root_local_id,
+                object: self
+                    .objects
+                    .object_handle(root_local_id)
+                    .expect("fixture Artboard root object"),
+                component: Some(root),
+                kind: AdvancingComponentKind::Artboard,
+            });
+        }
+        self.persistent_dirt_component_fixture = Some(PersistentDirtComponentFixture {
+            local_id: root_local_id,
+            advance_count: 0,
+            update_count: 0,
+        });
+    }
+
+    #[cfg(test)]
+    pub(crate) fn persistent_dirt_component_fixture_receipt(&self) -> (usize, usize, bool) {
+        let fixture = self
+            .persistent_dirt_component_fixture
+            .as_ref()
+            .expect("persistent-dirt component fixture must be installed");
+        (
+            fixture.advance_count,
+            fixture.update_count,
+            self.has_dirt(ComponentDirt::COMPONENTS),
+        )
+    }
+
     pub fn update_pass_with_script_errors(&mut self) -> Result<bool, ScriptError> {
         let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
         self.update_pass_with_script_mode_and_errors(&mut script_mode)
@@ -7998,6 +8106,8 @@ impl ArtboardInstance {
                 if dirt.is_empty() || dirt.contains(ComponentDirt::COLLAPSED) {
                     continue;
                 }
+                #[cfg(test)]
+                self.update_persistent_dirt_component_fixture(local_id);
                 let Some(address) = self.objects.address(component_handle) else {
                     continue;
                 };
@@ -11185,6 +11295,8 @@ mod tests {
             objects,
             joysticks: Vec::new(),
             advancing_components,
+            #[cfg(test)]
+            persistent_dirt_component_fixture: None,
             resetting_components,
             component_lists,
             joysticks_apply_before_update: true,

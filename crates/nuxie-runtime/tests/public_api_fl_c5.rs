@@ -11,6 +11,7 @@ use nuxie_runtime::{
     StateMachineEventStringProperty, StateMachineInputInstance, StateMachineInstance,
     StateMachineReportedEvent,
 };
+use std::sync::Arc;
 
 macro_rules! public_methods_are_reachable {
     ($owner:ty; $($method:ident),+ $(,)?) => {
@@ -26,11 +27,16 @@ macro_rules! exact_public_signature {
 
 #[test]
 fn fl_c5_public_reexports_are_downstream_visible_after_file_split() {
+    // This is the compile-time FL-C5 public-signature inventory. Do not
+    // replace these exact coercions with untyped method-item references:
+    // parameter, return, receiver, and ownership changes must break this
+    // downstream test.
+    // BEGIN exhaustive W4 exact signatures
     fn definition_fields_are_public(machine: &RuntimeStateMachine) {
-        let _ = machine.global_id;
-        let _ = &machine.name;
-        let _ = &machine.inputs;
-        let _ = &machine.layers;
+        let _: &u32 = &machine.global_id;
+        let _: &Option<Arc<str>> = &machine.name;
+        let _: &Arc<Vec<Option<RuntimeStateMachineInput>>> = &machine.inputs;
+        let _: &Arc<Vec<RuntimeStateMachineLayer>> = &machine.layers;
     }
     let _ = definition_fields_are_public as fn(&RuntimeStateMachine);
     fn is_clone<T: Clone>() {}
@@ -38,11 +44,6 @@ fn fl_c5_public_reexports_are_downstream_visible_after_file_split() {
     let focus = FocusState::default();
     let _ = (focus.has_focus, focus.expects_keyboard_input);
 
-    // This is the compile-time FL-C5 public-signature inventory. Do not
-    // replace these exact coercions with untyped method-item references:
-    // parameter, return, receiver, and ownership changes must break this
-    // downstream test.
-    // BEGIN exhaustive W4 exact signatures
     exact_public_signature!(
         RuntimeStateMachine::scripted_objects
             => for<'a> fn(&'a RuntimeStateMachine) -> &'a [ScriptListenerActionDefinition]
@@ -853,6 +854,74 @@ fn fl_c5_public_reexports_are_downstream_visible_after_file_split() {
                 HydrationFactory,
             ) -> Result<bool, ScriptError>
     );
+
+    // Each closure consumes its captured token, so it implements `FnOnce` but
+    // not `Fn`. Narrowing any public hydration bound to `Fn` must therefore
+    // make this downstream inventory fail to compile.
+    fn hydration_methods_accept_fn_once(machine: &mut StateMachineInstance) {
+        let token = String::from("data-converter");
+        let _ = machine.hydrate_and_initialize_scripted_data_converter_instance(
+            0,
+            &[],
+            ScriptListenerActionHydration::new(None, Vec::new()),
+            false,
+            None,
+            move |_| {
+                drop(token);
+                Ok(ScriptListenerActionHydration::new(None, Vec::new()))
+            },
+        );
+
+        let token = String::from("listener-data-converter");
+        let _ = machine.hydrate_and_initialize_scripted_listener_data_converter_instance(
+            0,
+            0,
+            &[],
+            ScriptListenerActionHydration::new(None, Vec::new()),
+            false,
+            None,
+            move |_| {
+                drop(token);
+                Ok(ScriptListenerActionHydration::new(None, Vec::new()))
+            },
+        );
+
+        let token = String::from("listener-action");
+        let _ = machine.hydrate_and_initialize_scripted_listener_action_instance(
+            0,
+            ScriptListenerActionHydration::new(None, Vec::new()),
+            false,
+            None,
+            move |_| {
+                drop(token);
+                Ok(ScriptListenerActionHydration::new(None, Vec::new()))
+            },
+        );
+
+        let token = String::from("scripted-object");
+        let _ = machine.hydrate_and_initialize_scripted_object_instance(
+            0,
+            ScriptListenerActionHydration::new(None, Vec::new()),
+            false,
+            None,
+            move |_| {
+                drop(token);
+                Ok(ScriptListenerActionHydration::new(None, Vec::new()))
+            },
+        );
+
+        let token = String::from("scripted-object-after-context");
+        let _ = machine.hydrate_and_initialize_scripted_object_instance_after_context_install(
+            0,
+            false,
+            None,
+            move |_| {
+                drop(token);
+                Ok(ScriptListenerActionHydration::new(None, Vec::new()))
+            },
+        );
+    }
+    let _ = hydration_methods_accept_fn_once as fn(&mut StateMachineInstance);
     // END exhaustive W4 exact signatures
 
     public_methods_are_reachable!(StateMachineEventContext;

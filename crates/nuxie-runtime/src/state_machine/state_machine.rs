@@ -836,14 +836,14 @@ impl BlendState1DInstance {
             .iter()
             .enumerate()
             .filter_map(|(definition_index, animation)| {
-                let linear_animation = artboard.linear_animation_definition(animation.animation)?;
                 Some(BlendAnimation1DInstance {
                     definition: RuntimeBlendAnimationHandle::new(definition_index),
                     animation: LinearAnimationInstance::new(
                         animation.animation,
-                        linear_animation,
+                        Arc::clone(&artboard.linear_animations),
+                        Arc::clone(&artboard.empty_linear_animation),
                         1.0,
-                    ),
+                    )?,
                     mix: 0.0,
                 })
             })

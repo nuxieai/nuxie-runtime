@@ -4445,12 +4445,12 @@ impl ArtboardInstance {
         index: usize,
         speed_multiplier: f32,
     ) -> Option<LinearAnimationInstance> {
-        let animation = self.linear_animation(index)?;
-        Some(LinearAnimationInstance::new(
+        LinearAnimationInstance::new(
             RuntimeLinearAnimationHandle::new(index),
-            animation,
+            Arc::clone(&self.linear_animations),
+            Arc::clone(&self.empty_linear_animation),
             speed_multiplier,
-        ))
+        )
     }
 
     pub fn advance_linear_animation_instance(
@@ -13204,7 +13204,7 @@ mod tests {
                 key_frame_data_bind_templates: Arc::new(Vec::new()),
                 has_keyed_callbacks: false,
             };
-            LinearAnimationInstance::new(
+            LinearAnimationInstance::new_for_test(
                 RuntimeLinearAnimationHandle::new(animation_index),
                 &animation,
                 1.0,

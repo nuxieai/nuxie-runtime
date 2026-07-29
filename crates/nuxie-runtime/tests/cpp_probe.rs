@@ -555,6 +555,55 @@ fn synthetic_two_animation_importer_cursor(file_id: u64) -> Vec<u8> {
     })
 }
 
+fn synthetic_invalid_keyed_object_property_sink(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 2.0, 1);
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 99);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 10, 12.0, 0);
+    })
+}
+
+fn synthetic_two_animation_loop_values(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "loopValue", 1);
+        });
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "loopValue", 2);
+        });
+    })
+}
+
 fn synthetic_negative_speed_nested_remap(file_id: u64) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
@@ -19252,6 +19301,33 @@ fn keyed_property_importer_cursor_survives_next_animation_like_cpp_probe() {
 }
 
 #[test]
+fn invalid_keyed_object_replaces_property_cursor_with_sink_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_invalid_keyed_object_property_sink_cpp.riv";
+    let bytes = synthetic_invalid_keyed_object_property_sink(8229);
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let cpp_frames =
+        &cpp.artboards[0].animations[0].keyed_objects[0].keyed_properties[0].key_frames;
+    assert_eq!(cpp_frames.len(), 1);
+
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let rust_animation = rust
+        .linear_animation(0)
+        .unwrap_or_else(|| panic!("missing Rust animation for {label}"));
+    assert_eq!(rust_animation.keyed_objects.len(), 1);
+    let rust_frames = &rust_animation.keyed_objects[0].keyed_properties[0].key_frames;
+    assert_eq!(
+        rust_frames.len(),
+        cpp_frames.len(),
+        "the frame owned by the invalid keyed object must be erased with its replacement property"
+    );
+}
+
+#[test]
 fn negative_speed_nested_remap_uses_effective_start_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -19549,13 +19625,7 @@ fn linear_animation_loop_value_definition_fallback_matches_cpp_probe() {
     let animation = rust
         .linear_animation_instance(0)
         .unwrap_or_else(|| panic!("missing Rust animation instance for {label}"));
-    let definition = rust
-        .linear_animation(0)
-        .unwrap_or_else(|| panic!("missing Rust animation definition for {label}"));
-    assert_eq!(
-        i64::from(animation.loop_value(definition)),
-        cpp_fallback_value
-    );
+    assert_eq!(i64::from(animation.loop_value()), cpp_fallback_value);
 }
 
 #[test]
@@ -19599,14 +19669,66 @@ fn linear_animation_loop_value_arbitrary_signed_override_matches_cpp_probe() {
     let mut animation = rust
         .linear_animation_instance(0)
         .unwrap_or_else(|| panic!("missing Rust animation instance for {label}"));
-    let definition = rust
-        .linear_animation(0)
-        .unwrap_or_else(|| panic!("missing Rust animation definition for {label}"));
-    animation.set_loop_value(definition, -2);
-    assert_eq!(
-        i64::from(animation.loop_value(definition)),
-        cpp_override_value
+    animation.set_loop_value(-2);
+    assert_eq!(i64::from(animation.loop_value()), cpp_override_value);
+}
+
+#[test]
+fn linear_animation_loop_value_uses_retained_definition_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_linear_animation_retained_loop_value_cpp.riv";
+    let bytes = synthetic_two_animation_loop_values(8228);
+    let cpp_fallback = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-advance-animation".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ],
     );
+    let cpp_fallback_value = cpp_fallback.artboards[0].runtime_animation_advances[0].loop_value;
+    assert_eq!(cpp_fallback_value, 1);
+
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut animation = rust
+        .linear_animation_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust animation instance A for {label}"));
+    let mismatched_definition = rust
+        .linear_animation(1)
+        .unwrap_or_else(|| panic!("missing Rust animation definition B for {label}"));
+    assert_eq!(mismatched_definition.loop_value, 2);
+    drop(rust);
+    assert_eq!(
+        i64::from(animation.loop_value()),
+        cpp_fallback_value,
+        "instance A must retain definition A instead of consulting definition B"
+    );
+
+    let cpp_override = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-set-animation-loop-value".to_owned(),
+            "0".to_owned(),
+            "2".to_owned(),
+            "--runtime-advance-animation".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ],
+    );
+    let cpp_override_value = cpp_override.artboards[0].runtime_animation_advances[0].loop_value;
+    assert_eq!(cpp_override_value, 2);
+    animation.set_loop_value(2);
+    assert_eq!(i64::from(animation.loop_value()), cpp_override_value);
 }
 
 #[test]
@@ -84141,7 +84263,7 @@ fn compare_animation_advance(
     assert_eq!(cpp.did_loop, rust.did_loop(), "{label} didLoop mismatch");
     assert_eq!(
         cpp.loop_value,
-        i64::from(rust.loop_value(runtime_animation)),
+        i64::from(rust.loop_value()),
         "{label} loopValue override mismatch"
     );
 }

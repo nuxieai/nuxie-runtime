@@ -391,11 +391,23 @@ pub(crate) fn build_linear_animations<'a>(
         };
 
         if object.type_name == "KeyedObject" {
-            let Some((object_id, target_local_id, _target)) =
+            let (object_id, target_local_id) = if let Some((object_id, target_local_id, _target)) =
                 keyed_object_target(file, slots, object)
-            else {
-                current_keyed_object = None;
-                continue;
+            {
+                (object_id, target_local_id)
+            } else {
+                // C++ imports the object and its following properties before
+                // KeyedObject::onAddedDirty reports MissingObject. Retain the
+                // same doomed owner as an importer sink until the final
+                // LinearAnimation fail-closed erasure below.
+                invalid_keyed_object_global_ids.push(global_id as u32);
+                (
+                    object
+                        .uint_property("objectId")
+                        .and_then(|id| usize::try_from(id).ok())
+                        .unwrap_or(usize::MAX),
+                    usize::MAX,
+                )
             };
 
             let keyed_objects = Arc::make_mut(&mut animations[animation_index].keyed_objects);
@@ -423,20 +435,31 @@ pub(crate) fn build_linear_animations<'a>(
             let keyed_object = &animations[owner_animation_index].keyed_objects[keyed_object_index];
             let object_id = keyed_object.object_id;
             let target_local_id = keyed_object.target_local_id;
-            let Some(target) = slots
-                .get(object_id)
-                .and_then(|slot| file.object(slot.source_global_id as usize))
-            else {
-                current_keyed_property = None;
-                continue;
-            };
-            if !object_supports_property(target.type_key, property_key) {
-                current_keyed_property = None;
-                continue;
-            }
-            let Some(target) = keyed_property_target(target_local_id, target, property_key) else {
-                current_keyed_property = None;
-                continue;
+            let invalid_owner = invalid_keyed_object_global_ids.contains(&keyed_object.global_id);
+            let target = if invalid_owner {
+                // keyed_property.cpp:186 replaces the property importer even
+                // when keyed_object.cpp:18 will later reject its owner. This
+                // placeholder is never observable: the complete keyed object,
+                // including all frames attached through this cursor, is erased.
+                RuntimeKeyedPropertyTarget::Bool
+            } else {
+                let Some(target) = slots
+                    .get(object_id)
+                    .and_then(|slot| file.object(slot.source_global_id as usize))
+                else {
+                    current_keyed_property = None;
+                    continue;
+                };
+                if !object_supports_property(target.type_key, property_key) {
+                    current_keyed_property = None;
+                    continue;
+                }
+                let Some(target) = keyed_property_target(target_local_id, target, property_key)
+                else {
+                    current_keyed_property = None;
+                    continue;
+                };
+                target
             };
 
             let keyed_objects = Arc::make_mut(&mut animations[owner_animation_index].keyed_objects);
@@ -792,6 +815,7 @@ fn key_frame_interpolator_id_resolves_to_expected_type(
 
 // Mirrors src/animation/linear_animation.cpp plus keyed object/property keyframe sampling.
 #[derive(Debug)]
+#[cfg_attr(test, derive(Clone))]
 pub struct RuntimeLinearAnimation {
     pub global_id: u32,
     pub name: Option<Arc<str>>,
@@ -1712,6 +1736,8 @@ impl RuntimeLinearAnimationHandle {
 #[derive(Debug)]
 pub struct LinearAnimationInstance {
     animation: RuntimeLinearAnimationHandle,
+    animation_definitions: Arc<Vec<RuntimeLinearAnimation>>,
+    empty_animation_definition: Arc<RuntimeLinearAnimation>,
     pub(crate) time: f32,
     pub(crate) speed_direction: f32,
     pub(crate) total_time: f32,
@@ -1742,6 +1768,8 @@ impl Clone for LinearAnimationInstance {
     fn clone(&self) -> Self {
         Self {
             animation: self.animation,
+            animation_definitions: Arc::clone(&self.animation_definitions),
+            empty_animation_definition: Arc::clone(&self.empty_animation_definition),
             time: self.time,
             speed_direction: self.speed_direction,
             total_time: self.total_time,
@@ -1771,12 +1799,17 @@ impl Clone for LinearAnimationInstance {
 impl LinearAnimationInstance {
     pub(crate) fn new(
         animation: RuntimeLinearAnimationHandle,
-        definition: &RuntimeLinearAnimation,
+        animation_definitions: Arc<Vec<RuntimeLinearAnimation>>,
+        empty_animation_definition: Arc<RuntimeLinearAnimation>,
         speed_multiplier: f32,
-    ) -> Self {
-        Self {
+    ) -> Option<Self> {
+        let definition = animation.resolve(&animation_definitions, &empty_animation_definition)?;
+        let time = definition.start_time_with_speed(speed_multiplier);
+        Some(Self {
             animation,
-            time: definition.start_time_with_speed(speed_multiplier),
+            animation_definitions,
+            empty_animation_definition,
+            time,
             speed_direction: if speed_multiplier >= 0.0 { 1.0 } else { -1.0 },
             total_time: 0.0,
             last_total_time: 0.0,
@@ -1791,7 +1824,35 @@ impl LinearAnimationInstance {
             key_frame_prototype_revision: 0,
             #[cfg(test)]
             removed_key_frame_data_bind_occurrences: Vec::new(),
-        }
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_for_test(
+        animation: RuntimeLinearAnimationHandle,
+        definition: &RuntimeLinearAnimation,
+        speed_multiplier: f32,
+    ) -> Self {
+        let (animation_definitions, empty_animation_definition) =
+            if let Some(definition_index) = animation.definition_index() {
+                let mut definitions = (0..=definition_index)
+                    .map(|_| RuntimeLinearAnimation::empty())
+                    .collect::<Vec<_>>();
+                definitions[definition_index] = definition.clone();
+                (
+                    Arc::new(definitions),
+                    Arc::new(RuntimeLinearAnimation::empty()),
+                )
+            } else {
+                (Arc::new(Vec::new()), Arc::new(definition.clone()))
+            };
+        Self::new(
+            animation,
+            animation_definitions,
+            empty_animation_definition,
+            speed_multiplier,
+        )
+        .expect("test animation definition is inserted at its retained handle")
     }
 
     pub(crate) fn build_key_frame_data_binds(
@@ -2122,10 +2183,18 @@ impl LinearAnimationInstance {
         self.spilled_time = 0.0;
     }
 
-    /// Mirrors C++ `LinearAnimationInstance::loopValue`: the `-1` sentinel
-    /// delegates to the retained definition, while every other signed value
-    /// is returned unchanged.
-    pub fn loop_value(&self, definition: &RuntimeLinearAnimation) -> i32 {
+    fn retained_definition(&self) -> &RuntimeLinearAnimation {
+        self.animation
+            .resolve(
+                &self.animation_definitions,
+                &self.empty_animation_definition,
+            )
+            .expect(
+                "constructor validated the retained definition handle against an immutable arena",
+            )
+    }
+
+    fn loop_value_for_definition(&self, definition: &RuntimeLinearAnimation) -> i32 {
         if self.loop_value_override == -1 {
             definition.loop_value as i32
         } else {
@@ -2133,9 +2202,17 @@ impl LinearAnimationInstance {
         }
     }
 
-    pub fn set_loop_value(&mut self, definition: &RuntimeLinearAnimation, value: i32) {
+    /// Mirrors C++ `LinearAnimationInstance::loopValue`: the `-1` sentinel
+    /// delegates through the retained animation handle, while every other
+    /// signed value is returned unchanged.
+    pub fn loop_value(&self) -> i32 {
+        self.loop_value_for_definition(self.retained_definition())
+    }
+
+    pub fn set_loop_value(&mut self, value: i32) {
+        let definition_loop_value = self.retained_definition().loop_value as i32;
         if self.loop_value_override == value
-            || (self.loop_value_override == -1 && definition.loop_value as i32 == value)
+            || (self.loop_value_override == -1 && definition_loop_value == value)
         {
             return;
         }
@@ -2551,8 +2628,11 @@ mod tests {
     #[test]
     fn data_bound_double_interpolation_uses_both_effective_endpoints() {
         let animation = animation_with_work_area(false);
-        let mut instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         instance.add_key_frame_value_holder(10, RuntimeKeyFrameValue::Number(100.0));
         instance.add_key_frame_value_holder(20, RuntimeKeyFrameValue::Number(200.0));
         let property = keyed_double_property(10, 1.0, 20, 2.0);
@@ -2566,8 +2646,11 @@ mod tests {
     #[test]
     fn data_bound_color_interpolation_uses_both_effective_endpoints() {
         let animation = animation_with_work_area(false);
-        let mut instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         let bound_from = 0xFF00_0000;
         let bound_to = 0xFFFF_FFFF;
         instance.add_key_frame_value_holder(30, RuntimeKeyFrameValue::Color(bound_from));
@@ -2640,8 +2723,11 @@ mod tests {
     #[test]
     fn data_bound_boolean_step_uses_the_effective_current_key_frame() {
         let animation = animation_with_work_area(false);
-        let mut instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         instance.add_key_frame_value_holder(50, RuntimeKeyFrameValue::Boolean(true));
         let mut property = keyed_double_property(10, 1.0, 20, 2.0);
         property.key_frames.clear();
@@ -2674,8 +2760,11 @@ mod tests {
     #[test]
     fn data_bound_string_step_uses_the_effective_current_key_frame() {
         let animation = animation_with_work_area(false);
-        let mut instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         instance
             .add_key_frame_value_holder(70, RuntimeKeyFrameValue::String(b"bound start".to_vec()));
         let mut property = keyed_double_property(10, 1.0, 20, 2.0);
@@ -2709,8 +2798,11 @@ mod tests {
     #[test]
     fn cloned_animation_instance_starts_without_key_frame_value_holders() {
         let animation = animation_with_work_area(false);
-        let mut instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         instance.add_key_frame_value_holder(10, RuntimeKeyFrameValue::Number(123.0));
 
         let cloned = instance.clone();
@@ -2727,42 +2819,48 @@ mod tests {
     #[test]
     fn raw_loop_override_retains_cpp_minus_one_sentinel() {
         let animation = animation_with_work_area(false);
-        let mut instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(7), &animation, 1.0);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(7),
+            &animation,
+            1.0,
+        );
 
         assert_eq!(instance.animation_index(), 7);
         assert_eq!(instance.loop_value_override, -1);
-        assert_eq!(instance.loop_value(&animation), 1);
+        assert_eq!(instance.loop_value(), 1);
         assert_eq!(instance.resolved_loop_kind(&animation), AnimationLoop::Loop);
 
         // linear_animation_instance.cpp:426-434 leaves the sentinel untouched
         // when the requested value already equals the definition.
-        instance.set_loop_value(&animation, animation.loop_value as i32);
+        instance.set_loop_value(animation.loop_value as i32);
         assert_eq!(instance.loop_value_override, -1);
 
-        instance.set_loop_value(&animation, 2);
+        instance.set_loop_value(2);
         assert_eq!(instance.loop_value_override, 2);
-        assert_eq!(instance.loop_value(&animation), 2);
+        assert_eq!(instance.loop_value(), 2);
         assert_eq!(
             instance.resolved_loop_kind(&animation),
             AnimationLoop::PingPong
         );
 
-        instance.set_loop_value(&animation, -1);
+        instance.set_loop_value(-1);
         assert_eq!(instance.loop_value_override, -1);
-        assert_eq!(instance.loop_value(&animation), 1);
+        assert_eq!(instance.loop_value(), 1);
         assert_eq!(instance.resolved_loop_kind(&animation), AnimationLoop::Loop);
 
-        instance.set_loop_value(&animation, -2);
+        instance.set_loop_value(-2);
         assert_eq!(instance.loop_value_override, -2);
-        assert_eq!(instance.loop_value(&animation), -2);
+        assert_eq!(instance.loop_value(), -2);
     }
 
     #[test]
     fn pre_advance_did_loop_is_safe_false_then_every_advance_writes_it() {
         let animation = animation_with_work_area(false);
-        let mut instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
 
         // Binding adaptation: pinned C++ leaves m_didLoop indeterminate until
         // advance; safe Rust exposes a deterministic false.
@@ -2776,8 +2874,11 @@ mod tests {
     #[test]
     fn time_and_reset_follow_cpp_occurrence_state_rules() {
         let animation = animation_with_work_area(true);
-        let mut instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         instance.total_time = 9.0;
         instance.last_total_time = 7.0;
         instance.direction = -1.0;
@@ -2802,12 +2903,21 @@ mod tests {
     fn key_frame_value_holders_are_isolated_per_animation_instance() {
         let animation = animation_with_work_area(false);
         let property = keyed_double_property(10, 1.0, 20, 2.0);
-        let mut first =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
-        let mut second =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
-        let unbound =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut first = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
+        let mut second = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
+        let unbound = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         first.add_key_frame_value_holder(10, RuntimeKeyFrameValue::Number(100.0));
         second.add_key_frame_value_holder(10, RuntimeKeyFrameValue::Number(200.0));
         *first.key_frame_value_holder_mut(10).unwrap() = RuntimeKeyFrameValue::Number(150.0);
@@ -2829,8 +2939,11 @@ mod tests {
     #[test]
     fn uint_and_id_sampling_ignore_key_frame_value_holders() {
         let animation = animation_with_work_area(false);
-        let mut instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         instance.add_key_frame_value_holder(90, RuntimeKeyFrameValue::Number(999.0));
         let mut property = keyed_double_property(10, 1.0, 20, 2.0);
         property.key_frames.clear();
@@ -2858,8 +2971,11 @@ mod tests {
         assert!(prototype.bind_default_view_model_context());
         assert!(prototype.set_default_view_model_number_source_for_path(&[0, 0], 10.0));
 
-        let mut state_machine_instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut state_machine_instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         assert!(state_machine_instance.prepare_key_frame_data_binds(Some(&prototype)));
         assert_eq!(
             state_machine_instance.key_frame_value_holder(10),
@@ -2902,10 +3018,16 @@ mod tests {
         prototype.set_formula_random_values(&[0.25, 0.75]);
         assert!(prototype.bind_default_view_model_context());
 
-        let mut first =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
-        let mut second =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut first = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
+        let mut second = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         first.prepare_key_frame_data_binds(Some(&prototype));
         second.prepare_key_frame_data_binds(Some(&prototype));
 
@@ -3015,8 +3137,11 @@ mod tests {
         );
         assert!(prototype.bind_default_view_model_context());
 
-        let mut instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         assert!(instance.build_key_frame_data_binds(
             &prototype,
             RuntimeKeyFrameDataBindEnrollment::Initial,
@@ -3063,8 +3188,11 @@ mod tests {
         assert!(prototype.bind_default_view_model_context());
         assert!(prototype.set_default_view_model_number_source_for_path(&[0, 0], 10.0));
 
-        let mut instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         assert!(instance.build_key_frame_data_binds(
             &prototype,
             RuntimeKeyFrameDataBindEnrollment::Initial,
@@ -3136,8 +3264,11 @@ mod tests {
         assert!(prototype.bind_default_view_model_context());
         assert!(prototype.set_default_view_model_number_source_for_path(&[0, 0], 10.0));
 
-        let mut instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         instance.build_key_frame_data_binds(&prototype, RuntimeKeyFrameDataBindEnrollment::Initial);
         // Pinned interpolators snap their first two converter advances before
         // later source changes begin smoothing.
@@ -3169,8 +3300,11 @@ mod tests {
         let prototype =
             RuntimeDataBindGraph::new_key_frame_bindings(&[number_key_frame_binding(None)])
                 .expect("keyframe graph");
-        let mut instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         instance.build_key_frame_data_binds(&prototype, RuntimeKeyFrameDataBindEnrollment::Initial);
 
         let occurrence = std::cell::RefCell::new(instance);
@@ -3201,8 +3335,11 @@ mod tests {
         let mut prototype = RuntimeDataBindGraph::new_key_frame_bindings(&[template])
             .expect("keyframe binding graph");
         assert!(prototype.bind_empty_data_context());
-        let mut instance =
-            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
         instance.prepare_key_frame_data_binds(Some(&prototype));
         assert_eq!(
             instance.key_frame_value_holder(30),

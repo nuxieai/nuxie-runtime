@@ -200,7 +200,7 @@ except profiler-only `getStateName`, which may be a source-cited omission.
 | `tryChangeState` (`state_machine_instance.cpp:528-630`) | [x] CLOSED; W4: faithful-looking | `B-LAYER`: full transition/callback/retirement ordering | `S-ORDER` | Partial interruption; zero duration; invalid exit cast; Any source; null destination. |
 | `apply` (`state_machine_instance.cpp:632-663`) | [x] CLOSED; W4: faithful-looking | `B-LAYER`: reset → held → outgoing → current | `S-ORDER` | Null interpolator, NaN mix, null current. |
 | `stateChangedOnAdvance` (`state_machine_instance.cpp:665-668`) | [x] CLOSED; W4: scattered | `B-LAYER`: retained flag, not aggregate-only | `S-LAYER` | Query after same-frame convergence. |
-| `currentState` (`state_machine_instance.cpp:670-673`) | [ ] OPEN — `state_machine_generic_layer_state_occurrence_matches_cpp_probe` returns core type `0` for Rust where pinned C++ returns base `LayerState` type `60`; W4: missing | `B-LAYER`: borrowed optional definition | `S-LAYER`, `S-API` | Null current. |
+| `currentState` (`state_machine_instance.cpp:670-673`) | [x] CLOSED — `state_machine_generic_layer_state_occurrence_matches_cpp_probe` now matches pinned C++ core type `60`; W4: missing | `B-LAYER`: borrowed optional definition | `S-LAYER`, `S-API` | Null current. |
 | `currentAnimation` (`state_machine_instance.cpp:675-684`) | [x] CLOSED; W4: faithful-looking | `B-LAYER`: animation-only compressed view | `S-LAYER` | Blend/current null; null animation occurrence. |
 | `evaluatedRandomWeight` shared scratch use (`state_machine_instance.cpp:428-456`) | [x] CLOSED; W4: divergent, approved adaptation | `B-LAYER`: equal results plus two-instance race isolation | `S-FIELDS` | Duplicate transitions, wraparound, concurrent instances. |
 
@@ -363,7 +363,7 @@ instance-level Rust implementation.
 | `completeViewModelInstances` (`state_machine_instance.hpp:97`; `.cpp:2792-2829`) | [x] CLOSED; W4: missing | `B-BIND`: main then globals; preserve occupied cross-model slot | `S-BIND`, `S-ORDER` | Missing file no-op; null default skipped; cross-VM override remains. |
 | `addToHitLookup` (`state_machine_instance.hpp:98-102`; `.cpp:1619-1705`) | [x] CLOSED; W4: divergent | `B-HIT`: type branches, dedup, recursion, opacity | `S-HIT`, `S-ORDER` | Reused layout opacity upgrade; shape opacity discard; mixed/deep container; duplicate target; unsupported target. |
 | `markNeedsAdvance` (`state_machine_instance.hpp:110`; `.cpp:2667`) | [x] CLOSED; W4: scattered | `B-ADV`: set-only latch | `S-ADV` | Mark then `newFrame=false` remains true. |
-| `advance(seconds,newFrame)` (`state_machine_instance.hpp:113`; `.cpp:2546-2585`) | [ ] OPEN — `state_machine_viewmodel_trigger_conditions_match_cpp_probe` reports pinned C++ `advanced=true` while Rust returns `false` for the bound value-trigger case; W4: divergent | `B-ADV` | `S-ADV`, `S-EVENT`, `S-HIT` | Draw-order change; chained focus lost-latch edge; `-0`; NaN; infinities; trigger clear; reports created during layer advance. |
+| `advance(seconds,newFrame)` (`state_machine_instance.hpp:113`; `.cpp:2546-2585`) | [x] CLOSED — `state_machine_viewmodel_trigger_conditions_match_cpp_probe` now matches pinned C++ `advanced=true` for the bound value-trigger case; W4: divergent | `B-ADV` | `S-ADV`, `S-EVENT`, `S-HIT` | Draw-order change; chained focus lost-latch edge; `-0`; NaN; infinities; trigger clear; reports created during layer advance. |
 | inline `advance(seconds)` (`state_machine_instance.hpp:115`) | [x] CLOSED; W4: scattered | `B-ADV`: delegates with `newFrame=true` | `S-ADV`, `S-API` | Equivalent to explicit true. |
 | `needsAdvance` (`state_machine_instance.hpp:118`; `.cpp:2668`) | [x] CLOSED; W4: faithful-looking | `B-ADV`: latch only | `S-ADV` | Event pending while false; focus queue semantics. |
 | `resetState` (`state_machine_instance.hpp:120`; `.cpp:2670-2676`) | [x] CLOSED; W4: faithful-looking | `B-LAYER`: authored layers only | `S-LAYER` | Active transition; queues/context/input unchanged. |
@@ -386,14 +386,14 @@ instance-level Rust implementation.
 | `currentAnimationCount` (`state_machine_instance.hpp:154`; `.cpp:2985-2996`) | [x] CLOSED; W4: faithful-looking | `B-LAYER`: per-layer count | `S-LAYER`, `S-API` | Two layers same source animation count twice. |
 | `currentAnimationByIndex` (`state_machine_instance.hpp:155`; `.cpp:2998-3014`) | [x] CLOSED; W4: faithful-looking | `B-LAYER`: compact authored order | `S-LAYER`, `S-API` | Interleaved non-animation layers. |
 | `stateChangedCount` (`state_machine_instance.hpp:159`; `.cpp:2955-2966`) | [x] CLOSED; W4: faithful-looking result, divergent cache shape | `B-LAYER`: scan retained flags; derived cache allowed | `S-LAYER` | Several transitions in one layer count one. |
-| `stateChangedByIndex` (`state_machine_instance.hpp:164`; `.cpp:2968-2983`) | [ ] OPEN — the generic base-`LayerState` differential returns core type `0` for Rust versus `60` for pinned C++; W4: missing | `B-LAYER`: compact authored changed-layer order | `S-LAYER`, `S-API` | Layers 0 and 2 changed; index 1 returns layer 2 current state; out of range null. |
+| `stateChangedByIndex` (`state_machine_instance.hpp:164`; `.cpp:2968-2983`) | [x] CLOSED — `state_machine_generic_layer_state_occurrence_matches_cpp_probe` now matches pinned C++ core type `60` and changed-layer occurrence order; W4: missing | `B-LAYER`: compact authored changed-layer order | `S-LAYER`, `S-API` | Layers 0 and 2 changed; index 1 returns layer 2 current state; out of range null. |
 | `advanceAndApply(seconds)` (`state_machine_instance.hpp:166`; `.cpp:2601-2604`) | [x] CLOSED; W4: scattered | `B-ADV`: exact delegate with VM=true | `S-ADV`, `S-OWNER` | Byte-equivalent to bool overload true. |
 | `advanceAndApply(seconds,advanceViewModels)` (`state_machine_instance.hpp:171`; `.cpp:2606-2665`) | [x] CLOSED; W4: faithful-looking behavior, scattered owner | `B-ADV`: consolidated owner | `S-ADV`, `S-OWNER` | Idle `-0`; hidden focus; sixth dirt pass; VM=false; infinite nested ping-pong. |
 | `advancedDataContext` (`state_machine_instance.hpp:172`; `.cpp:2587-2593`) | [x] CLOSED; W4: scattered | `B-ADV`: each settlement iteration if bound | `S-ADV` | Five dirty passes produce five advances. |
 | `reset` (`state_machine_instance.hpp:173`; `.cpp:2595-2599`) | [x] CLOSED; W4: scattered | `B-ADV`: VM advanced before artboard reset | `S-ADV`, `S-ORDER` | Resettable observes post-consumed trigger. |
 | `name` (`state_machine_instance.hpp:174`; `.cpp:2678`) | [x] CLOSED; W4: scattered | `B-API`: source machine name | `S-API` | Null source remains malformed, not empty string. |
 | `pointerMove` (`state_machine_instance.hpp:175-177`; `.cpp:1568-1573`) | [x] CLOSED; W4: divergent | `B-HIT`: C++ path forwards coordinates/timestamp | `S-HIT`, `S-ADV` | Multiple IDs; negative/NaN timestamp and nonfinite coordinates. |
-| `pointerDown` (`state_machine_instance.hpp:178`; `.cpp:1574-1577`) | [ ] OPEN — the probe-armed scripting floor loses both ordinary scripted pointer callbacks and a deferred listener's retained callback table, so the end-to-end pointer dispatch receipt is not green; W4: divergent | `B-HIT`: timestamp zero through hit owners | `S-HIT` | Down outside after hover; duplicate click listeners. |
+| `pointerDown` (`state_machine_instance.hpp:178`; `.cpp:1574-1577`) | [x] CLOSED — `flow_pointer_callbacks_receive_event_time_and_the_prior_delivered_position` and `listener_missing_context_hydration_keeps_the_table_until_context_arrives` now retain and dispatch both ordinary and deferred scripted callbacks; W4: divergent | `B-HIT`: timestamp zero through hit owners | `S-HIT` | Down outside after hover; duplicate click listeners. |
 | `pointerUp` (`state_machine_instance.hpp:179`; `.cpp:1578-1581`) | [x] CLOSED; W4: divergent | `B-HIT`: click/up phase | `S-HIT` | Up without down; different pointer IDs; click plus up. |
 | `pointerExit` (`state_machine_instance.hpp:180`; `.cpp:1582-1585`) | [x] CLOSED; W4: divergent | `B-HIT`: process then release pointer state | `S-HIT` | Exit during drag; repeated exit. |
 | `dragStart` (`state_machine_instance.hpp:181-184`; `.cpp:1586-1597`) | [x] CLOSED; W4: divergent | `B-HIT`: optional disable before timestamp-zero event | `S-HIT` | External default versus internal disable=false; nested base no-op. |
@@ -411,7 +411,7 @@ instance-level Rust implementation.
 | `notify` (`state_machine_instance.hpp:212-213`; `.cpp:3041-3046`) | [x] CLOSED; W4: scattered | `B-EVENT`: immediate nested dispatch then bind update | `S-EVENT`, `S-ORDER` | Nested action dirties bind; bubbling precedes final local bind update. |
 | `notifyListenerViewModels` (`state_machine_instance.hpp:214-215`; `.cpp:3048-3060`) | [x] CLOSED; W4: faithful-looking | `B-EVENT`: snapshot FIFO/duplicates | `S-EVENT` | First reports second; null malformed pointer; terminal Rust error documented. |
 | `reportEvent` (`state_machine_instance.hpp:219`; `.cpp:3016-3019`) | [x] CLOSED; W4: scattered | `B-EVENT`: exact FIFO report append | `S-EVENT` | Duplicate report; null malformed event; negative/NaN/infinite/`-0` delay. |
-| `applyEvents` (`state_machine_instance.hpp:221`; `.cpp:2320-2344`) | [ ] OPEN — the facade acceptance tests lose the synchronous pointer-event prefix before/while the next advance applies events, so the end-to-end application receipt is not green; W4: faithful-looking | `B-EVENT` | `S-EVENT` | Event chains event+VM; exactly 100 finite batches; 101 chain; callback count query. |
+| `applyEvents` (`state_machine_instance.hpp:221`; `.cpp:2320-2344`) | [x] CLOSED — `synchronous_pointer_events_survive_the_followup_advance_once_in_authored_order` and `synchronous_and_advance_events_share_one_cycle_in_cpp_order_without_replay` now retain the synchronous prefix and apply it once in C++ order; W4: faithful-looking | `B-EVENT` | `S-EVENT` | Event chains event+VM; exactly 100 finite batches; 101 chain; callback count query. |
 | `reportListenerViewModel` (`state_machine_instance.hpp:223`; `.cpp:3021-3025`) | [x] CLOSED; W4: faithful-looking | `B-EVENT`: borrowed/indexed FIFO append | `S-EVENT` | Same listener twice; null malformed. |
 | `reportedEventCount` (`state_machine_instance.hpp:226`; `.cpp:3027-3030`) | [x] CLOSED; W4: faithful-looking | `B-EVENT`: pending-only visibility | `S-EVENT`, `S-API` | Inside callback after chaining one event. |
 | `reportedEventAt` (`state_machine_instance.hpp:229`; `.cpp:3032-3039`) | [x] CLOSED; W4: divergent API adaptation | `B-EVENT`: live projection and out-of-range adaptation | `S-EVENT`, `S-API` | Index==count; C++ null/+0 sentinel; Rust `None`; mutable payload refresh. |
@@ -432,7 +432,7 @@ instance-level Rust implementation.
 | `clearDataContext` (`state_machine_instance.hpp:262`; `.cpp:2923-2934`) | [x] CLOSED; W4: scattered | `B-BIND`: unregister/null then clear listener cells only | `S-BIND`, `S-ORDER` | State-machine binds/artboard/scripts retain their pinned state. |
 | `relinkDataContext` (`state_machine_instance.hpp:263`; `.cpp:2936-2939`) | [x] CLOSED; W4: scattered | `B-BIND`: artboard-only delegation | `S-BIND` | Nested VM reference used only by state-machine listener remains unaffected here. |
 | `rebuildDataBind` (`state_machine_instance.hpp:264`; `.cpp:2941-2947`) | [x] CLOSED; W4: scattered | `B-BIND`: context-bind subtype only | `S-BIND` | Plain bind ignored; null malformed; cleared context forwarded. |
-| `internalDataContext` (`state_machine_instance.hpp:265`; `.cpp:2901-2914`) | [ ] OPEN — the first factory-backed pointer does not observe the fixed binding source and a missing-context listener loses its retained table before later hydration; W4: scattered | `B-BIND`: assign → binds → listener cells → script contexts → init/hydrate | `S-BIND`, `S-ORDER` | Null with VM listeners; script mutates context; multiple script visits. |
+| `internalDataContext` (`state_machine_instance.hpp:265`; `.cpp:2901-2914`) | [x] CLOSED — `first_factory_pointer_prepares_and_applies_fixed_bindings_before_callback` observes the fixed source and `listener_missing_context_hydration_keeps_the_table_until_context_arrives` retains the deferred listener through hydration; W4: scattered | `B-BIND`: assign → binds → listener cells → script contexts → init/hydrate | `S-BIND`, `S-ORDER` | Null with VM listeners; script mutates context; multiple script visits. |
 | `scriptedObject` (`state_machine_instance.hpp:266`; `.cpp:2130-2139`) | [x] CLOSED; W4: scattered | `B-CTOR`: exact source/global identity adaptation | `S-FIELDS`, `S-API` | Equivalent different source returns none. |
 | `queueFocusEvent` (`state_machine_instance.hpp:269`; `.cpp:2409-2414`) | [x] CLOSED; W4: faithful-looking | `B-FOCUS`: FIFO append and mark | `S-EVENT` | Null malformed group; duplicates. |
 | `queueSemanticEvent` (`state_machine_instance.hpp:272-273`; `.cpp:2475-2480`) | [x] CLOSED; W4: faithful-looking | `B-FOCUS`: FIFO append and mark | `S-EVENT` | Duplicate same action. |
@@ -456,7 +456,7 @@ instance-level Rust implementation.
 | `disablePointerEvents` (`state_machine_instance.hpp:380`; `.cpp:3181-3187`) | [x] CLOSED; W4: missing | `B-HIT`: current sorted hit walk | `S-HIT` | Disable twice then enable once. |
 | `dispose` (`state_machine_instance.hpp:381`; `.cpp:2201-2206`) | [x] CLOSED; W4: missing | `B-LIFE`: explicit nested detach, repeatable | `S-LIFE` | Call twice then child emits. |
 | `removeEventListeners` (`state_machine_instance.hpp:421`; `.cpp:2208-2243`) | [x] CLOSED; W4: scattered ownership adaptation | `B-LIFE`: current nested traversal and all-duplicate removal | `S-LIFE` | Child removed/replaced before disposal; null elements skipped. |
-| `initScriptedObjects` (`state_machine_instance.hpp:422`; `.cpp:2886-2899`) | [ ] OPEN — the probe-armed missing-context lifecycle test shows the deferred listener no longer owns its C++-equivalent callback table before the context arrives; W4: divergent, approved facade-timing adaptation | `B-CTOR`, `B-BIND`: initialization/hydration phase equivalence | `S-LIFE`, `S-BIND` | Two observable scripts; hydration failure does not abort later ordinary C++ work; terminal resource fence remains documented. |
+| `initScriptedObjects` (`state_machine_instance.hpp:422`; `.cpp:2886-2899`) | [x] CLOSED — `listener_missing_context_hydration_keeps_the_table_until_context_arrives` proves the deferred listener retains its C++-equivalent callback table until initialization/hydration; W4: divergent, approved facade-timing adaptation | `B-CTOR`, `B-BIND`: initialization/hydration phase equivalence | `S-LIFE`, `S-BIND` | Two observable scripts; hydration failure does not abort later ordinary C++ work; terminal resource fence remains documented. |
 | `processFocusEvents` (`state_machine_instance.hpp:452`; `.cpp:2449-2473`) | [x] CLOSED; W4: faithful-looking | `B-FOCUS`: moved one-batch FIFO | `S-EVENT` | Callback changes focus; chained event waits next frame. |
 | `processSemanticEvents` (`state_machine_instance.hpp:463`; `.cpp:2482-2507`) | [x] CLOSED; W4: faithful-looking | `B-FOCUS`: moved one-batch FIFO with null skips | `S-EVENT` | Null/valid/null-listener/valid. |
 | tools `onInputChanged` (`state_machine_instance.hpp:467-470`) | [x] CLOSED; W4: missing | `B-SOURCE`: replace nullable callback | `S-TOOLS` | Set, replace, clear. |
@@ -470,11 +470,16 @@ instance-level Rust implementation.
   input holes; input → layer → listener dirty/clean ordering; first-error stop
   without rollback; exact counts and index/name lookup; duplicate names,
   duplicate pointers, case mismatch, `index == count`, and `SIZE_MAX`.
-- [ ] Occurrence construction order: OPEN because the probe-armed
-  `listener_missing_context_hydration_keeps_the_table_until_context_arrives`
-  test disproves retention of the deferred scripted occurrence's callback
-  table. The remaining `B-CTOR`, `S-ORDER`, and `S-FIELDS`
-  prove inputs and tools indices
+- [x] Occurrence construction order: `B-CTOR`, `S-ORDER`, and `S-FIELDS`
+  are landed through
+  `fl_c5_constructor_order_phase_trace_and_explicit_fields`,
+  `fl_c5_constructor_order_retains_unresolved_pointer_group_occurrence`,
+  `fl_c5_constructor_order_source_and_runtime_boundaries_match_cpp`, and
+  `listener_missing_context_hydration_keeps_the_table_until_context_arrives`.
+  The `state_machine_instance_constructor_phase_reorder`,
+  `state_machine_listener_slot_compaction`, and
+  `scripted_object_unbound_constructor_enters_live_context` ratchets reject
+  the displaced shapes. These proofs show inputs and tools indices
   precede layers; Any/Entry keyframe binds and Entry callbacks can run before
   ordinary machine binds/listeners; bindable reuse and duplicate transition
   property overwrite; event/VM exclusive listener paths; focus/keyboard/
@@ -489,43 +494,101 @@ instance-level Rust implementation.
   pointers, provider targets, component-list indices, and nested notifier
   registrations remain observable in their pinned order. No `filter_map`,
   set, or map may replace an authored occurrence vector.
-- [ ] Transition search and state change: OPEN because
-  `state_machine_generic_layer_state_occurrence_matches_cpp_probe` disproves
-  the claimed generic `currentState`/`stateChangedByIndex` result. The
-  remaining `B-LAYER`, `S-LAYER`, and
-  `S-ORDER` prove Any before current,
+- [x] Transition search and state change: `B-LAYER`, `S-LAYER`, and
+  `S-ORDER` are landed through
+  `state_machine_generic_layer_state_occurrence_matches_cpp_probe`,
+  `fl_c5_state_changed_layers_and_convergence_match_cpp_probe`,
+  `fl_c5_current_state_and_animation_authored_compression_match_cpp_probe`,
+  and `fl_c5_random_transition_edges_weighted_boundaries_and_wraparound_match_cpp_probe`.
+  The `state_machine_layer_current_state_access_required`,
+  `state_machine_changed_state_query_required`, and
+  `state_machine_transition_candidate_reorder` ratchets enforce the retained
+  occurrence and authored search. The proofs cover Any before current,
   first-match nonrandom selection, weighted authored order, wrapping weight
   sum, strict cumulative boundary, RNG 0/exact-boundary/1/NaN, waiting-for-exit,
   early interruption, spilled time, zero-duration callback pairing, 101-success
   guard, held animation/reset ordering, per-layer changed flags, compressed
   changed-state/current-animation access, and state reset during a transition.
-- [ ] Hit listener and focus ownership: OPEN because
-  `flow_pointer_callbacks_receive_event_time_and_the_prior_delivered_position`
-  produces no scripted callbacks and the deferred-listener pointer path also
-  loses its callback. The remaining `B-HIT`, `B-FOCUS`, `S-HIT`, and
-  `S-SEAM` prove shared-target dedup and
+- [x] Hit listener and focus ownership: `B-HIT`, `B-FOCUS`, `S-HIT`, and
+  `S-SEAM` are landed through
+  `flow_pointer_callbacks_receive_event_time_and_the_prior_delivered_position`,
+  `listener_missing_context_hydration_keeps_the_table_until_context_arrives`,
+  `fl_c5_hit_result_is_tristate_and_aggregates_strongest`,
+  `fl_c5_hit_three_passes_continue_after_opaque_with_can_hit_false`,
+  `fl_c5_hit_click_only_duplicate_groups_require_down_and_up`,
+  `fl_c5_hit_component_identity_reuses_owner_but_retains_duplicate_groups`,
+  `fl_c5_pointer_drag_discards_event_timestamps_then_follows_with_move`,
+  `fl_c5_pointer_exit_releases_group_history_and_drag_state`,
+  `fl_c5_pointer_cpp_paths_accept_nonfinite_coordinates_and_timestamps`,
+  `fl_c5_hit_component_shared_target_down_up_matches_cpp_probe`,
+  `fl_c5_nested_pointer_authored_child_routing_matches_cpp_probe`,
+  `fl_c5_component_list_pointer_reverse_overlap_matches_cpp_probe`,
+  `fl_c5_pointer_fp_nonfinite_coordinates_match_cpp_probe`,
+  `fl_c5_focus_semantic_focus_state_and_owner_safe_focus_accessors`,
+  `fl_c5_focus_semantic_manager_switch_is_identity_noop_and_restores_internal`,
+  `fl_c5_focus_semantic_batches_snapshot_clear_and_keep_focus_then_semantic_fifo`,
+  `fl_c5_focus_semantic_callback_generated_batches_obey_phase_snapshots`,
+  `fl_c5_focus_semantic_recorded_semantic_manager_boundaries_keep_call_order`,
+  `fl_c5_focus_queue_chained_callback_waits_source_contract`,
+  `fl_c5_focus_queue_snapshot_and_duplicate_source_contract`,
+  `fl_c5_focus_manager_switch_order`, `fl_c5_focus_state`,
+  `fl_c5_semantic_queue_focus_then_semantic_phase_contract`, and
+  `fl_c5_semantic_queue_snapshot_null_and_duplicate_source_contract`. The
+  `state_machine_hit_trait_required`,
+  `state_machine_hit_concrete_types_required`,
+  `state_machine_hit_three_pass_order_required`, and
+  `state_machine_focus_then_semantic_phase_required` ratchets enforce the
+  owner structure. These proofs cover shared-target dedup and
   duplicate listener append; reset → prepare → process; opacity propagation
   without skipping cleanup; Artboard-first/draw-chain sorting and counter
   re-sort; shape/layout/text geometry; nested authored routing; component-list
   reverse routing and opaque→exit cleanup; drag disable/enable; provider opacity
   upgrade/discard rules; frame-origin transforms; focused-manager switch order;
   and provider/nested/list-only `hasListeners`.
-- [ ] DataContext bind rebind and clear: OPEN because
-  `first_factory_pointer_prepares_and_applies_fixed_bindings_before_callback`
-  does not emit the callback that observes the fixed source, while the
-  missing-context hydration test loses the retained listener table. The
-  remaining `B-BIND` and `S-BIND` prove all distinct null
+- [x] DataContext bind rebind and clear: `B-BIND` and `S-BIND` are landed
+  through `first_factory_pointer_prepares_and_applies_fixed_bindings_before_callback`,
+  `listener_missing_context_hydration_keeps_the_table_until_context_arrives`,
+  `fl_c5_bind_staged_main_and_globals_apply_only_through_primary_bind`,
+  `fl_c5_bind_null_matrix_keeps_every_cpp_branch_distinct`,
+  `fl_c5_bind_data_context_and_rebind_preserve_artboard_machine_order`,
+  `fl_c5_bind_setters_preserve_an_existing_unregistered_context`,
+  `fl_c5_bind_inherit_a_then_b_retains_the_prior_registration_hazard`,
+  `fl_c5_bind_shared_context_repoints_all_registered_machine_sinks`,
+  `fl_c5_bind_typed_context_apis_delegate_without_signature_changes`,
+  `fl_c5_bind_family_typed_default_context_matches_cpp_probe`,
+  `fl_c5_bind_null_matrix_matches_pinned_cpp_members`,
+  `fl_c5_inherit_context_a_then_b_retains_pinned_cpp_registration_hazard`,
+  and `fl_c5_complete_view_models_main_then_globals_matches_pinned_cpp`. The
+  `state_machine_bind_primary_family_required`,
+  `state_machine_bind_null_branches_distinct_required`,
+  `state_machine_internal_context_listener_before_script_required`, and
+  `state_machine_typed_context_primary_delegation_required` ratchets enforce
+  the family. These proofs cover all distinct null
   branches; staged main/global setters; completion order and cross-model global
   occupancy; complete → artboard → machine bind; bind-null’s limited unbind;
   `bindDataContext(nullptr)` failure; inherited A→B prior-registration hazard;
   setter/getter, artboard-only relink, subtype-only rebuild, listener-cell
   clear/relink, scripted context pass order, and destructor unbind order.
-- [ ] Event application and chained reports: OPEN because
-  `synchronous_pointer_events_survive_the_followup_advance_once_in_authored_order`
-  returns no `Footstep`/`Event 3` reports and
-  `synchronous_and_advance_events_share_one_cycle_in_cpp_order_without_replay`
-  loses the synchronous `Third`/`First` prefix. The remaining `B-EVENT`,
-  `B-LVM`, and `S-EVENT` prove both pending queues
+- [x] Event application and chained reports: `B-EVENT`, `B-LVM`, and
+  `S-EVENT` are landed through
+  `synchronous_pointer_events_survive_the_followup_advance_once_in_authored_order`,
+  `synchronous_and_advance_events_share_one_cycle_in_cpp_order_without_replay`,
+  `fl_c5_event_host_drain_leaves_the_core_queue_for_apply_events`,
+  `fl_c5_event_apply_batches_chaining_and_exact_100_cap`,
+  `fl_c5_event_listener_fire_reports_live_payload_before_advance`,
+  `fl_c5_event_mid_callback_visibility_excludes_the_reporting_snapshot`,
+  `fl_c5_event_trigger_zero_suppression_and_duplicate_listener_fifo`,
+  `fl_c5_event_listener_major_event_minor_single_and_multi_order`,
+  `fl_c5_event_bubbling_precedes_the_recorded_audio_seam_through_two_ancestors`,
+  `fl_c5_apply_events_chaining_and_listener_order`,
+  `fl_c5_apply_events_100_batches`, `fl_c5_event_mid_callback_visibility`,
+  `fl_c5_trigger_zero_suppression`, `fl_c5_event_bubbling_audio_seam_order`,
+  and `fl_c5_live_event_projection`. The
+  `state_machine_event_apply_order_required`,
+  `state_machine_event_exact_100_batches_required`,
+  `state_machine_event_pending_cursor_required`, and
+  `state_machine_vm_listener_firing_boundary_required` ratchets enforce the
+  queue semantics. These proofs show both pending queues
   are snapshotted/cleared before callbacks; events precede VM reports; callback
   inspection sees only newly pending reports; exactly 100 batches run and the
   boundary warning semantics are retained; batch 101 remains pending; single
@@ -543,11 +606,23 @@ instance-level Rust implementation.
   seconds, pointer positions/timestamps, event delays, transition mix/duration,
   animation duration, spilled time, frame origin, and singular transforms.
   Keep validation only on separately named Rust convenience entry points.
-- [ ] Advance return and pending work: OPEN because
-  `state_machine_viewmodel_trigger_conditions_match_cpp_probe` returns
-  `advanced=true` in pinned C++ and `false` in Rust for the bound
-  value-trigger case. The remaining `B-ADV`, `S-ADV`, and `S-ORDER` prove raw
-  new-frame order is
+- [x] Advance return and pending work: `B-ADV`, `S-ADV`, and `S-ORDER` are
+  landed through `state_machine_viewmodel_trigger_conditions_match_cpp_probe`,
+  `fl_c5_advance_raw_order_and_clean_zero_bookkeeping`,
+  `fl_c5_advance_new_frame_false_preserves_the_sticky_latch`,
+  `fl_c5_advance_fp_values_forward_without_validation_and_zero_forces_facade`,
+  `fl_c5_advance_bind_generated_report_is_a_raw_return_term`,
+  `fl_c5_advance_five_passes_probe_transitions_unconditionally`,
+  `fl_c5_advance_view_models_false_skips_only_data_context_advancement`,
+  `fl_c5_advance_focus_chaining_and_hidden_target_boundaries`,
+  `fl_c5_raw_advance_order_matches_pinned_cpp`, `fl_c5_advance_return_terms`,
+  `fl_c5_advance_fp_matrix`, `fl_c5_advance_view_models_false`,
+  `fl_c5_five_pass_unconditional_probe`, and `fl_c5_zero_delta_bookkeeping`.
+  The `state_machine_advance_raw_order_required`,
+  `state_machine_advance_return_terms_required`,
+  `state_machine_advance_unconditional_settlement_required`, and
+  `state_machine_advance_clean_zero_fast_path` ratchets enforce the result.
+  These proofs show raw new-frame order is
   draw-sort check → focus batch → semantic batch → apply events → clear latch →
   pre-layer binds → authored layers → converter advance → every input
   `advanced`; same-frame calls retain state-change flags; reports created after
@@ -722,9 +797,52 @@ The structural checker and injected negatives must permanently reject:
 
 ## Publication packet
 
-Before the immutable candidate is submitted:
+Immutable candidate identity:
 
-- [ ] every member row and all twelve adversarial rows are checked;
+- candidate commit (current `HEAD`):
+  `41f2aeaf6edcfb0cca3b2c9e173b842760e73b11`;
+- pinned C++:
+  `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
+- trace source fingerprint and Rust runner provenance:
+  `docs/runtime-frame-loop-trace.json`; `make
+  runtime-frame-loop-port-check` confirms both are current for this final
+  evidence tree.
+
+Gate receipts:
+
+| Gate | Green receipt |
+| --- | --- |
+| Seven reopened member behaviors | This W31 run executes one passing test for each named receipt: `state_machine_generic_layer_state_occurrence_matches_cpp_probe` (`currentState`, `stateChangedByIndex`), `state_machine_viewmodel_trigger_conditions_match_cpp_probe` (`advance(seconds,newFrame)`), `flow_pointer_callbacks_receive_event_time_and_the_prior_delivered_position` (`pointerDown`), both `synchronous_*` event-cycle tests (`applyEvents`), `first_factory_pointer_prepares_and_applies_fixed_bindings_before_callback` (`internalDataContext`), and `listener_missing_context_hydration_keeps_the_table_until_context_arrives` (`pointerDown`, `internalDataContext`, `initScriptedObjects`). |
+| Focused and broad behavioral floor | `.flc5/out/W30-report.md`: C++ probes 804/804, `nuxie --lib` 146/146, runtime library 713/713, scripting library 205/205, and `sound` 1/1 exact. W31 reruns the complete runtime library and C++ probe gates below. |
+| Structural checker and provenance | W31 `make runtime-frame-loop-port-check`: 56/56 checker tests; files 341 (105 faithful, 236 pending), members 75 (40 adapted, 13 faithful, 22 pending), gaps 10; all 209 ratchets in `docs/runtime-frame-loop-gaps.toml` are within their declared ranges. The current trace fingerprint and Rust runner provenance are accepted. |
+| Public/downstream API | `.flc5/out/floor-public-api.log`: 15 passed, 0 failed. |
+| Renderer corpus | `.flc5/out/floor-renderer-golden.log`: exact=1,468, byte-exact=837, diverges=0, gated=0. |
+| Scripted golden corpus | `.flc5/out/floor-scripted-golden.log`: 317/317 exact entries, 647 exact segments, diverges=0, unsupported=0, not-yet=0. |
+| Same-runner pixel corpus | `.flc5/out/floor-pixel-same-runner.log`: exact=1,468, byte-exact=1,370, diverges=0, gated=0. |
+| Browser/WebGPU | `.flc5/out/floor-browser.log`: browser smoke pass, GPU smoke pass, prohibited surface/CPU presentation=0, typed readback=1, clean error-scope and bounded surface recovery invariants hold. |
+| Link-closure size | `.flc5/out/floor-size.log`: scripting off=8,201,416 bytes; scripting on=9,302,152 bytes; both below the 9 MiB (9,437,184-byte) budget. |
+| Apple | `.flc5/out/floor-apple.log`: build green; release panic-firewall 1/1; debug unit tests 66/66; artifact validator 15/15; doc tests and `-D warnings` product clippy green. |
+| Final named W31 commands | `cargo test -p nuxie-runtime --lib`: 713/713; `cargo test -p nuxie-runtime --test cpp_probe`: 804/804; `make runtime-frame-loop-port-check`: 56/56 plus ownership/ratchets green; `cargo fmt --all -- --check`: green; `git diff --check`: green. |
+
+Remaining out-of-scope work is unchanged and explicitly `RECORDED`: pending
+rows `B6-0259` (`listener_group.cpp`), `B6-0083`
+(`text_input_listener_group.cpp`), `B6-0241` (`gamepad_batch.cpp`),
+`B6-0238` (`focus_manager.cpp`), `B6-0329`
+(`semantic_manager.cpp`), `B6-0327` (`semantic_data.cpp`), and `B6-0113`
+(`audio_event.cpp`), plus adapted importer rows `B6-0228` and `B6-0212`.
+None is promoted by FL-C5.
+
+Compensation verdict: all 25 `KEEP` adaptations remain tied to their
+behavioral, structural, or public-API proofs. All four `DELETE` mechanisms
+remain absent:
+`requires_post_update_state_probe`, `post_update_probe_pending`,
+`has_advanced_once`, and stored/cached-only `changed_state_count`. The
+on-demand compatibility query is not stored state. No compensation verdict
+changed during closure completion.
+
+Closure checklist:
+
+- [x] every member row and all twelve adversarial rows are checked;
 - [x] the two new owner modules exist and both legacy files are thin entry
   points/re-exports;
 - [x] every compensation `KEEP` is documented in the corresponding member
@@ -733,11 +851,11 @@ Before the immutable candidate is submitted:
 - [x] every recorded seam names its owning row and remains unpromoted;
 - [x] every structural rule has a passing injected negative control
   (`make runtime-frame-loop-port-test`: 56 passed);
-- [ ] focused Rust tests and pinned-C++ differentials are green;
-- [ ] the complete non-performance correctness floor, public/downstream API
+- [x] focused Rust tests and pinned-C++ differentials are green;
+- [x] the complete non-performance correctness floor, public/downstream API
   floor, structural checker, format/lint, C API, Apple, browser, pixel, size,
   and provenance gates required by the family procedure are green;
-- [ ] exact source citations, test names, checker counts, gate counts, trace
+- [x] exact source citations, test names, checker counts, gate counts, trace
   receipt, and immutable candidate identity are recorded here and in the
   mechanical status layers; and
 - [x] no performance measurement was run or used to select work.

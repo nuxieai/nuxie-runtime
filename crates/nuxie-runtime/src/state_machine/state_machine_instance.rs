@@ -1398,6 +1398,7 @@ pub struct StateMachineInstance {
     data_bind_container: RuntimeDataBindContainerQueue,
     data_bind_occurrences: Vec<RuntimeStateMachineDataBindOccurrence>,
     key_frame_data_bind_graphs: Vec<Option<RuntimeDataBindGraph>>,
+    next_key_frame_data_bind_occurrence_id: u64,
     layers: Vec<StateMachineLayerInstance>,
     reported_events: Vec<StateMachineReportedEvent>,
     /// Prefix of `reported_events` already consumed by C++ `applyEvents`.
@@ -2028,6 +2029,7 @@ impl Clone for StateMachineInstance {
             data_bind_container: RuntimeDataBindContainerQueue::default(),
             data_bind_occurrences: Vec::new(),
             key_frame_data_bind_graphs: self.key_frame_data_bind_graphs.clone(),
+            next_key_frame_data_bind_occurrence_id: 0,
             layers: self.layers.clone(),
             // Public Clone is Rust's explicit state-snapshot adaptation (C++
             // has no StateMachineInstance copy constructor). Copy report
@@ -2490,6 +2492,9 @@ impl StateMachineInstance {
 
     fn teardown_bind_occurrences(&mut self) {
         self.record_drop_phase("binds");
+        for layer in &mut self.layers {
+            layer.remove_key_frame_data_binds();
+        }
         self.owned_data_context = None;
         self.data_bind_occurrences.clear();
         self.data_bind_container = RuntimeDataBindContainerQueue::default();
@@ -2512,6 +2517,69 @@ impl StateMachineInstance {
         self.scripted_instances_by_global.clear();
         self.scripted_facade_root_view_model = None;
         self.script_error = None;
+    }
+
+    fn key_frame_data_bind_occurrence_ids(
+        &mut self,
+        enrollment: crate::animation::RuntimeKeyFrameDataBindEnrollment,
+    ) -> Vec<crate::animation::RuntimeKeyFrameDataBindOccurrenceId> {
+        let (layers, graphs, next_id) = (
+            &mut self.layers,
+            &self.key_frame_data_bind_graphs,
+            &mut self.next_key_frame_data_bind_occurrence_id,
+        );
+        for layer in &mut *layers {
+            // Snapshot Clone deliberately drops mutable graph occurrences.
+            // Rebuild them from the immutable prototype before collecting
+            // typed owner-local enrollment identities.
+            layer.ensure_key_frame_data_binds(graphs);
+            layer.enroll_unassigned_key_frame_data_binds(next_id);
+        }
+        let mut ids = Vec::new();
+        for layer in layers {
+            layer.collect_key_frame_data_bind_occurrence_ids(enrollment, &mut ids);
+        }
+        ids.sort_unstable();
+        ids
+    }
+
+    fn prepare_key_frame_data_bind_enrollment(
+        &mut self,
+        enrollment: crate::animation::RuntimeKeyFrameDataBindEnrollment,
+    ) -> bool {
+        let ids = self.key_frame_data_bind_occurrence_ids(enrollment);
+        let (layers, graphs) = (&mut self.layers, &self.key_frame_data_bind_graphs);
+        let mut changed = false;
+        for id in ids {
+            for layer in &mut *layers {
+                if let Some(result) = layer.prepare_key_frame_data_bind_occurrence(id, graphs) {
+                    changed |= result;
+                    break;
+                }
+            }
+        }
+        changed
+    }
+
+    fn advance_key_frame_data_bind_enrollment(
+        &mut self,
+        enrollment: crate::animation::RuntimeKeyFrameDataBindEnrollment,
+        elapsed_seconds: f32,
+    ) -> bool {
+        let ids = self.key_frame_data_bind_occurrence_ids(enrollment);
+        let (layers, graphs) = (&mut self.layers, &self.key_frame_data_bind_graphs);
+        let mut keep_going = false;
+        for id in ids {
+            for layer in &mut *layers {
+                if let Some(result) =
+                    layer.advance_key_frame_data_bind_occurrence(id, graphs, elapsed_seconds)
+                {
+                    keep_going |= result;
+                    break;
+                }
+            }
+        }
+        keep_going
     }
 
     #[cfg(test)]
@@ -2711,6 +2779,7 @@ impl StateMachineInstance {
             data_bind_container: RuntimeDataBindContainerQueue::default(),
             data_bind_occurrences: Vec::new(),
             key_frame_data_bind_graphs,
+            next_key_frame_data_bind_occurrence_id: 0,
             layers: Vec::with_capacity(layer_capacity),
             reported_events: Vec::new(),
             reported_event_listener_index: 0,
@@ -11723,7 +11792,13 @@ impl StateMachineInstance {
         // separate scripted full-list walk here: it loses the container's
         // authored cross-family partition/order.
         self.record_advance_phase("pre-layer-binds");
+        self.prepare_key_frame_data_bind_enrollment(
+            crate::animation::RuntimeKeyFrameDataBindEnrollment::Initial,
+        );
         self.update_data_binds_false(artboard, owned_context.as_deref(), host)?;
+        self.prepare_key_frame_data_bind_enrollment(
+            crate::animation::RuntimeKeyFrameDataBindEnrollment::Late,
+        );
         // C++ has no graph-wide Before/After sweep here. The pre-layer
         // selected false update above owns propagation; converter advance is
         // one post-layer DataBindContainer walk below.
@@ -11801,6 +11876,10 @@ impl StateMachineInstance {
         self.record_advance_phase("converter-advance");
         let mut data_bind_advance =
             crate::data_bind_graph::RuntimeDataBindGraphStatefulAdvance::default();
+        let mut key_frame_data_bind_keep_going = self.advance_key_frame_data_bind_enrollment(
+            crate::animation::RuntimeKeyFrameDataBindEnrollment::Initial,
+            elapsed_seconds,
+        );
         for occurrence in self.data_bind_occurrences.clone() {
             let advance = match occurrence {
                 RuntimeStateMachineDataBindOccurrence::Ordinary { data_bind_index } => self
@@ -11823,6 +11902,10 @@ impl StateMachineInstance {
             data_bind_advance.changed |= advance.changed;
             data_bind_advance.keep_going |= advance.keep_going;
         }
+        key_frame_data_bind_keep_going |= self.advance_key_frame_data_bind_enrollment(
+            crate::animation::RuntimeKeyFrameDataBindEnrollment::Late,
+            elapsed_seconds,
+        );
         #[cfg(test)]
         if let Some(report) = self.bind_advance_test_report.take() {
             self.reported_events.push(report);
@@ -11837,7 +11920,10 @@ impl StateMachineInstance {
         for input in &mut self.inputs {
             input.advanced();
         }
-        let scheduled = focus_needs_advance || data_bind_advance.keep_going || keep_going;
+        let scheduled = focus_needs_advance
+            || data_bind_advance.keep_going
+            || key_frame_data_bind_keep_going
+            || keep_going;
         self.needs_advance = scheduled;
         let advanced = scheduled
             || self.reported_event_count() != 0

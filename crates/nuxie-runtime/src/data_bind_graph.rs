@@ -5133,7 +5133,6 @@ pub(crate) struct RuntimeDataBindGraphStatefulAdvance {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum RuntimeDataBindGraphApplyPhase {
     BeforeStatefulAdvance,
-    AfterStatefulAdvance,
     UpdateDataBindsFalse,
     Immediate,
     PublicUpdate,
@@ -6066,8 +6065,6 @@ impl RuntimeDataBindGraph {
                 template.default_value.clone(),
             );
         }
-        default_view_model_bindings.sort_by_key(|binding| binding.data_bind_index);
-
         Some(Self {
             context_kind: RuntimeDataBindGraphContextKind::None,
             default_view_model_bindings_dirty: false,
@@ -10343,7 +10340,6 @@ impl RuntimeDataBindGraph {
                 && matches!(
                     phase,
                     RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance
-                        | RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance
                         | RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse
                 );
             let delayed_view_model_apply = !source.is_main_to_source()
@@ -10352,7 +10348,6 @@ impl RuntimeDataBindGraph {
                 && matches!(
                     phase,
                     RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance
-                        | RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance
                         | RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse
                 );
             if source.retained_bind.target_origin()
@@ -10970,12 +10965,6 @@ impl RuntimeDataBindGraphSourceNode {
             // Only the time-STEP is a no-op at 0. Skipping this phase left
             // 'set value, advance(0), render' showing the stale value.
             RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance => false,
-            // The post-step value becomes visible at the NEXT advance's
-            // update pass: the step's markConverterDirty feeds the following
-            // updateDataBinds in C++ (data_converter_interpolator.cpp:98),
-            // so the post-step pass here must not re-apply stateful bindings
-            // a frame early.
-            RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance => true,
             RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse
             | RuntimeDataBindGraphApplyPhase::Immediate
             | RuntimeDataBindGraphApplyPhase::PublicUpdate => false,

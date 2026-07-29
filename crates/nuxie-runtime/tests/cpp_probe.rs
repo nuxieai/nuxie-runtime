@@ -81832,6 +81832,307 @@ fn fl_c5_run_rust_unit_probe(filter: &str) -> String {
         .unwrap_or_else(|error| panic!("Rust WP5 probe {filter} emitted non-UTF-8 output: {error}"))
 }
 
+fn push_fl_c5_keyframe_data_bind_context(bytes: &mut Vec<u8>, path: &[u32]) {
+    let mut source_path_ids = Vec::new();
+    for path_id in path {
+        push_var_uint(&mut source_path_ids, u64::from(*path_id));
+    }
+    push_object_with_properties(bytes, "DataBindContext", |bytes| {
+        push_uint_property(
+            bytes,
+            "DataBindContext",
+            "propertyKey",
+            u64::from(property_key_for_name("KeyFrameDouble", "value")),
+        );
+        push_bytes_property(bytes, "DataBindContext", "sourcePathIds", &source_path_ids);
+    });
+}
+
+fn synthetic_fl_c5_keyframe_data_bind(
+    file_id: u64,
+    duplicate_source_bind: bool,
+    transition_after_bind: bool,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        for name in ["first", "second"] {
+            push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+                push_string_property(bytes, "ViewModelPropertyNumber", "name", name);
+            });
+        }
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        for (property_id, value) in [(0, 11.0), (1, 99.0)] {
+            push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+                push_uint_property(
+                    bytes,
+                    "ViewModelInstanceNumber",
+                    "viewModelPropertyId",
+                    property_id,
+                );
+                push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", value);
+            });
+        }
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 2.0, 1);
+        push_fl_c5_keyframe_data_bind_context(bytes, &[0, 0]);
+        if duplicate_source_bind {
+            push_fl_c5_keyframe_data_bind_context(bytes, &[0, 1]);
+        }
+        push_keyframe_double(bytes, 10, 12.0, 0);
+
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        if transition_after_bind {
+            push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+                push_string_property(bytes, "StateMachineBool", "name", "go");
+            });
+        }
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        if transition_after_bind {
+            push_object_with_properties(bytes, "StateTransition", |bytes| {
+                push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            });
+            push_synthetic_bool_transition_condition(bytes, 0);
+            push_object_with_properties(bytes, "AnimationState", |bytes| {
+                push_uint_property(bytes, "AnimationState", "animationId", 0);
+            });
+        }
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn cpp_runtime_update_transform_x(cpp: &CppProbeFile, local_id: usize) -> f32 {
+    cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .and_then(|update| {
+            update
+                .components
+                .iter()
+                .find(|component| component.local_id == local_id)
+        })
+        .and_then(|component| component.local_transform)
+        .map(|transform| transform[4])
+        .unwrap_or_else(|| panic!("missing C++ runtime-update transform for local {local_id}"))
+}
+
+#[test]
+fn fl_c5_keyframe_data_bind_supported_holder_and_removal_source_contract() {
+    fl_c5_run_rust_unit_probe("fl_c5_keyframe_data_bind_supported_holders_and_live_resolution");
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_keyframe_data_bind_duplicate_build_tracks_and_removes_in_build_order",
+    );
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_keyframe_data_bind_converter_advancement_keeps_going_per_occurrence",
+    );
+
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let build = fl_c5_cpp_member(
+        &source,
+        "static uint32_t keyFrameHolderPropertyKey",
+        "bool StateMachineInstance::hasFocusNodes()",
+    );
+    for required in [
+        "KeyFrameDoubleBase::typeKey",
+        "KeyFrameColorBase::typeKey",
+        "KeyFrameBoolBase::typeKey",
+        "KeyFrameStringBase::typeKey",
+        "default:\n            return 0;",
+        "default:\n            return nullptr;",
+        "firstBindByTarget.emplace(target, dataBind);",
+        "m_stateKeyFrameDataBinds[stateInstance].push_back",
+        "auto it = m_stateKeyFrameDataBinds.find(stateInstance);",
+        "if (it == m_stateKeyFrameDataBinds.end())",
+        "removeDataBind(dataBind);\n        delete dataBind;",
+        "m_stateKeyFrameDataBinds.erase(it);",
+    ] {
+        assert!(
+            build.contains(required),
+            "pinned keyframe lifecycle omitted {required:?}"
+        );
+    }
+    let build_member = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::buildStateKeyFrameBinds",
+        "void StateMachineInstance::removeStateKeyFrameBinds",
+    );
+    assert!(
+        !build_member.contains("if (keyframe == nullptr)"),
+        "pinned C++ deliberately dereferences a retained null keyframe slot"
+    );
+    let destructor = fl_c5_cpp_member(
+        &source,
+        "StateMachineInstance::~StateMachineInstance()",
+        "void StateMachineInstance::dispose()",
+    );
+    let delete_binds = destructor.find("deleteDataBinds();").expect("delete binds");
+    let clear_tracking = destructor
+        .find("m_stateKeyFrameDataBinds.clear();")
+        .expect("clear keyframe tracking");
+    let delete_layers = destructor
+        .find("delete[] m_layers;")
+        .expect("delete layers");
+    assert!(delete_binds < clear_tracking);
+    assert!(clear_tracking < delete_layers);
+}
+
+#[test]
+fn fl_c5_keyframe_first_source_bind() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_keyframe_first_source_bind.riv";
+    let bytes = synthetic_fl_c5_keyframe_data_bind(96_980, true, false);
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-update".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (file, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    assert!(state_machine.bind_view_model_instance_context(&file, 0, 0));
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust.update_components();
+
+    assert_close(
+        cpp_runtime_update_transform_x(&cpp, 1),
+        11.0,
+        "C++ first source bind",
+    );
+    assert_close(transform_x(&rust, 1), 11.0, "Rust first source bind");
+}
+
+#[test]
+fn fl_c5_keyframe_initialize_converter_order() {
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let build = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::buildStateKeyFrameBinds",
+        "void StateMachineInstance::removeStateKeyFrameBinds",
+    );
+    let holder = build.find("makeKeyFrameValueHolder").expect("holder");
+    let clone = build.find("dataBind->clone()").expect("clone");
+    let file = build.find("dataBindClone->file(").expect("file");
+    let target = build.find("dataBindClone->target(").expect("target");
+    let property = build
+        .find("dataBindClone->propertyKey(")
+        .expect("property key");
+    let initialize = build
+        .find("dataBindClone->initialize();")
+        .expect("initialize");
+    let converter = build
+        .find("dataBindClone->converter(dataBind->converter()")
+        .expect("converter");
+    let enrollment = build
+        .find("addDataBind(dataBindClone);")
+        .expect("enrollment");
+    let tracking = build
+        .find("m_stateKeyFrameDataBinds[stateInstance].push_back")
+        .expect("state tracking");
+    assert!(holder < clone);
+    assert!(clone < file);
+    assert!(file < target);
+    assert!(target < property);
+    assert!(property < initialize);
+    assert!(initialize < converter);
+    assert!(converter < enrollment);
+    assert!(enrollment < tracking);
+    fl_c5_run_rust_unit_probe("fl_c5_keyframe_data_bind_supported_holders_and_live_resolution");
+}
+
+#[test]
+fn fl_c5_keyframe_bound_context_lifecycle() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_keyframe_bound_context_lifecycle.riv";
+    let bytes = synthetic_fl_c5_keyframe_data_bind(96_981, false, true);
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-update".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (file, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    assert!(state_machine.bind_view_model_instance_context(&file, 0, 0));
+    let mut snapshot = state_machine.clone();
+    let (_, mut snapshot_artboard) = read_rust_instance_from_bytes(&bytes, label);
+    snapshot_artboard.advance_state_machine_instance(&mut snapshot, 0.0);
+    snapshot_artboard.update_components();
+    assert_close(
+        transform_x(&snapshot_artboard, 1),
+        11.0,
+        "Rust snapshot rebuilds isolated keyframe bind occurrences",
+    );
+    assert!(state_machine.set_bool(0, true));
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust.update_components();
+
+    assert_close(
+        cpp_runtime_update_transform_x(&cpp, 1),
+        11.0,
+        "C++ already-bound new occurrence",
+    );
+    assert_close(
+        transform_x(&rust, 1),
+        11.0,
+        "Rust already-bound new occurrence",
+    );
+}
+
 fn fl_c5_rust_probe_receipt<'a>(output: &'a str, marker: &str) -> &'a str {
     output
         .lines()

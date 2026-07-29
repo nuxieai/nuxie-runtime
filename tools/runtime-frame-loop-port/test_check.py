@@ -2799,6 +2799,382 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     textwrap.dedent(safe),
                 )
 
+    def test_fl_c5_keyframe_live_ratchets_and_negative_controls(self) -> None:
+        required_cases = [
+            (
+                "state_machine_keyframe_first_source_bind_required",
+                "crates/nuxie-runtime/src/artboard_data_bind.rs",
+                """
+                fn build_key_frame_data_bind_templates() {
+                    let mut claimed_targets = BTreeSet::new();
+                    for target in targets {
+                        if !claimed_targets.insert(target.id) {
+                            continue;
+                        }
+                    }
+                }
+                """,
+                """
+                fn build_key_frame_data_bind_templates() {
+                    for target in targets {
+                        templates.insert(target.id, target);
+                    }
+                }
+                """,
+            ),
+            (
+                "state_machine_keyframe_holder_set_required",
+                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                """
+                enum RuntimeKeyFrameDataBindTarget {
+                    Number,
+                    Color,
+                    Boolean,
+                    String,
+                }
+                """,
+                """
+                enum RuntimeKeyFrameDataBindTarget {
+                    Number,
+                    Color,
+                    Boolean,
+                    String,
+                    Integer,
+                }
+                """,
+            ),
+            (
+                "state_machine_keyframe_build_order_required",
+                "crates/nuxie-runtime/src/animation.rs",
+                """
+                fn build_key_frame_data_binds() {
+                    self.add_key_frame_value_holder(global_id, value);
+                    self.key_frame_data_bind_graphs
+                        .push(prototype.clone_for_key_frame_instance());
+                    graph.take_key_frame_binding_updates(phase);
+                }
+                """,
+                """
+                fn build_key_frame_data_binds() {
+                    self.key_frame_data_bind_graphs
+                        .push(prototype.clone_for_key_frame_instance());
+                    self.add_key_frame_value_holder(global_id, value);
+                    graph.take_key_frame_binding_updates(phase);
+                }
+                """,
+            ),
+            (
+                "state_machine_keyframe_animation_traversal_order_required",
+                "crates/nuxie-runtime/src/animation.rs",
+                """
+                fn key_frame_data_bind_templates_in_animation_order() {
+                    animation.keyed_objects
+                        .flat_map(|object| object.keyed_properties)
+                        .flat_map(|property| property.key_frames)
+                        .filter_map(RuntimeKeyFrame::bindable_global_id)
+                        .filter_map(|id| template_by_key_frame.get(&id));
+                }
+                """,
+                """
+                fn key_frame_data_bind_templates_in_animation_order() {
+                    templates
+                        .filter(|template| key_frame_ids.contains(&template.id));
+                }
+                """,
+            ),
+            (
+                "state_machine_keyframe_container_phase_order_required",
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+                """
+                fn advance_with_report_mode() {
+                    self.prepare_key_frame_data_bind_enrollment(Enrollment::Initial);
+                    self.update_data_binds_false();
+                    self.prepare_key_frame_data_bind_enrollment(Enrollment::Late);
+                    self.record_advance_phase("authored-layers");
+                    advance_layers();
+                    self.record_advance_phase("converter-advance");
+                    self.advance_key_frame_data_bind_enrollment(Enrollment::Initial);
+                    for occurrence in self.data_bind_occurrences.clone() {
+                        advance(occurrence);
+                    }
+                    self.advance_key_frame_data_bind_enrollment(Enrollment::Late);
+                }
+                """,
+                """
+                fn advance_with_report_mode() {
+                    self.update_data_binds_false();
+                    self.prepare_key_frame_data_bind_enrollment(Enrollment::Initial);
+                    self.prepare_key_frame_data_bind_enrollment(Enrollment::Late);
+                    self.record_advance_phase("authored-layers");
+                    advance_layers();
+                    self.record_advance_phase("converter-advance");
+                    for occurrence in self.data_bind_occurrences.clone() {
+                        advance(occurrence);
+                    }
+                }
+                """,
+            ),
+            (
+                "state_machine_keyframe_remove_before_holder_required",
+                "crates/nuxie-runtime/src/animation.rs",
+                """
+                fn remove_key_frame_data_binds() {
+                    for ((id, enrollment), graph) in self
+                        .key_frame_data_bind_occurrences
+                        .drain(..)
+                        .zip(self.key_frame_data_bind_graphs.drain(..))
+                    {
+                        drop(graph);
+                    }
+                    self.key_frame_value_holders = None;
+                }
+                """,
+                """
+                fn remove_key_frame_data_binds() {
+                    self.key_frame_value_holders = None;
+                    for ((id, enrollment), graph) in self
+                        .key_frame_data_bind_occurrences
+                        .drain(..)
+                        .zip(self.key_frame_data_bind_graphs.drain(..))
+                    {
+                        drop(graph);
+                    }
+                }
+                """,
+            ),
+            (
+                "state_machine_keyframe_snapshot_rebuild_and_owner_ids_required",
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+                """
+                fn key_frame_data_bind_occurrence_ids() {
+                    layer.ensure_key_frame_data_binds(graphs);
+                    layer.enroll_unassigned_key_frame_data_binds(next_id);
+                    layer.collect_key_frame_data_bind_occurrence_ids(enrollment, &mut ids);
+                    ids.sort_unstable();
+                }
+                """,
+                """
+                fn key_frame_data_bind_occurrence_ids() {
+                    layer.collect_key_frame_data_bind_occurrence_ids(enrollment, &mut ids);
+                    ids.sort_unstable();
+                }
+                """,
+            ),
+            (
+                "state_machine_keyframe_snapshot_ensure_is_construction_only",
+                "crates/nuxie-runtime/src/animation.rs",
+                """
+                fn ensure_key_frame_data_binds() {
+                    if self.key_frame_data_bind_graphs.is_empty() {
+                        self.build_key_frame_data_binds_internal(
+                            prototype,
+                            enrollment,
+                            false,
+                        );
+                    }
+                }
+                """,
+                """
+                fn ensure_key_frame_data_binds() {
+                    self.prepare_key_frame_data_binds(prototype);
+                }
+                """,
+            ),
+            (
+                "state_machine_keyframe_machine_teardown_before_layers_required",
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+                """
+                fn teardown_bind_occurrences() {
+                    layer.remove_key_frame_data_binds();
+                    self.key_frame_data_bind_graphs.clear();
+                }
+                fn teardown_layers() {
+                    self.layers.clear();
+                }
+                """,
+                """
+                fn teardown_bind_occurrences() {
+                    self.key_frame_data_bind_graphs.clear();
+                }
+                fn teardown_layers() {
+                    self.layers.clear();
+                }
+                """,
+            ),
+            (
+                "state_machine_keyframe_cpp_initialize_converter_order_required",
+                "crates/nuxie-runtime/tests/cpp_probe.rs",
+                """
+                fn fl_c5_keyframe_initialize_converter_order() {
+                    assert!(holder < clone);
+                    assert!(clone < file);
+                    assert!(file < target);
+                    assert!(target < property);
+                    assert!(property < initialize);
+                    assert!(initialize < converter);
+                    assert!(converter < enrollment);
+                    assert!(enrollment < tracking);
+                }
+                """,
+                """
+                fn fl_c5_keyframe_initialize_converter_order() {
+                    assert!(holder < clone);
+                    assert!(clone < file);
+                    assert!(file < target);
+                    assert!(target < property);
+                    assert!(property < converter);
+                    assert!(converter < initialize);
+                    assert!(initialize < enrollment);
+                    assert!(enrollment < tracking);
+                }
+                """,
+            ),
+            (
+                "state_machine_keyframe_state_build_sites_required",
+                "crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs",
+                """
+                fn new() {
+                    any_state.build_key_frame_data_binds(
+                        key_frame_data_bind_graphs,
+                        crate::animation::RuntimeKeyFrameDataBindEnrollment::Initial,
+                    );
+                    current_state.build_key_frame_data_binds(
+                        key_frame_data_bind_graphs,
+                        crate::animation::RuntimeKeyFrameDataBindEnrollment::Initial,
+                    );
+                }
+                fn reset_state() {
+                    current_state.build_key_frame_data_binds(
+                        key_frame_data_bind_graphs,
+                        crate::animation::RuntimeKeyFrameDataBindEnrollment::Late,
+                    );
+                }
+                fn change_state() {
+                    current_state.build_key_frame_data_binds(
+                        key_frame_data_bind_graphs,
+                        crate::animation::RuntimeKeyFrameDataBindEnrollment::Late,
+                    );
+                }
+                """,
+                """
+                fn new() {
+                    any_state.build_key_frame_data_binds(
+                        key_frame_data_bind_graphs,
+                        crate::animation::RuntimeKeyFrameDataBindEnrollment::Initial,
+                    );
+                    current_state.build_key_frame_data_binds(
+                        key_frame_data_bind_graphs,
+                        crate::animation::RuntimeKeyFrameDataBindEnrollment::Initial,
+                    );
+                }
+                fn reset_state() {
+                    current_state.build_key_frame_data_binds(
+                        key_frame_data_bind_graphs,
+                        crate::animation::RuntimeKeyFrameDataBindEnrollment::Late,
+                    );
+                }
+                fn change_state() {
+                    drop(current_state);
+                }
+                """,
+            ),
+            (
+                "state_machine_keyframe_layer_occurrence_order_required",
+                "crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs",
+                """
+                fn collect_key_frame_data_bind_occurrence_ids() {
+                    any_state.collect_key_frame_data_bind_occurrence_ids(enrollment, ids);
+                    state_from.collect_key_frame_data_bind_occurrence_ids(enrollment, ids);
+                    current_state.collect_key_frame_data_bind_occurrence_ids(enrollment, ids);
+                }
+                fn remove_key_frame_data_binds() {
+                    any_state.remove_key_frame_data_binds();
+                    state_from.remove_key_frame_data_binds();
+                    current_state.remove_key_frame_data_binds();
+                }
+                """,
+                """
+                fn collect_key_frame_data_bind_occurrence_ids() {
+                    any_state.collect_key_frame_data_bind_occurrence_ids(enrollment, ids);
+                    current_state.collect_key_frame_data_bind_occurrence_ids(enrollment, ids);
+                    state_from.collect_key_frame_data_bind_occurrence_ids(enrollment, ids);
+                }
+                fn remove_key_frame_data_binds() {
+                    any_state.remove_key_frame_data_binds();
+                    current_state.remove_key_frame_data_binds();
+                    state_from.remove_key_frame_data_binds();
+                }
+                """,
+            ),
+        ]
+        for ratchet_id, source, required, missing in required_cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_required_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    textwrap.dedent(required),
+                    textwrap.dedent(missing),
+                )
+
+        self.assert_production_ratchet_case(
+            "state_machine_keyframe_last_source_bind_selection",
+            "crates/nuxie-runtime/src/artboard_data_bind.rs",
+            textwrap.dedent(
+                """
+                fn build_key_frame_data_bind_templates() {
+                    for data_bind in artboard_data_binds(index).iter().rev() {
+                        select(data_bind);
+                    }
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                fn build_key_frame_data_bind_templates() {
+                    for data_bind in artboard_data_binds(index) {
+                        select(data_bind);
+                    }
+                }
+                """
+            ),
+        )
+        self.assert_production_ratchet_case(
+            "state_machine_keyframe_binding_reorder_by_data_bind_index",
+            "crates/nuxie-runtime/src/data_bind_graph.rs",
+            textwrap.dedent(
+                """
+                fn new_key_frame_bindings() {
+                    default_view_model_bindings.sort_by_key(|binding| binding.data_bind_index);
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                fn new_key_frame_bindings() {
+                    retain_key_frame_traversal_order(default_view_model_bindings);
+                }
+                """
+            ),
+        )
+        self.assert_production_ratchet_case(
+            "state_machine_keyframe_snapshot_ensure_prepares_existing",
+            "crates/nuxie-runtime/src/animation.rs",
+            textwrap.dedent(
+                """
+                fn ensure_key_frame_data_binds() {
+                    self.prepare_key_frame_data_binds(prototype);
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                fn ensure_key_frame_data_binds() {
+                    build_empty_snapshot_occurrence();
+                }
+                """
+            ),
+        )
+
     def test_fl_c4_negative_ratchets_reject_displaced_listener_action_shapes(self) -> None:
         cases = [
             (

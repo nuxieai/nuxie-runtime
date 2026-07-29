@@ -183,16 +183,101 @@ impl RuntimeStateInstance {
         }
     }
 
-    pub(super) fn prepare_key_frame_data_binds(
+    pub(super) fn build_key_frame_data_binds(
         &mut self,
         graphs: &[Option<crate::RuntimeDataBindGraph>],
+        enrollment: crate::animation::RuntimeKeyFrameDataBindEnrollment,
     ) {
         self.for_each_animation_instance_mut(|instance| {
             let prototype = graphs
                 .get(instance.animation_index())
                 .and_then(Option::as_ref);
-            instance.prepare_key_frame_data_binds(prototype);
+            if let Some(prototype) = prototype {
+                instance.build_key_frame_data_binds(prototype, enrollment);
+            }
         });
+    }
+
+    pub(super) fn collect_key_frame_data_bind_occurrence_ids(
+        &mut self,
+        enrollment: crate::animation::RuntimeKeyFrameDataBindEnrollment,
+        ids: &mut Vec<crate::animation::RuntimeKeyFrameDataBindOccurrenceId>,
+    ) {
+        self.for_each_animation_instance_mut(|instance| {
+            ids.extend(instance.key_frame_data_bind_occurrence_ids(enrollment));
+        });
+    }
+
+    pub(super) fn ensure_key_frame_data_binds(
+        &mut self,
+        graphs: &[Option<crate::RuntimeDataBindGraph>],
+    ) {
+        self.for_each_animation_instance_mut(|instance| {
+            let Some(prototype) = graphs
+                .get(instance.animation_index())
+                .and_then(Option::as_ref)
+            else {
+                return;
+            };
+            instance.ensure_key_frame_data_binds(prototype);
+        });
+    }
+
+    pub(super) fn enroll_unassigned_key_frame_data_binds(&mut self, next_id: &mut u64) {
+        self.for_each_animation_instance_mut(|instance| {
+            instance.enroll_unassigned_key_frame_data_binds(next_id);
+        });
+    }
+
+    pub(super) fn prepare_key_frame_data_bind_occurrence(
+        &mut self,
+        occurrence_id: crate::animation::RuntimeKeyFrameDataBindOccurrenceId,
+        graphs: &[Option<crate::RuntimeDataBindGraph>],
+    ) -> Option<bool> {
+        let mut result = None;
+        self.for_each_animation_instance_mut(|instance| {
+            if result.is_some() {
+                return;
+            }
+            let Some(prototype) = graphs
+                .get(instance.animation_index())
+                .and_then(Option::as_ref)
+            else {
+                return;
+            };
+            result = instance.prepare_key_frame_data_bind_occurrence(occurrence_id, prototype);
+        });
+        result
+    }
+
+    pub(super) fn advance_key_frame_data_bind_occurrence(
+        &mut self,
+        occurrence_id: crate::animation::RuntimeKeyFrameDataBindOccurrenceId,
+        graphs: &[Option<crate::RuntimeDataBindGraph>],
+        elapsed_seconds: f32,
+    ) -> Option<bool> {
+        let mut result = None;
+        self.for_each_animation_instance_mut(|instance| {
+            if result.is_some() {
+                return;
+            }
+            let Some(prototype) = graphs
+                .get(instance.animation_index())
+                .and_then(Option::as_ref)
+            else {
+                return;
+            };
+            result = instance.advance_key_frame_data_bind_occurrence(
+                occurrence_id,
+                prototype,
+                elapsed_seconds,
+            );
+        });
+        result
+    }
+
+    pub(super) fn remove_key_frame_data_binds(&mut self) {
+        self.for_each_animation_instance_mut(LinearAnimationInstance::remove_key_frame_data_binds);
     }
 
     pub(super) fn for_each_animation_instance_mut(

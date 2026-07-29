@@ -17,6 +17,15 @@ use nuxie_schema::{
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct RuntimeKeyFrameDataBindOccurrenceId(u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimeKeyFrameDataBindEnrollment {
+    Initial,
+    Late,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum RuntimeInterpolator {
     CubicEase {
@@ -617,28 +626,36 @@ pub(crate) fn build_linear_animations<'a>(
     let templates = build_key_frame_data_bind_templates(file, artboard_index, converter_cache);
     if !templates.is_empty() {
         for animation in &mut animations {
-            let key_frame_ids = animation
-                .keyed_objects
-                .iter()
-                .flat_map(|object| &object.keyed_properties)
-                .flat_map(|property| {
-                    property
-                        .key_frames
-                        .iter()
-                        .filter_map(RuntimeKeyFrame::bindable_global_id)
-                })
-                .collect::<std::collections::HashSet<_>>();
             animation.key_frame_data_bind_templates = Arc::new(
-                templates
-                    .iter()
-                    .filter(|template| key_frame_ids.contains(&template.key_frame_global_id))
-                    .cloned()
-                    .collect(),
+                key_frame_data_bind_templates_in_animation_order(animation, &templates),
             );
         }
     }
 
     animations
+}
+
+/// C++ first selects the first authored DataBind for each target, then walks
+/// animation → keyed object → keyed property → keyframe when it clones and
+/// enrolls those binds. The shared template catalog retains the first-source
+/// decision; this projection restores the separate keyframe traversal order.
+fn key_frame_data_bind_templates_in_animation_order(
+    animation: &RuntimeLinearAnimation,
+    templates: &[RuntimeKeyFrameDataBindTemplate],
+) -> Vec<RuntimeKeyFrameDataBindTemplate> {
+    let template_by_key_frame = templates
+        .iter()
+        .map(|template| (template.key_frame_global_id, template))
+        .collect::<HashMap<_, _>>();
+    animation
+        .keyed_objects
+        .iter()
+        .flat_map(|object| &object.keyed_properties)
+        .flat_map(|property| &property.key_frames)
+        .filter_map(RuntimeKeyFrame::bindable_global_id)
+        .filter_map(|global_id| template_by_key_frame.get(&global_id).copied())
+        .cloned()
+        .collect()
 }
 
 fn runtime_keyed_property_mut(
@@ -1620,9 +1637,21 @@ pub struct LinearAnimationInstance {
     pub(crate) did_loop: bool,
     /// C++ `m_loopValue`: `-1` means use the definition value.
     pub(crate) loop_value_override: i32,
+    /// Live keyframe DataBind clones in C++ build order. The reusable
+    /// StateMachine-level graph is only a prototype: every call corresponding
+    /// to `buildStateKeyFrameBinds` appends a fresh graph with independent
+    /// converter/random state. Keeping these occurrences before the holders
+    /// also makes Rust drop the binds before their targets.
+    key_frame_data_bind_graphs: Vec<RuntimeDataBindGraph>,
+    key_frame_data_bind_occurrences: Vec<(
+        Option<RuntimeKeyFrameDataBindOccurrenceId>,
+        RuntimeKeyFrameDataBindEnrollment,
+    )>,
+    key_frame_rebuild_enrollment: RuntimeKeyFrameDataBindEnrollment,
     key_frame_value_holders: Option<Box<HashMap<u32, RuntimeKeyFrameValue>>>,
-    key_frame_data_bind_graph: Option<Box<RuntimeDataBindGraph>>,
     key_frame_prototype_revision: u64,
+    #[cfg(test)]
+    removed_key_frame_data_bind_occurrences: Vec<RuntimeKeyFrameDataBindOccurrenceId>,
 }
 
 impl Clone for LinearAnimationInstance {
@@ -1640,9 +1669,17 @@ impl Clone for LinearAnimationInstance {
             // Keyframe holders model C++'s per-LAI runtime-owned bind targets.
             // A copied LAI starts unbound; state transitions move the outgoing
             // instance when they need to preserve its concrete binding identity.
+            key_frame_data_bind_graphs: Vec::new(),
+            key_frame_data_bind_occurrences: Vec::new(),
+            key_frame_rebuild_enrollment: self
+                .key_frame_data_bind_occurrences
+                .first()
+                .map(|(_, enrollment)| *enrollment)
+                .unwrap_or(self.key_frame_rebuild_enrollment),
             key_frame_value_holders: None,
-            key_frame_data_bind_graph: None,
             key_frame_prototype_revision: 0,
+            #[cfg(test)]
+            removed_key_frame_data_bind_occurrences: Vec::new(),
         }
     }
 }
@@ -1663,16 +1700,37 @@ impl LinearAnimationInstance {
             direction: 1.0,
             did_loop: false,
             loop_value_override: -1,
+            key_frame_data_bind_graphs: Vec::new(),
+            key_frame_data_bind_occurrences: Vec::new(),
+            key_frame_rebuild_enrollment: RuntimeKeyFrameDataBindEnrollment::Late,
             key_frame_value_holders: None,
-            key_frame_data_bind_graph: None,
             key_frame_prototype_revision: 0,
+            #[cfg(test)]
+            removed_key_frame_data_bind_occurrences: Vec::new(),
         }
     }
 
-    fn initialize_key_frame_data_bind_graph(&mut self, prototype: &RuntimeDataBindGraph) {
-        if self.key_frame_data_bind_graph.is_some() {
-            return;
+    pub(crate) fn build_key_frame_data_binds(
+        &mut self,
+        prototype: &RuntimeDataBindGraph,
+        enrollment: RuntimeKeyFrameDataBindEnrollment,
+    ) -> bool {
+        self.build_key_frame_data_binds_internal(prototype, enrollment, true)
+    }
+
+    fn build_key_frame_data_binds_internal(
+        &mut self,
+        prototype: &RuntimeDataBindGraph,
+        enrollment: RuntimeKeyFrameDataBindEnrollment,
+        apply_immediately: bool,
+    ) -> bool {
+        if self.key_frame_data_bind_graphs.is_empty() {
+            self.key_frame_rebuild_enrollment = enrollment;
         }
+        // Pinned C++ creates each typed holder before cloning the matching
+        // DataBind. A duplicate build overwrites the holder lookup but retains
+        // both bind clones in build order
+        // (`state_machine_instance.cpp:3338-3369`).
         for target in &prototype.targets {
             let (global_id, value) = match target.target {
                 RuntimeDataBindGraphTarget::KeyFrameNumber { global_id } => {
@@ -1691,16 +1749,96 @@ impl LinearAnimationInstance {
             };
             self.add_key_frame_value_holder(global_id, value);
         }
-        self.key_frame_data_bind_graph = Some(Box::new(prototype.clone_for_key_frame_instance()));
+        self.key_frame_data_bind_graphs
+            .push(prototype.clone_for_key_frame_instance());
+        self.key_frame_data_bind_occurrences
+            .push((None, enrollment));
         self.key_frame_prototype_revision = prototype.key_frame_source_revision();
+
+        if !apply_immediately {
+            return false;
+        }
+        let updates = self
+            .key_frame_data_bind_graphs
+            .last_mut()
+            .map(|graph| {
+                graph.take_key_frame_binding_updates(
+                    RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance,
+                )
+            })
+            .unwrap_or_default();
+        self.apply_key_frame_data_bind_updates(updates)
+    }
+
+    pub(crate) fn ensure_key_frame_data_binds(&mut self, prototype: &RuntimeDataBindGraph) {
+        if self.key_frame_data_bind_graphs.is_empty() {
+            self.build_key_frame_data_binds_internal(
+                prototype,
+                self.key_frame_rebuild_enrollment,
+                false,
+            );
+        }
+    }
+
+    pub(crate) fn key_frame_data_bind_occurrence_ids(
+        &self,
+        enrollment: RuntimeKeyFrameDataBindEnrollment,
+    ) -> impl Iterator<Item = RuntimeKeyFrameDataBindOccurrenceId> + '_ {
+        self.key_frame_data_bind_occurrences
+            .iter()
+            .filter_map(move |(id, candidate)| (*candidate == enrollment).then_some(*id).flatten())
+    }
+
+    pub(crate) fn enroll_unassigned_key_frame_data_binds(&mut self, next_id: &mut u64) {
+        for (id, _) in &mut self.key_frame_data_bind_occurrences {
+            if id.is_some() {
+                continue;
+            }
+            *id = Some(RuntimeKeyFrameDataBindOccurrenceId(*next_id));
+            *next_id = next_id.wrapping_add(1);
+        }
+    }
+
+    pub(crate) fn prepare_key_frame_data_bind_occurrence(
+        &mut self,
+        occurrence_id: RuntimeKeyFrameDataBindOccurrenceId,
+        prototype: &RuntimeDataBindGraph,
+    ) -> Option<bool> {
+        self.sync_key_frame_data_bind_graph(prototype);
+        let position = self
+            .key_frame_data_bind_occurrences
+            .iter()
+            .position(|(id, _)| *id == Some(occurrence_id))?;
+        let updates = self
+            .key_frame_data_bind_graphs
+            .get_mut(position)?
+            .take_key_frame_binding_updates(RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance);
+        Some(self.apply_key_frame_data_bind_updates(updates))
+    }
+
+    pub(crate) fn advance_key_frame_data_bind_occurrence(
+        &mut self,
+        occurrence_id: RuntimeKeyFrameDataBindOccurrenceId,
+        prototype: &RuntimeDataBindGraph,
+        elapsed_seconds: f32,
+    ) -> Option<bool> {
+        self.sync_key_frame_data_bind_graph(prototype);
+        let position = self
+            .key_frame_data_bind_occurrences
+            .iter()
+            .position(|(id, _)| *id == Some(occurrence_id))?;
+        let advance = self
+            .key_frame_data_bind_graphs
+            .get_mut(position)?
+            .advance_stateful_converters(elapsed_seconds);
+        Some(advance.changed || advance.keep_going)
     }
 
     fn sync_key_frame_data_bind_graph(&mut self, prototype: &RuntimeDataBindGraph) {
-        self.initialize_key_frame_data_bind_graph(prototype);
         if self.key_frame_prototype_revision == prototype.key_frame_source_revision() {
             return;
         }
-        if let Some(graph) = self.key_frame_data_bind_graph.as_deref_mut() {
+        for graph in &mut self.key_frame_data_bind_graphs {
             graph.sync_key_frame_sources_from(prototype);
         }
         self.key_frame_prototype_revision = prototype.key_frame_source_revision();
@@ -1749,16 +1887,16 @@ impl LinearAnimationInstance {
         let Some(prototype) = prototype else {
             return false;
         };
+        if self.key_frame_data_bind_graphs.is_empty() {
+            return self.build_key_frame_data_binds(prototype, self.key_frame_rebuild_enrollment);
+        }
         self.sync_key_frame_data_bind_graph(prototype);
-        let updates = self
-            .key_frame_data_bind_graph
-            .as_deref_mut()
-            .map(|graph| {
-                graph.take_key_frame_binding_updates(
-                    RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance,
-                )
-            })
-            .unwrap_or_default();
+        let mut updates = Vec::new();
+        for graph in &mut self.key_frame_data_bind_graphs {
+            updates.extend(graph.take_key_frame_binding_updates(
+                RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance,
+            ));
+        }
         self.apply_key_frame_data_bind_updates(updates)
     }
 
@@ -1770,23 +1908,17 @@ impl LinearAnimationInstance {
         let Some(prototype) = prototype else {
             return false;
         };
+        self.sync_key_frame_data_bind_graph(prototype);
         let mut keep_going = false;
-        let mut changed = self.prepare_key_frame_data_binds(Some(prototype));
-        if let Some(graph) = self.key_frame_data_bind_graph.as_deref_mut() {
+        let mut changed = false;
+        for graph in &mut self.key_frame_data_bind_graphs {
             let advance = graph.advance_stateful_converters(elapsed_seconds);
             changed |= advance.changed;
             keep_going |= advance.keep_going;
         }
-        let updates = self
-            .key_frame_data_bind_graph
-            .as_deref_mut()
-            .map(|graph| {
-                graph.take_key_frame_binding_updates(
-                    RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance,
-                )
-            })
-            .unwrap_or_default();
-        changed |= self.apply_key_frame_data_bind_updates(updates);
+        // C++ advances converters after every layer, but the resulting dirt is
+        // consumed by the next frame's normal updateDataBinds(false) pass.
+        // Do not apply an AfterStatefulAdvance update here.
         changed || keep_going
     }
 
@@ -1798,6 +1930,27 @@ impl LinearAnimationInstance {
         self.key_frame_value_holders
             .get_or_insert_with(|| Box::new(HashMap::new()))
             .insert(key_frame_global_id, value);
+    }
+
+    pub(crate) fn remove_key_frame_data_binds(&mut self) {
+        // Drain and drop each occurrence explicitly because `Vec` does not
+        // guarantee element drop order. Holders are released only afterward,
+        // matching `removeStateKeyFrameBinds` and making repeated/unknown
+        // removal a no-op in the Rust ownership model.
+        for ((occurrence_id, _), graph) in self
+            .key_frame_data_bind_occurrences
+            .drain(..)
+            .zip(self.key_frame_data_bind_graphs.drain(..))
+        {
+            #[cfg(test)]
+            if let Some(occurrence_id) = occurrence_id {
+                self.removed_key_frame_data_bind_occurrences
+                    .push(occurrence_id);
+            }
+            drop(graph);
+        }
+        self.key_frame_value_holders = None;
+        self.key_frame_prototype_revision = 0;
     }
 
     pub(crate) fn key_frame_value_holder(
@@ -2119,9 +2272,16 @@ impl LinearAnimationInstance {
     }
 }
 
+impl Drop for LinearAnimationInstance {
+    fn drop(&mut self) {
+        self.remove_key_frame_data_binds();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::RuntimeDataBindGraphValue;
     use crate::data_bind_graph::{
         RuntimeDataBindGraphConverter, RuntimeDataBindGraphFormulaToken,
         RuntimeKeyFrameDataBindTarget,
@@ -2138,6 +2298,23 @@ mod tests {
             flags: 0,
             converter,
             default_value: crate::RuntimeDataBindGraphValue::Number(0.0),
+        }
+    }
+
+    fn key_frame_binding(
+        data_bind_index: usize,
+        key_frame_global_id: u32,
+        target: RuntimeKeyFrameDataBindTarget,
+        default_value: RuntimeDataBindGraphValue,
+    ) -> RuntimeKeyFrameDataBindTemplate {
+        RuntimeKeyFrameDataBindTemplate {
+            data_bind_index,
+            key_frame_global_id,
+            target,
+            path: vec![0, data_bind_index as u32],
+            flags: 0,
+            converter: None,
+            default_value,
         }
     }
 
@@ -2598,9 +2775,15 @@ mod tests {
             Some(&RuntimeKeyFrameValue::Number(20.0))
         );
 
-        let standalone_clone = state_machine_instance.clone();
-        assert!(standalone_clone.key_frame_data_bind_graph.is_none());
+        let mut standalone_clone = state_machine_instance.clone();
+        assert!(standalone_clone.key_frame_data_bind_graphs.is_empty());
         assert!(standalone_clone.key_frame_value_holders.is_none());
+        assert!(standalone_clone.prepare_key_frame_data_binds(Some(&prototype)));
+        assert_eq!(
+            standalone_clone.key_frame_value_holder(10),
+            Some(&RuntimeKeyFrameValue::Number(20.0)),
+            "the snapshot rebuilds a fresh occurrence from the immutable prototype"
+        );
     }
 
     #[test]
@@ -2638,28 +2821,271 @@ mod tests {
         );
         assert_ne!(
             first
-                .key_frame_data_bind_graph
-                .as_deref()
+                .key_frame_data_bind_graphs
+                .first()
                 .map(|graph| graph as *const RuntimeDataBindGraph),
             second
-                .key_frame_data_bind_graph
-                .as_deref()
+                .key_frame_data_bind_graphs
+                .first()
                 .map(|graph| graph as *const RuntimeDataBindGraph)
         );
         assert_eq!(
             first
-                .key_frame_data_bind_graph
-                .as_deref()
+                .key_frame_data_bind_graphs
+                .first()
                 .map(RuntimeDataBindGraph::formula_random_call_count),
             Some(1)
         );
         assert_eq!(
             second
-                .key_frame_data_bind_graph
-                .as_deref()
+                .key_frame_data_bind_graphs
+                .first()
                 .map(RuntimeDataBindGraph::formula_random_call_count),
             Some(1)
         );
+    }
+
+    #[test]
+    fn fl_c5_keyframe_data_bind_supported_holders_and_live_resolution() {
+        let animation = animation_with_work_area(false);
+        let templates = [
+            key_frame_binding(
+                0,
+                10,
+                RuntimeKeyFrameDataBindTarget::Number,
+                RuntimeDataBindGraphValue::Number(12.5),
+            ),
+            key_frame_binding(
+                1,
+                20,
+                RuntimeKeyFrameDataBindTarget::Color,
+                RuntimeDataBindGraphValue::Color(0xFF12_3456),
+            ),
+            key_frame_binding(
+                2,
+                30,
+                RuntimeKeyFrameDataBindTarget::Boolean,
+                RuntimeDataBindGraphValue::Boolean(true),
+            ),
+            key_frame_binding(
+                3,
+                40,
+                RuntimeKeyFrameDataBindTarget::String,
+                RuntimeDataBindGraphValue::String(b"bound".to_vec()),
+            ),
+        ];
+        let mut traversal_animation = animation_with_work_area(false);
+        traversal_animation.keyed_objects = Arc::new(vec![RuntimeKeyedObject {
+            global_id: 1,
+            object_id: 0,
+            target_local_id: 0,
+            keyed_properties: vec![keyed_double_property(10, 1.0, 40, 2.0)],
+        }]);
+        let reversed_templates = [
+            templates[3].clone(),
+            templates[0].clone(),
+            templates[1].clone(),
+            templates[2].clone(),
+        ];
+        assert_eq!(
+            key_frame_data_bind_templates_in_animation_order(
+                &traversal_animation,
+                &reversed_templates,
+            )
+            .iter()
+            .map(|template| template.key_frame_global_id)
+            .collect::<Vec<_>>(),
+            [10, 40],
+            "keyframe traversal, not authored DataBind order, owns clone/enrollment order"
+        );
+        let mut prototype =
+            RuntimeDataBindGraph::new_key_frame_bindings(&templates).expect("four holders");
+        assert_eq!(
+            prototype
+                .targets
+                .iter()
+                .filter_map(|target| match target.target {
+                    RuntimeDataBindGraphTarget::KeyFrameNumber { global_id }
+                    | RuntimeDataBindGraphTarget::KeyFrameColor { global_id }
+                    | RuntimeDataBindGraphTarget::KeyFrameBoolean { global_id }
+                    | RuntimeDataBindGraphTarget::KeyFrameString { global_id } => Some(global_id),
+                    _ => None,
+                })
+                .collect::<Vec<_>>(),
+            [10, 20, 30, 40],
+            "keyframe traversal/enrollment stays in authored template order"
+        );
+        assert!(prototype.bind_default_view_model_context());
+
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        assert!(instance.build_key_frame_data_binds(
+            &prototype,
+            RuntimeKeyFrameDataBindEnrollment::Initial,
+        ));
+        assert_eq!(
+            instance.key_frame_value_holder(10),
+            Some(&RuntimeKeyFrameValue::Number(12.5))
+        );
+        assert_eq!(
+            instance.key_frame_value_holder(20),
+            Some(&RuntimeKeyFrameValue::Color(0xFF12_3456))
+        );
+        assert_eq!(
+            instance.key_frame_value_holder(30),
+            Some(&RuntimeKeyFrameValue::Boolean(true))
+        );
+        assert_eq!(
+            instance.key_frame_value_holder(40),
+            Some(&RuntimeKeyFrameValue::String(b"bound".to_vec()))
+        );
+
+        // The typed target enum has exactly these four variants. Uint/ID and
+        // a null keyframe have no representable template/holder in Rust; the
+        // former continues to sample its serialized value.
+        let mut uint_property = keyed_double_property(50, 1.0, 60, 2.0);
+        uint_property.target = RuntimeKeyedPropertyTarget::Uint;
+        uint_property.key_frames = vec![RuntimeKeyFrame::Uint(RuntimeKeyFrameUint {
+            global_id: 50,
+            frame: 0,
+            seconds: 0.0,
+            interpolation_type: 0,
+            interpolator_id: None,
+            value: 7,
+        })];
+        assert_eq!(uint_property.uint_value_at(0.0), Some(7));
+    }
+
+    #[test]
+    fn fl_c5_keyframe_data_bind_duplicate_build_tracks_and_removes_in_build_order() {
+        let animation = animation_with_work_area(false);
+        let mut prototype =
+            RuntimeDataBindGraph::new_key_frame_bindings(&[number_key_frame_binding(None)])
+                .expect("keyframe graph");
+        assert!(prototype.bind_default_view_model_context());
+        assert!(prototype.set_default_view_model_number_source_for_path(&[0, 0], 10.0));
+
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        assert!(instance.build_key_frame_data_binds(
+            &prototype,
+            RuntimeKeyFrameDataBindEnrollment::Initial,
+        ));
+        assert_eq!(instance.key_frame_data_bind_graphs.len(), 1);
+
+        assert!(prototype.set_default_view_model_number_source_for_path(&[0, 0], 20.0));
+        assert!(
+            instance
+                .build_key_frame_data_binds(&prototype, RuntimeKeyFrameDataBindEnrollment::Late,)
+        );
+        assert_eq!(instance.key_frame_data_bind_graphs.len(), 2);
+        assert!(
+            !std::ptr::eq(
+                &instance.key_frame_data_bind_graphs[0],
+                &instance.key_frame_data_bind_graphs[1],
+            ),
+            "each build owns a distinct mutable bind graph"
+        );
+        assert_eq!(
+            instance.key_frame_value_holder(10),
+            Some(&RuntimeKeyFrameValue::Number(20.0)),
+            "the later build overwrites the holder lookup while retaining both bind clones"
+        );
+        let mut next_occurrence_id = 0;
+        instance.enroll_unassigned_key_frame_data_binds(&mut next_occurrence_id);
+        let initial_ids = instance
+            .key_frame_data_bind_occurrence_ids(RuntimeKeyFrameDataBindEnrollment::Initial)
+            .collect::<Vec<_>>();
+        let late_ids = instance
+            .key_frame_data_bind_occurrence_ids(RuntimeKeyFrameDataBindEnrollment::Late)
+            .collect::<Vec<_>>();
+        assert_eq!(initial_ids.len(), 1);
+        assert_eq!(late_ids.len(), 1);
+        assert!(
+            initial_ids[0] < late_ids[0],
+            "typed occurrence ids retain cross-family enrollment chronology"
+        );
+
+        let expected_removal_order = instance
+            .key_frame_data_bind_occurrences
+            .iter()
+            .filter_map(|(id, _)| *id)
+            .collect::<Vec<_>>();
+        instance.remove_key_frame_data_binds();
+        assert!(instance.key_frame_data_bind_graphs.is_empty());
+        assert!(instance.key_frame_value_holders.is_none());
+        assert_eq!(
+            instance.removed_key_frame_data_bind_occurrences, expected_removal_order,
+            "each tracked graph is removed in its exact enrollment/build order"
+        );
+        instance.remove_key_frame_data_binds();
+        assert!(instance.key_frame_data_bind_graphs.is_empty());
+    }
+
+    #[test]
+    fn fl_c5_keyframe_data_bind_converter_advancement_keeps_going_per_occurrence() {
+        let animation = animation_with_work_area(false);
+        let converter = RuntimeDataBindGraphConverter::Interpolator {
+            global_id: 70,
+            duration: 1.0,
+            interpolator: None,
+        };
+        let mut prototype =
+            RuntimeDataBindGraph::new_key_frame_bindings(&[number_key_frame_binding(Some(
+                converter,
+            ))])
+            .expect("stateful keyframe graph");
+        assert!(prototype.bind_default_view_model_context());
+        assert!(prototype.set_default_view_model_number_source_for_path(&[0, 0], 10.0));
+
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        instance.build_key_frame_data_binds(&prototype, RuntimeKeyFrameDataBindEnrollment::Initial);
+        // Pinned interpolators snap their first two converter advances before
+        // later source changes begin smoothing.
+        instance.advance_key_frame_data_binds(Some(&prototype), 0.25);
+        instance.advance_key_frame_data_binds(Some(&prototype), 0.25);
+        assert!(prototype.set_default_view_model_number_source_for_path(&[0, 0], 20.0));
+        instance.prepare_key_frame_data_binds(Some(&prototype));
+        let before_step = instance.key_frame_value_holder(10).cloned();
+        assert!(
+            instance.advance_key_frame_data_binds(Some(&prototype), 0.25),
+            "the enrolled converter requests another frame"
+        );
+        assert_eq!(
+            instance.key_frame_value_holder(10),
+            before_step.as_ref(),
+            "post-layer converter dirt must not update the holder in the same frame"
+        );
+        assert!(instance.prepare_key_frame_data_binds(Some(&prototype)));
+        assert_ne!(
+            instance.key_frame_value_holder(10),
+            before_step.as_ref(),
+            "the next normal pre-layer update consumes converter dirt"
+        );
+    }
+
+    #[test]
+    fn fl_c5_keyframe_data_bind_reentrant_removal_is_borrow_isolated_and_active_drop_is_safe() {
+        let animation = animation_with_work_area(false);
+        let prototype =
+            RuntimeDataBindGraph::new_key_frame_bindings(&[number_key_frame_binding(None)])
+                .expect("keyframe graph");
+        let mut instance =
+            LinearAnimationInstance::new(RuntimeLinearAnimationHandle::new(0), &animation, 1.0);
+        instance.build_key_frame_data_binds(&prototype, RuntimeKeyFrameDataBindEnrollment::Initial);
+
+        let occurrence = std::cell::RefCell::new(instance);
+        let processing = occurrence.borrow_mut();
+        assert!(
+            occurrence
+                .try_borrow_mut()
+                .map(|mut instance| instance.remove_key_frame_data_binds())
+                .is_err(),
+            "Rust cannot alias a reentrant removal with the active graph update borrow"
+        );
+        drop(processing);
+        drop(occurrence);
     }
 
     #[test]

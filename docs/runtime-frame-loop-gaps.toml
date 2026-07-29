@@ -1269,6 +1269,108 @@ pattern = "fn\\s+\\w*settle\\w*\\b(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b
 max_occurrences = 0
 
 [[ratchet]]
+id = "state_machine_keyframe_first_source_bind_required"
+globs = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+pattern = "fn\\s+build_key_frame_data_bind_templates\\b[\\s\\S]{0,1800}let\\s+mut\\s+claimed_targets\\s*=\\s*BTreeSet::new\\(\\)[\\s\\S]{0,1800}if\\s+!claimed_targets\\.insert\\(target\\.id\\)\\s*\\{\\s*continue;\\s*\\}"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_last_source_bind_selection"
+globs = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+pattern = "fn\\s+build_key_frame_data_bind_templates\\b(?:(?!\\n(?:pub(?:\\([^)]*\\))?\\s+)?fn\\b)[\\s\\S]){0,6000}(?:artboard_data_binds\\([^)]*\\)[\\s\\S]{0,300}\\.rev\\(\\)|claimed_targets\\.(?:remove|replace|take)\\(|templates\\.(?:retain|retain_mut)\\()"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_keyframe_holder_set_required"
+globs = ["crates/nuxie-runtime/src/data_bind_graph.rs"]
+pattern = "enum\\s+RuntimeKeyFrameDataBindTarget\\s*\\{\\s*Number\\s*,\\s*Color\\s*,\\s*Boolean\\s*,\\s*String\\s*,?\\s*\\}"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_build_order_required"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "fn\\s+build_key_frame_data_binds\\b[\\s\\S]{0,2200}add_key_frame_value_holder\\([\\s\\S]{0,500}key_frame_data_bind_graphs\\s*\\.\\s*push\\(prototype\\.clone_for_key_frame_instance\\(\\)\\)[\\s\\S]{0,900}take_key_frame_binding_updates"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_animation_traversal_order_required"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "fn\\s+key_frame_data_bind_templates_in_animation_order\\b[\\s\\S]{0,2200}keyed_objects[\\s\\S]{0,300}keyed_properties[\\s\\S]{0,300}key_frames[\\s\\S]{0,300}filter_map\\(RuntimeKeyFrame::bindable_global_id\\)[\\s\\S]{0,500}template_by_key_frame"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_binding_reorder_by_data_bind_index"
+globs = ["crates/nuxie-runtime/src/data_bind_graph.rs"]
+pattern = "fn\\s+new_key_frame_bindings\\b(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,5000}default_view_model_bindings\\.sort"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_keyframe_container_phase_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+advance_with_report_mode\\b[\\s\\S]{0,15000}prepare_key_frame_data_bind_enrollment\\([\\s\\S]{0,180}Enrollment::Initial[\\s\\S]{0,500}update_data_binds_false\\([\\s\\S]{0,500}prepare_key_frame_data_bind_enrollment\\([\\s\\S]{0,180}Enrollment::Late[\\s\\S]{0,6500}record_advance_phase\\(\"authored-layers\"\\)[\\s\\S]{0,8500}record_advance_phase\\(\"converter-advance\"\\)[\\s\\S]{0,1200}advance_key_frame_data_bind_enrollment\\([\\s\\S]{0,180}Enrollment::Initial[\\s\\S]{0,2200}for\\s+occurrence\\s+in\\s+self\\.data_bind_occurrences\\.clone\\(\\)[\\s\\S]{0,3000}advance_key_frame_data_bind_enrollment\\([\\s\\S]{0,180}Enrollment::Late"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_remove_before_holder_required"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "fn\\s+remove_key_frame_data_binds\\b[\\s\\S]{0,600}key_frame_data_bind_occurrences[\\s\\S]{0,180}\\.drain\\(\\.\\.\\)[\\s\\S]{0,180}\\.zip\\(self\\.key_frame_data_bind_graphs\\.drain\\(\\.\\.\\)\\)[\\s\\S]{0,500}drop\\(graph\\);[\\s\\S]{0,180}key_frame_value_holders\\s*=\\s*None"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_snapshot_rebuild_and_owner_ids_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+key_frame_data_bind_occurrence_ids\\b[\\s\\S]{0,1200}layer\\.ensure_key_frame_data_binds\\(graphs\\)[\\s\\S]{0,300}layer\\.enroll_unassigned_key_frame_data_binds\\(next_id\\)[\\s\\S]{0,500}layer\\.collect_key_frame_data_bind_occurrence_ids\\(enrollment, &mut ids\\)[\\s\\S]{0,250}ids\\.sort_unstable\\(\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_snapshot_ensure_is_construction_only"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "fn\\s+ensure_key_frame_data_binds\\b[\\s\\S]{0,600}if\\s+self\\.key_frame_data_bind_graphs\\.is_empty\\(\\)[\\s\\S]{0,500}build_key_frame_data_binds_internal\\([\\s\\S]{0,250}false"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_snapshot_ensure_prepares_existing"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "fn\\s+ensure_key_frame_data_binds\\b(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,1200}(?:prepare_key_frame_data_binds|take_key_frame_binding_updates)\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_keyframe_machine_teardown_before_layers_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+teardown_bind_occurrences\\b[\\s\\S]{0,500}layer\\.remove_key_frame_data_binds\\(\\)[\\s\\S]{0,800}key_frame_data_bind_graphs\\.clear\\(\\)[\\s\\S]{0,800}fn\\s+teardown_layers\\b"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_cpp_initialize_converter_order_required"
+globs = ["crates/nuxie-runtime/tests/cpp_probe.rs"]
+pattern = "fn\\s+fl_c5_keyframe_initialize_converter_order\\b[\\s\\S]{0,2600}assert!\\(holder\\s*<\\s*clone\\)[\\s\\S]{0,250}assert!\\(clone\\s*<\\s*file\\)[\\s\\S]{0,250}assert!\\(file\\s*<\\s*target\\)[\\s\\S]{0,250}assert!\\(target\\s*<\\s*property\\)[\\s\\S]{0,250}assert!\\(property\\s*<\\s*initialize\\)[\\s\\S]{0,250}assert!\\(initialize\\s*<\\s*converter\\)[\\s\\S]{0,250}assert!\\(converter\\s*<\\s*enrollment\\)[\\s\\S]{0,250}assert!\\(enrollment\\s*<\\s*tracking\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_state_build_sites_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "(?:any_state|current_state)\\.build_key_frame_data_binds\\(\\s*key_frame_data_bind_graphs,\\s*crate::animation::RuntimeKeyFrameDataBindEnrollment::(?:Initial|Late),?\\s*\\)"
+min_occurrences = 4
+max_occurrences = 4
+
+[[ratchet]]
+id = "state_machine_keyframe_layer_occurrence_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "fn\\s+collect_key_frame_data_bind_occurrence_ids\\b[\\s\\S]{0,1000}any_state\\.collect_key_frame_data_bind_occurrence_ids\\(enrollment, ids\\)[\\s\\S]{0,400}state_from\\.collect_key_frame_data_bind_occurrence_ids\\(enrollment, ids\\)[\\s\\S]{0,400}current_state\\.collect_key_frame_data_bind_occurrence_ids\\(enrollment, ids\\)[\\s\\S]{0,3000}fn\\s+remove_key_frame_data_binds\\b[\\s\\S]{0,600}any_state\\.remove_key_frame_data_binds\\(\\)[\\s\\S]{0,400}state_from\\.remove_key_frame_data_binds\\(\\)[\\s\\S]{0,400}current_state\\.remove_key_frame_data_binds\\(\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
 id = "data_bind_per_type_target_to_source_path"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "(?m)^\\s*(?:pub\\(crate\\)\\s+)?fn\\s+apply_default_view_model_(?:number|symbol_list_index|boolean|string|color|enum|asset|artboard|list|trigger|view_model)(?:_public_update)?_targets_to_sources(?:_with_options)?\\b"

@@ -86,10 +86,16 @@ impl StateMachineLayerInstance {
             RuntimeStateInstance::make(layer, state_index, artboard, inputs, bindable_numbers)
         });
         if let Some(any_state) = any_state.as_mut() {
-            any_state.prepare_key_frame_data_binds(key_frame_data_bind_graphs);
+            any_state.build_key_frame_data_binds(
+                key_frame_data_bind_graphs,
+                crate::animation::RuntimeKeyFrameDataBindEnrollment::Initial,
+            );
         }
         if let Some(current_state) = current_state.as_mut() {
-            current_state.prepare_key_frame_data_binds(key_frame_data_bind_graphs);
+            current_state.build_key_frame_data_binds(
+                key_frame_data_bind_graphs,
+                crate::animation::RuntimeKeyFrameDataBindEnrollment::Initial,
+            );
         }
         Self {
             view_model_trigger_layer_id: next_view_model_trigger_layer_id(),
@@ -198,8 +204,6 @@ impl StateMachineLayerInstance {
         mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
         executor: &mut dyn RuntimeScheduledListenerActionExecutor,
     ) -> Result<StateMachineLayerAdvance, ScriptError> {
-        let key_frame_data_bind_keep_going =
-            self.advance_key_frame_data_binds(key_frame_data_bind_graphs, elapsed_seconds);
         self.advance_current_animation(
             artboard,
             layer,
@@ -223,7 +227,7 @@ impl StateMachineLayerInstance {
             targets.bindable_numbers,
             targets.reported_events,
         );
-        self.apply_animations(artboard, layer, key_frame_data_bind_graphs);
+        self.apply_animations(artboard, layer);
 
         let mut changed_state = false;
         // Pinned C++ tests the limit after each successful update. Its loop
@@ -243,7 +247,7 @@ impl StateMachineLayerInstance {
                 break;
             }
             changed_state = true;
-            self.apply_animations(artboard, layer, key_frame_data_bind_graphs);
+            self.apply_animations(artboard, layer);
             if iteration == 100 {
                 return Ok(StateMachineLayerAdvance { keep_going: false });
             }
@@ -255,7 +259,6 @@ impl StateMachineLayerInstance {
         Ok(StateMachineLayerAdvance {
             keep_going: changed_state
                 || input_changed
-                || key_frame_data_bind_keep_going
                 || self.is_transitioning()
                 || self.waiting_for_exit
                 || self
@@ -291,7 +294,10 @@ impl StateMachineLayerInstance {
             targets.bindable_numbers,
         );
         if let Some(current_state) = self.current_state.as_mut() {
-            current_state.prepare_key_frame_data_binds(key_frame_data_bind_graphs);
+            current_state.build_key_frame_data_binds(
+                key_frame_data_bind_graphs,
+                crate::animation::RuntimeKeyFrameDataBindEnrollment::Late,
+            );
         }
         let Some(entry_state) = self
             .current_state
@@ -640,7 +646,10 @@ impl StateMachineLayerInstance {
             targets.bindable_numbers,
         );
         if let Some(current_state) = self.current_state.as_mut() {
-            current_state.prepare_key_frame_data_binds(key_frame_data_bind_graphs);
+            current_state.build_key_frame_data_binds(
+                key_frame_data_bind_graphs,
+                crate::animation::RuntimeKeyFrameDataBindEnrollment::Late,
+            );
         }
         if let Some(current_state) = layer.states.get(state_to_index) {
             current_state.perform_fire_actions(
@@ -911,9 +920,7 @@ impl StateMachineLayerInstance {
         &mut self,
         artboard: &mut ArtboardInstance,
         layer: &RuntimeStateMachineLayer,
-        key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
     ) -> bool {
-        self.prepare_key_frame_data_binds(key_frame_data_bind_graphs);
         let mut changed = self
             .transition_animation_reset
             .as_ref()
@@ -946,45 +953,109 @@ impl StateMachineLayerInstance {
         changed
     }
 
-    fn prepare_key_frame_data_binds(&mut self, graphs: &[Option<crate::RuntimeDataBindGraph>]) {
-        if graphs.is_empty() {
-            return;
-        }
-        if let Some(current_state) = self.current_state.as_mut() {
-            current_state.prepare_key_frame_data_binds(graphs);
+    pub(crate) fn collect_key_frame_data_bind_occurrence_ids(
+        &mut self,
+        enrollment: crate::animation::RuntimeKeyFrameDataBindEnrollment,
+        ids: &mut Vec<crate::animation::RuntimeKeyFrameDataBindOccurrenceId>,
+    ) {
+        if let Some(any_state) = self.any_state.as_mut() {
+            any_state.collect_key_frame_data_bind_occurrence_ids(enrollment, ids);
         }
         if let Some(state_from) = self.state_from.as_mut() {
-            state_from.prepare_key_frame_data_binds(graphs);
+            state_from.collect_key_frame_data_bind_occurrence_ids(enrollment, ids);
+        }
+        if let Some(current_state) = self.current_state.as_mut() {
+            current_state.collect_key_frame_data_bind_occurrence_ids(enrollment, ids);
         }
     }
 
-    fn advance_key_frame_data_binds(
+    pub(crate) fn ensure_key_frame_data_binds(
         &mut self,
         graphs: &[Option<crate::RuntimeDataBindGraph>],
-        elapsed_seconds: f32,
-    ) -> bool {
-        if graphs.is_empty() {
-            return false;
-        }
-        let mut keep_going = false;
-        Self::for_each_animation_instance_mut(self, |instance| {
-            let prototype = graphs
-                .get(instance.animation_index())
-                .and_then(Option::as_ref);
-            keep_going |= instance.advance_key_frame_data_binds(prototype, elapsed_seconds);
-        });
-        keep_going
-    }
-
-    fn for_each_animation_instance_mut(
-        &mut self,
-        mut callback: impl FnMut(&mut LinearAnimationInstance),
     ) {
-        if let Some(current_state) = self.current_state.as_mut() {
-            current_state.for_each_animation_instance_mut(&mut callback);
+        if let Some(any_state) = self.any_state.as_mut() {
+            any_state.ensure_key_frame_data_binds(graphs);
         }
         if let Some(state_from) = self.state_from.as_mut() {
-            state_from.for_each_animation_instance_mut(&mut callback);
+            state_from.ensure_key_frame_data_binds(graphs);
+        }
+        if let Some(current_state) = self.current_state.as_mut() {
+            current_state.ensure_key_frame_data_binds(graphs);
+        }
+    }
+
+    pub(crate) fn enroll_unassigned_key_frame_data_binds(&mut self, next_id: &mut u64) {
+        if let Some(any_state) = self.any_state.as_mut() {
+            any_state.enroll_unassigned_key_frame_data_binds(next_id);
+        }
+        if let Some(state_from) = self.state_from.as_mut() {
+            state_from.enroll_unassigned_key_frame_data_binds(next_id);
+        }
+        if let Some(current_state) = self.current_state.as_mut() {
+            current_state.enroll_unassigned_key_frame_data_binds(next_id);
+        }
+    }
+
+    pub(crate) fn prepare_key_frame_data_bind_occurrence(
+        &mut self,
+        occurrence_id: crate::animation::RuntimeKeyFrameDataBindOccurrenceId,
+        graphs: &[Option<crate::RuntimeDataBindGraph>],
+    ) -> Option<bool> {
+        if let Some(any_state) = self.any_state.as_mut()
+            && let Some(result) =
+                any_state.prepare_key_frame_data_bind_occurrence(occurrence_id, graphs)
+        {
+            return Some(result);
+        }
+        if let Some(state_from) = self.state_from.as_mut()
+            && let Some(result) =
+                state_from.prepare_key_frame_data_bind_occurrence(occurrence_id, graphs)
+        {
+            return Some(result);
+        }
+        self.current_state
+            .as_mut()?
+            .prepare_key_frame_data_bind_occurrence(occurrence_id, graphs)
+    }
+
+    pub(crate) fn advance_key_frame_data_bind_occurrence(
+        &mut self,
+        occurrence_id: crate::animation::RuntimeKeyFrameDataBindOccurrenceId,
+        graphs: &[Option<crate::RuntimeDataBindGraph>],
+        elapsed_seconds: f32,
+    ) -> Option<bool> {
+        if let Some(any_state) = self.any_state.as_mut()
+            && let Some(result) = any_state.advance_key_frame_data_bind_occurrence(
+                occurrence_id,
+                graphs,
+                elapsed_seconds,
+            )
+        {
+            return Some(result);
+        }
+        if let Some(state_from) = self.state_from.as_mut()
+            && let Some(result) = state_from.advance_key_frame_data_bind_occurrence(
+                occurrence_id,
+                graphs,
+                elapsed_seconds,
+            )
+        {
+            return Some(result);
+        }
+        self.current_state
+            .as_mut()?
+            .advance_key_frame_data_bind_occurrence(occurrence_id, graphs, elapsed_seconds)
+    }
+
+    pub(crate) fn remove_key_frame_data_binds(&mut self) {
+        if let Some(any_state) = self.any_state.as_mut() {
+            any_state.remove_key_frame_data_binds();
+        }
+        if let Some(state_from) = self.state_from.as_mut() {
+            state_from.remove_key_frame_data_binds();
+        }
+        if let Some(current_state) = self.current_state.as_mut() {
+            current_state.remove_key_frame_data_binds();
         }
     }
 }

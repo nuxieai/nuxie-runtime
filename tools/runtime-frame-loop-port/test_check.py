@@ -2342,6 +2342,219 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     textwrap.dedent(safe),
                 )
 
+    def test_fl_c5_event_live_ratchets_preserve_batches_visibility_and_seams(
+        self,
+    ) -> None:
+        source = "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+        required_cases = [
+            (
+                "state_machine_event_apply_order_required",
+                """
+                fn apply_local_event_listeners() {
+                    self.update_data_binds_false(artboard);
+                    let events = std::mem::take(&mut self.reporting_events);
+                    self.reported_listener_view_models.swap_into(&mut listeners);
+                    self.notify_events_with_context(artboard, None, &events, None);
+                    for &listener_index in &listener_indices { notify(listener_index); }
+                }
+                """,
+                """
+                fn apply_local_event_listeners() {
+                    self.update_data_binds_false(artboard);
+                    let events = std::mem::take(&mut self.reporting_events);
+                    self.reported_listener_view_models.swap_into(&mut listeners);
+                    for &listener_index in &listener_indices { notify(listener_index); }
+                    self.notify_events_with_context(artboard, None, &events, None);
+                }
+                """,
+            ),
+            (
+                "state_machine_event_exact_100_batches_required",
+                """
+                const MAX_EVENT_ITERATIONS: usize = 100;
+                for _ in 0..MAX_EVENT_ITERATIONS { apply_batch(); }
+                """,
+                """
+                const MAX_EVENT_ITERATIONS: usize = 99;
+                for _ in 0..MAX_EVENT_ITERATIONS { apply_batch(); }
+                """,
+            ),
+            (
+                "state_machine_event_pending_cursor_required",
+                """
+                fn reported_event_count() {
+                    len.saturating_sub(self.next_unapplied_reported_event_index())
+                }
+                fn reported_event() {
+                    let index = self.next_unapplied_reported_event_index() + index;
+                }
+                """,
+                """
+                fn reported_event_count() { len }
+                fn reported_event() { events.get(index) }
+                """,
+            ),
+            (
+                "state_machine_event_local_bubble_audio_order_required",
+                """
+                fn notify_events_with_context_and_script_host() {
+                    self.record_event_dispatch_phase("local-dispatch");
+                    dispatch();
+                    self.bubble_events_to_owner_seam(events);
+                    self.reach_recorded_audio_event_seam(events)
+                }
+                pub fn plays_audio(&self) -> bool { true }
+                """,
+                """
+                fn notify_events_with_context_and_script_host() {
+                    self.record_event_dispatch_phase("local-dispatch");
+                    dispatch();
+                    self.reach_recorded_audio_event_seam(events);
+                    self.bubble_events_to_owner_seam(events)
+                }
+                pub fn plays_audio(&self) -> bool { false }
+                """,
+            ),
+            (
+                "state_machine_event_listener_trigger_guard_sink_required",
+                """
+                RuntimeCellDirtSink::reporting_listener(queue, listener_index)
+                """,
+                """
+                RuntimeCellDirtSink::reporting_data_bind(queue, listener_index)
+                """,
+            ),
+            (
+                "state_machine_event_bubble_fifo_required",
+                """
+                fn bubble_events_to_owner_seam(events: &[Event]) {
+                    self.bubbled_event_reports.extend_from_slice(events);
+                }
+                """,
+                """
+                fn bubble_events_to_owner_seam(events: &[Event]) {
+                    self.record_event_dispatch_phase("bubble-to-owner");
+                }
+                """,
+            ),
+        ]
+        for ratchet_id, required, missing in required_cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_required_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    textwrap.dedent(required),
+                    textwrap.dedent(missing),
+                )
+
+        forbidden_cases = [
+            (
+                "state_machine_event_current_batch_exposed",
+                """
+                fn reported_event_count() {
+                    self.reporting_events.len()
+                }
+                """,
+                """
+                fn reported_event_count() {
+                    self.reported_events.len()
+                }
+                """,
+            ),
+            (
+                "state_machine_event_local_audio_execution",
+                """
+                fn reach_recorded_audio_event_seam() {
+                    self.play_audio_event(event);
+                }
+                """,
+                """
+                fn reach_recorded_audio_event_seam() {
+                    self.record_event_dispatch_phase("recorded-audio-seam");
+                }
+                """,
+            ),
+        ]
+        for ratchet_id, forbidden, safe in forbidden_cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    textwrap.dedent(forbidden),
+                    textwrap.dedent(safe),
+                )
+
+    def test_fl_c5_event_trigger_zero_guard_negative_control(self) -> None:
+        self.assert_required_production_ratchet_case(
+            "state_machine_event_listener_trigger_zero_guard_required",
+            "crates/nuxie-runtime/src/view_model_cell.rs",
+            textwrap.dedent(
+                """
+                notification.suppress_trigger_zero
+                    && matches!(self.value, RuntimeViewModelCellValue::Trigger(0))
+                """
+            ),
+            textwrap.dedent(
+                """
+                notification.suppress_trigger_zero
+                    && matches!(self.value, RuntimeViewModelCellValue::Trigger(1))
+                """
+            ),
+        )
+
+    def test_fl_c5_listener_firing_boundary_negative_control(self) -> None:
+        required = textwrap.dedent(
+            """
+            fn finish_listener_view_model_firing_boundary() {
+                reported_listener_view_models.report_data_bind(listener_index);
+            }
+            fn owned_context_listener_report_waits_for_nested_relative_relink() {
+                binding.cell.ptr_eq(changed_cell);
+                RuntimeListenerViewModelPath::Relative;
+                resolved_name_ids.len() > 1;
+                manifest.resolve_name(name_id);
+            }
+            fn write_owned_view_model_context_with_listener_boundary() {
+                post_apply_listener_view_models.push(listener_index);
+            }
+            """
+        )
+        missing_cases = [
+            required.replace("binding.cell.ptr_eq(changed_cell);", ""),
+            required.replace("RuntimeListenerViewModelPath::Relative;", ""),
+            required.replace("resolved_name_ids.len() > 1;", ""),
+            required.replace("manifest.resolve_name(name_id);", ""),
+        ]
+        for missing in missing_cases:
+            self.assert_required_production_ratchet_case(
+                "state_machine_vm_listener_firing_boundary_required",
+                "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+                required,
+                missing,
+            )
+
+    def test_fl_c5_event_bubble_owner_wiring_negative_control(self) -> None:
+        self.assert_required_production_ratchet_case(
+            "state_machine_event_bubble_owner_wiring_required",
+            "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+            textwrap.dedent(
+                """
+                fn new() {
+                    event_bubble_owner_attached: !artboard.frame_origin();
+                }
+                fn reported_event_count() { bubbled_event_reports.len(); }
+                fn reported_event() { bubbled_event_reports.get(index); }
+                """
+            ),
+            textwrap.dedent(
+                """
+                fn schedule_post_update_probe() { attach_event_bubble_owner(); }
+                fn reported_event_count() { reported_events.len(); }
+                fn reported_event() { reported_events.get(index); }
+                """
+            ),
+        )
+
     def test_fl_c4_negative_ratchets_reject_displaced_listener_action_shapes(self) -> None:
         cases = [
             (

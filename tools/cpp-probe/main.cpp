@@ -357,6 +357,7 @@ enum class RuntimeStateMachineActionKind
     UpdateDataBindsApplyTargetToSource,
     SetBool,
     SetNumber,
+    SetObjectString,
     SetBindableNumber,
     SetBindableInteger,
     SetBindableColor,
@@ -391,6 +392,7 @@ enum class RuntimeStateMachineActionKind
     SetViewModelInstanceSourceNumber,
     SetViewModelInstanceSourceNumberByName,
     SetOwnedViewModelSourceNumber,
+    AdvanceThenSetOwnedViewModelSourceNumberByName,
     SetOwnedViewModelSourceBoolean,
     SetViewModelInstanceSourceBoolean,
     SetViewModelInstanceSourceBooleanByName,
@@ -427,6 +429,11 @@ enum class RuntimeStateMachineActionKind
     BindDefaultViewModelContext,
     BindCreatedDefaultViewModelContext,
     BindViewModelInstanceContext,
+    BindNullViewModelInstanceContext,
+    SetViewModelInstanceContext,
+    InheritViewModelInstanceContext,
+    SetGlobalViewModelInstanceContext,
+    CompleteViewModelInstances,
     BindOwnedViewModelNumberContext,
     BindOwnedViewModelNumberNamePathContext,
     BindOwnedViewModelImportedIntermediateNumberNamePathContext,
@@ -509,6 +516,14 @@ struct RuntimeStateMachineViewModelBindingReport
     bool hasTarget;
     size_t targetViewModelIndex;
     size_t targetInstanceIndex;
+};
+
+struct RuntimeStateMachineGlobalSlotReport
+{
+    size_t slotViewModelIndex;
+    bool hasInstance;
+    size_t instanceViewModelIndex;
+    size_t instanceIndex;
 };
 
 struct RuntimeStateMachineNumberBindingReport
@@ -754,6 +769,12 @@ struct RuntimeStateMachineAdvanceReport
     std::vector<RuntimeStateMachineReportedEventReport> reportedEvents;
     std::vector<RuntimeStateMachineViewModelTriggerReport> viewModelTriggers;
     std::vector<RuntimeStateMachineViewModelBindingReport> viewModelBindings;
+    bool hasDataContext = false;
+    bool hasMainViewModelInstance = false;
+    size_t mainViewModelIndex = 0;
+    size_t mainViewModelInstanceIndex = 0;
+    std::vector<size_t> inheritedDataContextDependentCounts;
+    std::vector<RuntimeStateMachineGlobalSlotReport> globalViewModelSlots;
     std::vector<RuntimeStateMachineNumberBindingReport> numberBindings;
     std::vector<RuntimeStateMachineBooleanBindingReport> booleanBindings;
     std::vector<RuntimeStateMachineStringBindingReport> stringBindings;
@@ -3260,6 +3281,8 @@ apply_runtime_state_machine_advances(rive::File* file,
         instance->stateMachineCount());
     std::vector<rive::rcp<rive::ViewModelInstance>> activeOwnedViewModelInstances(
         instance->stateMachineCount());
+    std::vector<std::vector<rive::rcp<rive::DataContext>>>
+        inheritedDataContexts(instance->stateMachineCount());
     for (const auto& action : options.runtimeStateMachineActions)
     {
         if (action.stateMachineIndex >= instances.size())
@@ -3294,6 +3317,28 @@ apply_runtime_state_machine_advances(rive::File* file,
                 static_cast<rive::SMINumber*>(input)->value(action.numberValue);
             }
             continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::SetObjectString)
+        {
+            rive::Core* object = nullptr;
+            for (const auto& localId : localIds)
+            {
+                if (localId.second == action.inputIndex)
+                {
+                    object = const_cast<rive::Core*>(localId.first);
+                    break;
+                }
+            }
+            if (object != nullptr &&
+                rive::CoreRegistry::objectSupportsProperty(
+                    object, action.dataBindIndex) &&
+                rive::CoreRegistry::propertyFieldId(
+                    static_cast<int>(action.dataBindIndex)) ==
+                    rive::CoreStringType::id)
+            {
+                rive::CoreRegistry::setString(
+                    object, action.dataBindIndex, action.stringValue);
+            }
         }
         if (action.kind == RuntimeStateMachineActionKind::SetBindableNumber)
         {
@@ -5777,6 +5822,86 @@ apply_runtime_state_machine_advances(rive::File* file,
             continue;
         }
         if (action.kind ==
+            RuntimeStateMachineActionKind::BindNullViewModelInstanceContext)
+        {
+            stateMachine->bindViewModelInstance(nullptr);
+            activeOwnedViewModelInstances[action.stateMachineIndex] = nullptr;
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::SetViewModelInstanceContext)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr &&
+                        action.viewModelInstanceIndex <
+                            viewModel->instanceCount()
+                    ? viewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            stateMachine->setViewModelInstance(
+                viewModelInstance == nullptr
+                    ? nullptr
+                    : rive::ref_rcp(viewModelInstance));
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::InheritViewModelInstanceContext)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr &&
+                        action.viewModelInstanceIndex <
+                            viewModel->instanceCount()
+                    ? viewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            if (viewModelInstance != nullptr)
+            {
+                auto dataContext = rive::make_rcp<rive::DataContext>(
+                    rive::ref_rcp(viewModelInstance));
+                stateMachine->inheritDataContext(dataContext);
+                inheritedDataContexts[action.stateMachineIndex].push_back(
+                    dataContext);
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::
+                               SetGlobalViewModelInstanceContext)
+        {
+            auto slotViewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto occupantViewModel =
+                file != nullptr &&
+                        action.leafPropertyIndex < file->viewModelCount()
+                    ? file->viewModel(action.leafPropertyIndex)
+                    : nullptr;
+            auto occupant =
+                occupantViewModel != nullptr &&
+                        action.viewModelInstanceIndex <
+                            occupantViewModel->instanceCount()
+                    ? occupantViewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            if (slotViewModel != nullptr && occupant != nullptr)
+            {
+                stateMachine->setGlobalViewModelInstance(
+                    slotViewModel->name(), rive::ref_rcp(occupant));
+            }
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::CompleteViewModelInstances)
+        {
+            stateMachine->completeViewModelInstances();
+            continue;
+        }
+        if (action.kind ==
             RuntimeStateMachineActionKind::BindOwnedViewModelNumberContext)
         {
             auto viewModel =
@@ -5824,6 +5949,8 @@ apply_runtime_state_machine_advances(rive::File* file,
                     number->value(action.numberValue);
                 }
                 stateMachine->bindViewModelInstance(viewModelInstance);
+                activeOwnedViewModelInstances[action.stateMachineIndex] =
+                    viewModelInstance;
             }
             continue;
         }
@@ -7356,7 +7483,12 @@ apply_runtime_state_machine_advances(rive::File* file,
         }
 
         bool advanced = false;
-        if (action.kind == RuntimeStateMachineActionKind::PointerDown)
+        if (action.kind == RuntimeStateMachineActionKind::SetObjectString)
+        {
+            // Mutation-only report: preserve the pending EventReport and
+            // project its retained Event pointer without advancing.
+        }
+        else if (action.kind == RuntimeStateMachineActionKind::PointerDown)
         {
             stateMachine->pointerDown(rive::Vec2D(action.x, action.y));
         }
@@ -7378,6 +7510,26 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             // Construction/lifecycle snapshot only. In particular, do not
             // turn this probe operation into an ordinary zero-second advance.
+        }
+        else if (action.kind == RuntimeStateMachineActionKind::
+                                    AdvanceThenSetOwnedViewModelSourceNumberByName)
+        {
+            // Cross the new-frame applyEvents boundary first, then perform a
+            // real external ViewModel mutation. Its listener report is left
+            // pending for the next probe advance, matching an external write
+            // that lands immediately after the C++ frame call.
+            advanced = stateMachine->advance(action.seconds);
+            auto viewModelInstance =
+                activeOwnedViewModelInstances[action.stateMachineIndex];
+            if (viewModelInstance != nullptr)
+            {
+                rive::ViewModelInstanceRuntime runtime(viewModelInstance);
+                auto source = runtime.propertyNumber(action.stringValue);
+                if (source != nullptr)
+                {
+                    source->value(action.numberValue);
+                }
+            }
         }
         else if (action.kind ==
                  RuntimeStateMachineActionKind::UpdateArtboardPass)
@@ -7413,6 +7565,82 @@ apply_runtime_state_machine_advances(rive::File* file,
                                                        : state->coreType());
         }
         report.randomTotalCalls = rive_probe::randomProviderTotalCalls();
+        auto resolveViewModelInstanceIdentity =
+            [file](rive::ViewModelInstance* candidate,
+                   size_t* viewModelIndex,
+                   size_t* instanceIndex) -> bool {
+            if (file == nullptr || candidate == nullptr)
+            {
+                return false;
+            }
+            for (size_t vmIndex = 0; vmIndex < file->viewModelCount();
+                 ++vmIndex)
+            {
+                auto viewModel = file->viewModel(vmIndex);
+                if (viewModel == nullptr)
+                {
+                    continue;
+                }
+                for (size_t vmInstanceIndex = 0;
+                     vmInstanceIndex < viewModel->instanceCount();
+                     ++vmInstanceIndex)
+                {
+                    if (viewModel->instance(vmInstanceIndex) == candidate)
+                    {
+                        *viewModelIndex = vmIndex;
+                        *instanceIndex = vmInstanceIndex;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        auto dataContext = stateMachine->dataContext();
+        report.hasDataContext = dataContext != nullptr;
+        auto mainViewModelInstance =
+            dataContext == nullptr ? nullptr
+                                   : dataContext->mainViewModelInstance().get();
+        report.hasMainViewModelInstance =
+            resolveViewModelInstanceIdentity(
+                mainViewModelInstance,
+                &report.mainViewModelIndex,
+                &report.mainViewModelInstanceIndex);
+        for (const auto& inherited :
+             inheritedDataContexts[action.stateMachineIndex])
+        {
+            report.inheritedDataContextDependentCounts.push_back(
+                inherited->m_dependentContainers.size());
+        }
+        if (file != nullptr && dataContext != nullptr)
+        {
+            for (auto* slotViewModel : file->globalViewModels())
+            {
+                RuntimeStateMachineGlobalSlotReport slotReport;
+                slotReport.slotViewModelIndex = 0;
+                slotReport.hasInstance = false;
+                slotReport.instanceViewModelIndex = 0;
+                slotReport.instanceIndex = 0;
+                for (size_t vmIndex = 0; vmIndex < file->viewModelCount();
+                     ++vmIndex)
+                {
+                    if (file->viewModel(vmIndex) == slotViewModel)
+                    {
+                        slotReport.slotViewModelIndex = vmIndex;
+                        break;
+                    }
+                }
+                auto occupant = dataContext
+                                    ->instanceForSlot(file->viewModelId(
+                                        slotViewModel->name()))
+                                    .get();
+                slotReport.hasInstance = occupant != nullptr;
+                resolveViewModelInstanceIdentity(
+                    occupant,
+                    &slotReport.instanceViewModelIndex,
+                    &slotReport.instanceIndex);
+                report.globalViewModelSlots.push_back(slotReport);
+            }
+        }
         for (size_t i = 0; i < stateMachine->inputCount(); ++i)
         {
             auto input = stateMachine->input(i);
@@ -7972,6 +8200,41 @@ void write_runtime_state_machine_advance_reports(
         }
         out << ']';
         out << ",\"randomTotalCalls\":" << report.randomTotalCalls;
+        out << ",\"hasDataContext\":"
+            << (report.hasDataContext ? "true" : "false");
+        out << ",\"hasMainViewModelInstance\":"
+            << (report.hasMainViewModelInstance ? "true" : "false");
+        out << ",\"mainViewModelIndex\":" << report.mainViewModelIndex;
+        out << ",\"mainViewModelInstanceIndex\":"
+            << report.mainViewModelInstanceIndex;
+        out << ",\"inheritedDataContextDependentCounts\":[";
+        for (size_t j = 0;
+             j < report.inheritedDataContextDependentCounts.size();
+             ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            out << report.inheritedDataContextDependentCounts[j];
+        }
+        out << "],\"globalViewModelSlots\":[";
+        for (size_t j = 0; j < report.globalViewModelSlots.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            const auto& slot = report.globalViewModelSlots[j];
+            out << "{\"slotViewModelIndex\":" << slot.slotViewModelIndex;
+            out << ",\"hasInstance\":"
+                << (slot.hasInstance ? "true" : "false");
+            out << ",\"instanceViewModelIndex\":"
+                << slot.instanceViewModelIndex;
+            out << ",\"instanceIndex\":" << slot.instanceIndex;
+            out << '}';
+        }
+        out << ']';
         out << ",\"reportedEventCount\":" << report.reportedEvents.size();
         out << ",\"boolInputs\":[";
         for (size_t j = 0; j < report.boolInputs.size(); ++j)
@@ -15056,6 +15319,29 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-set-object-string"))
+        {
+            if (i + 4 >= argc)
+            {
+                std::cerr << "--runtime-set-object-string requires stateMachineIndex localId propertyKey value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::SetObjectString;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.dataBindIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.stringValue = argv[++i];
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-set-state-machine-bindable-number"))
         {
             if (i + 3 >= argc)
@@ -15837,7 +16123,31 @@ int main(int argc, const char* argv[])
             options.runtimeStateMachineActions.push_back(action);
             continue;
         }
-
+        if (is_arg(
+                argv[i],
+                "--runtime-advance-then-set-owned-view-model-source-number-by-name"))
+        {
+            if (i + 4 >= argc)
+            {
+                std::cerr << "--runtime-advance-then-set-owned-view-model-source-number-by-name requires stateMachineIndex propertyName seconds value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                AdvanceThenSetOwnedViewModelSourceNumberByName;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex = 0;
+            action.viewModelInstanceIndex = 0;
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.stringValue = argv[++i];
+            action.seconds = std::strtof(argv[++i], nullptr);
+            action.boolValue = false;
+            action.numberValue = std::strtof(argv[++i], nullptr);
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
         if (is_arg(argv[i], "--runtime-set-owned-view-model-source-bool"))
         {
             if (i + 3 >= argc)
@@ -16847,6 +17157,129 @@ int main(int argc, const char* argv[])
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
             action.viewModelInstanceIndex =
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+        if (is_arg(
+                argv[i],
+                "--runtime-bind-null-view-model-instance-state-machine-context"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-bind-null-view-model-instance-state-machine-context requires stateMachineIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                BindNullViewModelInstanceContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+        if (is_arg(
+                argv[i],
+                "--runtime-set-view-model-instance-state-machine-context"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-set-view-model-instance-state-machine-context requires stateMachineIndex viewModelIndex instanceIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::SetViewModelInstanceContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+        if (is_arg(
+                argv[i],
+                "--runtime-inherit-view-model-instance-state-machine-context"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-inherit-view-model-instance-state-machine-context requires stateMachineIndex viewModelIndex instanceIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::InheritViewModelInstanceContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+        if (is_arg(
+                argv[i],
+                "--runtime-set-global-view-model-instance-state-machine-context"))
+        {
+            if (i + 4 >= argc)
+            {
+                std::cerr << "--runtime-set-global-view-model-instance-state-machine-context requires stateMachineIndex slotViewModelIndex occupantViewModelIndex occupantInstanceIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                SetGlobalViewModelInstanceContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.leafPropertyIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+        if (is_arg(argv[i],
+                   "--runtime-complete-view-model-instances-state-machine-context"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-complete-view-model-instances-state-machine-context requires stateMachineIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::CompleteViewModelInstances;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
             action.seconds = 0.0f;
             action.boolValue = false;
             action.numberValue = 0.0f;

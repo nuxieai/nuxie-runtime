@@ -1410,12 +1410,26 @@ pub struct StateMachineInstance {
     /// Retained C++ `m_reportingEvents` analog used while notifications may
     /// enqueue the next batch into `reported_events`.
     reporting_events: Vec<StateMachineReportedEvent>,
+    /// Owner-safe output of the immediate nested bubbling phase. The artboard
+    /// owner drains this FIFO and delivers it to the next ancestor; retaining
+    /// values here avoids a raw child-to-parent pointer.
+    bubbled_event_reports: Vec<StateMachineReportedEvent>,
+    bubbled_event_report_index: usize,
+    /// Whether this occurrence is owned by a `NestedStateMachine` notifier.
+    /// Root occurrences have no upward event edge and must not accumulate an
+    /// outgoing bubble batch.
+    event_bubble_owner_attached: bool,
+    notifying_event_listeners: bool,
     /// C++ `m_reportedListenerViewModels`: every retained listener-cell
     /// mutation appends its listener index, preserving duplicates and
     /// dependent-registration order until next-frame `applyEvents`.
     reported_listener_view_models: RuntimeCellNotificationQueue,
     /// Retained C++ `m_reportingListenerViewModels` batch buffer.
     reporting_listener_view_models: Vec<usize>,
+    /// Nested-ViewModel source reports discovered through Rust's external
+    /// context adaptation become pending only after the current frame's
+    /// `applyEvents`, matching the later C++ DataBind occurrence update.
+    post_apply_listener_view_models: Vec<usize>,
     pub(super) needs_advance: bool,
     has_advanced_once: bool,
     // A mounted NestedStateMachine is initialized before its parent binding
@@ -1434,6 +1448,8 @@ pub struct StateMachineInstance {
     owned_data_bind_context_bind_count: usize,
     #[cfg(test)]
     bind_phase_trace: Vec<&'static str>,
+    #[cfg(test)]
+    event_dispatch_phase_trace: Vec<&'static str>,
     /// C++ `ViewModelInstance::m_dependents` push channel: structural
     /// ViewModel replacement dirties this sink so the retained DataContext is
     /// relinked without polling a root mutation generation every frame.
@@ -2019,8 +2035,13 @@ impl Clone for StateMachineInstance {
             reported_event_listener_index: self.reported_event_listener_index,
             host_reported_event_index: self.host_reported_event_index,
             reporting_events: self.reporting_events.clone(),
+            bubbled_event_reports: self.bubbled_event_reports.clone(),
+            bubbled_event_report_index: self.bubbled_event_report_index,
+            event_bubble_owner_attached: self.event_bubble_owner_attached,
+            notifying_event_listeners: false,
             reported_listener_view_models,
             reporting_listener_view_models: Vec::new(),
+            post_apply_listener_view_models: self.post_apply_listener_view_models.clone(),
             needs_advance: self.needs_advance,
             has_advanced_once: self.has_advanced_once,
             post_update_probe_pending: self.post_update_probe_pending,
@@ -2036,6 +2057,8 @@ impl Clone for StateMachineInstance {
             owned_data_bind_context_bind_count: self.owned_data_bind_context_bind_count,
             #[cfg(test)]
             bind_phase_trace: self.bind_phase_trace.clone(),
+            #[cfg(test)]
+            event_dispatch_phase_trace: self.event_dispatch_phase_trace.clone(),
             owned_view_model_rebind_sink: RuntimeCellDirtSink::new(),
             pointer_down_listener_hits: self.pointer_down_listener_hits.clone(),
             pointer_listener_states: self.pointer_listener_states.clone(),
@@ -2403,6 +2426,13 @@ impl StateMachineInstance {
         let _ = phase;
     }
 
+    fn record_event_dispatch_phase(&mut self, phase: &'static str) {
+        #[cfg(test)]
+        self.event_dispatch_phase_trace.push(phase);
+        #[cfg(not(test))]
+        let _ = phase;
+    }
+
     fn record_constructor_phase(&mut self, phase: RuntimeConstructorPhase) {
         #[cfg(test)]
         self.constructor_phases.push(phase);
@@ -2672,8 +2702,17 @@ impl StateMachineInstance {
             reported_event_listener_index: 0,
             host_reported_event_index: 0,
             reporting_events: Vec::new(),
+            bubbled_event_reports: Vec::new(),
+            bubbled_event_report_index: 0,
+            // Capture the mounted-owner boundary once, while the occurrence
+            // is constructed. `frame_origin` is later reused as mutable draw
+            // state, so consulting it from `advance` could accidentally turn
+            // a root machine into an upward bubbling source.
+            event_bubble_owner_attached: !artboard.frame_origin(),
+            notifying_event_listeners: false,
             reported_listener_view_models: RuntimeCellNotificationQueue::default(),
             reporting_listener_view_models: Vec::new(),
+            post_apply_listener_view_models: Vec::new(),
             needs_advance: false,
             has_advanced_once: false,
             post_update_probe_pending: false,
@@ -2683,6 +2722,8 @@ impl StateMachineInstance {
             owned_data_bind_context_bind_count: 0,
             #[cfg(test)]
             bind_phase_trace: Vec::new(),
+            #[cfg(test)]
+            event_dispatch_phase_trace: Vec::new(),
             owned_view_model_rebind_sink: RuntimeCellDirtSink::new(),
             pointer_down_listener_hits: Vec::new(),
             pointer_listener_states: Vec::new(),
@@ -6694,6 +6735,8 @@ impl StateMachineInstance {
         {
             return Ok(false);
         }
+        self.notifying_event_listeners = true;
+        self.record_event_dispatch_phase("local-dispatch");
         let listener_definitions = Arc::clone(&self.listener_definitions);
         let mut changed = false;
         for listener in listener_definitions.iter() {
@@ -6728,7 +6771,7 @@ impl StateMachineInstance {
                 {
                     continue;
                 }
-                changed |= self.perform_listener_actions_with_event_context(
+                let action_changed = self.perform_listener_actions_with_event_context(
                     artboard,
                     &listener.listener_actions,
                     owned_context.as_deref_mut(),
@@ -6738,13 +6781,69 @@ impl StateMachineInstance {
                     },
                     host,
                     event.context.as_ref(),
-                )?;
+                );
+                match action_changed {
+                    Ok(action_changed) => changed |= action_changed,
+                    Err(error) => {
+                        self.notifying_event_listeners = false;
+                        return Err(error);
+                    }
+                }
                 if listener.is_single {
                     break;
                 }
             }
         }
+        self.notifying_event_listeners = false;
+        self.bubble_events_to_owner_seam(events);
+        self.reach_recorded_audio_event_seam(events);
         Ok(changed)
+    }
+
+    /// C++ immediately forwards a nested report to the owning artboard after
+    /// local listeners. Rust's owner-safe adaptation exposes that batch from
+    /// this dispatch seam without retaining a raw parent pointer.
+    fn bubble_events_to_owner_seam(&mut self, events: &[StateMachineReportedEvent]) {
+        if self.event_bubble_owner_attached && !events.is_empty() {
+            if self.bubbled_event_report_index != 0 {
+                self.bubbled_event_reports
+                    .drain(..self.bubbled_event_report_index);
+                self.bubbled_event_report_index = 0;
+            }
+            self.bubbled_event_reports.extend_from_slice(events);
+            self.record_event_dispatch_phase("bubble-to-owner");
+        }
+    }
+
+    pub(crate) fn attach_event_bubble_owner(&mut self) {
+        self.event_bubble_owner_attached = true;
+    }
+
+    /// Drain the owner-safe bubbling FIFO without touching host reports or
+    /// the local `applyEvents` queue.
+    #[cfg(test)]
+    pub(crate) fn take_bubbled_event_reports(&mut self) -> Vec<StateMachineReportedEvent> {
+        self.bubbled_event_report_index = 0;
+        std::mem::take(&mut self.bubbled_event_reports)
+    }
+
+    /// Audio playback remains owned by the deferred audio subsystem. WP6
+    /// records only that event bubbling reaches this seam afterward.
+    fn reach_recorded_audio_event_seam(&mut self, events: &[StateMachineReportedEvent]) {
+        if !events.is_empty() {
+            self.record_event_dispatch_phase("recorded-audio-seam");
+        }
+    }
+
+    pub fn plays_audio(&self) -> bool {
+        true
+    }
+
+    fn finish_listener_view_model_firing_boundary(&mut self) {
+        for listener_index in std::mem::take(&mut self.post_apply_listener_view_models) {
+            self.reported_listener_view_models
+                .report_data_bind(listener_index);
+        }
     }
 
     pub(crate) fn apply_local_event_listeners(
@@ -6773,12 +6872,14 @@ impl StateMachineInstance {
             return changed;
         }
 
+        let mut event_iterations = 0;
         for _ in 0..MAX_EVENT_ITERATIONS {
             if next_event_index >= self.reported_events.len()
                 && self.reported_listener_view_models.is_empty()
             {
                 break;
             }
+            event_iterations += 1;
 
             // Mirrors C++ `StateMachineInstance::applyEvents()` updating
             // data binds before each queued notification batch
@@ -6798,13 +6899,18 @@ impl StateMachineInstance {
                 event.refresh_from_live_artboard(artboard);
             }
             next_event_index = self.reported_events.len();
+            // The reporting snapshot is no longer pending before either
+            // callback family runs. Count/At inspection from a callback sees
+            // only reports appended for a later batch.
+            self.reported_event_listener_index = next_event_index;
             // C++ swaps BOTH queues before notifying either one. Event
             // actions that mutate a listener cell therefore enqueue the next
             // batch rather than joining this reporting batch
             // (`state_machine_instance.cpp:2328-2335`).
-            let mut listener_indices = std::mem::take(&mut self.reporting_listener_view_models);
+            let mut newly_reported = std::mem::take(&mut self.reporting_listener_view_models);
             self.reported_listener_view_models
-                .swap_into(&mut listener_indices);
+                .swap_into(&mut newly_reported);
+            let mut listener_indices = newly_reported;
             let event_changed = self.notify_events_with_context(
                 artboard,
                 None,
@@ -6870,6 +6976,9 @@ impl StateMachineInstance {
             if self.script_error.is_some() {
                 break;
             }
+        }
+        if event_iterations >= MAX_EVENT_ITERATIONS {
+            eprintln!("StateMachine exceeded max event iterations");
         }
         self.reported_event_listener_index = next_event_index.min(self.reported_events.len());
         changed
@@ -8870,6 +8979,95 @@ impl StateMachineInstance {
         true
     }
 
+    fn owned_context_listener_report_waits_for_nested_relative_relink(
+        &self,
+        listener_index: usize,
+        changed_cell: Option<&RuntimeViewModelCell>,
+    ) -> bool {
+        let Some(changed_cell) = changed_cell else {
+            return false;
+        };
+        let Some(listener) = self.view_model_listeners.get(listener_index) else {
+            return false;
+        };
+        let Some(file) = self.scripted_listener_runtime_file.as_deref() else {
+            return false;
+        };
+        let Some(manifest) = file.manifest() else {
+            return false;
+        };
+        let definition = &listener.listener_definitions[listener.listener_index];
+        listener.property_bindings.iter().any(|binding| {
+            let binding_matches_changed_cell = binding
+                .cell_binding
+                .as_ref()
+                .is_some_and(|bound| bound.cell.ptr_eq(changed_cell));
+            if !binding_matches_changed_cell {
+                return false;
+            }
+            let path = match binding.source {
+                RuntimeViewModelListenerSource::Single => definition.view_model_path.as_ref(),
+                RuntimeViewModelListenerSource::Input(input_index) => definition
+                    .view_model_input_types
+                    .get(input_index)
+                    .and_then(|input| input.path()),
+            };
+            matches!(
+                path,
+                Some(RuntimeListenerViewModelPath::Relative {
+                    resolved_name_ids,
+                    ..
+                }) if resolved_name_ids.len() > 1
+                    && resolved_name_ids
+                        .iter()
+                        .all(|name_id| manifest.resolve_name(*name_id).is_some())
+            )
+        })
+    }
+
+    fn write_owned_view_model_context_with_listener_boundary(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+        data_bind_index: usize,
+        write: impl FnOnce(&mut RuntimeDataBindGraph, &mut RuntimeOwnedViewModelInstance, usize) -> bool,
+    ) -> bool {
+        let changed_cell = self
+            .data_bind_graph
+            .source_path_for_data_bind(data_bind_index)
+            .and_then(|source_path| {
+                let (&view_model_index, property_path) = source_path.split_first()?;
+                (usize::try_from(view_model_index).ok()? == context.view_model_index)
+                    .then_some(property_path)?
+                    .iter()
+                    .map(|property_index| usize::try_from(*property_index).ok())
+                    .collect::<Option<Vec<_>>>()
+            })
+            .and_then(|property_path| context.cell_by_property_path(&property_path));
+        let mut previously_reported = Vec::new();
+        self.reported_listener_view_models
+            .swap_into(&mut previously_reported);
+        let changed = write(&mut self.data_bind_graph, context, data_bind_index);
+        let mut reports_from_write = Vec::new();
+        self.reported_listener_view_models
+            .swap_into(&mut reports_from_write);
+        for listener_index in previously_reported {
+            self.reported_listener_view_models
+                .report_data_bind(listener_index);
+        }
+        for listener_index in reports_from_write {
+            if self.owned_context_listener_report_waits_for_nested_relative_relink(
+                listener_index,
+                changed_cell.as_ref(),
+            ) {
+                self.post_apply_listener_view_models.push(listener_index);
+            } else {
+                self.reported_listener_view_models
+                    .report_data_bind(listener_index);
+            }
+        }
+        changed
+    }
+
     pub fn set_owned_view_model_context_number_source_for_data_bind(
         &mut self,
         context: &mut RuntimeOwnedViewModelInstance,
@@ -8879,13 +9077,21 @@ impl StateMachineInstance {
         let path = self
             .data_bind_graph
             .source_path_for_data_bind(data_bind_index);
-        let changed = self
-            .data_bind_graph
-            .set_owned_view_model_context_number_source_for_data_bind(
-                context,
-                data_bind_index,
-                value,
-            );
+        // C++ discovers a fully resolved nested-relative listener report
+        // during the later DataBind occurrence pass. Capture only the exact
+        // listener/cell reports produced by this external write; flat and
+        // unrelated listeners retain their immediate pending boundary.
+        let changed = self.write_owned_view_model_context_with_listener_boundary(
+            context,
+            data_bind_index,
+            |graph, context, data_bind_index| {
+                graph.set_owned_view_model_context_number_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    value,
+                )
+            },
+        );
         let key_frame_changed = path.is_some_and(|path| {
             self.set_key_frame_active_source_for_path(
                 &path,
@@ -8905,14 +9111,17 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: u64,
     ) -> bool {
-        if !self
-            .data_bind_graph
-            .set_owned_view_model_context_symbol_list_index_source_for_data_bind(
-                context,
-                data_bind_index,
-                value,
-            )
-        {
+        if !self.write_owned_view_model_context_with_listener_boundary(
+            context,
+            data_bind_index,
+            |graph, context, data_bind_index| {
+                graph.set_owned_view_model_context_symbol_list_index_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    value,
+                )
+            },
+        ) {
             return false;
         }
         self.needs_advance = true;
@@ -8928,13 +9137,17 @@ impl StateMachineInstance {
         let path = self
             .data_bind_graph
             .source_path_for_data_bind(data_bind_index);
-        let changed = self
-            .data_bind_graph
-            .set_owned_view_model_context_boolean_source_for_data_bind(
-                context,
-                data_bind_index,
-                value,
-            );
+        let changed = self.write_owned_view_model_context_with_listener_boundary(
+            context,
+            data_bind_index,
+            |graph, context, data_bind_index| {
+                graph.set_owned_view_model_context_boolean_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    value,
+                )
+            },
+        );
         let key_frame_changed = path.is_some_and(|path| {
             self.set_key_frame_active_source_for_path(
                 &path,
@@ -8954,10 +9167,17 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: u64,
     ) -> bool {
-        if !self
-            .data_bind_graph
-            .set_owned_view_model_context_enum_source_for_data_bind(context, data_bind_index, value)
-        {
+        if !self.write_owned_view_model_context_with_listener_boundary(
+            context,
+            data_bind_index,
+            |graph, context, data_bind_index| {
+                graph.set_owned_view_model_context_enum_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    value,
+                )
+            },
+        ) {
             return false;
         }
         self.needs_advance = true;
@@ -8973,13 +9193,17 @@ impl StateMachineInstance {
         let path = self
             .data_bind_graph
             .source_path_for_data_bind(data_bind_index);
-        let changed = self
-            .data_bind_graph
-            .set_owned_view_model_context_color_source_for_data_bind(
-                context,
-                data_bind_index,
-                value,
-            );
+        let changed = self.write_owned_view_model_context_with_listener_boundary(
+            context,
+            data_bind_index,
+            |graph, context, data_bind_index| {
+                graph.set_owned_view_model_context_color_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    value,
+                )
+            },
+        );
         let key_frame_changed = path.is_some_and(|path| {
             self.set_key_frame_active_source_for_path(
                 &path,
@@ -9002,13 +9226,17 @@ impl StateMachineInstance {
         let path = self
             .data_bind_graph
             .source_path_for_data_bind(data_bind_index);
-        let changed = self
-            .data_bind_graph
-            .set_owned_view_model_context_string_source_for_data_bind(
-                context,
-                data_bind_index,
-                value,
-            );
+        let changed = self.write_owned_view_model_context_with_listener_boundary(
+            context,
+            data_bind_index,
+            |graph, context, data_bind_index| {
+                graph.set_owned_view_model_context_string_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    value,
+                )
+            },
+        );
         let key_frame_changed = path.is_some_and(|path| {
             self.set_key_frame_active_source_for_path(
                 &path,
@@ -9028,14 +9256,17 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: u64,
     ) -> bool {
-        if !self
-            .data_bind_graph
-            .set_owned_view_model_context_trigger_source_for_data_bind(
-                context,
-                data_bind_index,
-                value,
-            )
-        {
+        if !self.write_owned_view_model_context_with_listener_boundary(
+            context,
+            data_bind_index,
+            |graph, context, data_bind_index| {
+                graph.set_owned_view_model_context_trigger_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    value,
+                )
+            },
+        ) {
             return false;
         }
         self.needs_advance = true;
@@ -9091,15 +9322,18 @@ impl StateMachineInstance {
         };
 
         bindable_trigger.set_value(value);
-        if !self
-            .data_bind_graph
-            .fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
-                context,
-                data_bind_index,
-                value,
-                property_path,
-            )
-        {
+        if !self.write_owned_view_model_context_with_listener_boundary(
+            context,
+            data_bind_index,
+            |graph, context, data_bind_index| {
+                graph.fire_owned_view_model_context_trigger_source_for_data_bind_at_property_path(
+                    context,
+                    data_bind_index,
+                    value,
+                    property_path,
+                )
+            },
+        ) {
             return false;
         }
         self.needs_advance = true;
@@ -9112,14 +9346,17 @@ impl StateMachineInstance {
         data_bind_index: usize,
         item_count: usize,
     ) -> bool {
-        if !self
-            .data_bind_graph
-            .set_owned_view_model_context_list_source_item_count_for_data_bind(
-                context,
-                data_bind_index,
-                item_count,
-            )
-        {
+        if !self.write_owned_view_model_context_with_listener_boundary(
+            context,
+            data_bind_index,
+            |graph, context, data_bind_index| {
+                graph.set_owned_view_model_context_list_source_item_count_for_data_bind(
+                    context,
+                    data_bind_index,
+                    item_count,
+                )
+            },
+        ) {
             return false;
         }
         self.needs_advance = true;
@@ -9132,14 +9369,17 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: u64,
     ) -> bool {
-        if !self
-            .data_bind_graph
-            .set_owned_view_model_context_asset_source_for_data_bind(
-                context,
-                data_bind_index,
-                value,
-            )
-        {
+        if !self.write_owned_view_model_context_with_listener_boundary(
+            context,
+            data_bind_index,
+            |graph, context, data_bind_index| {
+                graph.set_owned_view_model_context_asset_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    value,
+                )
+            },
+        ) {
             return false;
         }
         self.needs_advance = true;
@@ -9152,14 +9392,17 @@ impl StateMachineInstance {
         data_bind_index: usize,
         value: u64,
     ) -> bool {
-        if !self
-            .data_bind_graph
-            .set_owned_view_model_context_artboard_source_for_data_bind(
-                context,
-                data_bind_index,
-                value,
-            )
-        {
+        if !self.write_owned_view_model_context_with_listener_boundary(
+            context,
+            data_bind_index,
+            |graph, context, data_bind_index| {
+                graph.set_owned_view_model_context_artboard_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    value,
+                )
+            },
+        ) {
             return false;
         }
         self.needs_advance = true;
@@ -9172,14 +9415,17 @@ impl StateMachineInstance {
         data_bind_index: usize,
         instance_index: usize,
     ) -> bool {
-        if !self
-            .data_bind_graph
-            .set_owned_view_model_context_view_model_source_for_data_bind(
-                context,
-                data_bind_index,
-                instance_index,
-            )
-        {
+        if !self.write_owned_view_model_context_with_listener_boundary(
+            context,
+            data_bind_index,
+            |graph, context, data_bind_index| {
+                graph.set_owned_view_model_context_view_model_source_for_data_bind(
+                    context,
+                    data_bind_index,
+                    instance_index,
+                )
+            },
+        ) {
             return false;
         }
         self.needs_advance = true;
@@ -11110,7 +11356,18 @@ impl StateMachineInstance {
     }
 
     pub fn reported_event_count(&self) -> usize {
-        self.reported_events.len()
+        if self.event_bubble_owner_attached && !self.notifying_event_listeners {
+            let bubbled = self
+                .bubbled_event_reports
+                .len()
+                .saturating_sub(self.bubbled_event_report_index);
+            if bubbled != 0 {
+                return bubbled;
+            }
+        }
+        self.reported_events
+            .len()
+            .saturating_sub(self.next_unapplied_reported_event_index())
     }
 
     /// Whether retained ViewModel-listener mutations are queued for the next
@@ -11119,6 +11376,10 @@ impl StateMachineInstance {
     /// 2663-2665`).
     pub fn has_pending_listener_view_model_reports(&self) -> bool {
         !self.reported_listener_view_models.is_empty()
+    }
+
+    fn has_deferred_listener_view_model_boundary_reports(&self) -> bool {
+        !self.post_apply_listener_view_models.is_empty()
     }
 
     #[cfg(test)]
@@ -11133,6 +11394,20 @@ impl StateMachineInstance {
         artboard: &ArtboardInstance,
         index: usize,
     ) -> Option<&StateMachineReportedEvent> {
+        if self.event_bubble_owner_attached && !self.notifying_event_listeners {
+            let bubble_index = self.bubbled_event_report_index.checked_add(index)?;
+            if bubble_index < self.bubbled_event_reports.len() {
+                if bubble_index + 1 == self.bubbled_event_reports.len() {
+                    self.bubbled_event_report_index = self.bubbled_event_reports.len();
+                }
+                let event = self.bubbled_event_reports.get_mut(bubble_index)?;
+                event.refresh_from_live_artboard(artboard);
+                return Some(event);
+            }
+        }
+        let index = self
+            .next_unapplied_reported_event_index()
+            .checked_add(index)?;
         let event = self.reported_events.get_mut(index)?;
         event.refresh_from_live_artboard(artboard);
         Some(event)
@@ -11144,7 +11419,10 @@ impl StateMachineInstance {
     /// Event identity is resolved against its current Artboard occurrence.
     #[doc(hidden)]
     pub fn reported_event_snapshot(&self, index: usize) -> Option<&StateMachineReportedEvent> {
-        self.reported_events.get(index)
+        self.reported_events.get(
+            self.next_unapplied_reported_event_index()
+                .checked_add(index)?,
+        )
     }
 
     pub(crate) fn next_unapplied_reported_event_index(&self) -> usize {
@@ -11419,6 +11697,7 @@ impl StateMachineInstance {
         if self.has_advanced_once
             && elapsed_seconds == 0.0
             && !self.needs_advance
+            && !self.has_deferred_listener_view_model_boundary_reports()
             && self.scripted_instances_by_global.is_empty()
         {
             return Ok(false);
@@ -11536,12 +11815,18 @@ impl StateMachineInstance {
         for input in &mut self.inputs {
             input.advanced();
         }
-        self.needs_advance = focus_needs_advance
+        let advanced = focus_needs_advance
             || data_bind_advance.keep_going
             || keep_going
             || !self.reported_events.is_empty()
-            || !self.reported_listener_view_models.is_empty();
-        Ok(self.needs_advance)
+            || self.has_pending_listener_view_model_reports();
+        // A fully resolved nested-relative listener is discovered during
+        // this raw advance in C++. Publish the report only after computing
+        // the return value so it is applied by the next new-frame call
+        // without making the discovery frame itself report `true`.
+        self.finish_listener_view_model_firing_boundary();
+        self.needs_advance = advanced;
+        Ok(advanced)
     }
 
     fn apply_default_view_model_bindings(
@@ -11792,6 +12077,13 @@ mod scripted_listener_action_tests {
         has_perform: bool,
         failure: ListenerFailure,
         state: usize,
+        calls: Rc<RefCell<Vec<RecordedCall>>>,
+    }
+
+    struct ReportingViewModelListenerScript {
+        label: &'static str,
+        queue: RuntimeCellNotificationQueue,
+        listener_index: usize,
         calls: Rc<RefCell<Vec<RecordedCall>>>,
     }
 
@@ -12323,6 +12615,60 @@ mod scripted_listener_action_tests {
                 return Ok(false);
             };
             self.call_listener_action(method, invocation, host)?;
+            Ok(true)
+        }
+
+        fn get_input(&self, _name: &str) -> Result<crate::ScriptValue, ScriptError> {
+            Ok(crate::ScriptValue::Nil)
+        }
+
+        fn set_input(
+            &mut self,
+            _name: &str,
+            _value: crate::ScriptValue,
+        ) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    impl ScriptInstance for ReportingViewModelListenerScript {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(method == ScriptMethod::PerformAction)
+        }
+
+        fn call_method(
+            &mut self,
+            _method: ScriptMethod,
+            _args: &[crate::ScriptValue],
+            _host: &mut dyn ScriptHost,
+        ) -> Result<crate::ScriptValue, ScriptError> {
+            Err(ScriptError::new(
+                "listener dispatch must use the typed invocation seam",
+            ))
+        }
+
+        fn call_listener_action(
+            &mut self,
+            method: ScriptListenerActionMethod,
+            invocation: &ScriptListenerInvocation,
+            _host: &mut dyn ScriptHost,
+        ) -> Result<(), ScriptError> {
+            self.calls.borrow_mut().push(RecordedCall {
+                label: self.label,
+                method,
+                invocation: invocation.clone(),
+                state_before_call: 0,
+            });
+            self.queue.report_data_bind(self.listener_index);
+            Ok(())
+        }
+
+        fn call_preferred_listener_action(
+            &mut self,
+            invocation: &ScriptListenerInvocation,
+            host: &mut dyn ScriptHost,
+        ) -> Result<bool, ScriptError> {
+            self.call_listener_action(ScriptListenerActionMethod::PerformAction, invocation, host)?;
             Ok(true)
         }
 
@@ -15277,7 +15623,7 @@ mod scripted_listener_action_tests {
     }
 
     #[test]
-    fn draining_public_reports_leaves_the_core_queue_for_apply_events() {
+    fn fl_c5_event_host_drain_leaves_the_core_queue_for_apply_events() {
         let (artboard, mut machine) = scripted_listener_artboard_and_machine();
         let event = StateMachineReportedEvent {
             event_local_index: 7,
@@ -15302,7 +15648,7 @@ mod scripted_listener_action_tests {
     }
 
     #[test]
-    fn apply_events_consumes_every_chained_listener_fire_event_in_the_same_frame() {
+    fn fl_c5_event_apply_batches_chaining_and_exact_100_cap() {
         fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
             AuthoringRecord {
                 type_key: nuxie_schema::definition_by_name(type_name)
@@ -15399,10 +15745,222 @@ mod scripted_listener_action_tests {
         assert_eq!(machine.reported_event_count(), 0);
         assert_eq!(machine.next_unapplied_reported_event_index(), 0);
         assert!(machine.take_reported_events(&artboard).is_empty());
+
+        let mut finite_records = vec![
+            record("Backboard", Vec::new()),
+            record("Artboard", Vec::new()),
+        ];
+        finite_records
+            .extend((0..100).map(|_| record("Event", vec![uint("Event", "parentId", 0)])));
+        finite_records.push(record("StateMachine", Vec::new()));
+        let finite_file =
+            RuntimeFile::from_authoring_records(finite_records).expect("finite chain imports");
+        let finite_graph =
+            GraphFile::from_runtime_file(&finite_file).expect("finite chain graph builds");
+        let mut finite_artboard = ArtboardInstance::from_graph_with_artboards(
+            &finite_file,
+            finite_graph
+                .artboards
+                .first()
+                .expect("finite chain artboard"),
+            &finite_graph.artboards,
+        )
+        .expect("finite chain artboard instantiates");
+        let mut finite_machine = finite_artboard
+            .state_machine_instance(0)
+            .expect("finite chain state machine");
+        finite_machine.listener_definitions = Arc::new(
+            (1..=100)
+                .map(|event_local_id| {
+                    event_listener(
+                        event_local_id,
+                        (event_local_id < 100).then_some(event_local_id + 1),
+                    )
+                })
+                .collect(),
+        );
+        finite_machine
+            .reported_events
+            .push(fl_c5_test_reported_event(1));
+        finite_machine.apply_local_event_listeners(&mut finite_artboard, 0, None);
+        assert_eq!(
+            finite_machine.next_unapplied_reported_event_index(),
+            100,
+            "a finite chain consumes its hundredth batch"
+        );
+        assert_eq!(
+            finite_machine.reported_event_count(),
+            0,
+            "a finite chain ending in batch 100 drains completely"
+        );
+        assert_eq!(
+            finite_machine
+                .reporting_events
+                .first()
+                .map(StateMachineReportedEvent::event_local_index),
+            Some(100)
+        );
+
+        let vm_listener_definition = RuntimeStateMachineListener {
+            target_local_id: 0,
+            is_single: false,
+            listener_types: vec![RuntimeListenerType::ViewModel],
+            event_local_indices: Vec::new(),
+            view_model_path: Some(RuntimeListenerViewModelPath::Absolute {
+                view_model_index: 0,
+                property_path: vec![0],
+            }),
+            view_model_input_types: Vec::new(),
+            gamepad_input_types: Vec::new(),
+            keyboard_input_types: Vec::new(),
+            semantic_input_types: Vec::new(),
+            hit_paths: Vec::new(),
+            listener_actions: vec![RuntimeScheduledListenerAction::FireEvent(
+                super::listener_fire_event::RuntimeListenerFireEvent::for_test(0, Some(2)),
+            )],
+        };
+        let mixed_definitions = Arc::new(vec![
+            event_listener(1, None),
+            vm_listener_definition,
+            event_listener(2, None),
+        ]);
+        finite_machine.listener_definitions = Arc::clone(&mixed_definitions);
+        finite_machine.view_model_listeners = vec![
+            RuntimeViewModelListenerInstance::new(Arc::clone(&mixed_definitions), 1)
+                .expect("mixed ViewModel listener"),
+        ];
+        finite_machine.reported_events.clear();
+        finite_machine.reported_event_listener_index = 0;
+        finite_machine
+            .reported_events
+            .push(fl_c5_test_reported_event(1));
+        finite_machine
+            .reported_listener_view_models
+            .report_data_bind(0);
+        finite_machine.apply_local_event_listeners(&mut finite_artboard, 0, None);
+        assert_eq!(
+            finite_machine
+                .reporting_events
+                .iter()
+                .map(StateMachineReportedEvent::event_local_index)
+                .collect::<Vec<_>>(),
+            [2],
+            "the ViewModel callback fires an event into the next same-call batch after the event phase"
+        );
+
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let mut event_to_vm = scripted_test_listener(
+            &mut finite_machine,
+            985,
+            "event-to-vm",
+            ListenerFailure::None,
+            vec![RuntimeListenerType::Event],
+            &calls,
+        );
+        event_to_vm.target_local_id = 1;
+        event_to_vm.event_local_indices = vec![1];
+        let event_to_vm_queue = finite_machine.reported_listener_view_models.clone();
+        let event_to_vm_script =
+            RuntimeScriptInstanceHandle::new(Box::new(ReportingViewModelListenerScript {
+                label: "event-to-vm",
+                queue: event_to_vm_queue,
+                listener_index: 0,
+                calls: Rc::clone(&calls),
+            }));
+        finite_machine
+            .scripted_instances_by_global
+            .insert(985, event_to_vm_script.clone());
+        finite_machine
+            .scripted_listener_action_instances
+            .insert(985, event_to_vm_script);
+        finite_machine.scripted_object_initialization_complete = true;
+        let mut event_after_vm = scripted_test_listener(
+            &mut finite_machine,
+            986,
+            "after-vm",
+            ListenerFailure::None,
+            vec![RuntimeListenerType::Event],
+            &calls,
+        );
+        event_after_vm.target_local_id = 2;
+        event_after_vm.event_local_indices = vec![2];
+        let event_to_vm_definitions = Arc::new(vec![
+            event_to_vm,
+            RuntimeStateMachineListener {
+                target_local_id: 0,
+                is_single: false,
+                listener_types: vec![RuntimeListenerType::ViewModel],
+                event_local_indices: Vec::new(),
+                view_model_path: Some(RuntimeListenerViewModelPath::Absolute {
+                    view_model_index: 0,
+                    property_path: vec![0],
+                }),
+                view_model_input_types: Vec::new(),
+                gamepad_input_types: Vec::new(),
+                keyboard_input_types: Vec::new(),
+                semantic_input_types: Vec::new(),
+                hit_paths: Vec::new(),
+                listener_actions: vec![RuntimeScheduledListenerAction::FireEvent(
+                    super::listener_fire_event::RuntimeListenerFireEvent::for_test(0, Some(2)),
+                )],
+            },
+            event_after_vm,
+        ]);
+        finite_machine.listener_definitions = Arc::clone(&event_to_vm_definitions);
+        finite_machine.view_model_listeners = vec![
+            RuntimeViewModelListenerInstance::new(Arc::clone(&event_to_vm_definitions), 1)
+                .expect("event-generated ViewModel listener"),
+        ];
+        finite_machine.reported_events.clear();
+        finite_machine.reported_event_listener_index = 0;
+        finite_machine
+            .reported_events
+            .push(fl_c5_test_reported_event(1));
+        finite_machine.apply_local_event_listeners(&mut finite_artboard, 0, None);
+        assert_eq!(
+            calls
+                .borrow()
+                .iter()
+                .map(|call| call.label)
+                .collect::<Vec<_>>(),
+            ["event-to-vm", "after-vm"],
+            "event-generated ViewModel work runs in the next batch, then its generated event runs in the following batch"
+        );
+
+        machine.listener_definitions = Arc::new(vec![event_listener(1, Some(1))]);
+        machine.reported_events.push(StateMachineReportedEvent {
+            event_local_index: 1,
+            event_core_type: 128,
+            name: Some("loop".to_owned()),
+            url: None,
+            target: None,
+            properties: Vec::new(),
+            string_properties: Vec::new(),
+            seconds_delay: 0.0,
+            context: None,
+        });
+        let start = machine.next_unapplied_reported_event_index();
+        machine.apply_local_event_listeners(&mut artboard, start, None);
+        assert_eq!(
+            machine.next_unapplied_reported_event_index(),
+            100,
+            "exactly 100 finite callback batches must be consumed"
+        );
+        assert_eq!(
+            machine.reported_event_count(),
+            1,
+            "the event generated by batch 100 is pending as batch 101"
+        );
+        assert_eq!(
+            machine
+                .reported_event_snapshot(0)
+                .map(StateMachineReportedEvent::event_local_index),
+            Some(1)
+        );
     }
 
     #[test]
-    fn listener_fire_event_reports_live_payload_before_advance() {
+    fn fl_c5_event_listener_fire_reports_live_payload_before_advance() {
         fn record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
             AuthoringRecord {
                 type_key: nuxie_schema::definition_by_name(type_name)
@@ -15525,6 +16083,236 @@ mod scripted_listener_action_tests {
         assert!(
             machine.take_reported_events(&artboard).is_empty(),
             "draining the source does not replay after the snapshot drain"
+        );
+    }
+
+    fn fl_c5_test_reported_event(local_index: usize) -> StateMachineReportedEvent {
+        StateMachineReportedEvent {
+            event_local_index: local_index,
+            event_core_type: 128,
+            name: Some(format!("event-{local_index}")),
+            url: None,
+            target: None,
+            properties: Vec::new(),
+            string_properties: Vec::new(),
+            seconds_delay: 0.0,
+            context: None,
+        }
+    }
+
+    #[test]
+    fn fl_c5_event_mid_callback_visibility_excludes_the_reporting_snapshot() {
+        let (_artboard, mut machine) = scripted_listener_artboard_and_machine();
+        machine.reported_events.push(fl_c5_test_reported_event(7));
+        let mut reporting = std::mem::take(&mut machine.reporting_events);
+        reporting.clear();
+        reporting.extend_from_slice(&machine.reported_events);
+        machine.reported_event_listener_index = machine.reported_events.len();
+
+        assert_eq!(machine.reported_event_count(), 0);
+        assert!(machine.reported_event_snapshot(0).is_none());
+        machine.reported_events.push(fl_c5_test_reported_event(8));
+        assert_eq!(machine.reported_event_count(), 1);
+        assert_eq!(
+            machine
+                .reported_event_snapshot(0)
+                .map(StateMachineReportedEvent::event_local_index),
+            Some(8),
+            "callback inspection sees only work appended for a later batch"
+        );
+        assert_eq!(reporting[0].event_local_index(), 7);
+    }
+
+    #[test]
+    fn fl_c5_event_trigger_zero_suppression_and_duplicate_listener_fifo() {
+        let cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Trigger(0));
+        let queue = RuntimeCellNotificationQueue::default();
+        let first = RuntimeCellDirtSink::reporting_listener(&queue, 3);
+        let duplicate = RuntimeCellDirtSink::reporting_listener(&queue, 3);
+        cell.add_dependent(&first);
+        cell.add_dependent(&duplicate);
+
+        assert!(cell.fire_trigger());
+        cell.advanced();
+        let mut reporting = Vec::new();
+        queue.swap_into(&mut reporting);
+        assert_eq!(
+            reporting,
+            [3, 3],
+            "one genuine mutation preserves duplicate dependent registrations"
+        );
+        assert_eq!(cell.value(), RuntimeViewModelCellValue::Trigger(0));
+
+        let signed_zero = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(-0.0));
+        assert_eq!(
+            signed_zero.value(),
+            RuntimeViewModelCellValue::Number(-0.0),
+            "signed zero remains ordinary number payload data"
+        );
+        let signed_zero_trigger = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Trigger(1));
+        let signed_zero_queue = RuntimeCellNotificationQueue::default();
+        let signed_zero_sink = RuntimeCellDirtSink::reporting_listener(&signed_zero_queue, 4);
+        signed_zero_trigger.add_dependent(&signed_zero_sink);
+        assert!(
+            signed_zero_trigger.set_value(RuntimeViewModelCellValue::Trigger((-0.0_f32) as u64))
+        );
+        let mut signed_zero_reports = Vec::new();
+        signed_zero_queue.swap_into(&mut signed_zero_reports);
+        assert!(
+            signed_zero_reports.is_empty(),
+            "a trigger reset expressed through signed zero is the same suppressed zero counter"
+        );
+    }
+
+    #[test]
+    fn fl_c5_event_listener_major_event_minor_single_and_multi_order() {
+        let (mut artboard, mut machine) = scripted_listener_artboard_and_machine();
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let mut single = scripted_test_listener(
+            &mut machine,
+            980,
+            "single",
+            ListenerFailure::None,
+            vec![RuntimeListenerType::Event],
+            &calls,
+        );
+        single.target_local_id = 0;
+        single.is_single = true;
+        single.event_local_indices = vec![7];
+        let mut multi = scripted_test_listener(
+            &mut machine,
+            981,
+            "multi",
+            ListenerFailure::None,
+            vec![RuntimeListenerType::Event],
+            &calls,
+        );
+        multi.target_local_id = 0;
+        multi.event_local_indices = vec![7];
+        machine.listener_definitions = Arc::new(vec![single, multi]);
+
+        let events = [fl_c5_test_reported_event(7), fl_c5_test_reported_event(7)];
+        machine.notify_events(&mut artboard, None, &events);
+        assert_eq!(
+            calls
+                .borrow()
+                .iter()
+                .map(|call| call.label)
+                .collect::<Vec<_>>(),
+            ["single", "multi", "multi"],
+            "listeners are outermost; single breaks at the first [A,A] match while multi scans both"
+        );
+    }
+
+    #[test]
+    fn fl_c5_event_bubbling_precedes_the_recorded_audio_seam_through_two_ancestors() {
+        let (mut leaf_artboard, mut leaf) = scripted_listener_artboard_and_machine();
+        let (mut parent_artboard, mut parent) = scripted_listener_artboard_and_machine();
+        let (mut root_artboard, mut root) = scripted_listener_artboard_and_machine();
+        leaf.attach_event_bubble_owner();
+        parent.attach_event_bubble_owner();
+        let mut audio_event = fl_c5_test_reported_event(7);
+        audio_event.event_core_type = 407;
+        let event = [audio_event];
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let mut mismatch = scripted_test_listener(
+            &mut parent,
+            982,
+            "mismatch",
+            ListenerFailure::None,
+            vec![RuntimeListenerType::Event],
+            &calls,
+        );
+        mismatch.target_local_id = 99;
+        mismatch.event_local_indices = vec![7];
+        let mut parent_listener = scripted_test_listener(
+            &mut parent,
+            983,
+            "parent",
+            ListenerFailure::None,
+            vec![RuntimeListenerType::Event],
+            &calls,
+        );
+        parent_listener.target_local_id = 7;
+        parent_listener.event_local_indices = vec![7];
+        parent.listener_definitions = Arc::new(vec![mismatch, parent_listener]);
+        parent
+            .nested_event_registrations
+            .push(RuntimeNestedEventRegistration {
+                source_local_id: 7,
+                notifier_local_id: 70,
+                kind: RuntimeNestedEventNotifierKind::StateMachine,
+            });
+        let mut root_listener = scripted_test_listener(
+            &mut root,
+            984,
+            "root",
+            ListenerFailure::None,
+            vec![RuntimeListenerType::Event],
+            &calls,
+        );
+        root_listener.target_local_id = 8;
+        root_listener.event_local_indices = vec![7];
+        root.listener_definitions = Arc::new(vec![root_listener]);
+        root.nested_event_registrations
+            .push(RuntimeNestedEventRegistration {
+                source_local_id: 8,
+                notifier_local_id: 80,
+                kind: RuntimeNestedEventNotifierKind::StateMachine,
+            });
+
+        leaf.notify_events(&mut leaf_artboard, None, &event);
+        let parent_events = leaf.take_bubbled_event_reports();
+        assert_eq!(parent_events.len(), 1);
+        parent.notify_events(&mut parent_artboard, Some(7), &parent_events);
+        let root_events = parent.take_bubbled_event_reports();
+        assert_eq!(root_events.len(), 1);
+        root_artboard.set_frame_origin(false);
+        let _ = root_artboard.advance_state_machine_instance(&mut root, 0.0);
+        root.schedule_post_update_probe();
+        root.notify_events(&mut root_artboard, Some(8), &root_events);
+        assert!(
+            root.take_bubbled_event_reports().is_empty(),
+            "root draw state and a post-update probe do not invent an outgoing parent edge"
+        );
+        assert_eq!(
+            calls
+                .borrow()
+                .iter()
+                .map(|call| call.label)
+                .collect::<Vec<_>>(),
+            ["parent", "root"],
+            "each owner dispatches the realistic nested source once; the mismatched target stays inert"
+        );
+        for machine in [&leaf, &parent] {
+            assert_eq!(
+                machine.event_dispatch_phase_trace,
+                ["local-dispatch", "bubble-to-owner", "recorded-audio-seam"]
+            );
+            assert!(machine.plays_audio());
+        }
+        assert_eq!(
+            root.event_dispatch_phase_trace,
+            ["local-dispatch", "recorded-audio-seam"]
+        );
+        assert!(root.plays_audio());
+
+        root.event_dispatch_phase_trace.clear();
+        assert!(
+            !root.notify_events(&mut root_artboard, Some(usize::MAX), &event),
+            "an unregistered nested source must not dispatch or bubble"
+        );
+        assert!(root.event_dispatch_phase_trace.is_empty());
+
+        leaf.notify_events(&mut leaf_artboard, None, &event);
+        assert_eq!(leaf.reported_event_count(), 1);
+        assert!(leaf.reported_event(&leaf_artboard, 0).is_some());
+        assert_eq!(leaf.reported_event_count(), 0);
+        leaf.notify_events(&mut leaf_artboard, None, &event);
+        assert_eq!(
+            leaf.bubbled_event_reports.len(),
+            1,
+            "the next bubble batch reclaims the production cursor's consumed prefix"
         );
     }
 
@@ -16821,6 +17609,20 @@ mod scripted_listener_action_tests {
             3,
             "completion inserts main first, then both globals, without replacing occupied A"
         );
+        let staged_main_view_model = staged
+            .main_handle()
+            .expect("completed main")
+            .borrow()
+            .view_model_index();
+        let staged_global_a_view_model = staged
+            .global_slot_handle(1)
+            .expect("occupied global A")
+            .borrow()
+            .view_model_index();
+        println!(
+            "FLC5_COMPLETE_DIFF main={staged_main_view_model} global_a={staged_global_a_view_model} global_b={}",
+            usize::from(staged.global_slot_handle(2).is_some())
+        );
 
         let bound_before_replacement = machine
             .owned_data_context
@@ -16946,6 +17748,34 @@ mod scripted_listener_action_tests {
             machine.rebuild_data_bind(None),
             Err(RuntimeDataContextBindError::NullDataBind)
         );
+
+        let mut differential_machine = scripted_listener_machine();
+        differential_machine.view_model_listeners.clear();
+        let staged_main = fl_c5_bind_handle(&file, 0);
+        assert!(differential_machine.set_view_model_instance(Some(staged_main)));
+        let staged_view_model = differential_machine
+            .data_context()
+            .and_then(|context| context.snapshot().main_handle().cloned())
+            .expect("staged differential main")
+            .borrow()
+            .view_model_index();
+        let bound_main = fl_c5_bind_handle(&file, 3);
+        differential_machine
+            .bind_view_model_instance(Some(&file), &mut artboard, Some(bound_main))
+            .expect("non-null differential bind");
+        let bound_view_model = differential_machine
+            .data_context()
+            .and_then(|context| context.snapshot().main_handle().cloned())
+            .expect("bound differential main")
+            .borrow()
+            .view_model_index();
+        differential_machine
+            .bind_view_model_instance(Some(&file), &mut artboard, None)
+            .expect("null differential bind");
+        println!(
+            "FLC5_BIND_NULL_DIFF staged={staged_view_model} bound={bound_view_model} cleared={}",
+            usize::from(differential_machine.data_context().is_none())
+        );
     }
 
     #[test]
@@ -17046,7 +17876,7 @@ mod scripted_listener_action_tests {
             RuntimeOwnedViewModelContext::from_main_handle(fl_c5_bind_handle(&file, 0)),
         );
         let context_b = RuntimeStateMachineDataContext::from_owned_context(
-            RuntimeOwnedViewModelContext::from_main_handle(fl_c5_bind_handle(&file, 0)),
+            RuntimeOwnedViewModelContext::from_main_handle(fl_c5_bind_handle(&file, 3)),
         );
 
         machine
@@ -17082,6 +17912,27 @@ mod scripted_listener_action_tests {
                 "script-init-pass",
             ],
             "the A→B path contains no clear phase"
+        );
+        let a_registered = machine
+            .owned_view_model_rebind_sink
+            .peek_dirt()
+            .contains(RuntimeCellDirt::BINDINGS);
+        machine.owned_view_model_rebind_sink.take_dirt();
+        context_b.mark_main_rebind_for_test();
+        let b_registered = machine
+            .owned_view_model_rebind_sink
+            .peek_dirt()
+            .contains(RuntimeCellDirt::BINDINGS);
+        let current_view_model = machine
+            .data_context()
+            .and_then(|context| context.snapshot().main_handle().cloned())
+            .expect("current inherited main")
+            .borrow()
+            .view_model_index();
+        println!(
+            "FLC5_INHERIT_DIFF current={current_view_model} a_registered={} b_registered={}",
+            usize::from(a_registered),
+            usize::from(b_registered)
         );
     }
 

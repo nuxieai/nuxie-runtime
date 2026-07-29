@@ -1142,6 +1142,81 @@ min_occurrences = 11
 max_occurrences = 11
 
 [[ratchet]]
+id = "state_machine_event_apply_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+apply_local_event_listeners\\b[\\s\\S]{0,5000}update_data_binds_false\\([\\s\\S]{0,900}take\\(&mut\\s+self\\.reporting_events\\)[\\s\\S]{0,1200}reported_listener_view_models[\\s\\S]{0,900}notify_events_with_context\\([\\s\\S]{0,2600}for\\s+&listener_index\\s+in\\s+&listener_indices"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_exact_100_batches_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "const\\s+MAX_EVENT_ITERATIONS:\\s*usize\\s*=\\s*100\\s*;[\\s\\S]{0,1800}for\\s+_\\s+in\\s+0\\.\\.MAX_EVENT_ITERATIONS"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_pending_cursor_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+reported_event_count\\b[\\s\\S]{0,900}next_unapplied_reported_event_index\\(\\)[\\s\\S]{0,3000}fn\\s+reported_event\\b[\\s\\S]{0,1200}next_unapplied_reported_event_index\\(\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_local_bubble_audio_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+notify_events_with_context_and_script_host\\b[\\s\\S]{0,4800}record_event_dispatch_phase\\(\"local-dispatch\"\\)[\\s\\S]{0,4000}bubble_events_to_owner_seam\\(events\\);\\s*self\\.reach_recorded_audio_event_seam\\(events\\)[\\s\\S]{0,1800}pub\\s+fn\\s+plays_audio\\(&self\\)\\s*->\\s*bool\\s*\\{\\s*true"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_listener_trigger_guard_sink_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "RuntimeCellDirtSink::reporting_listener\\(queue,\\s*listener_index\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_listener_trigger_zero_guard_required"
+globs = ["crates/nuxie-runtime/src/view_model_cell.rs"]
+pattern = "notification\\.suppress_trigger_zero[\\s\\S]{0,120}matches!\\(self\\.value,\\s*RuntimeViewModelCellValue::Trigger\\(0\\)\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_bubble_fifo_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+bubble_events_to_owner_seam\\b[\\s\\S]{0,400}bubbled_event_reports\\.extend_from_slice\\(events\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_bubble_owner_wiring_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*event_bubble_owner_attached:\\s*!artboard\\.frame_origin\\(\\))(?=[\\s\\S]*fn\\s+reported_event_count\\b[\\s\\S]{0,800}bubbled_event_reports)(?=[\\s\\S]*fn\\s+reported_event\\b[\\s\\S]{0,900}bubbled_event_reports)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_vm_listener_firing_boundary_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+finish_listener_view_model_firing_boundary\\b[\\s\\S]{0,500}reported_listener_view_models[\\s\\S]{0,200}report_data_bind)(?=[\\s\\S]*fn\\s+owned_context_listener_report_waits_for_nested_relative_relink\\b[\\s\\S]{0,3000}ptr_eq\\(changed_cell\\)[\\s\\S]{0,2000}RuntimeListenerViewModelPath::Relative[\\s\\S]{0,1000}resolved_name_ids\\.len\\(\\)\\s*>\\s*1[\\s\\S]{0,1000}manifest\\.resolve_name)(?=[\\s\\S]*fn\\s+write_owned_view_model_context_with_listener_boundary\\b[\\s\\S]{0,5000}post_apply_listener_view_models\\.push\\(listener_index\\))"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_current_batch_exposed"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+reported_event_count\\b[\\s\\S]{0,350}reporting_events"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_event_local_audio_execution"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\b(?:play_audio|audio_playback|play_audio_event)\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
 id = "data_bind_per_type_target_to_source_path"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "(?m)^\\s*(?:pub\\(crate\\)\\s+)?fn\\s+apply_default_view_model_(?:number|symbol_list_index|boolean|string|color|enum|asset|artboard|list|trigger|view_model)(?:_public_update)?_targets_to_sources(?:_with_options)?\\b"

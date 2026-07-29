@@ -829,7 +829,11 @@ FL-A post-rebase floor, refreshed after final independent review:
    first), and the complete source-walk evidence is
    `runtime-frame-loop-fl-c5-walk/`. One production writer; no semantic edit
    outside the packages.
-2. FL-C1 is independently accepted at `efd87746`; recorded gap
-   `flc5-vm-listener-firing-boundary` remains owned by FL-C5 WP6. FL-B remains
+2. FL-C1 is independently accepted at `efd87746`. Recorded gap
+   `flc5-vm-listener-firing-boundary` is CLOSED by FL-C5 WP6: the
+   nested-relative ViewModel-listener report now becomes pending only after
+   the current frame's `applyEvents`, matching C++'s later DataBind
+   occurrence update, and all four claimed-path differentials hold strict
+   per-step equality with the explicit divergence pin removed. FL-B remains
    the only outstanding prior acceptance. Performance remains deferred until
    all mapped FL-A-through-FL-E code is ported.

@@ -1891,6 +1891,46 @@ fn synthetic_state_machine_fire_event_listener_input_change(file_id: u64) -> Vec
     })
 }
 
+fn synthetic_state_machine_self_chaining_event(file_id: u64) -> Vec<u8> {
+    const AT_START: u64 = 0;
+    const REPORTED_EVENT: u64 = 2;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "Event", |bytes| {
+            push_string_property(bytes, "Event", "name", "loop");
+        });
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 5);
+            push_uint_property(
+                bytes,
+                "StateMachineListenerSingle",
+                "eventId",
+                REPORTED_EVENT,
+            );
+        });
+        push_object_with_properties(bytes, "ListenerFireEvent", |bytes| {
+            push_uint_property(bytes, "ListenerFireEvent", "eventId", REPORTED_EVENT);
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_state_machine_fire_event(bytes, REPORTED_EVENT, AT_START);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_callback_keyframe_event(file_id: u64) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
@@ -19311,7 +19351,6 @@ fn relative_claimed_data_bind_path_view_model_listener_matches_cpp_on_property_m
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
-
     assert_eq!(
         state_machine.input(0).and_then(|input| input.bool_value()),
         Some(true),
@@ -19508,13 +19547,17 @@ fn nested_relative_claimed_data_bind_path_view_model_listener_matches_cpp() {
     let bytes = synthetic_nested_relative_claimed_data_bind_path_view_model_listener(9694);
     let cpp = probe_path().map(|probe| {
         let args = [
-            "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+            "--runtime-bind-owned-view-model-number-name-path-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "child/amount".to_owned(),
             "0".to_owned(),
             "--runtime-advance-state-machine".to_owned(),
             "0".to_owned(),
             "0".to_owned(),
-            "--runtime-set-default-view-model-source-number".to_owned(),
+            "--runtime-advance-then-set-owned-view-model-source-number-by-name".to_owned(),
             "0".to_owned(),
+            "child/amount".to_owned(),
             "0".to_owned(),
             "1".to_owned(),
             "--runtime-advance-state-machine".to_owned(),
@@ -19524,8 +19567,8 @@ fn nested_relative_claimed_data_bind_path_view_model_listener_matches_cpp() {
         read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args)
     });
     let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
-    let mut context = RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
-        .unwrap_or_else(|| panic!("missing Rust imported view-model context for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -19547,7 +19590,10 @@ fn nested_relative_claimed_data_bind_path_view_model_listener_matches_cpp() {
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
     ));
-
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
     assert_eq!(
         state_machine.input(0).and_then(|input| input.bool_value()),
         Some(true),
@@ -19565,19 +19611,11 @@ fn nested_relative_claimed_data_bind_path_view_model_listener_matches_cpp() {
                 *advanced,
                 &format!("{label} action {step}"),
             );
-            if step == 1 {
-                assert_view_model_listener_firing_boundary_divergence(
-                    cpp_report,
-                    rust_report,
-                    &format!("{label} action {step}"),
-                );
-            } else {
-                compare_state_machine_bool_inputs(
-                    cpp_report,
-                    rust_report,
-                    &format!("{label} action {step}"),
-                );
-            }
+            compare_state_machine_bool_inputs(
+                cpp_report,
+                rust_report,
+                &format!("{label} action {step}"),
+            );
         }
     } else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -22301,8 +22339,7 @@ fn fl_c5_pointer_fp_nonfinite_coordinates_match_cpp_probe() {
     );
 }
 
-#[test]
-fn state_machine_fire_event_listeners_apply_on_the_next_frame() {
+fn assert_state_machine_fire_event_listeners_apply_on_the_next_frame() {
     let label = "synthetic/runtime_state_machine_fire_event_listener_input_change.riv";
     let bytes = synthetic_state_machine_fire_event_listener_input_change(8921);
     let cpp = probe_path().map(|probe| {
@@ -22375,6 +22412,60 @@ fn state_machine_fire_event_listeners_apply_on_the_next_frame() {
             label,
         );
     }
+}
+
+fn assert_fl_c5_self_chaining_event_stops_at_100_against_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_self_chaining_event_100.riv";
+    let bytes = synthetic_state_machine_self_chaining_event(96_964);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut machine = rust
+        .state_machine_instance(0)
+        .expect("self-chaining Rust machine");
+    let rust_reports = [
+        (
+            rust.advance_state_machine_instance(&mut machine, 0.0),
+            machine.clone(),
+        ),
+        (
+            rust.advance_state_machine_instance(&mut machine, 0.0),
+            machine.clone(),
+        ),
+    ];
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), 2);
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&rust_reports).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} step {step}"),
+        );
+    }
+    assert_eq!(
+        cpp_reports[1].reported_event_count, 1,
+        "pinned C++ leaves batch 101 pending after exactly 100 callbacks"
+    );
+    assert_eq!(rust_reports[1].1.reported_event_count(), 1);
+}
+
+#[test]
+fn state_machine_fire_event_listeners_apply_on_the_next_frame() {
+    assert_state_machine_fire_event_listeners_apply_on_the_next_frame();
 }
 
 #[test]
@@ -81667,10 +81758,19 @@ fn fl_c5_cpp_member<'a>(source: &'a str, start: &str, end: &str) -> &'a str {
     &source[start..end]
 }
 
-fn fl_c5_run_rust_unit_probe(filter: &str) {
+fn fl_c5_run_rust_unit_probe(filter: &str) -> String {
     let output = Command::new(env!("CARGO"))
         .current_dir(repo_root())
-        .args(["test", "-q", "-p", "nuxie-runtime", "--lib", filter])
+        .args([
+            "test",
+            "-q",
+            "-p",
+            "nuxie-runtime",
+            "--lib",
+            filter,
+            "--",
+            "--nocapture",
+        ])
         .output()
         .unwrap_or_else(|error| panic!("run Rust WP5 probe {filter}: {error}"));
     assert!(
@@ -81679,6 +81779,55 @@ fn fl_c5_run_rust_unit_probe(filter: &str) {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
+    String::from_utf8(output.stdout)
+        .unwrap_or_else(|error| panic!("Rust WP5 probe {filter} emitted non-UTF-8 output: {error}"))
+}
+
+fn fl_c5_rust_probe_receipt<'a>(output: &'a str, marker: &str) -> &'a str {
+    output
+        .lines()
+        .find_map(|line| line.trim().strip_prefix(marker))
+        .unwrap_or_else(|| panic!("Rust differential probe omitted {marker:?}\n{output}"))
+}
+
+fn synthetic_fl_c5_bind_family_contexts(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        for (view_model_index, (name, global)) in [
+            ("Main", false),
+            ("Global A", true),
+            ("Global B", true),
+            ("Standard", false),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            push_object_with_properties(bytes, "ViewModel", |bytes| {
+                push_string_property(bytes, "ViewModel", "name", name);
+                if global {
+                    push_uint_property(bytes, "ViewModel", "viewModelType", 2);
+                }
+            });
+            push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+                push_string_property(
+                    bytes,
+                    "ViewModelInstance",
+                    "name",
+                    &format!("{name} instance"),
+                );
+                push_uint_property(
+                    bytes,
+                    "ViewModelInstance",
+                    "viewModelId",
+                    u64::try_from(view_model_index).expect("small fixture index"),
+                );
+            });
+        }
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+    })
 }
 
 #[test]
@@ -81736,121 +81885,321 @@ fn fl_c5_bind_family_typed_default_context_matches_cpp_probe() {
 
 #[test]
 fn fl_c5_bind_null_matrix_matches_pinned_cpp_members() {
-    fl_c5_run_rust_unit_probe("fl_c5_bind_null_matrix_keeps_every_cpp_branch_distinct");
-    let source = fl_c5_cpp_state_machine_instance_source();
-    let set = fl_c5_cpp_member(
-        &source,
-        "void StateMachineInstance::setViewModelInstance(",
-        "bool StateMachineInstance::setGlobalViewModelInstance(",
+    let rust_output =
+        fl_c5_run_rust_unit_probe("fl_c5_bind_null_matrix_keeps_every_cpp_branch_distinct");
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_bind_null_matrix_live_cpp.riv";
+    let bytes = synthetic_fl_c5_bind_family_contexts(96_960);
+    let args = [
+        "--runtime-set-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "3".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-null-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(reports.len(), 3);
+    assert!(reports[0].has_data_context && reports[0].has_main_view_model_instance);
+    assert_eq!(
+        (
+            reports[0].main_view_model_index,
+            reports[0].main_view_model_instance_index
+        ),
+        (0, 0),
+        "setViewModelInstance must stage the selected main without binding"
+    );
+    assert_eq!(
+        (
+            reports[1].main_view_model_index,
+            reports[1].main_view_model_instance_index
+        ),
+        (3, 0),
+        "non-null bindViewModelInstance must replace and bind the main"
     );
     assert!(
-        set.contains("if (viewModelInstance == nullptr)")
-            && set.contains("return;")
-            && !set.contains("clearDataContext()"),
-        "setViewModelInstance(null) must remain a no-op"
+        !reports[2].has_data_context,
+        "null bindViewModelInstance must clear the machine context"
     );
-
-    let bind_instance = fl_c5_cpp_member(
-        &source,
-        "void StateMachineInstance::bindViewModelInstance(",
-        "rcp<ViewModelInstance> StateMachineInstance::globalViewModelInstance(",
+    let cpp_receipt = format!(
+        " staged={} bound={} cleared={}",
+        reports[0].main_view_model_index,
+        reports[1].main_view_model_index,
+        usize::from(!reports[2].has_data_context)
     );
-    let clear = bind_instance
-        .find("clearDataContext();")
-        .expect("C++ null bindViewModelInstance clear");
-    let artboard_unbind = bind_instance
-        .find("m_artboardInstance->unbind();")
-        .expect("C++ null bindViewModelInstance artboard unbind");
-    assert!(
-        clear < artboard_unbind && !bind_instance.contains("unbindDataBinds()"),
-        "bindViewModelInstance(null) clears the machine context and only unbinds the artboard"
-    );
-
-    let bind_data_context = fl_c5_cpp_member(
-        &source,
-        "void StateMachineInstance::bindDataContext(",
-        "void StateMachineInstance::inheritDataContext(",
-    );
-    assert!(
-        !bind_data_context.contains("dataContext == nullptr"),
-        "bindDataContext(null) is intentionally not a safe clear branch"
-    );
-
-    let inherit = fl_c5_cpp_member(
-        &source,
-        "void StateMachineInstance::inheritDataContext(",
-        "void StateMachineInstance::dataContext(",
-    );
-    assert!(
-        inherit.contains("if (dataContext == nullptr)")
-            && inherit.contains("return;")
-            && !inherit.contains("clearDataContext()"),
-        "inheritDataContext(null) must be a no-op without prior clearing"
+    assert_eq!(
+        fl_c5_rust_probe_receipt(&rust_output, "FLC5_BIND_NULL_DIFF"),
+        cpp_receipt,
+        "the Rust and pinned-C++ null/set/bind branches must produce the same live receipt"
     );
 }
 
 #[test]
 fn fl_c5_inherit_context_a_then_b_retains_pinned_cpp_registration_hazard() {
-    fl_c5_run_rust_unit_probe("fl_c5_bind_inherit_a_then_b_retains_the_prior_registration_hazard");
-    let source = fl_c5_cpp_state_machine_instance_source();
-    let inherit = fl_c5_cpp_member(
-        &source,
-        "void StateMachineInstance::inheritDataContext(",
-        "void StateMachineInstance::dataContext(",
+    let rust_output = fl_c5_run_rust_unit_probe(
+        "fl_c5_bind_inherit_a_then_b_retains_the_prior_registration_hazard",
     );
-    let register = inherit
-        .find("dataContext->addDependentContainer(this);")
-        .expect("C++ inherited-context registration");
-    let bind = inherit
-        .find("internalDataContext(dataContext);")
-        .expect("C++ inherited-context bind");
-    assert!(
-        register < bind,
-        "C++ registers the inherited context before binding"
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_inherit_a_then_b_live_cpp.riv";
+    let bytes = synthetic_fl_c5_bind_family_contexts(96_961);
+    let args = [
+        "--runtime-inherit-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-inherit-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "3".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let report = &cpp.artboards[0].runtime_state_machine_advances[0];
+    assert_eq!(
+        (
+            report.main_view_model_index,
+            report.main_view_model_instance_index
+        ),
+        (3, 0),
+        "the second inherited context must become current"
     );
-    assert!(
-        !inherit.contains("removeDependentContainer")
-            && !inherit.contains("clearDataContext")
-            && inherit.matches("addDependentContainer(this)").count() == 1,
-        "A→B inheritance must retain A's dependent registration while registering B"
+    assert_eq!(
+        report.inherited_data_context_dependent_counts,
+        [1, 1],
+        "A→B inheritance must retain A's registration while registering B"
+    );
+    let cpp_receipt = format!(
+        " current={} a_registered={} b_registered={}",
+        report.main_view_model_index,
+        usize::from(report.inherited_data_context_dependent_counts[0] != 0),
+        usize::from(report.inherited_data_context_dependent_counts[1] != 0)
+    );
+    assert_eq!(
+        fl_c5_rust_probe_receipt(&rust_output, "FLC5_INHERIT_DIFF"),
+        cpp_receipt,
+        "the Rust and pinned-C++ A→B inheritance hazards must match live"
     );
 }
 
 #[test]
 fn fl_c5_complete_view_models_main_then_globals_matches_pinned_cpp() {
-    fl_c5_run_rust_unit_probe("fl_c5_bind_staged_main_and_globals_apply_only_through_primary_bind");
+    let rust_output = fl_c5_run_rust_unit_probe(
+        "fl_c5_bind_staged_main_and_globals_apply_only_through_primary_bind",
+    );
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_complete_view_models_live_cpp.riv";
+    let bytes = synthetic_fl_c5_bind_family_contexts(96_962);
+    let args = [
+        "--runtime-set-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-global-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "3".to_owned(),
+        "0".to_owned(),
+        "--runtime-complete-view-model-instances-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let report = &cpp.artboards[0].runtime_state_machine_advances[0];
+    assert_eq!(
+        (
+            report.main_view_model_index,
+            report.main_view_model_instance_index
+        ),
+        (0, 0),
+        "completion must preserve an occupied main"
+    );
+    assert_eq!(report.global_view_model_slots.len(), 2);
+    assert_eq!(
+        (
+            report.global_view_model_slots[0].slot_view_model_index,
+            report.global_view_model_slots[0].instance_view_model_index,
+            report.global_view_model_slots[0].instance_index,
+        ),
+        (1, 3, 0),
+        "completion must preserve a cross-model occupant by slot identity"
+    );
+    assert!(
+        report.global_view_model_slots[1].has_instance,
+        "completion must fill the next missing global slot"
+    );
+    let cpp_receipt = format!(
+        " main={} global_a={} global_b={}",
+        report.main_view_model_index,
+        report.global_view_model_slots[0].instance_view_model_index,
+        usize::from(report.global_view_model_slots[1].has_instance)
+    );
+    assert_eq!(
+        fl_c5_rust_probe_receipt(&rust_output, "FLC5_COMPLETE_DIFF"),
+        cpp_receipt,
+        "the Rust and pinned-C++ main/global completion receipts must match live"
+    );
+}
+
+#[test]
+fn fl_c5_apply_events_chaining_and_listener_order() {
+    assert_state_machine_fire_event_listeners_apply_on_the_next_frame();
+    fl_c5_run_rust_unit_probe("fl_c5_event_apply_batches_chaining_and_exact_100_cap");
+    fl_c5_run_rust_unit_probe("fl_c5_event_listener_major_event_minor_single_and_multi_order");
     let source = fl_c5_cpp_state_machine_instance_source();
-    let complete = fl_c5_cpp_member(
+    let apply = fl_c5_cpp_member(
         &source,
-        "void StateMachineInstance::completeViewModelInstances()",
-        "void StateMachineInstance::bindViewModelInstance(",
+        "void StateMachineInstance::applyEvents()",
+        "void StateMachineInstance::setExternalFocusManager(",
     );
-    let main_check = complete
-        .find("m_DataContext->mainViewModelInstance() == nullptr")
-        .expect("C++ missing-main check");
-    let main_create = complete
-        .find("createDefaultViewModelInstance(m_artboardInstance)")
-        .expect("C++ main completion");
-    let globals = complete
-        .find("for (auto* viewModel : file->globalViewModels())")
-        .expect("C++ file-order globals loop");
-    let occupied = complete
-        .find("m_DataContext->instanceForSlot(slotKey) != nullptr")
-        .expect("C++ occupied-slot check");
-    let global_create = complete[globals..]
-        .find("createDefaultViewModelInstance(viewModel)")
-        .map(|offset| globals + offset)
-        .expect("C++ global completion");
-    assert!(
-        main_check < main_create
-            && main_create < globals
-            && globals < occupied
-            && occupied < global_create,
-        "C++ completion must fill a missing main before missing global slots in file order"
+    let events = apply.find("notifyEventListeners").expect("C++ event phase");
+    let view_models = apply
+        .find("notifyListenerViewModels")
+        .expect("C++ ViewModel phase");
+    assert!(events < view_models);
+}
+
+#[test]
+fn fl_c5_apply_events_100_batches() {
+    assert_fl_c5_self_chaining_event_stops_at_100_against_cpp();
+    fl_c5_run_rust_unit_probe("fl_c5_event_apply_batches_chaining_and_exact_100_cap");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let apply = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::applyEvents()",
+        "void StateMachineInstance::setExternalFocusManager(",
     );
-    assert!(
-        !complete[occupied..global_create].contains("viewModelId("),
-        "occupied global slots are accepted by slot key even when the occupant is cross-model"
+    assert!(apply.contains("int maxIterations = 100;"));
+    assert!(apply.contains("currentIteration++ < maxIterations"));
+}
+
+#[test]
+fn fl_c5_event_mid_callback_visibility() {
+    assert_state_machine_fire_event_listeners_apply_on_the_next_frame();
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_event_mid_callback_visibility_excludes_the_reporting_snapshot",
+    );
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let apply = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::applyEvents()",
+        "void StateMachineInstance::setExternalFocusManager(",
+    );
+    let snapshot = apply
+        .find("m_reportingEvents = m_reportedEvents;")
+        .expect("C++ event snapshot");
+    let clear = apply
+        .find("m_reportedEvents.clear();")
+        .expect("C++ pending clear");
+    let notify = apply
+        .find("notifyEventListeners")
+        .expect("C++ notification");
+    assert!(snapshot < clear && clear < notify);
+}
+
+#[test]
+fn fl_c5_trigger_zero_suppression() {
+    assert_state_machine_fire_event_listeners_apply_on_the_next_frame();
+    fl_c5_run_rust_unit_probe("fl_c5_event_trigger_zero_suppression_and_duplicate_listener_fifo");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let listener = fl_c5_cpp_member(
+        &source,
+        "class ListenerViewModel",
+        "ListenerViewModelPropertyBinding::ListenerViewModelPropertyBinding(",
+    );
+    assert!(listener.contains("propertyValue() != 0"));
+}
+
+#[test]
+fn fl_c5_event_bubbling_audio_seam_order() {
+    assert_state_machine_fire_event_listeners_apply_on_the_next_frame();
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_event_bubbling_precedes_the_recorded_audio_seam_through_two_ancestors",
+    );
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let notify = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::notifyEventListeners(",
+        "void StateMachineInstance::enablePointerEvents(",
+    );
+    let local = notify
+        .find("for (size_t i = 0; i < m_machine->listenerCount(); i++)")
+        .expect("C++ local event-listener phase");
+    let bubble = notify
+        .find("for (auto listener : nestedEventListeners())")
+        .expect("C++ nested bubbling phase");
+    let audio = notify
+        .find("event->is<AudioEvent>()")
+        .expect("C++ audio phase");
+    assert!(local < bubble && bubble < audio);
+}
+
+#[test]
+fn fl_c5_live_event_projection() {
+    fl_c5_run_rust_unit_probe("fl_c5_event_listener_fire_reports_live_payload_before_advance");
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_live_event_projection.riv";
+    let bytes = synthetic_state_machine_fire_event_listener_input_change(96_963);
+    let event_name_key = property_key_for_name("Event", "name");
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-object-string".to_owned(),
+        "0".to_owned(),
+        "2".to_owned(),
+        event_name_key.to_string(),
+        "latest".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut machine = rust
+        .state_machine_instance(0)
+        .expect("live projection Rust machine");
+    let first_advanced = rust.advance_state_machine_instance(&mut machine, 0.0);
+    let first = machine.clone();
+    assert!(rust.set_string_property(2, event_name_key, b"latest".to_vec()));
+    machine
+        .reported_event(&rust, 0)
+        .expect("refresh Rust report through the live Event identity");
+    let second = machine.clone();
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), 2);
+    compare_state_machine_advance(&cpp_reports[0], &first, first_advanced, label);
+    compare_state_machine_advance(&cpp_reports[1], &second, false, label);
+    assert_eq!(
+        cpp_reports[1].reported_events[0].event_name.as_deref(),
+        Some("latest"),
+        "pinned C++ EventReport retains a live Event pointer across the mutation"
     );
 }
 
@@ -82103,42 +82452,6 @@ fn compare_state_machine_bool_inputs(
             cpp_input.index
         );
     }
-}
-
-fn assert_view_model_listener_firing_boundary_divergence(
-    cpp: &CppRuntimeStateMachineAdvance,
-    rust: &nuxie_runtime::StateMachineInstance,
-    label: &str,
-) {
-    let message = format!(
-        "{label} KNOWN DIVERGENCE flc5-vm-listener-firing-boundary: \
-         Rust fires one advance early; WP6 must restore the C++ boundary"
-    );
-    let rust_bool_input_count = (0..rust.input_count())
-        .filter(|index| {
-            rust.input(*index)
-                .is_some_and(|input| input.kind() == StateMachineInputKind::Bool)
-        })
-        .count();
-    assert_eq!(
-        cpp.bool_inputs.len(),
-        rust_bool_input_count,
-        "{message}: bool input count mismatch"
-    );
-    let cpp_input = cpp
-        .bool_inputs
-        .iter()
-        .find(|input| input.index == 0)
-        .unwrap_or_else(|| panic!("{message}: missing C++ bool input 0"));
-    assert_eq!(
-        cpp_input.value, false,
-        "{message}: C++ bool input 0 must remain false at the early step"
-    );
-    assert_eq!(
-        rust.input(0).and_then(|input| input.bool_value()),
-        Some(true),
-        "{message}: Rust bool input 0 must already be true at the early step"
-    );
 }
 
 fn compare_state_machine_number_binding(
@@ -83186,6 +83499,18 @@ struct CppRuntimeStateMachineAdvance {
     view_model_triggers: Vec<CppRuntimeStateMachineViewModelTrigger>,
     #[serde(default, rename = "viewModelBindings")]
     view_model_bindings: Vec<CppRuntimeStateMachineViewModelBinding>,
+    #[serde(default, rename = "hasDataContext")]
+    has_data_context: bool,
+    #[serde(default, rename = "hasMainViewModelInstance")]
+    has_main_view_model_instance: bool,
+    #[serde(default, rename = "mainViewModelIndex")]
+    main_view_model_index: usize,
+    #[serde(default, rename = "mainViewModelInstanceIndex")]
+    main_view_model_instance_index: usize,
+    #[serde(default, rename = "inheritedDataContextDependentCounts")]
+    inherited_data_context_dependent_counts: Vec<usize>,
+    #[serde(default, rename = "globalViewModelSlots")]
+    global_view_model_slots: Vec<CppRuntimeStateMachineGlobalViewModelSlot>,
     #[serde(default, rename = "numberBindings")]
     number_bindings: Vec<CppRuntimeStateMachineNumberBinding>,
     #[serde(default, rename = "booleanBindings")]
@@ -83212,6 +83537,15 @@ struct CppRuntimeStateMachineAdvance {
     artboard_scripted_objects: Vec<CppRuntimeStateMachineScriptedObject>,
     #[serde(default, rename = "scriptedConverters")]
     scripted_converters: Vec<CppRuntimeStateMachineScriptedConverter>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppRuntimeStateMachineGlobalViewModelSlot {
+    slot_view_model_index: usize,
+    has_instance: bool,
+    instance_view_model_index: usize,
+    instance_index: usize,
 }
 
 #[derive(Debug, Deserialize)]

@@ -28,11 +28,25 @@ member rows:
 7. `animation.reset`
 8. `blend_animation.owners`
 
+The frozen 45-file membership includes
+`src/importers/keyed_property_importer.cpp`. The earlier provisional use of
+`src/animation/scripted_listener_action.cpp` as the 45th row is deliberately
+superseded: that owner belongs to FL-C's listener/action family and remains
+assigned there. Reacceptance must preserve this exact membership rather than
+moving `scripted_listener_action.cpp` back into FL-B.
+
 The production Rust closure is deliberately narrow:
 
 - `crates/nuxie-runtime/src/animation.rs`
 - `crates/nuxie-runtime/src/artboard.rs`
 - `crates/nuxie-runtime/src/state_machine.rs`
+- `crates/nuxie-runtime/src/state_machine/animation_reset_factory.rs`
+- `crates/nuxie-runtime/src/state_machine/blend_state_direct_instance.rs`
+
+The two filename-corresponding state-machine submodules are incremental
+FLR-16 extractions of the touched reset-factory and direct-blend-instance
+owners; their surrounding FL-B families remain coordinated by
+`state_machine.rs`.
 
 Tests, the frame-loop ledger/checker, and evidence documents may change with
 the owner family. Renderer backend code and later FL-C/FL-D/FL-E production

@@ -24,6 +24,11 @@ from source_fingerprint import (
     candidate_source_fingerprint,
     rust_runner_provenance,
 )
+from check import (
+    FL_B_FROZEN_SCOPE_FILES,
+    FL_B_FROZEN_SCOPE_REF,
+    validate_frozen_wave_scopes,
+)
 
 
 class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
@@ -464,6 +469,78 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "src/animation/new_owner.cpp",
             result.stderr,
         )
+
+    def test_frozen_wave_scope_rejects_membership_drift(self) -> None:
+        ledger = self.ledger.read_text()
+        ledger += textwrap.dedent(
+            """
+
+            [[frozen_wave_scope]]
+            wave = "FL-B"
+            expected_file_count = 1
+            files = [
+              "src/animation/linear_animation.cpp",
+            ]
+            """
+        )
+        self.ledger.write_text(ledger)
+        self.assertEqual(self.run_check().returncode, 0)
+
+        self.ledger.write_text(
+            ledger.replace(
+                'files = [\n  "src/animation/linear_animation.cpp",\n]',
+                'files = [\n  "src/animation/missing_owner.cpp",\n]',
+            )
+        )
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "frozen wave FL-B membership differs from expanded source scope",
+            result.stderr,
+        )
+
+    def test_pinned_fl_b_scope_rejects_removal(self) -> None:
+        errors: list[str] = []
+        validate_frozen_wave_scopes(
+            rows=[],
+            assignments={},
+            source_set_waves={},
+            wave_ids={"FL-B"},
+            upstream_ref=FL_B_FROZEN_SCOPE_REF,
+            errors=errors,
+        )
+        self.assertIn(
+            f"missing pinned frozen wave scope for FL-B at {FL_B_FROZEN_SCOPE_REF}",
+            errors,
+        )
+
+    def test_pinned_fl_b_scope_rejects_coordinated_membership_drift(self) -> None:
+        drift_file = "src/animation/linear_animation.cpp"
+        errors: list[str] = []
+        validate_frozen_wave_scopes(
+            rows=[
+                {
+                    "wave": "FL-B",
+                    "expected_file_count": 1,
+                    "files": [drift_file],
+                }
+            ],
+            assignments={drift_file: "animation"},
+            source_set_waves={"animation": "FL-B"},
+            wave_ids={"FL-B"},
+            upstream_ref=FL_B_FROZEN_SCOPE_REF,
+            errors=errors,
+        )
+        self.assertTrue(
+            any(
+                error.startswith(
+                    "pinned frozen wave FL-B literal membership differs from "
+                )
+                for error in errors
+            ),
+            errors,
+        )
+        self.assertEqual(len(FL_B_FROZEN_SCOPE_FILES), 45)
 
     def test_overlap_fails(self) -> None:
         content = self.ledger.read_text()

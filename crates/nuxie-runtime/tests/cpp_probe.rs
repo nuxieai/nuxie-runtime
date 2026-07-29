@@ -4,12 +4,12 @@ use nuxie_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDataContext,
     RuntimeDataContextLookupKind, RuntimeDataContextLookupReport, RuntimeDrawableDispatchKind,
     RuntimeFeatherState, RuntimeGradientStop, RuntimeImportedViewModelInstanceContext,
-    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
-    RuntimeOwnedViewModelInstance, RuntimePathCommand, RuntimeShapePaintKind,
-    RuntimeShapePaintPathKind, RuntimeShapePaintState, RuntimeStateMachineDataConverterBindStep,
-    RuntimeViewModelLinkError, ScriptError, ScriptHost, ScriptInputViewModelPropertyPath,
-    ScriptInstance, ScriptMethod, ScriptValue, ScriptedStateMachineObjectKind,
-    StateMachineInputKind, StateMachineInstance, TransformProperty,
+    RuntimeKeyFrame, RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle,
+    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimePathCommand,
+    RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
+    RuntimeStateMachineDataConverterBindStep, RuntimeViewModelLinkError, ScriptError, ScriptHost,
+    ScriptInputViewModelPropertyPath, ScriptInstance, ScriptMethod, ScriptValue,
+    ScriptedStateMachineObjectKind, StateMachineInputKind, StateMachineInstance, TransformProperty,
     bound_script_view_model_from_owned_context, bound_script_view_model_from_owned_path,
     bound_script_view_model_snapshot, bound_script_view_model_snapshot_from_path,
     runtime_data_context_lookup_reports, runtime_random_call_count, script_view_model_from_owned,
@@ -304,6 +304,26 @@ fn push_keyframe_double(bytes: &mut Vec<u8>, frame: u64, value: f32, interpolati
     });
 }
 
+fn push_keyframe_double_with_interpolator(
+    bytes: &mut Vec<u8>,
+    frame: u64,
+    value: f32,
+    interpolation_type: u64,
+    interpolator_id: u64,
+) {
+    push_object_with_properties(bytes, "KeyFrameDouble", |bytes| {
+        push_uint_property(bytes, "KeyFrameDouble", "frame", frame);
+        push_uint_property(
+            bytes,
+            "KeyFrameDouble",
+            "interpolationType",
+            interpolation_type,
+        );
+        push_uint_property(bytes, "KeyFrameDouble", "interpolatorId", interpolator_id);
+        push_f32_property(bytes, "KeyFrameDouble", "value", value);
+    });
+}
+
 fn push_keyframe_color(bytes: &mut Vec<u8>, frame: u64, value: u32, interpolation_type: u64) {
     push_object_with_properties(bytes, "KeyFrameColor", |bytes| {
         push_uint_property(bytes, "KeyFrameColor", "frame", frame);
@@ -458,6 +478,103 @@ fn synthetic_linear_animation_with_options(
         });
         push_keyframe_double(bytes, first_frame, first_value, first_interpolation_type);
         push_keyframe_double(bytes, second_frame, second_value, 0);
+    })
+}
+
+fn synthetic_linear_animation_wrong_type_interpolator(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "y")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 3.0, 1);
+        push_keyframe_double(bytes, 10, 13.0, 0);
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double_with_interpolator(bytes, 0, 12.0, 1, 1);
+        push_keyframe_double(bytes, 10, 22.0, 0);
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "y")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 13.0, 1);
+        push_keyframe_double(bytes, 10, 23.0, 0);
+    })
+}
+
+fn synthetic_two_animation_importer_cursor(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 10, 12.0, 1);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 20);
+            push_uint_property(bytes, "LinearAnimation", "duration", 40);
+        });
+        push_keyframe_double(bytes, 20, 22.0, 0);
+    })
+}
+
+fn synthetic_negative_speed_nested_remap(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        push_object_with_properties(bytes, "NestedRemapAnimation", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+            push_uint_property(bytes, "NestedAnimation", "animationId", 0);
+            push_f32_property(bytes, "NestedRemapAnimation", "time", 0.0);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+            push_f32_property(bytes, "LinearAnimation", "speed", -1.0);
+            push_uint_property(bytes, "LinearAnimation", "loopValue", 0);
+        });
     })
 }
 
@@ -2529,6 +2646,73 @@ fn synthetic_state_machine_blend_state_1d_input(file_id: u64) -> Vec<u8> {
         });
         push_object_with_properties(bytes, "BlendState1DInput", |bytes| {
             push_uint_property(bytes, "BlendState1DInput", "inputId", 0);
+        });
+        push_blend_animation_1d(bytes, 0, 0.0);
+        push_blend_animation_1d(bytes, 1, 1.0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_empty_baseline_reset(file_id: u64) -> Vec<u8> {
+    const LAYER_STATE_RESET: u64 = 1 << 1;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 7.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "y")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 3.0, 1);
+        push_keyframe_double(bytes, 10, 13.0, 0);
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "y")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 3.0, 1);
+        push_keyframe_double(bytes, 10, 13.0, 0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineNumber", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "BlendState1DInput", |bytes| {
+            push_uint_property(bytes, "BlendState1DInput", "inputId", 0);
+            push_uint_property(bytes, "BlendState1DInput", "flags", LAYER_STATE_RESET);
         });
         push_blend_animation_1d(bytes, 0, 0.0);
         push_blend_animation_1d(bytes, 1, 1.0);
@@ -10283,6 +10467,25 @@ fn synthetic_state_machine_blend_state_direct(file_id: u64) -> Vec<u8> {
         push_object_with_properties(bytes, "BlendStateDirect", |_| {});
         push_blend_animation_direct_mix_value(bytes, 0, 25.0);
         push_blend_animation_direct_input(bytes, 1, 0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_direct_nan_mix(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 7.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "BlendStateDirect", |_| {});
+        push_blend_animation_direct_mix_value(bytes, 0, f32::NAN);
         push_object_with_properties(bytes, "ExitState", |_| {});
     })
 }
@@ -18967,6 +19170,133 @@ fn linear_animation_apply_matches_cpp_probe() {
 }
 
 #[test]
+fn invalid_keyframe_interpolator_erases_entire_keyed_object_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_linear_animation_wrong_type_interpolator_cpp.riv";
+    let bytes = synthetic_linear_animation_wrong_type_interpolator(8218);
+    let args = [
+        "--runtime-apply-animation".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    assert_eq!(cpp.artboards[0].animations[0].keyed_objects.len(), 0);
+
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    assert_eq!(
+        rust.linear_animation(0)
+            .expect("Rust animation")
+            .keyed_objects
+            .len(),
+        cpp.artboards[0].animations[0].keyed_objects.len(),
+        "wrong-type interpolator must erase the keyed object, including its valid sibling property"
+    );
+    rust.apply_linear_animation(0, 0.0, 1.0);
+    let report = rust.update_components();
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn keyed_property_importer_cursor_survives_next_animation_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_two_animation_importer_cursor_cpp.riv";
+    let bytes = synthetic_two_animation_importer_cursor(8219);
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let cpp_frames =
+        &cpp.artboards[0].animations[0].keyed_objects[0].keyed_properties[0].key_frames;
+    assert_eq!(
+        cpp_frames
+            .iter()
+            .map(|frame| (frame.frame, frame.seconds))
+            .collect::<Vec<_>>(),
+        vec![(10, 1.0), (20, 2.0)]
+    );
+    assert!(cpp.artboards[0].animations[1].keyed_objects.is_empty());
+
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let rust_frames = &rust
+        .linear_animation(0)
+        .expect("Rust animation A")
+        .keyed_objects[0]
+        .keyed_properties[0]
+        .key_frames;
+    let rust_frame_times = rust_frames
+        .iter()
+        .map(|frame| match frame {
+            RuntimeKeyFrame::Double(frame) => (frame.frame, frame.seconds),
+            other => panic!("unexpected Rust keyframe for {label}: {other:?}"),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rust_frame_times,
+        cpp_frames
+            .iter()
+            .map(|frame| (frame.frame, frame.seconds))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        rust.linear_animation(1)
+            .expect("Rust animation B")
+            .keyed_objects
+            .is_empty()
+    );
+}
+
+#[test]
+fn negative_speed_nested_remap_uses_effective_start_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_negative_speed_nested_remap_cpp.riv";
+    let bytes = synthetic_negative_speed_nested_remap(8220);
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let cpp_report = cpp.artboards[0]
+        .nested_remap_animations
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ nested remap report for {label}"));
+    assert_eq!(cpp_report.local_id, 2);
+    assert_close(
+        cpp_report
+            .animation_time
+            .unwrap_or_else(|| panic!("missing C++ remap animation for {label}")),
+        2.0,
+        "C++ negative-speed remap time",
+    );
+
+    let runtime = read_runtime_file(&bytes).expect("Rust imports negative-speed remap bytes");
+    let graph =
+        GraphFile::from_runtime_file(&runtime).expect("Rust graphs negative-speed remap bytes");
+    let rust = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        graph.artboards.first().expect("parent artboard"),
+        &graph.artboards,
+    )
+    .expect("Rust mounts the child artboard from the same bytes");
+    let rust_report = rust
+        .runtime_nested_remap_animation_reports()
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| panic!("missing Rust nested remap report for {label}"));
+    assert_eq!(rust_report.local_id, cpp_report.local_id);
+    assert_close(
+        rust_report.animation_time,
+        cpp_report.animation_time.unwrap(),
+        "Rust negative-speed remap time",
+    );
+}
+
+#[test]
 fn animation_reset_color_roundtrip_matches_pinned_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -19179,6 +19509,104 @@ fn linear_animation_instance_advance_matches_cpp_probe() {
         );
         compare_cpp_runtime_update(&cpp, &rust, &report, label);
     }
+}
+
+#[test]
+fn linear_animation_loop_value_definition_fallback_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_linear_animation_loop_value_signed_cpp.riv";
+    let bytes = synthetic_linear_animation_with_options(
+        8227,
+        0,
+        2.0,
+        10,
+        12.0,
+        1,
+        LinearAnimationFixtureOptions {
+            loop_value: 1,
+            ..Default::default()
+        },
+    );
+    let cpp_fallback = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-advance-animation".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ],
+    );
+    let cpp_fallback_value = cpp_fallback.artboards[0].runtime_animation_advances[0].loop_value;
+    assert_eq!(cpp_fallback_value, 1);
+
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let animation = rust
+        .linear_animation_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust animation instance for {label}"));
+    let definition = rust
+        .linear_animation(0)
+        .unwrap_or_else(|| panic!("missing Rust animation definition for {label}"));
+    assert_eq!(
+        i64::from(animation.loop_value(definition)),
+        cpp_fallback_value
+    );
+}
+
+#[test]
+fn linear_animation_loop_value_arbitrary_signed_override_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_linear_animation_loop_value_signed_cpp.riv";
+    let bytes = synthetic_linear_animation_with_options(
+        8227,
+        0,
+        2.0,
+        10,
+        12.0,
+        1,
+        LinearAnimationFixtureOptions {
+            loop_value: 1,
+            ..Default::default()
+        },
+    );
+    let cpp_override = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-set-animation-loop-value".to_owned(),
+            "0".to_owned(),
+            "-2".to_owned(),
+            "--runtime-advance-animation".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ],
+    );
+    let cpp_override_value = cpp_override.artboards[0].runtime_animation_advances[0].loop_value;
+    assert_eq!(cpp_override_value, -2);
+
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut animation = rust
+        .linear_animation_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust animation instance for {label}"));
+    let definition = rust
+        .linear_animation(0)
+        .unwrap_or_else(|| panic!("missing Rust animation definition for {label}"));
+    animation.set_loop_value(definition, -2);
+    assert_eq!(
+        i64::from(animation.loop_value(definition)),
+        cpp_override_value
+    );
 }
 
 #[test]
@@ -23335,6 +23763,49 @@ fn state_machine_blend_state_1d_input_matches_cpp_probe() {
 }
 
 #[test]
+fn empty_baseline_animation_reset_matches_cpp_reader_underflow_zero() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_empty_baseline_reset_cpp.riv";
+    let bytes = synthetic_state_machine_empty_baseline_reset(8222);
+    let args = [
+        "--runtime-set-state-machine-number".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    assert!(state_machine.set_number(0, 1.0));
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    let report = rust.update_components();
+
+    let cpp_x = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .and_then(|update| {
+            update
+                .components
+                .iter()
+                .find(|component| component.local_id == 1)
+        })
+        .and_then(|component| component.local_transform)
+        .map(|transform| transform[4])
+        .unwrap_or_else(|| panic!("missing C++ target transform for {label}"));
+    assert_eq!(cpp_x, 0.0, "C++ empty baseline resets x to zero");
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn state_machine_blend_state_direct_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -23391,6 +23862,44 @@ fn state_machine_blend_state_direct_matches_cpp_probe() {
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
     }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn direct_blend_nan_mix_value_skips_target_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_direct_nan_mix_cpp.riv";
+    let bytes = synthetic_state_machine_direct_nan_mix(8221);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    let report = rust.update_components();
+
+    let cpp_x = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .and_then(|update| {
+            update
+                .components
+                .iter()
+                .find(|component| component.local_id == 1)
+        })
+        .and_then(|component| component.local_transform)
+        .map(|transform| transform[4])
+        .unwrap_or_else(|| panic!("missing C++ target transform for {label}"));
+    assert_eq!(cpp_x, 7.0, "C++ ordered max/min collapses NaN to zero");
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
 
@@ -83632,8 +84141,8 @@ fn compare_animation_advance(
     );
     assert_eq!(cpp.did_loop, rust.did_loop(), "{label} didLoop mismatch");
     assert_eq!(
-        cpp.loop_value as u64,
-        rust.loop_value().unwrap_or(runtime_animation.loop_value),
+        cpp.loop_value,
+        i64::from(rust.loop_value(runtime_animation)),
         "{label} loopValue override mismatch"
     );
 }
@@ -84418,6 +84927,8 @@ struct CppArtboard {
     #[serde(rename = "objectCount")]
     object_count: usize,
     objects: Vec<Option<CppObject>>,
+    #[serde(default)]
+    animations: Vec<CppLinearAnimationDefinition>,
     #[serde(default, rename = "stateMachines")]
     state_machines: Vec<CppStateMachineDefinition>,
     #[serde(default, rename = "drawCommandStream")]
@@ -84432,6 +84943,40 @@ struct CppArtboard {
     data_binds: Vec<CppArtboardDataBind>,
     #[serde(default, rename = "nestedStateMachines")]
     nested_state_machines: Vec<CppNestedStateMachine>,
+    #[serde(default, rename = "nestedRemapAnimations")]
+    nested_remap_animations: Vec<CppNestedRemapAnimation>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppNestedRemapAnimation {
+    local_id: usize,
+    animation_time: Option<f32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppLinearAnimationDefinition {
+    keyed_objects: Vec<CppKeyedObjectDefinition>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppKeyedObjectDefinition {
+    keyed_properties: Vec<CppKeyedPropertyDefinition>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppKeyedPropertyDefinition {
+    key_frames: Vec<CppKeyFrameDefinition>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppKeyFrameDefinition {
+    frame: u64,
+    seconds: f32,
 }
 
 #[derive(Debug, Deserialize)]

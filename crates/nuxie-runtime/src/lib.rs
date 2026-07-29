@@ -47,7 +47,7 @@ pub use animation::{
 };
 pub use artboard::{
     ArtboardInstance, ExternalFontAssetError, RuntimeArtboardOccurrenceSegment, RuntimeComponents,
-    RuntimeEventProperty, RuntimeEventPropertyValue,
+    RuntimeEventProperty, RuntimeEventPropertyValue, RuntimeNestedRemapAnimationReport,
 };
 pub use components::{
     ComponentDirt, Mat2D, RuntimeComponent, RuntimeComponentCapabilities, TransformProperty,

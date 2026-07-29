@@ -996,6 +996,15 @@ pub enum RuntimeArtboardOccurrenceSegment {
     },
 }
 
+/// Probe-facing snapshot of one mounted nested remap animation occurrence.
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RuntimeNestedRemapAnimationReport {
+    pub host_local_id: usize,
+    pub local_id: usize,
+    pub animation_time: f32,
+}
+
 /// Full logical topology retained independently from the mounted artboards,
 /// matching C++ `m_listItems` and `m_artboardSizes`.
 #[derive(Debug, Clone)]
@@ -5510,6 +5519,32 @@ impl ArtboardInstance {
                         }
                         RuntimeNestedAnimationInstance::Simple { .. }
                         | RuntimeNestedAnimationInstance::Remap { .. } => None,
+                    })
+            })
+            .collect()
+    }
+
+    /// Report mounted remap occurrence time for pinned-C++ differentials.
+    #[doc(hidden)]
+    pub fn runtime_nested_remap_animation_reports(&self) -> Vec<RuntimeNestedRemapAnimationReport> {
+        self.nested_artboards
+            .iter()
+            .flat_map(|(host_local_id, nested)| {
+                nested
+                    .animations
+                    .iter()
+                    .filter_map(|animation| match animation {
+                        RuntimeNestedAnimationInstance::Remap {
+                            local_id,
+                            animation,
+                            ..
+                        } => Some(RuntimeNestedRemapAnimationReport {
+                            host_local_id: *host_local_id,
+                            local_id: *local_id,
+                            animation_time: animation.time(),
+                        }),
+                        RuntimeNestedAnimationInstance::Simple { .. }
+                        | RuntimeNestedAnimationInstance::StateMachine(_) => None,
                     })
             })
             .collect()

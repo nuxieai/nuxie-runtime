@@ -356,6 +356,7 @@ pub(crate) fn build_linear_animations<'a>(
     let mut current_animation = None;
     let mut current_keyed_object = None;
     let mut current_keyed_property = None;
+    let mut invalid_keyed_object_global_ids = Vec::<u32>::new();
 
     for global_id in start..end {
         let Some(object) = file.object(global_id) else {
@@ -382,8 +383,6 @@ pub(crate) fn build_linear_animations<'a>(
                 has_keyed_callbacks: false,
             });
             current_animation = Some(animations.len() - 1);
-            current_keyed_object = None;
-            current_keyed_property = None;
             continue;
         }
 
@@ -396,7 +395,6 @@ pub(crate) fn build_linear_animations<'a>(
                 keyed_object_target(file, slots, object)
             else {
                 current_keyed_object = None;
-                current_keyed_property = None;
                 continue;
             };
 
@@ -407,13 +405,12 @@ pub(crate) fn build_linear_animations<'a>(
                 target_local_id,
                 keyed_properties: Vec::new(),
             });
-            current_keyed_object = Some(keyed_objects.len() - 1);
-            current_keyed_property = None;
+            current_keyed_object = Some((animation_index, keyed_objects.len() - 1));
             continue;
         }
 
         if object.type_name == "KeyedProperty" {
-            let Some(keyed_object_index) = current_keyed_object else {
+            let Some((owner_animation_index, keyed_object_index)) = current_keyed_object else {
                 continue;
             };
             let Some(property_key) = object
@@ -423,7 +420,7 @@ pub(crate) fn build_linear_animations<'a>(
                 current_keyed_property = None;
                 continue;
             };
-            let keyed_object = &animations[animation_index].keyed_objects[keyed_object_index];
+            let keyed_object = &animations[owner_animation_index].keyed_objects[keyed_object_index];
             let object_id = keyed_object.object_id;
             let target_local_id = keyed_object.target_local_id;
             let Some(target) = slots
@@ -442,7 +439,7 @@ pub(crate) fn build_linear_animations<'a>(
                 continue;
             };
 
-            let keyed_objects = Arc::make_mut(&mut animations[animation_index].keyed_objects);
+            let keyed_objects = Arc::make_mut(&mut animations[owner_animation_index].keyed_objects);
             keyed_objects[keyed_object_index]
                 .keyed_properties
                 .push(RuntimeKeyedProperty {
@@ -452,21 +449,48 @@ pub(crate) fn build_linear_animations<'a>(
                     key_frames: Vec::new(),
                 });
             current_keyed_property = Some((
+                owner_animation_index,
                 keyed_object_index,
                 keyed_objects[keyed_object_index].keyed_properties.len() - 1,
+                animation_index,
             ));
             continue;
         }
 
+        if matches!(
+            object.type_name,
+            "KeyFrameDouble"
+                | "KeyFrameColor"
+                | "KeyFrameBool"
+                | "KeyFrameUint"
+                | "KeyFrameId"
+                | "KeyFrameString"
+        ) && normalized_interpolator_id(object).is_some()
+            && !key_frame_interpolator_id_resolves_to_expected_type(file, artboard_index, object)
+        {
+            if let Some((owner_animation_index, keyed_object_index, _, _)) = current_keyed_property
+            {
+                invalid_keyed_object_global_ids.push(
+                    animations[owner_animation_index].keyed_objects[keyed_object_index].global_id,
+                );
+            }
+        }
+
         if object.type_name == "KeyFrameDouble" {
-            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
+            let Some((
+                owner_animation_index,
+                keyed_object_index,
+                keyed_property_index,
+                fps_animation_index,
+            )) = current_keyed_property
+            else {
                 continue;
             };
             let frame = object.uint_property("frame").unwrap_or(0);
-            let seconds = retained_key_frame_seconds(frame, animations[animation_index].fps);
+            let seconds = retained_key_frame_seconds(frame, animations[fps_animation_index].fps);
             runtime_keyed_property_mut(
                 &mut animations,
-                animation_index,
+                owner_animation_index,
                 keyed_object_index,
                 keyed_property_index,
             )
@@ -483,14 +507,20 @@ pub(crate) fn build_linear_animations<'a>(
         }
 
         if object.type_name == "KeyFrameColor" {
-            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
+            let Some((
+                owner_animation_index,
+                keyed_object_index,
+                keyed_property_index,
+                fps_animation_index,
+            )) = current_keyed_property
+            else {
                 continue;
             };
             let frame = object.uint_property("frame").unwrap_or(0);
-            let seconds = retained_key_frame_seconds(frame, animations[animation_index].fps);
+            let seconds = retained_key_frame_seconds(frame, animations[fps_animation_index].fps);
             runtime_keyed_property_mut(
                 &mut animations,
-                animation_index,
+                owner_animation_index,
                 keyed_object_index,
                 keyed_property_index,
             )
@@ -507,14 +537,20 @@ pub(crate) fn build_linear_animations<'a>(
         }
 
         if object.type_name == "KeyFrameBool" {
-            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
+            let Some((
+                owner_animation_index,
+                keyed_object_index,
+                keyed_property_index,
+                fps_animation_index,
+            )) = current_keyed_property
+            else {
                 continue;
             };
             let frame = object.uint_property("frame").unwrap_or(0);
-            let seconds = retained_key_frame_seconds(frame, animations[animation_index].fps);
+            let seconds = retained_key_frame_seconds(frame, animations[fps_animation_index].fps);
             runtime_keyed_property_mut(
                 &mut animations,
-                animation_index,
+                owner_animation_index,
                 keyed_object_index,
                 keyed_property_index,
             )
@@ -530,14 +566,20 @@ pub(crate) fn build_linear_animations<'a>(
         }
 
         if object.type_name == "KeyFrameUint" {
-            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
+            let Some((
+                owner_animation_index,
+                keyed_object_index,
+                keyed_property_index,
+                fps_animation_index,
+            )) = current_keyed_property
+            else {
                 continue;
             };
             let frame = object.uint_property("frame").unwrap_or(0);
-            let seconds = retained_key_frame_seconds(frame, animations[animation_index].fps);
+            let seconds = retained_key_frame_seconds(frame, animations[fps_animation_index].fps);
             runtime_keyed_property_mut(
                 &mut animations,
-                animation_index,
+                owner_animation_index,
                 keyed_object_index,
                 keyed_property_index,
             )
@@ -553,14 +595,20 @@ pub(crate) fn build_linear_animations<'a>(
         }
 
         if object.type_name == "KeyFrameId" {
-            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
+            let Some((
+                owner_animation_index,
+                keyed_object_index,
+                keyed_property_index,
+                fps_animation_index,
+            )) = current_keyed_property
+            else {
                 continue;
             };
             let frame = object.uint_property("frame").unwrap_or(0);
-            let seconds = retained_key_frame_seconds(frame, animations[animation_index].fps);
+            let seconds = retained_key_frame_seconds(frame, animations[fps_animation_index].fps);
             runtime_keyed_property_mut(
                 &mut animations,
-                animation_index,
+                owner_animation_index,
                 keyed_object_index,
                 keyed_property_index,
             )
@@ -576,14 +624,20 @@ pub(crate) fn build_linear_animations<'a>(
         }
 
         if object.type_name == "KeyFrameString" {
-            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
+            let Some((
+                owner_animation_index,
+                keyed_object_index,
+                keyed_property_index,
+                fps_animation_index,
+            )) = current_keyed_property
+            else {
                 continue;
             };
             let frame = object.uint_property("frame").unwrap_or(0);
-            let seconds = retained_key_frame_seconds(frame, animations[animation_index].fps);
+            let seconds = retained_key_frame_seconds(frame, animations[fps_animation_index].fps);
             runtime_keyed_property_mut(
                 &mut animations,
-                animation_index,
+                owner_animation_index,
                 keyed_object_index,
                 keyed_property_index,
             )
@@ -602,15 +656,21 @@ pub(crate) fn build_linear_animations<'a>(
         }
 
         if object.type_name == "KeyFrameCallback" {
-            let Some((keyed_object_index, keyed_property_index)) = current_keyed_property else {
+            let Some((
+                owner_animation_index,
+                keyed_object_index,
+                keyed_property_index,
+                fps_animation_index,
+            )) = current_keyed_property
+            else {
                 continue;
             };
-            animations[animation_index].has_keyed_callbacks = true;
+            animations[owner_animation_index].has_keyed_callbacks = true;
             let frame = object.uint_property("frame").unwrap_or(0);
-            let seconds = retained_key_frame_seconds(frame, animations[animation_index].fps);
+            let seconds = retained_key_frame_seconds(frame, animations[fps_animation_index].fps);
             runtime_keyed_property_mut(
                 &mut animations,
-                animation_index,
+                owner_animation_index,
                 keyed_object_index,
                 keyed_property_index,
             )
@@ -621,6 +681,12 @@ pub(crate) fn build_linear_animations<'a>(
                 seconds,
             }));
         }
+    }
+
+    for animation in &mut animations {
+        Arc::make_mut(&mut animation.keyed_objects).retain(|keyed_object| {
+            !invalid_keyed_object_global_ids.contains(&keyed_object.global_id)
+        });
     }
 
     let templates = build_key_frame_data_bind_templates(file, artboard_index, converter_cache);
@@ -707,6 +773,21 @@ fn runtime_key_frame_interpolator(
     let local_index = usize::try_from(normalized_interpolator_id(key_frame)?).ok()?;
     let interpolator = file.artboard_local_object(artboard_index, local_index)?;
     RuntimeInterpolator::from_object(interpolator)
+}
+
+fn key_frame_interpolator_id_resolves_to_expected_type(
+    file: &RuntimeFile,
+    artboard_index: usize,
+    key_frame: &RuntimeObject,
+) -> bool {
+    let Some(local_index) =
+        normalized_interpolator_id(key_frame).and_then(|id| usize::try_from(id).ok())
+    else {
+        return false;
+    };
+    file.artboard_local_object(artboard_index, local_index)
+        .and_then(|interpolator| definition_by_type_key(interpolator.type_key))
+        .is_some_and(|definition| definition.is_a("KeyFrameInterpolator"))
 }
 
 // Mirrors src/animation/linear_animation.cpp plus keyed object/property keyframe sampling.
@@ -978,19 +1059,22 @@ impl RuntimeLinearAnimation {
     }
 
     pub(crate) fn global_to_local_seconds(&self, seconds: f32) -> f32 {
+        let (start_time, end_time) = if self.speed >= 0.0 {
+            (self.start_seconds(), self.end_seconds())
+        } else {
+            (self.end_seconds(), self.start_seconds())
+        };
         match AnimationLoop::from_loop_value(self.loop_value as i32) {
-            AnimationLoop::OneShot => seconds + self.start_seconds(),
-            AnimationLoop::Loop => {
-                positive_mod(seconds, self.duration_seconds()) + self.start_seconds()
-            }
+            AnimationLoop::OneShot => seconds + start_time,
+            AnimationLoop::Loop => positive_mod(seconds, self.duration_seconds()) + start_time,
             AnimationLoop::PingPong => {
                 let duration = self.duration_seconds();
                 let local_time = positive_mod(seconds, duration);
                 let direction = (seconds / duration) as i32 % 2;
                 if direction == 0 {
-                    local_time + self.start_seconds()
+                    local_time + start_time
                 } else {
-                    self.end_seconds() - local_time
+                    end_time - local_time
                 }
             }
         }
@@ -2038,11 +2122,18 @@ impl LinearAnimationInstance {
         self.spilled_time = 0.0;
     }
 
-    pub fn loop_value(&self) -> Option<u64> {
-        u64::try_from(self.loop_value_override).ok()
+    /// Mirrors C++ `LinearAnimationInstance::loopValue`: the `-1` sentinel
+    /// delegates to the retained definition, while every other signed value
+    /// is returned unchanged.
+    pub fn loop_value(&self, definition: &RuntimeLinearAnimation) -> i32 {
+        if self.loop_value_override == -1 {
+            definition.loop_value as i32
+        } else {
+            self.loop_value_override
+        }
     }
 
-    pub(crate) fn set_loop_value(&mut self, definition: &RuntimeLinearAnimation, value: i32) {
+    pub fn set_loop_value(&mut self, definition: &RuntimeLinearAnimation, value: i32) {
         if self.loop_value_override == value
             || (self.loop_value_override == -1 && definition.loop_value as i32 == value)
         {
@@ -2641,6 +2732,7 @@ mod tests {
 
         assert_eq!(instance.animation_index(), 7);
         assert_eq!(instance.loop_value_override, -1);
+        assert_eq!(instance.loop_value(&animation), 1);
         assert_eq!(instance.resolved_loop_kind(&animation), AnimationLoop::Loop);
 
         // linear_animation_instance.cpp:426-434 leaves the sentinel untouched
@@ -2650,6 +2742,7 @@ mod tests {
 
         instance.set_loop_value(&animation, 2);
         assert_eq!(instance.loop_value_override, 2);
+        assert_eq!(instance.loop_value(&animation), 2);
         assert_eq!(
             instance.resolved_loop_kind(&animation),
             AnimationLoop::PingPong
@@ -2657,7 +2750,12 @@ mod tests {
 
         instance.set_loop_value(&animation, -1);
         assert_eq!(instance.loop_value_override, -1);
+        assert_eq!(instance.loop_value(&animation), 1);
         assert_eq!(instance.resolved_loop_kind(&animation), AnimationLoop::Loop);
+
+        instance.set_loop_value(&animation, -2);
+        assert_eq!(instance.loop_value_override, -2);
+        assert_eq!(instance.loop_value(&animation), -2);
     }
 
     #[test]

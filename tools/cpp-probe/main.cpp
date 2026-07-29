@@ -82,6 +82,7 @@ size_t randomProviderTotalCalls();
 #include "rive/animation/listener_action.hpp"
 #include "rive/animation/listener_fire_event.hpp"
 #include "rive/animation/nested_input.hpp"
+#include "rive/animation/nested_remap_animation.hpp"
 #include "rive/animation/nested_state_machine.hpp"
 #include "rive/animation/listener_types/listener_input_type.hpp"
 #include "rive/animation/listener_types/listener_input_type_viewmodel.hpp"
@@ -337,6 +338,12 @@ struct RuntimeAnimationAdvance
     size_t animationIndex;
     float seconds;
     float mix;
+};
+
+struct RuntimeAnimationLoopValueMutation
+{
+    size_t animationIndex;
+    int value;
 };
 
 struct RuntimeStateMachineReportedEventReport
@@ -904,6 +911,8 @@ struct ProbeOptions
     std::vector<RuntimeCollapseMutation> runtimeCollapseMutations;
     std::vector<RuntimeArtboardSizeMutation> runtimeArtboardSizeMutations;
     std::vector<RuntimeAnimationApplication> runtimeAnimationApplications;
+    std::vector<RuntimeAnimationLoopValueMutation>
+        runtimeAnimationLoopValueMutations;
     std::vector<RuntimeAnimationAdvance> runtimeAnimationAdvances;
     std::vector<RuntimeStateMachineAction> runtimeStateMachineActions;
     std::vector<RuntimeViewModelInstanceStringMutation>
@@ -1266,6 +1275,24 @@ void write_nested_state_machine(std::ostream& out,
     out << '}';
 }
 
+void write_nested_remap_animation(std::ostream& out,
+                                  size_t localId,
+                                  rive::NestedRemapAnimation* nested)
+{
+    auto animation = nested->animationInstance();
+    out << "{\"localId\":" << localId;
+    out << ",\"animationTime\":";
+    if (animation == nullptr)
+    {
+        out << "null";
+    }
+    else
+    {
+        out << animation->time();
+    }
+    out << '}';
+}
+
 void write_runtime_update(std::ostream& out,
                           const LocalIds& localIds,
                           const std::vector<rive::Core*>& objects,
@@ -1489,6 +1516,14 @@ std::vector<RuntimeAnimationAdvanceReport> apply_runtime_animation_advances(
         if (animation == nullptr)
         {
             continue;
+        }
+        for (const auto& mutation :
+             options.runtimeAnimationLoopValueMutations)
+        {
+            if (mutation.animationIndex == advance.animationIndex)
+            {
+                animation->loopValue(mutation.value);
+            }
         }
         RuntimeAnimationEventReporter reporter(objects);
         bool advanced = animation->advance(advance.seconds, &reporter);
@@ -10185,6 +10220,16 @@ void write_keyed_property(std::ostream& out,
     }
     out << ",\"firstKeyFrame\":";
     write_key_frame_or_null(out, keyedProperty->first(), options);
+    out << ",\"keyFrames\":[";
+    for (size_t i = 0; i < keyedProperty->numKeyFrames(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        write_key_frame_or_null(out, keyedProperty->getKeyFrame(i), options);
+    }
+    out << ']';
     out << '}';
 }
 
@@ -13600,6 +13645,26 @@ void write_artboard(std::ostream& out,
     }
     out << ']';
 
+    out << ",\"nestedRemapAnimations\":[";
+    first = true;
+    for (size_t i = 0; i < objects.size(); ++i)
+    {
+        rive::Core* object = objects[i];
+        if (object == nullptr ||
+            !object->is<rive::NestedRemapAnimation>())
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        write_nested_remap_animation(
+            out, i, object->as<rive::NestedRemapAnimation>());
+    }
+    out << ']';
+
     out << ",\"artboardComponentLists\":[";
     first = true;
     for (size_t i = 0; i < objects.size(); ++i)
@@ -15353,6 +15418,22 @@ int main(int argc, const char* argv[])
             advance.seconds = std::strtof(argv[++i], nullptr);
             advance.mix = std::strtof(argv[++i], nullptr);
             options.runtimeAnimationAdvances.push_back(advance);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-set-animation-loop-value"))
+        {
+            if (i + 2 >= argc)
+            {
+                std::cerr << "--runtime-set-animation-loop-value requires animationIndex value\n";
+                return 2;
+            }
+            RuntimeAnimationLoopValueMutation mutation;
+            mutation.animationIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            mutation.value =
+                static_cast<int>(std::strtol(argv[++i], nullptr, 10));
+            options.runtimeAnimationLoopValueMutations.push_back(mutation);
             continue;
         }
 

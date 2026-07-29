@@ -69,8 +69,13 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   described the provisional stack base, not the active wave, and is no longer
   used for FL-C publication. There is no PR.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
-- File closure: 105 / 341. The accepted FL-C1 family adds 12 exact
-  input/listener owners; 236 later-wave rows remain pending.
+- FL-B scope correction restores the frozen 45th owner,
+  `src/importers/keyed_property_importer.cpp`, to the executable FL-B ledger.
+  `src/animation/scripted_listener_action.cpp` remains deliberately assigned
+  to FL-C; it is not a substitute FL-B row. The checker pins the exact
+  45-file FL-B membership so either omission or reassignment fails.
+- File closure: 105 / 342. The accepted FL-C1 family adds 12 exact
+  input/listener owners; 237 later-wave rows remain pending.
 - Member closure: 53 / 75 owner/member rows. FL-C1 adds
   `state_machine.inputs`; 22 later-wave rows remain.
 - Open mechanism gaps: 7 / 10. FL-G02 and FL-G06 remain closed; FL-G10 records

@@ -49,6 +49,56 @@ CITATION_RE = re.compile(r"^(cpp|rust):(.+):(\d+)(?:-(\d+))?$")
 UNBOUND_SCRIPTED_CONSTRUCTOR_RATCHET = (
     "scripted_object_unbound_constructor_enters_live_context"
 )
+FL_B_FROZEN_SCOPE_REF = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+FL_B_FROZEN_SCOPE_FILES = frozenset(
+    {
+        "src/animation/animation_reset.cpp",
+        "src/animation/animation_reset_factory.cpp",
+        "src/animation/animation_state.cpp",
+        "src/animation/animation_state_instance.cpp",
+        "src/animation/blend_animation.cpp",
+        "src/animation/blend_animation_1d.cpp",
+        "src/animation/blend_animation_direct.cpp",
+        "src/animation/blend_state.cpp",
+        "src/animation/blend_state_1d.cpp",
+        "src/animation/blend_state_1d_input.cpp",
+        "src/animation/blend_state_1d_instance.cpp",
+        "src/animation/blend_state_1d_viewmodel.cpp",
+        "src/animation/blend_state_direct.cpp",
+        "src/animation/blend_state_direct_instance.cpp",
+        "src/animation/blend_state_transition.cpp",
+        "src/animation/cubic_ease_interpolator.cpp",
+        "src/animation/cubic_interpolator.cpp",
+        "src/animation/cubic_interpolator_component.cpp",
+        "src/animation/cubic_interpolator_solver.cpp",
+        "src/animation/cubic_value_interpolator.cpp",
+        "src/animation/elastic_ease.cpp",
+        "src/animation/elastic_interpolator.cpp",
+        "src/animation/interpolating_keyframe.cpp",
+        "src/animation/keyed_object.cpp",
+        "src/animation/keyed_property.cpp",
+        "src/animation/keyframe.cpp",
+        "src/animation/keyframe_bool.cpp",
+        "src/animation/keyframe_callback.cpp",
+        "src/animation/keyframe_color.cpp",
+        "src/animation/keyframe_double.cpp",
+        "src/animation/keyframe_id.cpp",
+        "src/animation/keyframe_interpolator.cpp",
+        "src/animation/keyframe_string.cpp",
+        "src/animation/keyframe_uint.cpp",
+        "src/animation/linear_animation.cpp",
+        "src/animation/linear_animation_instance.cpp",
+        "src/animation/nested_animation.cpp",
+        "src/animation/nested_bool.cpp",
+        "src/animation/nested_linear_animation.cpp",
+        "src/animation/nested_number.cpp",
+        "src/animation/nested_remap_animation.cpp",
+        "src/animation/nested_simple_animation.cpp",
+        "src/animation/nested_trigger.cpp",
+        "src/animation/property_recorder.cpp",
+        "src/importers/keyed_property_importer.cpp",
+    }
+)
 
 
 class CheckFailure(Exception):
@@ -449,6 +499,77 @@ def expand_source_sets(
     return assignments, source_set_waves
 
 
+def validate_frozen_wave_scopes(
+    *,
+    rows: list[dict[str, Any]],
+    assignments: dict[str, str],
+    source_set_waves: dict[str, str],
+    wave_ids: set[str],
+    upstream_ref: str,
+    errors: list[str],
+) -> None:
+    seen_waves: set[str] = set()
+    for row in rows:
+        wave = str(row.get("wave", ""))
+        if wave in seen_waves:
+            errors.append(f"duplicate frozen wave scope for {wave!r}")
+            continue
+        seen_waves.add(wave)
+        if wave not in wave_ids:
+            errors.append(f"frozen wave scope has unknown wave {wave!r}")
+
+        files = [str(value) for value in row.get("files", [])]
+        expected_file_count = row.get("expected_file_count")
+        if not isinstance(expected_file_count, int) or expected_file_count < 1:
+            errors.append(
+                f"frozen wave {wave} has invalid expected_file_count "
+                f"{expected_file_count!r}"
+            )
+        elif len(files) != expected_file_count:
+            errors.append(
+                f"frozen wave {wave} declares {len(files)} files; "
+                f"expected {expected_file_count}"
+            )
+        duplicates = duplicate_values(files)
+        if duplicates:
+            errors.append(
+                f"frozen wave {wave} has duplicate files: {', '.join(duplicates)}"
+            )
+
+        expanded_files = {
+            path
+            for path, source_set in assignments.items()
+            if source_set_waves.get(source_set) == wave
+        }
+        frozen_files = set(files)
+        if wave == "FL-B" and upstream_ref == FL_B_FROZEN_SCOPE_REF:
+            if expected_file_count != len(FL_B_FROZEN_SCOPE_FILES):
+                errors.append(
+                    "pinned frozen wave FL-B expected_file_count must remain "
+                    f"{len(FL_B_FROZEN_SCOPE_FILES)}"
+                )
+            if frozen_files != FL_B_FROZEN_SCOPE_FILES:
+                missing = sorted(FL_B_FROZEN_SCOPE_FILES - frozen_files)
+                unexpected = sorted(frozen_files - FL_B_FROZEN_SCOPE_FILES)
+                errors.append(
+                    "pinned frozen wave FL-B literal membership differs from "
+                    f"{FL_B_FROZEN_SCOPE_REF}: missing={missing!r}, "
+                    f"unexpected={unexpected!r}"
+                )
+        if expanded_files != frozen_files:
+            missing = sorted(frozen_files - expanded_files)
+            unexpected = sorted(expanded_files - frozen_files)
+            errors.append(
+                f"frozen wave {wave} membership differs from expanded source scope: "
+                f"missing={missing!r}, unexpected={unexpected!r}"
+            )
+    if upstream_ref == FL_B_FROZEN_SCOPE_REF and "FL-B" not in seen_waves:
+        errors.append(
+            "missing pinned frozen wave scope for FL-B at "
+            f"{FL_B_FROZEN_SCOPE_REF}"
+        )
+
+
 def validate_file_rows(
     *,
     rows: list[dict[str, Any]],
@@ -671,6 +792,14 @@ def check(
         repo_root=repo_root,
         rive_runtime_dir=rive_runtime_dir,
         wave_ids=wave_ids,
+        errors=errors,
+    )
+    validate_frozen_wave_scopes(
+        rows=list(ledger.get("frozen_wave_scope", [])),
+        assignments=assignments,
+        source_set_waves=source_set_waves,
+        wave_ids=wave_ids,
+        upstream_ref=upstream_ref,
         errors=errors,
     )
     file_rows, file_status_counts = validate_file_rows(

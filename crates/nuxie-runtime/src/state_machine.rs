@@ -13,7 +13,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
+mod animation_reset_factory;
 mod bindables;
+mod blend_state_direct_instance;
 mod data_bind_template;
 mod data_converter_binding;
 mod event_report;
@@ -68,6 +70,9 @@ mod transition_property_comparator;
 mod transition_property_viewmodel_comparator;
 mod transition_trigger_condition;
 mod transition_viewmodel_condition;
+use animation_reset_factory::{AnimationReset, AnimationResetFactory};
+#[cfg(test)]
+use animation_reset_factory::{AnimationResetColorValue, AnimationResetEntry};
 pub(crate) use bindables::{
     RuntimeBindableArtboard, RuntimeBindableAsset, RuntimeBindableAssetDefaultViewModelSource,
     RuntimeBindableAssetValue, RuntimeBindableBoolean, RuntimeBindableColor, RuntimeBindableEnum,
@@ -88,6 +93,7 @@ pub(crate) use bindables::{
     runtime_bindable_view_models, runtime_default_view_model_triggers,
     runtime_number_default_view_model_source_for_instance,
 };
+pub(crate) use blend_state_direct_instance::BlendStateDirectInstance;
 use data_bind_template::{
     RuntimeStateMachineDataBindTemplate, runtime_state_machine_data_bind_templates,
 };
@@ -130,13 +136,14 @@ use scripted_listener_action::{
 };
 use scripted_transition_condition::RuntimeScriptedTransitionCondition;
 use state_instance::RuntimeStateInstance;
+use state_machine::RuntimeBlendAnimationHandle;
 pub use state_machine::RuntimeStateMachine;
-use state_machine::{AnimationReset, AnimationResetFactory, next_view_model_trigger_layer_id};
+use state_machine::next_view_model_trigger_layer_id;
 pub(crate) use state_machine::{
-    BlendState1DInstance, BlendStateDirectInstance, RuntimeBlendAnimation1D,
-    RuntimeBlendAnimationDirect, RuntimeBlendState1D, RuntimeBlendState1DSource,
-    RuntimeBlendStateDirect, RuntimeDirectBlendSource, RuntimeTransitionInterpolator,
-    TransitionEvaluationContext, build_state_machines, build_state_machines_with_action_catalog,
+    BlendState1DInstance, RuntimeBlendAnimation1D, RuntimeBlendAnimationDirect,
+    RuntimeBlendState1D, RuntimeBlendState1DSource, RuntimeBlendStateDirect,
+    RuntimeDirectBlendSource, RuntimeTransitionInterpolator, TransitionEvaluationContext,
+    build_state_machines, build_state_machines_with_action_catalog,
 };
 pub(crate) use state_machine_fire_action::{
     RuntimeStateMachineFireAction, StateMachineFireOccurrence, perform_state_machine_fire_actions,

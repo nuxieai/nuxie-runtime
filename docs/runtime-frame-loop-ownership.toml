@@ -129,7 +129,7 @@ steady = false
 faithful = 105
 adapted = 0
 divergent-by-decision = 0
-pending = 236
+pending = 237
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
@@ -170,6 +170,57 @@ id = "FL-E"
 sequence = 5
 depends_on = ["FL-A", "FL-D"]
 boundary = "Live Artboard draw integration through the existing Renderer/RenderFactory API."
+
+[[frozen_wave_scope]]
+wave = "FL-B"
+expected_file_count = 45
+files = [
+  "src/animation/animation_reset.cpp",
+  "src/animation/animation_reset_factory.cpp",
+  "src/animation/animation_state.cpp",
+  "src/animation/animation_state_instance.cpp",
+  "src/animation/blend_animation.cpp",
+  "src/animation/blend_animation_1d.cpp",
+  "src/animation/blend_animation_direct.cpp",
+  "src/animation/blend_state.cpp",
+  "src/animation/blend_state_1d.cpp",
+  "src/animation/blend_state_1d_input.cpp",
+  "src/animation/blend_state_1d_instance.cpp",
+  "src/animation/blend_state_1d_viewmodel.cpp",
+  "src/animation/blend_state_direct.cpp",
+  "src/animation/blend_state_direct_instance.cpp",
+  "src/animation/blend_state_transition.cpp",
+  "src/animation/cubic_ease_interpolator.cpp",
+  "src/animation/cubic_interpolator.cpp",
+  "src/animation/cubic_interpolator_component.cpp",
+  "src/animation/cubic_interpolator_solver.cpp",
+  "src/animation/cubic_value_interpolator.cpp",
+  "src/animation/elastic_ease.cpp",
+  "src/animation/elastic_interpolator.cpp",
+  "src/animation/interpolating_keyframe.cpp",
+  "src/animation/keyed_object.cpp",
+  "src/animation/keyed_property.cpp",
+  "src/animation/keyframe.cpp",
+  "src/animation/keyframe_bool.cpp",
+  "src/animation/keyframe_callback.cpp",
+  "src/animation/keyframe_color.cpp",
+  "src/animation/keyframe_double.cpp",
+  "src/animation/keyframe_id.cpp",
+  "src/animation/keyframe_interpolator.cpp",
+  "src/animation/keyframe_string.cpp",
+  "src/animation/keyframe_uint.cpp",
+  "src/animation/linear_animation.cpp",
+  "src/animation/linear_animation_instance.cpp",
+  "src/animation/nested_animation.cpp",
+  "src/animation/nested_bool.cpp",
+  "src/animation/nested_linear_animation.cpp",
+  "src/animation/nested_number.cpp",
+  "src/animation/nested_remap_animation.cpp",
+  "src/animation/nested_simple_animation.cpp",
+  "src/animation/nested_trigger.cpp",
+  "src/animation/property_recorder.cpp",
+  "src/importers/keyed_property_importer.cpp",
+]
 
 [[import_ledger]]
 id = "runtime-drawing"
@@ -212,7 +263,11 @@ static_closure = "Component virtual update dispatch, dependency sorting, transfo
 [[source_set]]
 id = "animation-values"
 wave = "FL-B"
-include = ["src/animation/*.cpp", "src/animation/**/*.cpp"]
+include = [
+  "src/animation/*.cpp",
+  "src/animation/**/*.cpp",
+  "src/importers/keyed_property_importer.cpp",
+]
 exclude = [
   "src/animation/*state*.cpp",
   "src/animation/*transition*.cpp",
@@ -228,6 +283,7 @@ exclude = [
 rust_modules = [
   "crates/nuxie-runtime/src/animation.rs",
   "crates/nuxie-runtime/src/artboard.rs",
+  "crates/nuxie-runtime/src/state_machine/animation_reset_factory.rs",
 ]
 static_closure = "Animation definitions, keyed values, interpolators, and reset owners are reachable from animation/state-machine advance even when absent from the sampled corpus."
 
@@ -242,6 +298,7 @@ exclude = []
 rust_modules = [
   "crates/nuxie-runtime/src/animation.rs",
   "crates/nuxie-runtime/src/state_machine.rs",
+  "crates/nuxie-runtime/src/state_machine/blend_state_direct_instance.rs",
 ]
 static_closure = "Blend-state definitions and instances are virtual animation owners reached through state-machine layer advance."
 
@@ -375,7 +432,7 @@ status = "faithful"
 upstream = "src/animation/animation_reset.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/animation_reset_factory.rs"]
 dynamically_reached = true
 status = "pending"
 
@@ -383,7 +440,7 @@ status = "pending"
 upstream = "src/animation/animation_reset_factory.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/animation_reset_factory.rs"]
 dynamically_reached = true
 status = "pending"
 
@@ -479,7 +536,7 @@ status = "pending"
 upstream = "src/animation/blend_state_direct_instance.cpp"
 source_set = "blend-animation-states"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/blend_state_direct_instance.rs"]
 dynamically_reached = true
 status = "pending"
 
@@ -1110,6 +1167,14 @@ wave = "FL-C"
 rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_viewmodel_condition.rs"]
 dynamically_reached = true
 status = "faithful"
+
+[[file]]
+upstream = "src/importers/keyed_property_importer.cpp"
+source_set = "animation-values"
+wave = "FL-B"
+rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+dynamically_reached = false
+status = "pending"
 
 [[file]]
 upstream = "src/artboard.cpp"
@@ -3272,7 +3337,7 @@ cpp_files = [
   "src/animation/animation_reset.cpp",
   "src/animation/animation_reset_factory.cpp",
 ]
-rust_file = "crates/nuxie-runtime/src/state_machine/state_machine.rs"
+rust_file = "crates/nuxie-runtime/src/state_machine/animation_reset_factory.rs"
 rust_anchor = "pub(super) struct AnimationReset"
 status = "pending"
 

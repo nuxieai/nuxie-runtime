@@ -11,6 +11,7 @@ default = ["renderer"]
 renderer = ["dep:nuxie-renderer"]
 scripting = [
     "dep:ed25519-dalek",
+    "dep:nux-container",
     "dep:nuxie-scripting",
     "dep:serde",
     "dep:serde_json",
@@ -20,6 +21,7 @@ scripting = [
 [dependencies]
 anyhow = "1"
 ed25519-dalek = { version = "2", default-features = false, features = ["std"], optional = true }
+nux-container = { path = "../nux-container", optional = true }
 nuxie-binary = { path = "../nuxie-binary" }
 nuxie-graph = { path = "../nuxie-graph" }
 nuxie-render-api = { path = "../nuxie-render-api" }

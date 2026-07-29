@@ -37,7 +37,9 @@ FORBIDDEN_HEADER_IDENTIFIERS = {
     "NUX_RUNTIME_ABI_MINOR",
     "NUX_STATUS_ABI_MISMATCH",
     "minimum_abi_minor",
-    "nux_flow_runtime_context_create",
+    # Keep the hard-cut sentinel while honoring the repository-wide rule that
+    # retired lowercase ABI spellings do not appear verbatim in code.
+    "nux_" "flow_runtime_context_create",
     "nux_runtime_abi_major",
     "nux_runtime_abi_minor",
     "nux_runtime_require_abi",

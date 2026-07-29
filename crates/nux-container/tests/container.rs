@@ -27,18 +27,17 @@ fn writer_reader_signature_and_roundtrip_form_a_complete_tracer_path() {
         "experience-fixture"
     );
     assert!(package.member("scene").expect("scene").starts_with(b"RIVE"));
-    assert_eq!(
-        verify_signature(
-            &package,
-            [(
-                TEST_ONLY_DEV_KEY_ID,
-                LazyLock::force(&TEST_ONLY_DEV_KEYPAIR).public_key(),
-            )],
-        ),
-        SignatureVerification::Verified {
-            key_id: TEST_ONLY_DEV_KEY_ID.to_owned(),
-        }
-    );
+    let SignatureVerification::Verified { key_id, scene } = verify_signature(
+        &package,
+        [(
+            TEST_ONLY_DEV_KEY_ID,
+            LazyLock::force(&TEST_ONLY_DEV_KEYPAIR).public_key(),
+        )],
+    ) else {
+        panic!("golden package signature must verify");
+    };
+    assert_eq!(key_id, TEST_ONLY_DEV_KEY_ID);
+    assert_eq!(scene.bytes(), package.member("scene").expect("scene"));
     validate_nux_roundtrip(&bytes).expect("writer output is canonical");
 }
 

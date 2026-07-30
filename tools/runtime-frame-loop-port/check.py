@@ -448,7 +448,11 @@ def rust_nested_event_owner_detector_binary() -> pathlib.Path:
 def rust_nested_event_owner_analysis(
     source: str,
     audio_aliases: tuple[str, ...] = (),
-) -> tuple[dict[str, tuple[int, ...]], frozenset[str]]:
+) -> tuple[
+    dict[str, tuple[int, ...]],
+    dict[str, tuple[int, ...]],
+    frozenset[str],
+]:
     """Resolve guarded ownership paths with syn and return fail-closed hits."""
 
     result = subprocess.run(
@@ -469,6 +473,12 @@ def rust_nested_event_owner_analysis(
         "dispatch": [],
         "audio": [],
     }
+    sites: dict[str, list[int]] = {
+        "collection": [],
+        "selection": [],
+        "dispatch": [],
+        "audio": [],
+    }
     aliases: set[str] = set()
     for line in result.stdout.splitlines():
         fields = line.split()
@@ -476,17 +486,19 @@ def rust_nested_event_owner_analysis(
             aliases.add(fields[1])
         elif (
             len(fields) == 3
-            and fields[0] == "hit"
+            and fields[0] in {"hit", "site"}
             and fields[1] in hits
             and fields[2].isdigit()
         ):
-            hits[fields[1]].append(int(fields[2]))
+            target = hits if fields[0] == "hit" else sites
+            target[fields[1]].append(int(fields[2]))
         else:
             raise CheckFailure(
                 f"invalid syn-based nested-event ownership detector output: {line!r}"
             )
     return (
         {kind: tuple(sorted(set(offsets))) for kind, offsets in hits.items()},
+        {kind: tuple(sorted(set(offsets))) for kind, offsets in sites.items()},
         frozenset(aliases),
     )
 
@@ -494,7 +506,7 @@ def rust_nested_event_owner_analysis(
 def nested_event_audio_use_aliases(source: str) -> set[str]:
     """Collect AST-resolved exported aliases for an owned audio function."""
 
-    return set(rust_nested_event_owner_analysis(source)[1])
+    return set(rust_nested_event_owner_analysis(source)[2])
 
 
 def nested_event_owner_boundary_hits(
@@ -502,14 +514,16 @@ def nested_event_owner_boundary_hits(
     kind: str,
     *,
     audio_aliases: Iterable[str] = (),
+    count_sites: bool = False,
 ) -> list[int]:
     """Find resolved or fail-closed event mechanics outside the owner module."""
 
     aliases = tuple(sorted(set(audio_aliases)))
-    hits, _ = rust_nested_event_owner_analysis(source, aliases)
-    if kind not in hits:
+    hits, sites, _ = rust_nested_event_owner_analysis(source, aliases)
+    selected = sites if count_sites else hits
+    if kind not in selected:
         raise ValueError(f"unknown nested-event boundary detector kind: {kind}")
-    return list(hits[kind])
+    return list(selected[kind])
 
 
 def read_toml(path: pathlib.Path) -> dict[str, Any]:
@@ -1486,6 +1500,33 @@ def check(
     duplicates = duplicate_values(ratchet_ids)
     if duplicates:
         errors.append(f"duplicate ratchet ids: {', '.join(duplicates)}")
+    owner_boundary_registry: dict[tuple[str, str], int] = {}
+    for row in gaps.get("owner_boundary_allow", []):
+        file = str(row.get("file", ""))
+        kind = str(row.get("kind", ""))
+        expected = row.get("expected_occurrences")
+        key = (file, kind)
+        if (
+            not file
+            or pathlib.PurePosixPath(file).is_absolute()
+            or ".." in pathlib.PurePosixPath(file).parts
+            or kind not in set(NESTED_EVENT_OWNER_BOUNDARY_RATCHETS.values())
+            or not isinstance(expected, int)
+            or isinstance(expected, bool)
+            or expected < 1
+        ):
+            errors.append(
+                "owner boundary registry row must have a relative file, "
+                "known kind, and positive expected_occurrences"
+            )
+            continue
+        if key in owner_boundary_registry:
+            errors.append(
+                f"duplicate owner boundary registry row: {file} {kind}"
+            )
+            continue
+        owner_boundary_registry[key] = expected
+    validated_owner_boundary_registry: set[tuple[str, str]] = set()
     semantic_resolver_seam_exists = any(
         re.search(
             r"\btrait\s+SemanticNodeResolver\b",
@@ -1567,11 +1608,32 @@ def check(
                         == NESTED_EVENT_OWNER_MODULE
                     ):
                         continue
+                    detector_kind = NESTED_EVENT_OWNER_BOUNDARY_RATCHETS[
+                        ratchet_id
+                    ]
                     found_offsets = nested_event_owner_boundary_hits(
                         source,
-                        NESTED_EVENT_OWNER_BOUNDARY_RATCHETS[ratchet_id],
+                        detector_kind,
                         audio_aliases=nested_event_audio_aliases,
                     )
+                    relative_file = path.relative_to(repo_root).as_posix()
+                    registry_key = (relative_file, detector_kind)
+                    expected = owner_boundary_registry.get(registry_key)
+                    if expected is not None:
+                        validated_owner_boundary_registry.add(registry_key)
+                        site_offsets = nested_event_owner_boundary_hits(
+                            source,
+                            detector_kind,
+                            audio_aliases=nested_event_audio_aliases,
+                            count_sites=True,
+                        )
+                        if len(site_offsets) != expected:
+                            errors.append(
+                                "owner boundary registry "
+                                f"{relative_file} {detector_kind} expected "
+                                f"{expected}, found {len(site_offsets)}"
+                            )
+                        found_offsets = []
                 else:
                     assert pattern is not None
                     found_offsets = [
@@ -1639,6 +1701,13 @@ def check(
         if require_closed and count != 0:
             errors.append(
                 f"closed frame loop required but ratchet {ratchet_id} has {count} hits"
+            )
+
+    for (file, kind), expected in sorted(owner_boundary_registry.items()):
+        if (file, kind) not in validated_owner_boundary_registry:
+            errors.append(
+                f"owner boundary registry {file} {kind} expected "
+                f"{expected}, found 0"
             )
 
     if errors:

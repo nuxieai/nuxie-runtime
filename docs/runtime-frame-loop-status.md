@@ -4,12 +4,13 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: P4 round-five corrective production, tests, ratchets, and spec prose
-  on top of the immutable E2 candidate
-  `95333c41fe68ab6a2a5486874ffd0c59cd4381be`. The orchestrator-owned E3 trace
-  regeneration and fingerprint-last provenance update remain pending; this
-  corrective does not touch the evidence directory or claim those checks
-  green.
+- Phase: E3 evidence publication for immutable combined production candidate
+  `691c5262fb990e73bf13187ea923fe54341c25bc`. The round-five corrective adds
+  per-source chain atomicity, retained-arena resolution for every consumer,
+  repository-wide semantic guards, and recursive tracked-receipt validation
+  on top of E2 publication `eaf8a6f6`. The five SHA-stamped floor4 receipts
+  are operative; the final trace is regenerated fingerprint-last and the
+  complete structural/provenance checker is green on this exact tree.
 - Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
   on that provisional implementation without claiming FL-B verification.
   FL-C's corrected 56-file/eight-member lane map is
@@ -829,9 +830,8 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Complete and preserve the P4 round-five corrective candidate without
-   regenerating trace evidence in the implementation lane.
-2. Let the orchestrator publish E3 by regenerating the trace and updating its
-   source fingerprint and provenance last.
-3. Request the independent round-five FL-B, FL-C5 oracle, and FL-C5 standards
-   reviews against E3.
+1. Publish the staged E3 evidence/docs packet without changing immutable
+   production candidate `691c5262fb990e73bf13187ea923fe54341c25bc`.
+2. Request the independent round-five FL-B reacceptance review against E3.
+3. Request the independent round-five FL-C5 oracle review against E3.
+4. Request the independent round-five FL-C5 standards review against E3.

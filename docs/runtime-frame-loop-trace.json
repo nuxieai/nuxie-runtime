@@ -7848,16 +7848,16 @@
   },
   "mode": "frame-only counters reset after construction and before samples",
   "rust_candidate_source": {
-    "file_count": 7306,
+    "file_count": 7310,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "802b384ebde991bf4178be71ee56a2842ef75e6918cc302160746456d828ef59"
+    "sha256": "51eedc8f4f8484825bde436a2578a7bd8d37f49265e9b86b0415621c68da7b91"
   },
-  "rust_ref": "afcb705806e0f8d0d21196064cc9456daeb237b9",
+  "rust_ref": "e729dd745db1850d0fda60b4631929e40ffbfba7",
   "rust_runner_provenance": {
     "candidate_source": {
-      "file_count": 7306,
+      "file_count": 7310,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "802b384ebde991bf4178be71ee56a2842ef75e6918cc302160746456d828ef59"
+      "sha256": "51eedc8f4f8484825bde436a2578a7bd8d37f49265e9b86b0415621c68da7b91"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [

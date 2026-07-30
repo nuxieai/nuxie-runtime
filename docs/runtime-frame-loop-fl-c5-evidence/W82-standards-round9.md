@@ -1,0 +1,31 @@
+## Findings
+
+- **BLOCKING — detector rigor is still structurally evadable.** I executed the exact content-addressed detector for this source digest. All recorded W77 forms now register, but these newly invented, valid Rust forms produced **no hit**:
+
+  1. `paste! { owner.[<notify_ events>](...) }`
+  2. `crate::bridge::Anim::StateMachine(...)`
+  3. A chained `defs → bridge` module re-export.
+  4. `<<Host as Carrier>::Anim>::StateMachine(...)`
+  5. Parenthesized alias: `type Anim = (RuntimeNestedAnimationInstance);`
+
+  Macro scanning compares only complete identifier tokens, so composed identifiers escape ([main.rs:560](/Users/levi/dev/worktrees/nuxie-e7-verify/tools/runtime-frame-loop-port/rust-owner-detector/src/main.rs:560)); successful parsing prevents the lexical fallback ([main.rs:781](/Users/levi/dev/worktrees/nuxie-e7-verify/tools/runtime-frame-loop-port/rust-owner-detector/src/main.rs:781)). The permanent `paste!` negative retains the complete `StateMachineInstance` token, so it does not prove identifier composition ([test_check.py:4441](/Users/levi/dev/worktrees/nuxie-e7-verify/tools/runtime-frame-loop-port/test_check.py:4441)).
+
+  Module resolution strips only `self`, not `crate`/`super` ([main.rs:172](/Users/levi/dev/worktrees/nuxie-e7-verify/tools/runtime-frame-loop-port/rust-owner-detector/src/main.rs:172)); child modules cannot see partially resolved parent bindings ([main.rs:299](/Users/levi/dev/worktrees/nuxie-e7-verify/tools/runtime-frame-loop-port/rust-owner-detector/src/main.rs:299)). Pattern visitors also discard qualified-self information ([main.rs:658](/Users/levi/dev/worktrees/nuxie-e7-verify/tools/runtime-frame-loop-port/rust-owner-detector/src/main.rs:658)). This contradicts the claimed fail-closed future-spelling policy ([closure:925](/Users/levi/dev/worktrees/nuxie-e7-verify/docs/runtime-frame-loop-fl-c5-closure.md:925)).
+
+- **BLOCKING — the publication checker remains in its weaker planning state.** The active FL-C5 family still declares `checklist_state = "planning"` ([ownership:22](/Users/levi/dev/worktrees/nuxie-e7-verify/docs/runtime-frame-loop-ownership.toml:22)), despite E7 being published for independent candidate review ([status:7](/Users/levi/dev/worktrees/nuxie-e7-verify/docs/runtime-frame-loop-status.md:7)). Planning mode accepts unchecked rows; candidate mode requires completed rows ([check.py:1074](/Users/levi/dev/worktrees/nuxie-e7-verify/tools/runtime-frame-loop-port/check.py:1074), [tests:471](/Users/levi/dev/worktrees/nuxie-e7-verify/tools/runtime-frame-loop-port/test_check.py:471)). The current rows happen to be checked, but the frozen publication has not enabled its binding candidate-stage invariant. Repository law permits publication only with a closed checklist ([PORTING.md:61](/Users/levi/dev/worktrees/nuxie-e7-verify/docs/PORTING.md:61)).
+
+- **NON-BLOCKING — FL-G03’s disposition is current, but its citations are incomplete.** It is explicitly open and reassigned to round nine ([gaps:59](/Users/levi/dev/worktrees/nuxie-e7-verify/docs/runtime-frame-loop-gaps.toml:59)). I classify the 30→11 topology difference as a safe owner-boundary adaptation: the actual nested batching/ancestor path is visible at [state_machine_instance.rs:12934](/Users/levi/dev/worktrees/nuxie-e7-verify/crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12934), followed by bubbling, audio unwind, deferred error retention, and settlement at [state_machine_instance.rs:13115](/Users/levi/dev/worktrees/nuxie-e7-verify/crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:13115). Those explanatory locations should be added to FL-G03’s citations.
+
+- **NON-BLOCKING — publication prose has stale pointers.** The live `NEXT` correctly requests round-nine review of `afcb7058` ([status:842](/Users/levi/dev/worktrees/nuxie-e7-verify/docs/runtime-frame-loop-status.md:842)), but the top-level “Canonical NEXT” still says to begin FL-C5 ([parity status:1010](/Users/levi/dev/worktrees/nuxie-e7-verify/docs/parity-closeout-status.md:1010)). Evidence README/checklist wording also still says E6 ([README:31](/Users/levi/dev/worktrees/nuxie-e7-verify/docs/runtime-frame-loop-fl-c5-evidence/README.md:31), [closure:996](/Users/levi/dev/worktrees/nuxie-e7-verify/docs/runtime-frame-loop-fl-c5-closure.md:996)).
+
+## Verified
+
+- Every prior evasion was replayed successfully: function/cross-file aliases, UFCS, spaced paths, raw identifiers, type aliases, plain/glob imports, method and trait indirection, parse-failure fallback, `cfg(not(test))`, mixed `any(test, …)`, direct module re-export, resolved/UNRESOLVED associated aliases, attribute macro, and the original `paste!` form.
+- `cfg(any(test, feature="tools"))` registers as production; `cfg(all(feature="tools", test))` and `cfg(test)` are excluded.
+- Clean fingerprint reproduced exactly: `file_count=7306`, `sha256=802b384ebde991bf4178be71ee56a2842ef75e6918cc302160746456d828ef59`, matching candidate and runner provenance ([trace:7850](/Users/levi/dev/worktrees/nuxie-e7-verify/docs/runtime-frame-loop-trace.json:7850)).
+- Registry probes produced `1` site with a string tag, `1` with a misleading comment, and `1/2/0` for exact/upward/downward occurrence cases. The checker rejects both drift directions ([check.py:1621](/Users/levi/dev/worktrees/nuxie-e7-verify/tools/runtime-frame-loop-port/check.py:1621), [check.py:1706](/Users/levi/dev/worktrees/nuxie-e7-verify/tools/runtime-frame-loop-port/check.py:1706)).
+- The detector is now a standalone workspace with a committed lockfile; `cargo metadata --locked` and `cargo tree --locked --offline` resolve correctly ([Cargo.toml:1](/Users/levi/dev/worktrees/nuxie-e7-verify/tools/runtime-frame-loop-port/rust-owner-detector/Cargo.toml:1)).
+- A genuinely fresh `--locked` build could not be completed because this reviewer sandbox rejects every writable temporary/target directory with `Operation not permitted`. The exact cached binary executed successfully, and the live checker body passed.
+- Clean porcelain, `cargo fmt --all -- --check`, and `git diff --check 99ef7700..e62803df` passed.
+
+**REJECT**

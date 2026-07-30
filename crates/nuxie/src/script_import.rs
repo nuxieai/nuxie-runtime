@@ -1,6 +1,7 @@
 //! Cryptographically bound import authority for remote scripted artifacts.
 
 use ed25519_dalek::{Signature, VerifyingKey};
+use nux_container::VerifiedScene;
 use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
 
@@ -101,6 +102,21 @@ impl ScriptImportCapability {
             return Err(ScriptAuthenticationError::ArtifactHashMismatch);
         }
 
+        Ok(Self(ScriptImportAuthority::Authenticated {
+            artifact_size,
+            artifact_sha256,
+        }))
+    }
+
+    /// Bind executable script authority to scene bytes returned by the signed
+    /// package verifier.
+    pub fn authenticated_for_verified_scene(
+        verified_scene: VerifiedScene<'_>,
+    ) -> Result<Self, ScriptAuthenticationError> {
+        let artifact_bytes = verified_scene.bytes();
+        let artifact_size = u64::try_from(artifact_bytes.len())
+            .map_err(|_| ScriptAuthenticationError::ArtifactSizeMismatch)?;
+        let artifact_sha256 = Sha256::digest(artifact_bytes).into();
         Ok(Self(ScriptImportAuthority::Authenticated {
             artifact_size,
             artifact_sha256,

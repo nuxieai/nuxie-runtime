@@ -23,12 +23,15 @@ env:
   DEPOT_TOOLS_REF: 1709e20d5ca2afe97bfa726168719c3b77eb9883
 
 jobs:
-  # Pin the immutable, administrator-reviewed workflow boundary. Its internal
-  # event check keeps fork pull requests on GitHub-hosted macOS while trusted
-  # same-repository changes can use the selected Nuxie runner group.
-  apple-runtime-ci:
-    name: Apple runtime
-    uses: nuxieai/nuxie-runtime/.github/workflows/_trusted-macos.yml@6531b8a826ace45a5812f3efa1dd51205540d67d
+  # This workflow definition is part of the pull request, so keep every local
+  # reusable-workflow job on an ephemeral GitHub-hosted runner. Protected refs
+  # may invoke the reusable workflow separately when self-hosted execution is
+  # required.
+  trusted-macos-ci:
+    name: Trusted macOS
+    uses: ./.github/workflows/_trusted-macos.yml
+    with:
+      force_hosted: true
 
   port-manifest:
     name: Upstream C++ port manifest
@@ -56,10 +59,10 @@ jobs:
       - name: Verify upstream C++ port manifest
         run: make port-manifest-check
 
-  # The administrator-pinned reusable workflow above owns the existing V2
-  # gate but does not export its raw summaries. Run the same floor on a hosted
-  # runner so the scorecard consumes real per-commit output and exit codes,
-  # never an inferred green status.
+  # The hosted reusable workflow above owns the existing V2 gate but does not
+  # export its raw summaries. Run the same floor separately so the scorecard
+  # consumes real per-commit output and exit codes, never an inferred green
+  # status.
   parity-runtime-evidence:
     name: Parity runtime floor evidence
     runs-on: macos-14

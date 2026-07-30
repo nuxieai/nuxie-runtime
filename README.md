@@ -12,7 +12,6 @@ commands, a public Rust API, and a C ABI for embedded SDK integrations.
 
 - `nuxie`: public Rust API
 - `nuxie-renderer`: default pure-Rust renderer with native and browser backends
-- `nux-apple-runtime`: versioned Apple product ABI and packaged XCFramework
 - `nux-capi`: C SDK surface and `nux_capi.h`
 - `nuxie-runtime`: artboard, animation, state-machine, and draw runtime
 - `nuxie-binary`: `.riv` importer
@@ -39,10 +38,9 @@ dependency only; it is not linked into or shipped with the Nuxie SDK.
 The fixture bootstrap pins and verifies the small upstream test-asset set;
 those `.riv` binaries are intentionally not stored in this repository.
 
-The Apple SDK boundary can be qualified locally with
-`make apple-runtime-check` and packaged with
-`make apple-runtime-xcframework`. Publishing is tag-only and intentionally
-separate from normal CI; see [Apple runtime releases](docs/apple-runtime-release.md).
+The Apple product FFI boundary and its binary packaging and releases are owned
+by the [nuxie-ios repository](https://github.com/nuxieai/nuxie-ios). This
+repository remains the platform-independent engine and format authority.
 
 ## License
 

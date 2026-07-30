@@ -1,4 +1,4 @@
-.PHONY: fixtures schema check test inspect graph cpp-probe cpp-probe-scripted cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-runtime-ref-check perf-hot-loop perf-json browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke apple-runtime-check apple-runtime-header-smoke apple-runtime-release-panic-smoke apple-runtime-xcframework size-report parity-scorecard parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed b6-audit-check
+.PHONY: fixtures schema check test inspect graph cpp-probe cpp-probe-scripted cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-wgpu-backend-check renderer-wgpu-consumer-check renderer-decoder-oracle renderer-fuzz-replay renderer-golden renderer-rust-replay-release renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline renderer-perf-runners renderer-perf renderer-perf-parity-gate r4-timing-gate r4-timing-gate-tools renderer-counter-runners perf-counter-compare perf-compare perf-corpus perf-runtime-ref-check perf-hot-loop perf-json browser-renderer-build browser-renderer-smoke browser-renderer-gpu-smoke capi-smoke size-report parity-scorecard parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed b6-audit-check
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
@@ -393,20 +393,6 @@ capi-smoke: fixtures
 	mkdir -p target/capi-smoke
 	$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/nux-capi/include -o target/capi-smoke/capi_smoke crates/nux-capi/smoke/capi_smoke.c -Ltarget/debug -lnux_capi
 	DYLD_LIBRARY_PATH=target/debug LD_LIBRARY_PATH=target/debug target/capi-smoke/capi_smoke "$(CAPI_SMOKE_FIXTURE)"
-
-apple-runtime-header-smoke:
-	cargo build --locked -p nux-apple-runtime --features apple-product
-	$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/nux-apple-runtime/include -fsyntax-only crates/nux-apple-runtime/smoke/header_smoke.c
-
-apple-runtime-release-panic-smoke:
-	cargo test --locked --profile release-apple -p nux-apple-runtime --features apple-product panic_firewall_converts_panics_to_the_declared_fallback
-
-apple-runtime-check: apple-runtime-header-smoke apple-runtime-release-panic-smoke
-	cargo test --locked -p nux-apple-runtime --features apple-product
-	cargo clippy --locked -p nux-apple-runtime --lib --no-default-features --features apple-product --no-deps --quiet -- -D warnings
-
-apple-runtime-xcframework:
-	tools/build-apple-xcframework.sh
 
 # SDK binary-size report: builds the post-Phase-R Darwin link closure with the
 # renderer retained, for scripting off and on. Pass SIZE_BASELINE=1 to also

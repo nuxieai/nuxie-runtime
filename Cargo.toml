@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/nux-container",
     "crates/nuxie-binary",
     "crates/nuxie-graph",
     "crates/nuxie-image-codec",
@@ -9,7 +10,6 @@ members = [
     "crates/nuxie-renderer-ffi",
     "crates/nuxie",
     "crates/nux-capi",
-    "crates/nux-apple-runtime",
     "crates/nuxie-runtime",
     "crates/nuxie-schema",
     "crates/nuxie-scripting",
@@ -42,8 +42,7 @@ repository = "https://github.com/nuxieai/nuxie-runtime"
 
 [patch.crates-io]
 # luaur 0.1.8 only selected its Mach clock implementation for macOS. The
-# local packages widen that existing implementation to every Apple platform so
-# the same pinned VM can ship in the iOS XCFramework.
+# local packages widen that existing implementation to every Apple platform.
 luaur-common = { path = "vendor/luaur-common-0.1.8" }
 luaur-vm = { path = "vendor/luaur-vm-0.1.8" }
 
@@ -82,11 +81,3 @@ panic = "unwind"
 inherits = "release"
 opt-level = "z"
 strip = "symbols"
-
-# Customer Apple binaries must contain panics at the C boundary instead of
-# aborting the host process. Keep the release optimizer/LTO settings while
-# overriding the workspace release profile's panic strategy.
-[profile.release-apple]
-inherits = "release"
-panic = "unwind"
-strip = "debuginfo"

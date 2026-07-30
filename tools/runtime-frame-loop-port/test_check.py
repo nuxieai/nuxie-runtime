@@ -27,6 +27,7 @@ from source_fingerprint import (
 from check import (
     FL_B_FROZEN_SCOPE_FILES,
     FL_B_FROZEN_SCOPE_REF,
+    nested_event_owner_boundary_matches,
     validate_frozen_wave_scopes,
 )
 
@@ -382,6 +383,21 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         result = self.run_check()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.gaps.write_text(base_gaps)
+
+    def owner_site_hash(
+        self,
+        source: str,
+        kind: str,
+        anchor: str,
+        guarded_name: str,
+    ) -> str:
+        records = [
+            record
+            for record in nested_event_owner_boundary_matches(source, kind)
+            if record[2] == anchor and record[3] == guarded_name
+        ]
+        self.assertEqual(len(records), 1, records)
+        return records[0][4]
 
     def assert_required_production_ratchet_case(
         self,
@@ -4687,6 +4703,292 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     safe,
                 )
 
+    def test_fl_c5_owner_detector_composes_macro_fragments_in_any_order(
+        self,
+    ) -> None:
+        ratchet_id = (
+            "state_machine_nested_event_dispatch_outside_instance_policy"
+        )
+        safe = textwrap.dedent(
+            """
+            fn unrelated_fragments_stay_clean() {
+                reverse_join!(frames, notify_);
+            }
+            """
+        )
+        forbidden_cases = [
+            textwrap.dedent(
+                """
+                macro_rules! reverse_join {
+                    ($suffix:ident, $prefix:ident) => {
+                        paste! {
+                            owner.[<$prefix $suffix>](
+                                owner, child, Some(host), &batch,
+                            );
+                        }
+                    };
+                }
+                fn evades() { reverse_join!(events, notify_); }
+                """
+            ),
+            textwrap.dedent(
+                """
+                fn reverse_three_fragments() {
+                    reverse_join!(events, no, tify_);
+                }
+                """
+            ),
+        ]
+        for forbidden in forbidden_cases:
+            with self.subTest(source=forbidden):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+                    forbidden,
+                    safe,
+                )
+
+    def test_fl_c5_owner_detector_audits_owner_origin_exports(
+        self,
+    ) -> None:
+        owner = self.repo / (
+            "crates/nuxie-runtime/src/state_machine/"
+            "state_machine_instance.rs"
+        )
+        consumer = self.repo / (
+            "crates/nuxie-runtime/src/state_machine/scout_probe.rs"
+        )
+        owner.parent.mkdir(parents=True, exist_ok=True)
+        base_gaps = self.gaps.read_text()
+        cases = [
+            (
+                "state_machine_nested_animation_selection_outside_instance_policy",
+                (
+                    "pub(crate) use "
+                    "RuntimeNestedAnimationInstance::StateMachine as Chosen;\n"
+                ),
+                textwrap.dedent(
+                    """
+                    use crate::state_machine::state_machine_instance::Chosen;
+                    fn outside(animation: FutureAnim) {
+                        if let Chosen(owner) = animation {
+                            displaced_policy(owner);
+                        }
+                    }
+                    """
+                ),
+                "Chosen",
+            ),
+            (
+                "state_machine_nested_animation_selection_outside_instance_policy",
+                (
+                    "pub(crate) use "
+                    "RuntimeNestedAnimationInstance::StateMachine as Chosen;\n"
+                ),
+                textwrap.dedent(
+                    """
+                    fn outside(animation: FutureAnim) {
+                        if let state_machine_instance::Chosen(owner) = animation {
+                            displaced_policy(owner);
+                        }
+                    }
+                    """
+                ),
+                "Chosen",
+            ),
+            (
+                "state_machine_nested_event_dispatch_outside_instance_policy",
+                textwrap.dedent(
+                    """
+                    impl StateMachineInstance {
+                        pub(crate) fn DELIVER(&mut self) {
+                            StateMachineInstance::notify_events(
+                                self, child, Some(host), &batch,
+                            );
+                        }
+                    }
+                    """
+                ),
+                textwrap.dedent(
+                    """
+                    fn consumer() {
+                        state_machine_instance::DELIVER(owner);
+                    }
+                    """
+                ),
+                "DELIVER",
+            ),
+            (
+                "state_machine_nested_event_dispatch_outside_instance_policy",
+                textwrap.dedent(
+                    """
+                    pub(crate) fn DELIVER(owner: &mut StateMachineInstance) {
+                        StateMachineInstance::notify_events(
+                            owner, child, Some(host), &batch,
+                        );
+                    }
+                    """
+                ),
+                textwrap.dedent(
+                    """
+                    fn consumer(owner: &mut OwnerFacade) {
+                        owner.DELIVER();
+                    }
+                    """
+                ),
+                "DELIVER",
+            ),
+        ]
+        try:
+            for ratchet_id, owner_source, consumer_source, exported in cases:
+                with self.subTest(exported=exported):
+                    self.gaps.write_text(base_gaps)
+                    self.install_production_ratchet(ratchet_id)
+                    owner.write_text(owner_source)
+                    consumer.write_text(consumer_source)
+                    result = self.run_check()
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(
+                        "from owner export "
+                        "crates/nuxie-runtime/src/state_machine/"
+                        f"state_machine_instance.rs::{exported}",
+                        result.stderr,
+                    )
+
+            self.gaps.write_text(base_gaps)
+            self.install_production_ratchet(
+                "state_machine_nested_event_dispatch_outside_instance_policy"
+            )
+            owner.write_text(
+                "pub(crate) fn INSPECT(value: usize) -> usize { value + 1 }\n"
+            )
+            consumer.write_text(
+                "fn allowed_owner_export() {\n"
+                "    let _ = state_machine_instance::INSPECT(1);\n"
+                "}\n"
+            )
+            result = self.run_check()
+            self.assertEqual(result.returncode, 0, result.stderr)
+        finally:
+            self.gaps.write_text(base_gaps)
+
+    def test_fl_c5_owner_detector_guarded_enum_catch_alls_fail_closed(
+        self,
+    ) -> None:
+        ratchet_id = (
+            "state_machine_nested_animation_selection_outside_instance_policy"
+        )
+        unrelated_safe = textwrap.dedent(
+            """
+            enum OtherAnimation {
+                Simple,
+                Remap,
+                Third,
+            }
+
+            fn unrelated_enum_stays_clean(animation: OtherAnimation) {
+                match animation {
+                    OtherAnimation::Simple => {}
+                    OtherAnimation::Remap => {}
+                    selected => use_it(selected),
+                }
+            }
+            """
+        )
+        forbidden_cases = [
+            textwrap.dedent(
+                """
+                fn displaced(
+                    animation: &mut RuntimeNestedAnimationInstance,
+                ) {
+                    match animation {
+                        RuntimeNestedAnimationInstance::Simple { .. } => {}
+                        RuntimeNestedAnimationInstance::Remap { .. } => {}
+                        selected_state_machine => {
+                            move_policy(selected_state_machine);
+                        }
+                    }
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                use RuntimeNestedAnimationInstance as R;
+
+                fn aliased_guarded_enum_catch_all(animation: &mut R) {
+                    match animation {
+                        R::Simple { .. } => {}
+                        R::Remap { .. } => {}
+                        selected_state_machine => {
+                            move_policy(selected_state_machine);
+                        }
+                    }
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                use RuntimeNestedAnimationInstance as R;
+
+                fn guarded_if_let_complement(a: R) {
+                    if let R::Simple { .. } = a {
+                        ordinary_policy();
+                    } else {
+                        use_it(a);
+                    }
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                use RuntimeNestedAnimationInstance as R;
+
+                fn guarded_let_else_complement(a: R) {
+                    let R::Simple { .. } = a else {
+                        use_it(a);
+                        return;
+                    };
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                use RuntimeNestedAnimationInstance as R;
+
+                fn guarded_matches_complement(a: R) {
+                    if !matches!(a, R::Simple { .. })
+                        && !matches!(a, R::Remap { .. })
+                    {
+                        use_it(a);
+                    }
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                fn fully_enumerated_guarded_enum(
+                    animation: RuntimeNestedAnimationInstance,
+                ) {
+                    match animation {
+                        RuntimeNestedAnimationInstance::Simple { .. } => {}
+                        RuntimeNestedAnimationInstance::Remap { .. } => {}
+                        RuntimeNestedAnimationInstance::StateMachine(owner) => {
+                            move_policy(owner);
+                        }
+                    }
+                }
+                """
+            ),
+        ]
+        for forbidden in forbidden_cases:
+            with self.subTest(source=forbidden):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+                    forbidden,
+                    unrelated_safe,
+                )
+
     def test_fl_c5_owner_detector_fragmented_take_member_fails_closed(
         self,
     ) -> None:
@@ -4716,6 +5018,255 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             safe,
         )
 
+    def test_fl_c5_owner_registry_uses_full_function_nesting_paths(
+        self,
+    ) -> None:
+        ratchet_id = (
+            "state_machine_nested_animation_selection_outside_instance_policy"
+        )
+        relative_source = (
+            "crates/nuxie-runtime/src/state_machine/"
+            "focused_input_dispatch.rs"
+        )
+        forged_source = textwrap.dedent(
+            """
+            struct ArtboardInstance;
+            impl ArtboardInstance {
+                fn dispatch_nested_text_input_at_focus() {
+                    fn dispatch_nested_key_input_at_focus() {
+                        if let RuntimeNestedAnimationInstance::StateMachine(
+                            owner,
+                        ) = animation {
+                            move_policy(owner);
+                        }
+                    }
+                }
+            }
+            """
+        )
+        forged_anchor = (
+            "ArtboardInstance::dispatch_nested_text_input_at_focus::"
+            "dispatch_nested_key_input_at_focus"
+        )
+        forged_hash = self.owner_site_hash(
+            forged_source,
+            "selection",
+            forged_anchor,
+            "StateMachine",
+        )
+        base_gaps = self.gaps.read_text()
+        try:
+            self.install_production_ratchet(ratchet_id)
+            self.gaps.write_text(
+                self.gaps.read_text()
+                + textwrap.dedent(
+                    f"""
+
+                    [[owner_boundary_allow]]
+                    file = {json.dumps(relative_source)}
+                    kind = "selection"
+                    anchor = "ArtboardInstance::dispatch_nested_key_input_at_focus"
+                    guarded_name = "StateMachine"
+                    site_hash = "{forged_hash}"
+                    """
+                )
+            )
+            source = self.repo / relative_source
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(forged_source)
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(forged_anchor, result.stderr)
+            self.assertIn(
+                "registered owner boundary anchor is missing "
+                f"{relative_source} selection "
+                "ArtboardInstance::dispatch_nested_key_input_at_focus "
+                f"StateMachine {forged_hash}",
+                result.stderr,
+            )
+        finally:
+            self.gaps.write_text(base_gaps)
+
+    def test_fl_c5_owner_registry_binds_same_anchor_to_site_hash(
+        self,
+    ) -> None:
+        ratchet_id = (
+            "state_machine_nested_animation_selection_outside_instance_policy"
+        )
+        relative_source = "crates/nuxie-runtime/src/artboard.rs"
+        approved_source = textwrap.dedent(
+            """
+            struct Approved;
+            impl Approved {
+                fn choose(animation: FutureAnim) {
+                    if let FutureAnim::StateMachine(owner) = animation {
+                        approved_policy(owner);
+                    }
+                }
+            }
+            """
+        )
+        relocated_source = textwrap.dedent(
+            """
+            struct Approved;
+            impl Approved {
+                fn choose(animation: FutureAnim, displaced: FutureAnim) {
+                    ordinary_policy(animation);
+                    if let FutureAnim::StateMachine(owner) = displaced {
+                        forbidden_policy(owner);
+                    }
+                }
+            }
+            """
+        )
+        unrelated_edit_source = textwrap.dedent(
+            """
+            struct Approved;
+            impl Approved {
+                fn choose(animation: FutureAnim) {
+                    unrelated_bookkeeping();
+                    if let FutureAnim::StateMachine(owner) = animation {
+                        approved_policy(owner);
+                    }
+                }
+            }
+            """
+        )
+        approved_hash = self.owner_site_hash(
+            approved_source,
+            "selection",
+            "Approved::choose",
+            "StateMachine",
+        )
+        relocated_hash = self.owner_site_hash(
+            relocated_source,
+            "selection",
+            "Approved::choose",
+            "StateMachine",
+        )
+        self.assertNotEqual(approved_hash, relocated_hash)
+        self.assertEqual(
+            approved_hash,
+            self.owner_site_hash(
+                unrelated_edit_source,
+                "selection",
+                "Approved::choose",
+                "StateMachine",
+            ),
+        )
+        base_gaps = self.gaps.read_text()
+        try:
+            self.install_production_ratchet(ratchet_id)
+            self.gaps.write_text(
+                self.gaps.read_text()
+                + textwrap.dedent(
+                    f"""
+
+                    [[owner_boundary_allow]]
+                    file = {json.dumps(relative_source)}
+                    kind = "selection"
+                    anchor = "Approved::choose"
+                    guarded_name = "StateMachine"
+                    site_hash = "{approved_hash}"
+                    """
+                )
+            )
+            source = self.repo / relative_source
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(approved_source)
+            result = self.run_check()
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            source.write_text(relocated_source)
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "unregistered owner boundary hit "
+                f"{relative_source} selection Approved::choose "
+                f"StateMachine {relocated_hash}",
+                result.stderr,
+            )
+            self.assertIn(
+                "registered owner boundary anchor is missing "
+                f"{relative_source} selection Approved::choose "
+                f"StateMachine {approved_hash}",
+                result.stderr,
+            )
+        finally:
+            self.gaps.write_text(base_gaps)
+
+    def test_fl_c5_owner_registry_site_hash_drift_fails_both_directions(
+        self,
+    ) -> None:
+        ratchet_id = (
+            "state_machine_nested_event_dispatch_outside_instance_policy"
+        )
+        relative_source = (
+            "crates/nuxie-runtime/src/state_machine/scout_probe.rs"
+        )
+        source_text = textwrap.dedent(
+            """
+            fn registered_sender() {
+                StateMachineInstance::notify_events(
+                    owner, child, Some(host), &batch,
+                );
+            }
+            """
+        )
+        actual_hash = self.owner_site_hash(
+            source_text,
+            "dispatch",
+            "registered_sender",
+            "notify_events",
+        )
+        stale_hash = "0" * 64
+        self.assertNotEqual(actual_hash, stale_hash)
+        base_gaps = self.gaps.read_text()
+        try:
+            self.install_production_ratchet(ratchet_id)
+            self.gaps.write_text(
+                self.gaps.read_text()
+                + textwrap.dedent(
+                    f"""
+
+                    [[owner_boundary_allow]]
+                    file = {json.dumps(relative_source)}
+                    kind = "dispatch"
+                    anchor = "registered_sender"
+                    guarded_name = "notify_events"
+                    site_hash = "{stale_hash}"
+                    """
+                )
+            )
+            source = self.repo / relative_source
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(source_text)
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "unregistered owner boundary hit "
+                f"{relative_source} dispatch registered_sender "
+                f"notify_events {actual_hash}",
+                result.stderr,
+            )
+            self.assertIn(
+                "registered owner boundary anchor is missing "
+                f"{relative_source} dispatch registered_sender "
+                f"notify_events {stale_hash}",
+                result.stderr,
+            )
+
+            self.gaps.write_text(base_gaps)
+            self.install_production_ratchet(ratchet_id)
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                f"ratchet {ratchet_id} increased to 1 > 0",
+                result.stderr,
+            )
+        finally:
+            self.gaps.write_text(base_gaps)
+
     def test_fl_c5_owner_detector_registry_is_exact_and_nonlexical(
         self,
     ) -> None:
@@ -4730,6 +5281,18 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             self.install_production_ratchet(ratchet_id)
             scout = self.repo / relative_source
             scout.parent.mkdir(parents=True, exist_ok=True)
+            registered_source = (
+                "fn registered_sender() {\n"
+                "    StateMachineInstance::notify_events("
+                "owner, child, Some(host), &batch);\n"
+                "}\n"
+            )
+            registered_hash = self.owner_site_hash(
+                registered_source,
+                "dispatch",
+                "registered_sender",
+                "notify_events",
+            )
 
             for lexical_bypass in [
                 (
@@ -4764,15 +5327,11 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 kind = "dispatch"
                 anchor = "registered_sender"
                 guarded_name = "notify_events"
+                site_hash = "{registered_hash}"
                 """
             )
             self.gaps.write_text(self.gaps.read_text() + registry)
-            scout.write_text(
-                "fn registered_sender() {\n"
-                "    StateMachineInstance::notify_events("
-                "owner, child, Some(host), &batch);\n"
-                "}\n"
-            )
+            scout.write_text(registered_source)
             result = self.run_check()
             self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -4835,20 +5394,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         base_gaps = self.gaps.read_text()
         try:
             self.install_production_ratchet(ratchet_id)
-            registry = textwrap.dedent(
-                f"""
-
-                [[owner_boundary_allow]]
-                file = {json.dumps(relative_source)}
-                kind = "selection"
-                anchor = "Approved::choose"
-                guarded_name = "StateMachine"
-                """
-            )
-            self.gaps.write_text(self.gaps.read_text() + registry)
-            source = self.repo / relative_source
-            source.parent.mkdir(parents=True, exist_ok=True)
-            source.write_text(
+            approved_source = (
                 "struct Approved;\n"
                 "impl Approved {\n"
                 "  fn choose() {\n"
@@ -4858,6 +5404,27 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "  }\n"
                 "}\n"
             )
+            approved_hash = self.owner_site_hash(
+                approved_source,
+                "selection",
+                "Approved::choose",
+                "StateMachine",
+            )
+            registry = textwrap.dedent(
+                f"""
+
+                [[owner_boundary_allow]]
+                file = {json.dumps(relative_source)}
+                kind = "selection"
+                anchor = "Approved::choose"
+                guarded_name = "StateMachine"
+                site_hash = "{approved_hash}"
+                """
+            )
+            self.gaps.write_text(self.gaps.read_text() + registry)
+            source = self.repo / relative_source
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(approved_source)
             result = self.run_check()
             self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -4897,6 +5464,17 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         base_gaps = self.gaps.read_text()
         try:
             self.install_production_ratchet(ratchet_id)
+            approved_source = (
+                "const APPROVED: bool = matches!(\n"
+                "    animation, FutureAnim::StateMachine(_)\n"
+                ");\n"
+            )
+            approved_hash = self.owner_site_hash(
+                approved_source,
+                "selection",
+                "APPROVED",
+                "StateMachine",
+            )
             registry = textwrap.dedent(
                 f"""
 
@@ -4905,16 +5483,13 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 kind = "selection"
                 anchor = "APPROVED"
                 guarded_name = "StateMachine"
+                site_hash = "{approved_hash}"
                 """
             )
             self.gaps.write_text(self.gaps.read_text() + registry)
             source = self.repo / relative_source
             source.parent.mkdir(parents=True, exist_ok=True)
-            source.write_text(
-                "const APPROVED: bool = matches!(\n"
-                "    animation, FutureAnim::StateMachine(_)\n"
-                ");\n"
-            )
+            source.write_text(approved_source)
             result = self.run_check()
             self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -4948,20 +5523,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         base_gaps = self.gaps.read_text()
         try:
             self.install_production_ratchet(ratchet_id)
-            registry = textwrap.dedent(
-                f"""
-
-                [[owner_boundary_allow]]
-                file = {json.dumps(relative_source)}
-                kind = "selection"
-                anchor = "TraitA_for_Host::choose"
-                guarded_name = "StateMachine"
-                """
-            )
-            self.gaps.write_text(self.gaps.read_text() + registry)
-            source = self.repo / relative_source
-            source.parent.mkdir(parents=True, exist_ok=True)
-            source.write_text(
+            approved_source = (
                 "trait TraitA { fn choose(); }\n"
                 "trait TraitB { fn choose(); }\n"
                 "struct Host;\n"
@@ -4971,6 +5533,27 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "  }\n"
                 "}\n"
             )
+            approved_hash = self.owner_site_hash(
+                approved_source,
+                "selection",
+                "TraitA_for_Host::choose",
+                "StateMachine",
+            )
+            registry = textwrap.dedent(
+                f"""
+
+                [[owner_boundary_allow]]
+                file = {json.dumps(relative_source)}
+                kind = "selection"
+                anchor = "TraitA_for_Host::choose"
+                guarded_name = "StateMachine"
+                site_hash = "{approved_hash}"
+                """
+            )
+            self.gaps.write_text(self.gaps.read_text() + registry)
+            source = self.repo / relative_source
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(approved_source)
             result = self.run_check()
             self.assertEqual(result.returncode, 0, result.stderr)
 

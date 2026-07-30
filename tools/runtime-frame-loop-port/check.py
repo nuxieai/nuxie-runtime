@@ -13,6 +13,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import tempfile
 import tomllib
 from typing import Any, Iterable
 
@@ -63,11 +64,8 @@ NESTED_EVENT_OWNER_BOUNDARY_DETECTOR = "rust_nested_event_owner_boundary"
 NESTED_EVENT_OWNER_MODULE = pathlib.PurePosixPath(
     "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
 )
-NESTED_EVENT_AUDIO_GUARDED_PATTERN = (
-    r"flush_deferred_owner_audio_events?|"
-    r"defer_recorded_audio_event_seam|"
-    r"reach_recorded_audio_event_seam|"
-    r"deliver_recorded_audio_occurrence"
+NESTED_EVENT_OWNER_DETECTOR_MANIFEST = (
+    TOOL_DIR / "rust-owner-detector" / "Cargo.toml"
 )
 FL_B_FROZEN_SCOPE_REF = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 FL_B_FROZEN_SCOPE_FILES = frozenset(
@@ -397,102 +395,106 @@ def semantic_ordinal_projection_hits(
     return hits
 
 
-@functools.lru_cache(maxsize=512)
-def rust_function_ranges(stripped: str) -> tuple[tuple[int, int], ...]:
-    """Return concrete Rust function ranges with balanced bodies."""
+@functools.lru_cache(maxsize=1)
+def rust_nested_event_owner_detector_binary() -> pathlib.Path:
+    """Build the syn-based ownership resolver into a content-addressed cache."""
 
-    function_pattern = re.compile(
-        r"(?m)^[ \t]*(?:(?:pub(?:\([^\n)]*\))?|const|async|unsafe|"
-        r"extern(?:[ \t]+\"[^\n\"]*\")?)[ \t]+)*fn[ \t]+[A-Za-z_]\w*"
+    if not NESTED_EVENT_OWNER_DETECTOR_MANIFEST.is_file():
+        raise CheckFailure(
+            "missing syn-based nested-event ownership detector manifest"
+        )
+    helper_dir = NESTED_EVENT_OWNER_DETECTOR_MANIFEST.parent
+    digest = hashlib.sha256()
+    workspace_root = TOOL_DIR.parents[1]
+    for path in [workspace_root / "Cargo.toml", workspace_root / "Cargo.lock"]:
+        digest.update(path.name.encode())
+        digest.update(path.read_bytes())
+    for path in sorted(helper_dir.rglob("*")):
+        if path.is_file():
+            digest.update(path.relative_to(helper_dir).as_posix().encode())
+            digest.update(path.read_bytes())
+    target_dir = (
+        pathlib.Path(tempfile.gettempdir())
+        / "nuxie-runtime-frame-loop-owner-detector"
+        / digest.hexdigest()
     )
-    ranges: list[tuple[int, int]] = []
-    for function in function_pattern.finditer(stripped):
-        open_brace = stripped.find("{", function.end())
-        if open_brace == -1:
-            continue
-        if stripped.find(";", function.end(), open_brace) != -1:
-            continue
-        depth = 0
-        for index in range(open_brace, len(stripped)):
-            if stripped[index] == "{":
-                depth += 1
-            elif stripped[index] == "}":
-                depth -= 1
-                if depth == 0:
-                    ranges.append((function.start(), index + 1))
-                    break
-    return tuple(ranges)
+    executable = target_dir / "debug/runtime-frame-loop-owner-detector"
+    if executable.is_file():
+        return executable
+    result = subprocess.run(
+        [
+            "cargo",
+            "build",
+            "--quiet",
+            "--locked",
+            "--manifest-path",
+            str(NESTED_EVENT_OWNER_DETECTOR_MANIFEST),
+            "--target-dir",
+            str(target_dir),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0 or not executable.is_file():
+        raise CheckFailure(
+            "cannot build syn-based nested-event ownership detector: "
+            + result.stderr.strip()
+        )
+    return executable
 
 
-@functools.lru_cache(maxsize=512)
-def rust_cfg_test_item_ranges(stripped: str) -> tuple[tuple[int, int], ...]:
-    """Return exact cfg(test) item spans without hiding later production."""
+@functools.lru_cache(maxsize=1024)
+def rust_nested_event_owner_analysis(
+    source: str,
+    audio_aliases: tuple[str, ...] = (),
+) -> tuple[dict[str, tuple[int, ...]], frozenset[str]]:
+    """Resolve guarded ownership paths with syn and return fail-closed hits."""
 
-    ranges: list[tuple[int, int]] = []
-    for attribute in re.finditer(
-        r"#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]",
-        stripped,
-    ):
-        cursor = attribute.end()
-        while True:
-            whitespace = re.match(r"\s*", stripped[cursor:])
-            assert whitespace is not None
-            cursor += whitespace.end()
-            if not stripped.startswith("#[", cursor):
-                break
-            attribute_end = stripped.find("]", cursor + 2)
-            if attribute_end == -1:
-                break
-            cursor = attribute_end + 1
-        open_brace = stripped.find("{", cursor)
-        semicolon = stripped.find(";", cursor)
-        if open_brace != -1 and (semicolon == -1 or open_brace < semicolon):
-            depth = 0
-            for index in range(open_brace, len(stripped)):
-                if stripped[index] == "{":
-                    depth += 1
-                elif stripped[index] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        ranges.append((attribute.start(), index + 1))
-                        break
-        elif semicolon != -1:
-            ranges.append((attribute.start(), semicolon + 1))
-    return tuple(ranges)
+    result = subprocess.run(
+        [str(rust_nested_event_owner_detector_binary()), *audio_aliases],
+        input=source,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise CheckFailure(
+            "syn-based nested-event ownership detector failed: "
+            + result.stderr.strip()
+        )
+    hits: dict[str, list[int]] = {
+        "collection": [],
+        "selection": [],
+        "dispatch": [],
+        "audio": [],
+    }
+    aliases: set[str] = set()
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) == 2 and fields[0] == "alias":
+            aliases.add(fields[1])
+        elif (
+            len(fields) == 3
+            and fields[0] == "hit"
+            and fields[1] in hits
+            and fields[2].isdigit()
+        ):
+            hits[fields[1]].append(int(fields[2]))
+        else:
+            raise CheckFailure(
+                f"invalid syn-based nested-event ownership detector output: {line!r}"
+            )
+    return (
+        {kind: tuple(sorted(set(offsets))) for kind, offsets in hits.items()},
+        frozenset(aliases),
+    )
 
 
 def nested_event_audio_use_aliases(source: str) -> set[str]:
-    """Collect names exported or imported for an owned audio-unwind function."""
+    """Collect AST-resolved exported aliases for an owned audio function."""
 
-    stripped = strip_rust_comments_and_strings(source)
-    excluded = rust_cfg_test_item_ranges(stripped)
-
-    def is_production(offset: int) -> bool:
-        return not any(start <= offset < end for start, end in excluded)
-
-    aliases = {
-        match.group(1)
-        for match in re.finditer(
-            r"\buse\s+(?:[A-Za-z_]\w*::)*"
-            r"(?:" + NESTED_EVENT_AUDIO_GUARDED_PATTERN + r")"
-            r"\s+as\s+([A-Za-z_]\w*)\s*;",
-            stripped,
-        )
-        if is_production(match.start())
-    }
-    aliases.update(
-        match.group(1)
-        for match in re.finditer(
-            r"\b(?:pub(?:\s*\([^)]*\))?\s+)?(?:const|static)\s+"
-            r"([A-Za-z_]\w*)\s*:[^=;]+=\s*"
-            r"(?:[A-Za-z_]\w*::)*(?:"
-            + NESTED_EVENT_AUDIO_GUARDED_PATTERN
-            + r")\b",
-            stripped,
-        )
-        if is_production(match.start())
-    )
-    return aliases
+    return set(rust_nested_event_owner_analysis(source)[1])
 
 
 def nested_event_owner_boundary_hits(
@@ -501,188 +503,13 @@ def nested_event_owner_boundary_hits(
     *,
     audio_aliases: Iterable[str] = (),
 ) -> list[int]:
-    """Find event-delivery mechanics displaced from the instance owner module."""
+    """Find resolved or fail-closed event mechanics outside the owner module."""
 
-    stripped = strip_rust_comments_and_strings(source)
-    excluded_ranges = rust_cfg_test_item_ranges(stripped)
-    all_function_ranges = rust_function_ranges(stripped)
-    function_ranges = [
-        (start, end)
-        for start, end in all_function_ranges
-        if not any(
-            excluded_start <= start < excluded_end
-            for excluded_start, excluded_end in excluded_ranges
-        )
-    ]
-
-    def coalesce_expression_offsets(offsets: Iterable[int]) -> list[int]:
-        owners = set()
-        for offset in offsets:
-            if any(start <= offset < end for start, end in excluded_ranges):
-                continue
-            owners.add(
-                next(
-                    (
-                        start
-                        for start, end in function_ranges
-                        if start <= offset < end
-                    ),
-                    offset,
-                )
-            )
-        return sorted(owners)
-
-    def identifier_offsets(name_pattern: str) -> list[int]:
-        identifier = re.compile(r"\b(?:" + name_pattern + r")\b")
-        return coalesce_expression_offsets(
-            match.start() for match in identifier.finditer(stripped)
-        )
-
-    def path_expression_offsets(name_pattern: str) -> list[int]:
-        path_expression = re.compile(
-            r"(?:(?:\b[A-Za-z_]\w*::)+|<[^<>{};]+>\s*::|\.)"
-            r"(?:" + name_pattern + r")\b"
-        )
-        return coalesce_expression_offsets(
-            match.start() for match in path_expression.finditer(stripped)
-        )
-
-    if kind == "collection":
-        # Collection mechanics are forbidden as values as well as direct
-        # calls. Otherwise a function-item alias can move the owner boundary
-        # while evading a call-shaped scanner:
-        # `let collect = StateMachineInstance::reported_event;`.
-        return path_expression_offsets(
-            r"reported_event_count|reported_event|"
-            r"take_(?:\w*event\w*|\w*report\w*)"
-        )
-    if kind == "dispatch":
-        # A path expression can be moved into a function item and invoked
-        # under an arbitrary local name. Guard the owned notify family at the
-        # reference, not merely at a direct-call shape.
-        return path_expression_offsets(r"notify_events(?:_[A-Za-z_]\w*)?")
-    if kind == "audio":
-        # These are the instance-owned unwind/seam functions. Matching their
-        # path-expression references catches `let finish = ...; finish(owner)`
-        # without treating arbitrary non-policy identifiers containing
-        # "audio" as ownership mechanics.
-        aliases = nested_event_audio_use_aliases(source)
-        aliases.update(audio_aliases)
-        hits = path_expression_offsets(NESTED_EVENT_AUDIO_GUARDED_PATTERN)
-        if aliases:
-            alias_declaration_ranges = [
-                (match.start(), match.end())
-                for match in re.finditer(
-                    r"\buse\b[^;]*\bas\s+(?:"
-                    + "|".join(re.escape(alias) for alias in aliases)
-                    + r")\s*;|"
-                    r"\b(?:pub(?:\s*\([^)]*\))?\s+)?(?:const|static)\s+"
-                    r"(?:"
-                    + "|".join(re.escape(alias) for alias in aliases)
-                    + r")\b[^;]*;",
-                    stripped,
-                )
-            ]
-            hits.extend(
-                coalesce_expression_offsets(
-                    match.start()
-                    for match in re.finditer(
-                        r"\b(?:"
-                        + "|".join(re.escape(alias) for alias in aliases)
-                        + r")\b",
-                        stripped,
-                    )
-                    if not any(
-                        start <= match.start() < end
-                        for start, end in alias_declaration_ranges
-                    )
-                )
-            )
-        return sorted(set(hits))
-    if kind == "selection":
-        variant_aliases = {
-            match.group(1)
-            for match in re.finditer(
-                r"\buse\s+(?:[A-Za-z_]\w*::)*"
-                r"(?:RuntimeNestedAnimationInstance|Self)::StateMachine"
-                r"\s+as\s+([A-Za-z_]\w*)\s*;",
-                stripped,
-            )
-        }
-        variant_aliases.update(
-            match.group(1)
-            for match in re.finditer(
-                r"\buse\s+(?:[A-Za-z_]\w*::)*"
-                r"(?:RuntimeNestedAnimationInstance|Self)::\{"
-                r"[^}]*\bStateMachine\s+as\s+([A-Za-z_]\w*)"
-                r"[^}]*\}\s*;",
-                stripped,
-            )
-        )
-        enum_aliases = {
-            match.group(1)
-            for match in re.finditer(
-                r"\buse\s+(?:[A-Za-z_]\w*::)*"
-                r"RuntimeNestedAnimationInstance"
-                r"\s+as\s+([A-Za-z_]\w*)\s*;",
-                stripped,
-            )
-        }
-        enum_aliases.update(
-            match.group(1)
-            for match in re.finditer(
-                r"\buse\s+(?:[A-Za-z_]\w*::)*\{"
-                r"[^}]*\bRuntimeNestedAnimationInstance"
-                r"\s+as\s+([A-Za-z_]\w*)[^}]*\}\s*;",
-                stripped,
-            )
-        )
-        direct_selection = re.compile(
-            r"(?:RuntimeNestedAnimationInstance|Self)::StateMachine\s*\("
-        )
-        variant_aliased_selection = (
-            re.compile(
-                r"\b(?:"
-                + "|".join(re.escape(alias) for alias in variant_aliases)
-                + r")\s*\("
-            )
-            if variant_aliases
-            else None
-        )
-        enum_aliased_selection = (
-            re.compile(
-                r"\b(?:"
-                + "|".join(re.escape(alias) for alias in enum_aliases)
-                + r")::StateMachine\s*\("
-            )
-            if enum_aliases
-            else None
-        )
-        event_mechanic = re.compile(
-            r"\breported_events\b|\bStateMachineReportedEvent\b|"
-            r"(?:(?:\b[A-Za-z_]\w*::)+|\.)"
-            r"(?:reported_event_count|reported_event|"
-            r"take_(?:\w*event\w*|\w*report\w*)|"
-            r"notify_events(?:_[A-Za-z_]\w*)?|"
-            r"flush_deferred_owner_audio_events?)\b"
-        )
-        return [
-            start
-            for start, end in function_ranges
-            if (
-                variant_aliased_selection is not None
-                and variant_aliased_selection.search(stripped, start, end)
-            )
-            or (
-                enum_aliased_selection is not None
-                and enum_aliased_selection.search(stripped, start, end)
-            )
-            or (
-                direct_selection.search(stripped, start, end)
-                and event_mechanic.search(stripped, start, end)
-            )
-        ]
-    raise ValueError(f"unknown nested-event boundary detector kind: {kind}")
+    aliases = tuple(sorted(set(audio_aliases)))
+    hits, _ = rust_nested_event_owner_analysis(source, aliases)
+    if kind not in hits:
+        raise ValueError(f"unknown nested-event boundary detector kind: {kind}")
+    return list(hits[kind])
 
 
 def read_toml(path: pathlib.Path) -> dict[str, Any]:

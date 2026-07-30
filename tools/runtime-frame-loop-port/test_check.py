@@ -3836,6 +3836,137 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
             ),
             (
+                "state_machine_nested_animation_selection_outside_instance_policy",
+                """
+                use RuntimeNestedAnimationInstance::StateMachine;
+                if let StateMachine(owner) = animation {
+                    owner.advance(child, elapsed, Some(&mut reported_events));
+                }
+                """,
+                """
+                fn plain_variant_import_uses_blessed_owner_policy() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_animation_selection_outside_instance_policy",
+                """
+                use RuntimeNestedAnimationInstance::StateMachine;
+
+                fn valid_plain_variant_import() {
+                    if let StateMachine(owner) = animation {
+                        owner.advance(child, elapsed, Some(&mut reported_events));
+                    }
+                }
+                """,
+                """
+                fn valid_plain_variant_import_uses_blessed_owner_policy() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_animation_selection_outside_instance_policy",
+                """
+                type Anim = RuntimeNestedAnimationInstance;
+                if let Anim::StateMachine(owner) = animation { move_policy(owner); }
+                """,
+                """
+                fn type_alias_uses_blessed_owner_policy() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_animation_selection_outside_instance_policy",
+                """
+                type Anim = RuntimeNestedAnimationInstance;
+
+                fn valid_type_alias() {
+                    if let Anim::StateMachine(owner) = animation {
+                        move_policy(owner);
+                    }
+                }
+                """,
+                """
+                fn valid_type_alias_uses_blessed_owner_policy() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_animation_selection_outside_instance_policy",
+                """
+                use RuntimeNestedAnimationInstance as ImportedAnim;
+                type Anim = ImportedAnim;
+
+                fn composed_type_alias() {
+                    if let Anim::StateMachine(owner) = animation {
+                        move_policy(owner);
+                    }
+                }
+                """,
+                """
+                fn composed_type_alias_uses_blessed_owner_policy() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_animation_selection_outside_instance_policy",
+                """
+                fn unresolved_variant_path_fails_closed() {
+                    if let FutureAnim::StateMachine(owner) = animation {
+                        owner.advance(child, elapsed, Some(&mut reported_events));
+                    }
+                }
+                """,
+                """
+                fn unresolved_variant_path_uses_blessed_owner_policy() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_animation_selection_outside_instance_policy",
+                """
+                use RuntimeNestedAnimationInstance::*;
+
+                fn displaced() {
+                    if let StateMachine(owner) = animation {
+                        displace(owner);
+                    }
+                }
+                """,
+                """
+                fn glob_import_uses_blessed_owner_policy() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
                 "state_machine_nested_event_dispatch_outside_instance_policy",
                 """
                 fn renamed_report_sender() {
@@ -3928,6 +4059,57 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
             ),
             (
+                "state_machine_nested_event_dispatch_outside_instance_policy",
+                """
+                fn spaced_report_sender() {
+                    let send = StateMachineInstance :: notify_events;
+                    send(owner, child, Some(host), &batch);
+                }
+                """,
+                """
+                fn spaced_report_sender() {
+                    StateMachineInstance::
+                        dispatch_nested_events_to_animation_owners(
+                            owners, child, host, reports, None,
+                        );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_event_dispatch_outside_instance_policy",
+                """
+                fn macro_composed_report_sender() {
+                    let send = member!(StateMachineInstance, notify_events);
+                    send(owner, child, Some(host), &batch);
+                }
+                """,
+                """
+                fn macro_composed_report_sender() {
+                    let send = member!(StateMachineInstance, notify_events); // flc5-owner-ratchet-allow: dispatch
+                    send(owner, child, Some(host), &batch);
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_event_collection_outside_instance_policy",
+                """
+                fn raw_report_collector() {
+                    let get = StateMachineInstance::r#reported_event;
+                    collect(get(owner, child, index));
+                }
+                """,
+                """
+                fn raw_report_collector() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, Some(dispatch),
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
                 "state_machine_nested_audio_unwind_outside_instance_policy",
                 """
                 fn renamed_tail_player() {
@@ -3989,6 +4171,22 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 """,
                 """
                 fn angle_bracket_ufcs_tail_player() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        artboard, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_audio_unwind_outside_instance_policy",
+                """
+                fn spaced_ufcs_tail_player() {
+                    StateMachineInstance :: flush_deferred_owner_audio_events(owner);
+                }
+                """,
+                """
+                fn spaced_ufcs_tail_player() {
                     StateMachineInstance::advance_nested_animation_owner_with(
                         artboard, host, animation_index, elapsed, None, None,
                     );

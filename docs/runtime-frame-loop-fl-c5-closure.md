@@ -886,6 +886,16 @@ Candidate identity:
   runtime-frame-loop-port-check` confirms both are current for this final
   evidence tree.
 
+The four nested-event ownership ratchets now use a syn-based resolver across
+every non-owner Rust source. It resolves use declarations and aliases, glob
+imports, type aliases, raw identifiers, spaced paths, and angle-bracket UFCS.
+Macro or otherwise unresolved guarded-member tokens are a fail-closed
+regression tripwire rather than an enumerated evasion list. A deliberately
+blessed macro site must carry `flc5-owner-ratchet-allow: <kind>` on that
+specific line. Permanent negatives retain every W66/W68/W71/W72/W73 spelling
+and fully-qualified controls; exotic future spellings containing a guarded
+member trip the token rule.
+
 Gate receipts:
 
 | Gate | Green receipt |

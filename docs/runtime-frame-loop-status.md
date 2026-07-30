@@ -4,13 +4,12 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: final E2 evidence publication on immutable combined production
-  candidate `95333c41fe68ab6a2a5486874ffd0c59cd4381be`. Round-four corrective
-  production landed as `2e2d3c6d`; `95333c41` completed the Makefile
-  tools-feature target. Independent W45/W46/W47 rejections of publication
-  `ff94a5f2` remain archived as historical verdicts; P3 addresses their
-  production and packet findings. This E2 delta is evidence/docs only and
-  promotes no additional file/member row.
+- Phase: P4 round-five corrective production, tests, ratchets, and spec prose
+  on top of the immutable E2 candidate
+  `95333c41fe68ab6a2a5486874ffd0c59cd4381be`. The orchestrator-owned E3 trace
+  regeneration and fingerprint-last provenance update remain pending; this
+  corrective does not touch the evidence directory or claim those checks
+  green.
 - Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
   on that provisional implementation without claiming FL-B verification.
   FL-C's corrected 56-file/eight-member lane map is
@@ -830,8 +829,9 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Land this evidence/docs-only packet as E2 on immutable P3
-   `95333c41fe68ab6a2a5486874ffd0c59cd4381be`.
-2. Request the next independent FL-B reacceptance, FL-C5 oracle, and FL-C5
-   standards reviews against E2. P3 and the operative floor3 receipts remain
-   unchanged during those reviews.
+1. Complete and preserve the P4 round-five corrective candidate without
+   regenerating trace evidence in the implementation lane.
+2. Let the orchestrator publish E3 by regenerating the trace and updating its
+   source fingerprint and provenance last.
+3. Request the independent round-five FL-B, FL-C5 oracle, and FL-C5 standards
+   reviews against E3.

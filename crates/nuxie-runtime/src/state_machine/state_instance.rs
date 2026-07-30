@@ -28,24 +28,35 @@ impl RuntimeStateInstance {
         layer: &RuntimeStateMachineLayer,
         state_index: usize,
         artboard: &ArtboardInstance,
+        animation_definitions: &Arc<Vec<RuntimeLinearAnimation>>,
+        empty_animation_definition: &Arc<RuntimeLinearAnimation>,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
     ) -> Option<Self> {
         let state = layer.states.get(state_index)?;
         let kind = if let Some(definition) = state.blend_state_1d.as_ref() {
-            let mut occurrence =
-                BlendState1DInstance::new(definition, artboard, state.resets_blend_values());
+            let mut occurrence = BlendState1DInstance::new(
+                definition,
+                artboard,
+                animation_definitions,
+                empty_animation_definition,
+                state.resets_blend_values(),
+            );
             occurrence.advance(definition, artboard, inputs, bindable_numbers, 0.0);
             RuntimeStateInstanceKind::Blend1D(occurrence)
         } else if let Some(definition) = state.blend_state_direct.as_ref() {
-            let mut occurrence = BlendStateDirectInstance::new(definition, artboard);
+            let mut occurrence = BlendStateDirectInstance::new(
+                definition,
+                animation_definitions,
+                empty_animation_definition,
+            );
             occurrence.advance(definition, artboard, inputs, bindable_numbers, 0.0);
             RuntimeStateInstanceKind::BlendDirect(occurrence)
         } else if let Some(handle) = state.animation {
             let mut occurrence = LinearAnimationInstance::new(
                 handle,
-                Arc::clone(&artboard.linear_animations),
-                Arc::clone(&artboard.empty_linear_animation),
+                Arc::clone(animation_definitions),
+                Arc::clone(empty_animation_definition),
                 state.speed,
             )?;
             let keep_going = occurrence.advance(0.0);

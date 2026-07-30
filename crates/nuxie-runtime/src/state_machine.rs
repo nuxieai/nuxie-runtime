@@ -152,6 +152,10 @@ pub(crate) use state_machine_fire_trigger::RuntimeStateMachineFireTriggerPath;
 use state_machine_input::runtime_state_machine_input;
 pub use state_machine_input::{RuntimeStateMachineInput, StateMachineInputKind};
 pub use state_machine_input_instance::StateMachineInputInstance;
+#[cfg(feature = "tools")]
+pub use state_machine_instance::{
+    RuntimeNestedEventChainPhase, RuntimeNestedEventChainStep, RuntimeNestedEventChainTrace,
+};
 pub use state_machine_layer::RuntimeStateMachineLayer;
 pub(crate) use state_machine_layer_instance::StateMachineLayerInstance;
 pub(crate) use state_machine_listener::RuntimeStateMachineListener;

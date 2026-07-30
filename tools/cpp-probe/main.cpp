@@ -809,6 +809,10 @@ struct RuntimeStateMachineAdvanceReport
     std::vector<std::pair<size_t, bool>> boolInputs;
     std::vector<RuntimeStateMachineCurrentAnimationReport> currentAnimations;
     std::vector<RuntimeStateMachineReportedEventReport> reportedEvents;
+    std::vector<std::pair<
+        size_t,
+        std::vector<RuntimeStateMachineReportedEventReport>>>
+        nestedReportedEvents;
     std::vector<RuntimeStateMachineViewModelTriggerReport> viewModelTriggers;
     std::vector<RuntimeStateMachineViewModelBindingReport> viewModelBindings;
     bool hasDataContext = false;
@@ -7814,6 +7818,38 @@ apply_runtime_state_machine_advances(rive::File* file,
             }
             report.reportedEvents.push_back(reportedEvent);
         }
+        const auto& occurrenceObjects = instance->objects();
+        for (size_t localId = 0; localId < occurrenceObjects.size(); ++localId)
+        {
+            auto object = occurrenceObjects[localId];
+            if (object == nullptr || !object->is<rive::NestedStateMachine>())
+            {
+                continue;
+            }
+            auto nested = object->as<rive::NestedStateMachine>();
+            auto nestedStateMachine = nested->stateMachineInstance();
+            if (nestedStateMachine == nullptr)
+            {
+                continue;
+            }
+            std::vector<RuntimeStateMachineReportedEventReport> nestedEvents;
+            for (size_t i = 0; i < nestedStateMachine->reportedEventCount(); ++i)
+            {
+                auto eventReport = nestedStateMachine->reportedEventAt(i);
+                auto event = eventReport.event();
+                RuntimeStateMachineReportedEventReport reportedEvent;
+                reportedEvent.hasEvent = event != nullptr;
+                reportedEvent.hasEventLocal = false;
+                reportedEvent.eventLocal = 0;
+                reportedEvent.coreType =
+                    event == nullptr ? 0 : event->coreType();
+                reportedEvent.name = event == nullptr ? "" : event->name();
+                reportedEvent.secondsDelay = eventReport.secondsDelay();
+                nestedEvents.push_back(reportedEvent);
+            }
+            report.nestedReportedEvents.push_back(
+                {localId, std::move(nestedEvents)});
+        }
         report.viewModelTriggers =
             collect_default_view_model_trigger_reports(file);
         report.viewModelBindings =
@@ -8422,6 +8458,20 @@ void write_runtime_state_machine_advance_reports(
         }
         out << "],\"reportedEvents\":";
         write_runtime_reported_events(out, report.reportedEvents);
+        out << ",\"nestedReportedEvents\":[";
+        for (size_t j = 0; j < report.nestedReportedEvents.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            out << "{\"localId\":" << report.nestedReportedEvents[j].first;
+            out << ",\"reportedEvents\":";
+            write_runtime_reported_events(
+                out, report.nestedReportedEvents[j].second);
+            out << '}';
+        }
+        out << ']';
         out << ",\"viewModelTriggers\":[";
         for (size_t j = 0; j < report.viewModelTriggers.size(); ++j)
         {

@@ -6,7 +6,11 @@ pub(crate) struct BlendStateDirectInstance {
 }
 
 impl BlendStateDirectInstance {
-    pub(crate) fn new(blend_state: &RuntimeBlendStateDirect, artboard: &ArtboardInstance) -> Self {
+    pub(crate) fn new(
+        blend_state: &RuntimeBlendStateDirect,
+        animation_definitions: &Arc<Vec<RuntimeLinearAnimation>>,
+        empty_animation_definition: &Arc<RuntimeLinearAnimation>,
+    ) -> Self {
         let animations = blend_state
             .animations
             .iter()
@@ -16,8 +20,8 @@ impl BlendStateDirectInstance {
                     definition: RuntimeBlendAnimationHandle::new(definition_index),
                     animation: LinearAnimationInstance::new(
                         animation.animation,
-                        Arc::clone(&artboard.linear_animations),
-                        Arc::clone(&artboard.empty_linear_animation),
+                        Arc::clone(animation_definitions),
+                        Arc::clone(empty_animation_definition),
                         1.0,
                     )?,
                     mix: 0.0,

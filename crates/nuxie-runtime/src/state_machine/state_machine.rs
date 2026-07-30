@@ -829,9 +829,11 @@ impl BlendState1DInstance {
     pub(crate) fn new(
         blend_state: &RuntimeBlendState1D,
         artboard: &ArtboardInstance,
+        animation_definitions: &Arc<Vec<RuntimeLinearAnimation>>,
+        empty_animation_definition: &Arc<RuntimeLinearAnimation>,
         reset_blend_values: bool,
     ) -> Self {
-        let animations = blend_state
+        let animations: Vec<BlendAnimation1DInstance> = blend_state
             .animations
             .iter()
             .enumerate()
@@ -840,8 +842,8 @@ impl BlendState1DInstance {
                     definition: RuntimeBlendAnimationHandle::new(definition_index),
                     animation: LinearAnimationInstance::new(
                         animation.animation,
-                        Arc::clone(&artboard.linear_animations),
-                        Arc::clone(&artboard.empty_linear_animation),
+                        Arc::clone(animation_definitions),
+                        Arc::clone(empty_animation_definition),
                         1.0,
                     )?,
                     mix: 0.0,
@@ -849,14 +851,9 @@ impl BlendState1DInstance {
             })
             .collect();
         let animation_reset = if reset_blend_values {
-            let animation_indices = blend_state
-                .animations
-                .iter()
-                .map(|animation| animation.animation.index())
-                .collect::<Vec<_>>();
-            Some(AnimationResetFactory::from_animation_indices(
+            Some(AnimationResetFactory::from_animation_instances(
                 artboard,
-                &animation_indices,
+                animations.iter().map(|animation| &animation.animation),
                 true,
             ))
         } else {
@@ -1538,7 +1535,13 @@ mod tests {
             25.0,
         ))]);
         let inputs = vec![StateMachineInputInstance::new(0, input_definitions)];
-        let mut occurrence = BlendState1DInstance::new(&blend_state, &artboard, false);
+        let mut occurrence = BlendState1DInstance::new(
+            &blend_state,
+            &artboard,
+            &artboard.linear_animations,
+            &artboard.empty_linear_animation,
+            false,
+        );
 
         assert_eq!(occurrence.animations.len(), blend_state.animations.len());
         assert_eq!(
@@ -1569,7 +1572,11 @@ mod tests {
                 source: RuntimeDirectBlendSource::MixValue { value: 200.0 },
             }],
         };
-        let mut direct_occurrence = BlendStateDirectInstance::new(&direct_state, &artboard);
+        let mut direct_occurrence = BlendStateDirectInstance::new(
+            &direct_state,
+            &artboard.linear_animations,
+            &artboard.empty_linear_animation,
+        );
         direct_state.animations[0].source = RuntimeDirectBlendSource::MixValue { value: 40.0 };
         direct_occurrence.advance(&direct_state, &artboard, &[], &[], 0.0);
         assert_eq!(
@@ -1965,10 +1972,12 @@ mod tests {
             &graph.artboards,
         )
         .expect("instantiate animation-reset artboard");
-        let animation_indices = (0..artboard.linear_animations().len()).collect::<Vec<_>>();
+        let animation_instances = (0..artboard.linear_animations().len())
+            .filter_map(|index| artboard.linear_animation_instance(index))
+            .collect::<Vec<_>>();
 
         let reset =
-            AnimationResetFactory::from_animation_indices(&artboard, &animation_indices, false);
+            AnimationResetFactory::from_animation_instances(&artboard, &animation_instances, false);
         let cloned = reset.clone();
         assert!(
             Arc::ptr_eq(&reset.storage, &cloned.storage),
@@ -2031,7 +2040,8 @@ mod tests {
         assert_eq!(actual, expected);
 
         reset.apply(&mut artboard);
-        let empty = AnimationResetFactory::from_animation_indices(&artboard, &[], false);
+        let empty =
+            AnimationResetFactory::from_animation_instances(&artboard, std::iter::empty(), false);
         assert!(
             empty.storage.entries.is_empty(),
             "the factory must return an owned empty reset, not null"

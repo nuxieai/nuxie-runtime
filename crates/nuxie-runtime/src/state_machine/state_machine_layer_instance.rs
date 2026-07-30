@@ -33,6 +33,8 @@ pub(crate) struct StateMachineLayerInstance {
     /// monotonic token gives every Rust layer occurrence the same identity
     /// boundary, including cloned state machines that share a retained VM.
     view_model_trigger_layer_id: u64,
+    animation_definitions: Arc<Vec<RuntimeLinearAnimation>>,
+    empty_animation_definition: Arc<RuntimeLinearAnimation>,
     any_state: Option<RuntimeStateInstance>,
     current_state: Option<RuntimeStateInstance>,
     state_from: Option<RuntimeStateInstance>,
@@ -40,7 +42,7 @@ pub(crate) struct StateMachineLayerInstance {
     transition_mix: f32,
     transition_mix_from: f32,
     hold_animation_from: bool,
-    hold_animation: Option<(RuntimeLinearAnimationHandle, f32)>,
+    hold_animation: Option<LinearAnimationInstance>,
     active_transition: Option<RuntimeStateTransitionHandle>,
     transition_completed: bool,
     transition_animation_reset: Option<AnimationReset>,
@@ -80,10 +82,26 @@ impl StateMachineLayerInstance {
             );
         });
         let mut any_state = layer.any_state_index.and_then(|state_index| {
-            RuntimeStateInstance::make(layer, state_index, artboard, inputs, bindable_numbers)
+            RuntimeStateInstance::make(
+                layer,
+                state_index,
+                artboard,
+                &artboard.linear_animations,
+                &artboard.empty_linear_animation,
+                inputs,
+                bindable_numbers,
+            )
         });
         let mut current_state = layer.entry_state_index.and_then(|state_index| {
-            RuntimeStateInstance::make(layer, state_index, artboard, inputs, bindable_numbers)
+            RuntimeStateInstance::make(
+                layer,
+                state_index,
+                artboard,
+                &artboard.linear_animations,
+                &artboard.empty_linear_animation,
+                inputs,
+                bindable_numbers,
+            )
         });
         if let Some(any_state) = any_state.as_mut() {
             any_state.build_key_frame_data_binds(
@@ -99,6 +117,8 @@ impl StateMachineLayerInstance {
         }
         Self {
             view_model_trigger_layer_id: next_view_model_trigger_layer_id(),
+            animation_definitions: Arc::clone(&artboard.linear_animations),
+            empty_animation_definition: Arc::clone(&artboard.empty_linear_animation),
             any_state,
             current_state,
             state_from: None,
@@ -290,6 +310,8 @@ impl StateMachineLayerInstance {
             layer,
             entry_state_index,
             artboard,
+            &self.animation_definitions,
+            &self.empty_animation_definition,
             targets.inputs,
             targets.bindable_numbers,
         );
@@ -642,6 +664,8 @@ impl StateMachineLayerInstance {
             layer,
             state_to_index,
             artboard,
+            &self.animation_definitions,
+            &self.empty_animation_definition,
             targets.inputs,
             targets.bindable_numbers,
         );
@@ -706,20 +730,27 @@ impl StateMachineLayerInstance {
             )?;
         }
 
-        let mut reset_animation_indices = Vec::new();
+        let mut reset_animation_instances = Vec::new();
         if let Some(animation) = previous_state
             .as_ref()
             .and_then(RuntimeStateInstance::plain_animation)
         {
-            reset_animation_indices.push(animation.animation_index());
+            reset_animation_instances.push(animation);
         }
         if let Some(animation) = self
             .current_state
             .as_ref()
             .and_then(RuntimeStateInstance::plain_animation)
         {
-            reset_animation_indices.push(animation.animation_index());
+            reset_animation_instances.push(animation);
         }
+        let transition_animation_reset = (!self.transition_completed).then(|| {
+            AnimationResetFactory::from_animation_instances(
+                artboard,
+                reset_animation_instances,
+                false,
+            )
+        });
         // A transition interruption releases the older transition-source
         // occurrence before the outgoing current occurrence becomes the new
         // source (`state_machine_instance.cpp:573-580`).
@@ -727,13 +758,7 @@ impl StateMachineLayerInstance {
         self.state_from = previous_state;
         if previous_state_index.is_some() {
             self.transition_duration_seconds = transition_duration_seconds;
-            self.transition_animation_reset = (!self.transition_completed).then(|| {
-                AnimationResetFactory::from_animation_indices(
-                    artboard,
-                    &reset_animation_indices,
-                    false,
-                )
-            });
+            self.transition_animation_reset = transition_animation_reset;
 
             if transition.has_exit_time()
                 && let Some(animation_instance) = self
@@ -744,15 +769,10 @@ impl StateMachineLayerInstance {
                     artboard.linear_animation_instance_definition(animation_instance)
             {
                 if transition.pause_on_exit() {
-                    animation_instance.set_time(
-                        animation,
-                        transition.exit_time_seconds(Some(animation), true),
-                    );
+                    let exit_time = transition.exit_time_seconds(Some(animation), true);
+                    animation_instance.set_time_from_retained_definition(exit_time);
                 }
-                self.hold_animation = Some((
-                    animation_instance.animation_handle(),
-                    animation_instance.time(),
-                ));
+                self.hold_animation = Some(animation_instance.clone());
             }
             self.transition_mix_from = previous_mix;
             // C++ only updates this hold flag when the previous mix was
@@ -925,12 +945,8 @@ impl StateMachineLayerInstance {
             .transition_animation_reset
             .as_ref()
             .is_some_and(|reset| reset.apply(artboard));
-        if let Some((animation_handle, hold_time)) = self.hold_animation.take() {
-            changed |= artboard.apply_linear_animation(
-                animation_handle.index(),
-                hold_time,
-                self.transition_mix_from,
-            );
+        if let Some(animation) = self.hold_animation.take() {
+            changed |= animation.apply(artboard, self.transition_mix_from);
         }
         let interpolator = self
             .active_transition

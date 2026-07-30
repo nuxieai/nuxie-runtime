@@ -126,6 +126,11 @@ pub use state_machine::{
     StateMachineEventStringProperty, StateMachineInputInstance, StateMachineInputKind,
     StateMachineInstance, StateMachineReportedEvent,
 };
+#[cfg(feature = "tools")]
+#[doc(hidden)]
+pub use state_machine::{
+    RuntimeNestedEventChainPhase, RuntimeNestedEventChainStep, RuntimeNestedEventChainTrace,
+};
 pub(crate) use state_machine::{
     RuntimeTransitionInterpolator, StateMachineBindableArtboardInstance,
     StateMachineBindableAssetInstance, StateMachineBindableBooleanInstance,

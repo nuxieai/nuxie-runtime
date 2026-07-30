@@ -44,6 +44,16 @@ The writer may change production code only where required by these packages:
 - update the FL-C5 closure/status/ownership/manifest evidence only after the
   corresponding production behavior and proof are green.
 
+The joint round-five corrective in `.flc5/W53-round5-spec.md` supersedes this
+original ownership list only for its binding items A and B. Item A authorizes
+moving nested event collection, animation-owner selection, dispatch, and audio
+unwinding out of `artboard.rs` and `nested_state_machine.rs` into
+`state_machine_instance.rs`, leaving borrow closures in the former files.
+Item B authorizes the directly coupled retained-definition changes in
+`animation.rs`, `animation_reset_factory.rs`, blend/state occurrence
+construction, `state_machine_layer_instance.rs`, and their tests. No other
+production scope is reopened.
+
 Orchestrator decision (2026-07-29): `crates/nuxie/src/lib.rs` is authorized
 exactly for the O1 construction-time scripted-preparation hookup. Both public
 facade constructors must return an already-constructed machine even when
@@ -132,9 +142,9 @@ Depends on WP0.
 
 ```sh
 cargo test -p nuxie-runtime --lib fl_c5_definition_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_state_machine_definition_
-cargo test -p nuxie-runtime --test cpp_probe malformed_listener_retains_authored_index -- --exact
-cargo test -p nuxie-runtime --test cpp_probe state_machine_added_phases_match_cpp -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_state_machine_definition_
+cargo test -p nuxie-runtime --features tools --test cpp_probe malformed_listener_retains_authored_index -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe state_machine_added_phases_match_cpp -- --exact
 make runtime-frame-loop-port-check
 cargo fmt --all -- --check
 ```
@@ -183,8 +193,8 @@ Depends on WP1.
 ```sh
 cargo test -p nuxie-runtime --lib fl_c5_constructor_order_
 cargo test -p nuxie-runtime --lib fl_c5_clone_teardown_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_constructor_order_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_dispose_nested_event_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_constructor_order_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_dispose_nested_event_
 cargo test -p nuxie --lib scripted_listener_action
 make runtime-frame-loop-port-check
 cargo fmt --all -- --check
@@ -240,10 +250,10 @@ Depends on WP2. This is the largest semantic package.
 ```sh
 cargo test -p nuxie-runtime --lib fl_c5_hit_
 cargo test -p nuxie-runtime --lib fl_c5_pointer_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_hit_component_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_nested_pointer_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_component_list_pointer_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_pointer_fp_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_hit_component_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_nested_pointer_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_component_list_pointer_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_pointer_fp_
 make runtime-frame-loop-port-check
 cargo fmt --all -- --check
 ```
@@ -290,9 +300,9 @@ FL-C3 refactoring.
 
 ```sh
 cargo test -p nuxie-runtime --lib fl_c5_state_changed_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_state_changed_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_current_state_and_animation_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_random_transition_edges_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_state_changed_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_current_state_and_animation_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_random_transition_edges_
 make runtime-frame-loop-port-check
 cargo fmt --all -- --check
 ```
@@ -337,10 +347,10 @@ null distinctions:
 
 ```sh
 cargo test -p nuxie-runtime --lib fl_c5_bind_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_bind_family_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_bind_null_matrix_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_inherit_context_a_then_b_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_complete_view_models_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_bind_family_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_bind_null_matrix_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_inherit_context_a_then_b_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_complete_view_models_
 cargo test -p nuxie --lib data_context
 make runtime-frame-loop-port-check
 cargo fmt --all -- --check
@@ -398,12 +408,12 @@ Depends on WP5.
 
 ```sh
 cargo test -p nuxie-runtime --lib fl_c5_event_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_apply_events_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_apply_events_100_batches -- --exact
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_event_mid_callback_visibility -- --exact
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_trigger_zero_suppression -- --exact
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_event_bubbling_audio_seam_order -- --exact
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_live_event_projection -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_apply_events_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_apply_events_100_batches -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_event_mid_callback_visibility -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_trigger_zero_suppression -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_event_bubbling_audio_seam_order -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_live_event_projection -- --exact
 make runtime-frame-loop-port-check
 cargo fmt --all -- --check
 ```
@@ -445,12 +455,12 @@ Depends on WP3, WP4, WP5, and WP6.
 
 ```sh
 cargo test -p nuxie-runtime --lib fl_c5_advance_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_raw_advance_order_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_zero_delta_bookkeeping -- --exact
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_advance_fp_matrix -- --exact
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_advance_return_terms -- --exact
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_five_pass_unconditional_probe -- --exact
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_advance_view_models_false -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_raw_advance_order_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_zero_delta_bookkeeping -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_advance_fp_matrix -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_advance_return_terms -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_five_pass_unconditional_probe -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_advance_view_models_false -- --exact
 make runtime-frame-loop-port-check
 cargo fmt --all -- --check
 ```
@@ -495,10 +505,10 @@ Depends on WP5 and WP7.
 
 ```sh
 cargo test -p nuxie-runtime --lib fl_c5_keyframe_data_bind_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_keyframe_data_bind_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_keyframe_first_source_bind -- --exact
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_keyframe_initialize_converter_order -- --exact
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_keyframe_bound_context_lifecycle -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_keyframe_data_bind_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_keyframe_first_source_bind -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_keyframe_initialize_converter_order -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_keyframe_bound_context_lifecycle -- --exact
 make runtime-frame-loop-port-check
 cargo fmt --all -- --check
 ```
@@ -532,10 +542,10 @@ Depends on WP2, WP6, and WP7.
 
 ```sh
 cargo test -p nuxie-runtime --lib fl_c5_focus_semantic_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_focus_queue_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_semantic_queue_
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_focus_manager_switch_order -- --exact
-cargo test -p nuxie-runtime --test cpp_probe fl_c5_focus_state -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_focus_queue_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_semantic_queue_
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_focus_manager_switch_order -- --exact
+cargo test -p nuxie-runtime --features tools --test cpp_probe fl_c5_focus_state -- --exact
 make runtime-frame-loop-port-check
 cargo fmt --all -- --check
 ```
@@ -567,7 +577,7 @@ Depends on WP0–WP9. No new semantic design belongs here.
 
 ```sh
 cargo test -p nuxie-runtime --lib
-cargo test -p nuxie-runtime --test cpp_probe
+cargo test -p nuxie-runtime --features tools --test cpp_probe
 cargo test -p nuxie --lib
 cargo test -p nuxie --test public_api
 cargo test -p nux-capi
@@ -605,9 +615,12 @@ The following are hard boundaries for every package:
 - Do not rewrite importer owners. Represent `state_machine.cpp` import/onAdded
   behavior through the accepted Rust import architecture.
 - Do not move or refactor the accepted FL-C3
-  `StateMachineLayerInstance` beyond the specific W4 divergence named in WP4.
+  `StateMachineLayerInstance` beyond the specific W4 divergence named in WP4,
+  except for the retained-arena completion explicitly authorized by the W53
+  round-five corrective.
 - Do not change accepted FL-C1–FL-C4 behavior or public APIs except for the
-  minimum delegation/re-export plumbing required by this file split.
+  minimum delegation/re-export plumbing required by this file split and the
+  W53 item-A/item-B corrective behavior.
 - Do not remove any W4 §C public API, narrow its visibility, or silently change
   its signature/result contract.
 - Do not move substantive instance orchestration into `artboard.rs`; it may

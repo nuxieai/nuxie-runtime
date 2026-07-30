@@ -99,9 +99,9 @@ fn animation_reset_pool() -> &'static Mutex<Vec<Vec<AnimationResetEntry>>> {
 }
 
 impl AnimationResetFactory {
-    pub(super) fn from_animation_indices(
+    pub(super) fn from_animation_instances<'a>(
         artboard: &ArtboardInstance,
-        animation_indices: &[usize],
+        animation_instances: impl IntoIterator<Item = &'a LinearAnimationInstance>,
         use_first_as_baseline: bool,
     ) -> AnimationReset {
         let mut entries = animation_reset_pool()
@@ -112,8 +112,8 @@ impl AnimationResetFactory {
         debug_assert!(entries.is_empty());
         let mut objects = Vec::<AnimationResetObjectData>::new();
 
-        for (animation_order, animation_index) in animation_indices.iter().enumerate() {
-            let Some(animation) = artboard.linear_animation(*animation_index) else {
+        for (animation_order, animation_instance) in animation_instances.into_iter().enumerate() {
+            let Some(animation) = animation_instance.retained_definition() else {
                 continue;
             };
             let use_baseline = use_first_as_baseline && animation_order == 0;

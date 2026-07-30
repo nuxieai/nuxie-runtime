@@ -4,12 +4,13 @@ use nuxie_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDataContext,
     RuntimeDataContextLookupKind, RuntimeDataContextLookupReport, RuntimeDrawableDispatchKind,
     RuntimeFeatherState, RuntimeGradientStop, RuntimeImportedViewModelInstanceContext,
-    RuntimeKeyFrame, RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle,
-    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimePathCommand,
-    RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
-    RuntimeStateMachineDataConverterBindStep, RuntimeViewModelLinkError, ScriptError, ScriptHost,
-    ScriptInputViewModelPropertyPath, ScriptInstance, ScriptMethod, ScriptValue,
-    ScriptedStateMachineObjectKind, StateMachineInputKind, StateMachineInstance, TransformProperty,
+    RuntimeKeyFrame, RuntimeNestedEventChainPhase, RuntimeNestedEventChainTrace,
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
+    RuntimeOwnedViewModelInstance, RuntimePathCommand, RuntimeShapePaintKind,
+    RuntimeShapePaintPathKind, RuntimeShapePaintState, RuntimeStateMachineDataConverterBindStep,
+    RuntimeViewModelLinkError, ScriptError, ScriptHost, ScriptInputViewModelPropertyPath,
+    ScriptInstance, ScriptMethod, ScriptValue, ScriptedStateMachineObjectKind,
+    StateMachineInputKind, StateMachineInstance, TransformProperty,
     bound_script_view_model_from_owned_context, bound_script_view_model_from_owned_path,
     bound_script_view_model_snapshot, bound_script_view_model_snapshot_from_path,
     runtime_data_context_lookup_reports, runtime_random_call_count, script_view_model_from_owned,
@@ -2187,6 +2188,61 @@ fn synthetic_state_machine_self_chaining_event(file_id: u64) -> Vec<u8> {
         });
         push_state_machine_fire_event(bytes, REPORTED_EVENT, AT_START);
         push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_sibling_nested_event_reporters(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        for (host_local, artboard_id) in [(1, 1), (3, 2)] {
+            push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+                push_uint_property(bytes, "Node", "parentId", 0);
+                push_uint_property(bytes, "NestedArtboard", "artboardId", artboard_id);
+            });
+            push_object_with_properties(bytes, "NestedStateMachine", |bytes| {
+                push_uint_property(bytes, "Component", "parentId", host_local);
+                push_uint_property(bytes, "NestedAnimation", "animationId", 0);
+            });
+        }
+        for name in ["A-root", "B-root"] {
+            push_object_with_properties(bytes, "Event", |bytes| {
+                push_string_property(bytes, "Event", "name", name);
+            });
+        }
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        for (host_local, root_event_local) in [(1, 5), (3, 6)] {
+            push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+                push_uint_property(bytes, "StateMachineListenerSingle", "targetId", host_local);
+                push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 5);
+                push_uint_property(bytes, "StateMachineListenerSingle", "eventId", 1);
+            });
+            push_object_with_properties(bytes, "ListenerFireEvent", |bytes| {
+                push_uint_property(bytes, "ListenerFireEvent", "eventId", root_event_local);
+            });
+        }
+
+        for name in ["A-local", "B-local"] {
+            push_object_with_properties(bytes, "Artboard", |_| {});
+            push_object_with_properties(bytes, "AudioEvent", |bytes| {
+                push_uint_property(bytes, "AudioEvent", "parentId", 0);
+                push_string_property(bytes, "Event", "name", name);
+            });
+            push_transform_node(bytes, 0, 0.0, 0.0, 1.0, 1.0, 1.0);
+            push_animation_for_single_node(bytes, 2, 0.0, 1.0);
+            push_object_with_properties(bytes, "StateMachine", |_| {});
+            push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+            push_object_with_properties(bytes, "AnyState", |_| {});
+            push_object_with_properties(bytes, "EntryState", |_| {});
+            push_object_with_properties(bytes, "StateTransition", |bytes| {
+                push_uint_property(bytes, "StateTransition", "stateToId", 2);
+            });
+            push_object_with_properties(bytes, "AnimationState", |bytes| {
+                push_uint_property(bytes, "AnimationState", "animationId", 0);
+            });
+            push_state_machine_fire_event(bytes, 1, 0);
+            push_object_with_properties(bytes, "ExitState", |_| {});
+        }
     })
 }
 
@@ -17079,7 +17135,6 @@ fn runtime_drawable_dispatch_stream_filters_hidden_and_opacity_like_cpp_probe() 
             )
         })
         .collect::<Vec<_>>();
-
     assert_eq!(
         cpp_commands,
         vec![(Some(1), RuntimeDrawableDispatchKind::Draw, true)],
@@ -19854,6 +19909,99 @@ fn linear_animation_instance_from_artboard_a_uses_a_definition_when_called_throu
         2.0,
         "the Rust caller artboard remains the application target",
     );
+}
+
+#[test]
+fn state_machine_from_artboard_a_uses_a_timing_exit_and_reset_definitions_when_advanced_through_artboard_b_like_cpp_probe()
+ {
+    const DURATION_IS_PERCENTAGE: u64 = 1 << 1;
+    const ENABLE_EXIT_TIME: u64 = 1 << 2;
+    const EXIT_TIME_IS_PERCENTAGE: u64 = 1 << 3;
+    const PAUSE_ON_EXIT: u64 = 1 << 4;
+
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_cross_artboard_state_machine_definition_owner_cpp.riv";
+    let owner_bytes = synthetic_state_machine_input_transition_with_options(
+        82_832,
+        SyntheticInputTransitionKind::Bool,
+        SyntheticTransitionOptions {
+            duration: 50,
+            flags: DURATION_IS_PERCENTAGE
+                | ENABLE_EXIT_TIME
+                | EXIT_TIME_IS_PERCENTAGE
+                | PAUSE_ON_EXIT,
+            exit_time: Some(50),
+            source_second_frame: 20,
+            source_second_value: 22.0,
+            source_animation_duration: 20,
+            ..Default::default()
+        },
+    );
+    let caller_bytes = synthetic_state_machine_input_transition_with_options(
+        82_833,
+        SyntheticInputTransitionKind::Bool,
+        SyntheticTransitionOptions {
+            duration: 50,
+            flags: DURATION_IS_PERCENTAGE
+                | ENABLE_EXIT_TIME
+                | EXIT_TIME_IS_PERCENTAGE
+                | PAUSE_ON_EXIT,
+            exit_time: Some(50),
+            source_second_frame: 10,
+            source_second_value: 102.0,
+            source_animation_duration: 10,
+            ..Default::default()
+        },
+    );
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.5".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &owner_bytes, &args);
+    let (_, mut owner_artboard) = read_rust_instance_from_bytes(&owner_bytes, label);
+    let (_, mut caller_artboard) = read_rust_instance_from_bytes(&caller_bytes, label);
+    let mut state_machine = owner_artboard
+        .state_machine_instance(0)
+        .expect("state-machine instance retained from artboard A");
+
+    let mut rust_reports = Vec::new();
+    let advanced = caller_artboard.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(state_machine.set_bool(0, true));
+    for seconds in [0.0, 0.5] {
+        let advanced = caller_artboard.advance_state_machine_instance(&mut state_machine, seconds);
+        rust_reports.push((advanced, state_machine.clone()));
+    }
+
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), rust_reports.len());
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&rust_reports).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} cross-artboard step {step}"),
+        );
+    }
+    let update = caller_artboard.update_components();
+    compare_cpp_runtime_update(&cpp, &caller_artboard, &update, label);
 }
 
 #[test]
@@ -83807,6 +83955,170 @@ fn fl_c5_event_bubbling_audio_seam_order() {
 }
 
 #[test]
+fn fl_c5_production_event_source_chains_are_atomic() {
+    fl_c5_run_rust_unit_probe(
+        "production_advance_and_apply_dispatches_each_sibling_reporter_chain_atomically",
+    );
+    fl_c5_run_rust_unit_probe(
+        "production_advance_and_apply_flushes_prior_source_audio_before_later_script_error",
+    );
+    let probe = probe_path().expect("the production atomicity differential requires cpp_probe");
+    let label = "synthetic/fl_c5_sibling_nested_event_reporters.riv";
+    let bytes = synthetic_sibling_nested_event_reporters(96_995);
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-advance-and-apply-state-machine".to_owned(),
+            "0".to_owned(),
+            "0.25".to_owned(),
+            "--runtime-advance-and-apply-state-machine".to_owned(),
+            "0".to_owned(),
+            "0.25".to_owned(),
+        ],
+    );
+    let cpp_snapshots = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .map(|report| {
+            report
+                .reported_events
+                .iter()
+                .filter_map(|event| event.event_name.clone())
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cpp_snapshots,
+        [
+            Vec::<String>::new(),
+            vec!["A-root".to_owned(), "B-root".to_owned()],
+        ],
+        "the live pinned-C++ advanceAndApply path must preserve sibling source order A then B; \
+         the paired Rust production unit above asserts each source's complete local/root/audio \
+         chain in that same order through its real advance_and_apply facade"
+    );
+    let runtime = read_runtime_file(&bytes).expect("Rust imports the sibling reporter fixture");
+    let graph =
+        GraphFile::from_runtime_file(&runtime).expect("Rust graphs the sibling reporter fixture");
+    let mut rust = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        graph.artboards.first().expect("Rust root artboard"),
+        &graph.artboards,
+    )
+    .expect("Rust mounts both sibling reporter artboards");
+    assert_eq!(rust.runtime_nested_state_machine_reports().len(), 2);
+    let mut rust_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust root state-machine occurrence");
+    let rust_trace = RuntimeNestedEventChainTrace::start();
+    rust_machine
+        .advance_and_apply(&mut rust, 0.25)
+        .expect("Rust production sibling-source advance");
+    let rust_steps = rust_trace.finish();
+    let rust_root_names = (0..rust_machine.reported_event_count())
+        .filter_map(|index| {
+            rust_machine
+                .reported_event(&rust, index)
+                .and_then(|event| event.name().map(str::to_owned))
+        })
+        .collect::<Vec<_>>();
+
+    let cpp_first = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("pinned C++ source-reporting frame");
+    assert_eq!(
+        cpp_first
+            .nested_reported_events
+            .iter()
+            .map(|source| source.local_id)
+            .collect::<Vec<_>>(),
+        [2, 4],
+        "pinned C++ advances the authored A then B NestedStateMachine sources"
+    );
+    let audio_event_core_type = u32::from(
+        definition_by_name("AudioEvent")
+            .expect("AudioEvent schema definition")
+            .type_key
+            .int,
+    );
+    let cpp_local_names = cpp_first
+        .nested_reported_events
+        .iter()
+        .map(|source| {
+            let [event] = source.reported_events.as_slice() else {
+                panic!("each pinned C++ sibling must report exactly one event");
+            };
+            assert_eq!(event.event_core_type, Some(audio_event_core_type));
+            assert_eq!(event.seconds_delay, 0.0);
+            event
+                .event_name
+                .clone()
+                .expect("pinned C++ AudioEvent name")
+        })
+        .collect::<Vec<_>>();
+    let cpp_root_names = cpp_snapshots
+        .iter()
+        .find(|snapshot| !snapshot.is_empty())
+        .expect("pinned C++ root-listener reporting snapshot");
+    assert_eq!(rust_root_names, *cpp_root_names);
+
+    let cpp_total_order = cpp_local_names
+        .iter()
+        .zip(cpp_root_names)
+        .flat_map(|(local, root)| {
+            let source = local
+                .strip_suffix("-local")
+                .expect("source event carries the local phase suffix");
+            [local.clone(), root.clone(), format!("{source}-audio")]
+        })
+        .collect::<Vec<_>>();
+    let rust_total_order = rust_steps
+        .iter()
+        .map(|step| {
+            let source = match step.source_local_id {
+                1 => "A",
+                3 => "B",
+                other => panic!("unexpected Rust nested source {other}"),
+            };
+            let phase = match step.phase {
+                RuntimeNestedEventChainPhase::SourceLocal => "local",
+                RuntimeNestedEventChainPhase::AncestorDispatch => "root",
+                RuntimeNestedEventChainPhase::AudioUnwind => "audio",
+            };
+            format!("{source}-{phase}")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rust_total_order, cpp_total_order,
+        "the same imported AudioEvent reporters must complete A-local/root/audio before \
+         B-local/root/audio through the real Rust and pinned-C++ advanceAndApply paths"
+    );
+
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let notify = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::notifyEventListeners(",
+        "void StateMachineInstance::enablePointerEvents(",
+    );
+    let local = notify
+        .find("for (size_t i = 0; i < m_machine->listenerCount(); i++)")
+        .expect("C++ local event-listener phase");
+    let synchronous_bubble = notify
+        .find("listener->notify(events, nestedArtboard());")
+        .expect("C++ synchronous parent notification");
+    let audio_unwind = notify
+        .find("event->is<AudioEvent>()")
+        .expect("C++ audio unwind");
+    assert!(
+        local < synchronous_bubble && synchronous_bubble < audio_unwind,
+        "pinned C++ must finish the source's local, ancestor, and audio phases in one call"
+    );
+}
+
+#[test]
 fn fl_c5_live_event_projection() {
     fl_c5_run_rust_unit_probe("fl_c5_event_listener_fire_reports_live_payload_before_advance");
     let Some(probe) = probe_path() else {
@@ -85619,6 +85931,8 @@ struct CppRuntimeStateMachineAdvance {
     current_animations: Vec<CppRuntimeStateMachineCurrentAnimation>,
     #[serde(default, rename = "reportedEvents")]
     reported_events: Vec<CppRuntimeStateMachineReportedEvent>,
+    #[serde(default, rename = "nestedReportedEvents")]
+    nested_reported_events: Vec<CppRuntimeNestedStateMachineReportedEvents>,
     #[serde(default, rename = "viewModelTriggers")]
     view_model_triggers: Vec<CppRuntimeStateMachineViewModelTrigger>,
     #[serde(default, rename = "viewModelBindings")]
@@ -85661,6 +85975,13 @@ struct CppRuntimeStateMachineAdvance {
     artboard_scripted_objects: Vec<CppRuntimeStateMachineScriptedObject>,
     #[serde(default, rename = "scriptedConverters")]
     scripted_converters: Vec<CppRuntimeStateMachineScriptedConverter>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppRuntimeNestedStateMachineReportedEvents {
+    local_id: usize,
+    reported_events: Vec<CppRuntimeStateMachineReportedEvent>,
 }
 
 #[derive(Debug, Deserialize)]

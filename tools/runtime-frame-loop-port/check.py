@@ -301,10 +301,14 @@ def unbound_scripted_constructor_hits(source: str) -> list[int]:
     return []
 
 
-def semantic_ordinal_projection_hits(source: str) -> list[int]:
-    """Find renamed SemanticData ordinal scans coexisting with the resolver."""
+def semantic_ordinal_projection_hits(
+    source: str,
+    *,
+    resolver_seam_exists: bool,
+) -> list[int]:
+    """Find renamed SemanticData ordinal scans when the repo owns the seam."""
 
-    if re.search(r"\btrait\s+SemanticNodeResolver\b", source) is None:
+    if not resolver_seam_exists:
         return []
     stripped = strip_rust_comments_and_strings(source)
     function_pattern = re.compile(
@@ -1340,6 +1344,15 @@ def check(
     duplicates = duplicate_values(ratchet_ids)
     if duplicates:
         errors.append(f"duplicate ratchet ids: {', '.join(duplicates)}")
+    semantic_resolver_seam_exists = any(
+        re.search(
+            r"\btrait\s+SemanticNodeResolver\b",
+            path.read_text(encoding="utf-8", errors="replace"),
+        )
+        is not None
+        for path in repo_root.glob("crates/nuxie-runtime/src/state_machine/**/*.rs")
+        if path.is_file()
+    )
     for row in ratchet_rows:
         ratchet_id = str(row.get("id", ""))
         pattern_text = str(row.get("pattern", ""))
@@ -1385,7 +1398,10 @@ def check(
                 if ratchet_id == UNBOUND_SCRIPTED_CONSTRUCTOR_RATCHET:
                     found_offsets = unbound_scripted_constructor_hits(source)
                 elif ratchet_id == SEMANTIC_ORDINAL_PROJECTION_RATCHET:
-                    found_offsets = semantic_ordinal_projection_hits(source)
+                    found_offsets = semantic_ordinal_projection_hits(
+                        source,
+                        resolver_seam_exists=semantic_resolver_seam_exists,
+                    )
                 else:
                     found_offsets = [
                         match.start() for match in pattern.finditer(source)

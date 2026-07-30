@@ -917,7 +917,8 @@ Closure checklist:
   masked;
 - [x] every recorded seam names its owning row and remains unpromoted;
 - [x] every structural rule has a passing injected negative control
-  (`make runtime-frame-loop-port-test`: 59 passed);
+  (`make runtime-frame-loop-port-test`: use the live count reported by the
+  gate receipt);
 - [x] focused Rust tests and pinned-C++ differentials are green;
 - [x] the complete non-performance correctness floor, public/downstream API
   floor, structural checker, format/lint, C API, Apple, browser, pixel, size,

@@ -4501,13 +4501,11 @@ impl ArtboardInstance {
         instance.keep_going()
     }
 
-    pub(crate) fn linear_animation_instance_definition(
+    pub(crate) fn linear_animation_instance_definition<'a>(
         &self,
-        instance: &LinearAnimationInstance,
-    ) -> Option<&RuntimeLinearAnimation> {
-        instance
-            .animation_handle()
-            .resolve(&self.linear_animations, &self.empty_linear_animation)
+        instance: &'a LinearAnimationInstance,
+    ) -> Option<&'a RuntimeLinearAnimation> {
+        instance.retained_definition()
     }
 
     pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
@@ -5460,13 +5458,15 @@ impl ArtboardInstance {
             instances,
             elapsed_seconds,
             None,
-            |artboard, elapsed_seconds| {
-                let mut nested_events = Vec::new();
-                let changed = artboard.advance_nested_artboards_collect_events(
+            |artboard, elapsed_seconds, nested_event_dispatch| {
+                let mut script_mode = RuntimeScriptAdvanceMode::Disabled;
+                artboard.advance_retained_components_collect_events_with_scripts(
                     elapsed_seconds,
-                    Some(&mut nested_events),
-                );
-                Ok((changed, nested_events))
+                    true,
+                    &mut script_mode,
+                    None,
+                    Some(nested_event_dispatch),
+                )
             },
         )
         .expect("disabled script dispatch cannot fail")
@@ -5483,13 +5483,15 @@ impl ArtboardInstance {
             instances,
             elapsed_seconds,
             Some(context),
-            |artboard, elapsed_seconds| {
-                let mut nested_events = Vec::new();
-                let changed = artboard.advance_nested_artboards_collect_events(
+            |artboard, elapsed_seconds, nested_event_dispatch| {
+                let mut script_mode = RuntimeScriptAdvanceMode::Disabled;
+                artboard.advance_retained_components_collect_events_with_scripts(
                     elapsed_seconds,
-                    Some(&mut nested_events),
-                );
-                Ok((changed, nested_events))
+                    true,
+                    &mut script_mode,
+                    None,
+                    Some(nested_event_dispatch),
+                )
             },
         )
         .expect("disabled script dispatch cannot fail")
@@ -5497,18 +5499,6 @@ impl ArtboardInstance {
 
     pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {
         self.advance_nested_artboards_collect_events(elapsed_seconds, None)
-    }
-
-    pub(crate) fn flush_nested_deferred_owner_audio_events(&mut self, host_local: usize) {
-        if let Some(nested) = self.nested_artboards.get_mut(&host_local) {
-            nested.flush_deferred_owner_audio_events();
-        }
-    }
-
-    fn flush_all_nested_deferred_owner_audio_events(&mut self) {
-        for nested in self.nested_artboards.values_mut() {
-            nested.flush_deferred_owner_audio_events();
-        }
     }
 
     /// Report imported nested-state-machine occurrence ownership and empty
@@ -5672,12 +5662,19 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         state_machine: &mut StateMachineInstance,
     ) -> bool {
-        StateMachineInstance::dispatch_collected_nested_events_with(
+        StateMachineInstance::dispatch_nested_event_sources_with(
             self,
             state_machine,
-            |artboard, nested_events| {
+            |artboard, nested_event_dispatch| {
                 let _ = artboard
-                    .advance_nested_artboards_collect_events(elapsed_seconds, Some(nested_events));
+                    .advance_retained_components_collect_events_with_scripts(
+                        elapsed_seconds,
+                        true,
+                        &mut RuntimeScriptAdvanceMode::Disabled,
+                        None,
+                        Some(nested_event_dispatch),
+                    )
+                    .expect("disabled script dispatch cannot fail");
                 Ok(())
             },
         )
@@ -5696,6 +5693,7 @@ impl ArtboardInstance {
             elapsed_seconds,
             &mut script_mode,
             None,
+            None,
         )
     }
 
@@ -5710,6 +5708,7 @@ impl ArtboardInstance {
             elapsed_seconds,
             &mut script_mode,
             None,
+            None,
         )
     }
 
@@ -5718,16 +5717,17 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         state_machine: &mut StateMachineInstance,
     ) -> Result<bool, ScriptError> {
-        StateMachineInstance::dispatch_collected_nested_events_with(
+        StateMachineInstance::dispatch_nested_event_sources_with(
             self,
             state_machine,
-            |artboard, nested_events| {
+            |artboard, nested_event_dispatch| {
                 let mut script_mode = RuntimeScriptAdvanceMode::HostOnly;
                 artboard
                     .advance_frame_components_collect_events_with_mode(
                         elapsed_seconds,
                         &mut script_mode,
-                        Some(nested_events),
+                        None,
+                        Some(nested_event_dispatch),
                     )
                     .map(|_| ())
             },
@@ -5772,30 +5772,38 @@ impl ArtboardInstance {
     pub(crate) fn advance_components_after_root_state_machines(
         &mut self,
         elapsed_seconds: f32,
-    ) -> Result<(bool, Vec<(usize, Vec<StateMachineReportedEvent>)>), ScriptError> {
-        let mut nested_events = Vec::new();
+        nested_event_dispatch: &mut dyn FnMut(
+            &mut ArtboardInstance,
+            usize,
+            &[StateMachineReportedEvent],
+        ) -> bool,
+    ) -> Result<bool, ScriptError> {
         let mut script_mode = RuntimeScriptAdvanceMode::HostOnly;
-        let changed = self.advance_frame_components_collect_events_with_mode(
+        self.advance_frame_components_collect_events_with_mode(
             elapsed_seconds,
             &mut script_mode,
-            Some(&mut nested_events),
-        )?;
-        Ok((changed, nested_events))
+            None,
+            Some(nested_event_dispatch),
+        )
     }
 
     pub(crate) fn advance_components_after_root_state_machines_with_factory(
         &mut self,
         elapsed_seconds: f32,
         factory: &mut dyn RenderFactory,
-    ) -> Result<(bool, Vec<(usize, Vec<StateMachineReportedEvent>)>), ScriptError> {
-        let mut nested_events = Vec::new();
+        nested_event_dispatch: &mut dyn FnMut(
+            &mut ArtboardInstance,
+            usize,
+            &[StateMachineReportedEvent],
+        ) -> bool,
+    ) -> Result<bool, ScriptError> {
         let mut script_mode = RuntimeScriptAdvanceMode::Factory(factory);
-        let changed = self.advance_frame_components_collect_events_with_mode(
+        self.advance_frame_components_collect_events_with_mode(
             elapsed_seconds,
             &mut script_mode,
-            Some(&mut nested_events),
-        )?;
-        Ok((changed, nested_events))
+            None,
+            Some(nested_event_dispatch),
+        )
     }
 
     fn advance_frame_components_collect_events_with_mode(
@@ -5803,12 +5811,16 @@ impl ArtboardInstance {
         elapsed_seconds: f32,
         script_mode: &mut RuntimeScriptAdvanceMode<'_>,
         nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
+        nested_event_dispatch: Option<
+            &mut dyn FnMut(&mut ArtboardInstance, usize, &[StateMachineReportedEvent]) -> bool,
+        >,
     ) -> Result<bool, ScriptError> {
         let mut changed = self.advance_retained_components_collect_events_with_scripts(
             elapsed_seconds,
             true,
             script_mode,
             nested_events,
+            nested_event_dispatch,
         )?;
         changed |= self.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
         Ok(changed)
@@ -5834,6 +5846,7 @@ impl ArtboardInstance {
             new_frame,
             &mut script_mode,
             nested_events,
+            None,
         )
         .expect("disabled script dispatch cannot fail")
     }
@@ -5844,6 +5857,9 @@ impl ArtboardInstance {
         new_frame: bool,
         script_mode: &mut RuntimeScriptAdvanceMode<'_>,
         mut nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
+        mut nested_event_dispatch: Option<
+            &mut dyn FnMut(&mut ArtboardInstance, usize, &[StateMachineReportedEvent]) -> bool,
+        >,
     ) -> Result<bool, ScriptError> {
         let mut changed = false;
         if self.advancing_components.is_empty() {
@@ -5897,15 +5913,41 @@ impl ArtboardInstance {
         for index in 0..self.advancing_components.len() {
             let entry = self.advancing_components[index];
             changed |= match entry.kind {
-                AdvancingComponentKind::NestedArtboard => self.advance_nested_artboard_entry(
-                    entry.local_id,
-                    elapsed_seconds,
-                    new_frame,
-                    script_mode,
-                    layout_frame.as_ref(),
-                    &mut initial_layout_paint_evaluations,
-                    nested_events.as_mut().map(|events| &mut **events),
-                )?,
+                AdvancingComponentKind::NestedArtboard => {
+                    let has_dispatch = nested_event_dispatch.is_some();
+                    let mut dispatch_source =
+                        |artboard: &mut ArtboardInstance,
+                         host_local: usize,
+                         events: &[StateMachineReportedEvent]| {
+                            nested_event_dispatch
+                                .as_mut()
+                                .is_some_and(|dispatch| (**dispatch)(artboard, host_local, events))
+                        };
+                    StateMachineInstance::advance_nested_event_source_with(
+                        self,
+                        entry.local_id,
+                        nested_events.as_deref_mut(),
+                        has_dispatch.then_some(
+                            &mut dispatch_source
+                                as &mut dyn FnMut(
+                                    &mut ArtboardInstance,
+                                    usize,
+                                    &[StateMachineReportedEvent],
+                                ) -> bool,
+                        ),
+                        |artboard, reported_events| {
+                            artboard.advance_nested_artboard_entry(
+                                entry.local_id,
+                                elapsed_seconds,
+                                new_frame,
+                                script_mode,
+                                layout_frame.as_ref(),
+                                &mut initial_layout_paint_evaluations,
+                                reported_events,
+                            )
+                        },
+                    )?
+                }
                 AdvancingComponentKind::ArtboardComponentList => self
                     .advance_component_list_entry(
                         entry.local_id,
@@ -6101,7 +6143,7 @@ impl ArtboardInstance {
         script_mode: &mut RuntimeScriptAdvanceMode<'_>,
         layout_frame: Option<&RuntimeNestedLayoutBoundsFrame>,
         initial_layout_paint_evaluations: &mut BTreeMap<usize, ArtboardInstance>,
-        nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
+        reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
     ) -> Result<bool, ScriptError> {
         if self
             .component(host_local)
@@ -6131,15 +6173,10 @@ impl ArtboardInstance {
             }
         }
 
-        let mut reported_events = Vec::new();
         let (keep_going, child_dirty) =
             if let Some(nested) = self.nested_artboards.get_mut(&host_local) {
                 let keep_going = if new_frame {
-                    nested.advance(
-                        elapsed_seconds,
-                        script_mode,
-                        nested_events.as_ref().map(|_| &mut reported_events),
-                    )?
+                    nested.advance(elapsed_seconds, script_mode, reported_events)?
                 } else {
                     nested.advance_outer_update()
                 };
@@ -6147,11 +6184,6 @@ impl ArtboardInstance {
             } else {
                 (false, false)
             };
-        if let Some(nested_events) = nested_events
-            && !reported_events.is_empty()
-        {
-            nested_events.push((host_local, reported_events));
-        }
         if child_dirty {
             self.add_dirt(host_local, ComponentDirt::COMPONENTS, false);
         }
@@ -6236,6 +6268,7 @@ impl ArtboardInstance {
                         true,
                         script_mode,
                         None,
+                        None,
                     )?
             } else {
                 item.child
@@ -6243,6 +6276,7 @@ impl ArtboardInstance {
                         elapsed_seconds,
                         false,
                         script_mode,
+                        None,
                         None,
                     )?
             };
@@ -10133,14 +10167,12 @@ impl RuntimeNestedArtboardInstance {
         }
 
         let has_outer_owner = reported_events.is_some();
-        let mut changed = false;
-        for animation in &mut self.animations {
-            changed |= animation.advance(
-                &mut self.child,
-                local_elapsed_seconds,
-                reported_events.as_mut().map(|events| &mut **events),
-            );
-        }
+        let mut changed = StateMachineInstance::advance_nested_animation_owners(
+            &mut self.animations,
+            &mut self.child,
+            local_elapsed_seconds,
+            reported_events.as_deref_mut(),
+        );
         // C++ advances the ENTIRE nested subtree before any data-bind pass
         // reaches it: `NestedArtboard::advanceComponent` only advances
         // animations and `advanceInternal` (src/nested_artboard.cpp:965-1008),
@@ -10152,45 +10184,40 @@ impl RuntimeNestedArtboardInstance {
         // machine observe a reverse write one pass earlier than C++ (the
         // db_health_tracker blend consumed the pulled value on the first
         // frame where C++ still blends the pre-pull value).
-        let mut child_nested_events = Vec::new();
+        let animations = &mut self.animations;
+        let mut dispatch_nested_source =
+            |child: &mut ArtboardInstance,
+             host_local: usize,
+             events: &[StateMachineReportedEvent]| {
+                StateMachineInstance::dispatch_nested_events_to_animation_owners(
+                    animations,
+                    child,
+                    host_local,
+                    events,
+                    reported_events.as_deref_mut(),
+                )
+            };
         changed |= self
             .child
             .advance_retained_components_collect_events_with_scripts(
                 local_elapsed_seconds,
                 true,
                 script_mode,
-                Some(&mut child_nested_events),
+                None,
+                Some(&mut dispatch_nested_source),
             )?;
-        for (host_local, events) in child_nested_events {
-            for animation in &mut self.animations {
-                let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation else {
-                    continue;
-                };
-                changed |= occurrence.notify_nested_events_and_collect(
-                    &mut self.child,
-                    host_local,
-                    &events,
-                    reported_events.as_deref_mut(),
-                );
-            }
-        }
+        drop(dispatch_nested_source);
         // Mirrors C++ src/nested_artboard.cpp NestedArtboard::updateDataBinds.
         changed |= self
             .child
             .advance_artboard_data_binds_with_elapsed(local_elapsed_seconds);
         if !has_outer_owner {
-            self.flush_deferred_owner_audio_events();
+            StateMachineInstance::flush_nested_animation_owner_audio(
+                &mut self.animations,
+                &mut self.child,
+            );
         }
         Ok(changed)
-    }
-
-    fn flush_deferred_owner_audio_events(&mut self) {
-        for animation in &mut self.animations {
-            if let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation {
-                occurrence.flush_deferred_owner_audio_events();
-            }
-        }
-        self.child.flush_all_nested_deferred_owner_audio_events();
     }
 
     fn reset_outer_state_machine_changed_state_counts(&mut self) {
@@ -10399,7 +10426,7 @@ impl RuntimeNestedAnimationInstance {
         }
     }
 
-    fn advance(
+    pub(crate) fn advance(
         &mut self,
         child: &mut ArtboardInstance,
         elapsed_seconds: f32,
@@ -11536,6 +11563,166 @@ mod tests {
             scripted_object_bindings: Vec::new(),
             action_owners: crate::state_machine::RuntimeActionCoreArena::empty(),
         }
+    }
+
+    fn nested_audio_event(local_index: usize) -> (StateMachineReportedEvent, u32) {
+        let file = RuntimeFile::from_authoring_records(vec![
+            authoring_record("Backboard", Vec::new()),
+            authoring_record("Artboard", Vec::new()),
+            authoring_record(
+                "AudioEvent",
+                vec![authoring_property(
+                    "AudioEvent",
+                    "parentId",
+                    AuthoringValue::Uint(0),
+                )],
+            ),
+        ])
+        .expect("import nested AudioEvent fixture");
+        let event = file
+            .objects
+            .iter()
+            .flatten()
+            .find(|object| object.type_name == "AudioEvent")
+            .expect("AudioEvent fixture object");
+        (
+            StateMachineReportedEvent::from_runtime_event(local_index, event),
+            u32::from(event.type_key),
+        )
+    }
+
+    fn nested_event_source(
+        graph_global_id: u32,
+        event: StateMachineReportedEvent,
+        local_phase: &'static str,
+        audio_phase: &'static str,
+        total_order: &Rc<RefCell<Vec<&'static str>>>,
+    ) -> RuntimeNestedArtboardInstance {
+        let mut child =
+            synthetic_instance(vec![synthetic_component_for_type(0, "Artboard")], vec![0]);
+        child.graph_global_id = graph_global_id;
+        child.state_machines = Arc::new(vec![empty_state_machine(graph_global_id)]);
+        let definition = Arc::clone(&child.state_machines);
+        let mut machine = StateMachineInstance::new(0, &definition[0], &mut child);
+        machine.configure_nested_event_source_test(
+            local_phase,
+            audio_phase,
+            Rc::clone(total_order),
+            event,
+        );
+        let mut nested = synthetic_nested_artboard_instance(graph_global_id);
+        nested.child = Box::new(child);
+        nested
+            .animations
+            .push(RuntimeNestedAnimationInstance::StateMachine(
+                RuntimeNestedStateMachineInstance::new(0, machine, Vec::new()),
+            ));
+        nested
+    }
+
+    #[test]
+    fn production_advance_and_apply_dispatches_each_sibling_reporter_chain_atomically() {
+        let total_order = Rc::new(RefCell::new(Vec::new()));
+        let (event, event_core_type) = nested_audio_event(7);
+        let mut root = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "NestedArtboard"),
+                synthetic_component_for_type(2, "NestedArtboard"),
+            ],
+            vec![0, 1, 2],
+        );
+        root.nested_artboards.insert(
+            1,
+            nested_event_source(101, event.clone(), "A-local", "A-audio", &total_order),
+        );
+        root.nested_artboards.insert(
+            2,
+            nested_event_source(102, event, "B-local", "B-audio", &total_order),
+        );
+        root.state_machines = Arc::new(vec![empty_state_machine(100)]);
+        let definition = Arc::clone(&root.state_machines);
+        let mut root_machine = StateMachineInstance::new(0, &definition[0], &mut root);
+        root_machine.configure_nested_event_root_test(
+            "root-local",
+            "root-audio",
+            Rc::clone(&total_order),
+            [1, 2],
+        );
+
+        root_machine
+            .advance_and_apply(&mut root, 0.25)
+            .expect("production advance_and_apply frame");
+
+        assert_eq!(
+            total_order.borrow().as_slice(),
+            [
+                "A-local",
+                "root-local",
+                "root-audio",
+                "A-audio",
+                "B-local",
+                "root-local",
+                "root-audio",
+                "B-audio",
+            ],
+            "each source completes local dispatch, ancestor dispatch, and audio unwind before the next authored component advances",
+        );
+        assert_eq!(
+            root_machine.audio_event_seam_receipt(),
+            (2, Some((7, event_core_type))),
+        );
+    }
+
+    #[test]
+    fn production_advance_and_apply_flushes_prior_source_audio_before_later_script_error() {
+        let total_order = Rc::new(RefCell::new(Vec::new()));
+        let (event, event_core_type) = nested_audio_event(7);
+        let mut root = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "NestedArtboard"),
+                synthetic_component_for_type(2, "ScriptedDrawable"),
+            ],
+            vec![0, 1, 2],
+        );
+        root.nested_artboards.insert(
+            1,
+            nested_event_source(101, event, "A-local", "A-audio", &total_order),
+        );
+        root.set_script_instance_for_global(
+            2,
+            Box::new(FailOnceAdvanceScriptInstance {
+                attempts: Rc::new(RefCell::new(Vec::new())),
+                should_fail: Rc::new(Cell::new(true)),
+            }),
+        );
+        root.state_machines = Arc::new(vec![empty_state_machine(100)]);
+        let definition = Arc::clone(&root.state_machines);
+        let mut root_machine = StateMachineInstance::new(0, &definition[0], &mut root);
+        root_machine.configure_nested_event_root_test(
+            "root-local",
+            "root-audio",
+            Rc::clone(&total_order),
+            [1],
+        );
+
+        root_machine
+            .advance_and_apply(&mut root, 0.25)
+            .expect_err("later scripted component fails");
+
+        assert_eq!(
+            total_order.borrow().as_slice(),
+            ["A-local", "root-local", "root-audio", "A-audio"],
+            "the earlier reporter's deferred audio is flushed before propagating the later ScriptError",
+        );
+        let nested_machine = root
+            .nested_state_machine(0)
+            .expect("nested source state machine");
+        assert_eq!(
+            nested_machine.audio_event_seam_receipt(),
+            (1, Some((7, event_core_type))),
+        );
     }
 
     #[test]

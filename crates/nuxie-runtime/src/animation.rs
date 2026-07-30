@@ -2195,6 +2195,14 @@ impl LinearAnimationInstance {
         )
     }
 
+    pub(crate) fn set_time_from_retained_definition(&mut self, seconds: f32) {
+        let definitions = Arc::clone(&self.animation_definitions);
+        let empty = Arc::clone(&self.empty_animation_definition);
+        if let Some(definition) = self.animation.resolve(&definitions, &empty) {
+            self.set_time(definition, seconds);
+        }
+    }
+
     fn loop_value_for_definition(&self, definition: &RuntimeLinearAnimation) -> i32 {
         if self.loop_value_override == -1 {
             definition.loop_value as i32

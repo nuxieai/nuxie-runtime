@@ -13,6 +13,52 @@ import tempfile
 
 TREE_SHA_PREFIX = b"FLOOR_RECEIPT_TREE_SHA="
 TREE_SHA_RE = re.compile(r"[0-9a-f]{40}")
+EVIDENCE_DIR = pathlib.PurePosixPath("docs/runtime-frame-loop-fl-c5-evidence")
+
+
+def tracked_floor_receipts(repo_root: pathlib.Path) -> list[pathlib.Path]:
+    completed = subprocess.run(
+        ["git", "ls-files", "-z", "--", EVIDENCE_DIR.as_posix()],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+    )
+    tracked = completed.stdout.decode("utf-8").split("\0")
+    return sorted(
+        repo_root / path
+        for path in tracked
+        if path
+        and pathlib.PurePosixPath(path).name.startswith("floor")
+        and pathlib.PurePosixPath(path).suffix == ".log"
+    )
+
+
+def validate_tracked_floor_receipts(repo_root: pathlib.Path) -> list[str]:
+    errors = []
+    for receipt in tracked_floor_receipts(repo_root):
+        relative = receipt.relative_to(repo_root).as_posix()
+        lines = receipt.read_bytes().splitlines()
+        first_line = lines[0] if lines else b""
+        if not first_line.startswith(TREE_SHA_PREFIX):
+            errors.append(f"{relative}: missing receipt tree SHA")
+            continue
+        tree_sha_bytes = first_line.removeprefix(TREE_SHA_PREFIX)
+        try:
+            tree_sha = tree_sha_bytes.decode("ascii")
+        except UnicodeDecodeError:
+            errors.append(f"{relative}: malformed receipt tree SHA")
+            continue
+        if TREE_SHA_RE.fullmatch(tree_sha) is None:
+            errors.append(f"{relative}: malformed receipt tree SHA")
+            continue
+        resolved = subprocess.run(
+            ["git", "cat-file", "-e", f"{tree_sha}^{{commit}}"],
+            cwd=repo_root,
+            capture_output=True,
+        )
+        if resolved.returncode != 0:
+            errors.append(f"{relative}: unresolvable receipt tree SHA {tree_sha}")
+    return errors
 
 
 def resolve_tree_sha(repo_root: pathlib.Path, requested: str | None) -> str:

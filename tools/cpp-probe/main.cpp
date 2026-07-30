@@ -83,6 +83,7 @@ size_t randomProviderTotalCalls();
 #include "rive/animation/listener_fire_event.hpp"
 #include "rive/animation/nested_input.hpp"
 #include "rive/animation/nested_remap_animation.hpp"
+#include "rive/animation/nested_simple_animation.hpp"
 #include "rive/animation/nested_state_machine.hpp"
 #include "rive/animation/listener_types/listener_input_type.hpp"
 #include "rive/animation/listener_types/listener_input_type_viewmodel.hpp"
@@ -354,6 +355,36 @@ struct RuntimeStateMachineReportedEventReport
     int coreType;
     std::string name;
     float secondsDelay;
+};
+
+class RuntimeNestedEventRecorder final : public rive::NestedEventListener
+{
+public:
+    void notify(const std::vector<rive::EventReport>& events,
+                rive::NestedArtboard*) override
+    {
+        for (const auto& eventReport : events)
+        {
+            auto event = eventReport.event();
+            RuntimeStateMachineReportedEventReport reportedEvent;
+            reportedEvent.hasEvent = event != nullptr;
+            reportedEvent.hasEventLocal = false;
+            reportedEvent.eventLocal = 0;
+            reportedEvent.coreType = event == nullptr ? 0 : event->coreType();
+            reportedEvent.name = event == nullptr ? "" : event->name();
+            reportedEvent.secondsDelay = eventReport.secondsDelay();
+            m_reportedEvents.push_back(std::move(reportedEvent));
+        }
+    }
+
+    const std::vector<RuntimeStateMachineReportedEventReport>& reportedEvents()
+        const
+    {
+        return m_reportedEvents;
+    }
+
+private:
+    std::vector<RuntimeStateMachineReportedEventReport> m_reportedEvents;
 };
 
 struct RuntimeAnimationAdvanceReport
@@ -7559,6 +7590,29 @@ apply_runtime_state_machine_advances(rive::File* file,
         bool advanced = false;
         bool pointerInputProbe = false;
         int pointerHitResult = -1;
+        const auto& occurrenceObjects = instance->objects();
+        std::vector<std::pair<
+            size_t,
+            std::unique_ptr<RuntimeNestedEventRecorder>>>
+            nestedSimpleRecorders;
+        for (size_t localId = 0; localId < occurrenceObjects.size(); ++localId)
+        {
+            auto object = occurrenceObjects[localId];
+            if (object == nullptr || !object->is<rive::NestedSimpleAnimation>())
+            {
+                continue;
+            }
+            auto animation =
+                object->as<rive::NestedSimpleAnimation>()->animationInstance();
+            if (animation == nullptr)
+            {
+                continue;
+            }
+            auto recorder = std::make_unique<RuntimeNestedEventRecorder>();
+            animation->addNestedEventListener(recorder.get());
+            nestedSimpleRecorders.push_back(
+                {localId, std::move(recorder)});
+        }
         std::unique_ptr<PersistentDirtProbeComponent> persistentDirtProbe;
         if (action.kind ==
             RuntimeStateMachineActionKind::AdvanceAndApplyPersistentDirt)
@@ -7644,6 +7698,13 @@ apply_runtime_state_machine_advances(rive::File* file,
         else
         {
             advanced = stateMachine->advance(action.seconds);
+        }
+        for (const auto& [localId, recorder] : nestedSimpleRecorders)
+        {
+            occurrenceObjects[localId]
+                ->as<rive::NestedSimpleAnimation>()
+                ->animationInstance()
+                ->removeNestedEventListener(recorder.get());
         }
         RuntimeStateMachineAdvanceReport report;
         report.stateMachineIndex = action.stateMachineIndex;
@@ -7818,7 +7879,6 @@ apply_runtime_state_machine_advances(rive::File* file,
             }
             report.reportedEvents.push_back(reportedEvent);
         }
-        const auto& occurrenceObjects = instance->objects();
         for (size_t localId = 0; localId < occurrenceObjects.size(); ++localId)
         {
             auto object = occurrenceObjects[localId];
@@ -7849,6 +7909,11 @@ apply_runtime_state_machine_advances(rive::File* file,
             }
             report.nestedReportedEvents.push_back(
                 {localId, std::move(nestedEvents)});
+        }
+        for (const auto& [localId, recorder] : nestedSimpleRecorders)
+        {
+            report.nestedReportedEvents.push_back(
+                {localId, recorder->reportedEvents()});
         }
         report.viewModelTriggers =
             collect_default_view_model_trigger_reports(file);

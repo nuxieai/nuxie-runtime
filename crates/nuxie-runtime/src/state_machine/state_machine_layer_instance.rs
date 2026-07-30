@@ -730,8 +730,19 @@ impl StateMachineLayerInstance {
             )?;
         }
 
+        // A transition interruption releases the older transition-source
+        // occurrence and its key-frame binds before the outgoing current
+        // occurrence becomes the new source. C++ constructs the replacement
+        // transition reset only after that teardown/reassignment
+        // (`state_machine_instance.cpp:573-585`).
+        if let Some(state_from) = self.state_from.as_mut() {
+            state_from.remove_key_frame_data_binds();
+        }
+        self.state_from = None;
+        self.state_from = previous_state;
         let mut reset_animation_instances = Vec::new();
-        if let Some(animation) = previous_state
+        if let Some(animation) = self
+            .state_from
             .as_ref()
             .and_then(RuntimeStateInstance::plain_animation)
         {
@@ -751,11 +762,6 @@ impl StateMachineLayerInstance {
                 false,
             )
         });
-        // A transition interruption releases the older transition-source
-        // occurrence before the outgoing current occurrence becomes the new
-        // source (`state_machine_instance.cpp:573-580`).
-        self.state_from = None;
-        self.state_from = previous_state;
         if previous_state_index.is_some() {
             self.transition_duration_seconds = transition_duration_seconds;
             self.transition_animation_reset = transition_animation_reset;

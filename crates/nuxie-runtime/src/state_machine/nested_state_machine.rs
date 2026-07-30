@@ -1,8 +1,8 @@
 use super::{StateMachineInputKind, StateMachineInstance};
+use crate::ArtboardInstance;
 use crate::RuntimeOwnedViewModelInstance;
 use crate::artboard_data_bind::RuntimeOwnedDataContext;
 use crate::focus::RuntimeFocusTree;
-use crate::{ArtboardInstance, StateMachineReportedEvent};
 use nuxie_binary::RuntimeFile;
 use nuxie_graph::ArtboardGraph;
 
@@ -256,7 +256,7 @@ impl RuntimeNestedStateMachineInstance {
         let input_names = (0..self.input_count())
             .filter_map(|index| self.input_name_at(index))
             .collect();
-        let empty_advance = occurrence.advance(&mut child, 0.0, None);
+        let empty_advance = occurrence.advance(&mut child, 0.0);
         let empty_hit_test = occurrence.hit_test(&child, 0.0, 0.0);
         let empty_pointer_down = !occurrence.pointer_down(&mut child, 0.0, 0.0, 1);
         let empty_pointer_move = !occurrence.pointer_move(&mut child, 0.0, 0.0, 0.25, 1);
@@ -323,24 +323,11 @@ impl RuntimeNestedStateMachineInstance {
         changed
     }
 
-    pub(crate) fn advance(
-        &mut self,
-        child: &mut ArtboardInstance,
-        elapsed_seconds: f32,
-        mut reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
-    ) -> bool {
+    pub(crate) fn advance(&mut self, child: &mut ArtboardInstance, elapsed_seconds: f32) -> bool {
         let Some(state_machine) = self.state_machine.as_mut() else {
             return false;
         };
-        let changed = child.advance_state_machine_instance(state_machine, elapsed_seconds);
-        if let Some(reported_events) = reported_events.as_mut() {
-            for index in 0..state_machine.reported_event_count() {
-                if let Some(event) = state_machine.reported_event(child, index) {
-                    (**reported_events).push(event.clone());
-                }
-            }
-        }
-        changed
+        child.advance_state_machine_instance(state_machine, elapsed_seconds)
     }
 
     pub(crate) fn hit_test(&self, child: &ArtboardInstance, x: f32, y: f32) -> bool {

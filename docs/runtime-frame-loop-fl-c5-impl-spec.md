@@ -44,13 +44,16 @@ The writer may change production code only where required by these packages:
 - update the FL-C5 closure/status/ownership/manifest evidence only after the
   corresponding production behavior and proof are green.
 
-The joint round-five corrective in `.flc5/W53-round5-spec.md` supersedes this
-original ownership list only for its binding items A and B. Item A authorizes
-moving nested event collection, animation-owner selection, dispatch, and audio
-unwinding out of `artboard.rs` and `nested_state_machine.rs` into
-`state_machine_instance.rs`, leaving borrow closures in the former files.
-Item B authorizes the directly coupled retained-definition changes in
-`animation.rs`, `animation_reset_factory.rs`, blend/state occurrence
+The joint round-five corrective in `.flc5/W53-round5-spec.md`, as refined by
+the round-six corrective in `.flc5/W58-round6-spec.md`, supersedes this
+original ownership list only for its binding items A and B. For item A,
+`state_machine_instance.rs` owns each nested animation occurrence's report
+queue iteration/copy, notifier selection, dispatch decision, and audio-seam
+initiation. `artboard.rs` retains the authored animation loop plus child-
+subtree and DataBind ordering, and calls the instance policies with the
+borrows they need; `nested_state_machine.rs` remains a trivial child-machine
+advance. Item B authorizes the directly coupled retained-definition changes
+in `animation.rs`, `animation_reset_factory.rs`, blend/state occurrence
 construction, `state_machine_layer_instance.rs`, and their tests. No other
 production scope is reopened.
 

@@ -12565,10 +12565,158 @@ impl StateMachineInstance {
         Ok(advanced)
     }
 
-    /// Instance-owned policy for a single root machine consuming nested
-    /// reports. Artboard retains only the borrow closure needed to run its
-    /// advancing-component collector.
-    pub(crate) fn advance_nested_event_source_with(
+    /// Advance one authored nested animation and complete its reporting chain
+    /// before the caller advances the next animation or the child subtree.
+    ///
+    /// Report collection, notifier selection, dispatch, and the source audio
+    /// tail all remain instance-owned; Artboard supplies only the animation
+    /// index that its authored-order loop selected.
+    pub(crate) fn advance_nested_animation_owner_with(
+        artboard: &mut ArtboardInstance,
+        host_local: usize,
+        animation_index: usize,
+        elapsed_seconds: f32,
+        nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
+        nested_event_dispatch: Option<
+            &mut dyn FnMut(&mut ArtboardInstance, usize, &[StateMachineReportedEvent]) -> bool,
+        >,
+    ) -> Result<bool, ScriptError> {
+        let should_collect = nested_events.is_some() || nested_event_dispatch.is_some();
+        let mut reported_events = Vec::new();
+        let (changed, _notifier_local) = {
+            let Some(nested) = artboard.nested_artboards.get_mut(&host_local) else {
+                return Ok(false);
+            };
+            let Some(animation) = nested.animations.get_mut(animation_index) else {
+                return Ok(false);
+            };
+            let notifier_local = match animation {
+                crate::artboard::RuntimeNestedAnimationInstance::Simple { local_id, .. }
+                | crate::artboard::RuntimeNestedAnimationInstance::Remap { local_id, .. } => {
+                    *local_id
+                }
+                crate::artboard::RuntimeNestedAnimationInstance::StateMachine(occurrence) => {
+                    occurrence.local_id()
+                }
+            };
+            let changed = Self::advance_nested_animation_owner(
+                animation,
+                &mut nested.child,
+                elapsed_seconds,
+                should_collect.then_some(&mut reported_events),
+            );
+            (changed, notifier_local)
+        };
+        #[cfg(feature = "tools")]
+        if !reported_events.is_empty() {
+            record_runtime_nested_event_chain_step(
+                _notifier_local,
+                RuntimeNestedEventChainPhase::SourceLocal,
+            );
+        }
+        if let Some(dispatch) = nested_event_dispatch {
+            let notified =
+                !reported_events.is_empty() && dispatch(artboard, host_local, &reported_events);
+            #[cfg(feature = "tools")]
+            if !reported_events.is_empty() {
+                record_runtime_nested_event_chain_step(
+                    _notifier_local,
+                    RuntimeNestedEventChainPhase::AncestorDispatch,
+                );
+            }
+            Self::flush_nested_animation_owner_audio_at(artboard, host_local, animation_index);
+            #[cfg(feature = "tools")]
+            if !reported_events.is_empty() {
+                record_runtime_nested_event_chain_step(
+                    _notifier_local,
+                    RuntimeNestedEventChainPhase::AudioUnwind,
+                );
+            }
+            Ok(changed | notified)
+        } else if reported_events.is_empty() {
+            Self::flush_nested_animation_owner_audio_at(artboard, host_local, animation_index);
+            Ok(changed)
+        } else {
+            nested_events
+                .expect("collection was selected without a destination")
+                .push((host_local, reported_events));
+            Ok(changed)
+        }
+    }
+
+    fn advance_nested_animation_owner(
+        animation: &mut crate::artboard::RuntimeNestedAnimationInstance,
+        child: &mut ArtboardInstance,
+        elapsed_seconds: f32,
+        reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
+    ) -> bool {
+        match animation {
+            crate::artboard::RuntimeNestedAnimationInstance::Simple {
+                animation,
+                is_playing,
+                speed,
+                mix,
+                ..
+            } => {
+                let mut changed = false;
+                if *is_playing {
+                    changed |= match reported_events {
+                        Some(reported_events) => child
+                            .advance_linear_animation_instance_with_events(
+                                animation,
+                                elapsed_seconds * *speed,
+                                reported_events,
+                            ),
+                        None => child
+                            .advance_linear_animation_instance(animation, elapsed_seconds * *speed),
+                    };
+                }
+                if *mix != 0.0 {
+                    changed |= child.apply_linear_animation_instance(animation, *mix);
+                }
+                changed
+            }
+            crate::artboard::RuntimeNestedAnimationInstance::Remap { animation, mix, .. } => {
+                *mix != 0.0 && child.apply_linear_animation_instance(animation, *mix)
+            }
+            crate::artboard::RuntimeNestedAnimationInstance::StateMachine(occurrence) => {
+                let changed = occurrence.advance(child, elapsed_seconds);
+                if let Some(reported_events) = reported_events
+                    && let Some(state_machine) = occurrence.state_machine_mut()
+                {
+                    for index in 0..state_machine.reported_event_count() {
+                        if let Some(event) = state_machine.reported_event(child, index) {
+                            reported_events.push(event.clone());
+                        }
+                    }
+                }
+                changed
+            }
+        }
+    }
+
+    fn flush_nested_animation_owner_audio_at(
+        artboard: &mut ArtboardInstance,
+        host_local: usize,
+        animation_index: usize,
+    ) {
+        let Some(nested) = artboard.nested_artboards.get_mut(&host_local) else {
+            return;
+        };
+        let Some(crate::artboard::RuntimeNestedAnimationInstance::StateMachine(occurrence)) =
+            nested.animations.get_mut(animation_index)
+        else {
+            return;
+        };
+        if let Some(state_machine) = occurrence.state_machine_mut() {
+            state_machine.flush_deferred_owner_audio_events();
+        }
+    }
+
+    /// Complete reports produced while advancing a nested host's child
+    /// subtree. Direct animation owners use
+    /// [`Self::advance_nested_animation_owner_with`] instead.
+    pub(crate) fn advance_nested_descendant_event_sources_with(
         artboard: &mut ArtboardInstance,
         host_local: usize,
         nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
@@ -12623,19 +12771,6 @@ impl StateMachineInstance {
                 .push((host_local, reported_events));
             Ok(changed)
         }
-    }
-
-    pub(crate) fn advance_nested_animation_owners(
-        animations: &mut [crate::artboard::RuntimeNestedAnimationInstance],
-        child: &mut ArtboardInstance,
-        elapsed_seconds: f32,
-        mut reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
-    ) -> bool {
-        let mut changed = false;
-        for animation in animations {
-            changed |= animation.advance(child, elapsed_seconds, reported_events.as_deref_mut());
-        }
-        changed
     }
 
     pub(crate) fn dispatch_nested_events_to_animation_owners(

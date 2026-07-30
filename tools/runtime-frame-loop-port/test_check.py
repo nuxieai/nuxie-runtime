@@ -2387,6 +2387,14 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                         },
                     );
                 }
+                fn advance_nested_artboard_entry() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, None,
+                    );
+                    StateMachineInstance::advance_nested_descendant_event_sources_with(
+                        self, host, None, None, advance_child,
+                    );
+                }
                 """
             ),
             textwrap.dedent(
@@ -2952,15 +2960,16 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             (
                 "state_machine_event_recursive_owner_total_order_required",
                 """
-                fn advance_nested_event_source_with() {
-                    advance(artboard);
+                fn advance_nested_animation_owner_with() {
+                    let mut reported_events = Vec::new();
+                    advance_nested_animation_owner();
                     dispatch(artboard, host_local, &reported_events);
-                    flush_nested_source_audio(artboard, host_local);
+                    flush_nested_animation_owner_audio_at(
+                        artboard, host_local, animation_index,
+                    );
                 }
                 fn dispatch_nested_event_sources_with() {
-                    state_machine.notify_events(
-                        artboard, Some(host_local), events,
-                    );
+                    state_machine.notify_events(artboard, Some(host_local), events);
                 }
                 fn fl_c5_event_bubbling_precedes_the_recorded_audio_seam_through_two_ancestors() {
                     assert_eq!([
@@ -2982,15 +2991,16 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 }
                 """,
                 """
-                fn advance_nested_event_source_with() {
-                    advance(artboard);
-                    flush_nested_source_audio(artboard, host_local);
+                fn advance_nested_animation_owner_with() {
+                    let mut reported_events = Vec::new();
+                    advance_nested_animation_owner();
+                    flush_nested_animation_owner_audio_at(
+                        artboard, host_local, animation_index,
+                    );
                     dispatch(artboard, host_local, &reported_events);
                 }
                 fn dispatch_nested_event_sources_with() {
-                    state_machine.notify_events(
-                        artboard, Some(host_local), events,
-                    );
+                    state_machine.notify_events(artboard, Some(host_local), events);
                 }
                 fn fl_c5_event_bubbling_precedes_the_recorded_audio_seam_through_two_ancestors() {
                     assert_eq!([
@@ -3368,35 +3378,39 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             instance_source,
             textwrap.dedent(
                 """
-                fn advance_nested_event_source_with() {
-                    dispatch();
-                    flush_nested_source_audio();
+                fn advance_nested_animation_owner_with() {
+                    let mut reported_events = Vec::new();
+                    dispatch(artboard, host_local, &reported_events);
+                    flush_nested_animation_owner_audio_at();
                 }
-                fn advance_nested_animation_owners() {
-                    animation.advance();
+                fn advance_nested_animation_owner() {
+                    child.advance_linear_animation_instance_with_events();
+                    state_machine.reported_event_count();
+                    state_machine.reported_event(child, index);
                 }
                 fn dispatch_nested_events_to_animation_owners() {
                     machine.notify_events();
                     machine.advance_on_artboard();
                 }
-                fn flush_nested_animation_owner_audio() {
+                fn flush_nested_animation_owner_audio_at() {
                     machine.flush_deferred_owner_audio_events();
                 }
                 """
             ),
             textwrap.dedent(
                 """
-                fn advance_nested_event_source_with() {
-                    dispatch();
+                fn advance_nested_animation_owner_with() {
+                    let mut reported_events = Vec::new();
+                    dispatch(artboard, host_local, &reported_events);
                 }
-                fn advance_nested_animation_owners() {
-                    animation.advance();
+                fn advance_nested_animation_owner() {
+                    child.advance_linear_animation_instance();
                 }
                 fn dispatch_nested_events_to_animation_owners() {
                     machine.notify_events();
                     machine.advance_on_artboard();
                 }
-                fn flush_nested_animation_owner_audio() {
+                fn flush_nested_animation_owner_audio_at() {
                     for machine in machines {
                         machine.play_audio_immediately();
                     }
@@ -3627,14 +3641,15 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "state_machine_nested_event_collection_outside_instance_policy",
                 """
                 fn renamed_report_collector() {
-                    let mut renamed_batch = Vec::new();
-                    advance_source(Some(&mut renamed_batch));
+                    for index in 0..owner.reported_event_count() {
+                        collect(owner.reported_event(child, index));
+                    }
                 }
                 """,
                 """
                 fn renamed_report_collector() {
-                    StateMachineInstance::advance_nested_event_source_with(
-                        self, host, None, Some(dispatch), advance_source,
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, Some(dispatch),
                     );
                 }
                 """,
@@ -3643,26 +3658,22 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             (
                 "state_machine_nested_animation_selection_outside_instance_policy",
                 """
-                fn renamed_owner_picker(
-                    renamed_reports: &[StateMachineReportedEvent],
-                ) {
-                    for animation in animations {
-                        if let RuntimeNestedAnimationInstance::StateMachine(owner) =
-                            animation
-                        {
-                            consume(owner, renamed_reports);
+                impl RuntimeNestedAnimationInstance {
+                    fn renamed_owner_picker(
+                        &mut self,
+                        reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
+                    ) {
+                        if let Self::StateMachine(owner) = self {
+                            owner.advance(child, elapsed, reported_events);
                         }
                     }
                 }
                 """,
                 """
-                fn renamed_owner_picker(
-                    events: &[StateMachineReportedEvent],
-                ) {
-                    StateMachineInstance::
-                        dispatch_nested_events_to_animation_owners(
-                            animations, child, host, events, None,
-                        );
+                fn renamed_owner_picker() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, None,
+                    );
                 }
                 """,
                 "crates/nuxie-runtime/src/artboard.rs",
@@ -3671,7 +3682,9 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "state_machine_nested_event_dispatch_outside_instance_policy",
                 """
                 fn renamed_report_sender() {
-                    owner.notify_events(child, Some(host), reports);
+                    if !batch.is_empty() {
+                        relay(child, host, &batch);
+                    }
                 }
                 """,
                 """
@@ -3688,13 +3701,15 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "state_machine_nested_audio_unwind_outside_instance_policy",
                 """
                 fn renamed_tail_player() {
-                    owner.flush_deferred_owner_audio_events();
+                    StateMachineInstance::flush_nested_animation_owner_audio(
+                        animations, child,
+                    );
                 }
                 """,
                 """
                 fn renamed_tail_player() {
-                    StateMachineInstance::flush_nested_source_audio(
-                        artboard, host,
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        artboard, host, animation_index, elapsed, None, None,
                     );
                 }
                 """,

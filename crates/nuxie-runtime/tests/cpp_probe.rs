@@ -659,6 +659,58 @@ fn synthetic_cross_artboard_animation_definition_owners(file_id: u64) -> Vec<u8>
     })
 }
 
+#[derive(Clone, Copy, Debug)]
+enum SyntheticCrossArtboardBlendKind {
+    Blend1D,
+    BlendDirect,
+}
+
+fn synthetic_cross_artboard_blend_definition_owner(
+    file_id: u64,
+    kind: SyntheticCrossArtboardBlendKind,
+    animations: [(f32, f32); 2],
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        // Keep the application target baseline identical between owner and
+        // caller so the differential isolates definition ownership even when
+        // sequential blend mixing retains part of the target's prior value.
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        for (from, to) in animations {
+            push_animation_for_single_node(bytes, 1, from, to);
+        }
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineNumber", |bytes| {
+            push_string_property(bytes, "StateMachineNumber", "name", "blend");
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        match kind {
+            SyntheticCrossArtboardBlendKind::Blend1D => {
+                push_object_with_properties(bytes, "BlendState1DInput", |bytes| {
+                    push_uint_property(bytes, "BlendState1DInput", "inputId", 0);
+                });
+                push_blend_animation_1d(bytes, 0, 0.0);
+                push_blend_animation_1d(bytes, 1, 1.0);
+            }
+            SyntheticCrossArtboardBlendKind::BlendDirect => {
+                push_object_with_properties(bytes, "BlendStateDirect", |_| {});
+                // A full first mix removes target-baseline history from the
+                // clone/remount comparison while the second animation still
+                // proves that both retained definitions belong to owner A.
+                push_blend_animation_direct_mix_value(bytes, 0, 100.0);
+                push_blend_animation_direct_input(bytes, 1, 0);
+            }
+        }
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_negative_speed_nested_remap(file_id: u64) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
@@ -2242,6 +2294,124 @@ fn synthetic_sibling_nested_event_reporters(file_id: u64) -> Vec<u8> {
             });
             push_state_machine_fire_event(bytes, 1, 0);
             push_object_with_properties(bytes, "ExitState", |_| {});
+        }
+    })
+}
+
+fn synthetic_same_host_nested_event_reporters(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        for animation_id in [0, 1] {
+            push_object_with_properties(bytes, "NestedStateMachine", |bytes| {
+                push_uint_property(bytes, "Component", "parentId", 1);
+                push_uint_property(bytes, "NestedAnimation", "animationId", animation_id);
+            });
+        }
+        for name in ["A-root", "B-root"] {
+            push_object_with_properties(bytes, "Event", |bytes| {
+                push_string_property(bytes, "Event", "name", name);
+            });
+        }
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        for (child_event_local, root_event_local) in [(1, 4), (2, 5)] {
+            push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+                push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 1);
+                push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 5);
+                push_uint_property(
+                    bytes,
+                    "StateMachineListenerSingle",
+                    "eventId",
+                    child_event_local,
+                );
+            });
+            push_object_with_properties(bytes, "ListenerFireEvent", |bytes| {
+                push_uint_property(bytes, "ListenerFireEvent", "eventId", root_event_local);
+            });
+        }
+
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        for name in ["A-local", "B-local"] {
+            push_object_with_properties(bytes, "AudioEvent", |bytes| {
+                push_uint_property(bytes, "AudioEvent", "parentId", 0);
+                push_string_property(bytes, "Event", "name", name);
+            });
+        }
+        push_transform_node(bytes, 0, 0.0, 0.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 3, 0.0, 1.0);
+        for event_local in [1, 2] {
+            push_object_with_properties(bytes, "StateMachine", |_| {});
+            push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+            push_object_with_properties(bytes, "AnyState", |_| {});
+            push_object_with_properties(bytes, "EntryState", |_| {});
+            push_object_with_properties(bytes, "StateTransition", |bytes| {
+                push_uint_property(bytes, "StateTransition", "stateToId", 2);
+            });
+            push_object_with_properties(bytes, "AnimationState", |bytes| {
+                push_uint_property(bytes, "AnimationState", "animationId", 0);
+            });
+            push_state_machine_fire_event(bytes, event_local, 0);
+            push_object_with_properties(bytes, "ExitState", |_| {});
+        }
+    })
+}
+
+fn synthetic_nested_simple_timeline_events(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        push_object_with_properties(bytes, "NestedSimpleAnimation", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+            push_uint_property(bytes, "NestedAnimation", "animationId", 0);
+            push_bool_property(bytes, "NestedSimpleAnimation", "isPlaying", true);
+            push_f32_property(bytes, "NestedLinearAnimation", "mix", 0.0);
+        });
+        push_object_with_properties(bytes, "Event", |bytes| {
+            push_string_property(bytes, "Event", "name", "parent-fired");
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 1);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 5);
+            push_uint_property(bytes, "StateMachineListenerSingle", "eventId", 1);
+        });
+        push_object_with_properties(bytes, "ListenerFireEvent", |bytes| {
+            push_uint_property(bytes, "ListenerFireEvent", "eventId", 3);
+        });
+
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Event", |bytes| {
+            push_string_property(bytes, "Event", "name", "timeline-event");
+        });
+        push_object_with_properties(bytes, "AudioEvent", |bytes| {
+            push_uint_property(bytes, "AudioEvent", "parentId", 0);
+            push_string_property(bytes, "Event", "name", "timeline-audio");
+        });
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        for event_local in [1, 2] {
+            push_object_with_properties(bytes, "KeyedObject", |bytes| {
+                push_uint_property(bytes, "KeyedObject", "objectId", event_local);
+            });
+            push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+                push_uint_property(
+                    bytes,
+                    "KeyedProperty",
+                    "propertyKey",
+                    u64::from(property_key_for_name("Event", "trigger")),
+                );
+            });
+            push_keyframe_callback(bytes, 5);
         }
     })
 }
@@ -20005,6 +20175,86 @@ fn state_machine_from_artboard_a_uses_a_timing_exit_and_reset_definitions_when_a
 }
 
 #[test]
+fn blend_states_from_artboard_a_use_a_definitions_through_wrong_artboard_and_clone_remount_like_cpp_probe()
+ {
+    let probe = probe_path().expect("the blend wrong-artboard differential requires cpp_probe");
+
+    for (case, kind, input, clone_remount) in [
+        (
+            "blend-1d",
+            SyntheticCrossArtboardBlendKind::Blend1D,
+            0.5,
+            false,
+        ),
+        (
+            "blend-direct-clone-remount",
+            SyntheticCrossArtboardBlendKind::BlendDirect,
+            50.0,
+            true,
+        ),
+    ] {
+        let label = format!("synthetic/runtime_cross_artboard_{case}_definition_owner_cpp.riv");
+        let owner_bytes = synthetic_cross_artboard_blend_definition_owner(
+            82_834,
+            kind,
+            [(2.0, 12.0), (20.0, 30.0)],
+        );
+        let caller_bytes = synthetic_cross_artboard_blend_definition_owner(
+            82_835,
+            kind,
+            [(100.0, 200.0), (300.0, 400.0)],
+        );
+        let args = [
+            "--runtime-set-state-machine-number".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            input.to_string(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+            "--runtime-update".to_owned(),
+        ];
+        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &owner_bytes, &args);
+        let (_, mut owner_artboard) = read_rust_instance_from_bytes(&owner_bytes, &label);
+        let (_, mut caller_artboard) = read_rust_instance_from_bytes(&caller_bytes, &label);
+        let mut state_machine = owner_artboard
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing retained owner state machine for {case}"));
+        assert!(state_machine.set_number(0, input));
+
+        let mut rust_reports = Vec::new();
+        let advanced = caller_artboard.advance_state_machine_instance(&mut state_machine, 0.0);
+        rust_reports.push((advanced, state_machine.clone()));
+
+        if clone_remount {
+            state_machine = state_machine.clone();
+            let (_, remounted_caller) = read_rust_instance_from_bytes(&caller_bytes, &label);
+            caller_artboard = remounted_caller;
+        }
+        let advanced = caller_artboard.advance_state_machine_instance(&mut state_machine, 1.0);
+        rust_reports.push((advanced, state_machine.clone()));
+
+        let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+        assert_eq!(cpp_reports.len(), rust_reports.len(), "{case} report count");
+        for (step, (cpp_report, (advanced, rust_report))) in
+            cpp_reports.iter().zip(&rust_reports).enumerate()
+        {
+            compare_state_machine_advance(
+                cpp_report,
+                rust_report,
+                *advanced,
+                &format!("{label} wrong-artboard step {step}"),
+            );
+        }
+        let update = caller_artboard.update_components();
+        compare_cpp_runtime_update(&cpp, &caller_artboard, &update, &label);
+    }
+}
+
+#[test]
 fn state_machine_animation_state_advances_through_public_runtime_seam() {
     let label = "synthetic/runtime_state_machine_animation_state_public.riv";
     let bytes = synthetic_state_machine_animation_state(8230);
@@ -21127,7 +21377,7 @@ fn transition_duration_bindings_preserve_duplicate_authored_order_like_cpp() {
         "0".to_owned(),
         "--runtime-advance-state-machine".to_owned(),
         "0".to_owned(),
-        "0".to_owned(),
+        "0.25".to_owned(),
         "--runtime-set-state-machine-bool".to_owned(),
         "0".to_owned(),
         "0".to_owned(),
@@ -83320,6 +83570,87 @@ fn synthetic_fl_c5_keyframe_data_bind(
     })
 }
 
+fn synthetic_fl_c5_interrupted_transition_keyframe_bind(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "bound");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 11.0);
+        });
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        for (animation_index, (from, to)) in
+            [(0, (2.0, 12.0)), (1, (20.0, 30.0)), (2, (40.0, 50.0))]
+        {
+            push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+                push_uint_property(bytes, "LinearAnimation", "fps", 10);
+                push_uint_property(bytes, "LinearAnimation", "duration", 20);
+            });
+            push_object_with_properties(bytes, "KeyedObject", |bytes| {
+                push_uint_property(bytes, "KeyedObject", "objectId", 1);
+            });
+            push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+                push_uint_property(
+                    bytes,
+                    "KeyedProperty",
+                    "propertyKey",
+                    u64::from(property_key_for_name("Node", "x")),
+                );
+            });
+            push_keyframe_double(bytes, 0, from, 1);
+            if animation_index == 0 {
+                push_fl_c5_keyframe_data_bind_context(bytes, &[0, 0]);
+            }
+            push_keyframe_double(bytes, 10, to, 0);
+        }
+
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        for name in ["to-b", "to-c"] {
+            push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+                push_string_property(bytes, "StateMachineBool", "name", name);
+            });
+        }
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            push_uint_property(bytes, "StateTransition", "duration", 1000);
+        });
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 4);
+            push_uint_property(bytes, "StateTransition", "duration", 1000);
+        });
+        push_synthetic_bool_transition_condition(bytes, 1);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 2);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn cpp_runtime_update_transform_x(cpp: &CppProbeFile, local_id: usize) -> f32 {
     cpp.artboards[0]
         .runtime_update
@@ -83543,7 +83874,7 @@ fn fl_c5_keyframe_bound_context_lifecycle() {
         "1".to_owned(),
         "--runtime-advance-state-machine".to_owned(),
         "0".to_owned(),
-        "0".to_owned(),
+        "0.25".to_owned(),
         "--runtime-update".to_owned(),
     ];
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
@@ -83574,6 +83905,100 @@ fn fl_c5_keyframe_bound_context_lifecycle() {
         transform_x(&rust, 1),
         11.0,
         "Rust already-bound new occurrence",
+    );
+}
+
+#[test]
+fn fl_c5_interrupted_transition_releases_old_keyframe_binds_before_reset() {
+    let probe = probe_path().expect("the interrupted-transition differential requires cpp_probe");
+    let label = "synthetic/fl_c5_interrupted_transition_keyframe_bind.riv";
+    let bytes = synthetic_fl_c5_interrupted_transition_keyframe_bind(96_998);
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.25".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-update".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (file, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut machine = rust
+        .state_machine_instance(0)
+        .expect("Rust interrupted-transition machine");
+    assert!(machine.bind_view_model_instance_context(&file, 0, 0));
+    let mut rust_steps = Vec::new();
+    let advanced = rust.advance_state_machine_instance(&mut machine, 0.0);
+    rust_steps.push((advanced, machine.clone()));
+    assert!(machine.set_bool(0, true));
+    let advanced = rust.advance_state_machine_instance(&mut machine, 0.25);
+    rust_steps.push((advanced, machine.clone()));
+    assert!(machine.set_bool(1, true));
+    let advanced = rust.advance_state_machine_instance(&mut machine, 0.0);
+    rust_steps.push((advanced, machine.clone()));
+    let advanced = rust.advance_state_machine_instance(&mut machine, 0.0);
+    rust_steps.push((advanced, machine.clone()));
+    rust.update_components();
+
+    let cpp_steps = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_steps.len(), rust_steps.len());
+    for (index, (cpp_step, (advanced, rust_step))) in cpp_steps.iter().zip(&rust_steps).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_step,
+            rust_step,
+            *advanced,
+            &format!("{label} step {index}"),
+        );
+    }
+    assert_close(
+        transform_x(&rust, 1),
+        cpp_runtime_update_transform_x(&cpp, 1),
+        "interrupted transition with an old bound source",
+    );
+
+    let layer_source = std::fs::read_to_string(
+        repo_root().join("crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"),
+    )
+    .expect("read Rust state-machine layer owner");
+    let interruption = layer_source
+        .find("// A transition interruption releases the older transition-source")
+        .expect("interrupted-transition teardown");
+    let ordered = &layer_source[interruption..];
+    let remove_binds = ordered
+        .find("state_from.remove_key_frame_data_binds();")
+        .expect("old source bind removal");
+    let release = ordered
+        .find("self.state_from = None;")
+        .expect("old source release");
+    let replace = ordered
+        .find("self.state_from = previous_state;")
+        .expect("new source assignment");
+    let reset = ordered
+        .find("AnimationResetFactory::from_animation_instances(")
+        .expect("replacement reset construction");
+    assert!(
+        remove_binds < release && release < replace && replace < reset,
+        "the live interrupted-transition proof is guarded against restoring the old reset-before-teardown inversion",
     );
 }
 
@@ -84065,7 +84490,11 @@ fn fl_c5_production_event_source_chains_are_atomic() {
         .expect("pinned C++ root-listener reporting snapshot");
     assert_eq!(rust_root_names, *cpp_root_names);
 
-    let cpp_total_order = cpp_local_names
+    // The probe live-compares the authored source order and both report-name
+    // phases. The C++ audio positions below are source-established rather
+    // than probe-recorded; notifyEventListeners synchronously bubbles before
+    // its AudioEvent branch, as asserted immediately after this comparison.
+    let source_established_cpp_total_order = cpp_local_names
         .iter()
         .zip(cpp_root_names)
         .flat_map(|(local, root)| {
@@ -84079,8 +84508,8 @@ fn fl_c5_production_event_source_chains_are_atomic() {
         .iter()
         .map(|step| {
             let source = match step.source_local_id {
-                1 => "A",
-                3 => "B",
+                2 => "A",
+                4 => "B",
                 other => panic!("unexpected Rust nested source {other}"),
             };
             let phase = match step.phase {
@@ -84092,9 +84521,9 @@ fn fl_c5_production_event_source_chains_are_atomic() {
         })
         .collect::<Vec<_>>();
     assert_eq!(
-        rust_total_order, cpp_total_order,
-        "the same imported AudioEvent reporters must complete A-local/root/audio before \
-         B-local/root/audio through the real Rust and pinned-C++ advanceAndApply paths"
+        rust_total_order, source_established_cpp_total_order,
+        "live-compared C++ report names plus the cited synchronous audio chronology require \
+         A-local/root/audio before B-local/root/audio on the Rust production path"
     );
 
     let source = fl_c5_cpp_state_machine_instance_source();
@@ -84115,6 +84544,245 @@ fn fl_c5_production_event_source_chains_are_atomic() {
     assert!(
         local < synchronous_bubble && synchronous_bubble < audio_unwind,
         "pinned C++ must finish the source's local, ancestor, and audio phases in one call"
+    );
+}
+
+#[test]
+fn fl_c5_same_host_multi_reporter_chains_are_atomic() {
+    fl_c5_run_rust_unit_probe(
+        "production_advance_and_apply_dispatches_each_same_host_reporter_chain_atomically",
+    );
+    let probe = probe_path().expect("the same-host atomicity differential requires cpp_probe");
+    let label = "synthetic/fl_c5_same_host_nested_event_reporters.riv";
+    let bytes = synthetic_same_host_nested_event_reporters(96_996);
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-advance-and-apply-state-machine".to_owned(),
+            "0".to_owned(),
+            "0.25".to_owned(),
+            "--runtime-advance-and-apply-state-machine".to_owned(),
+            "0".to_owned(),
+            "0.25".to_owned(),
+        ],
+    );
+    let cpp_root_names = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .flat_map(|report| &report.reported_events)
+        .filter_map(|event| event.event_name.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(cpp_root_names, ["A-root", "B-root"]);
+    let cpp_sources = &cpp.artboards[0].runtime_state_machine_advances[0].nested_reported_events;
+    assert_eq!(
+        cpp_sources
+            .iter()
+            .map(|source| source.local_id)
+            .collect::<Vec<_>>(),
+        [2, 3],
+        "pinned C++ advances both authored NestedStateMachine owners on the one host",
+    );
+    assert_eq!(
+        cpp_sources
+            .iter()
+            .map(|source| source.reported_events[0].event_name.as_deref())
+            .collect::<Vec<_>>(),
+        [Some("A-local"), Some("B-local")],
+    );
+
+    let runtime = read_runtime_file(&bytes).expect("Rust imports same-host reporter fixture");
+    let graph =
+        GraphFile::from_runtime_file(&runtime).expect("Rust graphs same-host reporter fixture");
+    let mut rust = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        graph.artboards.first().expect("Rust root artboard"),
+        &graph.artboards,
+    )
+    .expect("Rust mounts the same-host reporter artboard");
+    let mut rust_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust root state-machine occurrence");
+    let rust_trace = RuntimeNestedEventChainTrace::start();
+    rust_machine
+        .advance_and_apply(&mut rust, 0.25)
+        .expect("Rust production same-host reporter advance");
+    let rust_steps = rust_trace.finish();
+    assert_eq!(
+        rust_steps
+            .iter()
+            .map(|step| (step.source_local_id, step.phase))
+            .collect::<Vec<_>>(),
+        [
+            (2, RuntimeNestedEventChainPhase::SourceLocal),
+            (2, RuntimeNestedEventChainPhase::AncestorDispatch),
+            (2, RuntimeNestedEventChainPhase::AudioUnwind),
+            (3, RuntimeNestedEventChainPhase::SourceLocal),
+            (3, RuntimeNestedEventChainPhase::AncestorDispatch),
+            (3, RuntimeNestedEventChainPhase::AudioUnwind),
+        ],
+        "each animation owner completes its production report chain before the next owner advances",
+    );
+
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let notify = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::notifyEventListeners(",
+        "void StateMachineInstance::enablePointerEvents(",
+    );
+    assert!(
+        notify.find("listener->notify(events, nestedArtboard())")
+            < notify.find("event->is<AudioEvent>()"),
+        "source inspection establishes the C++ ancestor-before-audio chronology; the live probe compares authored source and report order",
+    );
+}
+
+#[test]
+fn fl_c5_nested_simple_timeline_event_and_audio_are_delivered() {
+    fl_c5_run_rust_unit_probe(
+        "production_nested_simple_animation_reports_timeline_event_and_audio_to_parent",
+    );
+    let probe = probe_path().expect("the nested-simple differential requires cpp_probe");
+    let label = "synthetic/fl_c5_nested_simple_timeline_events.riv";
+    let bytes = synthetic_nested_simple_timeline_events(96_997);
+    let args = [
+        "--runtime-advance-and-apply-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.5".to_owned(),
+        "--runtime-advance-and-apply-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let cpp_root_names = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .flat_map(|report| &report.reported_events)
+        .filter_map(|event| event.event_name.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cpp_root_names,
+        ["parent-fired"],
+        "the pinned-C++ parent listener fires for the nested simple timeline Event",
+    );
+    let cpp_nested_simple = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("pinned-C++ nested-simple reporting frame")
+        .nested_reported_events
+        .iter()
+        .find(|source| source.local_id == 2)
+        .expect("pinned-C++ nested simple reporter");
+    let event_core_type = u32::from(
+        definition_by_name("Event")
+            .expect("Event schema definition")
+            .type_key
+            .int,
+    );
+    let audio_event_core_type = u32::from(
+        definition_by_name("AudioEvent")
+            .expect("AudioEvent schema definition")
+            .type_key
+            .int,
+    );
+    assert_eq!(
+        cpp_nested_simple
+            .reported_events
+            .iter()
+            .map(|event| {
+                (
+                    event.event_core_type,
+                    event.event_name.as_deref(),
+                    event.seconds_delay,
+                )
+            })
+            .collect::<Vec<_>>(),
+        [
+            (Some(event_core_type), Some("timeline-event"), 0.0),
+            (Some(audio_event_core_type), Some("timeline-audio"), 0.0,),
+        ],
+        "the live C++ nested linear reporter emits the Event followed by exactly one AudioEvent",
+    );
+
+    let runtime = read_runtime_file(&bytes).expect("Rust imports nested-simple event fixture");
+    let graph =
+        GraphFile::from_runtime_file(&runtime).expect("Rust graphs nested-simple event fixture");
+    let mut rust = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        graph.artboards.first().expect("Rust root artboard"),
+        &graph.artboards,
+    )
+    .expect("Rust mounts nested-simple event fixture");
+    let mut rust_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust root state-machine occurrence");
+    let rust_trace = RuntimeNestedEventChainTrace::start();
+    rust_machine
+        .advance_and_apply(&mut rust, 0.5)
+        .expect("Rust nested-simple production advance");
+    let rust_steps = rust_trace.finish();
+    let mut rust_root_names = (0..rust_machine.reported_event_count())
+        .filter_map(|index| {
+            rust_machine
+                .reported_event(&rust, index)
+                .and_then(|event| event.name().map(str::to_owned))
+        })
+        .collect::<Vec<_>>();
+    rust_machine
+        .advance_and_apply(&mut rust, 0.0)
+        .expect("Rust publishes the parent listener report");
+    rust_root_names.extend(
+        (0..rust_machine.reported_event_count()).filter_map(|index| {
+            rust_machine
+                .reported_event(&rust, index)
+                .and_then(|event| event.name().map(str::to_owned))
+        }),
+    );
+    assert_eq!(rust_root_names, cpp_root_names);
+    assert_eq!(
+        rust_steps
+            .iter()
+            .map(|step| (step.source_local_id, step.phase))
+            .collect::<Vec<_>>(),
+        [
+            (2, RuntimeNestedEventChainPhase::SourceLocal),
+            (2, RuntimeNestedEventChainPhase::AncestorDispatch),
+            (2, RuntimeNestedEventChainPhase::AudioUnwind),
+        ],
+        "the live C++ reporter types establish exactly one AudioEvent; Rust completes that \
+         Event/AudioEvent batch through one per-animation source/ancestor/audio chain",
+    );
+
+    let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let nested_simple = std::fs::read_to_string(
+        PathBuf::from(&runtime_root).join("src/animation/nested_simple_animation.cpp"),
+    )
+    .expect("read pinned nested_simple_animation.cpp");
+    let reporting_advance = nested_simple
+        .find("m_AnimationInstance->advance(elapsedSeconds * speed(),")
+        .expect("nested simple advance call");
+    let reporting_facade = nested_simple[reporting_advance..]
+        .find("m_AnimationInstance.get())")
+        .expect("nested simple animation reports through its LinearAnimationInstance");
+    assert!(reporting_facade > 0);
+    let linear = std::fs::read_to_string(
+        PathBuf::from(runtime_root).join("src/animation/linear_animation_instance.cpp"),
+    )
+    .expect("read pinned linear_animation_instance.cpp");
+    assert!(linear.contains("notifyListeners(events);"));
+    let state_machine = fl_c5_cpp_state_machine_instance_source();
+    let notify = fl_c5_cpp_member(
+        &state_machine,
+        "void StateMachineInstance::notifyEventListeners(",
+        "void StateMachineInstance::enablePointerEvents(",
+    );
+    assert!(
+        notify.find("listener->notify(events, nestedArtboard())")
+            < notify.find("event->is<AudioEvent>()"),
+        "pinned C++ synchronously delivers the parent listener before consuming the exact \
+         AudioEvent proven by the live reporter",
     );
 }
 

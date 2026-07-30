@@ -22,4 +22,14 @@ Verification:
 - Live checker: only the three intentional pre-E5 receipt failures—stale Rust ref, fingerprint, and runner provenance
 - `cargo fmt` and `git diff --check`: clean
 
+## Restored nonzero-time parity
+
+The two restored `0.25`/`0.25` comparisons expose work that the earlier
+Rust-only zero advances concealed. In the transition-duration case, nonzero
+time exercises active-animation time and return-value progression. In the
+keyframe-context case, it advances the newly bound keyframe occurrence at
+nonzero time. The zero inputs had proved hydration and ordering while skipping
+both time-dependent paths; equal elapsed time now keeps those paths live on
+both sides of the differential.
+
 No commit was created; HEAD remains `f4f013dd364389aaed18f27c7a2eec7183050821`. Goal elapsed time: approximately 1h 21m.

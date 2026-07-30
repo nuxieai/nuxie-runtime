@@ -28,7 +28,7 @@ the final independently accepted candidate immediately before promotion, not
 once per correction round. Six consecutive identical complete-floor cycles,
 P2 through P7, provided zero new information for the delivery-semantics
 corrections. The floor7 files therefore remain the standing full-floor
-reference during E8; they are not `e729dd74` receipts and must not be
+reference during E9; they are not `14b18765` receipts and must not be
 represented as such.
 
 Upstream boundary commit `afe71e30` on 2026-07-30 removed
@@ -102,3 +102,20 @@ golden corpora at 317/317 entries plus 647/647 exact segments with zero
 divergences; the standalone detector also builds from a clean target with
 `--locked`. As a corrective report, W84 is not an independent acceptance
 verdict.
+
+The W81/W82/W83 verdicts and W84 corrective report remain archived above as
+the superseded E8 round record; they are retained as historical evidence and
+are not E9 acceptance receipts.
+
+`W86-oracle-round10.md`, `W87-standards-round10.md`, and
+`W88-flb-round10.md` preserve the three independent round-ten rejection
+verdicts. All three hold the behavioral axis clean and reject only
+detector/registry mechanics: reverse-order token fragments, owner-origin
+aliases and wrappers, exhaustive catch-all selection, and forgeable or
+same-anchor-relocatable registry sites. `round-specs/W89-round11-spec.md`
+preserves the binding corrective specification. `W89-report.md` maps those
+findings to immutable candidate `14b18765` and records runtime 726/726, tools
+differentials 823/823, supplemental `nuxie --lib` 147/147, candidate-mode
+checker tests 83/83, both golden corpora at 317/317 entries plus 647/647 exact
+segments, and a clean-cache `--locked` detector build. As a corrective report,
+W89 is not an independent acceptance verdict.

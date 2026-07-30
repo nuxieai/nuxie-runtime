@@ -8,8 +8,9 @@ family at `d788e8ec6e8b598526607d6a1e8818e8b637b60c`:
 - `include/rive/animation/state_machine_instance.hpp`
 - `src/animation/state_machine_instance.cpp`
 
-It is a draft until every unchecked row has its named proof. FL-C5 is eligible
-for whole-family review only when every member row below has:
+This checklist was a draft until every unchecked row had its named proof.
+FL-C5 was eligible for whole-family review only when every member row below
+had:
 
 1. its directive-selected filename-corresponding Rust owner;
 2. a live C++ differential, focused unit test, live probe, or an explicit
@@ -39,6 +40,37 @@ Their acceptance is recorded in `docs/runtime-frame-loop-status.md` and
 the FL-C5 implementation range itself did not take ownership of or promote an
 FL-C1 owner. This clarification resolves the W33 S6 history-range ambiguity
 without reclassifying the separately accepted work.
+
+## Acceptance
+
+The coordinator accepted immutable joint FL-B/FL-C5 candidate
+`14b187659a1eafadd3e425d75f516b7080c3b021` on 2026-07-30 after eleven
+review rounds. The behavioral axis remained clean through rounds 8–11, the
+FL-B behavior remained clear for six consecutive rounds, the production
+`crates` tree object remained `473036c1…` across `e729dd74`, `14b18765`, and
+publication `a4522812`, and W91's registry audit matched all 38 committed rows
+to 38 regenerated hits with zero drift.
+
+The ownership detector is accepted as a **drift lint** for the documented
+ownership convention. Its fixed corpus of permanent negatives validates that
+convention and prevents the known pre-round-11 forms from regressing. It makes
+no adversarial-soundness claim.
+
+### Residual risk register
+
+The coordinator documented and accepted these five open round-11 findings:
+
+| Accepted residual risk | Evidence |
+| --- | --- |
+| Token-identical relocation of a blessed statement within the same anchor preserves `site_hash`. | [`W91-oracle-round11.md`](runtime-frame-loop-fl-c5-evidence/W91-oracle-round11.md), [`W92-standards-round11.md`](runtime-frame-loop-fl-c5-evidence/W92-standards-round11.md), and [`W93-flb-round11.md`](runtime-frame-loop-fl-c5-evidence/W93-flb-round11.md) |
+| Owner-export propagation is single-hop; a two-hop wrapper chain escapes the ownership lint. | [`W93-flb-round11.md`](runtime-frame-loop-fl-c5-evidence/W93-flb-round11.md) |
+| An `@`-binding catch-all such as `selected @ _` escapes construct marking. | [`W92-standards-round11.md`](runtime-frame-loop-fl-c5-evidence/W92-standards-round11.md) |
+| `matches!` with `if`-guard syntax fails semantic parsing, and its fallback is not alias-aware. | [`W92-standards-round11.md`](runtime-frame-loop-fl-c5-evidence/W92-standards-round11.md) |
+| The committed W89 corrective report is not fully self-contained. | [`W92-standards-round11.md`](runtime-frame-loop-fl-c5-evidence/W92-standards-round11.md) |
+
+These are accepted limitations of the drift lint and evidence packet, not
+claims of behavioral divergence in the accepted FL-B/FL-C5 production tree.
+There is no round 12.
 
 ## Binding Rust ownership
 
@@ -1025,9 +1057,11 @@ Closure checklist:
 - [x] focused Rust tests and pinned-C++ differentials are green;
 - [x] the E9 interim fast behavioral floor and structural/provenance gates
   required by the 2026-07-30 coordinator policy are green; floor7 remains the
-  standing complete-floor reference, and the next complete pixel/browser/size
-  run is reserved for the final independently accepted candidate before
-  promotion;
+  standing complete-floor reference, and the accepted-candidate
+  pixel/browser/size floor is the next pre-PR step;
+- [x] W91/W92/W93 are archived, the coordinator's 2026-07-30 acceptance is
+  recorded, and all five accepted findings are explicit in the residual-risk
+  register with no adversarial-soundness claim;
 - [x] exact source citations, test names, checker counts, gate counts, trace
   receipt, and immutable candidate identity are recorded here and in the
   mechanical status layers; and

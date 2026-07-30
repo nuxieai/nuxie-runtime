@@ -447,17 +447,20 @@ def rust_nested_event_owner_detector_binary() -> pathlib.Path:
 @functools.lru_cache(maxsize=1024)
 def rust_nested_event_owner_analysis(
     source: str,
-    audio_aliases: tuple[str, ...] = (),
+    guarded_aliases: tuple[tuple[str, str], ...] = (),
 ) -> tuple[
     dict[str, tuple[int, ...]],
     dict[str, tuple[int, ...]],
-    frozenset[str],
-    dict[str, tuple[tuple[int, int, str, str], ...]],
+    frozenset[tuple[str, str]],
+    dict[str, tuple[tuple[int, int, str, str, str], ...]],
 ]:
     """Resolve guarded ownership paths with syn and return fail-closed hits."""
 
     result = subprocess.run(
-        [str(rust_nested_event_owner_detector_binary()), *audio_aliases],
+        [
+            str(rust_nested_event_owner_detector_binary()),
+            *(f"{kind}:{alias}" for kind, alias in guarded_aliases),
+        ],
         input=source,
         text=True,
         capture_output=True,
@@ -480,8 +483,8 @@ def rust_nested_event_owner_analysis(
         "dispatch": [],
         "audio": [],
     }
-    aliases: set[str] = set()
-    matches: dict[str, list[tuple[int, int, str, str]]] = {
+    exports: set[tuple[str, str]] = set()
+    matches: dict[str, list[tuple[int, int, str, str, str]]] = {
         "collection": [],
         "selection": [],
         "dispatch": [],
@@ -489,8 +492,12 @@ def rust_nested_event_owner_analysis(
     }
     for line in result.stdout.splitlines():
         fields = line.split()
-        if len(fields) == 2 and fields[0] == "alias":
-            aliases.add(fields[1])
+        if (
+            len(fields) == 3
+            and fields[0] == "export"
+            and fields[1] in hits
+        ):
+            exports.add((fields[1], fields[2]))
         elif (
             len(fields) == 3
             and fields[0] in {"hit", "site"}
@@ -500,14 +507,21 @@ def rust_nested_event_owner_analysis(
             target = hits if fields[0] == "hit" else sites
             target[fields[1]].append(int(fields[2]))
         elif (
-            len(fields) == 6
+            len(fields) == 7
             and fields[0] == "match"
             and fields[1] in matches
             and fields[2].isdigit()
             and fields[3].isdigit()
+            and re.fullmatch(r"[0-9a-f]{64}", fields[6]) is not None
         ):
             matches[fields[1]].append(
-                (int(fields[2]), int(fields[3]), fields[4], fields[5])
+                (
+                    int(fields[2]),
+                    int(fields[3]),
+                    fields[4],
+                    fields[5],
+                    fields[6],
+                )
             )
         else:
             raise CheckFailure(
@@ -516,7 +530,7 @@ def rust_nested_event_owner_analysis(
     return (
         {kind: tuple(sorted(set(offsets))) for kind, offsets in hits.items()},
         {kind: tuple(sorted(set(offsets))) for kind, offsets in sites.items()},
-        frozenset(aliases),
+        frozenset(exports),
         {
             kind: tuple(sorted(set(records)))
             for kind, records in matches.items()
@@ -524,8 +538,8 @@ def rust_nested_event_owner_analysis(
     )
 
 
-def nested_event_audio_use_aliases(source: str) -> set[str]:
-    """Collect AST-resolved exported aliases for an owned audio function."""
+def nested_event_owner_exports(source: str) -> set[tuple[str, str]]:
+    """Collect guarded names exported from the dedicated owner module."""
 
     return set(rust_nested_event_owner_analysis(source)[2])
 
@@ -534,12 +548,12 @@ def nested_event_owner_boundary_hits(
     source: str,
     kind: str,
     *,
-    audio_aliases: Iterable[str] = (),
+    guarded_aliases: Iterable[tuple[str, str]] = (),
     count_sites: bool = False,
 ) -> list[int]:
     """Find resolved or fail-closed event mechanics outside the owner module."""
 
-    aliases = tuple(sorted(set(audio_aliases)))
+    aliases = tuple(sorted(set(guarded_aliases)))
     hits, sites, _, _ = rust_nested_event_owner_analysis(source, aliases)
     selected = sites if count_sites else hits
     if kind not in selected:
@@ -551,11 +565,11 @@ def nested_event_owner_boundary_matches(
     source: str,
     kind: str,
     *,
-    audio_aliases: Iterable[str] = (),
-) -> list[tuple[int, int, str, str]]:
+    guarded_aliases: Iterable[tuple[str, str]] = (),
+) -> list[tuple[int, int, str, str, str]]:
     """Return exact enclosing-item/name matches for registry validation."""
 
-    aliases = tuple(sorted(set(audio_aliases)))
+    aliases = tuple(sorted(set(guarded_aliases)))
     _, _, _, matches = rust_nested_event_owner_analysis(source, aliases)
     if kind not in matches:
         raise ValueError(f"unknown nested-event boundary detector kind: {kind}")
@@ -1536,13 +1550,14 @@ def check(
     duplicates = duplicate_values(ratchet_ids)
     if duplicates:
         errors.append(f"duplicate ratchet ids: {', '.join(duplicates)}")
-    owner_boundary_registry: set[tuple[str, str, str, str]] = set()
+    owner_boundary_registry: set[tuple[str, str, str, str, str]] = set()
     for row in gaps.get("owner_boundary_allow", []):
         file = str(row.get("file", ""))
         kind = str(row.get("kind", ""))
         anchor = str(row.get("anchor", ""))
         guarded_name = str(row.get("guarded_name", ""))
-        key = (file, kind, anchor, guarded_name)
+        site_hash = str(row.get("site_hash", ""))
+        key = (file, kind, anchor, guarded_name, site_hash)
         if (
             not file
             or pathlib.PurePosixPath(file).is_absolute()
@@ -1554,20 +1569,24 @@ def check(
             )
             is None
             or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", guarded_name) is None
+            or re.fullmatch(r"[0-9a-f]{64}", site_hash) is None
         ):
             errors.append(
                 "owner boundary registry row must have a relative file, "
-                "known kind, enclosing-item anchor, and guarded name"
+                "known kind, full enclosing-item anchor, guarded name, and "
+                "site_hash"
             )
             continue
         if key in owner_boundary_registry:
             errors.append(
                 "duplicate owner boundary registry row: "
-                f"{file} {kind} {anchor} {guarded_name}"
+                f"{file} {kind} {anchor} {guarded_name} {site_hash}"
             )
             continue
         owner_boundary_registry.add(key)
-    matched_owner_boundary_registry: set[tuple[str, str, str, str]] = set()
+    matched_owner_boundary_registry: set[
+        tuple[str, str, str, str, str]
+    ] = set()
     semantic_resolver_seam_exists = any(
         re.search(
             r"\btrait\s+SemanticNodeResolver\b",
@@ -1577,14 +1596,15 @@ def check(
         for path in repo_root.glob("crates/nuxie-runtime/src/state_machine/**/*.rs")
         if path.is_file()
     )
-    nested_event_audio_aliases = set()
-    for path in repo_root.glob("crates/nuxie-runtime/src/**/*.rs"):
-        if path.is_file():
-            nested_event_audio_aliases.update(
-                nested_event_audio_use_aliases(
-                    path.read_text(encoding="utf-8", errors="replace")
-                )
-            )
+    owner_export_origins: dict[tuple[str, str], str] = {}
+    owner_path = repo_root / NESTED_EVENT_OWNER_MODULE
+    if owner_path.is_file():
+        owner_relative = NESTED_EVENT_OWNER_MODULE.as_posix()
+        for exported in nested_event_owner_exports(
+            owner_path.read_text(encoding="utf-8", errors="replace")
+        ):
+            owner_export_origins[exported] = owner_relative
+    nested_event_guarded_aliases = set(owner_export_origins)
     for row in ratchet_rows:
         ratchet_id = str(row.get("id", ""))
         pattern_text = str(row.get("pattern", ""))
@@ -1655,34 +1675,36 @@ def check(
                     found_offsets = nested_event_owner_boundary_hits(
                         source,
                         detector_kind,
-                        audio_aliases=nested_event_audio_aliases,
+                        guarded_aliases=nested_event_guarded_aliases,
                     )
                     relative_file = path.relative_to(repo_root).as_posix()
                     registered = {
-                        (anchor, guarded_name)
-                        for file, kind, anchor, guarded_name in owner_boundary_registry
+                        (anchor, guarded_name, site_hash)
+                        for file, kind, anchor, guarded_name, site_hash in owner_boundary_registry
                         if file == relative_file and kind == detector_kind
                     }
+                    match_records = nested_event_owner_boundary_matches(
+                        source,
+                        detector_kind,
+                        guarded_aliases=nested_event_guarded_aliases,
+                    )
                     if registered:
-                        match_records = nested_event_owner_boundary_matches(
-                            source,
-                            detector_kind,
-                            audio_aliases=nested_event_audio_aliases,
-                        )
                         unregistered_offsets = []
-                        consumed: set[tuple[str, str]] = set()
+                        consumed: set[tuple[str, str, str]] = set()
                         for (
                             anchor_offset,
                             site_offset,
                             anchor,
                             guarded_name,
+                            site_hash,
                         ) in match_records:
-                            match_key = (anchor, guarded_name)
+                            match_key = (anchor, guarded_name, site_hash)
                             registry_key = (
                                 relative_file,
                                 detector_kind,
                                 anchor,
                                 guarded_name,
+                                site_hash,
                             )
                             if (
                                 match_key in registered
@@ -1695,12 +1717,21 @@ def check(
                             errors.append(
                                 "unregistered owner boundary hit "
                                 f"{relative_file} {detector_kind} {anchor} "
-                                f"{guarded_name}"
+                                f"{guarded_name} {site_hash}"
+                                + (
+                                    " propagated from owner export "
+                                    f"{owner_export_origins[(detector_kind, guarded_name)]}"
+                                    f"::{guarded_name}"
+                                    if (detector_kind, guarded_name)
+                                    in owner_export_origins
+                                    else ""
+                                )
                             )
                         recorded_anchor_offsets = {
                             anchor_offset
                             for (
                                 anchor_offset,
+                                _,
                                 _,
                                 _,
                                 _,
@@ -1712,6 +1743,24 @@ def check(
                         found_offsets = sorted(
                             set(unregistered_offsets) | unmatched_hit_offsets
                         )
+                    else:
+                        for (
+                            _,
+                            _,
+                            anchor,
+                            guarded_name,
+                            _,
+                        ) in match_records:
+                            origin = owner_export_origins.get(
+                                (detector_kind, guarded_name)
+                            )
+                            if origin is not None:
+                                errors.append(
+                                    "propagated owner boundary hit "
+                                    f"{relative_file} {detector_kind} {anchor} "
+                                    f"{guarded_name} from owner export "
+                                    f"{origin}::{guarded_name}"
+                                )
                 else:
                     assert pattern is not None
                     found_offsets = [
@@ -1781,11 +1830,19 @@ def check(
                 f"closed frame loop required but ratchet {ratchet_id} has {count} hits"
             )
 
-    for file, kind, anchor, guarded_name in sorted(owner_boundary_registry):
-        if (file, kind, anchor, guarded_name) not in matched_owner_boundary_registry:
+    for file, kind, anchor, guarded_name, site_hash in sorted(
+        owner_boundary_registry
+    ):
+        if (
+            file,
+            kind,
+            anchor,
+            guarded_name,
+            site_hash,
+        ) not in matched_owner_boundary_registry:
             errors.append(
                 "registered owner boundary anchor is missing "
-                f"{file} {kind} {anchor} {guarded_name}"
+                f"{file} {kind} {anchor} {guarded_name} {site_hash}"
             )
 
     if errors:

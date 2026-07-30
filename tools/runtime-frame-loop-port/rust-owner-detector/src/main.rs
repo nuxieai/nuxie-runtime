@@ -1,17 +1,19 @@
 use proc_macro2::{LineColumn, Span, TokenStream, TokenTree};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use quote::ToTokens;
+use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::io::{self, Read};
-use syn::parse::Parser;
+use syn::parse::{Parse, ParseStream, Parser};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
 use syn::{
-    Attribute, Block, ExprMethodCall, ExprPath, File, ImplItem, ImplItemFn, Item, ItemFn, ItemImpl,
-    ItemMod, ItemTrait, Macro, Meta, PatStruct, PatTupleStruct, Path, Token, TraitItem, Type,
-    TypePath, UseTree,
+    Attribute, Block, Expr, ExprIf, ExprMatch, ExprMethodCall, ExprPath, File, ImplItem,
+    ImplItemFn, Item, ItemFn, ItemImpl, ItemMod, ItemTrait, Local, Macro, Meta, Pat, PatStruct,
+    PatTupleStruct, Path, Token, TraitItem, TraitItemFn, Type, TypePath, UseTree, Visibility,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum GuardKind {
     Collection,
     Selection,
@@ -34,6 +36,10 @@ impl GuardKind {
             Self::Dispatch => "dispatch",
             Self::Audio => "audio",
         }
+    }
+
+    fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.name() == name)
     }
 
     fn matches_member(self, name: &str) -> bool {
@@ -86,7 +92,7 @@ struct Bindings {
     plain_values: HashSet<String>,
     modules: HashMap<String, Box<Bindings>>,
     variants: HashSet<String>,
-    guarded_values: HashMap<String, GuardKind>,
+    guarded_values: HashMap<String, HashSet<GuardKind>>,
     nested_animation_glob: bool,
 }
 
@@ -95,6 +101,7 @@ struct UseEntry {
     path: Vec<String>,
     local: Option<String>,
     glob: bool,
+    renamed: bool,
 }
 
 fn ident_name(ident: &syn::Ident) -> String {
@@ -106,6 +113,37 @@ fn path_names(path: &Path) -> Vec<String> {
         .iter()
         .map(|segment| ident_name(&segment.ident))
         .collect()
+}
+
+fn append_normalized_tokens(tokens: TokenStream, normalized: &mut String) {
+    for token in tokens {
+        match token {
+            TokenTree::Group(group) => {
+                let (open, close) = match group.delimiter() {
+                    proc_macro2::Delimiter::Parenthesis => ('(', ')'),
+                    proc_macro2::Delimiter::Brace => ('{', '}'),
+                    proc_macro2::Delimiter::Bracket => ('[', ']'),
+                    proc_macro2::Delimiter::None => ('\0', '\0'),
+                };
+                if open != '\0' {
+                    normalized.push(open);
+                }
+                append_normalized_tokens(group.stream(), normalized);
+                if close != '\0' {
+                    normalized.push(close);
+                }
+            }
+            TokenTree::Ident(ident) => normalized.push_str(&ident.to_string()),
+            TokenTree::Punct(punct) => normalized.push(punct.as_char()),
+            TokenTree::Literal(literal) => normalized.push_str(&literal.to_string()),
+        }
+    }
+}
+
+fn normalized_token_hash(value: &impl ToTokens) -> String {
+    let mut normalized = String::new();
+    append_normalized_tokens(value.to_token_stream(), &mut normalized);
+    format!("{:x}", Sha256::digest(normalized.as_bytes()))
 }
 
 fn without_relative_prefixes(path: &[String]) -> &[String] {
@@ -131,6 +169,7 @@ fn flatten_use(tree: &UseTree, prefix: &mut Vec<String>, entries: &mut Vec<UseEn
                 path,
                 local: Some(imported),
                 glob: false,
+                renamed: false,
             });
         }
         UseTree::Rename(rename) => {
@@ -140,12 +179,14 @@ fn flatten_use(tree: &UseTree, prefix: &mut Vec<String>, entries: &mut Vec<UseEn
                 path,
                 local: Some(ident_name(&rename.rename)),
                 glob: false,
+                renamed: true,
             });
         }
         UseTree::Glob(_) => entries.push(UseEntry {
             path: prefix.clone(),
             local: None,
             glob: true,
+            renamed: false,
         }),
         UseTree::Group(group) => {
             for item in &group.items {
@@ -179,6 +220,55 @@ fn cfg_test(attrs: &[Attribute]) -> bool {
             .parse_args::<Meta>()
             .is_ok_and(|meta| meta_guarantees_test(&meta))
     })
+}
+
+fn is_owner_export_visibility(visibility: &Visibility) -> bool {
+    match visibility {
+        Visibility::Public(_) => true,
+        Visibility::Restricted(restricted) => restricted.path.is_ident("crate"),
+        Visibility::Inherited => false,
+    }
+}
+
+fn pattern_is_catch_all(pattern: &Pat) -> bool {
+    match pattern {
+        Pat::Ident(pattern) => pattern.subpat.is_none(),
+        Pat::Wild(_) => true,
+        Pat::Or(pattern) => pattern.cases.iter().any(pattern_is_catch_all),
+        Pat::Paren(pattern) => pattern_is_catch_all(&pattern.pat),
+        Pat::Reference(pattern) => pattern_is_catch_all(&pattern.pat),
+        Pat::Type(pattern) => pattern_is_catch_all(&pattern.pat),
+        _ => false,
+    }
+}
+
+#[derive(Default)]
+struct PatternPathVisitor {
+    paths: Vec<Vec<String>>,
+}
+
+impl<'ast> Visit<'ast> for PatternPathVisitor {
+    fn visit_path(&mut self, path: &'ast Path) {
+        self.paths.push(path_names(path));
+        visit::visit_path(self, path);
+    }
+}
+
+struct MatchesInput {
+    _expression: Expr,
+    pattern: Pat,
+}
+
+impl Parse for MatchesInput {
+    fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
+        let expression = input.parse()?;
+        input.parse::<Token![,]>()?;
+        let pattern = Pat::parse_multi_with_leading_vert(input)?;
+        Ok(Self {
+            _expression: expression,
+            pattern,
+        })
+    }
 }
 
 fn resolution_in_bindings(path: &[String], bindings: &Bindings) -> Option<TypeResolution> {
@@ -288,12 +378,18 @@ enum TypeAliasTarget {
     },
 }
 
-fn bindings_for_items(items: &[Item], scopes: &[Bindings], audio_aliases: &[String]) -> Bindings {
+fn bindings_for_items(
+    items: &[Item],
+    scopes: &[Bindings],
+    guarded_aliases: &[(GuardKind, String)],
+) -> Bindings {
     let mut bindings = Bindings::default();
-    for alias in audio_aliases {
+    for (kind, alias) in guarded_aliases {
         bindings
             .guarded_values
-            .insert(alias.clone(), GuardKind::Audio);
+            .entry(alias.clone())
+            .or_default()
+            .insert(*kind);
     }
 
     let mut uses = Vec::new();
@@ -420,7 +516,7 @@ fn bindings_for_items(items: &[Item], scopes: &[Bindings], audio_aliases: &[Stri
             }
             Item::Mod(item_mod) => {
                 if let Some((_, children)) = &item_mod.content {
-                    let nested = bindings_for_items(children, scopes, audio_aliases);
+                    let nested = bindings_for_items(children, scopes, guarded_aliases);
                     bindings
                         .modules
                         .insert(ident_name(&item_mod.ident), Box::new(nested));
@@ -544,9 +640,11 @@ fn bindings_for_items(items: &[Item], scopes: &[Bindings], audio_aliases: &[Stri
             }
             for kind in [GuardKind::Collection, GuardKind::Dispatch, GuardKind::Audio] {
                 if kind.matches_member(member) {
-                    if bindings.guarded_values.insert(local.clone(), kind) != Some(kind) {
-                        changed = true;
-                    }
+                    changed |= bindings
+                        .guarded_values
+                        .entry(local.clone())
+                        .or_default()
+                        .insert(kind);
                     break;
                 }
             }
@@ -620,17 +718,21 @@ struct Analyzer<'a> {
     source: &'a str,
     line_offsets: Vec<usize>,
     scopes: Vec<Bindings>,
-    audio_aliases: Vec<String>,
+    guarded_aliases: Vec<(GuardKind, String)>,
     hits: HashMap<GuardKind, BTreeSet<usize>>,
     sites: HashMap<GuardKind, BTreeSet<usize>>,
-    matches: HashMap<GuardKind, BTreeSet<(usize, usize, String, String)>>,
+    matches: HashMap<GuardKind, BTreeSet<(usize, usize, String, String, String)>>,
     enclosing_item: Option<(usize, String)>,
     item_context: Vec<String>,
+    item_hash_context: Vec<String>,
+    hash_context: Vec<String>,
+    export_stack: Vec<(String, HashSet<GuardKind>)>,
+    exports: BTreeSet<(GuardKind, String)>,
     direct_selection_is_guarded: bool,
 }
 
 impl<'a> Analyzer<'a> {
-    fn new(source: &'a str, audio_aliases: Vec<String>) -> Self {
+    fn new(source: &'a str, guarded_aliases: Vec<(GuardKind, String)>) -> Self {
         let mut line_offsets = vec![0];
         line_offsets.extend(
             source
@@ -642,12 +744,16 @@ impl<'a> Analyzer<'a> {
             source,
             line_offsets,
             scopes: Vec::new(),
-            audio_aliases,
+            guarded_aliases,
             hits: HashMap::new(),
             sites: HashMap::new(),
             matches: HashMap::new(),
             enclosing_item: None,
             item_context: Vec::new(),
+            item_hash_context: Vec::new(),
+            hash_context: Vec::new(),
+            export_stack: Vec::new(),
+            exports: BTreeSet::new(),
             direct_selection_is_guarded: false,
         }
     }
@@ -663,6 +769,12 @@ impl<'a> Analyzer<'a> {
 
     fn record(&mut self, kind: GuardKind, span: Span, guarded_name: &str) {
         let site_offset = self.offset(span.start());
+        let site_hash = self
+            .hash_context
+            .last()
+            .or_else(|| self.item_hash_context.last())
+            .cloned()
+            .unwrap_or_else(|| normalized_token_hash(&guarded_name));
         self.sites.entry(kind).or_default().insert(site_offset);
         let (offset, anchor) = self
             .enclosing_item
@@ -674,7 +786,11 @@ impl<'a> Analyzer<'a> {
             site_offset,
             anchor,
             guarded_name.to_owned(),
+            site_hash,
         ));
+        for (_, kinds) in &mut self.export_stack {
+            kinds.insert(kind);
+        }
     }
 
     fn qualified_anchor(&self, name: &str) -> String {
@@ -739,11 +855,71 @@ impl<'a> Analyzer<'a> {
             .any(|scope| scope.variants.contains(name) || scope.nested_animation_glob)
     }
 
-    fn guarded_value(&self, name: &str) -> Option<GuardKind> {
-        self.scopes
-            .iter()
-            .rev()
-            .find_map(|scope| scope.guarded_values.get(name).copied())
+    fn guarded_value_has(&self, name: &str, kind: GuardKind) -> bool {
+        self.scopes.iter().rev().any(|scope| {
+            scope
+                .guarded_values
+                .get(name)
+                .is_some_and(|kinds| kinds.contains(&kind))
+        })
+    }
+
+    fn pattern_mentions_guarded_enum(&self, pattern: &Pat) -> bool {
+        let mut visitor = PatternPathVisitor::default();
+        visitor.visit_pat(pattern);
+        visitor.paths.iter().any(|names| {
+            names
+                .iter()
+                .any(|name| name == "RuntimeNestedAnimationInstance")
+                || (names.len() > 1
+                    && matches!(
+                        self.resolve_type(&names[..names.len() - 1]),
+                        Some(
+                            TypeResolution::Target(TypeTarget::NestedAnimation)
+                                | TypeResolution::Unresolved
+                        )
+                    ))
+                || names.iter().enumerate().any(|(index, _)| {
+                    matches!(
+                        self.resolve_type(&names[..=index]),
+                        Some(TypeResolution::Target(TypeTarget::NestedAnimation))
+                    )
+                })
+        })
+    }
+
+    fn export_kinds_for_path(&self, names: &[String]) -> HashSet<GuardKind> {
+        let mut kinds = HashSet::new();
+        let Some(member) = names.last() else {
+            return kinds;
+        };
+        for kind in GuardKind::ALL {
+            if self.guarded_value_has(member, kind)
+                || ((kind.matches_member(member) || kind.matches_guarded_type(member))
+                    && !self.path_is_known_non_guarded(names))
+            {
+                kinds.insert(kind);
+            }
+        }
+        if member == "StateMachine"
+            || self.resolve_type(names) == Some(TypeResolution::Target(TypeTarget::NestedAnimation))
+        {
+            kinds.insert(GuardKind::Selection);
+        }
+        if kinds.is_empty() && !self.path_is_known_non_guarded(names) {
+            // A public owner re-export with an unresolved tail must not create
+            // a neutral spelling that escapes the non-owner pass.
+            kinds.extend(GuardKind::ALL);
+        }
+        kinds
+    }
+
+    fn finish_export(&mut self) {
+        let Some((name, kinds)) = self.export_stack.pop() else {
+            return;
+        };
+        self.exports
+            .extend(kinds.into_iter().map(|kind| (kind, name.clone())));
     }
 
     fn path_is_known_non_guarded(&self, names: &[String]) -> bool {
@@ -779,11 +955,15 @@ impl<'a> Analyzer<'a> {
                 // much of the prefix can be resolved. Only a fully resolved
                 // local non-guarded item is exempt.
                 self.record(kind, span, member);
-            } else if self.guarded_value(member) == Some(kind) {
+            } else if self.guarded_value_has(member, kind) {
                 self.record(kind, span, member);
             }
         }
 
+        if self.guarded_value_has(member, GuardKind::Selection) {
+            self.record(GuardKind::Selection, span, member);
+            return;
+        }
         if member == "StateMachine" {
             if !known_non_guarded {
                 self.record(GuardKind::Selection, span, member);
@@ -792,6 +972,7 @@ impl<'a> Analyzer<'a> {
         }
         if names.len() == 1 {
             if self.variant_is_bound(member)
+                || self.guarded_value_has(member, GuardKind::Selection)
                 || (member == "StateMachine" && self.direct_selection_is_guarded)
             {
                 self.record(GuardKind::Selection, span, member);
@@ -810,21 +991,82 @@ impl<'a> Analyzer<'a> {
         self.analyze_names(&path_names(path), path.span());
     }
 
-    fn append_identifier_fragments(tokens: TokenStream, normalized: &mut String) {
+    fn append_identifier_fragments(
+        tokens: TokenStream,
+        normalized: &mut String,
+        fragments: &mut Vec<String>,
+    ) {
         for token in tokens {
             match token {
-                TokenTree::Ident(ident) => normalized.push_str(&ident_name(&ident)),
+                TokenTree::Ident(ident) => {
+                    let fragment = ident_name(&ident);
+                    normalized.push_str(&fragment);
+                    fragments.push(fragment);
+                }
                 TokenTree::Group(group) => {
-                    Self::append_identifier_fragments(group.stream(), normalized);
+                    Self::append_identifier_fragments(group.stream(), normalized, fragments);
                 }
                 _ => {}
             }
         }
     }
 
+    fn fragments_compose_guarded_name(fragments: &[String], guarded_name: &str) -> bool {
+        let mut counts = BTreeMap::<&str, usize>::new();
+        for fragment in fragments {
+            if !fragment.is_empty()
+                && fragment.len() <= guarded_name.len()
+                && guarded_name.contains(fragment)
+            {
+                *counts.entry(fragment).or_default() += 1;
+            }
+        }
+        let fragments = counts.keys().copied().collect::<Vec<_>>();
+        let mut available = counts.values().copied().collect::<Vec<_>>();
+        let mut failed = HashSet::new();
+
+        fn search(
+            guarded_name: &str,
+            offset: usize,
+            fragments: &[&str],
+            available: &mut [usize],
+            failed: &mut HashSet<(usize, Vec<usize>)>,
+        ) -> bool {
+            if offset == guarded_name.len() {
+                return true;
+            }
+            let state = (offset, available.to_vec());
+            if failed.contains(&state) {
+                return false;
+            }
+            for (index, fragment) in fragments.iter().enumerate() {
+                if available[index] == 0 || !guarded_name[offset..].starts_with(fragment) {
+                    continue;
+                }
+                available[index] -= 1;
+                if search(
+                    guarded_name,
+                    offset + fragment.len(),
+                    fragments,
+                    available,
+                    failed,
+                ) {
+                    available[index] += 1;
+                    return true;
+                }
+                available[index] += 1;
+            }
+            failed.insert(state);
+            false
+        }
+
+        search(guarded_name, 0, &fragments, &mut available, &mut failed)
+    }
+
     fn macro_guarded_name(tokens: TokenStream, kind: GuardKind) -> Option<String> {
         let mut normalized = String::new();
-        Self::append_identifier_fragments(tokens, &mut normalized);
+        let mut fragments = Vec::new();
+        Self::append_identifier_fragments(tokens, &mut normalized, &mut fragments);
         let guarded_names: &[&str] = match kind {
             GuardKind::Collection => &[
                 "reported_event_count",
@@ -843,10 +1085,9 @@ impl<'a> Analyzer<'a> {
                 "StateMachineInstance",
             ],
         };
-        let exact = guarded_names
-            .iter()
-            .copied()
-            .find(|name| normalized.contains(name));
+        let exact = guarded_names.iter().copied().find(|name| {
+            normalized.contains(name) || Self::fragments_compose_guarded_name(&fragments, name)
+        });
         if let Some(name) = exact {
             return Some(name.to_owned());
         }
@@ -862,7 +1103,7 @@ impl<'a> Analyzer<'a> {
     }
 
     fn push_item_scope(&mut self, items: &[Item]) {
-        let bindings = bindings_for_items(items, &self.scopes, &self.audio_aliases);
+        let bindings = bindings_for_items(items, &self.scopes, &self.guarded_aliases);
         self.scopes.push(bindings);
     }
 
@@ -898,6 +1139,7 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
         if cfg_test(item_attrs(item)) {
             return;
         }
+        self.item_hash_context.push(normalized_token_hash(item));
         let previous_item = self.item_anchor_name(item).map(|anchor| {
             self.enclosing_item
                 .replace((self.offset(item.span().start()), anchor))
@@ -906,6 +1148,7 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
         if let Some(previous_item) = previous_item {
             self.enclosing_item = previous_item;
         }
+        self.item_hash_context.pop();
     }
 
     fn visit_item_mod(&mut self, item: &'ast ItemMod) {
@@ -1000,19 +1243,59 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
         }
     }
 
+    fn visit_trait_item_fn(&mut self, item: &'ast TraitItemFn) {
+        if cfg_test(&item.attrs) {
+            return;
+        }
+        for attribute in &item.attrs {
+            self.visit_attribute(attribute);
+        }
+        self.visit_signature(&item.sig);
+        let name = ident_name(&item.sig.ident);
+        let previous_item = self.enclosing_item.replace((
+            self.offset(item.span().start()),
+            self.qualified_anchor(&name),
+        ));
+        if let Some(block) = &item.default {
+            let previous_selection = std::mem::replace(
+                &mut self.direct_selection_is_guarded,
+                block_has_event_mechanic(block),
+            );
+            self.item_context.push(name);
+            self.visit_block(block);
+            self.item_context.pop();
+            self.direct_selection_is_guarded = previous_selection;
+        }
+        self.enclosing_item = previous_item;
+    }
+
     fn visit_item_fn(&mut self, item: &'ast ItemFn) {
         if cfg_test(&item.attrs) {
             return;
         }
+        for attribute in &item.attrs {
+            self.visit_attribute(attribute);
+        }
+        self.visit_visibility(&item.vis);
+        self.visit_signature(&item.sig);
+        let name = ident_name(&item.sig.ident);
         let previous_item = self.enclosing_item.replace((
             self.offset(item.span().start()),
-            self.qualified_anchor(&ident_name(&item.sig.ident)),
+            self.qualified_anchor(&name),
         ));
         let previous_selection = std::mem::replace(
             &mut self.direct_selection_is_guarded,
             block_has_event_mechanic(&item.block),
         );
-        visit::visit_item_fn(self, item);
+        if is_owner_export_visibility(&item.vis) {
+            self.export_stack.push((name.clone(), HashSet::new()));
+        }
+        self.item_context.push(name);
+        self.visit_block(&item.block);
+        self.item_context.pop();
+        if is_owner_export_visibility(&item.vis) {
+            self.finish_export();
+        }
         self.direct_selection_is_guarded = previous_selection;
         self.enclosing_item = previous_item;
     }
@@ -1021,15 +1304,29 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
         if cfg_test(&item.attrs) {
             return;
         }
+        for attribute in &item.attrs {
+            self.visit_attribute(attribute);
+        }
+        self.visit_visibility(&item.vis);
+        self.visit_signature(&item.sig);
+        let name = ident_name(&item.sig.ident);
         let previous_item = self.enclosing_item.replace((
             self.offset(item.span().start()),
-            self.qualified_anchor(&ident_name(&item.sig.ident)),
+            self.qualified_anchor(&name),
         ));
         let previous_selection = std::mem::replace(
             &mut self.direct_selection_is_guarded,
             block_has_event_mechanic(&item.block),
         );
-        visit::visit_impl_item_fn(self, item);
+        if is_owner_export_visibility(&item.vis) {
+            self.export_stack.push((name.clone(), HashSet::new()));
+        }
+        self.item_context.push(name);
+        self.visit_block(&item.block);
+        self.item_context.pop();
+        if is_owner_export_visibility(&item.vis) {
+            self.finish_export();
+        }
         self.direct_selection_is_guarded = previous_selection;
         self.enclosing_item = previous_item;
     }
@@ -1045,6 +1342,12 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
         self.scopes.pop();
     }
 
+    fn visit_stmt(&mut self, statement: &'ast syn::Stmt) {
+        self.hash_context.push(normalized_token_hash(statement));
+        visit::visit_stmt(self, statement);
+        self.hash_context.pop();
+    }
+
     fn visit_expr_path(&mut self, expression: &'ast ExprPath) {
         self.analyze_path(&expression.path, expression.qself.as_ref());
         visit::visit_expr_path(self, expression);
@@ -1058,7 +1361,7 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
     fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
         let mut entries = Vec::new();
         flatten_use(&item.tree, &mut Vec::new(), &mut entries);
-        for entry in entries {
+        for entry in &entries {
             if entry.path.last().is_some_and(|member| {
                 GuardKind::ALL
                     .iter()
@@ -1066,8 +1369,70 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
             }) {
                 self.analyze_names(&entry.path, item.span());
             }
+            if is_owner_export_visibility(&item.vis) && entry.renamed {
+                let Some(local) = &entry.local else {
+                    continue;
+                };
+                self.exports.extend(
+                    self.export_kinds_for_path(&entry.path)
+                        .into_iter()
+                        .map(|kind| (kind, local.clone())),
+                );
+            }
         }
         visit::visit_item_use(self, item);
+    }
+
+    fn visit_expr_match(&mut self, expression: &'ast ExprMatch) {
+        if expression
+            .arms
+            .iter()
+            .any(|arm| self.pattern_mentions_guarded_enum(&arm.pat))
+        {
+            for arm in &expression.arms {
+                if pattern_is_catch_all(&arm.pat) {
+                    self.record(
+                        GuardKind::Selection,
+                        arm.pat.span(),
+                        "RuntimeNestedAnimationInstance",
+                    );
+                }
+            }
+        }
+        visit::visit_expr_match(self, expression);
+    }
+
+    fn visit_expr_if(&mut self, expression: &'ast ExprIf) {
+        if let Expr::Let(condition) = expression.cond.as_ref()
+            && self.pattern_mentions_guarded_enum(&condition.pat)
+        {
+            // A refutable `if let` has an implicit complement even though syn
+            // exposes no wildcard pattern for that path.
+            self.record(
+                GuardKind::Selection,
+                condition.pat.span(),
+                "RuntimeNestedAnimationInstance",
+            );
+        }
+        visit::visit_expr_if(self, expression);
+    }
+
+    fn visit_local(&mut self, local: &'ast Local) {
+        if local
+            .init
+            .as_ref()
+            .is_some_and(|init| init.diverge.is_some())
+            && self.pattern_mentions_guarded_enum(&local.pat)
+        {
+            // `let PAT = value else { ... }` selects PAT's implicit
+            // complement in the diverging branch.
+            self.record(
+                GuardKind::Selection,
+                local.pat.span(),
+                "RuntimeNestedAnimationInstance",
+            );
+        }
+        visit::visit_local(self, local);
     }
 
     fn visit_pat_tuple_struct(&mut self, pattern: &'ast PatTupleStruct) {
@@ -1082,8 +1447,8 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
 
     fn visit_expr_method_call(&mut self, expression: &'ast ExprMethodCall) {
         let member = ident_name(&expression.method);
-        for kind in [GuardKind::Collection, GuardKind::Dispatch, GuardKind::Audio] {
-            if kind.matches_member(&member) {
+        for kind in GuardKind::ALL {
+            if kind.matches_member(&member) || self.guarded_value_has(&member, kind) {
                 self.record(kind, expression.method.span(), &member);
             }
         }
@@ -1091,6 +1456,19 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
     }
 
     fn visit_macro(&mut self, item: &'ast Macro) {
+        if item.path.is_ident("matches")
+            && syn::parse2::<MatchesInput>(item.tokens.clone())
+                .is_ok_and(|input| self.pattern_mentions_guarded_enum(&input.pattern))
+        {
+            // `matches!` has no catch-all arm in its AST surface. Requiring a
+            // registry row for every guarded-enum pattern mention closes
+            // complement-by-negation without attempting control-flow proof.
+            self.record(
+                GuardKind::Selection,
+                item.span(),
+                "RuntimeNestedAnimationInstance",
+            );
+        }
         for kind in GuardKind::ALL {
             let path_guarded = item.path.segments.last().and_then(|segment| {
                 let name = ident_name(&segment.ident);
@@ -1129,29 +1507,41 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
     }
 }
 
-fn audio_exports(file: &File) -> BTreeSet<String> {
-    fn collect(items: &[Item], aliases: &mut BTreeSet<String>) {
+fn guarded_value_exports(file: &File) -> BTreeSet<(GuardKind, String)> {
+    fn collect(items: &[Item], aliases: &mut BTreeSet<(GuardKind, String)>) {
         for item in items {
             if cfg_test(item_attrs(item)) {
                 continue;
             }
             match item {
                 Item::Const(item) => {
+                    if !is_owner_export_visibility(&item.vis) {
+                        continue;
+                    }
                     if let syn::Expr::Path(path) = item.expr.as_ref()
-                        && path.path.segments.last().is_some_and(|segment| {
-                            GuardKind::Audio.matches_member(&ident_name(&segment.ident))
-                        })
+                        && let Some(member) = path.path.segments.last()
                     {
-                        aliases.insert(ident_name(&item.ident));
+                        let member = ident_name(&member.ident);
+                        for kind in GuardKind::ALL {
+                            if kind.matches_member(&member) {
+                                aliases.insert((kind, ident_name(&item.ident)));
+                            }
+                        }
                     }
                 }
                 Item::Static(item) => {
+                    if !is_owner_export_visibility(&item.vis) {
+                        continue;
+                    }
                     if let syn::Expr::Path(path) = item.expr.as_ref()
-                        && path.path.segments.last().is_some_and(|segment| {
-                            GuardKind::Audio.matches_member(&ident_name(&segment.ident))
-                        })
+                        && let Some(member) = path.path.segments.last()
                     {
-                        aliases.insert(ident_name(&item.ident));
+                        let member = ident_name(&member.ident);
+                        for kind in GuardKind::ALL {
+                            if kind.matches_member(&member) {
+                                aliases.insert((kind, ident_name(&item.ident)));
+                            }
+                        }
                     }
                 }
                 Item::Mod(item) => {
@@ -1200,7 +1590,13 @@ fn main() {
         eprintln!("cannot read Rust source: {error}");
         std::process::exit(2);
     }
-    let audio_aliases = std::env::args().skip(1).collect::<Vec<_>>();
+    let guarded_aliases = std::env::args()
+        .skip(1)
+        .filter_map(|argument| {
+            let (kind, alias) = argument.split_once(':')?;
+            Some((GuardKind::parse(kind)?, alias.to_owned()))
+        })
+        .collect::<Vec<_>>();
     let Ok(file) = syn::parse_file(&source) else {
         for (kind, offsets) in lexical_tripwire(&source) {
             println!("hit {} 0", kind.name());
@@ -1211,11 +1607,12 @@ fn main() {
         return;
     };
 
-    for alias in audio_exports(&file) {
-        println!("alias {alias}");
-    }
-    let mut analyzer = Analyzer::new(&source, audio_aliases);
+    let mut analyzer = Analyzer::new(&source, guarded_aliases);
     analyzer.visit_file(&file);
+    analyzer.exports.extend(guarded_value_exports(&file));
+    for (kind, alias) in &analyzer.exports {
+        println!("export {} {alias}", kind.name());
+    }
     for kind in GuardKind::ALL {
         if let Some(offsets) = analyzer.hits.get(&kind) {
             for offset in offsets {
@@ -1228,9 +1625,9 @@ fn main() {
             }
         }
         if let Some(records) = analyzer.matches.get(&kind) {
-            for (anchor_offset, site_offset, anchor, guarded_name) in records {
+            for (anchor_offset, site_offset, anchor, guarded_name, site_hash) in records {
                 println!(
-                    "match {} {anchor_offset} {site_offset} {anchor} {guarded_name}",
+                    "match {} {anchor_offset} {site_offset} {anchor} {guarded_name} {site_hash}",
                     kind.name()
                 );
             }

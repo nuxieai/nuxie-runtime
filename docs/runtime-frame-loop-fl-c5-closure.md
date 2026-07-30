@@ -477,7 +477,7 @@ instance-level Rust implementation.
 | tools `onInputChanged` (`state_machine_instance.hpp:467-470`) | [x] CLOSED; W4: missing | `B-SOURCE`: replace nullable callback | `S-TOOLS` | Set, replace, clear. |
 | tools `onDataBindChanged` (`state_machine_instance.hpp:471`; `.cpp:2245-2253`) | [x] CLOSED; W4: missing | `B-SOURCE`: current shadow-vector behavior or documented tools adaptation | `S-TOOLS` | Later keyframe bind does not inherit callback; null clears. |
 
-## Twelve required adversarial publication rows
+## Thirteen required adversarial publication rows
 
 - [x] Definition import and collection ownership: `B-DEF`, `S-OWNER`,
   `S-SLOTS`, `S-ORDER`, and `S-FIELDS` prove all five
@@ -939,12 +939,16 @@ Macro or otherwise unresolved guarded-member tokens are a fail-closed
 regression tripwire rather than an enumerated evasion list. A deliberately
 blessed site must have an explicit `[[owner_boundary_allow]]` registry row in
 `docs/runtime-frame-loop-gaps.toml` naming its file, guarded kind, exact
-enclosing-item anchor, and guarded name. Inline comments and string literals
-have no suppression power, and the checker rejects an unregistered hit, a
-missing registered anchor, duplicate substitution, or drift in either
-direction. Permanent negatives retain every W66/W68/W71/W72/W73/W81/W82/W83
-spelling and fully-qualified controls; exotic future spellings containing a
-guarded type or member trip the token rule.
+full-nesting-path anchor, guarded name, and detector-derived statement
+`site_hash`. The hash is SHA-256 over the minimal enclosing statement's
+normalized token stream, so the W87 same-anchor relocation requires explicit
+re-blessing while unrelated edits elsewhere in the function do not churn the
+row. Inline comments and string literals have no suppression power, and the
+checker rejects an unregistered hit, a missing registered anchor, duplicate
+substitution, same-anchor relocation, stale site hash, or drift in either
+direction. Permanent negatives retain every
+W66/W68/W71/W72/W73/W81/W82/W83 spelling and fully-qualified controls; exotic
+future spellings containing a guarded type or member trip the token rule.
 
 Gate receipts:
 
@@ -995,7 +999,7 @@ changed during closure completion.
 
 Closure checklist:
 
-- [x] every member row and all twelve adversarial rows are checked;
+- [x] every member row and all thirteen adversarial rows are checked;
 - [x] the two new owner modules exist and both legacy files are thin entry
   points/re-exports;
 - [x] every compensation `KEEP` is documented in the corresponding member

@@ -4,15 +4,14 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: joint round-six corrective after E3 publication for immutable
-  combined production candidate `691c5262fb990e73bf13187ea923fe54341c25bc`.
-  The round-five corrective adds
-  per-source chain atomicity, retained-arena resolution for every consumer,
-  repository-wide semantic guards, and recursive tracked-receipt validation
-  on top of E2 publication `eaf8a6f6`. The five SHA-stamped floor4 receipts
-  are operative for E3. The round-six working tree intentionally makes E3's
-  candidate-source fingerprint and Rust-runner provenance stale; those two
-  trace validations remain pending E4's fingerprint-last regeneration.
+- Phase: E4 evidence publication for immutable combined production candidate
+  `9434b39cd1e888ac5f3300a9f6708b303516da2d`. E3 evidence was published as
+  `50bf85e8`; round-six production adds per-animation chain atomicity,
+  nested-simple event delivery, instance-owned seam mechanics, restored
+  reset order, and retained-definition blend proofs. The five SHA-stamped
+  floor5 receipts are operative. The final trace is regenerated
+  fingerprint-last, and the complete structural/provenance checker is green
+  on this exact tree.
 - Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
   on that provisional implementation without claiming FL-B verification.
   FL-C's corrected 56-file/eight-member lane map is
@@ -832,8 +831,8 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Commit the round-six corrective production/tests candidate.
-2. Run and SHA-stamp the required floors against that production commit.
-3. Publish E4 with regenerated fingerprint-last trace/provenance evidence.
-4. Request the independent FL-B reacceptance, FL-C5 oracle, and FL-C5
-   standards reviews against E4.
+1. Publish the staged E4 evidence/docs packet without changing immutable
+   production candidate `9434b39cd1e888ac5f3300a9f6708b303516da2d`.
+2. Request the independent round-six FL-B reacceptance review against E4.
+3. Request the independent round-six FL-C5 oracle review against E4.
+4. Request the independent round-six FL-C5 standards review against E4.

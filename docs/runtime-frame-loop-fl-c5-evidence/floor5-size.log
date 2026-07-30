@@ -1,0 +1,40 @@
+FLOOR_RECEIPT_TREE_SHA=9434b39cd1e888ac5f3300a9f6708b303516da2d
+tools/size-report.sh
+==================================================================
+ Nuxie full SDK link-closure size report
+ Rust target: aarch64-apple-darwin (Mach-O arm64)
+ Source revision: 9434b39cd1e888ac5f3300a9f6708b303516da2d
+ closure: all nux-capi exports + complete public Darwin renderer roots
+ link: dead_strip + dead_strip_dylibs; post-link strip -S -x
+==================================================================
+
+Building release-size full SDK closure (renderer on scripting off, features=size-report-roots)...
+Building release-size full SDK closure (renderer on scripting on, features=size-report-roots,nuxie/scripting)...
+
+Tracked stripped link-closure sizes:
+  release-size opt=z, renderer ON, scripting OFF     8218008 B    7.84 MiB
+  release-size opt=z, renderer ON, scripting ON      9302232 B    8.87 MiB  (+1084224 B, +13.2%)
+
+Historical 2.75 MiB budget delta (informational; not enforced): +5334424 B (+185.0%)
+Retained renderer roots: scripting OFF=44, ON=44
+Artifact SHA-256: scripting OFF=6da9068265507329815893eeb75db2c6a2b5faaf78423af7057ac18ec7b25d5f
+Artifact SHA-256: scripting ON=46ff379919657538dc2158ad728fb72b4dbecc3b4ccbc8bf2fa6412937ed8a89
+
+Artifacts:
+  scripting OFF: target/size-report/release-size-renderer-on-scripting-off/libnux_capi_full.dylib
+  scripting ON:  target/size-report/release-size-renderer-on-scripting-on/libnux_capi_full.dylib
+
+Section breakdown (release-size, renderer ON, scripting OFF):
+Segment __TEXT: 7520256
+	Section __text: 5174512
+	Section __const: 1097368
+	Section __cstring: 131005
+	Section __unwind_info: 192528
+	Section __eh_frame: 470560
+Segment __DATA_CONST: 540672
+	Section __const: 527960
+Segment __DATA: 16384
+Segment __LINKEDIT: 147456
+
+size-report summary: off-bytes=8218008 on-bytes=9302232 budget-bytes=9437184
+size-report OK: both variants within the 9 MiB #B-3 budget. See docs/SIZE.md.

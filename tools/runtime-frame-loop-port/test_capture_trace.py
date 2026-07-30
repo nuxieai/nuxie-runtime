@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import pathlib
+import subprocess
+import tempfile
+import unittest
+
+
+MODULE_PATH = pathlib.Path(__file__).with_name("capture_trace.py")
+SPEC = importlib.util.spec_from_file_location("capture_trace", MODULE_PATH)
+assert SPEC is not None and SPEC.loader is not None
+CAPTURE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(CAPTURE)
+
+
+class CaptureTraceTest(unittest.TestCase):
+    def test_rust_runner_provenance_accepts_exact_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runner = pathlib.Path(directory) / "rust-golden-runner"
+            runner.write_bytes(b"runner")
+            candidate = {
+                "schema": "nuxie-runtime-frame-loop-rust-source/v1",
+                "sha256": "a" * 64,
+                "file_count": 12,
+            }
+            provenance = CAPTURE.rust_runner_provenance(candidate)
+            CAPTURE.rust_runner_provenance_path(runner).write_text(
+                json.dumps(provenance)
+            )
+
+            self.assertEqual(
+                CAPTURE.require_rust_runner_provenance(runner, candidate),
+                provenance,
+            )
+
+    def test_rust_runner_provenance_rejects_stale_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runner = pathlib.Path(directory) / "rust-golden-runner"
+            runner.write_bytes(b"runner")
+            built_candidate = {
+                "schema": "nuxie-runtime-frame-loop-rust-source/v1",
+                "sha256": "a" * 64,
+                "file_count": 12,
+            }
+            current_candidate = dict(built_candidate, sha256="b" * 64)
+            CAPTURE.rust_runner_provenance_path(runner).write_text(
+                json.dumps(CAPTURE.rust_runner_provenance(built_candidate))
+            )
+
+            with self.assertRaisesRegex(
+                CAPTURE.SourceFingerprintError,
+                "Rust trace runner provenance is stale",
+            ):
+                CAPTURE.require_rust_runner_provenance(
+                    runner, current_candidate
+                )
+
+    def test_candidate_source_fingerprint_is_deterministic_and_self_excluding(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = pathlib.Path(directory)
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            source = repo / "crates/runtime/src/lib.rs"
+            source.parent.mkdir(parents=True)
+            source.write_text("pub fn frame() {}\n")
+            output = repo / "docs/runtime-frame-loop-trace.json"
+            output.parent.mkdir()
+            output.write_text("{}\n")
+            status = repo / "docs/runtime-frame-loop-status.md"
+            status.write_text("before\n")
+            local_fixture = repo / "fixtures/animation"
+            local_fixture.parent.mkdir()
+            local_fixture.symlink_to("/developer-only/fixtures")
+            orchestration_log = repo / ".flc5/out/W29.log"
+            orchestration_log.parent.mkdir(parents=True)
+            orchestration_log.write_text("before\n")
+
+            first = CAPTURE.candidate_source_fingerprint(
+                repo, evidence_path=output
+            )
+            output.write_text('{"generated": true}\n')
+            status.write_text("after\n")
+            orchestration_log.write_text("after\n")
+            generated = repo / "tools/trace/__pycache__/capture.pyc"
+            generated.parent.mkdir(parents=True)
+            generated.write_bytes(b"generated")
+            second = CAPTURE.candidate_source_fingerprint(
+                repo, evidence_path=output
+            )
+
+            self.assertEqual(first, second)
+            self.assertEqual(first["file_count"], 1)
+
+    def test_interactive_input_is_only_enabled_for_mechanism_frame(self) -> None:
+        row = {
+            "id": "scroll",
+            "path": "scroll.riv",
+            "samples": [0.0, 0.1],
+            "input_script": pathlib.Path("/tmp/scroll.txt"),
+        }
+
+        frame, frame_input = CAPTURE.effective_fixture_row(
+            row,
+            frame_only=True,
+            occurrence_only=False,
+            steady_only=False,
+        )
+        self.assertTrue(frame_input)
+        self.assertEqual(frame["samples"], [0.0, 0.1])
+        self.assertIn("input_script", frame)
+
+        construction, construction_input = CAPTURE.effective_fixture_row(
+            row,
+            frame_only=False,
+            occurrence_only=True,
+            steady_only=False,
+        )
+        self.assertFalse(construction_input)
+        self.assertEqual(construction["samples"], [0.0])
+        self.assertNotIn("input_script", construction)
+
+        steady, steady_input = CAPTURE.effective_fixture_row(
+            row,
+            frame_only=True,
+            occurrence_only=False,
+            steady_only=True,
+        )
+        self.assertFalse(steady_input)
+        self.assertEqual(steady["samples"], [0.0])
+        self.assertNotIn("input_script", steady)
+
+
+if __name__ == "__main__":
+    unittest.main()

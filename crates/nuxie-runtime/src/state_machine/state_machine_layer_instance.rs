@@ -1,0 +1,1101 @@
+use super::*;
+use crate::math::random::RuntimeRandomProvider;
+
+fn retain_random_waiting_for_exit(waiting_for_exit: &mut bool, allowance: TransitionAllowance) {
+    if allowance == TransitionAllowance::WaitingForExit {
+        *waiting_for_exit = true;
+    }
+}
+
+fn clear_waiting_for_exit_after_selected_transition(waiting_for_exit: &mut bool) {
+    *waiting_for_exit = false;
+}
+
+#[cfg(test)]
+thread_local! {
+    static LAYER_CONSTRUCTION_NUMBER_SNAPSHOTS: std::cell::RefCell<Vec<Vec<Option<f32>>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(super) fn reset_layer_construction_number_snapshots() {
+    LAYER_CONSTRUCTION_NUMBER_SNAPSHOTS.with(|snapshots| snapshots.borrow_mut().clear());
+}
+
+#[cfg(test)]
+pub(super) fn layer_construction_number_snapshots() -> Vec<Vec<Option<f32>>> {
+    LAYER_CONSTRUCTION_NUMBER_SNAPSHOTS.with(|snapshots| snapshots.borrow().clone())
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct StateMachineLayerInstance {
+    /// C++ keys trigger consumption by `StateMachineLayerInstance*`. A fresh
+    /// monotonic token gives every Rust layer occurrence the same identity
+    /// boundary, including cloned state machines that share a retained VM.
+    view_model_trigger_layer_id: u64,
+    animation_definitions: Arc<Vec<RuntimeLinearAnimation>>,
+    empty_animation_definition: Arc<RuntimeLinearAnimation>,
+    any_state: Option<RuntimeStateInstance>,
+    current_state: Option<RuntimeStateInstance>,
+    state_from: Option<RuntimeStateInstance>,
+    transition_duration_seconds: f32,
+    transition_mix: f32,
+    transition_mix_from: f32,
+    hold_animation_from: bool,
+    hold_animation: Option<LinearAnimationInstance>,
+    active_transition: Option<RuntimeStateTransitionHandle>,
+    transition_completed: bool,
+    transition_animation_reset: Option<AnimationReset>,
+    waiting_for_exit: bool,
+    /// Pinned C++ retains one changed flag per authored layer occurrence.
+    /// A new-frame advance clears it; zero-time convergence in the same frame
+    /// can only set it, so several transitions still report one changed layer.
+    state_changed_on_advance: bool,
+    /// C++ temporarily writes `evaluatedRandomWeight` onto shared
+    /// StateTransition definitions. Rust retains the same authored-order,
+    /// `uint32_t` scratch on the layer occurrence so concurrent instances do
+    /// not race through an immutable definition (FLR-17).
+    evaluated_random_weights: Vec<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct StateMachineLayerAdvance {
+    pub(crate) keep_going: bool,
+}
+
+impl StateMachineLayerInstance {
+    pub(crate) fn new(
+        layer: &RuntimeStateMachineLayer,
+        artboard: &ArtboardInstance,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
+    ) -> Self {
+        RuntimeRandomProvider::initialize_layer();
+        #[cfg(test)]
+        LAYER_CONSTRUCTION_NUMBER_SNAPSHOTS.with(|snapshots| {
+            snapshots.borrow_mut().push(
+                inputs
+                    .iter()
+                    .map(StateMachineInputInstance::number_value)
+                    .collect(),
+            );
+        });
+        let mut any_state = layer.any_state_index.and_then(|state_index| {
+            RuntimeStateInstance::make(
+                layer,
+                state_index,
+                artboard,
+                &artboard.linear_animations,
+                &artboard.empty_linear_animation,
+                inputs,
+                bindable_numbers,
+            )
+        });
+        let mut current_state = layer.entry_state_index.and_then(|state_index| {
+            RuntimeStateInstance::make(
+                layer,
+                state_index,
+                artboard,
+                &artboard.linear_animations,
+                &artboard.empty_linear_animation,
+                inputs,
+                bindable_numbers,
+            )
+        });
+        if let Some(any_state) = any_state.as_mut() {
+            any_state.build_key_frame_data_binds(
+                key_frame_data_bind_graphs,
+                crate::animation::RuntimeKeyFrameDataBindEnrollment::Initial,
+            );
+        }
+        if let Some(current_state) = current_state.as_mut() {
+            current_state.build_key_frame_data_binds(
+                key_frame_data_bind_graphs,
+                crate::animation::RuntimeKeyFrameDataBindEnrollment::Initial,
+            );
+        }
+        Self {
+            view_model_trigger_layer_id: next_view_model_trigger_layer_id(),
+            animation_definitions: Arc::clone(&artboard.linear_animations),
+            empty_animation_definition: Arc::clone(&artboard.empty_linear_animation),
+            any_state,
+            current_state,
+            state_from: None,
+            transition_duration_seconds: 0.0,
+            transition_mix: 1.0,
+            transition_mix_from: 1.0,
+            hold_animation_from: false,
+            hold_animation: None,
+            active_transition: None,
+            transition_completed: false,
+            transition_animation_reset: None,
+            waiting_for_exit: false,
+            state_changed_on_advance: false,
+            evaluated_random_weights: Vec::new(),
+        }
+    }
+
+    pub(crate) fn refresh_view_model_trigger_layer_id(&mut self) {
+        self.view_model_trigger_layer_id = next_view_model_trigger_layer_id();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn view_model_trigger_layer_id(&self) -> u64 {
+        self.view_model_trigger_layer_id
+    }
+
+    #[cfg(test)]
+    pub(crate) fn evaluated_random_weights(&self) -> &[u32] {
+        &self.evaluated_random_weights
+    }
+
+    pub(crate) fn has_current_animation(&self) -> bool {
+        self.current_state
+            .as_ref()
+            .and_then(RuntimeStateInstance::plain_animation)
+            .is_some()
+    }
+
+    pub(crate) fn current_animation(&self) -> Option<&LinearAnimationInstance> {
+        self.current_state
+            .as_ref()
+            .and_then(RuntimeStateInstance::plain_animation)
+    }
+
+    pub(crate) fn state_changed_on_advance(&self) -> bool {
+        self.state_changed_on_advance
+    }
+
+    pub(crate) fn begin_new_frame(&mut self) {
+        self.state_changed_on_advance = false;
+    }
+
+    pub(crate) fn current_state<'a>(
+        &self,
+        layer: &'a RuntimeStateMachineLayer,
+    ) -> Option<&'a RuntimeLayerState> {
+        self.current_state.as_ref()?.state(layer)
+    }
+
+    pub(crate) fn perform_initial_entry_actions(
+        &self,
+        artboard: &mut ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+        mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
+        executor: &mut dyn RuntimeScheduledListenerActionExecutor,
+    ) -> Result<(), ScriptError> {
+        let Some(state) = self
+            .current_state
+            .as_ref()
+            .and_then(|state| state.state(layer))
+        else {
+            return Ok(());
+        };
+        state.perform_fire_actions(
+            StateMachineFireOccurrence::AtStart,
+            artboard,
+            executor,
+            &mut *targets.reported_events,
+        );
+        state.perform_listener_actions(
+            StateMachineFireOccurrence::AtStart,
+            artboard,
+            targets.reborrow(),
+            executor,
+        )?;
+        Ok(())
+    }
+
+    fn current_state_index(&self) -> Option<usize> {
+        self.current_state
+            .as_ref()
+            .map(RuntimeStateInstance::state_index)
+    }
+
+    pub(crate) fn advance(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+        key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
+        elapsed_seconds: f32,
+        data_context_present: bool,
+        layer_index: usize,
+        mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
+        executor: &mut dyn RuntimeScheduledListenerActionExecutor,
+    ) -> Result<StateMachineLayerAdvance, ScriptError> {
+        self.advance_current_animation(
+            artboard,
+            layer,
+            elapsed_seconds,
+            targets.inputs,
+            targets.bindable_numbers,
+            targets.reported_events,
+        );
+        let input_changed = self.update_transition_mix(
+            artboard,
+            layer,
+            elapsed_seconds,
+            targets.reborrow(),
+            executor,
+        )?;
+        self.advance_transition_source_animation(
+            artboard,
+            layer,
+            elapsed_seconds,
+            targets.inputs,
+            targets.bindable_numbers,
+            targets.reported_events,
+        );
+        self.apply_animations(artboard, layer);
+
+        let mut changed_state = false;
+        // Pinned C++ tests the limit after each successful update. Its loop
+        // therefore applies updates numbered 0 through 100, then returns
+        // `false` immediately on the 101st success without clearing spilled
+        // time (`state_machine_instance.cpp:227-259`).
+        for iteration in 0..=100 {
+            if !self.update_state(
+                artboard,
+                layer,
+                key_frame_data_bind_graphs,
+                data_context_present,
+                layer_index,
+                targets.reborrow(),
+                executor,
+            )? {
+                break;
+            }
+            changed_state = true;
+            self.apply_animations(artboard, layer);
+            if iteration == 100 {
+                return Ok(StateMachineLayerAdvance { keep_going: false });
+            }
+        }
+        if let Some(current_state) = self.current_state.as_mut() {
+            current_state.clear_spilled_time();
+        }
+
+        Ok(StateMachineLayerAdvance {
+            keep_going: changed_state
+                || input_changed
+                || self.is_transitioning()
+                || self.waiting_for_exit
+                || self
+                    .current_state
+                    .as_ref()
+                    .is_some_and(RuntimeStateInstance::keep_going),
+        })
+    }
+
+    pub(crate) fn reset_state(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+        key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
+        mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
+        executor: &mut dyn RuntimeScheduledListenerActionExecutor,
+    ) -> Result<(), ScriptError> {
+        // C++ removes occurrence-owned keyframe binds before deleting source
+        // and current. Rust keyframe binds are owned by the animation
+        // occurrence itself, so dropping these two Options performs the same
+        // teardown and makes the C++ alias guards unrepresentable.
+        self.state_from = None;
+        self.current_state = None;
+
+        let Some(entry_state_index) = layer.entry_state_index else {
+            return Ok(());
+        };
+        self.current_state = RuntimeStateInstance::make(
+            layer,
+            entry_state_index,
+            artboard,
+            &self.animation_definitions,
+            &self.empty_animation_definition,
+            targets.inputs,
+            targets.bindable_numbers,
+        );
+        if let Some(current_state) = self.current_state.as_mut() {
+            current_state.build_key_frame_data_binds(
+                key_frame_data_bind_graphs,
+                crate::animation::RuntimeKeyFrameDataBindEnrollment::Late,
+            );
+        }
+        let Some(entry_state) = self
+            .current_state
+            .as_ref()
+            .and_then(|state| state.state(layer))
+        else {
+            return Ok(());
+        };
+        entry_state.perform_fire_actions(
+            StateMachineFireOccurrence::AtStart,
+            artboard,
+            executor,
+            &mut *targets.reported_events,
+        );
+        entry_state.perform_listener_actions(
+            StateMachineFireOccurrence::AtStart,
+            artboard,
+            targets.reborrow(),
+            executor,
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn update_state(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+        key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
+        data_context_present: bool,
+        layer_index: usize,
+        mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
+        executor: &mut dyn RuntimeScheduledListenerActionExecutor,
+    ) -> Result<bool, ScriptError> {
+        self.refresh_resolved_transition_duration(artboard, layer, targets.transition_durations);
+        if self.is_transitioning()
+            && !self
+                .active_transition
+                .and_then(|handle| handle.resolve(layer))
+                .is_some_and(RuntimeStateTransition::enable_early_exit)
+        {
+            return Ok(false);
+        }
+        self.waiting_for_exit = false;
+        if self.try_change_state(
+            artboard,
+            layer,
+            key_frame_data_bind_graphs,
+            self.any_state
+                .as_ref()
+                .map(RuntimeStateInstance::state_index),
+            data_context_present,
+            layer_index,
+            targets.reborrow(),
+            executor,
+        )? {
+            self.state_changed_on_advance = true;
+            return Ok(true);
+        }
+        let changed = self.try_change_state(
+            artboard,
+            layer,
+            key_frame_data_bind_graphs,
+            self.current_state
+                .as_ref()
+                .map(RuntimeStateInstance::state_index),
+            data_context_present,
+            layer_index,
+            targets,
+            executor,
+        )?;
+        self.state_changed_on_advance |= changed;
+        Ok(changed)
+    }
+
+    fn try_change_state(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+        key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
+        state_index: Option<usize>,
+        data_context_present: bool,
+        layer_index: usize,
+        targets: RuntimeScheduledListenerActionTargetsMut<'_>,
+        executor: &mut dyn RuntimeScheduledListenerActionExecutor,
+    ) -> Result<bool, ScriptError> {
+        let Some(state_index) = state_index else {
+            return Ok(false);
+        };
+        let Some(state) = layer.states.get(state_index) else {
+            return Ok(false);
+        };
+
+        if state.uses_random_transition_selection() {
+            let random_transition = {
+                let context = targets.evaluation_context(
+                    data_context_present,
+                    layer_index,
+                    self.view_model_trigger_layer_id,
+                );
+                self.find_random_transition(
+                    &context,
+                    artboard,
+                    state,
+                    state_index,
+                    targets.inputs,
+                    executor,
+                )
+            };
+            let Some((transition_index, state_to_index)) = random_transition else {
+                return Ok(false);
+            };
+            let transition = &state.transitions[transition_index];
+            transition.use_inputs(
+                targets.inputs,
+                executor,
+                layer_index,
+                self.view_model_trigger_layer_id,
+            );
+            let change_result = self.change_state(
+                artboard,
+                layer,
+                key_frame_data_bind_graphs,
+                RuntimeStateTransitionHandle::new(state_index, transition_index),
+                transition,
+                state_to_index,
+                targets,
+                executor,
+            );
+            // Pinned C++ retains `m_waitingForExit` while it evaluates every
+            // weighted candidate, then clears the latch after a selected
+            // transition has changed state and before returning
+            // (`state_machine_instance.cpp:412-468,528-627`).
+            clear_waiting_for_exit_after_selected_transition(&mut self.waiting_for_exit);
+            change_result?;
+            return Ok(true);
+        }
+
+        for (transition_index, transition) in state.transitions.iter().enumerate() {
+            if !transition.is_simple_supported() {
+                continue;
+            }
+            let Some(state_to_index) = transition.state_to_index else {
+                continue;
+            };
+            if self
+                .current_state
+                .as_ref()
+                .is_some_and(|state| state.is_same_definition(state_to_index))
+            {
+                continue;
+            }
+            let animation_from = self.current_transition_animation(
+                artboard,
+                transition,
+                self.current_state_index() == Some(state_index),
+            );
+            let allowance = {
+                let context = targets.evaluation_context(
+                    data_context_present,
+                    layer_index,
+                    self.view_model_trigger_layer_id,
+                );
+                if transition.direct_input_conditions_only {
+                    transition.allow_direct_inputs(&context, targets.inputs, animation_from)
+                } else {
+                    transition.allow(&context, artboard, targets.inputs, executor, animation_from)
+                }
+            };
+            match allowance {
+                TransitionAllowance::No => continue,
+                TransitionAllowance::WaitingForExit => {
+                    self.waiting_for_exit = true;
+                    continue;
+                }
+                TransitionAllowance::Yes => {
+                    self.waiting_for_exit = false;
+                }
+            }
+            transition.use_inputs(
+                targets.inputs,
+                executor,
+                layer_index,
+                self.view_model_trigger_layer_id,
+            );
+            self.change_state(
+                artboard,
+                layer,
+                key_frame_data_bind_graphs,
+                RuntimeStateTransitionHandle::new(state_index, transition_index),
+                transition,
+                state_to_index,
+                targets,
+                executor,
+            )?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    fn find_random_transition(
+        &mut self,
+        context: &TransitionEvaluationContext<'_>,
+        artboard: &ArtboardInstance,
+        state: &RuntimeLayerState,
+        state_index: usize,
+        inputs: &[StateMachineInputInstance],
+        executor: &dyn RuntimeScheduledListenerActionExecutor,
+    ) -> Option<(usize, usize)> {
+        self.evaluated_random_weights
+            .resize(state.transitions.len(), 0);
+        self.evaluated_random_weights.fill(0);
+        let mut total_weight = 0_u32;
+        for (transition_index, transition) in state.transitions.iter().enumerate() {
+            if !transition.is_simple_supported() {
+                continue;
+            }
+            let Some(state_to_index) = transition.state_to_index else {
+                continue;
+            };
+            if self
+                .current_state
+                .as_ref()
+                .is_some_and(|state| state.is_same_definition(state_to_index))
+            {
+                continue;
+            }
+
+            let animation_from = self.current_transition_animation(
+                artboard,
+                transition,
+                self.current_state_index() == Some(state_index),
+            );
+            let allowance = if transition.direct_input_conditions_only {
+                transition.allow_direct_inputs(context, inputs, animation_from)
+            } else {
+                transition.allow(context, artboard, inputs, executor, animation_from)
+            };
+            match allowance {
+                TransitionAllowance::No => {}
+                TransitionAllowance::WaitingForExit => {
+                    // `updateState` clears this latch once before probing
+                    // AnyState and then the current state. Each scan may set
+                    // it, but a later scan that finds no waiter must not erase
+                    // the earlier result (`state_machine_instance.cpp:
+                    // 282-296,412-468`).
+                    retain_random_waiting_for_exit(&mut self.waiting_for_exit, allowance);
+                }
+                TransitionAllowance::Yes => {
+                    // Pinned C++ accumulates into `uint32_t`, including
+                    // ordinary unsigned wrap (`state_machine_instance.cpp:
+                    // 412-448`). Do not widen or saturate this sum.
+                    total_weight = total_weight.wrapping_add(transition.random_weight);
+                    self.evaluated_random_weights[transition_index] = transition.random_weight;
+                }
+            }
+        }
+
+        if total_weight == 0 {
+            return None;
+        }
+
+        let random_weight =
+            f64::from(RuntimeRandomProvider::generate_random_float()) * f64::from(total_weight);
+        let mut current_weight = 0.0_f64;
+        for (transition_index, transition) in state.transitions.iter().enumerate() {
+            let transition_weight = self.evaluated_random_weights[transition_index];
+            let next_weight = current_weight + f64::from(transition_weight);
+            if next_weight > random_weight {
+                return transition
+                    .state_to_index
+                    .map(|state_to_index| (transition_index, state_to_index));
+            }
+            current_weight = next_weight;
+        }
+
+        None
+    }
+
+    fn current_transition_animation<'a>(
+        &'a self,
+        artboard: &'a ArtboardInstance,
+        transition: &RuntimeStateTransition,
+        is_current_state: bool,
+    ) -> Option<RuntimeTransitionAnimationRef<'a>> {
+        if !is_current_state {
+            return None;
+        }
+
+        let animation_instance = self
+            .current_state
+            .as_ref()?
+            .transition_animation(transition.exit_blend_animation_index)?;
+        let animation = artboard.linear_animation_instance_definition(animation_instance)?;
+        Some(RuntimeTransitionAnimationRef {
+            instance: animation_instance,
+            animation,
+        })
+    }
+
+    fn change_state(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+        key_frame_data_bind_graphs: &[Option<crate::RuntimeDataBindGraph>],
+        transition_handle: RuntimeStateTransitionHandle,
+        transition: &RuntimeStateTransition,
+        state_to_index: usize,
+        mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
+        executor: &mut dyn RuntimeScheduledListenerActionExecutor,
+    ) -> Result<(), ScriptError> {
+        // Pinned C++ clears the prior transition's reset before it runs the
+        // outgoing state's end actions and constructs the replacement
+        // occurrence (`state_machine_instance.cpp:528-540`).
+        self.transition_animation_reset = None;
+        let previous_state = self.current_state.take();
+        let previous_state_index = previous_state
+            .as_ref()
+            .map(RuntimeStateInstance::state_index);
+        let previous_spilled_time = previous_state
+            .as_ref()
+            .map(RuntimeStateInstance::spilled_time)
+            .unwrap_or(0.0);
+        let previous_mix = self.transition_mix;
+        if let Some(previous_state) =
+            previous_state_index.and_then(|state_index| layer.states.get(state_index))
+        {
+            previous_state.perform_fire_actions(
+                StateMachineFireOccurrence::AtEnd,
+                artboard,
+                executor,
+                &mut *targets.reported_events,
+            );
+            previous_state.perform_listener_actions(
+                StateMachineFireOccurrence::AtEnd,
+                artboard,
+                targets.reborrow(),
+                executor,
+            )?;
+        }
+
+        self.current_state = RuntimeStateInstance::make(
+            layer,
+            state_to_index,
+            artboard,
+            &self.animation_definitions,
+            &self.empty_animation_definition,
+            targets.inputs,
+            targets.bindable_numbers,
+        );
+        if let Some(current_state) = self.current_state.as_mut() {
+            current_state.build_key_frame_data_binds(
+                key_frame_data_bind_graphs,
+                crate::animation::RuntimeKeyFrameDataBindEnrollment::Late,
+            );
+        }
+        if let Some(current_state) = layer.states.get(state_to_index) {
+            current_state.perform_fire_actions(
+                StateMachineFireOccurrence::AtStart,
+                artboard,
+                executor,
+                &mut *targets.reported_events,
+            );
+            current_state.perform_listener_actions(
+                StateMachineFireOccurrence::AtStart,
+                artboard,
+                targets.reborrow(),
+                executor,
+            )?;
+        }
+
+        self.active_transition = Some(transition_handle);
+        let previous_runtime_animation = previous_state
+            .as_ref()
+            .and_then(RuntimeStateInstance::plain_animation)
+            .and_then(|animation_instance| {
+                artboard.linear_animation_instance_definition(animation_instance)
+            });
+        let duration_override =
+            transition_duration_value(targets.transition_durations, transition.global_id);
+        let transition_duration_seconds =
+            transition.transition_duration_seconds(previous_runtime_animation, duration_override);
+        transition.perform_fire_actions(
+            StateMachineFireOccurrence::AtStart,
+            artboard,
+            executor,
+            &mut *targets.reported_events,
+        );
+        transition.perform_listener_actions(
+            StateMachineFireOccurrence::AtStart,
+            artboard,
+            targets.reborrow(),
+            executor,
+        )?;
+
+        self.transition_completed = transition_duration_seconds == 0.0;
+        if transition_duration_seconds == 0.0 {
+            transition.perform_fire_actions(
+                StateMachineFireOccurrence::AtEnd,
+                artboard,
+                executor,
+                &mut *targets.reported_events,
+            );
+            transition.perform_listener_actions(
+                StateMachineFireOccurrence::AtEnd,
+                artboard,
+                targets.reborrow(),
+                executor,
+            )?;
+        }
+
+        // A transition interruption releases the older transition-source
+        // occurrence and its key-frame binds before the outgoing current
+        // occurrence becomes the new source. C++ constructs the replacement
+        // transition reset only after that teardown/reassignment
+        // (`state_machine_instance.cpp:573-585`).
+        if let Some(state_from) = self.state_from.as_mut() {
+            state_from.remove_key_frame_data_binds();
+        }
+        self.state_from = None;
+        self.state_from = previous_state;
+        let mut reset_animation_instances = Vec::new();
+        if let Some(animation) = self
+            .state_from
+            .as_ref()
+            .and_then(RuntimeStateInstance::plain_animation)
+        {
+            reset_animation_instances.push(animation);
+        }
+        if let Some(animation) = self
+            .current_state
+            .as_ref()
+            .and_then(RuntimeStateInstance::plain_animation)
+        {
+            reset_animation_instances.push(animation);
+        }
+        let transition_animation_reset = (!self.transition_completed).then(|| {
+            AnimationResetFactory::from_animation_instances(
+                artboard,
+                reset_animation_instances,
+                false,
+            )
+        });
+        if previous_state_index.is_some() {
+            self.transition_duration_seconds = transition_duration_seconds;
+            self.transition_animation_reset = transition_animation_reset;
+
+            if transition.has_exit_time()
+                && let Some(animation_instance) = self
+                    .state_from
+                    .as_mut()
+                    .and_then(RuntimeStateInstance::plain_animation_mut)
+                && let Some(animation) =
+                    artboard.linear_animation_instance_definition(animation_instance)
+            {
+                if transition.pause_on_exit() {
+                    let exit_time = transition.exit_time_seconds(Some(animation), true);
+                    animation_instance.set_time_from_retained_definition(exit_time);
+                }
+                self.hold_animation = Some(animation_instance.clone());
+            }
+            self.transition_mix_from = previous_mix;
+            // C++ only updates this hold flag when the previous mix was
+            // nonzero. Preserve the old value at zero rather than replacing
+            // that branch with a simpler assignment.
+            if previous_mix != 0.0 {
+                self.hold_animation_from = transition.pause_on_exit();
+            }
+            if previous_spilled_time != 0.0
+                && let Some(current_state) = self.current_state.as_mut()
+            {
+                current_state.advance(
+                    layer,
+                    artboard,
+                    targets.inputs,
+                    targets.bindable_numbers,
+                    previous_spilled_time,
+                    targets.reported_events,
+                );
+            }
+            self.transition_mix = 0.0;
+            self.update_transition_mix(artboard, layer, 0.0, targets.reborrow(), executor)?;
+        } else {
+            self.clear_transition_source();
+        }
+        Ok(())
+    }
+
+    fn clear_transition_source(&mut self) {
+        self.state_from = None;
+        self.transition_duration_seconds = 0.0;
+        self.transition_mix = 1.0;
+        self.transition_mix_from = 1.0;
+        self.hold_animation_from = false;
+        self.hold_animation = None;
+        self.active_transition = None;
+        self.transition_completed = false;
+        self.transition_animation_reset = None;
+    }
+
+    fn is_transitioning(&self) -> bool {
+        self.has_transition_source()
+            && self.transition_duration_seconds != 0.0
+            && self.transition_mix < 1.0
+    }
+
+    fn has_transition_source(&self) -> bool {
+        self.state_from.is_some()
+    }
+
+    fn update_transition_mix(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+        elapsed_seconds: f32,
+        mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
+        executor: &mut dyn RuntimeScheduledListenerActionExecutor,
+    ) -> Result<bool, ScriptError> {
+        self.refresh_resolved_transition_duration(artboard, layer, targets.transition_durations);
+        if !self.has_transition_source() || self.transition_duration_seconds == 0.0 {
+            self.transition_mix = 1.0;
+            return Ok(false);
+        }
+        self.transition_mix = (self.transition_mix
+            + elapsed_seconds / self.transition_duration_seconds)
+            .clamp(0.0, 1.0);
+        if self.transition_mix == 1.0 && !self.transition_completed {
+            self.transition_completed = true;
+            self.transition_animation_reset = None;
+            let Some(transition) = self
+                .active_transition
+                .and_then(|handle| handle.resolve(layer))
+            else {
+                return Ok(false);
+            };
+            transition.perform_fire_actions(
+                StateMachineFireOccurrence::AtEnd,
+                artboard,
+                executor,
+                &mut *targets.reported_events,
+            );
+            transition.perform_listener_actions(
+                StateMachineFireOccurrence::AtEnd,
+                artboard,
+                targets.reborrow(),
+                executor,
+            )
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn refresh_resolved_transition_duration(
+        &mut self,
+        artboard: &ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+        transition_durations: &[StateMachineTransitionDurationInstance],
+    ) {
+        let Some(transition) = self
+            .active_transition
+            .and_then(|handle| handle.resolve(layer))
+        else {
+            return;
+        };
+        let animation = self
+            .state_from
+            .as_ref()
+            .and_then(RuntimeStateInstance::plain_animation)
+            .and_then(|instance| artboard.linear_animation_instance_definition(instance));
+        let duration_override =
+            transition_duration_value(transition_durations, transition.global_id);
+        self.transition_duration_seconds =
+            transition.transition_duration_seconds(animation, duration_override);
+    }
+
+    fn advance_current_animation(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+        elapsed_seconds: f32,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) -> bool {
+        self.current_state.as_mut().is_some_and(|state| {
+            state.advance(
+                layer,
+                artboard,
+                inputs,
+                bindable_numbers,
+                elapsed_seconds,
+                reported_events,
+            )
+        })
+    }
+
+    fn advance_transition_source_animation(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+        elapsed_seconds: f32,
+        inputs: &[StateMachineInputInstance],
+        bindable_numbers: &[StateMachineBindableNumberInstance],
+        reported_events: &mut Vec<StateMachineReportedEvent>,
+    ) -> bool {
+        if !self.is_transitioning() {
+            return false;
+        }
+        if self.hold_animation_from {
+            return false;
+        }
+        self.state_from.as_mut().is_some_and(|state| {
+            state.advance(
+                layer,
+                artboard,
+                inputs,
+                bindable_numbers,
+                elapsed_seconds,
+                reported_events,
+            )
+        })
+    }
+
+    fn apply_animations(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        layer: &RuntimeStateMachineLayer,
+    ) -> bool {
+        let mut changed = self
+            .transition_animation_reset
+            .as_ref()
+            .is_some_and(|reset| reset.apply(artboard));
+        if let Some(animation) = self.hold_animation.take() {
+            changed |= animation.apply(artboard, self.transition_mix_from);
+        }
+        let interpolator = self
+            .active_transition
+            .and_then(|handle| handle.resolve(layer))
+            .and_then(|transition| transition.interpolator);
+        if self.state_from.is_some() && self.transition_mix < 1.0 {
+            let mix_from = interpolator
+                .map(|interpolator| interpolator.transform(self.transition_mix_from))
+                .unwrap_or(self.transition_mix_from);
+            if let Some(state_from) = self.state_from.as_mut() {
+                changed |= state_from.apply(artboard, mix_from);
+            }
+        }
+        let mix = interpolator
+            .map(|interpolator| interpolator.transform(self.transition_mix))
+            .unwrap_or(self.transition_mix);
+        if let Some(current_state) = self.current_state.as_mut() {
+            changed |= current_state.apply(artboard, mix);
+        }
+        changed
+    }
+
+    pub(crate) fn collect_key_frame_data_bind_occurrence_ids(
+        &mut self,
+        enrollment: crate::animation::RuntimeKeyFrameDataBindEnrollment,
+        ids: &mut Vec<crate::animation::RuntimeKeyFrameDataBindOccurrenceId>,
+    ) {
+        if let Some(any_state) = self.any_state.as_mut() {
+            any_state.collect_key_frame_data_bind_occurrence_ids(enrollment, ids);
+        }
+        if let Some(state_from) = self.state_from.as_mut() {
+            state_from.collect_key_frame_data_bind_occurrence_ids(enrollment, ids);
+        }
+        if let Some(current_state) = self.current_state.as_mut() {
+            current_state.collect_key_frame_data_bind_occurrence_ids(enrollment, ids);
+        }
+    }
+
+    pub(crate) fn ensure_key_frame_data_binds(
+        &mut self,
+        graphs: &[Option<crate::RuntimeDataBindGraph>],
+    ) {
+        if let Some(any_state) = self.any_state.as_mut() {
+            any_state.ensure_key_frame_data_binds(graphs);
+        }
+        if let Some(state_from) = self.state_from.as_mut() {
+            state_from.ensure_key_frame_data_binds(graphs);
+        }
+        if let Some(current_state) = self.current_state.as_mut() {
+            current_state.ensure_key_frame_data_binds(graphs);
+        }
+    }
+
+    pub(crate) fn enroll_unassigned_key_frame_data_binds(&mut self, next_id: &mut u64) {
+        if let Some(any_state) = self.any_state.as_mut() {
+            any_state.enroll_unassigned_key_frame_data_binds(next_id);
+        }
+        if let Some(state_from) = self.state_from.as_mut() {
+            state_from.enroll_unassigned_key_frame_data_binds(next_id);
+        }
+        if let Some(current_state) = self.current_state.as_mut() {
+            current_state.enroll_unassigned_key_frame_data_binds(next_id);
+        }
+    }
+
+    pub(crate) fn prepare_key_frame_data_bind_occurrence(
+        &mut self,
+        occurrence_id: crate::animation::RuntimeKeyFrameDataBindOccurrenceId,
+        graphs: &[Option<crate::RuntimeDataBindGraph>],
+    ) -> Option<bool> {
+        if let Some(any_state) = self.any_state.as_mut()
+            && let Some(result) =
+                any_state.prepare_key_frame_data_bind_occurrence(occurrence_id, graphs)
+        {
+            return Some(result);
+        }
+        if let Some(state_from) = self.state_from.as_mut()
+            && let Some(result) =
+                state_from.prepare_key_frame_data_bind_occurrence(occurrence_id, graphs)
+        {
+            return Some(result);
+        }
+        self.current_state
+            .as_mut()?
+            .prepare_key_frame_data_bind_occurrence(occurrence_id, graphs)
+    }
+
+    pub(crate) fn advance_key_frame_data_bind_occurrence(
+        &mut self,
+        occurrence_id: crate::animation::RuntimeKeyFrameDataBindOccurrenceId,
+        graphs: &[Option<crate::RuntimeDataBindGraph>],
+        elapsed_seconds: f32,
+    ) -> Option<bool> {
+        if let Some(any_state) = self.any_state.as_mut()
+            && let Some(result) = any_state.advance_key_frame_data_bind_occurrence(
+                occurrence_id,
+                graphs,
+                elapsed_seconds,
+            )
+        {
+            return Some(result);
+        }
+        if let Some(state_from) = self.state_from.as_mut()
+            && let Some(result) = state_from.advance_key_frame_data_bind_occurrence(
+                occurrence_id,
+                graphs,
+                elapsed_seconds,
+            )
+        {
+            return Some(result);
+        }
+        self.current_state
+            .as_mut()?
+            .advance_key_frame_data_bind_occurrence(occurrence_id, graphs, elapsed_seconds)
+    }
+
+    pub(crate) fn remove_key_frame_data_binds(&mut self) {
+        if let Some(any_state) = self.any_state.as_mut() {
+            any_state.remove_key_frame_data_binds();
+        }
+        if let Some(state_from) = self.state_from.as_mut() {
+            state_from.remove_key_frame_data_binds();
+        }
+        if let Some(current_state) = self.current_state.as_mut() {
+            current_state.remove_key_frame_data_binds();
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        TransitionAllowance, clear_waiting_for_exit_after_selected_transition,
+        retain_random_waiting_for_exit,
+    };
+
+    #[test]
+    fn random_scan_retains_wait_then_successful_selection_clears_it() {
+        let mut waiting_for_exit = false;
+        retain_random_waiting_for_exit(&mut waiting_for_exit, TransitionAllowance::WaitingForExit);
+        retain_random_waiting_for_exit(&mut waiting_for_exit, TransitionAllowance::Yes);
+        assert!(waiting_for_exit);
+        clear_waiting_for_exit_after_selected_transition(&mut waiting_for_exit);
+        assert!(!waiting_for_exit);
+    }
+}

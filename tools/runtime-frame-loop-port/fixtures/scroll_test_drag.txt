@@ -1,0 +1,8 @@
+# Pinned C++ scroll_test.cpp:19-100, reduced to one deterministic right-side
+# drag plus release so ScrollConstraint physics advances after pointer-up.
+0.100 pointerDown 180 350
+0.101 pointerUp 180 350
+1.200 pointerDown 260 500
+1.216 pointerMove 250 450
+1.232 pointerMove 240 400
+1.248 pointerUp 240 400

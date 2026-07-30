@@ -39,8 +39,8 @@ layout, or virtualization.
   needing reset.
 - Generated list item identities are proven separately at the binary/converter
   level. They are not instantiated into `ArtboardComponentList` here.
-- The direct post-bind `Artboard::updateDataBinds(true)` boundary preserves
-  this immediate target-list report and is covered separately in
+- The direct post-bind `Artboard::updateDataBinds(true)` boundary applies the
+  target list and is covered separately in
   `docs/prototypes/data-binding-graph-artboard-list-direct-update-boundary-runtime-contract.md`.
 - The follow-up post-bind advance target-count boundary is covered separately
   in

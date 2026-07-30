@@ -562,7 +562,14 @@ struct StaticTextStyle<'a> {
     container: Option<&'a ShapePaintContainerNode>,
     font_asset_id: Option<u32>,
     font_bytes: Option<&'a [u8]>,
-    variations: Vec<(u32, f32)>,
+    variations: Vec<StaticTextVariation>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StaticTextVariation {
+    tag: u32,
+    axis_local: usize,
+    authored_value: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1735,7 +1742,7 @@ impl<'a> StaticTextSlice<'a> {
                 || !self
                     .style_letter_spacing(runtime, instance, style)
                     .is_finite()
-                || !style.variations.iter().all(|(_, value)| value.is_finite())
+                || !style.variations_are_finite(instance)
             {
                 return Ok(false);
             }
@@ -2140,12 +2147,7 @@ impl<'a> StaticTextSlice<'a> {
         };
 
         let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
-        let harf_variations = self
-            .base_style()?
-            .variations
-            .iter()
-            .map(|(tag, value)| (HarfTag::from_u32(*tag), *value))
-            .collect::<Vec<_>>();
+        let harf_variations = self.base_style()?.harf_variations(instance);
         let shaper_instance = if harf_variations.is_empty() {
             None
         } else {
@@ -2431,13 +2433,7 @@ impl<'a> StaticTextSlice<'a> {
                     let style_font = SkrifaFontRef::new(style_font_bytes)
                         .context("failed to parse font for outlines")?;
                     let outlines = style_font.outline_glyphs();
-                    let skrifa_variations = style
-                        .variations
-                        .iter()
-                        .map(|(tag, value)| {
-                            VariationSetting::new(SkrifaTag::from_u32(*tag), *value)
-                        })
-                        .collect::<Vec<_>>();
+                    let skrifa_variations = style.skrifa_variations(instance);
                     let location = style_font
                         .axes()
                         .location(skrifa_variations.iter().copied());
@@ -2501,12 +2497,7 @@ impl<'a> StaticTextSlice<'a> {
         };
 
         let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
-        let harf_variations = self
-            .base_style()?
-            .variations
-            .iter()
-            .map(|(tag, value)| (HarfTag::from_u32(*tag), *value))
-            .collect::<Vec<_>>();
+        let harf_variations = self.base_style()?.harf_variations(instance);
         let shaper_instance = if harf_variations.is_empty() {
             None
         } else {
@@ -2642,12 +2633,7 @@ impl<'a> StaticTextSlice<'a> {
         };
 
         let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
-        let harf_variations = self
-            .base_style()?
-            .variations
-            .iter()
-            .map(|(tag, value)| (HarfTag::from_u32(*tag), *value))
-            .collect::<Vec<_>>();
+        let harf_variations = self.base_style()?.harf_variations(instance);
         let shaper_instance = if harf_variations.is_empty() {
             None
         } else {
@@ -2920,11 +2906,7 @@ impl<'a> StaticTextSlice<'a> {
                 };
                 let font = SkrifaFontRef::new(font_bytes)
                     .context("failed to parse font for line metrics")?;
-                let skrifa_variations = style
-                    .variations
-                    .iter()
-                    .map(|(tag, value)| VariationSetting::new(SkrifaTag::from_u32(*tag), *value))
-                    .collect::<Vec<_>>();
+                let skrifa_variations = style.skrifa_variations(instance);
                 let location = font.axes().location(skrifa_variations.iter().copied());
                 let location_ref = LocationRef::from(&location);
                 let (ascent, descent) = harfbuzz_line_metrics(&font, location_ref);
@@ -3090,11 +3072,7 @@ impl<'a> StaticTextSlice<'a> {
         };
         let font =
             SkrifaFontRef::new(font_bytes).context("failed to parse font for trim metrics")?;
-        let skrifa_variations = style
-            .variations
-            .iter()
-            .map(|(tag, value)| VariationSetting::new(SkrifaTag::from_u32(*tag), *value))
-            .collect::<Vec<_>>();
+        let skrifa_variations = style.skrifa_variations(instance);
         let location = font.axes().location(skrifa_variations.iter().copied());
         let location_ref = LocationRef::from(&location);
         let (ascent, _) = harfbuzz_line_metrics(&font, location_ref);
@@ -3132,11 +3110,7 @@ impl<'a> StaticTextSlice<'a> {
         };
         let font =
             SkrifaFontRef::new(font_bytes).context("failed to parse font for trim metrics")?;
-        let skrifa_variations = style
-            .variations
-            .iter()
-            .map(|(tag, value)| VariationSetting::new(SkrifaTag::from_u32(*tag), *value))
-            .collect::<Vec<_>>();
+        let skrifa_variations = style.skrifa_variations(instance);
         let location = font.axes().location(skrifa_variations.iter().copied());
         let location_ref = LocationRef::from(&location);
         let (_, descent) = harfbuzz_line_metrics(&font, location_ref);
@@ -3340,7 +3314,7 @@ impl<'a> StaticTextSlice<'a> {
         let font_size = self.style_font_size(runtime, instance, style)?;
         let scale = font_size * font_scale / TEXT_SHAPE_SCALE_F32;
         let letter_spacing = self.style_letter_spacing(runtime, instance, style);
-        let raw_glyphs = shape_text_glyphs_for_style(font_bytes, style, text)?;
+        let raw_glyphs = shape_text_glyphs_for_style(font_bytes, style, instance, text)?;
         Ok(raw_glyphs
             .iter()
             .enumerate()
@@ -3478,11 +3452,7 @@ impl<'a> StaticTextSlice<'a> {
         {
             let harf_font =
                 HarfFontRef::new(font_bytes).context("failed to parse font for clip layout")?;
-            let harf_variations = base_style
-                .variations
-                .iter()
-                .map(|(tag, value)| (HarfTag::from_u32(*tag), *value))
-                .collect::<Vec<_>>();
+            let harf_variations = base_style.harf_variations(instance);
             let shaper_instance = if harf_variations.is_empty() {
                 None
             } else {
@@ -4155,6 +4125,39 @@ impl<'a> StaticTextSlice<'a> {
 }
 
 impl<'a> StaticTextStyle<'a> {
+    fn variation_values(&self, instance: &ArtboardInstance) -> Vec<(u32, f32)> {
+        let axis_value_key = property_key_for_name("TextStyleAxis", "axisValue");
+        self.variations
+            .iter()
+            .map(|variation| {
+                let value = axis_value_key
+                    .and_then(|key| instance.double_property(variation.axis_local, key))
+                    .unwrap_or(variation.authored_value);
+                (variation.tag, value)
+            })
+            .collect()
+    }
+
+    fn variations_are_finite(&self, instance: &ArtboardInstance) -> bool {
+        self.variation_values(instance)
+            .iter()
+            .all(|(_, value)| value.is_finite())
+    }
+
+    fn harf_variations(&self, instance: &ArtboardInstance) -> Vec<(HarfTag, f32)> {
+        self.variation_values(instance)
+            .into_iter()
+            .map(|(tag, value)| (HarfTag::from_u32(tag), value))
+            .collect()
+    }
+
+    fn skrifa_variations(&self, instance: &ArtboardInstance) -> Vec<VariationSetting> {
+        self.variation_values(instance)
+            .into_iter()
+            .map(|(tag, value)| VariationSetting::new(SkrifaTag::from_u32(tag), value))
+            .collect()
+    }
+
     fn from_graph(
         runtime: &'a RuntimeFile,
         graph: &'a ArtboardGraph,
@@ -4247,7 +4250,11 @@ impl<'a> StaticTextStyle<'a> {
                 .with_context(|| format!("TextStyleAxis global {axis_global} missing tag"))?
                 as u32;
             let axis_value = axis.double_property("axisValue").unwrap_or(0.0);
-            variations.push((tag, axis_value));
+            variations.push(StaticTextVariation {
+                tag,
+                axis_local,
+                authored_value: axis_value,
+            });
         }
 
         Ok(Self {
@@ -5607,14 +5614,11 @@ fn shape_cxx_script_run_glyphs(
 fn shape_text_glyphs_for_style(
     font_bytes: &[u8],
     style: &StaticTextStyle<'_>,
+    instance: &ArtboardInstance,
     text: &str,
 ) -> Result<Vec<TextGlyph>> {
     let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
-    let harf_variations = style
-        .variations
-        .iter()
-        .map(|(tag, value)| (HarfTag::from_u32(*tag), *value))
-        .collect::<Vec<_>>();
+    let harf_variations = style.harf_variations(instance);
     let shaper_instance = if harf_variations.is_empty() {
         None
     } else {

@@ -44,6 +44,17 @@ impl std::fmt::Debug for RuntimeCellNotificationQueue {
 }
 
 impl RuntimeCellNotificationQueue {
+    /// Copy pending notification values into a distinct queue.
+    ///
+    /// Rust's public state-machine `Clone` is a snapshot adaptation with no
+    /// C++ copy-constructor counterpart. The snapshot keeps pending values,
+    /// but its listener sinks must append to separate storage.
+    pub(crate) fn detached_clone(&self) -> Self {
+        Self {
+            values: Rc::new(RefCell::new(self.values.borrow().clone())),
+        }
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.values.borrow().is_empty()
     }
@@ -66,6 +77,15 @@ impl RuntimeCellNotificationQueue {
     /// origin remain distinguishable.
     pub(crate) fn report_data_bind(&self, data_bind_index: usize) {
         self.values.borrow_mut().push(data_bind_index);
+    }
+
+    /// Remove queued reports for an occurrence that is about to consume its
+    /// already-active dirty turn. This is the Rust queue counterpart of C++
+    /// clearing `DataBind::inDirtyList` immediately before `updateDataBind`.
+    pub(crate) fn remove_data_bind(&self, data_bind_index: usize) {
+        self.values
+            .borrow_mut()
+            .retain(|candidate| *candidate != data_bind_index);
     }
 
     fn downgrade(&self) -> Weak<RefCell<Vec<usize>>> {
@@ -115,7 +135,16 @@ impl RuntimeCellDirt {
 #[derive(Clone, Default)]
 pub struct RuntimeCellDirtSink {
     bits: Rc<Cell<u8>>,
+    /// C++ `DataBind::Flag::SuppressDirt`: generated target/source writes
+    /// temporarily mute only the writing dependent while sibling dependents
+    /// on the same retained value continue to receive dirt.
+    suppressed: Rc<Cell<bool>>,
     notification: Option<RuntimeCellNotification>,
+    /// C++ converter-owned DataBinds notify their parent converter before
+    /// entering the converter's own dirty queue. The callback owns that
+    /// complete parent-first notification path; ordinary sinks leave it
+    /// empty and use `notification` directly.
+    before_notify: Rc<RefCell<Option<Rc<dyn Fn(RuntimeCellDirt) -> bool>>>>,
 }
 
 impl std::fmt::Debug for RuntimeCellDirtSink {
@@ -145,12 +174,14 @@ impl RuntimeCellDirtSink {
     ) -> Self {
         Self {
             bits: Rc::new(Cell::new(0)),
+            suppressed: Rc::new(Cell::new(false)),
             notification: Some(RuntimeCellNotification {
                 queue: queue.downgrade(),
                 value: listener_index,
                 suppress_trigger_zero: true,
                 dedupe_while_dirty: false,
             }),
+            before_notify: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -165,12 +196,14 @@ impl RuntimeCellDirtSink {
     ) -> Self {
         Self {
             bits: Rc::new(Cell::new(0)),
+            suppressed: Rc::new(Cell::new(false)),
             notification: Some(RuntimeCellNotification {
                 queue: queue.downgrade(),
                 value: data_bind_index,
                 suppress_trigger_zero: false,
                 dedupe_while_dirty: true,
             }),
+            before_notify: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -186,17 +219,32 @@ impl RuntimeCellDirtSink {
         RuntimeCellDirt(self.bits.get())
     }
 
+    pub(crate) fn suppress_dirt(&self, suppressed: bool) {
+        self.suppressed.set(suppressed);
+    }
+
+    pub(crate) fn set_before_notify(
+        &self,
+        before_notify: Option<Rc<dyn Fn(RuntimeCellDirt) -> bool>>,
+    ) {
+        *self.before_notify.borrow_mut() = before_notify;
+    }
+
     pub(crate) fn downgrade(&self) -> RuntimeCellDependent {
         RuntimeCellDependent {
             bits: Rc::downgrade(&self.bits),
+            suppressed: Rc::downgrade(&self.suppressed),
             notification: self.notification.clone(),
+            before_notify: Rc::downgrade(&self.before_notify),
         }
     }
 }
 
 pub(crate) struct RuntimeCellDependent {
     bits: Weak<Cell<u8>>,
+    suppressed: Weak<Cell<bool>>,
     notification: Option<RuntimeCellNotification>,
+    before_notify: Weak<RefCell<Option<Rc<dyn Fn(RuntimeCellDirt) -> bool>>>>,
 }
 
 impl std::fmt::Debug for RuntimeCellDependent {
@@ -212,7 +260,34 @@ impl RuntimeCellDependent {
         let Some(bits) = self.bits.upgrade() else {
             return false;
         };
+        let Some(suppressed) = self.suppressed.upgrade() else {
+            return false;
+        };
+        if suppressed.get() {
+            return true;
+        }
+        let was_dirty = bits.get() & dirt.0 == dirt.0;
+        let handled_notification = if !dirt.is_empty() && !was_dirty {
+            self.before_notify
+                .upgrade()
+                .and_then(|callback| callback.borrow().clone())
+                .map(|callback| callback(dirt))
+        } else {
+            None
+        };
+        if handled_notification == Some(false) {
+            return true;
+        }
         bits.set(bits.get() | dirt.0);
+        if !dirt.is_empty()
+            && handled_notification != Some(true)
+            && let Some(notification) = &self.notification
+            && (!notification.dedupe_while_dirty || !was_dirty)
+            && !notification.suppress_trigger_zero
+            && let Some(queue) = notification.queue.upgrade()
+        {
+            queue.borrow_mut().push(notification.value);
+        }
         true
     }
 
@@ -377,9 +452,28 @@ impl RuntimeViewModelCellState {
             let Some(bits) = dependent.bits.upgrade() else {
                 return false;
             };
+            let Some(suppressed) = dependent.suppressed.upgrade() else {
+                return false;
+            };
+            if suppressed.get() {
+                return true;
+            }
             let was_dirty = bits.get() & dirt.0 == dirt.0;
+            let handled_notification = if !dirt.is_empty() && !was_dirty {
+                dependent
+                    .before_notify
+                    .upgrade()
+                    .and_then(|callback| callback.borrow().clone())
+                    .map(|callback| callback(dirt))
+            } else {
+                None
+            };
+            if handled_notification == Some(false) {
+                return true;
+            }
             bits.set(bits.get() | dirt.0);
             if let Some(notification) = &dependent.notification
+                && handled_notification != Some(true)
                 && (!notification.dedupe_while_dirty || !was_dirty)
                 && !(notification.suppress_trigger_zero
                     && matches!(self.value, RuntimeViewModelCellValue::Trigger(0)))
@@ -596,8 +690,12 @@ impl RuntimeViewModelCell {
         changed
     }
 
-    /// C++ `ViewModelInstanceTrigger::trigger()` analog: increment the fire
-    /// counter. Cascades like any other write.
+    /// C++ `ViewModelInstanceTrigger::trigger()` analog: increment the
+    /// generated uint32 fire counter with native unsigned wrap. A wrap to zero
+    /// is still a real property write/dirt cascade, while ScriptInputTrigger's
+    /// generated callback deliberately treats that zero value as no callback
+    /// edge (`viewmodel_instance_trigger.hpp:31-33`;
+    /// `script_input_trigger.cpp:49-55`).
     pub fn fire_trigger(&self) -> bool {
         let current = {
             let state = self.state.borrow();
@@ -609,9 +707,9 @@ impl RuntimeViewModelCell {
                 }
             }
         };
-        self.set_value(RuntimeViewModelCellValue::Trigger(
-            current.saturating_add(1),
-        ))
+        self.set_value(RuntimeViewModelCellValue::Trigger(u64::from(
+            (current as u32).wrapping_add(1),
+        )))
     }
 
     /// C++ `ViewModelInstanceValue::advanced()`: acknowledge one update pass.
@@ -646,7 +744,7 @@ impl RuntimeViewModelCell {
     }
 
     #[cfg(test)]
-    fn dependent_count(&self) -> usize {
+    pub(crate) fn dependent_count(&self) -> usize {
         self.state.borrow().dependents.len()
     }
 }
@@ -1756,6 +1854,31 @@ mod tests {
         queue.swap_into(&mut reporting);
         assert_eq!(reporting, [3]);
         assert_eq!(cell.value(), RuntimeViewModelCellValue::Trigger(0));
+    }
+
+    #[test]
+    fn trigger_counter_wraps_as_cpp_uint32_and_zero_edge_skips_listener_report() {
+        let cell =
+            RuntimeViewModelCell::new(RuntimeViewModelCellValue::Trigger(u64::from(u32::MAX)));
+        let queue = RuntimeCellNotificationQueue::default();
+        let listener = RuntimeCellDirtSink::reporting_listener(&queue, 3);
+        let data_bind = RuntimeCellDirtSink::reporting_data_bind(&queue, 7);
+        cell.add_dependent(&listener);
+        cell.add_dependent(&data_bind);
+
+        assert!(cell.fire_trigger());
+        assert_eq!(cell.value(), RuntimeViewModelCellValue::Trigger(0));
+        assert!(
+            data_bind.take_dirt().contains(RuntimeCellDirt::BINDINGS),
+            "the uint32 wrap remains a real source-property change"
+        );
+        let mut reporting = Vec::new();
+        queue.swap_into(&mut reporting);
+        assert_eq!(
+            reporting,
+            [7],
+            "ScriptInputTrigger/listener callback semantics skip the wrapped zero edge"
+        );
     }
 
     #[test]

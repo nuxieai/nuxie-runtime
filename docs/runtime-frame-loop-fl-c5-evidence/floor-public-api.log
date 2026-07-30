@@ -1,0 +1,1286 @@
+FLOOR_RECEIPT_TREE_SHA=41f2aeaf6edcfb0cca3b2c9e173b842760e73b11
+warning: unexpected `cfg` condition value: `luau_assert`
+ --> vendor/luaur-common-0.1.8/src/macros/luau_assertenabled.rs:2:65
+  |
+2 | pub const LUAU_ASSERTENABLED: bool = cfg!(any(debug_assertions, feature = "luau_assert"));
+  |                                                                 ^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: expected values for `feature` are: `cli`, `default`, `native`, `native-codegen`, `std`, and `wasm`
+  = help: consider adding `luau_assert` as a feature in `Cargo.toml`
+  = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+  = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unused imports: `DenseDefault` and `DenseEqDefault`
+ --> vendor/luaur-common-0.1.8/src/methods/dense_hash_table_insert_unsafe.rs:3:5
+  |
+3 |     DenseDefault, DenseEq, DenseEqDefault, DenseHashTable, DenseHasher, ItemInterface,
+  |     ^^^^^^^^^^^^           ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `crate::records::pair_hash::PairHash`
+ --> vendor/luaur-common-0.1.8/src/methods/pair_hash_operator_call.rs:1:5
+  |
+1 | use crate::records::pair_hash::PairHash;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unexpected `cfg` condition value: `luau_enable_time_trace`
+ --> vendor/luaur-common-0.1.8/src/methods/thread_context_thread_context_time_trace.rs:1:7
+  |
+1 | #[cfg(feature = "luau_enable_time_trace")]
+  |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: expected values for `feature` are: `cli`, `default`, `native`, `native-codegen`, `std`, and `wasm`
+  = help: consider adding `luau_enable_time_trace` as a feature in `Cargo.toml`
+  = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `luau_enable_time_trace`
+ --> vendor/luaur-common-0.1.8/src/methods/thread_context_thread_context_time_trace.rs:8:19
+  |
+8 |         #[cfg(not(feature = "luau_enable_time_trace"))]
+  |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: expected values for `feature` are: `cli`, `default`, `native`, `native-codegen`, `std`, and `wasm`
+  = help: consider adding `luau_enable_time_trace` as a feature in `Cargo.toml`
+  = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `luau_enable_time_trace`
+  --> vendor/luaur-common-0.1.8/src/methods/thread_context_thread_context_time_trace.rs:18:15
+   |
+18 |         #[cfg(feature = "luau_enable_time_trace")]
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `cli`, `default`, `native`, `native-codegen`, `std`, and `wasm`
+   = help: consider adding `luau_enable_time_trace` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unused import: `core::ptr::NonNull`
+ --> vendor/luaur-common-0.1.8/src/methods/vec_deque_operator_assign_vec_deque.rs:2:5
+  |
+2 | use core::ptr::NonNull;
+  |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::records::vec_deque::VecDeque`
+ --> vendor/luaur-common-0.1.8/src/methods/vec_deque_reserve.rs:1:5
+  |
+1 | use crate::records::vec_deque::VecDeque;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unexpected `cfg` condition value: `luau_enable_time_trace`
+  --> vendor/luaur-common-0.1.8/src/records/scope.rs:11:15
+   |
+11 |         #[cfg(feature = "luau_enable_time_trace")]
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: expected values for `feature` are: `cli`, `default`, `native`, `native-codegen`, `std`, and `wasm`
+   = help: consider adding `luau_enable_time_trace` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: value assigned to `unfinished_enter` is never read
+  --> vendor/luaur-common-0.1.8/src/functions/flush_events.rs:55:21
+   |
+55 |                     unfinished_enter = false;
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+70 |                 unfinished_enter = true;
+   |                 ----------------------- `unfinished_enter` is overwritten here before the previous value is read
+   |
+   = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: unnecessary `unsafe` block
+  --> vendor/luaur-common-0.1.8/src/macros/luau_debugbreak.rs:14:9
+   |
+14 |         unsafe {
+   |         ^^^^^^ unnecessary `unsafe` block
+   |
+  ::: vendor/luaur-common-0.1.8/src/functions/join_impl.rs:21:5
+   |
+21 |     unsafe {
+   |     ------ because it's nested under this `unsafe` block
+...
+41 |         LUAU_ASSERT!(dest == result.as_mut_ptr().add(len));
+   |         -------------------------------------------------- in this macro invocation
+   |
+   = note: `#[warn(unused_unsafe)]` (part of `#[warn(unused)]`) on by default
+   = note: this warning originates in the macro `$crate::LUAU_DEBUGBREAK` which comes from the expansion of the macro `LUAU_ASSERT` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: trait `VariantAccess<T>` is more private than the item `get_if_variant::get_if`
+  --> vendor/luaur-common-0.1.8/src/functions/get_if_variant.rs:5:1
+   |
+ 5 | / pub fn get_if<T, V>(var: &V) -> Option<&T>
+ 6 | | where
+ 7 | |     V: VariantAccess<T>,
+   | |________________________^ function `get_if_variant::get_if` is reachable at visibility `pub`
+   |
+note: but trait `VariantAccess<T>` is only usable at visibility `pub(self)`
+  --> vendor/luaur-common-0.1.8/src/functions/get_if_variant.rs:12:1
+   |
+12 | trait VariantAccess<T> {
+   | ^^^^^^^^^^^^^^^^^^^^^^
+   = note: `#[warn(private_bounds)]` on by default
+
+warning: method `rehash_stub` is never used
+  --> vendor/luaur-common-0.1.8/src/methods/dense_hash_table_rehash.rs:11:19
+   |
+ 4 | / impl<K, I, Iface, H, E> DenseHashTable<K, I, Iface, H, E>
+ 5 | | where
+ 6 | |     K: Clone,
+ 7 | |     Iface: ItemInterface<K, I>,
+ 8 | |     H: DenseHasher<K> + Default,
+ 9 | |     E: DenseEq<K> + Default,
+   | |____________________________- method in this implementation
+10 |   {
+11 |       pub(crate) fn rehash_stub(&mut self) {
+   |                     ^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `clear_impl` is never used
+ --> vendor/luaur-common-0.1.8/src/methods/vec_deque_clear.rs:4:19
+  |
+3 | impl<T> VecDeque<T> {
+  | ------------------- method in this implementation
+4 |     pub(crate) fn clear_impl(&mut self) {
+  |                   ^^^^^^^^^^
+
+warning: method `pop_back_impl` is never used
+ --> vendor/luaur-common-0.1.8/src/methods/vec_deque_pop_back.rs:6:19
+  |
+5 | impl<T> VecDeque<T> {
+  | ------------------- method in this implementation
+6 |     pub(crate) fn pop_back_impl(&mut self) {
+  |                   ^^^^^^^^^^^^^
+
+warning: method `shrink_to_fit_impl` is never used
+ --> vendor/luaur-common-0.1.8/src/methods/vec_deque_shrink_to_fit.rs:7:19
+  |
+5 | impl<T> VecDeque<T> {
+  | ------------------- method in this implementation
+6 |     #[allow(non_snake_case)]
+7 |     pub(crate) fn shrink_to_fit_impl(&mut self) {
+  |                   ^^^^^^^^^^^^^^^^^^
+
+warning: field `dynamic` is never read
+   --> vendor/luaur-common-0.1.8/src/records/f_value.rs:126:16
+    |
+124 | pub struct FValue<T> {
+    |            ------ field in this struct
+125 |     pub(crate) value: UnsafeCell<T>,
+126 |     pub(crate) dynamic: bool,
+    |                ^^^^^^^
+
+warning: fields `context`, `token`, and `threshold` are never read
+ --> vendor/luaur-common-0.1.8/src/records/optional_tail_scope.rs:6:16
+  |
+5 | pub struct OptionalTailScope {
+  |            ----------------- fields in this struct
+6 |     pub(crate) context: *mut ThreadContext,
+  |                ^^^^^^^
+7 |     pub(crate) token: u16,
+  |                ^^^^^
+8 |     pub(crate) threshold: u32,
+  |                ^^^^^^^^^
+  |
+  = note: `OptionalTailScope` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: field `context` is never read
+ --> vendor/luaur-common-0.1.8/src/records/scope.rs:6:16
+  |
+5 | pub struct Scope {
+  |            ----- field in this struct
+6 |     pub(crate) context: *mut ThreadContext,
+  |                ^^^^^^^
+  |
+  = note: `Scope` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: creating a mutable reference to mutable static
+  --> vendor/luaur-common-0.1.8/src/functions/assert_handler.rs:11:14
+   |
+11 |     unsafe { &mut HANDLER }
+   |              ^^^^^^^^^^^^ mutable reference to mutable static
+   |
+   = note: mutable references to mutable statics are dangerous; it's undefined behavior if any other pointer to the static is used or if any other reference is created for the static while the mutable reference lives
+   = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/static-mut-references.html>
+   = note: `#[warn(static_mut_refs)]` (part of `#[warn(rust_2024_compatibility)]`) on by default
+help: use `&raw mut` instead to create a raw pointer
+   |
+11 |     unsafe { &raw mut HANDLER }
+   |               +++
+
+warning: creating a mutable reference to mutable static
+  --> vendor/luaur-common-0.1.8/src/functions/thread_context_provider.rs:16:14
+   |
+16 |     unsafe { &mut HANDLER }
+   |              ^^^^^^^^^^^^ mutable reference to mutable static
+   |
+   = note: mutable references to mutable statics are dangerous; it's undefined behavior if any other pointer to the static is used or if any other reference is created for the static while the mutable reference lives
+   = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/static-mut-references.html>
+help: use `&raw mut` instead to create a raw pointer
+   |
+16 |     unsafe { &raw mut HANDLER }
+   |               +++
+
+warning: structure field `dataPos` should have a snake case name
+  --> vendor/luaur-common-0.1.8/src/records/event.rs:15:16
+   |
+15 |     pub(crate) dataPos: u32,
+   |                ^^^^^^^ help: convert the identifier to snake case: `data_pos`
+   |
+   = note: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: structure field `Ts` should have a snake case name
+ --> vendor/luaur-common-0.1.8/src/records/overloaded.rs:4:9
+  |
+4 |     pub Ts: Ts,
+  |         ^^ help: convert the identifier to snake case: `ts`
+
+warning: associated constant `kEventFlushLimit` should have an upper case name
+  --> vendor/luaur-common-0.1.8/src/records/thread_context.rs:17:22
+   |
+17 |     pub(crate) const kEventFlushLimit: usize = 8192;
+   |                      ^^^^^^^^^^^^^^^^ help: convert the identifier to upper case: `K_EVENT_FLUSH_LIMIT`
+   |
+   = note: `#[warn(non_upper_case_globals)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: `luaur-common` (lib) generated 24 warnings (run `cargo fix --lib -p luaur-common` to apply 4 suggestions)
+warning: unused imports: `RuntimeBindableNumberDefaultViewModelSource` and `runtime_number_default_view_model_source_for_instance`
+  --> crates/nuxie-runtime/src/state_machine.rs:75:5
+   |
+75 |     RuntimeBindableNumberDefaultViewModelSource, RuntimeBindableString, RuntimeBindableTrigger,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+89 |     runtime_number_default_view_model_source_for_instance,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused imports: `RuntimeBlendAnimation1D`, `RuntimeBlendAnimationDirect`, `RuntimeBlendState1DSource`, `RuntimeDirectBlendSource`, and `build_state_machines`
+   --> crates/nuxie-runtime/src/state_machine.rs:136:53
+    |
+136 |     BlendState1DInstance, BlendStateDirectInstance, RuntimeBlendAnimation1D,
+    |                                                     ^^^^^^^^^^^^^^^^^^^^^^^
+137 |     RuntimeBlendAnimationDirect, RuntimeBlendState1D, RuntimeBlendState1DSource,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^                       ^^^^^^^^^^^^^^^^^^^^^^^^^
+138 |     RuntimeBlendStateDirect, RuntimeDirectBlendSource, RuntimeTransitionInterpolator,
+    |                              ^^^^^^^^^^^^^^^^^^^^^^^^
+139 |     TransitionEvaluationContext, build_state_machines, build_state_machines_with_action_catalog,
+    |                                  ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `occurrence_id`
+    --> crates/nuxie-runtime/src/animation.rs:1940:15
+     |
+1940 |         for ((occurrence_id, _), graph) in self
+     |               ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_occurrence_id`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `prepare_key_frame_data_binds`, `advance_key_frame_data_binds`, `key_frame_value_holder`, `set_loop_value`, and `reset` are never used
+    --> crates/nuxie-runtime/src/animation.rs:1883:19
+     |
+1687 | impl LinearAnimationInstance {
+     | ---------------------------- methods in this implementation
+...
+1883 |     pub(crate) fn prepare_key_frame_data_binds(
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1903 |     pub(crate) fn advance_key_frame_data_binds(
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1956 |     pub(crate) fn key_frame_value_holder(
+     |                   ^^^^^^^^^^^^^^^^^^^^^^
+...
+2045 |     pub(crate) fn set_loop_value(&mut self, definition: &RuntimeLinearAnimation, value: i32) {
+     |                   ^^^^^^^^^^^^^^
+...
+2070 |     pub(crate) fn reset(&mut self, animation: &RuntimeLinearAnimation, speed_multiplier: f32) {
+     |                   ^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `clear_data_context_for_state_machine_bind`, `unbind_for_state_machine_view_model_clear`, `relink_data_context_for_state_machine`, and `update_component` are never used
+    --> crates/nuxie-runtime/src/artboard.rs:1127:19
+     |
+1120 | impl ArtboardInstance {
+     | --------------------- methods in this implementation
+...
+1127 |     pub(crate) fn clear_data_context_for_state_machine_bind(&mut self) {
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1155 |     pub(crate) fn unbind_for_state_machine_view_model_clear(&mut self, file: Option<&RuntimeFile>) {
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1166 |     pub(crate) fn relink_data_context_for_state_machine(&mut self, file: &RuntimeFile) -> bool {
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+8135 |     pub(crate) fn update_component(
+     |                   ^^^^^^^^^^^^^^^^
+
+warning: associated function `root` is never used
+   --> crates/nuxie-runtime/src/artboard_data_bind.rs:833:8
+    |
+832 | impl RuntimeOwnedDataContextInstance {
+    | ------------------------------------ associated function in this implementation
+833 |     fn root(context: RuntimeOwnedViewModelHandle) -> Self {
+    |        ^^^^
+
+warning: method `clear_intent` is never used
+   --> crates/nuxie-runtime/src/components.rs:850:19
+    |
+821 | impl RuntimeScrollConstraintState {
+    | --------------------------------- method in this implementation
+...
+850 |     pub(crate) fn clear_intent(&mut self, axis: RuntimeScrollAxis) -> bool {
+    |                   ^^^^^^^^^^^^
+
+warning: function `runtime_scroll_intent_axes` is never used
+   --> crates/nuxie-runtime/src/constraints.rs:104:4
+    |
+104 | fn runtime_scroll_intent_axes(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `runtime_draggable_proxy_hit_test` is never used
+    --> crates/nuxie-runtime/src/constraints.rs:1013:15
+     |
+1013 | pub(crate) fn runtime_draggable_proxy_hit_test(
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `unbind_scripted_converter_sources`, `update_scripted_converter_inputs`, and `update_scripted_converter_inputs_from_data_context` are never used
+    --> crates/nuxie-runtime/src/data_bind_graph.rs:4217:8
+     |
+4165 | impl RuntimeDataBindGraphConverterState {
+     | --------------------------------------- methods in this implementation
+...
+4217 |     fn unbind_scripted_converter_sources(&mut self) {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+4568 |     pub(crate) fn update_scripted_converter_inputs<F>(
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+4609 |     pub(crate) fn update_scripted_converter_inputs_from_data_context<F>(
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variant `Immediate` is never constructed
+    --> crates/nuxie-runtime/src/data_bind_graph.rs:5137:5
+     |
+5134 | pub(crate) enum RuntimeDataBindGraphApplyPhase {
+     |                 ------------------------------ variant in this enum
+...
+5137 |     Immediate,
+     |     ^^^^^^^^^
+     |
+     = note: `RuntimeDataBindGraphApplyPhase` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `apply_default_view_model_targets_to_sources` and `apply_default_view_model_bindings` are never used
+     --> crates/nuxie-runtime/src/data_bind_graph.rs:10103:19
+      |
+ 5563 | impl RuntimeDataBindGraph {
+      | ------------------------- methods in this implementation
+...
+10103 |     pub(crate) fn apply_default_view_model_targets_to_sources(
+      |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+10493 |     pub(crate) fn apply_default_view_model_bindings(
+      |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `draw_paths` is never read
+     --> crates/nuxie-runtime/src/draw.rs:13228:5
+      |
+13225 | pub(crate) struct RuntimeArtboardPathState {
+      |                   ------------------------ field in this struct
+...
+13228 |     draw_paths: RuntimeDrawPathSlots,
+      |     ^^^^^^^^^^
+
+warning: field `path` is never read
+     --> crates/nuxie-runtime/src/draw.rs:13488:5
+      |
+13486 | struct RuntimeCachedPathGeometryCommands {
+      |        --------------------------------- field in this struct
+13487 |     key: RuntimePathGeometryCommandsCacheKey,
+13488 |     path: Arc<PathGeometryNode>,
+      |     ^^^^
+      |
+      = note: `RuntimeCachedPathGeometryCommands` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: methods `draw_path`, `draw_path_with_optional_fill_rule`, and `draw_path_with_optional_fill_rule_and_prepared_raw_path` are never used
+     --> crates/nuxie-runtime/src/draw.rs:14484:8
+      |
+13992 | impl RuntimeArtboardPathState {
+      | ----------------------------- methods in this implementation
+...
+14484 |     fn draw_path(
+      |        ^^^^^^^^^
+...
+14495 |     fn draw_path_with_optional_fill_rule(
+      |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+14515 |     fn draw_path_with_optional_fill_rule_and_prepared_raw_path(
+      |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `text_variation_helper_text_handle` is never used
+   --> crates/nuxie-runtime/src/objects.rs:384:19
+    |
+156 | impl InstanceObjectArena {
+    | ------------------------ method in this implementation
+...
+384 |     pub(crate) fn text_variation_helper_text_handle(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `current_artboard`, `did_cross_boundary`, `crossing_host`, and `source_artboard` are never used
+   --> crates/nuxie-runtime/src/parent_traversal.rs:91:19
+    |
+ 37 | impl<'a> ParentTraversal<'a> {
+    | ---------------------------- methods in this implementation
+...
+ 91 |     pub(crate) fn current_artboard(&self) -> Option<&'a ArtboardInstance> {
+    |                   ^^^^^^^^^^^^^^^^
+...
+ 97 |     pub(crate) fn did_cross_boundary(&self) -> bool {
+    |                   ^^^^^^^^^^^^^^^^^^
+...
+101 |     pub(crate) fn crossing_host(&self) -> Option<ComponentHandle> {
+    |                   ^^^^^^^^^^^^^
+...
+105 |     pub(crate) fn source_artboard(&self) -> Option<&'a ArtboardInstance> {
+    |                   ^^^^^^^^^^^^^^^
+
+warning: struct `RectEvent` is never constructed
+  --> crates/nuxie-runtime/src/rectangles_to_contour.rs:15:8
+   |
+15 | struct RectEvent {
+   |        ^^^^^^^^^
+
+warning: method `value` is never used
+  --> crates/nuxie-runtime/src/rectangles_to_contour.rs:23:8
+   |
+22 | impl RectEvent {
+   | -------------- method in this implementation
+23 |     fn value(self, axis: u8) -> f32 {
+   |        ^^^^^
+
+warning: struct `ContourPoint` is never constructed
+  --> crates/nuxie-runtime/src/rectangles_to_contour.rs:29:8
+   |
+29 | struct ContourPoint {
+   |        ^^^^^^^^^^^^
+
+warning: type alias `EdgeMap` is never used
+  --> crates/nuxie-runtime/src/rectangles_to_contour.rs:34:6
+   |
+34 | type EdgeMap = Vec<(Vec2D, Vec2D)>;
+   |      ^^^^^^^
+
+warning: struct `RuntimeRectanglesToContour` is never constructed
+  --> crates/nuxie-runtime/src/rectangles_to_contour.rs:38:19
+   |
+38 | pub(crate) struct RuntimeRectanglesToContour {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `add_rect`, `reset`, `compute_contours`, `contour_count`, `contour`, and `subdivide_rectangles` are never used
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:55:19
+    |
+ 52 | impl RuntimeRectanglesToContour {
+    | ------------------------------- methods in this implementation
+...
+ 55 |     pub(crate) fn add_rect(&mut self, rect: Aabb) {
+    |                   ^^^^^^^^
+...
+ 68 |     pub(crate) fn reset(&mut self) {
+    |                   ^^^^^
+...
+ 72 |     pub(crate) fn compute_contours(&mut self) {
+    |                   ^^^^^^^^^^^^^^^^
+...
+127 |     pub(crate) fn contour_count(&self) -> usize {
+    |                   ^^^^^^^^^^^^^
+...
+131 |     pub(crate) fn contour(&self, index: usize) -> RuntimeRectangleContour<'_> {
+    |                   ^^^^^^^
+...
+141 |     fn subdivide_rectangles(&mut self) {
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `RuntimeRectangleContour` is never constructed
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:201:19
+    |
+201 | pub(crate) struct RuntimeRectangleContour<'a> {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `len`, `point`, `point_reversed`, `is_clockwise`, and `points` are never used
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:206:19
+    |
+205 | impl RuntimeRectangleContour<'_> {
+    | -------------------------------- methods in this implementation
+206 |     pub(crate) fn len(self) -> usize {
+    |                   ^^^
+...
+210 |     pub(crate) fn point(self, index: usize) -> Vec2D {
+    |                   ^^^^^
+...
+214 |     pub(crate) fn point_reversed(self, index: usize) -> Vec2D {
+    |                   ^^^^^^^^^^^^^^
+...
+218 |     pub(crate) fn is_clockwise(self) -> bool {
+    |                   ^^^^^^^^^^^^
+...
+234 |     pub(crate) fn points(&self) -> impl Iterator<Item = Vec2D> + '_ {
+    |                   ^^^^^^
+
+warning: function `sort_rect_events` is never used
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:245:4
+    |
+245 | fn sort_rect_events(rects: &[Aabb], axis_a: u8, axis_b: u8) -> Vec<RectEvent> {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `extract_polygons` is never used
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:276:4
+    |
+276 | fn extract_polygons(
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `insert_edge` is never used
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:325:4
+    |
+325 | fn insert_edge(edges: &mut EdgeMap, key: Vec2D, value: Vec2D) {
+    |    ^^^^^^^^^^^
+
+warning: function `take_edge` is never used
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:333:4
+    |
+333 | fn take_edge(edges: &mut EdgeMap, key: Vec2D) -> Option<Vec2D> {
+    |    ^^^^^^^^^
+
+warning: function `remove_edge` is never used
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:340:4
+    |
+340 | fn remove_edge(edges: &mut EdgeMap, key: Vec2D) {
+    |    ^^^^^^^^^^^
+
+warning: function `toggle_unique_point` is never used
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:346:4
+    |
+346 | fn toggle_unique_point(points: &mut Vec<Vec2D>, point: Vec2D) {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `mark_rect_included` is never used
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:354:4
+    |
+354 | fn mark_rect_included(bits: &mut [u8], index: usize, included: bool) {
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `is_rect_included` is never used
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:363:4
+    |
+363 | fn is_rect_included(bits: &[u8], index: usize) -> bool {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `compare_x_then_y` is never used
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:367:4
+    |
+367 | fn compare_x_then_y(left: &Vec2D, right: &Vec2D) -> Ordering {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `compare_y_then_x` is never used
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:371:4
+    |
+371 | fn compare_y_then_x(left: &Vec2D, right: &Vec2D) -> Ordering {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `compare_float` is never used
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:375:4
+    |
+375 | fn compare_float(left: f32, right: f32) -> Ordering {
+    |    ^^^^^^^^^^^^^
+
+warning: function `cross` is never used
+   --> crates/nuxie-runtime/src/rectangles_to_contour.rs:379:4
+    |
+379 | fn cross(left: Vec2D, right: Vec2D) -> f32 {
+    |    ^^^^^
+
+warning: associated constants `LEGACY_ALL`, `LISTENER_PERFORM`, and `LISTENER_PERFORM_ACTION` are never used
+  --> crates/nuxie-runtime/src/script_asset.rs:14:22
+   |
+12 | impl RuntimeScriptImplementedMethods {
+   | ------------------------------------ associated constants in this implementation
+13 |     pub(crate) const METHOD_MASK: u32 = (1 << 21) - 1;
+14 |     pub(crate) const LEGACY_ALL: Self = Self(Self::METHOD_MASK);
+   |                      ^^^^^^^^^^
+...
+20 |     pub(crate) const LISTENER_PERFORM: u32 = 1 << 13;
+   |                      ^^^^^^^^^^^^^^^^
+21 |     pub(crate) const LISTENER_PERFORM_ACTION: u32 = 1 << 14;
+   |                      ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `target_property` is never read
+   --> crates/nuxie-runtime/src/scripted_data_converter.rs:149:9
+    |
+147 |     Inert {
+    |     ----- field in this variant
+148 |         property_key: u32,
+149 |         target_property: RuntimeScriptInputTargetProperty,
+    |         ^^^^^^^^^^^^^^^
+    |
+    = note: `RuntimeScriptedDataConverterDataBindOccurrence` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `update_inputs` and `update_inputs_from_data_context` are never used
+   --> crates/nuxie-runtime/src/scripted_data_converter.rs:925:19
+    |
+179 | impl RuntimeScriptedDataConverterState {
+    | -------------------------------------- methods in this implementation
+...
+925 |     pub(crate) fn update_inputs<F>(
+    |                   ^^^^^^^^^^^^^
+...
+955 |     pub(crate) fn update_inputs_from_data_context<F>(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated function `with_inputs` is never used
+   --> crates/nuxie-runtime/src/scripting.rs:140:19
+    |
+125 | impl ScriptListenerActionDefinition {
+    | ----------------------------------- associated function in this implementation
+...
+140 |     pub(crate) fn with_inputs(
+    |                   ^^^^^^^^^^^
+
+warning: fields `data_bind_index`, `path`, `flags`, `converter`, `value`, and `view_model_instance_ids` are never read
+  --> crates/nuxie-runtime/src/state_machine/bindables.rs:25:16
+   |
+24 | pub(crate) struct RuntimeBindableNumberDefaultViewModelSource {
+   |                   ------------------------------------------- fields in this struct
+25 |     pub(crate) data_bind_index: usize,
+   |                ^^^^^^^^^^^^^^^
+26 |     pub(crate) path: Vec<u32>,
+   |                ^^^^
+27 |     pub(crate) flags: u64,
+   |                ^^^^^
+28 |     pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
+   |                ^^^^^^^^^
+29 |     pub(crate) value: RuntimeDataBindGraphValue,
+   |                ^^^^^
+30 |     pub(crate) view_model_instance_ids: Vec<u32>,
+   |                ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `RuntimeBindableNumberDefaultViewModelSource` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `data_bind_index`, `path`, `flags`, and `value` are never read
+  --> crates/nuxie-runtime/src/state_machine/bindables.rs:43:16
+   |
+42 | pub(crate) struct RuntimeBindableIntegerDefaultViewModelSource {
+   |                   -------------------------------------------- fields in this struct
+43 |     pub(crate) data_bind_index: usize,
+   |                ^^^^^^^^^^^^^^^
+44 |     pub(crate) path: Vec<u32>,
+   |                ^^^^
+45 |     pub(crate) flags: u64,
+   |                ^^^^^
+46 |     pub(crate) value: u64,
+   |                ^^^^^
+   |
+   = note: `RuntimeBindableIntegerDefaultViewModelSource` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `data_bind_index`, `path`, `flags`, and `value` are never read
+  --> crates/nuxie-runtime/src/state_machine/bindables.rs:59:16
+   |
+58 | pub(crate) struct RuntimeBindableColorDefaultViewModelSource {
+   |                   ------------------------------------------ fields in this struct
+59 |     pub(crate) data_bind_index: usize,
+   |                ^^^^^^^^^^^^^^^
+60 |     pub(crate) path: Vec<u32>,
+   |                ^^^^
+61 |     pub(crate) flags: u64,
+   |                ^^^^^
+62 |     pub(crate) value: u32,
+   |                ^^^^^
+   |
+   = note: `RuntimeBindableColorDefaultViewModelSource` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `data_bind_index`, `path`, `flags`, `converter`, and `value` are never read
+  --> crates/nuxie-runtime/src/state_machine/bindables.rs:75:16
+   |
+74 | pub(crate) struct RuntimeBindableStringDefaultViewModelSource {
+   |                   ------------------------------------------- fields in this struct
+75 |     pub(crate) data_bind_index: usize,
+   |                ^^^^^^^^^^^^^^^
+76 |     pub(crate) path: Vec<u32>,
+   |                ^^^^
+77 |     pub(crate) flags: u64,
+   |                ^^^^^
+78 |     pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
+   |                ^^^^^^^^^
+79 |     pub(crate) value: RuntimeDataBindGraphValue,
+   |                ^^^^^
+   |
+   = note: `RuntimeBindableStringDefaultViewModelSource` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `data_bind_index`, `path`, `flags`, and `value` are never read
+  --> crates/nuxie-runtime/src/state_machine/bindables.rs:92:16
+   |
+91 | pub(crate) struct RuntimeBindableEnumDefaultViewModelSource {
+   |                   ----------------------------------------- fields in this struct
+92 |     pub(crate) data_bind_index: usize,
+   |                ^^^^^^^^^^^^^^^
+93 |     pub(crate) path: Vec<u32>,
+   |                ^^^^
+94 |     pub(crate) flags: u64,
+   |                ^^^^^
+95 |     pub(crate) value: u64,
+   |                ^^^^^
+   |
+   = note: `RuntimeBindableEnumDefaultViewModelSource` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `data_bind_index` is never read
+   --> crates/nuxie-runtime/src/state_machine/bindables.rs:108:16
+    |
+107 | pub(crate) struct RuntimeBindableAssetDefaultViewModelSource {
+    |                   ------------------------------------------ field in this struct
+108 |     pub(crate) data_bind_index: usize,
+    |                ^^^^^^^^^^^^^^^
+    |
+    = note: `RuntimeBindableAssetDefaultViewModelSource` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `data_bind_index`, `path`, `flags`, and `value` are never read
+   --> crates/nuxie-runtime/src/state_machine/bindables.rs:205:16
+    |
+204 | pub(crate) struct RuntimeBindableArtboardDefaultViewModelSource {
+    |                   --------------------------------------------- fields in this struct
+205 |     pub(crate) data_bind_index: usize,
+    |                ^^^^^^^^^^^^^^^
+206 |     pub(crate) path: Vec<u32>,
+    |                ^^^^
+207 |     pub(crate) flags: u64,
+    |                ^^^^^
+208 |     pub(crate) value: u64,
+    |                ^^^^^
+    |
+    = note: `RuntimeBindableArtboardDefaultViewModelSource` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `data_bind_index`, `path`, `flags`, `converter`, and `value` are never read
+   --> crates/nuxie-runtime/src/state_machine/bindables.rs:221:16
+    |
+220 | pub(crate) struct RuntimeBindableListDefaultViewModelSource {
+    |                   ----------------------------------------- fields in this struct
+221 |     pub(crate) data_bind_index: usize,
+    |                ^^^^^^^^^^^^^^^
+222 |     pub(crate) path: Vec<u32>,
+    |                ^^^^
+223 |     pub(crate) flags: u64,
+    |                ^^^^^
+224 |     pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
+    |                ^^^^^^^^^
+225 |     pub(crate) value: RuntimeDataBindGraphValue,
+    |                ^^^^^
+    |
+    = note: `RuntimeBindableListDefaultViewModelSource` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `data_bind_index`, `path`, `flags`, `converter`, and `value` are never read
+   --> crates/nuxie-runtime/src/state_machine/bindables.rs:238:16
+    |
+237 | pub(crate) struct RuntimeBindableTriggerDefaultViewModelSource {
+    |                   -------------------------------------------- fields in this struct
+238 |     pub(crate) data_bind_index: usize,
+    |                ^^^^^^^^^^^^^^^
+239 |     pub(crate) path: Vec<u32>,
+    |                ^^^^
+240 |     pub(crate) flags: u64,
+    |                ^^^^^
+241 |     pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
+    |                ^^^^^^^^^
+242 |     pub(crate) value: u64,
+    |                ^^^^^
+    |
+    = note: `RuntimeBindableTriggerDefaultViewModelSource` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `data_bind_index`, `path`, `flags`, `converter`, `value`, and `view_model_instance_ids` are never read
+   --> crates/nuxie-runtime/src/state_machine/bindables.rs:262:16
+    |
+261 | pub(crate) struct RuntimeBindableViewModelDefaultViewModelSource {
+    |                   ---------------------------------------------- fields in this struct
+262 |     pub(crate) data_bind_index: usize,
+    |                ^^^^^^^^^^^^^^^
+263 |     pub(crate) path: Vec<u32>,
+    |                ^^^^
+264 |     pub(crate) flags: u64,
+    |                ^^^^^
+265 |     pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
+    |                ^^^^^^^^^
+266 |     pub(crate) value: RuntimeViewModelPointer,
+    |                ^^^^^
+267 |     pub(crate) view_model_instance_ids: Vec<u32>,
+    |                ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `RuntimeBindableViewModelDefaultViewModelSource` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `data_bind_index`, `path`, `flags`, `converter`, and `value` are never read
+   --> crates/nuxie-runtime/src/state_machine/bindables.rs:280:16
+    |
+279 | pub(crate) struct RuntimeBindableBooleanDefaultViewModelSource {
+    |                   -------------------------------------------- fields in this struct
+280 |     pub(crate) data_bind_index: usize,
+    |                ^^^^^^^^^^^^^^^
+281 |     pub(crate) path: Vec<u32>,
+    |                ^^^^
+282 |     pub(crate) flags: u64,
+    |                ^^^^^
+283 |     pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
+    |                ^^^^^^^^^
+284 |     pub(crate) value: bool,
+    |                ^^^^^
+    |
+    = note: `RuntimeBindableBooleanDefaultViewModelSource` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `runtime_number_default_view_model_source_for_instance` is never used
+   --> crates/nuxie-runtime/src/state_machine/bindables.rs:882:15
+    |
+882 | pub(crate) fn runtime_number_default_view_model_source_for_instance(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `broadcast_nested_gamepad_to_scripted_drawables` is never used
+   --> crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs:282:19
+    |
+ 39 | impl ArtboardInstance {
+    | --------------------- method in this implementation
+...
+282 |     pub(crate) fn broadcast_nested_gamepad_to_scripted_drawables(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated functions `connected` and `disconnected` are never used
+   --> crates/nuxie-runtime/src/state_machine/gamepad_listener_group.rs:102:19
+    |
+ 51 | impl RuntimeGamepadListenerGroup {
+    | -------------------------------- associated functions in this implementation
+...
+102 |     pub(crate) fn connected(snapshot: ScriptGamepadSnapshot) -> ScriptListenerInvocation {
+    |                   ^^^^^^^^^
+...
+106 |     pub(crate) fn disconnected(device_id: i32) -> ScriptListenerInvocation {
+    |                   ^^^^^^^^^^^^
+
+warning: field `target_local_id` is never read
+  --> crates/nuxie-runtime/src/state_machine/keyboard_listener_group.rs:12:16
+   |
+ 9 | pub(crate) struct RuntimeKeyboardListenerGroup {
+   |                   ---------------------------- field in this struct
+...
+12 |     pub(crate) target_local_id: usize,
+   |                ^^^^^^^^^^^^^^^
+   |
+   = note: `RuntimeKeyboardListenerGroup` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: associated function `empty` is never used
+   --> crates/nuxie-runtime/src/state_machine/listener_action_owner.rs:183:19
+    |
+182 | impl RuntimeActionCoreArena {
+    | --------------------------- associated function in this implementation
+183 |     pub(crate) fn empty() -> Self {
+    |                   ^^^^^
+
+warning: methods `gamepad_input_count` and `gamepad_input` are never used
+  --> crates/nuxie-runtime/src/state_machine/listener_types/listener_input_type_gamepad.rs:30:19
+   |
+15 | impl RuntimeListenerInputTypeGamepad {
+   | ------------------------------------ methods in this implementation
+...
+30 |     pub(crate) fn gamepad_input_count(&self) -> usize {
+   |                   ^^^^^^^^^^^^^^^^^^^
+...
+34 |     pub(crate) fn gamepad_input(&self, index: usize) -> Option<&RuntimeGamepadInput> {
+   |                   ^^^^^^^^^^^^^
+
+warning: methods `keyboard_input_count` and `keyboard_input` are never used
+  --> crates/nuxie-runtime/src/state_machine/listener_types/listener_input_type_keyboard.rs:34:19
+   |
+19 | impl RuntimeListenerInputTypeKeyboard {
+   | ------------------------------------- methods in this implementation
+...
+34 |     pub(crate) fn keyboard_input_count(&self) -> usize {
+   |                   ^^^^^^^^^^^^^^^^^^^^
+...
+38 |     pub(crate) fn keyboard_input(&self, index: usize) -> Option<&RuntimeKeyboardInput> {
+   |                   ^^^^^^^^^^^^^^
+
+warning: associated items `semantic_input_count`, `semantic_input`, and `constraints_met` are never used
+  --> crates/nuxie-runtime/src/state_machine/listener_types/listener_input_type_semantic.rs:26:19
+   |
+11 | impl RuntimeListenerInputTypeSemantic {
+   | ------------------------------------- associated items in this implementation
+...
+26 |     pub(crate) fn semantic_input_count(&self) -> usize {
+   |                   ^^^^^^^^^^^^^^^^^^^^
+...
+30 |     pub(crate) fn semantic_input(&self, index: usize) -> Option<&RuntimeSemanticInput> {
+   |                   ^^^^^^^^^^^^^^
+...
+34 |     pub(crate) fn constraints_met(input_types: &[Self], action_type: u32) -> bool {
+   |                   ^^^^^^^^^^^^^^^
+
+warning: associated items `new`, `animation_id`, and `input_id_named` are never used
+   --> crates/nuxie-runtime/src/state_machine/nested_state_machine.rs:66:19
+    |
+ 65 | impl RuntimeNestedStateMachineInstance {
+    | -------------------------------------- associated items in this implementation
+ 66 |     pub(crate) fn new(
+    |                   ^^^
+...
+177 |     pub(crate) fn animation_id(&self) -> usize {
+    |                   ^^^^^^^^^^^^
+...
+211 |     pub(crate) fn input_id_named(&self, name: &str) -> Option<usize> {
+    |                   ^^^^^^^^^^^^^^
+
+warning: function `runtime_scripted_listener_action_binding_definition` is never used
+   --> crates/nuxie-runtime/src/state_machine/scripted_listener_action.rs:279:15
+    |
+279 | pub(crate) fn runtime_scripted_listener_action_binding_definition(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: multiple methods are never used
+    --> crates/nuxie-runtime/src/state_machine/scripted_listener_action.rs:782:19
+     |
+ 441 | impl RuntimeScriptedListenerActionBindingOccurrence {
+     | --------------------------------------------------- methods in this implementation
+...
+ 782 |     pub(crate) fn resolve_from_data_context(
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1303 |     pub(crate) fn update_scripted_converter_inputs<F>(
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1338 |     pub(crate) fn update_scripted_converter_inputs_from_data_context<F>(
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1382 |     pub(crate) fn public_update_data_binds<F>(
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1556 |     pub(crate) fn resolve_runtime_table_updates_from_data_context(
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1595 |     pub(crate) fn resolve_runtime_table_updates(
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1630 |     pub(crate) fn advance_stateful_converters(
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `listener_index`, `target_local_id`, and `semantic_data_local_id` are never read
+ --> crates/nuxie-runtime/src/state_machine/semantic_listener_group.rs:7:16
+  |
+6 | pub(crate) struct RuntimeSemanticListenerGroup {
+  |                   ---------------------------- fields in this struct
+7 |     pub(crate) listener_index: usize,
+  |                ^^^^^^^^^^^^^^
+8 |     pub(crate) target_local_id: usize,
+  |                ^^^^^^^^^^^^^^^
+9 |     pub(crate) semantic_data_local_id: usize,
+  |                ^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `RuntimeSemanticListenerGroup` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: method `invocation` is never used
+  --> crates/nuxie-runtime/src/state_machine/semantic_listener_group.rs:27:19
+   |
+12 | impl RuntimeSemanticListenerGroup {
+   | --------------------------------- method in this implementation
+...
+27 |     pub(crate) fn invocation(
+   |                   ^^^^^^^^^^
+
+warning: field `action_owners` is never read
+  --> crates/nuxie-runtime/src/state_machine/state_machine.rs:38:16
+   |
+ 9 | pub struct RuntimeStateMachine {
+   |            ------------------- field in this struct
+...
+38 |     pub(crate) action_owners: RuntimeActionCoreArena,
+   |                ^^^^^^^^^^^^^
+   |
+   = note: `RuntimeStateMachine` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `listener_at` and `data_bind_at` are never used
+   --> crates/nuxie-runtime/src/state_machine/state_machine.rs:90:19
+    |
+ 41 | impl RuntimeStateMachine {
+    | ------------------------ methods in this implementation
+...
+ 90 |     pub(crate) fn listener_at(&self, index: usize) -> Option<&RuntimeStateMachineListener> {
+    |                   ^^^^^^^^^^^
+...
+100 |     pub(crate) fn data_bind_at(
+    |                   ^^^^^^^^^^^^
+
+warning: function `build_state_machines` is never used
+   --> crates/nuxie-runtime/src/state_machine/state_machine.rs:212:15
+    |
+212 | pub(crate) fn build_state_machines<'a>(
+    |               ^^^^^^^^^^^^^^^^^^^^
+
+warning: associated function `from_invocation` is never used
+    --> crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:1046:8
+     |
+1045 | impl RuntimeQueuedSemanticEvent {
+     | ------------------------------- associated function in this implementation
+1046 |     fn from_invocation(invocation: ScriptListenerInvocation) -> Option<Self> {
+     |        ^^^^^^^^^^^^^^^
+
+warning: variants `NullDataContext` and `NullDataBind` are never constructed
+    --> crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:1143:5
+     |
+1142 | pub(crate) enum RuntimeDataContextBindError {
+     |                 --------------------------- variants in this enum
+1143 |     NullDataContext,
+     |     ^^^^^^^^^^^^^^^
+1144 |     NullDataContextWithViewModelListeners,
+1145 |     NullDataBind,
+     |     ^^^^^^^^^^^^
+     |
+     = note: `RuntimeDataContextBindError` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `sink` is never read
+    --> crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:1158:5
+     |
+1156 | struct RuntimeStateMachineDataContextRelay {
+     |        ----------------------------------- field in this struct
+1157 |     handle: RuntimeOwnedViewModelHandle,
+1158 |     sink: RuntimeCellDirtSink,
+     |     ^^^^
+     |
+     = note: `RuntimeStateMachineDataContextRelay` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: methods `add_artboard_rebind_dependent`, `set_main`, `set_global_named`, `complete_for_artboard`, and `global_slot_handle` are never used
+    --> crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:1282:8
+     |
+1242 | impl RuntimeStateMachineDataContext {
+     | ----------------------------------- methods in this implementation
+...
+1282 |     fn add_artboard_rebind_dependent(&self, artboard: &mut ArtboardInstance) {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1291 |     fn set_main(&self, handle: RuntimeOwnedViewModelHandle) {
+     |        ^^^^^^^^
+...
+1298 |     fn set_global_named(
+     |        ^^^^^^^^^^^^^^^^
+...
+1320 |     fn complete_for_artboard(&self, file: &RuntimeFile, artboard_index: usize) -> bool {
+     |        ^^^^^^^^^^^^^^^^^^^^^
+...
+1334 |     fn global_slot_handle(&self, slot: usize) -> Option<RuntimeOwnedViewModelHandle> {
+     |        ^^^^^^^^^^^^^^^^^^
+
+warning: multiple methods are never used
+     --> crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:3882:8
+      |
+ 2500 | impl StateMachineInstance {
+      | ------------------------- methods in this implementation
+...
+ 3882 |     fn apply_scripted_object_bindings(
+      |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+ 5199 |     fn queue_semantic_event(&mut self, listener_index: Option<usize>, action_type: u32) {
+      |        ^^^^^^^^^^^^^^^^^^^^
+...
+ 5296 |     pub(crate) fn semantic_action_for_target(
+      |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+ 6912 |     fn dispatch_captured_pointer_listener_type(
+      |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+ 7184 |     pub(crate) fn attach_event_bubble_owner(&mut self) {
+      |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+10097 |     pub(crate) fn bind_data_context(
+      |                   ^^^^^^^^^^^^^^^^^
+...
+10127 |     pub(crate) fn inherit_data_context(
+      |                   ^^^^^^^^^^^^^^^^^^^^
+...
+10144 |     pub(crate) fn set_data_context(
+      |                   ^^^^^^^^^^^^^^^^
+...
+10156 |     pub(crate) fn data_context(&self) -> Option<&RuntimeStateMachineDataContext> {
+      |                   ^^^^^^^^^^^^
+...
+10163 |     pub(crate) fn set_view_model_instance(
+      |                   ^^^^^^^^^^^^^^^^^^^^^^^
+...
+10179 |     pub(crate) fn set_global_view_model_instance(
+      |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+10203 |     pub(crate) fn complete_view_model_instances(
+      |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+10227 |     pub(crate) fn bind(
+      |                   ^^^^
+...
+10260 |     pub(crate) fn bind_view_model_instance(
+      |                   ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+10279 |     pub(crate) fn global_view_model_instance(
+      |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+10296 |     pub(crate) fn rebind(
+      |                   ^^^^^^
+...
+10340 |     pub(crate) fn relink_data_context(
+      |                   ^^^^^^^^^^^^^^^^^^^
+...
+10351 |     pub(crate) fn rebuild_data_bind(
+      |                   ^^^^^^^^^^^^^^^^^
+...
+10437 |     fn ensure_primary_data_context(&mut self) -> RuntimeStateMachineDataContext {
+      |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+12516 |     fn apply_default_view_model_bindings(
+      |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `semantic_input_types` and `hit_paths` are never read
+  --> crates/nuxie-runtime/src/state_machine/state_machine_listener.rs:31:16
+   |
+19 | pub(crate) struct RuntimeStateMachineListener {
+   |                   --------------------------- fields in this struct
+...
+31 |     pub(crate) semantic_input_types: Vec<RuntimeListenerInputTypeSemantic>,
+   |                ^^^^^^^^^^^^^^^^^^^^
+32 |     pub(crate) hit_paths: Vec<RuntimeListenerHitPath>,
+   |                ^^^^^^^^^
+   |
+   = note: `RuntimeStateMachineListener` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `hit_test` and `semantic_constraints_met` are never used
+  --> crates/nuxie-runtime/src/state_machine/state_machine_listener.rs:41:19
+   |
+36 | impl RuntimeStateMachineListener {
+   | -------------------------------- methods in this implementation
+...
+41 |     pub(crate) fn hit_test(&self, artboard: &ArtboardInstance, x: f32, y: f32) -> bool {
+   |                   ^^^^^^^^
+...
+74 |     pub(crate) fn semantic_constraints_met(&self, action_type: u32) -> bool {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `local_id` and `kind` are never read
+   --> crates/nuxie-runtime/src/state_machine/state_machine_listener.rs:106:5
+    |
+105 | pub(crate) struct RuntimeListenerHitPath {
+    |                   ---------------------- fields in this struct
+106 |     local_id: usize,
+    |     ^^^^^^^^
+107 |     kind: RuntimeListenerHitPathKind,
+    |     ^^^^
+    |
+    = note: `RuntimeListenerHitPath` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `hit_test` and `hit_test_rectangle` are never used
+   --> crates/nuxie-runtime/src/state_machine/state_machine_listener.rs:111:8
+    |
+110 | impl RuntimeListenerHitPath {
+    | --------------------------- methods in this implementation
+111 |     fn hit_test(&self, artboard: &ArtboardInstance, x: f32, y: f32) -> bool {
+    |        ^^^^^^^^
+...
+124 |     fn hit_test_rectangle(&self, artboard: &ArtboardInstance, x: f32, y: f32) -> bool {
+    |        ^^^^^^^^^^^^^^^^^^
+
+warning: function `artboard_double_property` is never used
+   --> crates/nuxie-runtime/src/state_machine/state_machine_listener.rs:366:4
+    |
+366 | fn artboard_double_property(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+  --> crates/nuxie-runtime/src/state_machine/transition_focus_condition.rs:43:19
+   |
+17 | impl RuntimeTransitionFocusCondition {
+   | ------------------------------------ associated function in this implementation
+...
+43 |     pub(super) fn new(target_local_id: usize, op: TransitionConditionOp) -> Self {
+   |                   ^^^
+
+warning: methods `list_value_by_property_path`, `list_items_by_property_name`, and `push_list_item_by_property_name` are never used
+    --> crates/nuxie-runtime/src/view_model.rs:8880:8
+     |
+7350 | impl RuntimeOwnedViewModelInstance {
+     | ---------------------------------- methods in this implementation
+...
+8880 |     fn list_value_by_property_path(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+8888 |     pub(crate) fn list_items_by_property_name(
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+8908 |     pub(crate) fn push_list_item_by_property_name(
+     |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `clear_notification_queue` is never used
+   --> crates/nuxie-runtime/src/retained_data_bind.rs:406:19
+    |
+209 | impl RuntimeRetainedDataBind {
+    | ---------------------------- method in this implementation
+...
+406 |     pub(crate) fn clear_notification_queue(&mut self) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `nuxie-runtime` (lib) generated 81 warnings (run `cargo fix --lib -p nuxie-runtime` to apply 3 suggestions)
+warning: this lint expectation is unfulfilled
+  --> vendor/wgpu-core-30.0.0/src/lock/ranked.rs:83:34
+   |
+83 |     #[cfg_attr(not(miri), expect(unused))] // but `Drop` has important side effects
+   |                                  ^^^^^^
+   |
+   = note: `#[warn(unfulfilled_lint_expectations)]` on by default
+
+warning: `wgpu-core` (lib) generated 1 warning
+warning: fields `width` and `height` are never read
+   --> crates/nuxie-renderer/src/lib.rs:347:5
+    |
+346 | struct FrameAttachments {
+    |        ---------------- fields in this struct
+347 |     width: u32,
+    |     ^^^^^
+348 |     height: u32,
+    |     ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `nuxie-renderer` (lib) generated 1 warning
+   Compiling nuxie v0.1.0 (/Users/levi/dev/worktrees/nuxie-fl-c/crates/nuxie)
+warning: variable does not need to be mutable
+    --> crates/nuxie/src/flow_session.rs:1056:9
+     |
+1056 |         mut factory: Option<&mut dyn Factory>,
+     |         ----^^^^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `factory`
+    --> crates/nuxie/src/flow_session.rs:1056:9
+     |
+1056 |         mut factory: Option<&mut dyn Factory>,
+     |         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_factory`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `nuxie` (lib) generated 2 warnings (run `cargo fix --lib -p nuxie` to apply 2 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.62s
+     Running tests/public_api.rs (target/debug/deps/public_api-8c5f4b4598ff28c5)
+
+running 15 tests
+test scene_rejects_zero_fps_at_commit_and_rolls_back_the_animation ... ok
+test scene_animation_authoring_surface_is_typed_key_free_and_upsert_shaped ... ok
+test scene_rejects_zero_fps_when_creating_a_linear_animation_atomically ... ok
+test public_api_imports_lists_instantiates_and_draws ... ok
+test embedded_image_contents_remain_authoritative_over_external_bytes ... ok
+test public_api_drives_default_state_machine_and_inputs ... ok
+test artboard_owned_renderer_retries_a_failed_image_decode_without_poisoning ... ok
+test scene_visibility_authoring_surface_is_typed_key_free_and_preserves_local_opacity ... ok
+test public_api_view_model_instance_selection_and_missing ... ok
+test public_api_view_model_number_set_changes_stream ... ok
+test file_owned_external_images_decode_lazily_and_retry_without_poisoning ... ok
+test public_api_artboard_view_model_binding_leaves_global_completion_to_state_machines ... ok
+test borrowed_view_model_advance_facade_forces_zero_seconds_true ... ok
+test public_api_view_model_string_set_changes_stream ... ok
+test public_api_exposes_the_default_rust_renderer ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.53s

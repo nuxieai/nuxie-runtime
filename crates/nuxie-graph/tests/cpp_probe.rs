@@ -6349,12 +6349,6 @@ fn compare_artboards(cpp: &CppProbeFile, runtime: &RuntimeFile, rust: &GraphFile
                 cpp_component.local_id
             );
             assert_eq!(
-                cpp_component.graph_order,
-                rust_component.graph_order.unwrap_or(0),
-                "component {} graph order mismatch in artboard {index} for {label}",
-                cpp_component.local_id
-            );
-            assert_eq!(
                 cpp_component.children_local, rust_component.children,
                 "component {} child list mismatch in artboard {index} for {label}",
                 cpp_component.local_id
@@ -7445,8 +7439,10 @@ struct CppComponent {
     parent_id: u64,
     #[serde(rename = "parentLocal")]
     parent_local: Option<usize>,
-    #[serde(rename = "graphOrder")]
-    graph_order: usize,
+    // C++ `Component::m_GraphOrder` has no construction default. The ordinary
+    // import snapshot must not read it for components outside the retained
+    // dependency schedule; the runtime-update probe owns that scheduled-only
+    // comparison (`component.hpp:26,54`, `artboard.cpp:846-855`).
     #[serde(default, rename = "childrenLocal")]
     children_local: Vec<usize>,
     #[serde(default, rename = "constraintsLocal")]

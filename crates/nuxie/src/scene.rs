@@ -17,7 +17,7 @@ use nuxie_runtime::{
     RuntimeOwnedViewModelInstance, RuntimeOwnedViewModelListStringMatchBooleanHandle,
     RuntimeOwnedViewModelNumberSourceHandle, RuntimeOwnedViewModelStringSourceHandle,
     StateMachineEventContext, StateMachineInputKind, StateMachineInstance,
-    embedded_font_is_parseable,
+    StateMachineReportedEvent, embedded_font_is_parseable,
 };
 
 use crate::{File, OwnedArtboardInstance, RuntimeOwnedViewModelContext, ViewModelInstance};
@@ -15103,7 +15103,8 @@ pub struct Frame<'a> {
     scene: &'a mut Scene,
 }
 
-/// One semantic runtime event reported by [`Frame::advance`].
+/// One semantic runtime event reported by [`Frame::advance`] or drained
+/// synchronously through [`Frame::take_reported_events`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SceneEventStringProperty {
     pub name: String,
@@ -15137,6 +15138,37 @@ pub enum SceneEvent {
         seconds_delay: f32,
         context: Option<SceneEventContext>,
     },
+}
+
+fn append_scene_reported_event(
+    materialized: &MaterializedArtboard,
+    reported: &StateMachineReportedEvent,
+    events: &mut Vec<SceneEvent>,
+) {
+    let Some(event) = materialized
+        .events_by_local
+        .get(reported.event_local_index())
+        .copied()
+        .flatten()
+    else {
+        return;
+    };
+    events.push(SceneEvent::Authored {
+        event,
+        name: reported.name().map(ToOwned::to_owned),
+        string_properties: reported
+            .string_properties()
+            .iter()
+            .map(|property| SceneEventStringProperty {
+                name: property.name().to_string(),
+                value: property.value().to_string(),
+            })
+            .collect(),
+        seconds_delay: reported.seconds_delay(),
+        context: reported
+            .context()
+            .and_then(|context| materialized.resolve_event_context(context)),
+    });
 }
 
 impl Frame<'_> {
@@ -15851,17 +15883,17 @@ impl Frame<'_> {
             .hit_test_path_segments_with_bounds(point)
             .first()
             .map(StateMachineEventContext::from_geometry_hit);
-        let (runtime, machines) = (&live.runtime, &mut live.machines);
+        let (runtime, machines) = (&mut live.runtime, &mut live.machines);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
             let current = match event_context.as_ref() {
                 Some(event_context) => machine.pointer_down_with_event_context(
-                    runtime.raw(),
+                    runtime.raw_mut(),
                     point.x,
                     point.y,
                     pointer_id,
                     event_context,
                 ),
-                None => machine.pointer_down(runtime.raw(), point.x, point.y, pointer_id),
+                None => machine.pointer_down(runtime.raw_mut(), point.x, point.y, pointer_id),
             };
             current | hit
         });
@@ -15889,10 +15921,15 @@ impl Frame<'_> {
         else {
             return false;
         };
-        let (runtime, machines) = (&live.runtime, &mut live.machines);
+        let (runtime, machines) = (&mut live.runtime, &mut live.machines);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
-            let current =
-                machine.pointer_move(runtime.raw(), point.x, point.y, elapsed_seconds, pointer_id);
+            let current = machine.pointer_move(
+                runtime.raw_mut(),
+                point.x,
+                point.y,
+                elapsed_seconds,
+                pointer_id,
+            );
             current | hit
         });
         hit
@@ -15918,17 +15955,17 @@ impl Frame<'_> {
             .hit_test_path_segments_with_bounds(point)
             .first()
             .map(StateMachineEventContext::from_geometry_hit);
-        let (runtime, machines) = (&live.runtime, &mut live.machines);
+        let (runtime, machines) = (&mut live.runtime, &mut live.machines);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
             let current = match event_context.as_ref() {
                 Some(event_context) => machine.pointer_up_with_event_context(
-                    runtime.raw(),
+                    runtime.raw_mut(),
                     point.x,
                     point.y,
                     pointer_id,
                     event_context,
                 ),
-                None => machine.pointer_up(runtime.raw(), point.x, point.y, pointer_id),
+                None => machine.pointer_up(runtime.raw_mut(), point.x, point.y, pointer_id),
             };
             current | hit
         });
@@ -15949,9 +15986,9 @@ impl Frame<'_> {
         else {
             return false;
         };
-        let (runtime, machines) = (&live.runtime, &mut live.machines);
+        let (runtime, machines) = (&mut live.runtime, &mut live.machines);
         let hit = machines.values.iter_mut().fold(false, |hit, machine| {
-            let current = machine.pointer_exit(runtime.raw(), point.x, point.y, pointer_id);
+            let current = machine.pointer_exit(runtime.raw_mut(), point.x, point.y, pointer_id);
             current | hit
         });
         hit
@@ -16032,38 +16069,45 @@ impl Frame<'_> {
         let machine_changed =
             runtime.advance_with_state_machines(&mut machines.values, elapsed_seconds);
         let changed = machine_changed;
-        for machine in &machines.values {
-            for index in 0..machine.reported_event_count() {
-                let Some(reported) = machine.reported_event(index) else {
-                    continue;
-                };
-                let Some(event) = materialized
-                    .events_by_local
-                    .get(reported.event_local_index())
-                    .copied()
-                    .flatten()
-                else {
-                    continue;
-                };
-                events.push(SceneEvent::Authored {
-                    event,
-                    name: reported.name().map(ToOwned::to_owned),
-                    string_properties: reported
-                        .string_properties()
-                        .iter()
-                        .map(|property| SceneEventStringProperty {
-                            name: property.name().to_string(),
-                            value: property.value().to_string(),
-                        })
-                        .collect(),
-                    seconds_delay: reported.seconds_delay(),
-                    context: reported
-                        .context()
-                        .and_then(|context| materialized.resolve_event_context(context)),
-                });
+        for machine in &mut machines.values {
+            for reported in machine.take_reported_events(runtime.raw()) {
+                append_scene_reported_event(materialized, &reported, events);
             }
         }
         changed
+    }
+
+    /// Drain listener-fired events without advancing the state machine.
+    ///
+    /// Pinned C++ makes `ListenerFireEvent::perform` immediately visible
+    /// through `reportedEventCount()`; the following new frame consumes that
+    /// same core queue through `applyEvents()` (`listener_fire_event.cpp:8-18`;
+    /// `state_machine_instance.cpp:2320-2335,3016-3019`). This facade method is
+    /// the equivalent host-drain seam for pointer, keyboard, gamepad, focus,
+    /// and semantic callbacks that run outside [`Self::advance`].
+    pub fn take_reported_events(
+        &mut self,
+        instance: InstanceId,
+        events: &mut Vec<SceneEvent>,
+    ) -> bool {
+        events.clear();
+        let (materialized, instances) = (&self.scene.materialized, &mut self.scene.instances);
+        let Some(live) = instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|candidate| candidate.id == instance)
+        else {
+            return false;
+        };
+        let Some(materialized) = materialized.get(&live.artboard) else {
+            return false;
+        };
+        for machine in &mut live.machines.values {
+            for reported in machine.take_reported_events(live.runtime.raw()) {
+                append_scene_reported_event(materialized, &reported, events);
+            }
+        }
+        !events.is_empty()
     }
 
     /// Advance one live instance with a renderer factory available to script
@@ -16104,35 +16148,9 @@ impl Frame<'_> {
             )
             .map_err(|_| AdvanceError::RuntimeRejected)?;
         let changed = machine_changed;
-        for machine in &machines.values {
-            for index in 0..machine.reported_event_count() {
-                let Some(reported) = machine.reported_event(index) else {
-                    continue;
-                };
-                let Some(event) = materialized
-                    .events_by_local
-                    .get(reported.event_local_index())
-                    .copied()
-                    .flatten()
-                else {
-                    continue;
-                };
-                events.push(SceneEvent::Authored {
-                    event,
-                    name: reported.name().map(ToOwned::to_owned),
-                    string_properties: reported
-                        .string_properties()
-                        .iter()
-                        .map(|property| SceneEventStringProperty {
-                            name: property.name().to_string(),
-                            value: property.value().to_string(),
-                        })
-                        .collect(),
-                    seconds_delay: reported.seconds_delay(),
-                    context: reported
-                        .context()
-                        .and_then(|context| materialized.resolve_event_context(context)),
-                });
+        for machine in &mut machines.values {
+            for reported in machine.take_reported_events(runtime.raw()) {
+                append_scene_reported_event(materialized, &reported, events);
             }
         }
         Ok(changed)
@@ -22714,14 +22732,14 @@ fn append_machine_export_records(
             })
             .collect::<Vec<_>>();
         for (listener, target, listener_name, listener_source) in listeners {
-            let target_id = visual_local_ids.get(&target).copied().ok_or_else(|| {
+            let visual_target_id = visual_local_ids.get(&target).copied().ok_or_else(|| {
                 EditDiagnostic::new(
                     origins.object(listener.id, fallback_operation_index),
                     vec![EditId::Object(listener.id), EditId::Object(target)],
                     EditReason::UnknownObject,
                 )
             })?;
-            let target_id = u32::try_from(target_id).map_err(|_| {
+            let visual_target_id = u32::try_from(visual_target_id).map_err(|_| {
                 EditDiagnostic::new(
                     origins.object(listener.id, fallback_operation_index),
                     vec![EditId::Object(listener.id), EditId::Object(target)],
@@ -22732,6 +22750,17 @@ fn append_machine_export_records(
                 MachineListenerSourceSpec::Pointer(listener_type) => *listener_type,
                 MachineListenerSourceSpec::Event(_) => MachineListenerType::Event,
                 MachineListenerSourceSpec::ViewModel(_) => MachineListenerType::ViewModel,
+            };
+            // C++ local event delivery accepts the owning Artboard (local id
+            // zero) or the Event itself, and deliberately rejects an
+            // ordinary component target to disambiguate legacy nested-event
+            // ids (`state_machine_instance.cpp:3078-3102`). The public Scene
+            // target still supplies the authored action context, but the
+            // listener record itself must target its owning Artboard.
+            let target_id = if matches!(listener_source, MachineListenerSourceSpec::Event(_)) {
+                0
+            } else {
+                visual_target_id
             };
             let mut properties = vec![
                 ExportedProperty::ListenerTargetId(target_id),
@@ -33883,7 +33912,7 @@ mod tests {
             Some(0.8)
         );
         let event = machine
-            .reported_event(0)
+            .reported_event(instance.raw(), 0)
             .ok_or_else(|| anyhow::anyhow!("reported event"))?;
         assert_eq!(event.event_local_index(), 2);
         assert_eq!(event.name(), Some("Reached active"));
@@ -34668,7 +34697,7 @@ mod tests {
         let active_draw = owned_canonical_draw(&mut instance)?;
         assert_ne!(idle_draw, active_draw);
         let event = machine
-            .reported_event(0)
+            .reported_event(instance.raw(), 0)
             .ok_or_else(|| anyhow::anyhow!("reported event"))?;
         assert_eq!(event.name(), Some("Reached active"));
         assert_eq!(machine.reported_event_count(), 1);

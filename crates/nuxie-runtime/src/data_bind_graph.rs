@@ -3,15 +3,22 @@ use std::{
     sync::Arc,
 };
 
-use nuxie_binary::{RuntimeFile, RuntimeObject};
+use nuxie_binary::{RuntimeDataType, RuntimeDataValue, RuntimeFile, RuntimeObject};
 
-use crate::artboard_data_bind::RuntimeOwnedDataContext;
+use crate::artboard_data_bind::{
+    RuntimeOwnedDataContext, runtime_owned_view_model_binding_value_for_property_path,
+};
+use crate::data_bind_container::RuntimeDataBindContainerQueue;
+use crate::data_converter::RuntimeDataConverterDataBindState;
 use crate::draw::color_lerp;
 use crate::project_data_converter::{
     PROJECT_DATA_CONVERTER_MAX_LIST_ITEMS, project_data_converter_bounded_list_length,
 };
 use crate::retained_data_bind::{RuntimeDataBindTarget, RuntimeRetainedDataBind};
-use crate::scripting::{RuntimeScriptInstanceHandle, ScriptDataConverterMethod};
+use crate::scripting::{
+    RuntimeScriptInstanceHandle, ScriptCoreString, ScriptDataConverterMethod, ScriptError,
+    ScriptHost,
+};
 use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelStructuralSource};
 use crate::view_model_cell::{
     RuntimeCellDirt, RuntimeViewModelCell, RuntimeViewModelCellValue, RuntimeViewModelInstanceCells,
@@ -21,13 +28,13 @@ use crate::{
     ProjectDataConverterResolver, ProjectDataConverterState, ProjectDataValue,
     ProjectDataValuePath, ProjectDataViewModelReference, RuntimeDataContext,
     RuntimeImportedViewModelInstanceContext, RuntimeOwnedViewModelInstance, RuntimeStateMachine,
-    RuntimeTransitionInterpolator, RuntimeViewModelPointer, ScriptValue,
-    StateMachineBindableArtboardInstance, StateMachineBindableAssetInstance,
-    StateMachineBindableBooleanInstance, StateMachineBindableColorInstance,
-    StateMachineBindableEnumInstance, StateMachineBindableIntegerInstance,
-    StateMachineBindableListInstance, StateMachineBindableNumberInstance,
-    StateMachineBindableStringInstance, StateMachineBindableTriggerInstance,
-    StateMachineBindableViewModelInstance, StateMachineTransitionDurationInstance,
+    RuntimeTransitionInterpolator, RuntimeViewModelPointer, StateMachineBindableArtboardInstance,
+    StateMachineBindableAssetInstance, StateMachineBindableBooleanInstance,
+    StateMachineBindableColorInstance, StateMachineBindableEnumInstance,
+    StateMachineBindableIntegerInstance, StateMachineBindableListInstance,
+    StateMachineBindableNumberInstance, StateMachineBindableStringInstance,
+    StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
+    StateMachineTransitionDurationInstance,
     runtime_view_model_view_model_property_path_for_name_path,
 };
 
@@ -123,6 +130,7 @@ pub(crate) struct RuntimeDataBindGraphFormulaRandomSource {
     call_count: usize,
     seeded_values: bool,
     fallback_seed: u32,
+    process_global: bool,
 }
 
 impl Default for RuntimeDataBindGraphFormulaRandomSource {
@@ -133,6 +141,7 @@ impl Default for RuntimeDataBindGraphFormulaRandomSource {
             call_count: 0,
             seeded_values: false,
             fallback_seed: 1,
+            process_global: false,
         }
     }
 }
@@ -145,6 +154,19 @@ impl RuntimeDataBindGraphFormulaRandomSource {
             call_count: 0,
             seeded_values: self.seeded_values,
             fallback_seed: 1,
+            process_global: self.process_global,
+        }
+    }
+
+    /// Use pinned C++'s one process-global `RandomProvider` rather than the
+    /// legacy graph-local fallback retained by not-yet-ported DataBind owners.
+    ///
+    /// Every wrapper created with this mode consumes the same global stream,
+    /// so separate DataBind/converter occurrences preserve authored call order.
+    pub(crate) fn process_global() -> Self {
+        Self {
+            process_global: true,
+            ..Self::default()
         }
     }
 
@@ -164,6 +186,9 @@ impl RuntimeDataBindGraphFormulaRandomSource {
                 self.next_index += 1;
             }
             return value;
+        }
+        if self.process_global {
+            return crate::math::random::RuntimeRandomProvider::generate_random_float();
         }
 
         // Mirrors C++ include/rive/math/random.hpp's non-TESTING rand()
@@ -208,7 +233,17 @@ pub(crate) struct RuntimeDataBindGraphTargetsMut<'a> {
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeDataBindGraphSourceNode {
+    /// The exact serialized path retained by the authored DataBind.
+    pub(crate) authored_path: Vec<u32>,
+    /// The id path used by runtime context resolution after any manifest
+    /// name-path translation.
     pub(crate) path: Vec<u32>,
+    pub(crate) name_based: bool,
+    /// Whether this occurrence is a DataBindContext subclass. Base DataBind
+    /// occurrences retain converter ownership and authored order but never
+    /// bind or initialize against a context in C++.
+    pub(crate) context_bindable: bool,
+    pub(crate) default_bound: bool,
     pub(crate) flags: u64,
     pub(crate) bound: bool,
     pub(crate) target_to_source_dirty: bool,
@@ -222,20 +257,43 @@ pub(crate) struct RuntimeDataBindGraphSourceNode {
     pub(crate) defer_source_to_target_until_next_update: bool,
     pub(crate) source_to_target_dirty_after_immediate: bool,
     pub(crate) source_to_target_dirty_after_target_to_source: bool,
+    /// Every source owns exactly one C++-shaped direction engine. Keep this
+    /// field before converter occurrence state: Rust drops fields in
+    /// declaration order, matching `DataBind::~DataBind` clearing the outer
+    /// source before it unbinds/deletes `m_dataConverter`
+    /// (`data_bind.cpp:239-249,354-369`).
+    pub(crate) retained_bind: RuntimeRetainedDataBind,
     pub(crate) converter: Option<RuntimeDataBindGraphConverter>,
     pub(crate) converter_state: RuntimeDataBindGraphConverterState,
+    /// Concrete `DataConverter::m_dataBinds` cloned into this exact outer
+    /// DataBind occurrence. Definitions are shared; retained cells, dirt
+    /// queues, target caches, and nested Group children are occurrence-local.
+    pub(crate) converter_data_binds: RuntimeDataConverterDataBindState,
     pub(crate) default_value: RuntimeDataBindGraphValue,
     pub(crate) value: RuntimeDataBindGraphValue,
     pub(crate) view_model_instance_ids: Vec<u32>,
-    /// Every source owns exactly one C++-shaped direction engine. Owned
-    /// owned paths attach their retained source property cell; unresolved
-    /// compatibility paths leave it empty while still sharing the same
-    /// origin/reconcile state.
-    pub(crate) retained_bind: RuntimeRetainedDataBind,
     /// Exact retained list/child endpoint for structural sources. Its cell is
     /// only the dependency identity; values are read from this object after
     /// dirt, matching C++ ContextValueList/ContextValueViewModel ownership.
     pub(crate) retained_structural_source: Option<RuntimeOwnedViewModelStructuralSource>,
+}
+
+impl Drop for RuntimeDataBindGraphSourceNode {
+    fn drop(&mut self) {
+        // `DataBind::~DataBind` first clears the outer source, then invokes
+        // the concrete converter's virtual `unbind`, and only then deletes
+        // the converter occurrence (`data_bind.cpp:239-249,354-369`).
+        //
+        // The explicit call matters for ScriptedDataConverter: its custom
+        // ScriptInput DataBinds must unregister while the occurrence's script
+        // table is still alive. Field declaration order alone would drop
+        // `converter` before `converter_data_binds`.
+        self.retained_bind.clear_source();
+        if let Some(converter) = self.converter.as_ref() {
+            self.converter_data_binds
+                .unbind(converter, &mut self.converter_state);
+        }
+    }
 }
 
 /// The #RB-1 e3 [`RuntimeDataBindTarget`] adapter: the retained bind's
@@ -311,6 +369,42 @@ pub(crate) fn runtime_graph_value_from_cell_value(
     })
 }
 
+/// Read the concrete scalar `DataValue` retained by a bound source cell.
+///
+/// This intentionally does not coerce to a preselected Rust graph variant.
+/// C++ retains the concrete `ViewModelInstanceValue` on `DataBind`; the
+/// matching `DataBindContextValue*` decides how it writes the target later.
+/// Structural List/ViewModel cells carry no copied scalar payload.
+pub(crate) fn runtime_graph_value_from_bound_cell(
+    cell_value: &RuntimeViewModelCellValue,
+) -> Option<RuntimeDataBindGraphValue> {
+    Some(match cell_value {
+        RuntimeViewModelCellValue::Number(value) => RuntimeDataBindGraphValue::Number(*value),
+        RuntimeViewModelCellValue::Boolean(value) => RuntimeDataBindGraphValue::Boolean(*value),
+        RuntimeViewModelCellValue::String(value) => {
+            RuntimeDataBindGraphValue::String(value.to_vec())
+        }
+        RuntimeViewModelCellValue::Color(value) => RuntimeDataBindGraphValue::Color(*value),
+        RuntimeViewModelCellValue::Enum(value) => {
+            RuntimeDataBindGraphValue::Enum(u64::from(*value))
+        }
+        RuntimeViewModelCellValue::Trigger(value) => RuntimeDataBindGraphValue::Trigger(*value),
+        RuntimeViewModelCellValue::SymbolListIndex(value) => {
+            RuntimeDataBindGraphValue::SymbolListIndex(u64::from(*value))
+        }
+        RuntimeViewModelCellValue::AssetImage(value) => {
+            RuntimeDataBindGraphValue::Asset(u64::from(*value))
+        }
+        RuntimeViewModelCellValue::AssetFont(value) => {
+            RuntimeDataBindGraphValue::Asset(value.file_asset_index())
+        }
+        RuntimeViewModelCellValue::Artboard(value) => {
+            RuntimeDataBindGraphValue::Artboard(u64::from(*value))
+        }
+        RuntimeViewModelCellValue::List | RuntimeViewModelCellValue::ViewModel => return None,
+    })
+}
+
 /// Graph value → cell payload for the migrated scalar kinds, mirroring the
 /// owned slot setters' u32 saturation.
 pub(crate) fn runtime_cell_value_from_graph_value(
@@ -349,11 +443,109 @@ pub(crate) fn runtime_cell_value_from_graph_value(
     })
 }
 
+/// Assign one concrete scalar `DataValue` only when its C++ runtime type
+/// matches the retained source cache. `DataBindContextValue::applyToSource`
+/// performs this same type check after conversion; a converter output of the
+/// wrong concrete type leaves the source untouched (`context_value.hpp:68-96`).
+fn assign_matching_scalar_graph_value(
+    current: &mut RuntimeDataBindGraphValue,
+    next: &RuntimeDataBindGraphValue,
+) -> bool {
+    let Some(next) = matching_graph_source_value(current, next) else {
+        return false;
+    };
+    if *current == next {
+        return false;
+    }
+    *current = next;
+    true
+}
+
+/// Pinned `DataBindContextValue::applyToSource` checks the converted value
+/// against the concrete source owner. Integer-backed ViewModel source
+/// subclasses all accept a `DataValueInteger`, while scalar and ViewModel
+/// references require their exact concrete DataValue type
+/// (`context_value.cpp:171-268`).
+fn matching_graph_source_value(
+    current: &RuntimeDataBindGraphValue,
+    next: &RuntimeDataBindGraphValue,
+) -> Option<RuntimeDataBindGraphValue> {
+    fn integer_payload(value: &RuntimeDataBindGraphValue) -> Option<u64> {
+        match value {
+            RuntimeDataBindGraphValue::Integer(value)
+            | RuntimeDataBindGraphValue::Enum(value)
+            | RuntimeDataBindGraphValue::SymbolListIndex(value)
+            | RuntimeDataBindGraphValue::Asset(value)
+            | RuntimeDataBindGraphValue::Artboard(value)
+            | RuntimeDataBindGraphValue::Trigger(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    Some(match (current, next) {
+        (RuntimeDataBindGraphValue::Number(_), RuntimeDataBindGraphValue::Number(value)) => {
+            RuntimeDataBindGraphValue::Number(*value)
+        }
+        (RuntimeDataBindGraphValue::Boolean(_), RuntimeDataBindGraphValue::Boolean(value)) => {
+            RuntimeDataBindGraphValue::Boolean(*value)
+        }
+        (RuntimeDataBindGraphValue::String(_), RuntimeDataBindGraphValue::String(value)) => {
+            RuntimeDataBindGraphValue::String(value.clone())
+        }
+        (RuntimeDataBindGraphValue::Color(_), RuntimeDataBindGraphValue::Color(value)) => {
+            RuntimeDataBindGraphValue::Color(*value)
+        }
+        (RuntimeDataBindGraphValue::Enum(_), next) => {
+            RuntimeDataBindGraphValue::Enum(integer_payload(next)?)
+        }
+        (RuntimeDataBindGraphValue::SymbolListIndex(_), next) => {
+            RuntimeDataBindGraphValue::SymbolListIndex(integer_payload(next)?)
+        }
+        (RuntimeDataBindGraphValue::Asset(_), next) => {
+            RuntimeDataBindGraphValue::Asset(integer_payload(next)?)
+        }
+        (RuntimeDataBindGraphValue::Artboard(_), next) => {
+            RuntimeDataBindGraphValue::Artboard(integer_payload(next)?)
+        }
+        (RuntimeDataBindGraphValue::Trigger(_), next) => {
+            RuntimeDataBindGraphValue::Trigger(integer_payload(next)?)
+        }
+        (RuntimeDataBindGraphValue::ViewModel(_), RuntimeDataBindGraphValue::ViewModel(value)) => {
+            RuntimeDataBindGraphValue::ViewModel(*value)
+        }
+        _ => return None,
+    })
+}
+
+/// Defined subset of C++'s `int rounded = value < 0 ? 0 :
+/// std::round(value)` before `CoreRegistry::setUint`.
+///
+/// C++ float→int conversion is undefined for NaN, positive infinity, and
+/// rounded values outside signed-int range. Rust leaves those inputs
+/// unapplied instead of inventing a result; every defined input preserves the
+/// exact negative clamp and halfway-away-from-zero rounding
+/// (`context_value_number.cpp:24-38`; `context_value_any.cpp:30-44`).
+fn cpp_number_to_core_uint(value: f32) -> Option<u64> {
+    if value < 0.0 {
+        return Some(0);
+    }
+    if !value.is_finite() {
+        return None;
+    }
+    let rounded = value.round();
+    if !(0.0..2_147_483_648.0).contains(&rounded) {
+        return None;
+    }
+    Some(u64::try_from(rounded as i32).expect("non-negative signed-int range"))
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum RuntimeDataBindGraphConverter {
     PassThrough,
     Scripted {
         global_id: u32,
+        serialized_implemented_methods: u32,
+        definition: crate::scripted_data_converter::RuntimeScriptedDataConverterDefinition,
         instance: Option<RuntimeScriptInstanceHandle>,
     },
     Project {
@@ -524,19 +716,116 @@ pub(crate) enum RuntimeDataBindGraphFormulaToken {
 }
 
 impl RuntimeDataBindGraphConverter {
+    fn has_scripted_occurrence(&self) -> bool {
+        match self {
+            Self::Scripted { .. } => true,
+            Self::Group(converters) => converters.iter().any(Self::has_scripted_occurrence),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn collect_scripted_global_ids(&self, output: &mut BTreeSet<u32>) {
+        match self {
+            Self::Scripted { global_id, .. } => {
+                output.insert(*global_id);
+            }
+            Self::Group(converters) => {
+                for converter in converters {
+                    converter.collect_scripted_global_ids(output);
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub(crate) fn can_change_output_kind(&self) -> bool {
+        matches!(
+            self.cpp_output_kind(),
+            RuntimeDataBindGraphConverterOutputKind::Deferred
+        )
+    }
+
+    /// Pinned `DataConverter::outputType`, including the group's reverse
+    /// "last non-input" walk.
+    ///
+    /// This is used at the bind boundary where C++ chooses its concrete
+    /// `DataBindContextValue` subclass. `None` and `Input` both make
+    /// `DataBind::outputType` fall back to the live source type
+    /// (`data_bind.cpp:165-173,251-299`).
+    pub(crate) fn cpp_output_data_type(&self) -> RuntimeDataType {
+        match self {
+            Self::PassThrough
+            | Self::ToNumber
+            | Self::ListToLength
+            | Self::OperationValue { .. }
+            | Self::OperationViewModel { .. }
+            | Self::SystemOperationValue { .. }
+            | Self::Rounder { .. }
+            | Self::RangeMapper { .. }
+            | Self::Formula { .. } => RuntimeDataType::Number,
+            Self::Scripted { .. } => RuntimeDataType::Any,
+            Self::Project { program, .. } => match program.output_type() {
+                Some(ProjectDataConverterOutputType::String) => RuntimeDataType::String,
+                Some(ProjectDataConverterOutputType::Number) => RuntimeDataType::Number,
+                Some(ProjectDataConverterOutputType::Boolean) => RuntimeDataType::Boolean,
+                Some(ProjectDataConverterOutputType::Color) => RuntimeDataType::Color,
+                Some(ProjectDataConverterOutputType::Enum) => RuntimeDataType::EnumType,
+                Some(ProjectDataConverterOutputType::List) => RuntimeDataType::List,
+                Some(ProjectDataConverterOutputType::ListIndex) => RuntimeDataType::SymbolListIndex,
+                Some(ProjectDataConverterOutputType::Image) => RuntimeDataType::AssetImage,
+                Some(ProjectDataConverterOutputType::Trigger) => RuntimeDataType::Trigger,
+                Some(ProjectDataConverterOutputType::ViewModel) => RuntimeDataType::ViewModel,
+                Some(ProjectDataConverterOutputType::Object) => RuntimeDataType::Any,
+                None => RuntimeDataType::None,
+            },
+            Self::BooleanNegate => RuntimeDataType::Boolean,
+            Self::TriggerIncrement => RuntimeDataType::Trigger,
+            Self::NumberToList { .. } => RuntimeDataType::List,
+            Self::ToString { .. }
+            | Self::StringTrim { .. }
+            | Self::StringRemoveZeros
+            | Self::StringPad { .. } => RuntimeDataType::String,
+            Self::Interpolator { .. } => RuntimeDataType::Input,
+            Self::Group(converters) => converters
+                .iter()
+                .rev()
+                .map(Self::cpp_output_data_type)
+                .find(|output| *output != RuntimeDataType::Input)
+                .unwrap_or(RuntimeDataType::None),
+            Self::Unsupported => RuntimeDataType::None,
+        }
+    }
+
+    /// Static shape of pinned C++ `DataConverter::outputType`.
+    ///
+    /// `DataConverterGroup::outputType` does not union the capabilities of
+    /// its children. It walks backward and returns the first child's output
+    /// that is not `DataType::input`; an all-interpolator group falls back to
+    /// the group's concrete `DataType::none`. Keeping that three-way result
+    /// prevents an early scripted/project converter from making a later
+    /// concrete converter look dynamically typed
+    /// (`data_converter_group.hpp:17-32`; `data_bind.cpp:165-173`).
+    fn cpp_output_kind(&self) -> RuntimeDataBindGraphConverterOutputKind {
         match self {
             // A scripted converter is instantiated after the static bind
             // topology. Its authored input type does not constrain the value
             // its script will return.
-            Self::Scripted { .. } => true,
+            Self::Scripted { .. } => RuntimeDataBindGraphConverterOutputKind::Deferred,
             // Project converters can depend on the mounted data context. The
             // context is not hydrated while static property bindings are
             // built, so a failed conversion of the serialized default does
             // not disprove the program's declared (or inferred) output type.
-            Self::Project { program, .. } => program.output_type().is_some(),
-            Self::Group(converters) => converters.iter().any(Self::can_change_output_kind),
-            _ => false,
+            Self::Project { program, .. } if program.output_type().is_some() => {
+                RuntimeDataBindGraphConverterOutputKind::Deferred
+            }
+            Self::Interpolator { .. } => RuntimeDataBindGraphConverterOutputKind::Input,
+            Self::Group(converters) => converters
+                .iter()
+                .rev()
+                .map(Self::cpp_output_kind)
+                .find(|output| *output != RuntimeDataBindGraphConverterOutputKind::Input)
+                .unwrap_or(RuntimeDataBindGraphConverterOutputKind::Concrete),
+            _ => RuntimeDataBindGraphConverterOutputKind::Concrete,
         }
     }
 
@@ -549,6 +838,7 @@ impl RuntimeDataBindGraphConverter {
             RuntimeDataBindGraphConverter::Scripted {
                 global_id,
                 instance,
+                ..
             } if *global_id == target_global_id => {
                 *instance = Some(handle.clone());
                 true
@@ -564,12 +854,63 @@ impl RuntimeDataBindGraphConverter {
         }
     }
 
+    /// Attach one concrete `ScriptedDataConverter` occurrence by its path
+    /// through the cloned converter tree.
+    ///
+    /// Global ids identify authored definitions, not cloned occurrences. A
+    /// `DataConverterGroup` may contain the same definition more than once,
+    /// and pinned C++ clones a separate table/cache for every item. The path
+    /// is therefore the stable occurrence identity inside this DataBind
+    /// clone (`data_converter_group.cpp:19-31`;
+    /// `scripted_data_converter.cpp:242-267`).
+    pub(crate) fn attach_scripted_instance_at_path(
+        &mut self,
+        path: &[usize],
+        handle: &RuntimeScriptInstanceHandle,
+    ) -> bool {
+        match (self, path) {
+            (Self::Scripted { instance, .. }, []) => {
+                *instance = Some(handle.clone());
+                true
+            }
+            (Self::Group(converters), [index, tail @ ..]) => converters
+                .get_mut(*index)
+                .is_some_and(|converter| converter.attach_scripted_instance_at_path(tail, handle)),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn scripted_instance_at_path(
+        &self,
+        path: &[usize],
+    ) -> Option<RuntimeScriptInstanceHandle> {
+        match (self, path) {
+            (Self::Scripted { instance, .. }, []) => instance.clone(),
+            (Self::Group(converters), [index, tail @ ..]) => {
+                converters.get(*index)?.scripted_instance_at_path(tail)
+            }
+            _ => None,
+        }
+    }
+
+    pub(crate) fn scripted_global_id_at_path(&self, path: &[usize]) -> Option<u32> {
+        match (self, path) {
+            (Self::Scripted { global_id, .. }, []) => Some(*global_id),
+            (Self::Group(converters), [index, tail @ ..]) => {
+                converters.get(*index)?.scripted_global_id_at_path(tail)
+            }
+            _ => None,
+        }
+    }
+
     /// A cloned converter otherwise retains the live script table through its
     /// shared handle. Isolated evaluators cannot snapshot arbitrary script
     /// state, so detach it and retain the existing cold/pass-through behavior.
     pub(crate) fn detach_scripted_instance(&mut self) {
         match self {
-            Self::Scripted { instance, .. } => *instance = None,
+            Self::Scripted { instance, .. } => {
+                *instance = None;
+            }
             Self::Group(converters) => {
                 for converter in converters {
                     converter.detach_scripted_instance();
@@ -917,6 +1258,13 @@ impl RuntimeDataBindGraphConverter {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeDataBindGraphConverterOutputKind {
+    Input,
+    Concrete,
+    Deferred,
+}
+
 fn runtime_data_bind_graph_operation_view_model_value(
     operation_value: f32,
     retained_operation_value: Option<&RuntimeViewModelCell>,
@@ -992,18 +1340,6 @@ pub(crate) fn runtime_data_bind_graph_converter_contains_formula(
     }
 }
 
-fn runtime_data_bind_graph_converter_contains_interpolator(
-    converter: &RuntimeDataBindGraphConverter,
-) -> bool {
-    match converter {
-        RuntimeDataBindGraphConverter::Interpolator { .. } => true,
-        RuntimeDataBindGraphConverter::Group(converters) => converters
-            .iter()
-            .any(runtime_data_bind_graph_converter_contains_interpolator),
-        _ => false,
-    }
-}
-
 pub(crate) fn runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source(
     converter: &RuntimeDataBindGraphConverter,
 ) -> bool {
@@ -1017,42 +1353,6 @@ pub(crate) fn runtime_data_bind_graph_converter_accepts_symbol_list_index_number
             .is_some_and(runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source),
         _ => false,
     }
-}
-
-fn runtime_data_bind_graph_converter_preserves_symbol_list_index_source_on_number_target_apply(
-    converter: &RuntimeDataBindGraphConverter,
-) -> bool {
-    matches!(
-        converter,
-        RuntimeDataBindGraphConverter::ToNumber | RuntimeDataBindGraphConverter::Formula { .. }
-    ) || (matches!(converter, RuntimeDataBindGraphConverter::Group(_))
-        && runtime_data_bind_graph_converter_accepts_symbol_list_index_number_source(converter))
-}
-
-fn runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply(
-    converter: &RuntimeDataBindGraphConverter,
-) -> bool {
-    matches!(
-        converter,
-        RuntimeDataBindGraphConverter::ToNumber | RuntimeDataBindGraphConverter::Formula { .. }
-    ) || matches!(
-        converter,
-        RuntimeDataBindGraphConverter::Group(converters)
-            if runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(converters)
-                || runtime_data_bind_graph_group_formula_operation_accepts_non_number_source(converters)
-    )
-}
-
-fn runtime_data_bind_graph_converter_preserves_trigger_source_on_number_target_apply(
-    converter: &RuntimeDataBindGraphConverter,
-) -> bool {
-    matches!(converter, RuntimeDataBindGraphConverter::Formula { .. })
-        || matches!(
-            converter,
-            RuntimeDataBindGraphConverter::Group(converters)
-                if runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(converters)
-                    || runtime_data_bind_graph_group_formula_operation_accepts_non_number_source(converters)
-        )
 }
 
 pub(crate) fn runtime_data_bind_graph_group_operation_formula_accepts_non_number_source(
@@ -1448,23 +1748,6 @@ fn runtime_data_bind_graph_interpolator_factor(
     factor
 }
 
-fn runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply(
-    converter: &RuntimeDataBindGraphConverter,
-) -> bool {
-    match converter {
-        RuntimeDataBindGraphConverter::StringTrim { .. }
-        | RuntimeDataBindGraphConverter::StringRemoveZeros
-        | RuntimeDataBindGraphConverter::StringPad { .. } => true,
-        RuntimeDataBindGraphConverter::Group(converters) => {
-            !converters.is_empty()
-                && converters.iter().all(
-                    runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply,
-                )
-        }
-        _ => false,
-    }
-}
-
 pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path(
     converter: &mut RuntimeDataBindGraphConverter,
     path: &[u32],
@@ -1642,6 +1925,36 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for
     context: &RuntimeOwnedViewModelInstance,
     context_chain: &[&[usize]],
 ) -> bool {
+    let mut changed =
+        runtime_data_bind_graph_refresh_own_operation_view_model_converter_for_owned_context(
+            converter,
+            context,
+            context_chain,
+        );
+    if let RuntimeDataBindGraphConverter::Group(converters) = converter {
+        for converter in converters {
+            changed |=
+                runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
+                    converter,
+                    context,
+                    context_chain,
+                );
+        }
+    }
+    changed
+}
+
+/// Bind only this concrete converter occurrence's own operand state.
+///
+/// `DataConverterGroup::bindFromContext` visits the group base first, then
+/// each child in authored order. Keeping this operation non-recursive lets a
+/// caller interleave a child's `ScriptedDataConverter::reinit` before binding
+/// the next child, exactly like pinned C++.
+pub(crate) fn runtime_data_bind_graph_refresh_own_operation_view_model_converter_for_owned_context(
+    converter: &mut RuntimeDataBindGraphConverter,
+    context: &RuntimeOwnedViewModelInstance,
+    context_chain: &[&[usize]],
+) -> bool {
     match converter {
         RuntimeDataBindGraphConverter::OperationViewModel {
             operation_value,
@@ -1692,16 +2005,6 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for
             resolved_values.clear();
             changed
         }
-        RuntimeDataBindGraphConverter::Group(converters) => {
-            let mut changed = false;
-            for converter in converters {
-                changed |=
-                    runtime_data_bind_graph_refresh_operation_view_model_converter_for_owned_context(
-                        converter, context, context_chain,
-                    );
-            }
-            changed
-        }
         _ => false,
     }
 }
@@ -1712,6 +2015,26 @@ pub(crate) fn runtime_data_bind_graph_refresh_operation_view_model_converter_for
 /// (`data_converter_operation_viewmodel.cpp:48-59`); callers register the
 /// returned cells on that bind's existing sink.
 pub(crate) fn runtime_data_bind_graph_bind_owned_converter_operands_for_data_context(
+    converter: &mut RuntimeDataBindGraphConverter,
+    data_context: &RuntimeOwnedDataContext,
+) -> bool {
+    let mut changed = runtime_data_bind_graph_bind_own_converter_operands_for_data_context(
+        converter,
+        data_context,
+    );
+    if let RuntimeDataBindGraphConverter::Group(converters) = converter {
+        for converter in converters {
+            changed |= runtime_data_bind_graph_bind_owned_converter_operands_for_data_context(
+                converter,
+                data_context,
+            );
+        }
+    }
+    changed
+}
+
+/// DataContext-scoped companion to the non-recursive owned-context helper.
+pub(crate) fn runtime_data_bind_graph_bind_own_converter_operands_for_data_context(
     converter: &mut RuntimeDataBindGraphConverter,
     data_context: &RuntimeOwnedDataContext,
 ) -> bool {
@@ -1762,16 +2085,6 @@ pub(crate) fn runtime_data_bind_graph_bind_owned_converter_operands_for_data_con
             retained_resolved_values.clone_from(&retained);
             *retained_values_bound = true;
             resolved_values.clear();
-            changed
-        }
-        RuntimeDataBindGraphConverter::Group(converters) => {
-            let mut changed = false;
-            for converter in converters {
-                changed |= runtime_data_bind_graph_bind_owned_converter_operands_for_data_context(
-                    converter,
-                    data_context,
-                );
-            }
             changed
         }
         _ => false,
@@ -1934,33 +2247,6 @@ fn runtime_owned_view_model_property_path_from_source_path(
         .collect()
 }
 
-fn runtime_data_bind_graph_scripted_convert(
-    instance: &RuntimeScriptInstanceHandle,
-    method: ScriptDataConverterMethod,
-    value: &RuntimeDataBindGraphValue,
-) -> Option<RuntimeDataBindGraphValue> {
-    let value = match value {
-        RuntimeDataBindGraphValue::Number(value) => ScriptValue::Number(f64::from(*value)),
-        RuntimeDataBindGraphValue::Boolean(value) => ScriptValue::Bool(*value),
-        RuntimeDataBindGraphValue::String(value) => {
-            ScriptValue::String(String::from_utf8_lossy(value).into_owned())
-        }
-        RuntimeDataBindGraphValue::Color(value) => ScriptValue::Color(*value),
-        _ => return None,
-    };
-    let converted = instance
-        .borrow_mut()
-        .call_data_converter(method, value)
-        .ok()?;
-    match converted {
-        ScriptValue::Number(value) => Some(RuntimeDataBindGraphValue::Number(value as f32)),
-        ScriptValue::Bool(value) => Some(RuntimeDataBindGraphValue::Boolean(value)),
-        ScriptValue::String(value) => Some(RuntimeDataBindGraphValue::String(value.into_bytes())),
-        ScriptValue::Color(value) => Some(RuntimeDataBindGraphValue::Color(value)),
-        _ => None,
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum RuntimeProjectDataBridgeError {
     ArtboardHasNoProjectRepresentation,
@@ -1978,6 +2264,9 @@ fn runtime_data_bind_graph_value_to_project(
     value: &RuntimeDataBindGraphValue,
 ) -> Result<ProjectDataValue, RuntimeProjectDataBridgeError> {
     match value {
+        RuntimeDataBindGraphValue::Untyped => {
+            Err(RuntimeProjectDataBridgeError::ObjectHasNoRiveRepresentation)
+        }
         RuntimeDataBindGraphValue::Number(value) => Ok(ProjectDataValue::Number(f64::from(*value))),
         RuntimeDataBindGraphValue::Boolean(value) => Ok(ProjectDataValue::Boolean(*value)),
         RuntimeDataBindGraphValue::String(value) => Ok(ProjectDataValue::String(
@@ -1985,6 +2274,7 @@ fn runtime_data_bind_graph_value_to_project(
         )),
         RuntimeDataBindGraphValue::Color(value) => Ok(ProjectDataValue::Color(*value)),
         RuntimeDataBindGraphValue::Enum(value) => Ok(ProjectDataValue::Enum(*value)),
+        RuntimeDataBindGraphValue::Integer(value) => Ok(ProjectDataValue::ListIndex(*value)),
         RuntimeDataBindGraphValue::SymbolListIndex(value) => {
             Ok(ProjectDataValue::ListIndex(*value))
         }
@@ -2284,20 +2574,22 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
 ) -> Option<RuntimeDataBindGraphValue> {
     match (converter, value) {
         (RuntimeDataBindGraphConverter::PassThrough, value) => Some(value.clone()),
-        (RuntimeDataBindGraphConverter::Scripted { instance: None, .. }, value) => {
-            Some(value.clone())
-        }
         (
             RuntimeDataBindGraphConverter::Scripted {
-                instance: Some(instance),
+                serialized_implemented_methods,
+                instance,
                 ..
             },
             value,
-        ) => runtime_data_bind_graph_scripted_convert(
-            instance,
-            ScriptDataConverterMethod::Convert,
-            value,
-        ),
+        ) => crate::scripted_data_converter::RuntimeScriptedDataConverterState::default()
+            .apply_conversion(
+                instance.as_ref(),
+                *serialized_implemented_methods,
+                ScriptDataConverterMethod::Convert,
+                value,
+            )
+            .ok()
+            .flatten(),
         (
             RuntimeDataBindGraphConverter::Project {
                 program,
@@ -2322,13 +2614,9 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             RuntimeDataBindGraphValue::Boolean(value),
         ) => Some(RuntimeDataBindGraphValue::Boolean(!value)),
         (RuntimeDataBindGraphConverter::BooleanNegate, _) => None,
-        (
-            RuntimeDataBindGraphConverter::TriggerIncrement,
-            RuntimeDataBindGraphValue::Trigger(value),
-        ) => Some(RuntimeDataBindGraphValue::Trigger(u64::from(
-            (*value as u32).wrapping_add(1),
-        ))),
-        (RuntimeDataBindGraphConverter::TriggerIncrement, _) => None,
+        (RuntimeDataBindGraphConverter::TriggerIncrement, value) => {
+            crate::data_converter_trigger::convert(value)
+        }
         (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Number(value)) => {
             Some(RuntimeDataBindGraphValue::Number(*value))
         }
@@ -2624,20 +2912,22 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
 ) -> Option<RuntimeDataBindGraphValue> {
     match (converter, value) {
         (RuntimeDataBindGraphConverter::PassThrough, value) => Some(value.clone()),
-        (RuntimeDataBindGraphConverter::Scripted { instance: None, .. }, value) => {
-            Some(value.clone())
-        }
         (
             RuntimeDataBindGraphConverter::Scripted {
-                instance: Some(instance),
+                serialized_implemented_methods,
+                instance,
                 ..
             },
             value,
-        ) => runtime_data_bind_graph_scripted_convert(
-            instance,
-            ScriptDataConverterMethod::ReverseConvert,
-            value,
-        ),
+        ) => crate::scripted_data_converter::RuntimeScriptedDataConverterState::default()
+            .apply_conversion(
+                instance.as_ref(),
+                *serialized_implemented_methods,
+                ScriptDataConverterMethod::ReverseConvert,
+                value,
+            )
+            .ok()
+            .flatten(),
         (
             RuntimeDataBindGraphConverter::Project {
                 program,
@@ -2662,11 +2952,9 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
             RuntimeDataBindGraphValue::Boolean(value),
         ) => Some(RuntimeDataBindGraphValue::Boolean(!value)),
         (RuntimeDataBindGraphConverter::BooleanNegate, _) => None,
-        (
-            RuntimeDataBindGraphConverter::TriggerIncrement,
-            RuntimeDataBindGraphValue::Trigger(value),
-        ) => Some(RuntimeDataBindGraphValue::Trigger(*value)),
-        (RuntimeDataBindGraphConverter::TriggerIncrement, _) => None,
+        (RuntimeDataBindGraphConverter::TriggerIncrement, value) => {
+            crate::data_converter_trigger::reverse_convert(value)
+        }
         (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Number(value)) => {
             Some(RuntimeDataBindGraphValue::Number(*value))
         }
@@ -2693,13 +2981,12 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
             RuntimeDataBindGraphValue::String(value),
         ) => Some(RuntimeDataBindGraphValue::String(value.clone())),
         (RuntimeDataBindGraphConverter::StringPad { .. }, value) => Some(value.clone()),
-        (RuntimeDataBindGraphConverter::ListToLength, RuntimeDataBindGraphValue::Number(value)) => {
-            Some(RuntimeDataBindGraphValue::Number(*value))
-        }
-        (RuntimeDataBindGraphConverter::ListToLength, RuntimeDataBindGraphValue::ListLength(_)) => {
-            Some(RuntimeDataBindGraphValue::Number(0.0))
-        }
-        (RuntimeDataBindGraphConverter::ListToLength, _) => None,
+        // `DataConverterListToLength` overrides only `convert`; reverse flow
+        // inherits `DataConverter::reverseConvert` and returns the input
+        // object unchanged for every runtime type
+        // (`data_converter.hpp:19-22`;
+        // `data_converter_list_to_length.cpp:8-23`).
+        (RuntimeDataBindGraphConverter::ListToLength, value) => Some(value.clone()),
         (
             RuntimeDataBindGraphConverter::OperationValue {
                 operation_type,
@@ -2859,7 +3146,6 @@ fn runtime_data_bind_graph_convert_formula_with_state(
 ) -> f32 {
     let mut result = input;
     let mut stack = Vec::new();
-    let mut current_random = 0;
     for token in tokens {
         match token {
             RuntimeDataBindGraphFormulaToken::Input => stack.push(input),
@@ -2881,9 +3167,12 @@ fn runtime_data_bind_graph_convert_formula_with_state(
                 random_mode,
             } => {
                 let random_value = if *function_type == 16 {
-                    let value = state.random_value(*random_mode, current_random, random_source);
-                    current_random += 1;
-                    Some(value)
+                    // Pinned `applyFunction` creates `currentRandom = 0`
+                    // inside each call. Cached random modes therefore reuse
+                    // slot zero across every random() token in one Formula;
+                    // Always mode still asks the provider on every call
+                    // (`data_converter_formula.cpp:239-252,385-389`).
+                    Some(state.random_value(*random_mode, 0, random_source))
                 } else {
                     None
                 };
@@ -3520,19 +3809,16 @@ fn runtime_data_bind_graph_converter_for_object<'a>(
         "DataConverterGroup" => RuntimeDataBindGraphConverter::Group(
             file.data_converter_group_items_for_object(converter)
                 .into_iter()
-                .map(|item| {
-                    item.converter
-                        .and_then(|converter| {
-                            runtime_data_bind_graph_converter_for_object(
-                                file,
-                                converter,
-                                visiting,
-                                true,
-                                data_bind_flags,
-                                cache,
-                            )
-                        })
-                        .unwrap_or(RuntimeDataBindGraphConverter::Unsupported)
+                .filter_map(|item| {
+                    let converter = item.converter?;
+                    runtime_data_bind_graph_converter_for_object(
+                        file,
+                        converter,
+                        visiting,
+                        true,
+                        data_bind_flags,
+                        cache,
+                    )
                 })
                 .collect(),
         ),
@@ -3552,6 +3838,22 @@ fn runtime_data_bind_graph_converter_for_object<'a>(
                 }
                 Ok(None) => RuntimeDataBindGraphConverter::Scripted {
                     global_id: converter.id,
+                    serialized_implemented_methods: file
+                        .resolved_file_asset_for_referencer(converter)
+                        .filter(|asset| {
+                            asset.type_name == "ScriptAsset"
+                                && !asset.bool_property("isModule").unwrap_or(false)
+                        })
+                        .map(|asset| {
+                            asset
+                                .uint_property("serializedImplementedMethods")
+                                .and_then(|value| u32::try_from(value).ok())
+                                .unwrap_or(
+                                    crate::script_asset::RuntimeScriptImplementedMethods::METHOD_MASK,
+                                )
+                        })
+                        .unwrap_or(0),
+                    definition: runtime_scripted_data_converter_input_definitions(file, converter),
                     instance: None,
                 },
                 // A payload carrying the reserved Project envelope prefix may not
@@ -3631,6 +3933,106 @@ fn runtime_data_bind_graph_converter_for_object<'a>(
 
     visiting.remove(&converter.id);
     Some(graph_converter)
+}
+
+pub(crate) fn runtime_scripted_data_converter_input_definitions<'a>(
+    file: &'a RuntimeFile,
+    scripted_converter: &RuntimeObject,
+) -> crate::scripted_data_converter::RuntimeScriptedDataConverterDefinition {
+    let mut inputs = file
+        .scripted_inputs_for_object(scripted_converter)
+        .into_iter()
+        .filter_map(|input| {
+            let kind = match input.type_name {
+                "ScriptInputBoolean" => crate::ScriptListenerInputKind::Boolean,
+                "ScriptInputNumber" => crate::ScriptListenerInputKind::Number,
+                "ScriptInputColor" => crate::ScriptListenerInputKind::Color,
+                "ScriptInputString" => crate::ScriptListenerInputKind::String,
+                "ScriptInputTrigger" => crate::ScriptListenerInputKind::Trigger,
+                "ScriptInputArtboard" => crate::ScriptListenerInputKind::Artboard,
+                "ScriptInputViewModelProperty" => crate::ScriptListenerInputKind::ViewModelProperty,
+                _ => return None,
+            };
+            Some(
+                crate::scripted_data_converter::RuntimeScriptedDataConverterInputDefinition {
+                    input_global_id: input.id,
+                    kind,
+                    properties: crate::scripted_object::RuntimeScriptInputProperties::from_object(
+                        file, input, kind,
+                    ),
+                    data_binds: Vec::new(),
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let mut data_bind_order = Vec::new();
+    for data_bind in (0..file.object_count())
+        .filter_map(|id| file.object(id))
+        .filter(|data_bind| {
+            nuxie_schema::definition_by_name(data_bind.type_name)
+                .is_some_and(|definition| definition.is_a("DataBind"))
+        })
+    {
+        let Some(target) = file.data_bind_target_for_object(data_bind) else {
+            continue;
+        };
+        let Some(input_index) = inputs
+            .iter()
+            .position(|input| input.input_global_id == target.id)
+        else {
+            continue;
+        };
+        let kind = inputs[input_index].kind;
+        let property_key = data_bind
+            .uint_property("propertyKey")
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(u32::MAX);
+        let target_property =
+            crate::scripted_object::RuntimeScriptInputProperties::property_for_key(
+                kind,
+                property_key,
+            );
+        let flags = data_bind.uint_property("flags").unwrap_or(0);
+        let converter_id = data_bind
+            .uint_property("converterId")
+            .unwrap_or(u64::from(u32::MAX)) as u32;
+        let binding = if data_bind.type_name != "DataBindContext" {
+            crate::scripted_data_converter::RuntimeScriptedDataConverterDataBindDefinition::Inert {
+                authored_order: data_bind.id,
+                property_key,
+                target_property,
+                flags,
+                converter_id,
+            }
+        } else {
+            crate::scripted_data_converter::RuntimeScriptedDataConverterDataBindDefinition::Context {
+                authored_order: data_bind.id,
+                // Retain the authored path id. The live DataContext
+                // resolver performs C++'s one manifest expansion.
+                source_path: file.data_bind_context_source_path_ids_for_object(data_bind),
+                name_based: file
+                    .data_bind_is_name_based_for_object(data_bind)
+                    .unwrap_or(false),
+                property_key,
+                target_property,
+                flags,
+                converter_id,
+                // `DataConverter::copy` clones this owned DataBind through
+                // generated DataBindBase/DataBindContextBase copy. Those
+                // copy serialized `converterId`, but not the resolved
+                // `DataBind::m_dataConverter` pointer.
+            }
+        };
+        let data_bind_index = inputs[input_index].data_binds.len();
+        inputs[input_index].data_binds.push(binding);
+        data_bind_order.push((input_index, data_bind_index));
+    }
+
+    crate::scripted_data_converter::RuntimeScriptedDataConverterDefinition {
+        inputs,
+        data_bind_order,
+    }
 }
 
 fn runtime_data_bind_graph_formula_converter(
@@ -3750,6 +4152,7 @@ fn runtime_data_bind_graph_default_operation_view_model_operand(
 #[derive(Debug, Clone)]
 pub(crate) enum RuntimeDataBindGraphConverterState {
     None,
+    Scripted(crate::scripted_data_converter::RuntimeScriptedDataConverterState),
     Formula(RuntimeDataBindGraphFormulaState),
     Interpolator(RuntimeDataBindGraphInterpolatorState),
     Project {
@@ -3762,6 +4165,11 @@ pub(crate) enum RuntimeDataBindGraphConverterState {
 impl RuntimeDataBindGraphConverterState {
     pub(crate) fn for_converter(converter: Option<&RuntimeDataBindGraphConverter>) -> Self {
         match converter {
+            Some(RuntimeDataBindGraphConverter::Scripted { definition, .. }) => Self::Scripted(
+                crate::scripted_data_converter::RuntimeScriptedDataConverterState::from_definition(
+                    definition,
+                ),
+            ),
             Some(RuntimeDataBindGraphConverter::Formula { .. }) => {
                 Self::Formula(RuntimeDataBindGraphFormulaState::default())
             }
@@ -3782,6 +4190,468 @@ impl RuntimeDataBindGraphConverterState {
         }
     }
 
+    /// Attach every nested scripted converter occurrence to the one outer
+    /// DataBind that owns this converter tree.
+    ///
+    /// Pinned C++ stores that exact `DataBind*` on each converter clone
+    /// before any converter-owned DataBind is bound. Group children inherit
+    /// the same pointer (`data_converter.cpp:25-29`;
+    /// `data_converter_group.cpp:63-75`). Rust keeps the parent endpoint
+    /// separately to avoid a self-referential owner, so construction,
+    /// converter-state reset, and graph clone/remount must all reinstall it.
+    fn set_scripted_converter_parent_wake(
+        &mut self,
+        wake: crate::retained_data_bind::RuntimeConverterParentWake,
+    ) {
+        match self {
+            Self::Scripted(state) => state.set_container_wake(Some(wake)),
+            Self::Group(states) => {
+                for state in states {
+                    state.set_scripted_converter_parent_wake(wake.clone());
+                }
+            }
+            Self::None | Self::Formula(_) | Self::Interpolator(_) | Self::Project { .. } => {}
+        }
+    }
+
+    fn unbind_scripted_converter_sources(&mut self) {
+        match self {
+            Self::Scripted(state) => state.unbind_sources(),
+            Self::Group(states) => {
+                for state in states {
+                    state.unbind_scripted_converter_sources();
+                }
+            }
+            Self::None | Self::Formula(_) | Self::Interpolator(_) | Self::Project { .. } => {}
+        }
+    }
+
+    /// A fresh Rust state-machine snapshot cannot copy a Lua table. Reset only
+    /// scripted occurrence state while preserving unrelated Formula,
+    /// Interpolator, and Project converter state in the snapshot.
+    fn reset_scripted_occurrences_for_fresh_clone(
+        &mut self,
+        converter: &RuntimeDataBindGraphConverter,
+    ) {
+        match (self, converter) {
+            (Self::Scripted(state), RuntimeDataBindGraphConverter::Scripted { definition, .. }) => {
+                *state =
+                    crate::scripted_data_converter::RuntimeScriptedDataConverterState::from_definition(
+                        definition,
+                    );
+            }
+            (Self::Group(states), RuntimeDataBindGraphConverter::Group(converters))
+                if states.len() == converters.len() =>
+            {
+                for (state, converter) in states.iter_mut().zip(converters) {
+                    state.reset_scripted_occurrences_for_fresh_clone(converter);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn scripted_converter_input_snapshots_at_path(
+        &self,
+        converter: &RuntimeDataBindGraphConverter,
+        path: &[usize],
+    ) -> Option<Vec<crate::ScriptListenerInputSnapshot>> {
+        match (converter, self, path) {
+            (RuntimeDataBindGraphConverter::Scripted { .. }, Self::Scripted(state), []) => {
+                Some(state.input_snapshots())
+            }
+            (
+                RuntimeDataBindGraphConverter::Group(converters),
+                Self::Group(states),
+                [index, nested_path @ ..],
+            ) if converters.len() == states.len() => states
+                .get(*index)?
+                .scripted_converter_input_snapshots_at_path(converters.get(*index)?, nested_path),
+            _ => None,
+        }
+    }
+
+    fn collect_scripted_converter_occurrence_snapshots(
+        &self,
+        converter: &RuntimeDataBindGraphConverter,
+        parent_data_bind_index: usize,
+        converter_path: &mut Vec<usize>,
+        output: &mut Vec<
+            crate::scripted_data_converter::RuntimeScriptedDataConverterOccurrenceSnapshot,
+        >,
+    ) {
+        match (converter, self) {
+            (
+                RuntimeDataBindGraphConverter::Scripted {
+                    global_id,
+                    serialized_implemented_methods,
+                    instance,
+                    ..
+                },
+                Self::Scripted(state),
+            ) => output.push(
+                crate::scripted_data_converter::RuntimeScriptedDataConverterOccurrenceSnapshot {
+                    parent_data_bind_index,
+                    converter_path: converter_path.clone(),
+                    converter_global_id: *global_id,
+                    serialized_implemented_methods: *serialized_implemented_methods,
+                    attached: instance.is_some(),
+                    inputs: state.input_snapshots(),
+                    data_binds: state.data_bind_snapshots(),
+                },
+            ),
+            (RuntimeDataBindGraphConverter::Group(converters), Self::Group(states))
+                if converters.len() == states.len() =>
+            {
+                for (index, (converter, state)) in converters.iter().zip(states).enumerate() {
+                    converter_path.push(index);
+                    state.collect_scripted_converter_occurrence_snapshots(
+                        converter,
+                        parent_data_bind_index,
+                        converter_path,
+                        output,
+                    );
+                    converter_path.pop();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn bind_scripted_converter_sources_at_path(
+        &mut self,
+        converter: &mut RuntimeDataBindGraphConverter,
+        converter_path: &[usize],
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        explicit_rebind: bool,
+    ) -> bool {
+        match (converter, self, converter_path) {
+            (
+                RuntimeDataBindGraphConverter::Scripted { definition, .. },
+                Self::Scripted(state),
+                [],
+            ) => {
+                state.bind_sources(&mut definition.inputs, file, context, explicit_rebind);
+                true
+            }
+            (
+                RuntimeDataBindGraphConverter::Group(converters),
+                Self::Group(states),
+                [index, nested_path @ ..],
+            ) if converters.len() == states.len() => states.get_mut(*index).is_some_and(|state| {
+                state.bind_scripted_converter_sources_at_path(
+                    &mut converters[*index],
+                    nested_path,
+                    file,
+                    context,
+                    explicit_rebind,
+                )
+            }),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn bind_scripted_converter_sources_from_data_context_at_path(
+        &mut self,
+        converter: &mut RuntimeDataBindGraphConverter,
+        converter_path: &[usize],
+        file: &RuntimeFile,
+        data_context: &RuntimeOwnedDataContext,
+        explicit_rebind: bool,
+    ) -> bool {
+        match (converter, self, converter_path) {
+            (
+                RuntimeDataBindGraphConverter::Scripted { definition, .. },
+                Self::Scripted(state),
+                [],
+            ) => {
+                state.bind_sources_from_data_context(
+                    &mut definition.inputs,
+                    file,
+                    data_context,
+                    explicit_rebind,
+                );
+                true
+            }
+            (
+                RuntimeDataBindGraphConverter::Group(converters),
+                Self::Group(states),
+                [index, nested_path @ ..],
+            ) if converters.len() == states.len() => states.get_mut(*index).is_some_and(|state| {
+                state.bind_scripted_converter_sources_from_data_context_at_path(
+                    &mut converters[*index],
+                    nested_path,
+                    file,
+                    data_context,
+                    explicit_rebind,
+                )
+            }),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn bind_scripted_converter_input_source_at_path(
+        &mut self,
+        converter: &mut RuntimeDataBindGraphConverter,
+        converter_path: &[usize],
+        input_index: usize,
+        data_bind_index: usize,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        match (converter, self, converter_path) {
+            (
+                RuntimeDataBindGraphConverter::Scripted { definition, .. },
+                Self::Scripted(state),
+                [],
+            ) => state.bind_input_source(
+                &mut definition.inputs,
+                input_index,
+                data_bind_index,
+                file,
+                context,
+            ),
+            (
+                RuntimeDataBindGraphConverter::Group(converters),
+                Self::Group(states),
+                [index, nested_path @ ..],
+            ) if converters.len() == states.len() => states.get_mut(*index).is_some_and(|state| {
+                state.bind_scripted_converter_input_source_at_path(
+                    &mut converters[*index],
+                    nested_path,
+                    input_index,
+                    data_bind_index,
+                    file,
+                    context,
+                )
+            }),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn rebind_scripted_converter_final_inputs_at_path(
+        &mut self,
+        converter: &mut RuntimeDataBindGraphConverter,
+        converter_path: &[usize],
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        match (converter, self, converter_path) {
+            (
+                RuntimeDataBindGraphConverter::Scripted { definition, .. },
+                Self::Scripted(state),
+                [],
+            ) => {
+                let mut rebound = false;
+                for input_index in 0..definition.inputs.len() {
+                    let Some(data_bind_index) = definition.inputs[input_index]
+                        .data_binds
+                        .len()
+                        .checked_sub(1)
+                    else {
+                        continue;
+                    };
+                    rebound |= state.bind_input_source(
+                        &mut definition.inputs,
+                        input_index,
+                        data_bind_index,
+                        file,
+                        context,
+                    );
+                }
+                rebound
+            }
+            (
+                RuntimeDataBindGraphConverter::Group(converters),
+                Self::Group(states),
+                [index, nested_path @ ..],
+            ) if converters.len() == states.len() => states.get_mut(*index).is_some_and(|state| {
+                state.rebind_scripted_converter_final_inputs_at_path(
+                    &mut converters[*index],
+                    nested_path,
+                    file,
+                    context,
+                )
+            }),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn bind_scripted_converter_input_source_from_data_context_at_path(
+        &mut self,
+        converter: &mut RuntimeDataBindGraphConverter,
+        converter_path: &[usize],
+        input_index: usize,
+        data_bind_index: usize,
+        file: &RuntimeFile,
+        data_context: &RuntimeOwnedDataContext,
+    ) -> bool {
+        match (converter, self, converter_path) {
+            (
+                RuntimeDataBindGraphConverter::Scripted { definition, .. },
+                Self::Scripted(state),
+                [],
+            ) => state.bind_input_source_from_data_context(
+                &mut definition.inputs,
+                input_index,
+                data_bind_index,
+                file,
+                data_context,
+            ),
+            (
+                RuntimeDataBindGraphConverter::Group(converters),
+                Self::Group(states),
+                [index, nested_path @ ..],
+            ) if converters.len() == states.len() => states.get_mut(*index).is_some_and(|state| {
+                state.bind_scripted_converter_input_source_from_data_context_at_path(
+                    &mut converters[*index],
+                    nested_path,
+                    input_index,
+                    data_bind_index,
+                    file,
+                    data_context,
+                )
+            }),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn rebind_scripted_converter_final_inputs_from_data_context_at_path(
+        &mut self,
+        converter: &mut RuntimeDataBindGraphConverter,
+        converter_path: &[usize],
+        file: &RuntimeFile,
+        data_context: &RuntimeOwnedDataContext,
+    ) -> bool {
+        match (converter, self, converter_path) {
+            (
+                RuntimeDataBindGraphConverter::Scripted { definition, .. },
+                Self::Scripted(state),
+                [],
+            ) => {
+                let mut rebound = false;
+                for input_index in 0..definition.inputs.len() {
+                    let Some(data_bind_index) = definition.inputs[input_index]
+                        .data_binds
+                        .len()
+                        .checked_sub(1)
+                    else {
+                        continue;
+                    };
+                    rebound |= state.bind_input_source_from_data_context(
+                        &mut definition.inputs,
+                        input_index,
+                        data_bind_index,
+                        file,
+                        data_context,
+                    );
+                }
+                rebound
+            }
+            (
+                RuntimeDataBindGraphConverter::Group(converters),
+                Self::Group(states),
+                [index, nested_path @ ..],
+            ) if converters.len() == states.len() => states.get_mut(*index).is_some_and(|state| {
+                state.rebind_scripted_converter_final_inputs_from_data_context_at_path(
+                    &mut converters[*index],
+                    nested_path,
+                    file,
+                    data_context,
+                )
+            }),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn update_scripted_converter_inputs<F>(
+        &mut self,
+        converter: &mut RuntimeDataBindGraphConverter,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        apply: &mut F,
+    ) -> Result<(), ScriptError>
+    where
+        F: FnMut(
+            &RuntimeScriptInstanceHandle,
+            &ScriptCoreString,
+            crate::state_machine::RuntimeScriptedListenerBoundValue,
+        ) -> Result<(), ScriptError>,
+    {
+        match (converter, self) {
+            (
+                RuntimeDataBindGraphConverter::Scripted {
+                    definition,
+                    instance,
+                    ..
+                },
+                Self::Scripted(state),
+            ) => state.update_inputs(
+                &mut definition.inputs,
+                instance.as_ref(),
+                file,
+                context,
+                apply,
+            ),
+            (RuntimeDataBindGraphConverter::Group(converters), Self::Group(states))
+                if converters.len() == states.len() =>
+            {
+                for (converter, state) in converters.iter_mut().zip(states) {
+                    state.update_scripted_converter_inputs(converter, file, context, apply)?;
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    pub(crate) fn update_scripted_converter_inputs_from_data_context<F>(
+        &mut self,
+        converter: &mut RuntimeDataBindGraphConverter,
+        file: &RuntimeFile,
+        data_context: &RuntimeOwnedDataContext,
+        apply: &mut F,
+    ) -> Result<(), ScriptError>
+    where
+        F: FnMut(
+            &RuntimeScriptInstanceHandle,
+            &ScriptCoreString,
+            crate::state_machine::RuntimeScriptedListenerBoundValue,
+        ) -> Result<(), ScriptError>,
+    {
+        match (converter, self) {
+            (
+                RuntimeDataBindGraphConverter::Scripted {
+                    definition,
+                    instance,
+                    ..
+                },
+                Self::Scripted(state),
+            ) => state.update_inputs_from_data_context(
+                &mut definition.inputs,
+                instance.as_ref(),
+                file,
+                data_context,
+                apply,
+            ),
+            (RuntimeDataBindGraphConverter::Group(converters), Self::Group(states))
+                if converters.len() == states.len() =>
+            {
+                for (converter, state) in converters.iter_mut().zip(states) {
+                    state.update_scripted_converter_inputs_from_data_context(
+                        converter,
+                        file,
+                        data_context,
+                        apply,
+                    )?;
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
     pub(crate) fn convert_value(
         &mut self,
         converter: &RuntimeDataBindGraphConverter,
@@ -3798,6 +4668,22 @@ impl RuntimeDataBindGraphConverterState {
         formula_random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
     ) -> Option<RuntimeDataBindGraphValue> {
         match (converter, self) {
+            (
+                RuntimeDataBindGraphConverter::Scripted {
+                    serialized_implemented_methods,
+                    instance,
+                    ..
+                },
+                Self::Scripted(state),
+            ) => state
+                .apply_conversion(
+                    instance.as_ref(),
+                    *serialized_implemented_methods,
+                    ScriptDataConverterMethod::Convert,
+                    value,
+                )
+                .ok()
+                .flatten(),
             (RuntimeDataBindGraphConverter::Formula { tokens }, Self::Formula(state)) => {
                 runtime_data_bind_graph_convert_formula_value_with_state(
                     value,
@@ -3850,6 +4736,134 @@ impl RuntimeDataBindGraphConverterState {
         }
     }
 
+    /// Listener-owned ScriptInput bindings need the same converter state as
+    /// ordinary DataBinds, but must retain the scripting error category so a
+    /// resource-limit failure stays terminal while an ordinary protected-call
+    /// failure affects only that one authored bind.
+    pub(crate) fn convert_value_with_formula_randoms_for_scripted_listener(
+        &mut self,
+        converter: &RuntimeDataBindGraphConverter,
+        value: &RuntimeDataBindGraphValue,
+        formula_random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
+    ) -> Result<Option<RuntimeDataBindGraphValue>, ScriptError> {
+        match (converter, self) {
+            (
+                RuntimeDataBindGraphConverter::Scripted {
+                    serialized_implemented_methods,
+                    instance: Some(instance),
+                    ..
+                },
+                Self::Scripted(state),
+            ) => state.apply_conversion(
+                Some(instance),
+                *serialized_implemented_methods,
+                ScriptDataConverterMethod::Convert,
+                value,
+            ),
+            (
+                RuntimeDataBindGraphConverter::Scripted {
+                    serialized_implemented_methods,
+                    instance: None,
+                    ..
+                },
+                Self::Scripted(state),
+            ) => state.apply_conversion(
+                None,
+                *serialized_implemented_methods,
+                ScriptDataConverterMethod::Convert,
+                value,
+            ),
+            (RuntimeDataBindGraphConverter::Group(converters), Self::Group(states))
+                if converters.len() == states.len() =>
+            {
+                let mut value = value.clone();
+                for (converter, state) in converters.iter().zip(states) {
+                    let Some(converted) = state
+                        .convert_value_with_formula_randoms_for_scripted_listener(
+                            converter,
+                            &value,
+                            formula_random_source,
+                        )?
+                    else {
+                        return Ok(None);
+                    };
+                    value = converted;
+                }
+                Ok(Some(value))
+            }
+            (converter, state) => Ok(state.convert_value_with_formula_randoms(
+                converter,
+                value,
+                formula_random_source,
+            )),
+        }
+    }
+
+    /// Reverse-direction companion to
+    /// [`Self::convert_value_with_formula_randoms_for_scripted_listener`].
+    /// C++ reverses `DataConverterGroup` order and preserves the protected
+    /// scripted-call error category for each concrete converter occurrence
+    /// (`data_converter_group.cpp:27-42`;
+    /// `scripted_data_converter.cpp:157-165`).
+    pub(crate) fn reverse_convert_value_with_formula_randoms_for_scripted_listener(
+        &mut self,
+        converter: &RuntimeDataBindGraphConverter,
+        value: &RuntimeDataBindGraphValue,
+        formula_random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
+    ) -> Result<Option<RuntimeDataBindGraphValue>, ScriptError> {
+        match (converter, self) {
+            (
+                RuntimeDataBindGraphConverter::Scripted {
+                    serialized_implemented_methods,
+                    instance: Some(instance),
+                    ..
+                },
+                Self::Scripted(state),
+            ) => state.apply_conversion(
+                Some(instance),
+                *serialized_implemented_methods,
+                ScriptDataConverterMethod::ReverseConvert,
+                value,
+            ),
+            (
+                RuntimeDataBindGraphConverter::Scripted {
+                    serialized_implemented_methods,
+                    instance: None,
+                    ..
+                },
+                Self::Scripted(state),
+            ) => state.apply_conversion(
+                None,
+                *serialized_implemented_methods,
+                ScriptDataConverterMethod::ReverseConvert,
+                value,
+            ),
+            (RuntimeDataBindGraphConverter::Group(converters), Self::Group(states))
+                if converters.len() == states.len() =>
+            {
+                let mut value = value.clone();
+                for (converter, state) in converters.iter().zip(states).rev() {
+                    let Some(converted) = state
+                        .reverse_convert_value_with_formula_randoms_for_scripted_listener(
+                            converter,
+                            &value,
+                            formula_random_source,
+                        )?
+                    else {
+                        return Ok(None);
+                    };
+                    value = converted;
+                }
+                Ok(Some(value))
+            }
+            (converter, state) => Ok(state.reverse_convert_value_with_formula_randoms(
+                converter,
+                value,
+                formula_random_source,
+            )),
+        }
+    }
+
     pub(crate) fn reverse_convert_value(
         &mut self,
         converter: &RuntimeDataBindGraphConverter,
@@ -3870,6 +4884,22 @@ impl RuntimeDataBindGraphConverterState {
         formula_random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
     ) -> Option<RuntimeDataBindGraphValue> {
         match (converter, self) {
+            (
+                RuntimeDataBindGraphConverter::Scripted {
+                    serialized_implemented_methods,
+                    instance,
+                    ..
+                },
+                Self::Scripted(state),
+            ) => state
+                .apply_conversion(
+                    instance.as_ref(),
+                    *serialized_implemented_methods,
+                    ScriptDataConverterMethod::ReverseConvert,
+                    value,
+                )
+                .ok()
+                .flatten(),
             (RuntimeDataBindGraphConverter::Formula { tokens }, Self::Formula(state)) => {
                 runtime_data_bind_graph_convert_formula_value_with_state(
                     value,
@@ -3962,12 +4992,65 @@ impl RuntimeDataBindGraphConverterState {
         }
     }
 
+    /// Advance one complete converter occurrence, including authored
+    /// ScriptedDataConverter leaves.
+    ///
+    /// `DataConverterGroup::advance` walks children in item order and keeps
+    /// going after an ordinary protected-call failure. A typed resource
+    /// failure remains Rust's binding safety fence
+    /// (`data_converter_group.cpp:113-129`;
+    /// `scripted_data_converter.cpp:202-217`).
+    fn advance_converter_with_scripted(
+        &mut self,
+        converter: Option<&RuntimeDataBindGraphConverter>,
+        elapsed_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> Result<RuntimeDataBindGraphStatefulAdvance, ScriptError> {
+        match (converter, self) {
+            (
+                Some(RuntimeDataBindGraphConverter::Scripted {
+                    instance,
+                    serialized_implemented_methods,
+                    ..
+                }),
+                Self::Scripted(_),
+            ) => {
+                let needs_advance = crate::scripted_data_converter::advance(
+                    instance.as_ref(),
+                    *serialized_implemented_methods,
+                    elapsed_seconds,
+                    host,
+                )?;
+                Ok(RuntimeDataBindGraphStatefulAdvance {
+                    changed: needs_advance,
+                    keep_going: needs_advance,
+                })
+            }
+            (Some(RuntimeDataBindGraphConverter::Group(converters)), Self::Group(states))
+                if converters.len() == states.len() =>
+            {
+                let mut aggregate = RuntimeDataBindGraphStatefulAdvance::default();
+                for (converter, state) in converters.iter().zip(states) {
+                    let advance = state.advance_converter_with_scripted(
+                        Some(converter),
+                        elapsed_seconds,
+                        host,
+                    )?;
+                    aggregate.changed |= advance.changed;
+                    aggregate.keep_going |= advance.keep_going;
+                }
+                Ok(aggregate)
+            }
+            (converter, state) => Ok(state.advance_converter(converter, elapsed_seconds)),
+        }
+    }
+
     pub(crate) fn is_initialized_stateful(&self) -> bool {
         match self {
             Self::Interpolator(state) => state.is_initialized(),
             Self::Project { state, .. } => state.is_interpolating(),
             Self::Group(states) => states.iter().any(Self::is_initialized_stateful),
-            Self::Formula(_) | Self::None => false,
+            Self::Formula(_) | Self::Scripted(_) | Self::None => false,
         }
     }
 
@@ -3979,7 +5062,7 @@ impl RuntimeDataBindGraphConverterState {
                     state.reset_formula_randoms();
                 }
             }
-            Self::Interpolator(_) | Self::Project { .. } | Self::None => {}
+            Self::Interpolator(_) | Self::Project { .. } | Self::Scripted(_) | Self::None => {}
         }
     }
 
@@ -4012,9 +5095,36 @@ impl RuntimeDataBindGraphConverterState {
             _ => {}
         }
     }
+
+    /// Mirror `DataConverter::reset` when a `DataBindContext` resolves to a
+    /// different retained source occurrence.
+    ///
+    /// Pinned C++ resets interpolators (including those nested in groups) but
+    /// the base converter and formula converter have no reset implementation.
+    /// Project converters are Rust's compiled equivalent of a scripted
+    /// converter lifetime and therefore restart with the newly bound source.
+    pub(crate) fn reset_for_data_bind_rebind(&mut self, converter: &RuntimeDataBindGraphConverter) {
+        match (converter, self) {
+            (RuntimeDataBindGraphConverter::Interpolator { .. }, Self::Interpolator(state)) => {
+                *state = RuntimeDataBindGraphInterpolatorState::new()
+            }
+            (RuntimeDataBindGraphConverter::Project { .. }, Self::Project { state, now_ms }) => {
+                *state = ProjectDataConverterState::default();
+                *now_ms = 0.0;
+            }
+            (RuntimeDataBindGraphConverter::Group(converters), Self::Group(states))
+                if converters.len() == states.len() =>
+            {
+                for (converter, state) in converters.iter().zip(states) {
+                    state.reset_for_data_bind_rebind(converter);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct RuntimeDataBindGraphStatefulAdvance {
     pub(crate) changed: bool,
     pub(crate) keep_going: bool,
@@ -4023,7 +5133,6 @@ pub(crate) struct RuntimeDataBindGraphStatefulAdvance {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum RuntimeDataBindGraphApplyPhase {
     BeforeStatefulAdvance,
-    AfterStatefulAdvance,
     UpdateDataBindsFalse,
     Immediate,
     PublicUpdate,
@@ -4036,33 +5145,104 @@ pub(crate) struct RuntimeDataBindGraphTargetNode {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum RuntimeDataBindGraphTarget {
-    Number { global_id: u32 },
-    Integer { global_id: u32 },
-    Boolean { global_id: u32 },
-    String { global_id: u32 },
-    Color { global_id: u32 },
-    Enum { global_id: u32 },
-    Asset { global_id: u32 },
-    Artboard { global_id: u32 },
-    List { global_id: u32 },
-    Trigger { global_id: u32 },
-    ViewModel { global_id: u32 },
-    TransitionDuration { transition_global_id: u32 },
-    KeyFrameNumber { global_id: u32 },
-    KeyFrameColor { global_id: u32 },
-    KeyFrameBoolean { global_id: u32 },
-    KeyFrameString { global_id: u32 },
+    /// The authored DataBind occurrence exists and owns its source/converter,
+    /// but its state-machine target has no concrete Rust value adapter. Pinned
+    /// C++ still clones and schedules that DataBind; applying its unsupported
+    /// property is inert (`state_machine_instance.cpp:1754-1824`;
+    /// `data_bind.cpp:251-299`).
+    Inert,
+    Number {
+        global_id: u32,
+    },
+    Integer {
+        global_id: u32,
+    },
+    Boolean {
+        global_id: u32,
+    },
+    String {
+        global_id: u32,
+    },
+    Color {
+        global_id: u32,
+    },
+    Enum {
+        global_id: u32,
+    },
+    Asset {
+        global_id: u32,
+    },
+    Artboard {
+        global_id: u32,
+    },
+    List {
+        global_id: u32,
+    },
+    Trigger {
+        global_id: u32,
+    },
+    ViewModel {
+        global_id: u32,
+    },
+    TransitionDuration {
+        transition_global_id: u32,
+        occurrence_index: usize,
+    },
+    KeyFrameNumber {
+        global_id: u32,
+    },
+    KeyFrameColor {
+        global_id: u32,
+    },
+    KeyFrameBoolean {
+        global_id: u32,
+    },
+    KeyFrameString {
+        global_id: u32,
+    },
+}
+
+fn runtime_data_bind_target_global_id(target: RuntimeDataBindGraphTarget) -> Option<u32> {
+    match target {
+        RuntimeDataBindGraphTarget::Inert => None,
+        RuntimeDataBindGraphTarget::Number { global_id }
+        | RuntimeDataBindGraphTarget::Integer { global_id }
+        | RuntimeDataBindGraphTarget::Boolean { global_id }
+        | RuntimeDataBindGraphTarget::String { global_id }
+        | RuntimeDataBindGraphTarget::Color { global_id }
+        | RuntimeDataBindGraphTarget::Enum { global_id }
+        | RuntimeDataBindGraphTarget::Asset { global_id }
+        | RuntimeDataBindGraphTarget::Artboard { global_id }
+        | RuntimeDataBindGraphTarget::List { global_id }
+        | RuntimeDataBindGraphTarget::Trigger { global_id }
+        | RuntimeDataBindGraphTarget::ViewModel { global_id } => Some(global_id),
+        RuntimeDataBindGraphTarget::TransitionDuration { .. }
+        | RuntimeDataBindGraphTarget::KeyFrameNumber { .. }
+        | RuntimeDataBindGraphTarget::KeyFrameColor { .. }
+        | RuntimeDataBindGraphTarget::KeyFrameBoolean { .. }
+        | RuntimeDataBindGraphTarget::KeyFrameString { .. } => None,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum RuntimeDataBindGraphValue {
+    /// Pinned C++'s concrete base `DataValue` sentinel. It carries no typed
+    /// payload, but it is still a non-null value and therefore continues
+    /// through later members of a `DataConverterGroup`.
+    Untyped,
     Number(f32),
     Boolean(bool),
     String(Vec<u8>),
     Color(u32),
+    /// Exact target-cache `DataValueInteger`. This is intentionally distinct
+    /// from every integer-backed ViewModel source subclass: converter groups
+    /// and optional scripted methods can observe that concrete C++ type.
+    Integer(u64),
     Enum(u64),
     SymbolListIndex(u64),
-    List { item_count: usize },
+    List {
+        item_count: usize,
+    },
     ListLength(usize),
     Asset(u64),
     Artboard(u64),
@@ -4082,7 +5262,8 @@ impl RuntimeDataBindGraphValue {
         if path.len() != 2
             && !matches!(
                 self,
-                Self::Number(_)
+                Self::Untyped
+                    | Self::Number(_)
                     | Self::Boolean(_)
                     | Self::String(_)
                     | Self::Color(_)
@@ -4098,6 +5279,13 @@ impl RuntimeDataBindGraphValue {
             return None;
         }
         match self {
+            Self::Untyped => {
+                let property_path = path[1..]
+                    .iter()
+                    .map(|property_index| usize::try_from(*property_index).ok())
+                    .collect::<Option<Vec<_>>>()?;
+                runtime_owned_view_model_binding_value_for_property_path(context, &property_path)
+            }
             Self::Number(_) => {
                 let property_path = path[1..]
                     .iter()
@@ -4134,6 +5322,7 @@ impl RuntimeDataBindGraphValue {
                     .color_value_by_property_path(&property_path)
                     .map(Self::Color)
             }
+            Self::Integer(_) => None,
             Self::Enum(_) => {
                 let property_path = path[1..]
                     .iter()
@@ -4222,6 +5411,15 @@ impl RuntimeDataBindGraphValue {
         path: &[u32],
     ) -> Option<Self> {
         match self {
+            Self::Untyped => {
+                let property_path = context.property_path_for_context_source_path(
+                    file,
+                    context_path,
+                    path,
+                    false,
+                )?;
+                runtime_owned_view_model_binding_value_for_property_path(context, &property_path)
+            }
             Self::Number(_) => context
                 .number_value_by_context_source_path(file, context_path, path, false)
                 .map(Self::Number),
@@ -4234,6 +5432,7 @@ impl RuntimeDataBindGraphValue {
             Self::Color(_) => context
                 .color_value_by_context_source_path(file, context_path, path, false)
                 .map(Self::Color),
+            Self::Integer(_) => None,
             Self::Enum(_) => context
                 .enum_value_by_context_source_path(file, context_path, path, false)
                 .map(Self::Enum),
@@ -4292,6 +5491,30 @@ impl RuntimeDataBindGraphValue {
 
         let source = context.absolute_property(path)?;
         match self {
+            Self::Untyped => match file.view_model_instance_source_data_value_for_object(source)? {
+                RuntimeDataValue::Number(value) => Some(Self::Number(value)),
+                RuntimeDataValue::String(value) => Some(Self::String(value.to_vec())),
+                RuntimeDataValue::Boolean(value) => Some(Self::Boolean(value)),
+                RuntimeDataValue::Color(value) => Some(Self::Color(value)),
+                RuntimeDataValue::Enum { value, .. } => Some(Self::Enum(value)),
+                RuntimeDataValue::Trigger(value) => Some(Self::Trigger(value)),
+                RuntimeDataValue::List(items) => Some(Self::List {
+                    item_count: items.len(),
+                }),
+                RuntimeDataValue::SymbolListIndex(value) => Some(Self::SymbolListIndex(value)),
+                RuntimeDataValue::AssetImage(value) | RuntimeDataValue::AssetFont(value) => {
+                    Some(Self::Asset(value))
+                }
+                RuntimeDataValue::Artboard(value) => Some(Self::Artboard(value)),
+                RuntimeDataValue::ViewModel(reference) => Some(Self::ViewModel(
+                    reference
+                        .map(|reference| RuntimeViewModelPointer::Imported {
+                            object_id: reference.object.id,
+                        })
+                        .unwrap_or(RuntimeViewModelPointer::Null),
+                )),
+                RuntimeDataValue::None => Some(Self::Untyped),
+            },
             Self::Number(_) => file
                 .view_model_instance_number_value_for_object(source)
                 .map(Self::Number),
@@ -4304,6 +5527,7 @@ impl RuntimeDataBindGraphValue {
             Self::Color(_) => file
                 .view_model_instance_color_value_for_object(source)
                 .map(Self::Color),
+            Self::Integer(_) => None,
             Self::Enum(_) => (source.type_name == "ViewModelInstanceEnum")
                 .then(|| source.uint_property("propertyValue"))
                 .flatten()
@@ -4337,8 +5561,409 @@ impl RuntimeDataBindGraphValue {
 }
 
 impl RuntimeDataBindGraph {
-    pub(crate) fn has_bindings(&self) -> bool {
-        !self.sources.is_empty()
+    pub(crate) fn has_scripted_converter_occurrence(&self) -> bool {
+        self.sources.iter().any(|source| {
+            source
+                .converter
+                .as_ref()
+                .is_some_and(RuntimeDataBindGraphConverter::has_scripted_occurrence)
+        })
+    }
+
+    pub(crate) fn scripted_converter_occurrence_snapshots(
+        &self,
+    ) -> Vec<crate::scripted_data_converter::RuntimeScriptedDataConverterOccurrenceSnapshot> {
+        let mut snapshots = Vec::new();
+        for binding in &self.default_view_model_bindings {
+            let Some(source) = self.sources.get(binding.source.0) else {
+                continue;
+            };
+            if !source.context_bindable {
+                continue;
+            }
+            let Some(converter) = source.converter.as_ref() else {
+                continue;
+            };
+            source
+                .converter_state
+                .collect_scripted_converter_occurrence_snapshots(
+                    converter,
+                    binding.data_bind_index,
+                    &mut Vec::new(),
+                    &mut snapshots,
+                );
+        }
+        snapshots
+    }
+
+    fn source_index_for_data_bind(&self, data_bind_index: usize) -> Option<usize> {
+        self.default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source.0)
+    }
+
+    pub(crate) fn scripted_converter_input_snapshots_at_occurrence(
+        &self,
+        parent_data_bind_index: usize,
+        converter_path: &[usize],
+    ) -> Option<Vec<crate::ScriptListenerInputSnapshot>> {
+        let source_index = self.source_index_for_data_bind(parent_data_bind_index)?;
+        let source = self.sources.get(source_index)?;
+        let converter = source.converter.as_ref()?;
+        source
+            .converter_state
+            .scripted_converter_input_snapshots_at_path(converter, converter_path)
+    }
+
+    pub(crate) fn scripted_converter_instance_at_occurrence(
+        &self,
+        parent_data_bind_index: usize,
+        converter_path: &[usize],
+    ) -> Option<RuntimeScriptInstanceHandle> {
+        let source_index = self.source_index_for_data_bind(parent_data_bind_index)?;
+        self.sources
+            .get(source_index)?
+            .converter
+            .as_ref()?
+            .scripted_instance_at_path(converter_path)
+    }
+
+    pub(crate) fn attach_scripted_instance_at_occurrence(
+        &mut self,
+        parent_data_bind_index: usize,
+        converter_path: &[usize],
+        converter_global_id: u32,
+        handle: &RuntimeScriptInstanceHandle,
+    ) -> bool {
+        let Some(source_index) = self.source_index_for_data_bind(parent_data_bind_index) else {
+            return false;
+        };
+        let Some(converter) = self
+            .sources
+            .get_mut(source_index)
+            .and_then(|source| source.converter.as_mut())
+        else {
+            return false;
+        };
+        if converter.scripted_global_id_at_path(converter_path) != Some(converter_global_id) {
+            return false;
+        }
+        converter.attach_scripted_instance_at_path(converter_path, handle)
+    }
+
+    pub(crate) fn bind_converter_own_sources_at_occurrence(
+        &mut self,
+        parent_data_bind_index: usize,
+        converter_path: &[usize],
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        explicit_rebind: bool,
+    ) -> bool {
+        let Some(source_index) = self.source_index_for_data_bind(parent_data_bind_index) else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return false;
+        };
+        let Some(converter) = source.converter.as_mut() else {
+            return false;
+        };
+        source.converter_data_binds.bind_own_sources_at_path(
+            converter,
+            &mut source.converter_state,
+            converter_path,
+            file,
+            context,
+            explicit_rebind,
+        )
+    }
+
+    pub(crate) fn bind_converter_own_sources_from_data_context_at_occurrence(
+        &mut self,
+        parent_data_bind_index: usize,
+        converter_path: &[usize],
+        file: &RuntimeFile,
+        data_context: &RuntimeOwnedDataContext,
+        explicit_rebind: bool,
+    ) -> bool {
+        let Some(source_index) = self.source_index_for_data_bind(parent_data_bind_index) else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return false;
+        };
+        let Some(converter) = source.converter.as_mut() else {
+            return false;
+        };
+        source
+            .converter_data_binds
+            .bind_own_sources_from_data_context_at_path(
+                converter,
+                &mut source.converter_state,
+                converter_path,
+                file,
+                data_context,
+                explicit_rebind,
+            )
+    }
+
+    pub(crate) fn bind_scripted_converter_sources_at_occurrence(
+        &mut self,
+        parent_data_bind_index: usize,
+        converter_path: &[usize],
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        explicit_rebind: bool,
+    ) -> bool {
+        let Some(source_index) = self.source_index_for_data_bind(parent_data_bind_index) else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return false;
+        };
+        let Some(converter) = source.converter.as_mut() else {
+            return false;
+        };
+        source
+            .converter_state
+            .bind_scripted_converter_sources_at_path(
+                converter,
+                converter_path,
+                file,
+                context,
+                explicit_rebind,
+            )
+    }
+
+    pub(crate) fn bind_scripted_converter_sources_from_data_context_at_occurrence(
+        &mut self,
+        parent_data_bind_index: usize,
+        converter_path: &[usize],
+        file: &RuntimeFile,
+        data_context: &RuntimeOwnedDataContext,
+        explicit_rebind: bool,
+    ) -> bool {
+        let Some(source_index) = self.source_index_for_data_bind(parent_data_bind_index) else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return false;
+        };
+        let Some(converter) = source.converter.as_mut() else {
+            return false;
+        };
+        source
+            .converter_state
+            .bind_scripted_converter_sources_from_data_context_at_path(
+                converter,
+                converter_path,
+                file,
+                data_context,
+                explicit_rebind,
+            )
+    }
+
+    pub(crate) fn rebind_scripted_converter_final_inputs_at_occurrence(
+        &mut self,
+        parent_data_bind_index: usize,
+        converter_path: &[usize],
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        let Some(source_index) = self.source_index_for_data_bind(parent_data_bind_index) else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return false;
+        };
+        let Some(converter) = source.converter.as_mut() else {
+            return false;
+        };
+        source
+            .converter_state
+            .rebind_scripted_converter_final_inputs_at_path(
+                converter,
+                converter_path,
+                file,
+                context,
+            )
+    }
+
+    pub(crate) fn rebind_scripted_converter_final_input_at_occurrence(
+        &mut self,
+        parent_data_bind_index: usize,
+        converter_path: &[usize],
+        input_index: usize,
+        data_bind_index: usize,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+    ) -> bool {
+        let Some(source_index) = self.source_index_for_data_bind(parent_data_bind_index) else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return false;
+        };
+        let Some(converter) = source.converter.as_mut() else {
+            return false;
+        };
+        source
+            .converter_state
+            .bind_scripted_converter_input_source_at_path(
+                converter,
+                converter_path,
+                input_index,
+                data_bind_index,
+                file,
+                context,
+            )
+    }
+
+    pub(crate) fn rebind_scripted_converter_final_inputs_from_data_context_at_occurrence(
+        &mut self,
+        parent_data_bind_index: usize,
+        converter_path: &[usize],
+        file: &RuntimeFile,
+        data_context: &RuntimeOwnedDataContext,
+    ) -> bool {
+        let Some(source_index) = self.source_index_for_data_bind(parent_data_bind_index) else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return false;
+        };
+        let Some(converter) = source.converter.as_mut() else {
+            return false;
+        };
+        source
+            .converter_state
+            .rebind_scripted_converter_final_inputs_from_data_context_at_path(
+                converter,
+                converter_path,
+                file,
+                data_context,
+            )
+    }
+
+    pub(crate) fn rebind_scripted_converter_final_input_from_data_context_at_occurrence(
+        &mut self,
+        parent_data_bind_index: usize,
+        converter_path: &[usize],
+        input_index: usize,
+        data_bind_index: usize,
+        file: &RuntimeFile,
+        data_context: &RuntimeOwnedDataContext,
+    ) -> bool {
+        let Some(source_index) = self.source_index_for_data_bind(parent_data_bind_index) else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return false;
+        };
+        let Some(converter) = source.converter.as_mut() else {
+            return false;
+        };
+        source
+            .converter_state
+            .bind_scripted_converter_input_source_from_data_context_at_path(
+                converter,
+                converter_path,
+                input_index,
+                data_bind_index,
+                file,
+                data_context,
+            )
+    }
+
+    pub(crate) fn mark_scripted_converter_hydrated_at_occurrence(
+        &mut self,
+        parent_data_bind_index: usize,
+        converter_path: &[usize],
+    ) -> bool {
+        let Some(source_index) = self.source_index_for_data_bind(parent_data_bind_index) else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return false;
+        };
+        if source
+            .converter
+            .as_ref()
+            .and_then(|converter| converter.scripted_instance_at_path(converter_path))
+            .is_none()
+        {
+            return false;
+        }
+        source.retained_bind.mark_converter_changed();
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
+    pub(crate) fn update_converter_data_binds_for_data_bind<F>(
+        &mut self,
+        parent_data_bind_index: usize,
+        file: &RuntimeFile,
+        context: &RuntimeOwnedViewModelInstance,
+        apply: &mut F,
+    ) -> Result<(), ScriptError>
+    where
+        F: FnMut(
+            &RuntimeScriptInstanceHandle,
+            &ScriptCoreString,
+            crate::state_machine::RuntimeScriptedListenerBoundValue,
+        ) -> Result<(), ScriptError>,
+    {
+        let Some(source_index) = self.source_index_for_data_bind(parent_data_bind_index) else {
+            return Ok(());
+        };
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return Ok(());
+        };
+        let Some(converter) = source.converter.as_mut() else {
+            return Ok(());
+        };
+        source.converter_data_binds.update(
+            converter,
+            &mut source.converter_state,
+            file,
+            context,
+            None,
+            apply,
+        )
+    }
+
+    pub(crate) fn update_converter_data_binds_from_data_context_for_data_bind<F>(
+        &mut self,
+        parent_data_bind_index: usize,
+        file: &RuntimeFile,
+        data_context: &RuntimeOwnedDataContext,
+        apply: &mut F,
+    ) -> Result<(), ScriptError>
+    where
+        F: FnMut(
+            &RuntimeScriptInstanceHandle,
+            &ScriptCoreString,
+            crate::state_machine::RuntimeScriptedListenerBoundValue,
+        ) -> Result<(), ScriptError>,
+    {
+        let Some(source_index) = self.source_index_for_data_bind(parent_data_bind_index) else {
+            return Ok(());
+        };
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return Ok(());
+        };
+        let Some(converter) = source.converter.as_mut() else {
+            return Ok(());
+        };
+        source.converter_data_binds.update_from_data_context(
+            converter,
+            &mut source.converter_state,
+            file,
+            data_context,
+            None,
+            apply,
+        )
     }
 
     pub(crate) fn attach_scripted_instances(
@@ -4360,225 +5985,34 @@ impl RuntimeDataBindGraph {
         let mut targets = Vec::new();
         let mut default_view_model_bindings = Vec::new();
 
-        for bindable in state_machine.bindable_numbers.iter() {
-            for source in &bindable.default_view_model_sources {
-                let source_handle = Self::push_default_view_model_binding(
-                    &mut sources,
-                    &mut targets,
-                    &mut default_view_model_bindings,
-                    source.data_bind_index,
-                    &source.path,
-                    source.flags,
-                    source.converter.clone(),
-                    RuntimeDataBindGraphTarget::Number {
-                        global_id: bindable.global_id,
-                    },
-                    source.value.clone(),
-                );
-                if let Some(node) = sources.get_mut(source_handle.0) {
-                    node.view_model_instance_ids = source.view_model_instance_ids.clone();
-                }
-            }
-        }
-        for binding in state_machine.transition_duration_bindings.iter() {
-            let source = &binding.source;
+        for template in state_machine.data_bind_templates.iter() {
             let source_handle = Self::push_default_view_model_binding(
                 &mut sources,
                 &mut targets,
                 &mut default_view_model_bindings,
-                source.data_bind_index,
-                &source.path,
-                source.flags,
-                source.converter.clone(),
-                RuntimeDataBindGraphTarget::TransitionDuration {
-                    transition_global_id: binding.transition_global_id,
-                },
-                source.value.clone(),
+                template.data_bind_index,
+                &template.resolved_path,
+                template.flags,
+                template.converter.clone(),
+                template.target,
+                template.source_seed.clone(),
             );
-            if let Some(node) = sources.get_mut(source_handle.0) {
-                node.view_model_instance_ids = source.view_model_instance_ids.clone();
+            if let Some(source) = sources.get_mut(source_handle.0) {
+                source.authored_path = template.authored_path.clone();
+                source.name_based = template.name_based;
+                source.context_bindable = template.context_bindable;
+                source.default_bound = template.source_bound;
+                source.bound = template.source_bound;
+                source.view_model_instance_ids = template.view_model_instance_ids.clone();
+                source.converter_data_binds = template.converter_data_binds.instantiate();
+                source.attach_converter_parent();
             }
         }
-        for bindable in state_machine.bindable_integers.iter() {
-            for source in &bindable.default_view_model_sources {
-                Self::push_default_view_model_binding(
-                    &mut sources,
-                    &mut targets,
-                    &mut default_view_model_bindings,
-                    source.data_bind_index,
-                    &source.path,
-                    source.flags,
-                    None,
-                    RuntimeDataBindGraphTarget::Integer {
-                        global_id: bindable.global_id,
-                    },
-                    RuntimeDataBindGraphValue::SymbolListIndex(source.value),
-                );
-            }
-        }
-        for bindable in state_machine.bindable_booleans.iter() {
-            for source in &bindable.default_view_model_sources {
-                Self::push_default_view_model_binding(
-                    &mut sources,
-                    &mut targets,
-                    &mut default_view_model_bindings,
-                    source.data_bind_index,
-                    &source.path,
-                    source.flags,
-                    source.converter.clone(),
-                    RuntimeDataBindGraphTarget::Boolean {
-                        global_id: bindable.global_id,
-                    },
-                    RuntimeDataBindGraphValue::Boolean(source.value),
-                );
-            }
-        }
-        for bindable in state_machine.bindable_strings.iter() {
-            for source in &bindable.default_view_model_sources {
-                Self::push_default_view_model_binding(
-                    &mut sources,
-                    &mut targets,
-                    &mut default_view_model_bindings,
-                    source.data_bind_index,
-                    &source.path,
-                    source.flags,
-                    source.converter.clone(),
-                    RuntimeDataBindGraphTarget::String {
-                        global_id: bindable.global_id,
-                    },
-                    source.value.clone(),
-                );
-            }
-        }
-        for bindable in state_machine.bindable_colors.iter() {
-            for source in &bindable.default_view_model_sources {
-                Self::push_default_view_model_binding(
-                    &mut sources,
-                    &mut targets,
-                    &mut default_view_model_bindings,
-                    source.data_bind_index,
-                    &source.path,
-                    source.flags,
-                    None,
-                    RuntimeDataBindGraphTarget::Color {
-                        global_id: bindable.global_id,
-                    },
-                    RuntimeDataBindGraphValue::Color(source.value),
-                );
-            }
-        }
-        for bindable in state_machine.bindable_enums.iter() {
-            for source in &bindable.default_view_model_sources {
-                Self::push_default_view_model_binding(
-                    &mut sources,
-                    &mut targets,
-                    &mut default_view_model_bindings,
-                    source.data_bind_index,
-                    &source.path,
-                    source.flags,
-                    None,
-                    RuntimeDataBindGraphTarget::Enum {
-                        global_id: bindable.global_id,
-                    },
-                    RuntimeDataBindGraphValue::Enum(source.value),
-                );
-            }
-        }
-        for bindable in state_machine.bindable_assets.iter() {
-            for source in &bindable.default_view_model_sources {
-                Self::push_default_view_model_binding(
-                    &mut sources,
-                    &mut targets,
-                    &mut default_view_model_bindings,
-                    source.data_bind_index,
-                    &source.path,
-                    source.flags,
-                    None,
-                    RuntimeDataBindGraphTarget::Asset {
-                        global_id: bindable.global_id,
-                    },
-                    RuntimeDataBindGraphValue::Asset(source.value.asset_index()),
-                );
-            }
-        }
-        for bindable in state_machine.bindable_artboards.iter() {
-            for source in &bindable.default_view_model_sources {
-                Self::push_default_view_model_binding(
-                    &mut sources,
-                    &mut targets,
-                    &mut default_view_model_bindings,
-                    source.data_bind_index,
-                    &source.path,
-                    source.flags,
-                    None,
-                    RuntimeDataBindGraphTarget::Artboard {
-                        global_id: bindable.global_id,
-                    },
-                    RuntimeDataBindGraphValue::Artboard(source.value),
-                );
-            }
-        }
-        for bindable in state_machine.bindable_lists.iter() {
-            for source in &bindable.default_view_model_sources {
-                Self::push_default_view_model_binding(
-                    &mut sources,
-                    &mut targets,
-                    &mut default_view_model_bindings,
-                    source.data_bind_index,
-                    &source.path,
-                    source.flags,
-                    source.converter.clone(),
-                    RuntimeDataBindGraphTarget::List {
-                        global_id: bindable.global_id,
-                    },
-                    source.value.clone(),
-                );
-            }
-        }
-        for bindable in state_machine.bindable_triggers.iter() {
-            for source in &bindable.default_view_model_sources {
-                Self::push_default_view_model_binding(
-                    &mut sources,
-                    &mut targets,
-                    &mut default_view_model_bindings,
-                    source.data_bind_index,
-                    &source.path,
-                    source.flags,
-                    source.converter.clone(),
-                    RuntimeDataBindGraphTarget::Trigger {
-                        global_id: bindable.global_id,
-                    },
-                    RuntimeDataBindGraphValue::Trigger(source.value),
-                );
-            }
-        }
-        for bindable in state_machine.bindable_view_models.iter() {
-            for source in &bindable.default_view_model_sources {
-                let source_handle = Self::push_default_view_model_binding(
-                    &mut sources,
-                    &mut targets,
-                    &mut default_view_model_bindings,
-                    source.data_bind_index,
-                    &source.path,
-                    source.flags,
-                    source.converter.clone(),
-                    RuntimeDataBindGraphTarget::ViewModel {
-                        global_id: bindable.global_id,
-                    },
-                    RuntimeDataBindGraphValue::ViewModel(source.value),
-                );
-                if let Some(node) = sources.get_mut(source_handle.0) {
-                    node.view_model_instance_ids = source.view_model_instance_ids.clone();
-                }
-            }
-        }
-
-        default_view_model_bindings.sort_by_key(|binding| binding.data_bind_index);
 
         Self {
             context_kind: RuntimeDataBindGraphContextKind::None,
             default_view_model_bindings_dirty: false,
-            formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
+            formula_random_source: RuntimeDataBindGraphFormulaRandomSource::process_global(),
             sources,
             targets,
             default_view_model_bindings,
@@ -4631,8 +6065,6 @@ impl RuntimeDataBindGraph {
                 template.default_value.clone(),
             );
         }
-        default_view_model_bindings.sort_by_key(|binding| binding.data_bind_index);
-
         Some(Self {
             context_kind: RuntimeDataBindGraphContextKind::None,
             default_view_model_bindings_dirty: false,
@@ -4655,6 +6087,47 @@ impl RuntimeDataBindGraph {
                 source.mark_reconcile_dirty();
             }
             clone.default_view_model_bindings_dirty = true;
+        }
+        clone
+    }
+
+    /// Rust's public `StateMachineInstance::clone` is an explicit snapshot
+    /// adaptation; C++ has no instance copy constructor. Scalar/container
+    /// state is copied, but a stateful Lua table cannot be snapshotted or
+    /// shared between occurrences. Retain the authored converter definitions,
+    /// detach every scripted table, and cold-reset only those scripted
+    /// occurrences so the facade can regenerate them independently.
+    pub(crate) fn clone_for_state_machine_snapshot(&self) -> Self {
+        let mut clone = self.clone();
+        for (source, original) in clone.sources.iter_mut().zip(&self.sources) {
+            source.converter_data_binds = original.converter_data_binds.fresh_clone();
+            if let Some(converter) = source.converter.as_mut() {
+                converter.detach_scripted_instance();
+            }
+            if let Some(converter) = source.converter.as_ref() {
+                source
+                    .converter_state
+                    .reset_scripted_occurrences_for_fresh_clone(converter);
+            }
+            source.attach_converter_parent();
+        }
+        clone
+    }
+
+    /// Re-home the mutable DataBind graph for a transactional snapshot of the
+    /// same concrete StateMachineInstance occurrence.
+    ///
+    /// Unlike a public fresh clone, this preserves every ordinary
+    /// ScriptedDataConverter table, cached value, and per-occurrence input
+    /// state. Retained binds still clone their dependency sinks, and the
+    /// candidate's DataBindContainer installs its own notification queue after
+    /// adoption. This is Rust's transactional representation of C++ retaining
+    /// the same cloned converter objects across `internalDataContext` calls
+    /// (`scripted_data_converter.cpp:170-188`).
+    pub(crate) fn clone_for_state_machine_transaction(&self) -> Self {
+        let mut clone = self.clone();
+        for source in &mut clone.sources {
+            source.attach_converter_parent();
         }
         clone
     }
@@ -4713,9 +6186,35 @@ impl RuntimeDataBindGraph {
         value: RuntimeDataBindGraphValue,
     ) -> RuntimeDataBindGraphSourceHandle {
         let source = RuntimeDataBindGraphSourceHandle(sources.len());
-        let converter_state = RuntimeDataBindGraphConverterState::for_converter(converter.as_ref());
-        sources.push(RuntimeDataBindGraphSourceNode {
+        sources.push(Self::default_view_model_source_node(
+            path, flags, converter, value,
+        ));
+        let target_handle = RuntimeDataBindGraphTargetHandle(targets.len());
+        targets.push(RuntimeDataBindGraphTargetNode { target });
+        bindings.push(RuntimeDataBindGraphDefaultBinding {
+            data_bind_index,
+            source,
+            target: target_handle,
+        });
+        source
+    }
+
+    fn default_view_model_source_node(
+        path: &[u32],
+        flags: u64,
+        converter: Option<RuntimeDataBindGraphConverter>,
+        value: RuntimeDataBindGraphValue,
+    ) -> RuntimeDataBindGraphSourceNode {
+        let retained_bind = RuntimeRetainedDataBind::new(flags, false);
+        let mut converter_state =
+            RuntimeDataBindGraphConverterState::for_converter(converter.as_ref());
+        converter_state.set_scripted_converter_parent_wake(retained_bind.converter_parent_wake());
+        RuntimeDataBindGraphSourceNode {
+            authored_path: path.to_vec(),
             path: path.to_vec(),
+            name_based: false,
+            context_bindable: true,
+            default_bound: true,
             flags,
             bound: true,
             target_to_source_dirty: false,
@@ -4725,20 +6224,13 @@ impl RuntimeDataBindGraph {
             source_to_target_dirty_after_target_to_source: false,
             converter,
             converter_state,
+            converter_data_binds: RuntimeDataConverterDataBindState::default(),
             default_value: value.clone(),
             value,
             view_model_instance_ids: Vec::new(),
-            retained_bind: RuntimeRetainedDataBind::new(flags, false),
+            retained_bind,
             retained_structural_source: None,
-        });
-        let target_handle = RuntimeDataBindGraphTargetHandle(targets.len());
-        targets.push(RuntimeDataBindGraphTargetNode { target });
-        bindings.push(RuntimeDataBindGraphDefaultBinding {
-            data_bind_index,
-            source,
-            target: target_handle,
-        });
-        source
+        }
     }
 
     pub(crate) fn set_formula_random_values(&mut self, values: &[f32]) {
@@ -4754,6 +6246,49 @@ impl RuntimeDataBindGraph {
 
     pub(crate) fn data_context_present(&self) -> bool {
         self.context_kind != RuntimeDataBindGraphContextKind::None
+    }
+
+    /// Append the state-machine's authored DataBinds to its one occurrence
+    /// container in C++ `StateMachine::dataBind(i)` order.
+    pub(crate) fn add_data_binds_to_container(
+        &mut self,
+        container: &mut RuntimeDataBindContainerQueue,
+    ) -> Vec<(usize, usize)> {
+        let sources = &mut self.sources;
+        let targets = &self.targets;
+        self.default_view_model_bindings
+            .iter()
+            .map(|binding| {
+                let source = sources
+                    .get_mut(binding.source.0)
+                    .expect("every authored DataBind occurrence owns one retained source");
+                // A graph clone owns a fresh outer retained DataBind. Its
+                // converter state is cloned separately, so re-home every
+                // nested parent endpoint before this concrete occurrence is
+                // mounted in the container.
+                source.attach_converter_parent();
+                let target = targets
+                    .get(binding.target.0)
+                    .expect("every authored DataBind occurrence owns one retained target")
+                    .target;
+                let persisting = source.applies_target_to_source()
+                    && matches!(
+                        target,
+                        RuntimeDataBindGraphTarget::Asset { .. }
+                            | RuntimeDataBindGraphTarget::ViewModel { .. }
+                    );
+                let occurrence = container.add_data_bind(&mut source.retained_bind, persisting);
+                (occurrence, binding.data_bind_index)
+            })
+            .collect()
+    }
+
+    pub(crate) fn data_bind_is_to_source(&self, data_bind_index: usize) -> bool {
+        self.default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .and_then(|binding| self.sources.get(binding.source.0))
+            .is_some_and(RuntimeDataBindGraphSourceNode::applies_target_to_source)
     }
 
     pub(crate) fn default_view_model_context_bound(&self) -> bool {
@@ -4779,7 +6314,6 @@ impl RuntimeDataBindGraph {
             return false;
         }
         self.clear_retained_binds();
-        self.reset_converter_states();
         self.context_kind = RuntimeDataBindGraphContextKind::Empty;
         self.imported_view_model_context = None;
         self.default_view_model_bindings_dirty = false;
@@ -4793,13 +6327,18 @@ impl RuntimeDataBindGraph {
         }
         self.clear_retained_binds();
         for source in &mut self.sources {
+            if !source.context_bindable {
+                source.bound = false;
+                continue;
+            }
             source.value = source.default_value.clone();
-            source.bound = true;
+            source.bound = source.default_bound;
             if let Some(converter) = source.converter.as_mut() {
                 runtime_data_bind_graph_reset_operation_view_model_converter_to_default(converter);
             }
-            source.reset_converter_state();
-            source.mark_reconcile_dirty();
+            if source.bound {
+                source.mark_reconcile_dirty();
+            }
         }
         self.context_kind = RuntimeDataBindGraphContextKind::DefaultViewModel;
         self.imported_view_model_context = None;
@@ -4846,6 +6385,10 @@ impl RuntimeDataBindGraph {
 
         self.clear_retained_binds();
         for source in &mut self.sources {
+            if !source.context_bindable {
+                source.bound = false;
+                continue;
+            }
             if let Some(value) =
                 source
                     .value
@@ -4944,7 +6487,6 @@ impl RuntimeDataBindGraph {
                     &runtime_context,
                 );
             }
-            source.reset_converter_state();
             source.mark_reconcile_dirty();
         }
         self.bind_retained_trigger_sources(|path| context.trigger_cell_for_source_path(path));
@@ -4962,6 +6504,10 @@ impl RuntimeDataBindGraph {
         let context_chain: [&[usize]; 1] = [&[]];
         self.clear_retained_binds();
         for source in &mut self.sources {
+            if !source.context_bindable {
+                source.bound = false;
+                continue;
+            }
             if let Some(value) = source
                 .value
                 .resolve_from_owned_view_model_instance(context, &source.path)
@@ -4983,7 +6529,6 @@ impl RuntimeDataBindGraph {
                 converter.retained_operand_cells(&mut operand_cells);
             }
             source.retained_bind.set_additional_sources(operand_cells);
-            source.reset_converter_state();
             source.mark_reconcile_dirty();
         }
         self.bind_retained_trigger_sources(|path| context.cell_for_source_path(path));
@@ -5001,6 +6546,10 @@ impl RuntimeDataBindGraph {
     ) -> bool {
         self.clear_retained_binds();
         for source in &mut self.sources {
+            if !source.context_bindable {
+                source.bound = false;
+                continue;
+            }
             if let Some(value) = context_chain.iter().find_map(|context_path| {
                 source.value.resolve_from_owned_view_model_context_path(
                     file,
@@ -5026,7 +6575,6 @@ impl RuntimeDataBindGraph {
                 converter.retained_operand_cells(&mut operand_cells);
             }
             source.retained_bind.set_additional_sources(operand_cells);
-            source.reset_converter_state();
             source.mark_reconcile_dirty();
         }
         self.bind_retained_trigger_sources(|path| {
@@ -5045,48 +6593,7 @@ impl RuntimeDataBindGraph {
         data_context: &RuntimeOwnedDataContext,
     ) -> bool {
         for source in &mut self.sources {
-            // Same walk and kind matrix as before (#RB-1 e3): the first
-            // context instance producing a kind-matched value wins; the resolution
-            // additionally yields the retained cell for migratable scalars.
-            let resolved =
-                data_context.resolve_value_and_cell_for_source_path(&source.value, &source.path);
-            // A source already bound to the SAME retained cell is
-            // dirt-driven: the (re)bind is not a new C++ `DataBind::bind()`,
-            // so it neither re-copies the value nor resets converter state —
-            // cell dirt alone decides whether the value refreshes below.
-            let retained_refresh = matches!(
-                &resolved,
-                Some((_, Some(cell), _))
-                    if source.bound
-                        && source
-                            .retained_bind
-                            .source()
-                            .is_some_and(|current| current.ptr_eq(cell))
-            );
-            if !retained_refresh {
-                source.retained_bind = RuntimeRetainedDataBind::new(source.flags, false);
-                match resolved {
-                    Some((value, Some(cell), structural_source)) => {
-                        // C++ `DataBind::bind()`: retain the source, register
-                        // as dependent, mark the reconcile in favor order.
-                        source.retained_bind.set_source(cell);
-                        source.retained_structural_source = structural_source;
-                        source.value = value;
-                        source.bound = true;
-                    }
-                    Some((value, None, structural_source)) => {
-                        source.retained_structural_source = structural_source;
-                        source.value = value;
-                        source.bound = true;
-                    }
-                    None => {
-                        source.retained_structural_source = None;
-                        source.bound = false;
-                    }
-                }
-            } else if let Some((_, _, structural_source)) = &resolved {
-                source.retained_structural_source = structural_source.clone();
-            }
+            Self::bind_owned_view_model_data_context_source(source, data_context);
             if let Some(converter) = source.converter.as_mut() {
                 runtime_data_bind_graph_bind_owned_converter_operands_for_data_context(
                     converter,
@@ -5098,18 +6605,118 @@ impl RuntimeDataBindGraph {
                 converter.retained_operand_cells(&mut operand_cells);
             }
             source.retained_bind.set_additional_sources(operand_cells);
-            if retained_refresh {
-                Self::refresh_retained_source_from_cell(source);
-                // An explicit bindFromContext is still C++ `DataBind::bind()`
-                // even when the retained source pointer is unchanged: both
-                // supported directions are dirtied in favor order
-                // (`data_bind_context.cpp:80-85`).
+        }
+        self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
+        self.imported_view_model_context = None;
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
+    fn bind_owned_view_model_data_context_source(
+        source: &mut RuntimeDataBindGraphSourceNode,
+        data_context: &RuntimeOwnedDataContext,
+    ) -> bool {
+        if !source.context_bindable {
+            source.bound = false;
+            return false;
+        }
+        let resolved =
+            data_context.resolve_value_and_cell_for_source_path(&source.value, &source.path);
+        let retained_refresh = matches!(
+            &resolved,
+            Some((_, Some(cell), _))
+                if source.bound
+                    && source
+                        .retained_bind
+                        .source()
+                        .is_some_and(|current| current.ptr_eq(cell))
+        );
+        if retained_refresh {
+            if let Some((_, _, structural_source)) = &resolved {
+                source.retained_structural_source = structural_source.clone();
+            }
+            Self::refresh_retained_source_from_cell(source);
+            // Same source is still an explicit C++ bindFromContext reconcile.
+            source.mark_reconcile_dirty();
+            return true;
+        }
+
+        match resolved {
+            Some((value, source_cell, structural_source)) => {
+                // A -> B calls `clearSource/source/bind`: reset the concrete
+                // converter, but do not call its virtual `unbind`.
+                if let Some(converter) = source.converter.as_ref() {
+                    source.converter_state.reset_for_data_bind_rebind(converter);
+                }
+                source.retained_bind.reset_preserving_notification();
+                if let Some(source_cell) = source_cell {
+                    source.retained_bind.set_source(source_cell);
+                }
+                source.retained_structural_source = structural_source;
+                source.value = value;
+                source.bound = true;
+                source.attach_converter_parent();
                 source.mark_reconcile_dirty();
-            } else {
-                source.reset_converter_state();
-                source.mark_reconcile_dirty();
+                true
+            }
+            None => {
+                // Missing source calls outer `DataBind::unbind`, which invokes
+                // the converter's concrete virtual unbind and does not invent
+                // a reconcile/update for an unresolved occurrence.
+                source.retained_bind.reset_preserving_notification();
+                if let Some(converter) = source.converter.as_ref() {
+                    source
+                        .converter_data_binds
+                        .unbind(converter, &mut source.converter_state);
+                }
+                source.retained_structural_source = None;
+                source.bound = false;
+                source.attach_converter_parent();
+                false
             }
         }
+    }
+
+    pub(crate) fn bind_owned_view_model_data_context_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        data_context: &RuntimeOwnedDataContext,
+    ) -> bool {
+        let Some(source_index) = self.source_index_for_data_bind(data_bind_index) else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return false;
+        };
+        let bound = Self::bind_owned_view_model_data_context_source(source, data_context);
+        if bound {
+            self.mark_default_view_model_bindings_dirty();
+        }
+        bound
+    }
+
+    pub(crate) fn finalize_owned_view_model_data_context_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        data_context: &RuntimeOwnedDataContext,
+    ) -> bool {
+        let Some(source_index) = self.source_index_for_data_bind(data_bind_index) else {
+            return false;
+        };
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return false;
+        };
+        if let Some(converter) = source.converter.as_mut() {
+            runtime_data_bind_graph_bind_owned_converter_operands_for_data_context(
+                converter,
+                data_context,
+            );
+        }
+        let mut operand_cells = Vec::new();
+        if let Some(converter) = source.converter.as_ref() {
+            converter.retained_operand_cells(&mut operand_cells);
+        }
+        source.retained_bind.set_additional_sources(operand_cells);
         self.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
         self.imported_view_model_context = None;
         self.mark_default_view_model_bindings_dirty();
@@ -5120,14 +6727,30 @@ impl RuntimeDataBindGraph {
     /// the direction-engine replacement for mutation-clock value-copy
     /// refresh.
     pub(crate) fn collect_retained_source_dirt(&mut self) -> bool {
+        self.collect_retained_source_dirt_with_schedule().0
+    }
+
+    /// Fold retained source dirt and separately identify mutations that
+    /// schedule another state-machine advance.
+    ///
+    /// C++ trigger values are reset by `DataContext::advanced()` with
+    /// delegation suppressed. Their DataBind still receives Bindings dirt
+    /// and must refresh on the current advance, but that reset does not call
+    /// `StateMachineInstance::markNeedsAdvance`. Explicit trigger setters
+    /// already arm the machine at their public boundary.
+    pub(crate) fn collect_retained_source_dirt_with_schedule(&mut self) -> (bool, bool) {
         let mut changed = false;
+        let mut schedules_advance = false;
         for source in &mut self.sources {
-            changed |= Self::refresh_retained_source_from_cell(source);
+            let source_changed = Self::refresh_retained_source_from_cell(source);
+            changed |= source_changed;
+            schedules_advance |= source_changed
+                && !matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_));
         }
         if changed {
             self.mark_default_view_model_bindings_dirty();
         }
-        changed
+        (changed, schedules_advance)
     }
 
     /// One migrated source's dirt-driven refresh: `collect_source_dirt()`,
@@ -5221,7 +6844,13 @@ impl RuntimeDataBindGraph {
     /// cell registration for a live one.
     fn clear_retained_binds(&mut self) {
         for source in &mut self.sources {
-            source.retained_bind = RuntimeRetainedDataBind::new(source.flags, false);
+            source.retained_bind.reset_preserving_notification();
+            if let Some(converter) = source.converter.as_ref() {
+                source
+                    .converter_data_binds
+                    .unbind(converter, &mut source.converter_state);
+            }
+            source.attach_converter_parent();
             source.retained_structural_source = None;
             if let Some(converter) = source.converter.as_mut() {
                 converter.clear_retained_owned_operands();
@@ -5242,7 +6871,7 @@ impl RuntimeDataBindGraph {
             if !matches!(source.default_value, RuntimeDataBindGraphValue::Trigger(_)) {
                 continue;
             }
-            if !source.bound {
+            if !source.bound || source.retained_bind.is_collapsed() {
                 source.retained_bind.clear_source();
                 continue;
             }
@@ -5300,7 +6929,7 @@ impl RuntimeDataBindGraph {
             .find(|binding| binding.data_bind_index == data_bind_index)
             .map(|binding| binding.source)
             .and_then(|source| self.sources.get(source.0))
-            .map(|source| source.path.clone())
+            .map(|source| source.authored_path.clone())
         else {
             return false;
         };
@@ -5419,7 +7048,13 @@ impl RuntimeDataBindGraph {
             ) {
                 continue;
             }
-            source.source_to_target_dirty_after_target_to_source = true;
+            // The selected ViewModel operand registers the outer DataBind as
+            // its dependent. Its mutation therefore calls
+            // `DataBind::addDirt(Bindings)` and enrolls that exact occurrence,
+            // rather than setting only a graph-side compatibility flag
+            // (`data_converter_operation_viewmodel.cpp:48-59`;
+            // `data_bind.cpp:502-531`).
+            source.mark_source_dirty_after_target_to_source();
             changed = true;
         }
         changed
@@ -5440,7 +7075,7 @@ impl RuntimeDataBindGraph {
             ) {
                 continue;
             }
-            source.source_to_target_dirty_after_target_to_source = true;
+            source.mark_source_dirty_after_target_to_source();
             changed = true;
         }
         changed
@@ -7747,7 +9382,11 @@ impl RuntimeDataBindGraph {
         data_bind_index: usize,
         target_matches: impl FnOnce(RuntimeDataBindGraphTarget) -> bool,
     ) -> bool {
-        if !self.default_view_model_source_context_bound() {
+        // The bind occurrence, not the default-context convenience owner,
+        // receives `BindingsTarget`. Imported and caller-owned contexts use
+        // the same cloned DataBind and concrete source owner
+        // (`data_bind.cpp:468-499`; `context_value.hpp:81-99`).
+        if !self.default_view_model_context_bound() {
             return false;
         }
         let Some(binding) = self
@@ -8255,7 +9894,7 @@ impl RuntimeDataBindGraph {
         Some(global_id)
     }
 
-    pub(crate) fn retained_trigger_source_for_bindable_target(
+    pub(crate) fn retained_source_for_bindable_target(
         &self,
         bindable_global_id: u32,
     ) -> Option<RuntimeViewModelCell> {
@@ -8273,7 +9912,17 @@ impl RuntimeDataBindGraph {
                 self.targets.get(binding.target.0).is_some_and(|target| {
                     matches!(
                         target.target,
-                        RuntimeDataBindGraphTarget::Trigger { global_id }
+                        RuntimeDataBindGraphTarget::Number { global_id }
+                            | RuntimeDataBindGraphTarget::Integer { global_id }
+                            | RuntimeDataBindGraphTarget::Boolean { global_id }
+                            | RuntimeDataBindGraphTarget::String { global_id }
+                            | RuntimeDataBindGraphTarget::Color { global_id }
+                            | RuntimeDataBindGraphTarget::Enum { global_id }
+                            | RuntimeDataBindGraphTarget::Asset { global_id }
+                            | RuntimeDataBindGraphTarget::Artboard { global_id }
+                            | RuntimeDataBindGraphTarget::List { global_id }
+                            | RuntimeDataBindGraphTarget::Trigger { global_id }
+                            | RuntimeDataBindGraphTarget::ViewModel { global_id }
                             if global_id == bindable_global_id
                     )
                 })
@@ -8283,6 +9932,76 @@ impl RuntimeDataBindGraph {
             .retained_bind
             .source()
             .cloned()
+    }
+
+    /// Return the last authored DataBind stored in C++'s
+    /// `m_bindableDataBindsToSource` map for this bindable occurrence.
+    pub(crate) fn bindable_data_bind_to_source_index(
+        &self,
+        bindable_global_id: u32,
+    ) -> Option<usize> {
+        self.bindable_data_bind_index(bindable_global_id, true)
+    }
+
+    pub(crate) fn bindable_data_bind_to_source_index_for_data_bind(
+        &self,
+        data_bind_index: usize,
+    ) -> Option<usize> {
+        let bindable_global_id = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .and_then(|binding| self.targets.get(binding.target.0))
+            .and_then(|target| runtime_data_bind_target_global_id(target.target))?;
+        self.bindable_data_bind_to_source_index(bindable_global_id)
+    }
+
+    fn bindable_data_bind_index(&self, bindable_global_id: u32, to_source: bool) -> Option<usize> {
+        self.default_view_model_bindings
+            .iter()
+            .rev()
+            .find_map(|binding| {
+                let source = self.sources.get(binding.source.0)?;
+                if (source.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0) != to_source {
+                    return None;
+                }
+                let target = self.targets.get(binding.target.0)?;
+                runtime_data_bind_target_global_id(target.target)
+                    .filter(|global_id| *global_id == bindable_global_id)
+                    .map(|_| binding.data_bind_index)
+            })
+    }
+
+    /// Mirrors `dataBindToTarget->addDirt(ComponentDirt::Bindings, true)`
+    /// after a ListenerViewModelChange. This dirt is required even when the
+    /// bindable has no target-to-source DataBind.
+    pub(crate) fn dirty_bindable_data_bind_to_target(&mut self, bindable_global_id: u32) -> bool {
+        let Some(binding) = self
+            .default_view_model_bindings
+            .iter()
+            .rev()
+            .find(|binding| {
+                let Some(source) = self.sources.get(binding.source.0) else {
+                    return false;
+                };
+                if source.flags & DATA_BIND_FLAG_DIRECTION_TO_SOURCE != 0 {
+                    return false;
+                }
+                self.targets
+                    .get(binding.target.0)
+                    .and_then(|target| runtime_data_bind_target_global_id(target.target))
+                    == Some(bindable_global_id)
+            })
+        else {
+            return false;
+        };
+        let source_index = binding.source.0;
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return false;
+        };
+        source.mark_source_dirty_after_target_to_source();
+        self.mark_default_view_model_bindings_dirty();
+        true
     }
 
     pub(crate) fn fire_retained_trigger_for_source_path(&self, source_path: &[u32]) -> bool {
@@ -8318,6 +10037,7 @@ impl RuntimeDataBindGraph {
             if advance.changed {
                 if source.retained_bind.target_origin() {
                     source.target_to_source_dirty = true;
+                    source.retained_bind.mark_target_changed();
                 } else {
                     source.mark_source_dirty_after_target_to_source();
                 }
@@ -8332,40 +10052,118 @@ impl RuntimeDataBindGraph {
         }
     }
 
-    pub(crate) fn apply_default_view_model_number_targets_to_sources(
+    /// State-machine variant of the occurrence-ordered advance. Unlike
+    /// keyframe-only graph advances, this path owns a live scripting host and
+    /// therefore includes ScriptedDataConverter callbacks.
+    pub(crate) fn advance_stateful_converter_with_scripted(
         &mut self,
-        numbers: &[StateMachineBindableNumberInstance],
-    ) -> bool {
-        self.apply_default_view_model_number_targets_to_sources_with_options(numbers, false)
-    }
-
-    pub(crate) fn apply_default_view_model_number_public_update_targets_to_sources(
-        &mut self,
-        numbers: &[StateMachineBindableNumberInstance],
-    ) -> bool {
-        self.apply_default_view_model_number_targets_to_sources_with_options(numbers, true)
-    }
-
-    pub(crate) fn apply_default_view_model_number_targets_to_sources_with_options(
-        &mut self,
-        numbers: &[StateMachineBindableNumberInstance],
-        include_deferred_main_to_target: bool,
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
+        data_bind_index: usize,
+        elapsed_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> Result<RuntimeDataBindGraphStatefulAdvance, ScriptError> {
+        if !self.default_view_model_context_bound() {
+            return Ok(RuntimeDataBindGraphStatefulAdvance::default());
         }
+        let Some(binding) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .cloned()
+        else {
+            return Ok(RuntimeDataBindGraphStatefulAdvance::default());
+        };
+        let Some(source) = self.sources.get_mut(binding.source.0) else {
+            return Ok(RuntimeDataBindGraphStatefulAdvance::default());
+        };
+        // `bound` is the graph's representation of C++ `m_Source` for both
+        // cell-backed owned contexts and serialized default/imported
+        // contexts. Pinned DataBind::advance additionally gates on collapse
+        // (`data_bind.cpp:582-588`).
+        if !source.bound || source.retained_bind.is_collapsed() {
+            return Ok(RuntimeDataBindGraphStatefulAdvance::default());
+        }
+        let advance = source.advance_stateful_converter_with_scripted(elapsed_seconds, host)?;
+        if advance.changed {
+            if source.retained_bind.target_origin() {
+                source.target_to_source_dirty = true;
+                source.retained_bind.mark_target_changed();
+            } else {
+                source.mark_source_dirty_after_target_to_source();
+            }
+            self.mark_default_view_model_bindings_dirty();
+        }
+        Ok(advance)
+    }
+
+    /// C++ `DataBindContextValue::applyToSource` is one source-owner
+    /// operation for every target family: read the concrete target cache,
+    /// convert in the occurrence's main/reverse direction, then type-check
+    /// against the actual retained source. Target-specific loaders and
+    /// converter-none gates are not part of that path.
+    pub(crate) fn apply_default_view_model_targets_to_sources(
+        &mut self,
+        targets: &RuntimeDataBindGraphTargetsMut<'_>,
+    ) -> Result<bool, ScriptError> {
+        self.apply_default_view_model_targets_to_sources_with_options(targets, false, None)
+    }
+
+    pub(crate) fn apply_default_view_model_target_to_source_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        targets: &RuntimeDataBindGraphTargetsMut<'_>,
+    ) -> Result<bool, ScriptError> {
+        self.apply_default_view_model_targets_to_sources_with_options(
+            targets,
+            false,
+            Some(data_bind_index),
+        )
+    }
+
+    pub(crate) fn apply_direct_bindable_target_to_source_for_data_bind(
+        &mut self,
+        data_bind_index: usize,
+        targets: &RuntimeDataBindGraphTargetsMut<'_>,
+    ) -> Result<bool, ScriptError> {
+        // A direct BindableProperty host edit calls
+        // `DataBind::updateSourceBinding(true)`: the `true` argument forces
+        // target-to-source even when this TwoWay occurrence is authored with
+        // source-to-target as its main direction (`data_bind.cpp:550-565`).
+        self.apply_default_view_model_targets_to_sources_with_options(
+            targets,
+            true,
+            Some(data_bind_index),
+        )
+    }
+
+    fn apply_default_view_model_targets_to_sources_with_options(
+        &mut self,
+        targets: &RuntimeDataBindGraphTargetsMut<'_>,
+        include_deferred_main_to_target: bool,
+        only_data_bind_index: Option<usize>,
+    ) -> Result<bool, ScriptError> {
+        if !self.default_view_model_context_bound() {
+            return Ok(false);
+        }
+
         let mut updates = Vec::<(usize, Vec<u32>, RuntimeDataBindGraphValue)>::new();
         let mut applied_target_to_source = false;
         let mut formula_random_source = std::mem::take(&mut self.formula_random_source);
 
         for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
+            if only_data_bind_index.is_some_and(|index| binding.data_bind_index != index) {
                 continue;
-            };
-            let RuntimeDataBindGraphTarget::Number { global_id } = target.target else {
+            }
+            let Some(target_kind) = self
+                .targets
+                .get(binding.target.0)
+                .map(|target| target.target)
+            else {
                 continue;
             };
             let Some(source) = self.sources.get_mut(binding.source.0) else {
+                continue;
+            };
+            let Some(target_value) = targets.current_value(target_kind, &source.value) else {
                 continue;
             };
             let target_to_source_dirty = source.target_to_source_dirty
@@ -8374,102 +10172,79 @@ impl RuntimeDataBindGraph {
             if !target_to_source_dirty {
                 continue;
             }
+            let converted = match source.target_to_source_converted_value_with_script_errors(
+                &target_value,
+                &mut formula_random_source,
+            ) {
+                Ok(value) => value,
+                Err(error) => {
+                    // A terminal Rust resource fence aborts this container
+                    // turn without consuming occurrence dirt or converter
+                    // state.
+                    self.formula_random_source = formula_random_source;
+                    return Err(error);
+                }
+            };
             source.target_to_source_dirty = false;
             if include_deferred_main_to_target {
                 source.source_to_target_dirty_after_immediate = false;
             }
-            let Some(value) = numbers
-                .iter()
-                .find(|number| number.global_id == global_id)
-                .map(|number| number.value)
+            let Some(value) = converted
+                .as_ref()
+                .and_then(|value| matching_graph_source_value(&source.value, value))
             else {
                 continue;
             };
-            let Some(value) =
-                source.number_target_to_source_value(value, &mut formula_random_source)
-            else {
-                continue;
-            };
-            if !include_deferred_main_to_target
-                && source.is_main_to_source()
-                && source.applies_source_to_target()
-                && source.converter.as_ref().is_some_and(|converter| {
-                    matches!(
-                        converter,
-                        RuntimeDataBindGraphConverter::Formula { .. }
-                            | RuntimeDataBindGraphConverter::Group(_)
-                            | RuntimeDataBindGraphConverter::ListToLength
-                            | RuntimeDataBindGraphConverter::Rounder { .. }
-                            | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
-                    ) && !runtime_data_bind_graph_converter_contains_interpolator(converter)
-                })
+            applied_target_to_source = true;
+
+            // The retained cell is the C++ source owner. Write it while this
+            // occurrence suppresses its own notification; sibling DataBinds
+            // sharing the cell remain observable through their own sinks.
+            let retained_source_value = source.retained_bind.source().map(|cell| cell.value());
+            if let Some(cell_value) =
+                runtime_cell_value_from_graph_value(&value, retained_source_value.as_ref())
             {
-                // The probe/runtime's main-to-source setter seam invokes
-                // updateSourceBinding directly. A successful source write then
-                // notifies this TwoWay bind as source-originated dirt before
-                // updateDataBinds(false), so the converted source is re-applied
-                // to the target in that same update.
-                source.mark_source_dirty_after_target_to_source();
-                applied_target_to_source = true;
-            }
-            if include_deferred_main_to_target {
-                applied_target_to_source = true;
+                source.retained_bind.update_source_binding_value(cell_value);
             }
             updates.push((binding.source.0, source.path.clone(), value));
         }
 
         let mut changed = false;
         for (origin_source_index, path, value) in updates {
-            for (source_index, source) in self.sources.iter_mut().enumerate() {
+            let mut source_changed_for_path = false;
+            for source in &mut self.sources {
                 if !source.bound || source.path != path {
                     continue;
                 }
-                let source_changed = match (&mut source.value, &mut source.default_value, &value) {
-                    (
-                        RuntimeDataBindGraphValue::Number(source_value),
-                        RuntimeDataBindGraphValue::Number(default_value),
-                        RuntimeDataBindGraphValue::Number(value),
-                    ) => {
-                        let mut source_changed = false;
-                        if *source_value != *value {
-                            *source_value = *value;
-                            source_changed = true;
-                        }
-                        if *default_value != *value {
-                            *default_value = *value;
-                            source_changed = true;
-                        }
-                        source_changed
-                    }
-                    (
-                        RuntimeDataBindGraphValue::Boolean(source_value),
-                        RuntimeDataBindGraphValue::Boolean(default_value),
-                        RuntimeDataBindGraphValue::Boolean(value),
-                    ) => {
-                        let mut source_changed = false;
-                        if *source_value != *value {
-                            *source_value = *value;
-                            source_changed = true;
-                        }
-                        if *default_value != *value {
-                            *default_value = *value;
-                            source_changed = true;
-                        }
-                        source_changed
-                    }
-                    _ => false,
-                };
-                if source_changed {
-                    source.reset_formula_random_state_for_target_change();
-                    if source.applies_source_to_target() && source_index != origin_source_index {
-                        if include_deferred_main_to_target {
-                            source.mark_source_dirty_after_public_target_to_source();
-                        } else {
+                source_changed_for_path |=
+                    assign_matching_scalar_graph_value(&mut source.value, &value)
+                        | assign_matching_scalar_graph_value(&mut source.default_value, &value);
+            }
+            if source_changed_for_path {
+                if let Some(origin) = self.sources.get_mut(origin_source_index) {
+                    // The source cell notifies both the outer DataBind and the
+                    // Formula converter registered as its own dependent.
+                    // `suppressDirt` silences only the outer DataBind; a
+                    // SourceChange Formula still clears its cached randoms
+                    // before the later source-to-target half runs
+                    // (`data_converter_formula.cpp:527-545`;
+                    // `context_value.hpp:90-99`).
+                    origin.reset_formula_random_state_for_target_change();
+                }
+                if include_deferred_main_to_target {
+                    self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
+                } else {
+                    for (source_index, source) in self.sources.iter_mut().enumerate() {
+                        if source_index != origin_source_index
+                            && source.bound
+                            && source.path == path
+                            && source.applies_source_to_target()
+                        {
                             source.mark_source_dirty_after_target_to_source();
                         }
                     }
-                    changed = true;
                 }
+                changed = true;
             }
         }
 
@@ -8477,1257 +10252,7 @@ impl RuntimeDataBindGraph {
             self.mark_default_view_model_bindings_dirty();
         }
         self.formula_random_source = formula_random_source;
-        changed || applied_target_to_source
-    }
-
-    pub(crate) fn apply_default_view_model_symbol_list_index_targets_to_sources(
-        &mut self,
-        integers: &[StateMachineBindableIntegerInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let mut changed = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::Integer { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            if !source.target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            if !source.bound || !source.supports_direct_symbol_list_index_target_to_source() {
-                continue;
-            }
-            let Some(value) = integers
-                .iter()
-                .find(|integer| integer.global_id == global_id)
-                .map(|integer| integer.value)
-            else {
-                continue;
-            };
-            let RuntimeDataBindGraphValue::SymbolListIndex(source_value) = &mut source.value else {
-                continue;
-            };
-            if *source_value != value {
-                *source_value = value;
-                changed = true;
-            }
-            let RuntimeDataBindGraphValue::SymbolListIndex(default_value) =
-                &mut source.default_value
-            else {
-                continue;
-            };
-            if *default_value != value {
-                *default_value = value;
-                changed = true;
-            }
-        }
-
-        if changed {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        changed
-    }
-
-    pub(crate) fn apply_default_view_model_symbol_list_index_public_update_targets_to_sources(
-        &mut self,
-        integers: &[StateMachineBindableIntegerInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-
-        let mut updates = Vec::<(usize, Vec<u32>, u64)>::new();
-        let mut applied_target_to_source = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::Integer { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            let target_to_source_dirty =
-                source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
-            if !target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            source.source_to_target_dirty_after_immediate = false;
-            if !source.bound || !source.supports_direct_symbol_list_index_target_to_source() {
-                continue;
-            }
-            let Some(value) = integers
-                .iter()
-                .find(|integer| integer.global_id == global_id)
-                .map(|integer| integer.value)
-            else {
-                continue;
-            };
-            applied_target_to_source = true;
-            updates.push((binding.source.0, source.path.clone(), value));
-        }
-
-        let mut changed = false;
-        for (origin_source_index, path, value) in updates {
-            let mut source_changed_for_path = false;
-            for source in &mut self.sources {
-                if !source.bound || source.path != path {
-                    continue;
-                }
-                let RuntimeDataBindGraphValue::SymbolListIndex(source_value) = &mut source.value
-                else {
-                    continue;
-                };
-                if *source_value != value {
-                    *source_value = value;
-                    source_changed_for_path = true;
-                }
-                let RuntimeDataBindGraphValue::SymbolListIndex(default_value) =
-                    &mut source.default_value
-                else {
-                    continue;
-                };
-                if *default_value != value {
-                    *default_value = value;
-                    source_changed_for_path = true;
-                }
-            }
-            if source_changed_for_path {
-                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
-                changed = true;
-            }
-        }
-
-        if changed || applied_target_to_source {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        applied_target_to_source
-    }
-
-    pub(crate) fn apply_default_view_model_boolean_targets_to_sources(
-        &mut self,
-        booleans: &[StateMachineBindableBooleanInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let mut changed = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::Boolean { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            if !source.target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            let Some(value) = booleans
-                .iter()
-                .find(|boolean| boolean.global_id == global_id)
-                .map(|boolean| boolean.value)
-            else {
-                continue;
-            };
-            let Some(value) = source.boolean_target_to_source_value(value) else {
-                continue;
-            };
-            let RuntimeDataBindGraphValue::Boolean(source_value) = &mut source.value else {
-                continue;
-            };
-            if *source_value != value {
-                *source_value = value;
-                changed = true;
-            }
-            let RuntimeDataBindGraphValue::Boolean(default_value) = &mut source.default_value
-            else {
-                continue;
-            };
-            if *default_value != value {
-                *default_value = value;
-                changed = true;
-            }
-        }
-
-        if changed {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        changed
-    }
-
-    pub(crate) fn apply_default_view_model_boolean_public_update_targets_to_sources(
-        &mut self,
-        booleans: &[StateMachineBindableBooleanInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-
-        let mut updates = Vec::<(usize, Vec<u32>, bool)>::new();
-        let mut applied_target_to_source = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::Boolean { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            let target_to_source_dirty =
-                source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
-            if !target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            source.source_to_target_dirty_after_immediate = false;
-            let Some(value) = booleans
-                .iter()
-                .find(|boolean| boolean.global_id == global_id)
-                .map(|boolean| boolean.value)
-            else {
-                continue;
-            };
-            let Some(value) = source.boolean_target_to_source_value(value) else {
-                continue;
-            };
-            applied_target_to_source = true;
-            updates.push((binding.source.0, source.path.clone(), value));
-        }
-
-        let mut changed = false;
-        for (origin_source_index, path, value) in updates {
-            let mut source_changed_for_path = false;
-            for source in &mut self.sources {
-                if !source.bound || source.path != path {
-                    continue;
-                }
-                let (
-                    RuntimeDataBindGraphValue::Boolean(source_value),
-                    RuntimeDataBindGraphValue::Boolean(default_value),
-                ) = (&mut source.value, &mut source.default_value)
-                else {
-                    continue;
-                };
-                if *source_value != value {
-                    *source_value = value;
-                    source_changed_for_path = true;
-                }
-                if *default_value != value {
-                    *default_value = value;
-                    source_changed_for_path = true;
-                }
-            }
-            if source_changed_for_path {
-                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
-                changed = true;
-            }
-        }
-
-        if changed || applied_target_to_source {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        applied_target_to_source
-    }
-
-    pub(crate) fn apply_default_view_model_string_targets_to_sources(
-        &mut self,
-        strings: &[StateMachineBindableStringInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let mut changed = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::String { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            if !source.target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            let Some(value) = strings
-                .iter()
-                .find(|string| string.global_id == global_id)
-                .map(|string| string.value.as_slice())
-            else {
-                continue;
-            };
-            let Some(value) = source.string_target_to_source_value(value) else {
-                continue;
-            };
-            if source.is_main_to_source()
-                && source.uses_delayed_string_source_to_target_after_main_to_source()
-            {
-                source.source_to_target_dirty_after_immediate = true;
-                changed = true;
-            }
-            let RuntimeDataBindGraphValue::String(value) = value else {
-                continue;
-            };
-            let RuntimeDataBindGraphValue::String(source_value) = &mut source.value else {
-                continue;
-            };
-            if source_value.as_slice() != value.as_slice() {
-                *source_value = value.clone();
-                changed = true;
-            }
-            let RuntimeDataBindGraphValue::String(default_value) = &mut source.default_value else {
-                continue;
-            };
-            if default_value.as_slice() != value.as_slice() {
-                *default_value = value;
-                changed = true;
-            }
-        }
-
-        if changed {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        changed
-    }
-
-    pub(crate) fn apply_default_view_model_string_public_update_targets_to_sources(
-        &mut self,
-        strings: &[StateMachineBindableStringInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let mut updates = Vec::<(usize, Vec<u32>, RuntimeDataBindGraphValue)>::new();
-        let mut applied_target_to_source = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::String { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            let target_to_source_dirty =
-                source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
-            if !target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            source.source_to_target_dirty_after_immediate = false;
-            let Some(value) = strings
-                .iter()
-                .find(|string| string.global_id == global_id)
-                .map(|string| string.value.as_slice())
-            else {
-                continue;
-            };
-            let Some(value) = source.string_target_to_source_value(value) else {
-                continue;
-            };
-            applied_target_to_source = true;
-            updates.push((binding.source.0, source.path.clone(), value));
-        }
-
-        let mut changed = false;
-        for (origin_source_index, path, value) in updates {
-            let mut source_changed_for_path = false;
-            for source in &mut self.sources {
-                if !source.bound || source.path != path {
-                    continue;
-                }
-                let (
-                    RuntimeDataBindGraphValue::String(source_value),
-                    RuntimeDataBindGraphValue::String(default_value),
-                    RuntimeDataBindGraphValue::String(value),
-                ) = (&mut source.value, &mut source.default_value, &value)
-                else {
-                    continue;
-                };
-                if source_value.as_slice() != value.as_slice() {
-                    *source_value = value.clone();
-                    source_changed_for_path = true;
-                }
-                if default_value.as_slice() != value.as_slice() {
-                    *default_value = value.clone();
-                    source_changed_for_path = true;
-                }
-            }
-            if source_changed_for_path {
-                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
-                changed = true;
-            }
-        }
-
-        if changed || applied_target_to_source {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        changed || applied_target_to_source
-    }
-
-    pub(crate) fn apply_default_view_model_color_targets_to_sources(
-        &mut self,
-        colors: &[StateMachineBindableColorInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let mut changed = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::Color { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            if !source.target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            if !source.bound || !source.supports_direct_color_target_to_source() {
-                continue;
-            }
-            let Some(value) = colors
-                .iter()
-                .find(|color| color.global_id == global_id)
-                .map(|color| color.value)
-            else {
-                continue;
-            };
-            let RuntimeDataBindGraphValue::Color(source_value) = &mut source.value else {
-                continue;
-            };
-            if *source_value != value {
-                *source_value = value;
-                changed = true;
-            }
-            let RuntimeDataBindGraphValue::Color(default_value) = &mut source.default_value else {
-                continue;
-            };
-            if *default_value != value {
-                *default_value = value;
-                changed = true;
-            }
-        }
-
-        if changed {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        changed
-    }
-
-    pub(crate) fn apply_default_view_model_color_public_update_targets_to_sources(
-        &mut self,
-        colors: &[StateMachineBindableColorInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-
-        let mut updates = Vec::<(usize, Vec<u32>, u32)>::new();
-        let mut applied_target_to_source = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::Color { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            let target_to_source_dirty =
-                source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
-            if !target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            source.source_to_target_dirty_after_immediate = false;
-            if !source.bound || !source.supports_direct_color_target_to_source() {
-                continue;
-            }
-            let Some(value) = colors
-                .iter()
-                .find(|color| color.global_id == global_id)
-                .map(|color| color.value)
-            else {
-                continue;
-            };
-            applied_target_to_source = true;
-            updates.push((binding.source.0, source.path.clone(), value));
-        }
-
-        let mut changed = false;
-        for (origin_source_index, path, value) in updates {
-            let mut source_changed_for_path = false;
-            for source in &mut self.sources {
-                if !source.bound || source.path != path {
-                    continue;
-                }
-                let RuntimeDataBindGraphValue::Color(source_value) = &mut source.value else {
-                    continue;
-                };
-                if *source_value != value {
-                    *source_value = value;
-                    source_changed_for_path = true;
-                }
-                let RuntimeDataBindGraphValue::Color(default_value) = &mut source.default_value
-                else {
-                    continue;
-                };
-                if *default_value != value {
-                    *default_value = value;
-                    source_changed_for_path = true;
-                }
-            }
-            if source_changed_for_path {
-                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
-                changed = true;
-            }
-        }
-
-        if changed || applied_target_to_source {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        applied_target_to_source
-    }
-
-    pub(crate) fn apply_default_view_model_enum_targets_to_sources(
-        &mut self,
-        enums: &[StateMachineBindableEnumInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let mut changed = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::Enum { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            if !source.target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            if !source.bound || !source.supports_direct_enum_target_to_source() {
-                continue;
-            }
-            let Some(value) = enums
-                .iter()
-                .find(|r#enum| r#enum.global_id == global_id)
-                .map(|r#enum| r#enum.value)
-            else {
-                continue;
-            };
-            let RuntimeDataBindGraphValue::Enum(source_value) = &mut source.value else {
-                continue;
-            };
-            if *source_value != value {
-                *source_value = value;
-                changed = true;
-            }
-            let RuntimeDataBindGraphValue::Enum(default_value) = &mut source.default_value else {
-                continue;
-            };
-            if *default_value != value {
-                *default_value = value;
-                changed = true;
-            }
-        }
-
-        if changed {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        changed
-    }
-
-    pub(crate) fn apply_default_view_model_enum_public_update_targets_to_sources(
-        &mut self,
-        enums: &[StateMachineBindableEnumInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-
-        let mut updates = Vec::<(usize, Vec<u32>, u64)>::new();
-        let mut applied_target_to_source = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::Enum { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            let target_to_source_dirty =
-                source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
-            if !target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            source.source_to_target_dirty_after_immediate = false;
-            if !source.bound || !source.supports_direct_enum_target_to_source() {
-                continue;
-            }
-            let Some(value) = enums
-                .iter()
-                .find(|r#enum| r#enum.global_id == global_id)
-                .map(|r#enum| r#enum.value)
-            else {
-                continue;
-            };
-            applied_target_to_source = true;
-            updates.push((binding.source.0, source.path.clone(), value));
-        }
-
-        let mut changed = false;
-        for (origin_source_index, path, value) in updates {
-            let mut source_changed_for_path = false;
-            for source in &mut self.sources {
-                if !source.bound || source.path != path {
-                    continue;
-                }
-                let RuntimeDataBindGraphValue::Enum(source_value) = &mut source.value else {
-                    continue;
-                };
-                if *source_value != value {
-                    *source_value = value;
-                    source_changed_for_path = true;
-                }
-                let RuntimeDataBindGraphValue::Enum(default_value) = &mut source.default_value
-                else {
-                    continue;
-                };
-                if *default_value != value {
-                    *default_value = value;
-                    source_changed_for_path = true;
-                }
-            }
-            if source_changed_for_path {
-                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
-                changed = true;
-            }
-        }
-
-        if changed || applied_target_to_source {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        applied_target_to_source
-    }
-
-    pub(crate) fn apply_default_view_model_asset_targets_to_sources(
-        &mut self,
-        assets: &[StateMachineBindableAssetInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let mut changed = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::Asset { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            if !source.target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            if !source.bound || !source.supports_direct_asset_target_to_source() {
-                continue;
-            }
-            let Some(value) = assets
-                .iter()
-                .find(|asset| asset.global_id == global_id)
-                .map(|asset| asset.value.data_bind_asset_index())
-            else {
-                continue;
-            };
-            let RuntimeDataBindGraphValue::Asset(source_value) = &mut source.value else {
-                continue;
-            };
-            if *source_value != value {
-                *source_value = value;
-                changed = true;
-            }
-            let RuntimeDataBindGraphValue::Asset(default_value) = &mut source.default_value else {
-                continue;
-            };
-            if *default_value != value {
-                *default_value = value;
-                changed = true;
-            }
-        }
-
-        if changed {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        changed
-    }
-
-    pub(crate) fn apply_default_view_model_asset_public_update_targets_to_sources(
-        &mut self,
-        assets: &[StateMachineBindableAssetInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-
-        let mut updates = Vec::<(usize, Vec<u32>, u64)>::new();
-        let mut applied_target_to_source = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::Asset { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            let target_to_source_dirty =
-                source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
-            if !target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            source.source_to_target_dirty_after_immediate = false;
-            if !source.bound || !source.supports_direct_asset_target_to_source() {
-                continue;
-            }
-            let Some(value) = assets
-                .iter()
-                .find(|asset| asset.global_id == global_id)
-                .map(|asset| asset.value.data_bind_asset_index())
-            else {
-                continue;
-            };
-            applied_target_to_source = true;
-            updates.push((binding.source.0, source.path.clone(), value));
-        }
-
-        let mut changed = false;
-        for (origin_source_index, path, value) in updates {
-            let mut source_changed_for_path = false;
-            for source in &mut self.sources {
-                if !source.bound || source.path != path {
-                    continue;
-                }
-                let RuntimeDataBindGraphValue::Asset(source_value) = &mut source.value else {
-                    continue;
-                };
-                if *source_value != value {
-                    *source_value = value;
-                    source_changed_for_path = true;
-                }
-                let RuntimeDataBindGraphValue::Asset(default_value) = &mut source.default_value
-                else {
-                    continue;
-                };
-                if *default_value != value {
-                    *default_value = value;
-                    source_changed_for_path = true;
-                }
-            }
-            if source_changed_for_path {
-                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
-                changed = true;
-            }
-        }
-
-        if changed || applied_target_to_source {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        applied_target_to_source
-    }
-
-    pub(crate) fn apply_default_view_model_artboard_targets_to_sources(
-        &mut self,
-        artboards: &[StateMachineBindableArtboardInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let mut changed = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::Artboard { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            if !source.target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            if !source.bound || !source.supports_direct_artboard_target_to_source() {
-                continue;
-            }
-            let Some(value) = artboards
-                .iter()
-                .find(|artboard| artboard.global_id == global_id)
-                .map(|artboard| artboard.value)
-            else {
-                continue;
-            };
-            let RuntimeDataBindGraphValue::Artboard(source_value) = &mut source.value else {
-                continue;
-            };
-            if *source_value != value {
-                *source_value = value;
-                changed = true;
-            }
-            let RuntimeDataBindGraphValue::Artboard(default_value) = &mut source.default_value
-            else {
-                continue;
-            };
-            if *default_value != value {
-                *default_value = value;
-                changed = true;
-            }
-        }
-
-        if changed {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        changed
-    }
-
-    pub(crate) fn apply_default_view_model_artboard_public_update_targets_to_sources(
-        &mut self,
-        artboards: &[StateMachineBindableArtboardInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-
-        let mut updates = Vec::<(usize, Vec<u32>, u64)>::new();
-        let mut applied_target_to_source = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::Artboard { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            let target_to_source_dirty =
-                source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
-            if !target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            source.source_to_target_dirty_after_immediate = false;
-            if !source.bound || !source.supports_direct_artboard_target_to_source() {
-                continue;
-            }
-            let Some(value) = artboards
-                .iter()
-                .find(|artboard| artboard.global_id == global_id)
-                .map(|artboard| artboard.value)
-            else {
-                continue;
-            };
-            applied_target_to_source = true;
-            updates.push((binding.source.0, source.path.clone(), value));
-        }
-
-        let mut changed = false;
-        for (origin_source_index, path, value) in updates {
-            let mut source_changed_for_path = false;
-            for source in &mut self.sources {
-                if !source.bound || source.path != path {
-                    continue;
-                }
-                let RuntimeDataBindGraphValue::Artboard(source_value) = &mut source.value else {
-                    continue;
-                };
-                if *source_value != value {
-                    *source_value = value;
-                    source_changed_for_path = true;
-                }
-                let RuntimeDataBindGraphValue::Artboard(default_value) = &mut source.default_value
-                else {
-                    continue;
-                };
-                if *default_value != value {
-                    *default_value = value;
-                    source_changed_for_path = true;
-                }
-            }
-            if source_changed_for_path {
-                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
-                changed = true;
-            }
-        }
-
-        if changed || applied_target_to_source {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        applied_target_to_source
-    }
-
-    pub(crate) fn apply_default_view_model_list_targets_to_sources(&mut self) -> bool {
-        self.apply_default_view_model_list_targets_to_sources_with_options(false)
-    }
-
-    pub(crate) fn apply_default_view_model_list_public_update_targets_to_sources(
-        &mut self,
-    ) -> bool {
-        self.apply_default_view_model_list_targets_to_sources_with_options(true)
-    }
-
-    pub(crate) fn apply_default_view_model_list_targets_to_sources_with_options(
-        &mut self,
-        include_deferred_main_to_target: bool,
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-
-        let mut consumed_target_to_source = false;
-        let mut needs_source_to_target_noop = false;
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::List { .. } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            let target_to_source_dirty = source.target_to_source_dirty
-                || (include_deferred_main_to_target
-                    && source.source_to_target_dirty_after_immediate);
-            if !target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            if include_deferred_main_to_target {
-                source.source_to_target_dirty_after_immediate = false;
-            }
-            if !source.bound || !source.applies_target_to_source() {
-                continue;
-            }
-            consumed_target_to_source = true;
-            if source.applies_source_to_target()
-                && (include_deferred_main_to_target
-                    || !source.suppresses_explicit_list_target_reapply_after_formula())
-            {
-                source.source_to_target_dirty_after_target_to_source = true;
-                needs_source_to_target_noop = true;
-            }
-        }
-
-        if needs_source_to_target_noop {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        consumed_target_to_source
-    }
-
-    pub(crate) fn apply_default_view_model_trigger_targets_to_sources(
-        &mut self,
-        triggers: &[StateMachineBindableTriggerInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let mut changed = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::Trigger { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            if !source.target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            source.source_to_target_dirty_after_target_to_source = false;
-            let Some(value) = triggers
-                .iter()
-                .find(|trigger| trigger.global_id == global_id)
-                .map(|trigger| trigger.value)
-            else {
-                continue;
-            };
-            let Some(value) = source.trigger_target_to_source_value(value) else {
-                continue;
-            };
-            changed |= source.write_retained_trigger_source(value);
-        }
-
-        if changed {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        changed
-    }
-
-    pub(crate) fn apply_default_view_model_trigger_public_update_targets_to_sources(
-        &mut self,
-        triggers: &[StateMachineBindableTriggerInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-
-        let mut updates = Vec::<(usize, Vec<u32>, RuntimeDataBindGraphValue)>::new();
-        let mut applied_target_to_source = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::Trigger { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            let target_to_source_dirty =
-                source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
-            if !target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            source.source_to_target_dirty_after_immediate = false;
-            let Some(value) = triggers
-                .iter()
-                .find(|trigger| trigger.global_id == global_id)
-                .map(|trigger| trigger.value)
-            else {
-                continue;
-            };
-            let Some(value) = source.trigger_target_to_source_value(value) else {
-                continue;
-            };
-            applied_target_to_source = true;
-            updates.push((binding.source.0, source.path.clone(), value));
-        }
-
-        let mut changed = false;
-        for (origin_source_index, path, value) in updates {
-            let source_changed_for_path = self
-                .sources
-                .get_mut(origin_source_index)
-                .is_some_and(|source| source.write_retained_trigger_source(value));
-            if source_changed_for_path {
-                self.mark_public_target_to_source_observers_dirty(origin_source_index, &path);
-                changed = true;
-            }
-        }
-
-        if changed || applied_target_to_source {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        applied_target_to_source
-    }
-
-    pub(crate) fn apply_default_view_model_view_model_targets_to_sources(
-        &mut self,
-        view_models: &[StateMachineBindableViewModelInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-        let mut updates = Vec::<(Vec<u32>, RuntimeViewModelPointer)>::new();
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::ViewModel { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            if !source.target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            if !source.bound || !source.supports_direct_view_model_target_to_source() {
-                continue;
-            }
-            let Some(value) = view_models
-                .iter()
-                .find(|view_model| view_model.global_id == global_id)
-                .map(|view_model| view_model.value)
-            else {
-                continue;
-            };
-            updates.push((source.path.clone(), value));
-        }
-
-        let mut changed = false;
-        for (path, value) in updates {
-            for source in &mut self.sources {
-                if !source.bound || source.path != path {
-                    continue;
-                }
-                let RuntimeDataBindGraphValue::ViewModel(source_value) = &mut source.value else {
-                    continue;
-                };
-                let mut source_changed = false;
-                if *source_value != value {
-                    *source_value = value;
-                    source_changed = true;
-                }
-                let RuntimeDataBindGraphValue::ViewModel(default_value) = &mut source.default_value
-                else {
-                    continue;
-                };
-                if *default_value != value {
-                    *default_value = value;
-                    source_changed = true;
-                }
-                if source_changed {
-                    source.reconcile_pending = false;
-                    source.source_to_target_dirty_after_target_to_source = true;
-                    changed = true;
-                }
-            }
-        }
-
-        if changed {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        changed
-    }
-
-    pub(crate) fn apply_default_view_model_view_model_public_update_targets_to_sources(
-        &mut self,
-        view_models: &[StateMachineBindableViewModelInstance],
-    ) -> bool {
-        if !self.default_view_model_source_context_bound() {
-            return false;
-        }
-
-        let mut updates = Vec::<(Vec<u32>, RuntimeViewModelPointer)>::new();
-        let mut applied_target_to_source = false;
-
-        for binding in self.default_view_model_bindings.clone() {
-            let Some(target) = self.targets.get(binding.target.0) else {
-                continue;
-            };
-            let RuntimeDataBindGraphTarget::ViewModel { global_id } = target.target else {
-                continue;
-            };
-            let Some(source) = self.sources.get_mut(binding.source.0) else {
-                continue;
-            };
-            let target_to_source_dirty =
-                source.target_to_source_dirty || source.source_to_target_dirty_after_immediate;
-            if !target_to_source_dirty {
-                continue;
-            }
-            source.target_to_source_dirty = false;
-            source.source_to_target_dirty_after_immediate = false;
-            if !source.bound || !source.supports_direct_view_model_target_to_source() {
-                continue;
-            }
-            let Some(value) = view_models
-                .iter()
-                .find(|view_model| view_model.global_id == global_id)
-                .map(|view_model| view_model.value)
-            else {
-                continue;
-            };
-            applied_target_to_source = true;
-            updates.push((source.path.clone(), value));
-        }
-
-        let mut changed = false;
-        for (path, value) in updates {
-            for source in &mut self.sources {
-                if !source.bound || source.path != path {
-                    continue;
-                }
-                let RuntimeDataBindGraphValue::ViewModel(source_value) = &mut source.value else {
-                    continue;
-                };
-                let mut source_changed = false;
-                if *source_value != value {
-                    *source_value = value;
-                    source_changed = true;
-                }
-                let RuntimeDataBindGraphValue::ViewModel(default_value) = &mut source.default_value
-                else {
-                    continue;
-                };
-                if *default_value != value {
-                    *default_value = value;
-                    source_changed = true;
-                }
-                if source_changed {
-                    source.source_to_target_dirty_after_target_to_source = true;
-                    changed = true;
-                }
-            }
-        }
-
-        if changed || applied_target_to_source {
-            self.mark_default_view_model_bindings_dirty();
-        }
-        applied_target_to_source
+        Ok(changed || applied_target_to_source)
     }
 
     fn mark_public_target_to_source_observers_dirty(
@@ -9740,28 +10265,45 @@ impl RuntimeDataBindGraph {
                 continue;
             }
             if source.applies_source_to_target() {
-                // The shared cell already cascaded this sibling's dirt. Fold
-                // its read-model cache now, but keep the public-update defer
-                // so C++ does not apply the observer in the origin pass.
+                // The shared cell already cascaded this sibling's dirt. If
+                // that sibling is still ahead in the active container
+                // snapshot, C++ consumes the new Bindings bit on that same
+                // turn; only a sibling that has already run naturally lands
+                // in the next snapshot through its queue notification.
                 Self::refresh_retained_source_from_cell(source);
-                source.mark_source_dirty_after_public_target_to_source();
+                source.mark_source_dirty_after_target_to_source();
             }
         }
     }
 
-    fn take_default_view_model_binding_updates(
+    fn take_default_view_model_binding_updates_with_script_errors(
         &mut self,
         include_view_models: bool,
         phase: RuntimeDataBindGraphApplyPhase,
-    ) -> Vec<(RuntimeDataBindGraphTarget, RuntimeDataBindGraphValue)> {
-        if !self.default_view_model_context_bound() || !self.default_view_model_bindings_dirty {
-            return Vec::new();
+        only_data_bind_index: Option<usize>,
+    ) -> Result<Vec<(RuntimeDataBindGraphTarget, RuntimeDataBindGraphValue)>, ScriptError> {
+        if !self.default_view_model_context_bound()
+            || (only_data_bind_index.is_none() && !self.default_view_model_bindings_dirty)
+        {
+            return Ok(Vec::new());
         }
         let mut updates = Vec::new();
         let mut skipped_dirty_binding = false;
         let mut formula_random_source = std::mem::take(&mut self.formula_random_source);
 
         for binding in self.default_view_model_bindings.clone() {
+            if only_data_bind_index.is_some_and(|index| binding.data_bind_index != index) {
+                // `DataBindContainer` selects one concrete `DataBind*` at a
+                // time. A sibling occurrence remains independently dirty
+                // until its own turn; it cannot be hidden by clearing this
+                // graph's aggregate compatibility bit after the preceding
+                // occurrence (`data_bind_container.cpp:115-203`).
+                skipped_dirty_binding |= self
+                    .sources
+                    .get(binding.source.0)
+                    .is_some_and(RuntimeDataBindGraphSourceNode::has_pending_binding_work);
+                continue;
+            }
             let Some(source) = self.sources.get_mut(binding.source.0) else {
                 continue;
             };
@@ -9814,7 +10356,6 @@ impl RuntimeDataBindGraph {
                 && matches!(
                     phase,
                     RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance
-                        | RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance
                         | RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse
                 );
             let delayed_view_model_apply = !source.is_main_to_source()
@@ -9823,13 +10364,13 @@ impl RuntimeDataBindGraph {
                 && matches!(
                     phase,
                     RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance
-                        | RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance
                         | RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse
                 );
             if source.retained_bind.target_origin()
                 && !source.source_to_target_dirty_after_target_to_source
                 && !delayed_main_to_source_apply
                 && !delayed_view_model_apply
+                && !source.reconcile_pending
             {
                 // Target-only dirt must not run source->target and clobber the
                 // just-authored target. This is the Rust equivalent of
@@ -9888,8 +10429,32 @@ impl RuntimeDataBindGraph {
                 skipped_dirty_binding = true;
                 continue;
             }
-            let converted_value = source.converted_value(&mut formula_random_source);
+            let converted_value =
+                match source.converted_value_with_script_errors(&mut formula_random_source) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        // The process-global/random replay state belongs to
+                        // the graph occurrence, not this one update stack
+                        // frame. A terminal Rust resource fence aborts the
+                        // container turn but must not silently replace that
+                        // retained state with `Default`.
+                        self.formula_random_source = formula_random_source;
+                        return Err(error);
+                    }
+                };
             let Some(value) = converted_value else {
+                continue;
+            };
+            let Some(value) =
+                source.source_to_target_value_for_concrete_target(target.target, value)
+            else {
+                // The only rejected dynamic-number cases are C++'s undefined
+                // float→int inputs. Consume this occurrence turn without
+                // inventing a target value.
+                source.source_to_target_dirty_after_immediate = false;
+                source.source_to_target_dirty_after_target_to_source = false;
+                source.reconcile_pending = false;
+                source.defer_source_to_target_until_next_update = false;
                 continue;
             };
             if matches!(phase, RuntimeDataBindGraphApplyPhase::Immediate)
@@ -9908,27 +10473,226 @@ impl RuntimeDataBindGraph {
         }
         self.formula_random_source = formula_random_source;
         self.default_view_model_bindings_dirty = skipped_dirty_binding;
-        updates
+        Ok(updates)
+    }
+
+    fn take_default_view_model_binding_updates(
+        &mut self,
+        include_view_models: bool,
+        phase: RuntimeDataBindGraphApplyPhase,
+        only_data_bind_index: Option<usize>,
+    ) -> Vec<(RuntimeDataBindGraphTarget, RuntimeDataBindGraphValue)> {
+        self.take_default_view_model_binding_updates_with_script_errors(
+            include_view_models,
+            phase,
+            only_data_bind_index,
+        )
+        .unwrap_or_default()
     }
 
     pub(crate) fn apply_default_view_model_bindings(
         &mut self,
         mut targets: RuntimeDataBindGraphTargetsMut<'_>,
         phase: RuntimeDataBindGraphApplyPhase,
-    ) {
+    ) -> Result<(), ScriptError> {
         let include_view_models = targets.include_view_models;
-        for (target, value) in
-            self.take_default_view_model_binding_updates(include_view_models, phase)
-        {
+        for (target, value) in self.take_default_view_model_binding_updates_with_script_errors(
+            include_view_models,
+            phase,
+            None,
+        )? {
             targets.apply_default_view_model_binding(&target, &value);
         }
+        Ok(())
+    }
+
+    /// C++ `DataBindContainer::updateDataBind`'s source-to-target half for
+    /// one selected `DataBind*`. The container has already snapshotted and
+    /// partitioned occurrence identity; this adapter must not visit sibling
+    /// bindings merely because they share a target kind.
+    pub(crate) fn update_default_view_model_binding(
+        &mut self,
+        data_bind_index: usize,
+        mut targets: RuntimeDataBindGraphTargetsMut<'_>,
+        phase: RuntimeDataBindGraphApplyPhase,
+    ) -> Result<(), ScriptError> {
+        let include_view_models = targets.include_view_models;
+        let updates = self.take_default_view_model_binding_updates_with_script_errors(
+            include_view_models,
+            phase,
+            Some(data_bind_index),
+        )?;
+        self.clear_retained_data_bind_occurrence_dirt(data_bind_index);
+        for (target, value) in updates {
+            targets.apply_default_view_model_binding(&target, &value);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn update_all_default_view_model_bindings_false(
+        &mut self,
+        mut targets: RuntimeDataBindGraphTargetsMut<'_>,
+    ) -> Result<(), ScriptError> {
+        // C++ `updateDataBinds(false)` drains the snapshotted occurrences in
+        // authored order. A direct target-to-source write can dirty a later
+        // sibling sharing the same retained cell, so updating only the
+        // originating occurrence loses that same-call propagation
+        // (`data_bind_container.cpp:115-203`).
+        let data_bind_indices = self
+            .default_view_model_bindings
+            .iter()
+            .map(|binding| binding.data_bind_index)
+            .collect::<Vec<_>>();
+        for data_bind_index in data_bind_indices {
+            let updates = self.take_default_view_model_binding_updates_with_script_errors(
+                targets.include_view_models,
+                RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse,
+                Some(data_bind_index),
+            )?;
+            self.clear_retained_data_bind_occurrence_dirt(data_bind_index);
+            for (target, value) in updates {
+                targets.apply_default_view_model_binding(&target, &value);
+            }
+        }
+        Ok(())
+    }
+
+    /// Process exactly one occurrence selected by the outer
+    /// `DataBindContainer` snapshot.
+    ///
+    /// Concrete target adapters receive this occurrence identity and read or
+    /// clear only the selected bind. Sibling occurrences retain their own
+    /// dirt and remain queued for a later container snapshot.
+    pub(crate) fn public_update_default_view_model_binding(
+        &mut self,
+        data_bind_index: usize,
+        mut targets: RuntimeDataBindGraphTargetsMut<'_>,
+    ) -> Result<(), ScriptError> {
+        if !self.default_view_model_context_bound() {
+            return Ok(());
+        }
+        let Some(binding) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .cloned()
+        else {
+            return Ok(());
+        };
+        let Some(target_kind) = self
+            .targets
+            .get(binding.target.0)
+            .map(|target| target.target)
+        else {
+            return Ok(());
+        };
+        let Some(source) = self.sources.get(binding.source.0) else {
+            return Ok(());
+        };
+        let source_runs_first = source.source_to_target_runs_first();
+        let persisting = source.applies_target_to_source()
+            && matches!(
+                target_kind,
+                RuntimeDataBindGraphTarget::Asset { .. }
+                    | RuntimeDataBindGraphTarget::ViewModel { .. }
+            );
+        let wants_target_to_source = source.applies_target_to_source()
+            && (persisting
+                || source
+                    .retained_bind
+                    .pending_dirt()
+                    .contains(RuntimeCellDirt::BINDINGS_TARGET)
+                || source.target_to_source_dirty
+                || source.source_to_target_dirty_after_immediate);
+
+        // The polling fallback behaves as if target dirt were present for
+        // every public call, but it is not enrolled in a dirty queue
+        // (`data_bind_container.cpp:86-105,115-128,239-248`).
+        if persisting && let Some(source) = self.sources.get_mut(binding.source.0) {
+            if source.is_main_to_source() {
+                source.target_to_source_dirty = true;
+            } else {
+                source.source_to_target_dirty_after_immediate = true;
+            }
+        }
+
+        if wants_target_to_source && !source_runs_first {
+            self.public_update_default_view_model_target_to_source(data_bind_index, &targets)?;
+        }
+
+        let include_view_models = targets.include_view_models;
+        let updates = self.take_default_view_model_binding_updates_with_script_errors(
+            include_view_models,
+            RuntimeDataBindGraphApplyPhase::PublicUpdate,
+            Some(data_bind_index),
+        )?;
+
+        self.clear_retained_data_bind_occurrence_dirt(data_bind_index);
+        for (target, value) in updates {
+            targets.apply_default_view_model_binding(&target, &value);
+        }
+
+        if wants_target_to_source && source_runs_first {
+            if let Some(source) = self.sources.get_mut(binding.source.0) {
+                if source.is_main_to_source() {
+                    source.target_to_source_dirty = true;
+                } else {
+                    source.source_to_target_dirty_after_immediate = true;
+                }
+            }
+            self.public_update_default_view_model_target_to_source(data_bind_index, &targets)?;
+        }
+
+        self.default_view_model_bindings_dirty = self.sources.iter().any(|source| {
+            source.target_to_source_dirty
+                || source.reconcile_pending
+                || source.defer_source_to_target_until_next_update
+                || source.source_to_target_dirty_after_immediate
+                || source.source_to_target_dirty_after_target_to_source
+        });
+        Ok(())
+    }
+
+    fn clear_retained_data_bind_occurrence_dirt(&mut self, data_bind_index: usize) {
+        let Some(source_index) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source.0)
+        else {
+            return;
+        };
+        let Some(source) = self.sources.get_mut(source_index) else {
+            return;
+        };
+        // C++ `DataBindContainer::updateDataBind` snapshots one occurrence's
+        // dirt, clears that dirt, and only then calls `DataBind::update`.
+        // Clearing before the concrete target write lets a later notification
+        // enqueue the same occurrence again instead of being hidden behind
+        // the already-latched bind/rebind bits
+        // (`data_bind_container.cpp:136-147`).
+        source.retained_bind.take_target_dirt();
+        source.retained_bind.take_pending_source_dirt();
+    }
+
+    fn public_update_default_view_model_target_to_source(
+        &mut self,
+        data_bind_index: usize,
+        targets: &RuntimeDataBindGraphTargetsMut<'_>,
+    ) -> Result<(), ScriptError> {
+        self.apply_default_view_model_targets_to_sources_with_options(
+            targets,
+            true,
+            Some(data_bind_index),
+        )?;
+        Ok(())
     }
 
     pub(crate) fn take_key_frame_binding_updates(
         &mut self,
         phase: RuntimeDataBindGraphApplyPhase,
     ) -> Vec<(RuntimeDataBindGraphTarget, RuntimeDataBindGraphValue)> {
-        self.take_default_view_model_binding_updates(false, phase)
+        self.take_default_view_model_binding_updates(false, phase, None)
             .into_iter()
             .filter(|(target, _)| {
                 matches!(
@@ -9944,6 +10708,14 @@ impl RuntimeDataBindGraph {
 }
 
 impl RuntimeDataBindGraphSourceNode {
+    fn has_pending_binding_work(&self) -> bool {
+        self.target_to_source_dirty
+            || self.reconcile_pending
+            || self.defer_source_to_target_until_next_update
+            || self.source_to_target_dirty_after_immediate
+            || self.source_to_target_dirty_after_target_to_source
+    }
+
     fn applies_source_to_target(&self) -> bool {
         data_bind_flags_apply_source_to_target(self.flags)
     }
@@ -9961,17 +10733,16 @@ impl RuntimeDataBindGraphSourceNode {
     }
 
     fn mark_target_dirty(&mut self) {
-        if self.reconcile_pending {
-            // An explicit target edit supersedes the initial bind/rebind
-            // reconciliation. Those dirt bits came from DataBind::bind, not
-            // from a source notification, so carrying the source bit forward
-            // would immediately write the stale source back over the edit.
-            self.target_to_source_dirty = false;
-            self.source_to_target_dirty_after_immediate = false;
-            self.source_to_target_dirty_after_target_to_source = false;
-            self.defer_source_to_target_until_next_update = false;
-        }
-        self.reconcile_pending = false;
+        // A target edit does not replace dirt already latched by bind/rebind.
+        // C++ `DataBind::addDirt` returns when BindingsTarget is already set,
+        // leaving the accompanying Bindings bit and favored origin intact.
+        // The later container update therefore still runs source-to-target
+        // when the original dirt snapshot contained Bindings
+        // (`data_bind.cpp:502-531`; `data_bind_container.cpp:118-153`).
+        let source_dirt_already_pending = self
+            .retained_bind
+            .pending_dirt()
+            .contains(RuntimeCellDirt::BINDINGS);
         // The public-update path is the Rust equivalent of C++
         // updateDataBinds(true). Main-to-source bindables also have an
         // immediate target->source seam in the probe/runtime API, while a
@@ -9987,7 +10758,7 @@ impl RuntimeDataBindGraphSourceNode {
         }
         *target_dirty = true;
         self.retained_bind.mark_target_changed();
-        if !self.source_to_target_runs_first() {
+        if !self.source_to_target_runs_first() && !source_dirt_already_pending {
             self.source_to_target_dirty_after_target_to_source = false;
             self.defer_source_to_target_until_next_update = false;
         }
@@ -10000,12 +10771,6 @@ impl RuntimeDataBindGraphSourceNode {
         }
         self.source_to_target_dirty_after_target_to_source = true;
         self.retained_bind.mark_source_changed();
-    }
-
-    fn mark_source_dirty_after_public_target_to_source(&mut self) {
-        self.source_to_target_dirty_after_target_to_source = true;
-        self.retained_bind.mark_source_changed();
-        self.defer_source_to_target_until_next_update = true;
     }
 
     fn mark_reconcile_dirty(&mut self) {
@@ -10025,293 +10790,97 @@ impl RuntimeDataBindGraphSourceNode {
         self.reconcile_pending = true;
     }
 
-    fn suppresses_explicit_list_target_reapply_after_formula(&self) -> bool {
-        matches!(
-            (&self.value, self.converter.as_ref()),
-            (
-                RuntimeDataBindGraphValue::List { .. },
-                Some(RuntimeDataBindGraphConverter::Formula { .. })
-            )
-        )
-    }
-
-    fn number_target_to_source_value(
+    /// C++ `DataBindContextValue::applyToSource` converts the concrete target
+    /// cache through the converter occurrence before checking the retained
+    /// source type. Keep the converter call occurrence-owned and preserve the
+    /// Rust resource-fence category; only ordinary protected-call failures
+    /// collapse to the converter's retained `m_dataValue`
+    /// (`context_value.hpp:68-96`; `scripted_data_converter.cpp:96-168`).
+    fn target_to_source_converted_value_with_script_errors(
         &mut self,
-        value: f32,
+        value: &RuntimeDataBindGraphValue,
         formula_random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
+    ) -> Result<Option<RuntimeDataBindGraphValue>, ScriptError> {
+        if !self.bound || !self.applies_target_to_source() {
+            return Ok(None);
+        }
+        // Pinned `DataBindContextValue::applyToSource` dispatches on the
+        // concrete ViewModel source subclass before it invokes a converter.
+        // List sources (and the base/untyped fallback) have no switch arm, so
+        // target-to-source is a complete no-op and must not consume converter
+        // state such as Formula random values (`context_value.cpp:171-268`).
+        if matches!(
+            self.value,
+            RuntimeDataBindGraphValue::Untyped
+                | RuntimeDataBindGraphValue::Integer(_)
+                | RuntimeDataBindGraphValue::List { .. }
+                | RuntimeDataBindGraphValue::ListLength(_)
+        ) {
+            return Ok(None);
+        }
+        let is_main_to_source = self.is_main_to_source();
+        match self.converter.as_ref() {
+            None => Ok(Some(value.clone())),
+            Some(converter) if is_main_to_source => self
+                .converter_state
+                .convert_value_with_formula_randoms_for_scripted_listener(
+                    converter,
+                    value,
+                    formula_random_source,
+                ),
+            Some(converter) => self
+                .converter_state
+                .reverse_convert_value_with_formula_randoms_for_scripted_listener(
+                    converter,
+                    value,
+                    formula_random_source,
+                ),
+        }
+    }
+
+    fn source_to_target_value_for_concrete_target(
+        &self,
+        target: RuntimeDataBindGraphTarget,
+        value: RuntimeDataBindGraphValue,
     ) -> Option<RuntimeDataBindGraphValue> {
-        if !self.bound || !self.applies_target_to_source() {
-            return None;
-        }
-        if let (
-            RuntimeDataBindGraphValue::List { item_count },
-            Some(RuntimeDataBindGraphConverter::Formula { .. }),
-        ) = (&self.value, self.converter.as_ref())
-        {
-            return Some(RuntimeDataBindGraphValue::List {
-                item_count: *item_count,
-            });
-        }
-        let converted = match self.converter.as_ref() {
-            None => RuntimeDataBindGraphValue::Number(value),
-            Some(converter) if self.is_main_to_source() => {
-                self.converter_state.convert_value_with_formula_randoms(
-                    converter,
-                    &RuntimeDataBindGraphValue::Number(value),
-                    formula_random_source,
-                )?
-            }
-            Some(converter) => self
-                .converter_state
-                .reverse_convert_value_with_formula_randoms(
-                    converter,
-                    &RuntimeDataBindGraphValue::Number(value),
-                    formula_random_source,
-                )?,
-        };
-        match (&self.value, converted) {
-            (RuntimeDataBindGraphValue::Number(_), RuntimeDataBindGraphValue::Number(value)) => {
-                Some(RuntimeDataBindGraphValue::Number(value))
-            }
-            (RuntimeDataBindGraphValue::Boolean(value), RuntimeDataBindGraphValue::Number(_))
-                if self.converter.as_ref().is_some_and(
-                    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
-                ) =>
-            {
-                Some(RuntimeDataBindGraphValue::Boolean(*value))
-            }
-            (RuntimeDataBindGraphValue::String(value), RuntimeDataBindGraphValue::Number(_))
-                if self.converter.as_ref().is_some_and(
-                    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
-                ) =>
-            {
-                Some(RuntimeDataBindGraphValue::String(value.clone()))
-            }
-            (RuntimeDataBindGraphValue::Color(value), RuntimeDataBindGraphValue::Number(_))
-                if self.converter.as_ref().is_some_and(
-                    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
-                ) =>
-            {
-                Some(RuntimeDataBindGraphValue::Color(*value))
-            }
-            (RuntimeDataBindGraphValue::Enum(value), RuntimeDataBindGraphValue::Number(_))
-                if self.converter.as_ref().is_some_and(
-                    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
-                ) =>
-            {
-                Some(RuntimeDataBindGraphValue::Enum(*value))
-            }
-            (RuntimeDataBindGraphValue::Asset(value), RuntimeDataBindGraphValue::Number(_))
-                if self.converter.as_ref().is_some_and(
-                    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
-                ) =>
-            {
-                Some(RuntimeDataBindGraphValue::Asset(*value))
-            }
-            (RuntimeDataBindGraphValue::Artboard(value), RuntimeDataBindGraphValue::Number(_))
-                if self.converter.as_ref().is_some_and(
-                    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
-                ) =>
-            {
-                Some(RuntimeDataBindGraphValue::Artboard(*value))
-            }
-            (RuntimeDataBindGraphValue::ViewModel(value), RuntimeDataBindGraphValue::Number(_))
-                if self.converter.as_ref().is_some_and(
-                    runtime_data_bind_graph_converter_preserves_non_trigger_non_number_source_on_number_target_apply,
-                ) =>
-            {
-                Some(RuntimeDataBindGraphValue::ViewModel(*value))
-            }
-            (RuntimeDataBindGraphValue::Trigger(value), RuntimeDataBindGraphValue::Number(_))
-                if self.converter.as_ref().is_some_and(
-                    runtime_data_bind_graph_converter_preserves_trigger_source_on_number_target_apply,
-                ) =>
-            {
-                Some(RuntimeDataBindGraphValue::Trigger(*value))
-            }
+        match (target, value) {
             (
-                RuntimeDataBindGraphValue::SymbolListIndex(value),
-                RuntimeDataBindGraphValue::Number(_),
-            ) if self.converter.as_ref().is_some_and(
-                runtime_data_bind_graph_converter_preserves_symbol_list_index_source_on_number_target_apply,
-            ) =>
-            {
-                Some(RuntimeDataBindGraphValue::SymbolListIndex(*value))
-            }
+                RuntimeDataBindGraphTarget::Number { .. }
+                | RuntimeDataBindGraphTarget::TransitionDuration { .. }
+                | RuntimeDataBindGraphTarget::KeyFrameNumber { .. },
+                RuntimeDataBindGraphValue::Number(value),
+            ) => Some(RuntimeDataBindGraphValue::Number(value)),
             (
-                RuntimeDataBindGraphValue::ListLength(value),
-                RuntimeDataBindGraphValue::Number(_),
-            ) if matches!(
-                self.converter.as_ref(),
-                Some(RuntimeDataBindGraphConverter::ListToLength)
-            ) =>
-            {
-                Some(RuntimeDataBindGraphValue::ListLength(*value))
+                RuntimeDataBindGraphTarget::Number { .. }
+                | RuntimeDataBindGraphTarget::TransitionDuration { .. }
+                | RuntimeDataBindGraphTarget::KeyFrameNumber { .. },
+                _,
+            ) => {
+                // `DataBindContextValueNumber::apply` uses
+                // `calculateValue<DataValueNumber, float>`, whose defined
+                // wrong-type result is `DataValueNumber::defaultValue` (0),
+                // and writes that value to the concrete target
+                // (`context_value.hpp:68-99`;
+                // `context_value_number.cpp:11-37`).
+                Some(RuntimeDataBindGraphValue::Number(0.0))
             }
+            // Both the typed Number and dynamic Any context-value owners use
+            // this exact CoreUint branch after conversion. C++ clamps
+            // negatives to zero and rounds rather than truncating
+            // (`context_value_number.cpp:24-38`;
+            // `context_value_any.cpp:30-44`).
             (
-                RuntimeDataBindGraphValue::List { item_count },
-                RuntimeDataBindGraphValue::Number(_),
-            ) if matches!(
-                self.converter.as_ref(),
-                Some(RuntimeDataBindGraphConverter::Formula { .. })
-            ) =>
-            {
-                Some(RuntimeDataBindGraphValue::List {
-                    item_count: *item_count,
-                })
-            }
-            (RuntimeDataBindGraphValue::Boolean(_), RuntimeDataBindGraphValue::Boolean(value)) => {
-                Some(RuntimeDataBindGraphValue::Boolean(value))
-            }
-            _ => None,
+                RuntimeDataBindGraphTarget::Integer { .. }
+                | RuntimeDataBindGraphTarget::Enum { .. }
+                | RuntimeDataBindGraphTarget::Asset { .. }
+                | RuntimeDataBindGraphTarget::Artboard { .. }
+                | RuntimeDataBindGraphTarget::List { .. }
+                | RuntimeDataBindGraphTarget::Trigger { .. }
+                | RuntimeDataBindGraphTarget::ViewModel { .. },
+                RuntimeDataBindGraphValue::Number(value),
+            ) => cpp_number_to_core_uint(value).map(RuntimeDataBindGraphValue::Integer),
+            (_, value) => Some(value),
         }
-    }
-
-    fn supports_direct_symbol_list_index_target_to_source(&self) -> bool {
-        self.applies_target_to_source()
-            && self.converter.is_none()
-            && matches!(self.value, RuntimeDataBindGraphValue::SymbolListIndex(_))
-    }
-
-    fn boolean_target_to_source_value(&self, value: bool) -> Option<bool> {
-        if !self.bound
-            || !self.applies_target_to_source()
-            || !matches!(self.value, RuntimeDataBindGraphValue::Boolean(_))
-        {
-            return None;
-        }
-        let value = match self.converter.as_ref() {
-            None => RuntimeDataBindGraphValue::Boolean(value),
-            Some(converter) if self.is_main_to_source() => runtime_data_bind_graph_convert_value(
-                converter,
-                &RuntimeDataBindGraphValue::Boolean(value),
-            )?,
-            Some(converter) => runtime_data_bind_graph_reverse_convert_value(
-                converter,
-                &RuntimeDataBindGraphValue::Boolean(value),
-            )?,
-        };
-        let RuntimeDataBindGraphValue::Boolean(value) = value else {
-            return None;
-        };
-        Some(value)
-    }
-
-    fn string_target_to_source_value(&mut self, value: &[u8]) -> Option<RuntimeDataBindGraphValue> {
-        if !self.bound || !self.applies_target_to_source() {
-            return None;
-        }
-        if self.preserves_string_source_on_main_to_source_target_apply() {
-            let RuntimeDataBindGraphValue::String(value) = &self.value else {
-                return None;
-            };
-            return Some(RuntimeDataBindGraphValue::String(value.clone()));
-        }
-        let value = RuntimeDataBindGraphValue::String(value.to_vec());
-        let converted = match self.converter.as_ref() {
-            None => value,
-            Some(converter) if self.is_main_to_source() => {
-                self.converter_state.convert_value(converter, &value)?
-            }
-            Some(converter) => self
-                .converter_state
-                .reverse_convert_value(converter, &value)?,
-        };
-        match (&self.value, converted) {
-            (RuntimeDataBindGraphValue::String(_), RuntimeDataBindGraphValue::String(value)) => {
-                Some(RuntimeDataBindGraphValue::String(value))
-            }
-            (RuntimeDataBindGraphValue::Number(value), RuntimeDataBindGraphValue::String(_))
-                if runtime_data_bind_graph_converter_starts_with_to_string(
-                    self.converter.as_ref(),
-                ) =>
-            {
-                Some(RuntimeDataBindGraphValue::Number(*value))
-            }
-            (RuntimeDataBindGraphValue::Boolean(value), RuntimeDataBindGraphValue::String(_))
-                if matches!(
-                    self.converter.as_ref(),
-                    Some(RuntimeDataBindGraphConverter::ToString { .. })
-                ) =>
-            {
-                Some(RuntimeDataBindGraphValue::Boolean(*value))
-            }
-            (RuntimeDataBindGraphValue::Trigger(value), RuntimeDataBindGraphValue::String(_))
-                if matches!(
-                    self.converter.as_ref(),
-                    Some(RuntimeDataBindGraphConverter::ToString { .. })
-                ) =>
-            {
-                Some(RuntimeDataBindGraphValue::Trigger(*value))
-            }
-            (
-                RuntimeDataBindGraphValue::SymbolListIndex(value),
-                RuntimeDataBindGraphValue::String(_),
-            ) if matches!(
-                self.converter.as_ref(),
-                Some(RuntimeDataBindGraphConverter::ToString { .. })
-            ) =>
-            {
-                Some(RuntimeDataBindGraphValue::SymbolListIndex(*value))
-            }
-            (RuntimeDataBindGraphValue::Color(value), RuntimeDataBindGraphValue::String(_))
-                if matches!(
-                    self.converter.as_ref(),
-                    Some(RuntimeDataBindGraphConverter::ToString { .. })
-                ) =>
-            {
-                Some(RuntimeDataBindGraphValue::Color(*value))
-            }
-            (RuntimeDataBindGraphValue::Enum(value), RuntimeDataBindGraphValue::String(_))
-                if matches!(
-                    self.converter.as_ref(),
-                    Some(RuntimeDataBindGraphConverter::ToString { .. })
-                ) =>
-            {
-                Some(RuntimeDataBindGraphValue::Enum(*value))
-            }
-            _ => None,
-        }
-    }
-
-    fn uses_delayed_string_source_to_target_after_main_to_source(&self) -> bool {
-        runtime_data_bind_graph_converter_starts_with_to_string(self.converter.as_ref())
-            || self
-                .converter
-                .as_ref()
-                .is_some_and(runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply)
-    }
-
-    fn preserves_string_source_on_main_to_source_target_apply(&self) -> bool {
-        self.is_main_to_source()
-            && self
-                .converter
-                .as_ref()
-                .is_some_and(runtime_data_bind_graph_converter_preserves_string_source_on_main_to_source_target_apply)
-    }
-
-    fn supports_direct_color_target_to_source(&self) -> bool {
-        self.applies_target_to_source()
-            && self.converter.is_none()
-            && matches!(self.value, RuntimeDataBindGraphValue::Color(_))
-    }
-
-    fn supports_direct_enum_target_to_source(&self) -> bool {
-        self.applies_target_to_source()
-            && self.converter.is_none()
-            && matches!(self.value, RuntimeDataBindGraphValue::Enum(_))
-    }
-
-    fn supports_direct_asset_target_to_source(&self) -> bool {
-        self.applies_target_to_source()
-            && self.converter.is_none()
-            && matches!(self.value, RuntimeDataBindGraphValue::Asset(_))
-    }
-
-    fn supports_direct_artboard_target_to_source(&self) -> bool {
-        self.applies_target_to_source()
-            && self.converter.is_none()
-            && matches!(self.value, RuntimeDataBindGraphValue::Artboard(_))
     }
 
     fn trigger_target_to_source_value(&mut self, value: u64) -> Option<RuntimeDataBindGraphValue> {
@@ -10335,33 +10904,21 @@ impl RuntimeDataBindGraphSourceNode {
         }
     }
 
-    fn write_retained_trigger_source(&mut self, value: RuntimeDataBindGraphValue) -> bool {
-        if !matches!(value, RuntimeDataBindGraphValue::Trigger(_))
-            || self.retained_bind.source().is_none()
-        {
-            return false;
-        }
-        let cache_changed = self.value != value;
-        self.value = value;
-        let source_value = self.retained_bind.source().map(RuntimeViewModelCell::value);
-        let mut target = RuntimeGraphSourceValueTarget {
-            value: &mut self.value,
-            source_value,
-            changed: false,
-        };
-        let cell_changed = self.retained_bind.update_source_binding(&mut target);
-        cell_changed || cache_changed
-    }
-
-    fn supports_direct_view_model_target_to_source(&self) -> bool {
-        self.applies_target_to_source()
-            && self.converter.is_none()
-            && matches!(self.value, RuntimeDataBindGraphValue::ViewModel(_))
-    }
-
     fn reset_converter_state(&mut self) {
+        self.converter_data_binds = self.converter_data_binds.fresh_clone();
         self.converter_state =
             RuntimeDataBindGraphConverterState::for_converter(self.converter.as_ref());
+        self.attach_converter_parent();
+    }
+
+    fn attach_converter_parent(&mut self) {
+        let wake = self.retained_bind.converter_parent_wake();
+        self.converter_state
+            .set_scripted_converter_parent_wake(wake.clone());
+        if self.converter.is_some() {
+            self.converter_data_binds
+                .set_parent_wake(wake, &mut self.converter_state);
+        }
     }
 
     fn reset_formula_random_state(&mut self) {
@@ -10399,6 +10956,18 @@ impl RuntimeDataBindGraphSourceNode {
             .advance_converter(self.converter.as_ref(), elapsed_seconds)
     }
 
+    fn advance_stateful_converter_with_scripted(
+        &mut self,
+        elapsed_seconds: f32,
+        host: &mut dyn ScriptHost,
+    ) -> Result<RuntimeDataBindGraphStatefulAdvance, ScriptError> {
+        self.converter_state.advance_converter_with_scripted(
+            self.converter.as_ref(),
+            elapsed_seconds,
+            host,
+        )
+    }
+
     fn should_skip_binding_for_phase(&self, phase: RuntimeDataBindGraphApplyPhase) -> bool {
         if !self.converter_state.is_initialized_stateful() {
             return false;
@@ -10412,95 +10981,119 @@ impl RuntimeDataBindGraphSourceNode {
             // Only the time-STEP is a no-op at 0. Skipping this phase left
             // 'set value, advance(0), render' showing the stale value.
             RuntimeDataBindGraphApplyPhase::BeforeStatefulAdvance => false,
-            // The post-step value becomes visible at the NEXT advance's
-            // update pass: the step's markConverterDirty feeds the following
-            // updateDataBinds in C++ (data_converter_interpolator.cpp:98),
-            // so the post-step pass here must not re-apply stateful bindings
-            // a frame early.
-            RuntimeDataBindGraphApplyPhase::AfterStatefulAdvance => true,
             RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse
             | RuntimeDataBindGraphApplyPhase::Immediate
             | RuntimeDataBindGraphApplyPhase::PublicUpdate => false,
         }
     }
 
-    fn converted_value(
+    fn converted_value_with_script_errors(
         &mut self,
         formula_random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
-    ) -> Option<RuntimeDataBindGraphValue> {
+    ) -> Result<Option<RuntimeDataBindGraphValue>, ScriptError> {
         match self.converter.as_ref() {
-            None => Some(self.value.clone()),
-            Some(converter @ RuntimeDataBindGraphConverter::ListToLength)
-                if self.is_main_to_source() =>
-            {
-                self.converter_state
-                    .reverse_convert_value_with_formula_randoms(
-                        converter,
-                        &self.value,
-                        formula_random_source,
-                    )
-            }
-            Some(converter @ RuntimeDataBindGraphConverter::ToString { .. })
-                if self.is_main_to_source() =>
-            {
-                self.converter_state
-                    .reverse_convert_value_with_formula_randoms(
-                        converter,
-                        &self.value,
-                        formula_random_source,
-                    )
-            }
-            Some(converter @ RuntimeDataBindGraphConverter::Interpolator { .. })
-                if self.is_main_to_source() =>
-            {
-                self.converter_state
-                    .reverse_convert_value_with_formula_randoms(
-                        converter,
-                        &self.value,
-                        formula_random_source,
-                    )
-            }
-            Some(converter @ RuntimeDataBindGraphConverter::TriggerIncrement)
-                if self.is_main_to_source() =>
-            {
-                self.converter_state
-                    .reverse_convert_value_with_formula_randoms(
-                        converter,
-                        &self.value,
-                        formula_random_source,
-                    )
-            }
-            Some(
-                converter @ (RuntimeDataBindGraphConverter::StringTrim { .. }
-                | RuntimeDataBindGraphConverter::StringRemoveZeros
-                | RuntimeDataBindGraphConverter::StringPad { .. }),
-            ) if self.is_main_to_source() => self
+            None => Ok(Some(self.value.clone())),
+            Some(converter) if self.is_main_to_source() => self
                 .converter_state
-                .reverse_convert_value_with_formula_randoms(
+                .reverse_convert_value_with_formula_randoms_for_scripted_listener(
                     converter,
                     &self.value,
                     formula_random_source,
                 ),
-            Some(converter @ RuntimeDataBindGraphConverter::Group(_))
-                if self.is_main_to_source() =>
-            {
-                self.converter_state
-                    .reverse_convert_value_with_formula_randoms(
-                        converter,
-                        &self.value,
-                        formula_random_source,
-                    )
-            }
-            Some(converter) => self.converter_state.convert_value_with_formula_randoms(
-                converter,
-                &self.value,
-                formula_random_source,
-            ),
+            Some(converter) => self
+                .converter_state
+                .convert_value_with_formula_randoms_for_scripted_listener(
+                    converter,
+                    &self.value,
+                    formula_random_source,
+                ),
         }
     }
 }
 
 impl RuntimeDataBindGraphTargetsMut<'_> {
+    fn current_value(
+        &self,
+        target: RuntimeDataBindGraphTarget,
+        source_value: &RuntimeDataBindGraphValue,
+    ) -> Option<RuntimeDataBindGraphValue> {
+        let uint_value = |value| match source_value {
+            RuntimeDataBindGraphValue::Asset(_) => RuntimeDataBindGraphValue::Asset(value),
+            _ => RuntimeDataBindGraphValue::Integer(value),
+        };
+        match target {
+            RuntimeDataBindGraphTarget::Inert => None,
+            RuntimeDataBindGraphTarget::Number { global_id } => self
+                .numbers
+                .iter()
+                .find(|target| target.global_id == global_id)
+                .map(|target| RuntimeDataBindGraphValue::Number(target.value)),
+            RuntimeDataBindGraphTarget::Integer { global_id } => self
+                .integers
+                .iter()
+                .find(|target| target.global_id == global_id)
+                .map(|target| uint_value(target.value)),
+            RuntimeDataBindGraphTarget::Boolean { global_id } => self
+                .booleans
+                .iter()
+                .find(|target| target.global_id == global_id)
+                .map(|target| RuntimeDataBindGraphValue::Boolean(target.value)),
+            RuntimeDataBindGraphTarget::String { global_id } => self
+                .strings
+                .iter()
+                .find(|target| target.global_id == global_id)
+                .map(|target| RuntimeDataBindGraphValue::String(target.value.clone())),
+            RuntimeDataBindGraphTarget::Color { global_id } => self
+                .colors
+                .iter()
+                .find(|target| target.global_id == global_id)
+                .map(|target| RuntimeDataBindGraphValue::Color(target.value)),
+            RuntimeDataBindGraphTarget::Enum { global_id } => self
+                .enums
+                .iter()
+                .find(|target| target.global_id == global_id)
+                .map(|target| uint_value(target.value)),
+            RuntimeDataBindGraphTarget::Asset { global_id } => self
+                .assets
+                .iter()
+                .find(|target| target.global_id == global_id)
+                .map(|target| uint_value(target.value.asset_index())),
+            RuntimeDataBindGraphTarget::Artboard { global_id } => self
+                .artboards
+                .iter()
+                .find(|target| target.global_id == global_id)
+                .map(|target| uint_value(target.value)),
+            RuntimeDataBindGraphTarget::List { global_id } => self
+                .lists
+                .iter()
+                .find(|target| target.global_id == global_id)
+                .and_then(|target| u64::try_from(target.property_value).ok().map(uint_value)),
+            RuntimeDataBindGraphTarget::Trigger { global_id } => self
+                .triggers
+                .iter()
+                .find(|target| target.global_id == global_id)
+                .map(|target| uint_value(target.value)),
+            RuntimeDataBindGraphTarget::ViewModel { global_id } => self
+                .view_models
+                .iter()
+                .find(|target| target.global_id == global_id)
+                .filter(|_| matches!(source_value, RuntimeDataBindGraphValue::ViewModel(_)))
+                .map(|target| RuntimeDataBindGraphValue::ViewModel(target.value)),
+            RuntimeDataBindGraphTarget::TransitionDuration {
+                transition_global_id,
+                occurrence_index,
+            } => self
+                .transition_durations
+                .get(occurrence_index)
+                .filter(|target| target.transition_global_id == transition_global_id)
+                .map(|target| RuntimeDataBindGraphValue::Number(target.value())),
+            RuntimeDataBindGraphTarget::KeyFrameNumber { .. }
+            | RuntimeDataBindGraphTarget::KeyFrameColor { .. }
+            | RuntimeDataBindGraphTarget::KeyFrameBoolean { .. }
+            | RuntimeDataBindGraphTarget::KeyFrameString { .. } => None,
+        }
+    }
+
     pub(crate) fn apply_default_view_model_binding(
         &mut self,
         target: &RuntimeDataBindGraphTarget,
@@ -10522,6 +11115,18 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
             (
                 RuntimeDataBindGraphTarget::Integer { global_id },
                 RuntimeDataBindGraphValue::SymbolListIndex(value),
+            ) => {
+                if let Some(target) = self
+                    .integers
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Integer { global_id },
+                RuntimeDataBindGraphValue::Integer(value),
             ) => {
                 if let Some(target) = self
                     .integers
@@ -10580,6 +11185,18 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
                 }
             }
             (
+                RuntimeDataBindGraphTarget::Enum { global_id },
+                RuntimeDataBindGraphValue::Integer(value),
+            ) => {
+                if let Some(target) = self
+                    .enums
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
                 RuntimeDataBindGraphTarget::Asset { global_id },
                 RuntimeDataBindGraphValue::Asset(value),
             ) => {
@@ -10592,8 +11209,32 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
                 }
             }
             (
+                RuntimeDataBindGraphTarget::Asset { global_id },
+                RuntimeDataBindGraphValue::Integer(value),
+            ) => {
+                if let Some(target) = self
+                    .assets
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
                 RuntimeDataBindGraphTarget::Artboard { global_id },
                 RuntimeDataBindGraphValue::Artboard(value),
+            ) => {
+                if let Some(target) = self
+                    .artboards
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Artboard { global_id },
+                RuntimeDataBindGraphValue::Integer(value),
             ) => {
                 if let Some(target) = self
                     .artboards
@@ -10619,8 +11260,33 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
                 }
             }
             (
+                RuntimeDataBindGraphTarget::List { global_id },
+                RuntimeDataBindGraphValue::Integer(value),
+            ) => {
+                if let Some(target) = self
+                    .lists
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                    && let Ok(value) = usize::try_from(*value)
+                {
+                    target.set_value(value);
+                }
+            }
+            (
                 RuntimeDataBindGraphTarget::Trigger { global_id },
                 RuntimeDataBindGraphValue::Trigger(value),
+            ) => {
+                if let Some(target) = self
+                    .triggers
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Trigger { global_id },
+                RuntimeDataBindGraphValue::Integer(value),
             ) => {
                 if let Some(target) = self
                     .triggers
@@ -10643,15 +11309,28 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
                 }
             }
             (
+                RuntimeDataBindGraphTarget::ViewModel { global_id },
+                RuntimeDataBindGraphValue::Integer(value),
+            ) => {
+                if let Some(target) = self
+                    .view_models
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.set_property_value(*value);
+                }
+            }
+            (
                 RuntimeDataBindGraphTarget::TransitionDuration {
                     transition_global_id,
+                    occurrence_index,
                 },
                 RuntimeDataBindGraphValue::Number(value),
             ) => {
                 if let Some(target) = self
                     .transition_durations
-                    .iter_mut()
-                    .find(|target| target.transition_global_id == *transition_global_id)
+                    .get_mut(*occurrence_index)
+                    .filter(|target| target.transition_global_id == *transition_global_id)
                 {
                     target.set_value(*value);
                 }
@@ -10664,9 +11343,14 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ScriptError, ScriptHost, ScriptInstance, ScriptMethod};
+    use crate::{
+        ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptInstance, ScriptMethod,
+        ScriptValue,
+    };
     use nuxie_binary::read_runtime_file_with_scripting;
     use nuxie_schema::definition_by_name;
+    use std::cell::{Cell, RefCell};
+    use std::rc::Rc;
 
     struct DoublingConverter;
 
@@ -10696,6 +11380,656 @@ mod tests {
             imported_view_model_overrides: BTreeMap::new(),
             key_frame_source_revision: 0,
         }
+    }
+
+    #[test]
+    fn container_enrollment_retains_inert_data_bind_occurrences_in_authored_order() {
+        let mut sources = Vec::new();
+        let mut targets = Vec::new();
+        let mut bindings = Vec::new();
+        for (data_bind_index, target) in [
+            (0, RuntimeDataBindGraphTarget::Inert),
+            (1, RuntimeDataBindGraphTarget::Inert),
+            (2, RuntimeDataBindGraphTarget::Number { global_id: 7 }),
+        ] {
+            RuntimeDataBindGraph::push_default_view_model_binding(
+                &mut sources,
+                &mut targets,
+                &mut bindings,
+                data_bind_index,
+                &[],
+                0,
+                None,
+                target,
+                RuntimeDataBindGraphValue::Untyped,
+            );
+        }
+        let mut graph = RuntimeDataBindGraph {
+            context_kind: RuntimeDataBindGraphContextKind::None,
+            default_view_model_bindings_dirty: false,
+            formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
+            sources,
+            targets,
+            default_view_model_bindings: bindings,
+            imported_view_model_context: None,
+            imported_view_model_overrides: BTreeMap::new(),
+            key_frame_source_revision: 0,
+        };
+        let mut container = RuntimeDataBindContainerQueue::default();
+
+        assert_eq!(
+            graph.add_data_binds_to_container(&mut container),
+            [(0, 0), (1, 1), (2, 2)],
+            "pinned StateMachineInstance clones and enrolls every accepted DataBind occurrence before binding, including base/unsupported targets (state_machine_instance.cpp:1754-1824)"
+        );
+    }
+
+    #[test]
+    fn number_context_value_uses_cpp_core_uint_rounding_for_every_uint_target() {
+        let graph = graph_with_number_binding(0);
+        let source = &graph.sources[0];
+        let uint_targets = [
+            RuntimeDataBindGraphTarget::Integer { global_id: 1 },
+            RuntimeDataBindGraphTarget::Enum { global_id: 2 },
+            RuntimeDataBindGraphTarget::Asset { global_id: 3 },
+            RuntimeDataBindGraphTarget::Artboard { global_id: 4 },
+            RuntimeDataBindGraphTarget::List { global_id: 5 },
+            RuntimeDataBindGraphTarget::Trigger { global_id: 6 },
+            RuntimeDataBindGraphTarget::ViewModel { global_id: 7 },
+        ];
+
+        for target in uint_targets {
+            for (input, expected) in [(1.4, 1), (1.5, 2), (-0.1, 0)] {
+                assert_eq!(
+                    source.source_to_target_value_for_concrete_target(
+                        target,
+                        RuntimeDataBindGraphValue::Number(input),
+                    ),
+                    Some(RuntimeDataBindGraphValue::Integer(expected)),
+                    "{target:?} at {input}"
+                );
+            }
+            for undefined in [f32::NAN, f32::INFINITY, 2_147_483_648.0] {
+                assert_eq!(
+                    source.source_to_target_value_for_concrete_target(
+                        target,
+                        RuntimeDataBindGraphValue::Number(undefined),
+                    ),
+                    None,
+                    "{target:?} leaves C++'s undefined float-to-int domain unapplied"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn integer_target_cache_retypes_only_at_the_concrete_source_owner() {
+        let target_cache = RuntimeDataBindGraphValue::Integer(23);
+        for (source, expected) in [
+            (
+                RuntimeDataBindGraphValue::Enum(0),
+                RuntimeDataBindGraphValue::Enum(23),
+            ),
+            (
+                RuntimeDataBindGraphValue::SymbolListIndex(0),
+                RuntimeDataBindGraphValue::SymbolListIndex(23),
+            ),
+            (
+                RuntimeDataBindGraphValue::Asset(0),
+                RuntimeDataBindGraphValue::Asset(23),
+            ),
+            (
+                RuntimeDataBindGraphValue::Artboard(0),
+                RuntimeDataBindGraphValue::Artboard(23),
+            ),
+            (
+                RuntimeDataBindGraphValue::Trigger(0),
+                RuntimeDataBindGraphValue::Trigger(23),
+            ),
+        ] {
+            assert_eq!(
+                matching_graph_source_value(&source, &target_cache),
+                Some(expected)
+            );
+        }
+        assert_eq!(
+            matching_graph_source_value(&RuntimeDataBindGraphValue::Number(0.0), &target_cache,),
+            None,
+            "C++ does not treat DataValueInteger as a number source"
+        );
+    }
+
+    fn scripted_number_definition()
+    -> crate::scripted_data_converter::RuntimeScriptedDataConverterDefinition {
+        use crate::scripted_data_converter::{
+            RuntimeScriptedDataConverterDataBindDefinition, RuntimeScriptedDataConverterDefinition,
+            RuntimeScriptedDataConverterInputDefinition,
+        };
+        use crate::scripted_object::{
+            RuntimeScriptInputProperties, RuntimeScriptInputTargetProperty,
+        };
+
+        RuntimeScriptedDataConverterDefinition::with_grouped_test_bind_order(vec![
+            RuntimeScriptedDataConverterInputDefinition {
+                input_global_id: 10,
+                kind: crate::ScriptListenerInputKind::Number,
+                properties: RuntimeScriptInputProperties::for_test(
+                    "amount",
+                    u32::MAX,
+                    Some(RuntimeDataBindGraphValue::Number(0.0)),
+                ),
+                data_binds: vec![RuntimeScriptedDataConverterDataBindDefinition::Context {
+                    authored_order: 20,
+                    source_path: Some(vec![0, 0]),
+                    name_based: false,
+                    property_key: crate::properties::property_key_for_name(
+                        "ScriptInputNumber",
+                        "propertyValue",
+                    )
+                    .map(u32::from)
+                    .expect("ScriptInputNumber.propertyValue"),
+                    target_property: RuntimeScriptInputTargetProperty::Value,
+                    flags: 0,
+                    converter_id: u32::MAX,
+                }],
+            },
+        ])
+    }
+
+    fn scripted_converter(
+        global_id: u32,
+        serialized_implemented_methods: u32,
+    ) -> RuntimeDataBindGraphConverter {
+        RuntimeDataBindGraphConverter::Scripted {
+            global_id,
+            serialized_implemented_methods,
+            definition: scripted_number_definition(),
+            instance: None,
+        }
+    }
+
+    fn graph_with_scripted_converters(
+        converters: impl IntoIterator<Item = RuntimeDataBindGraphConverter>,
+    ) -> RuntimeDataBindGraph {
+        let mut sources = Vec::new();
+        let mut targets = Vec::new();
+        let mut bindings = Vec::new();
+        for (index, converter) in converters.into_iter().enumerate() {
+            RuntimeDataBindGraph::push_default_view_model_binding(
+                &mut sources,
+                &mut targets,
+                &mut bindings,
+                index,
+                &[0, index as u32],
+                0,
+                Some(converter),
+                RuntimeDataBindGraphTarget::Number {
+                    global_id: 100 + index as u32,
+                },
+                RuntimeDataBindGraphValue::Number(1.0),
+            );
+        }
+        RuntimeDataBindGraph {
+            context_kind: RuntimeDataBindGraphContextKind::DefaultViewModel,
+            default_view_model_bindings_dirty: false,
+            formula_random_source: RuntimeDataBindGraphFormulaRandomSource::default(),
+            sources,
+            targets,
+            default_view_model_bindings: bindings,
+            imported_view_model_context: None,
+            imported_view_model_overrides: BTreeMap::new(),
+            key_frame_source_revision: 0,
+        }
+    }
+
+    #[derive(Debug)]
+    struct ScriptedConverterOccurrenceProbe {
+        offset: f64,
+        advances: Rc<Cell<usize>>,
+        inputs: Rc<RefCell<Vec<(String, ScriptValue)>>>,
+    }
+
+    impl ScriptInstance for ScriptedConverterOccurrenceProbe {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(method == ScriptMethod::Advance)
+        }
+
+        fn call_method(
+            &mut self,
+            method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            assert_eq!(method, ScriptMethod::Advance);
+            self.advances.set(self.advances.get() + 1);
+            Ok(ScriptValue::Bool(true))
+        }
+
+        fn call_data_converter(
+            &mut self,
+            _method: ScriptDataConverterMethod,
+            value: ScriptValue,
+        ) -> Result<ScriptValue, ScriptError> {
+            let ScriptValue::Number(value) = value else {
+                return Ok(ScriptValue::Nil);
+            };
+            Ok(ScriptValue::Number(value + self.offset))
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, name: &str, value: ScriptValue) -> Result<(), ScriptError> {
+            self.inputs.borrow_mut().push((name.to_owned(), value));
+            Ok(())
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct ScriptedConverterCacheProbe {
+        convert_calls: usize,
+        reverse_calls: usize,
+    }
+
+    impl ScriptInstance for ScriptedConverterCacheProbe {
+        fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(false)
+        }
+
+        fn call_method(
+            &mut self,
+            _method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn call_data_converter(
+            &mut self,
+            method: ScriptDataConverterMethod,
+            _value: ScriptValue,
+        ) -> Result<ScriptValue, ScriptError> {
+            let calls = match method {
+                ScriptDataConverterMethod::Convert => &mut self.convert_calls,
+                ScriptDataConverterMethod::ReverseConvert => &mut self.reverse_calls,
+            };
+            *calls += 1;
+            if *calls == 1 {
+                Ok(ScriptValue::Number(match method {
+                    ScriptDataConverterMethod::Convert => 17.0,
+                    ScriptDataConverterMethod::ReverseConvert => 23.0,
+                }))
+            } else {
+                Err(ScriptError::new("ordinary protected-call failure"))
+            }
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    #[derive(Debug)]
+    struct ScriptedConverterResourceProbe;
+
+    impl ScriptInstance for ScriptedConverterResourceProbe {
+        fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(false)
+        }
+
+        fn call_method(
+            &mut self,
+            _method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn call_data_converter(
+            &mut self,
+            _method: ScriptDataConverterMethod,
+            _value: ScriptValue,
+        ) -> Result<ScriptValue, ScriptError> {
+            Err(ScriptError::with_resource_code(
+                "terminal converter resource fence",
+                "script.resource.host_commands",
+            ))
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    fn graph_with_resource_failing_scripted_converter() -> RuntimeDataBindGraph {
+        let mask = crate::script_asset::RuntimeScriptImplementedMethods::DATA_CONVERT;
+        let mut graph = graph_with_scripted_converters([scripted_converter(77, mask)]);
+        let instance = RuntimeScriptInstanceHandle::new(Box::new(ScriptedConverterResourceProbe));
+        assert!(graph.attach_scripted_instance_at_occurrence(0, &[], 77, &instance));
+        graph.default_view_model_bindings_dirty = true;
+        graph.sources[0].source_to_target_dirty_after_target_to_source = true;
+        graph
+    }
+
+    fn with_empty_graph_targets<T>(
+        apply: impl FnOnce(RuntimeDataBindGraphTargetsMut<'_>) -> T,
+    ) -> T {
+        let mut numbers = Vec::new();
+        let mut integers = Vec::new();
+        let mut booleans = Vec::new();
+        let mut strings = Vec::new();
+        let mut colors = Vec::new();
+        let mut enums = Vec::new();
+        let mut assets = Vec::new();
+        let mut artboards = Vec::new();
+        let mut lists = Vec::new();
+        let mut triggers = Vec::new();
+        let mut view_models = Vec::new();
+        let mut transition_durations = Vec::new();
+        apply(RuntimeDataBindGraphTargetsMut {
+            numbers: &mut numbers,
+            integers: &mut integers,
+            booleans: &mut booleans,
+            strings: &mut strings,
+            colors: &mut colors,
+            enums: &mut enums,
+            assets: &mut assets,
+            artboards: &mut artboards,
+            lists: &mut lists,
+            triggers: &mut triggers,
+            view_models: &mut view_models,
+            transition_durations: &mut transition_durations,
+            include_view_models: true,
+        })
+    }
+
+    #[test]
+    fn ordinary_scripted_converter_retains_occurrence_cache_after_failure() {
+        let handle =
+            RuntimeScriptInstanceHandle::new(Box::<ScriptedConverterCacheProbe>::default());
+        let converter = RuntimeDataBindGraphConverter::Scripted {
+            global_id: 77,
+            serialized_implemented_methods:
+                crate::script_asset::RuntimeScriptImplementedMethods::DATA_CONVERT
+                    | crate::script_asset::RuntimeScriptImplementedMethods::DATA_REVERSE_CONVERT,
+            definition:
+                crate::scripted_data_converter::RuntimeScriptedDataConverterDefinition::default(),
+            instance: Some(handle),
+        };
+        let mut state = RuntimeDataBindGraphConverterState::for_converter(Some(&converter));
+        let input = RuntimeDataBindGraphValue::Number(1.0);
+
+        assert_eq!(
+            state.convert_value(&converter, &input),
+            Some(RuntimeDataBindGraphValue::Number(17.0))
+        );
+        assert_eq!(
+            state.convert_value(&converter, &input),
+            Some(RuntimeDataBindGraphValue::Number(17.0)),
+            "C++ retains ScriptedDataConverter::m_dataValue after a protected-call failure"
+        );
+        assert_eq!(
+            state.reverse_convert_value(&converter, &input),
+            Some(RuntimeDataBindGraphValue::Number(23.0))
+        );
+        assert_eq!(
+            state.reverse_convert_value(&converter, &input),
+            Some(RuntimeDataBindGraphValue::Number(23.0)),
+            "forward and reverse calls share the same occurrence-owned cache"
+        );
+    }
+
+    #[test]
+    fn ordinary_scripted_converter_immediate_apply_preserves_resource_fence() {
+        let mut graph = graph_with_resource_failing_scripted_converter();
+        let error = with_empty_graph_targets(|targets| {
+            graph.apply_default_view_model_bindings(
+                targets,
+                RuntimeDataBindGraphApplyPhase::Immediate,
+            )
+        })
+        .expect_err("the all-occurrence update must retain the typed resource failure");
+
+        assert_eq!(error.resource_code(), Some("script.resource.host_commands"));
+        assert!(
+            graph.default_view_model_bindings_dirty,
+            "an aborted container turn must leave the occurrence eligible for the terminal fence"
+        );
+    }
+
+    #[test]
+    fn ordinary_scripted_converter_public_update_preserves_resource_fence() {
+        let mut graph = graph_with_resource_failing_scripted_converter();
+        let error = with_empty_graph_targets(|targets| {
+            graph.public_update_default_view_model_binding(0, targets)
+        })
+        .expect_err("the selected public update must retain the typed resource failure");
+
+        assert_eq!(error.resource_code(), Some("script.resource.host_commands"));
+        assert!(
+            graph.default_view_model_bindings_dirty,
+            "the failed selected occurrence must not be reported as clean"
+        );
+    }
+
+    fn occurrence_probe(
+        offset: f64,
+    ) -> (
+        RuntimeScriptInstanceHandle,
+        Rc<Cell<usize>>,
+        Rc<RefCell<Vec<(String, ScriptValue)>>>,
+    ) {
+        let advances = Rc::new(Cell::new(0));
+        let inputs = Rc::new(RefCell::new(Vec::new()));
+        (
+            RuntimeScriptInstanceHandle::new(Box::new(ScriptedConverterOccurrenceProbe {
+                offset,
+                advances: Rc::clone(&advances),
+                inputs: Rc::clone(&inputs),
+            })),
+            advances,
+            inputs,
+        )
+    }
+
+    #[test]
+    fn scripted_custom_input_wakes_only_its_exact_outer_occurrence() {
+        let converters = [scripted_converter(77, 0), scripted_converter(77, 0)];
+        let mut graph = graph_with_scripted_converters(converters);
+        let mut container = RuntimeDataBindContainerQueue::default();
+        assert_eq!(
+            graph.add_data_binds_to_container(&mut container),
+            vec![(0, 0), (1, 1)]
+        );
+        assert_eq!(container.begin_update(|_| false), Some(Vec::new()));
+        container.finish_update();
+
+        let first = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        let second = RuntimeViewModelCell::new(RuntimeViewModelCellValue::Number(1.0));
+        for (source, cell) in graph.sources.iter_mut().zip([&first, &second]) {
+            let RuntimeDataBindGraphConverterState::Scripted(state) = &mut source.converter_state
+            else {
+                panic!("scripted converter state");
+            };
+            assert!(state.bind_test_input_source(0, 0, cell.clone()));
+        }
+
+        assert!(first.set_value(RuntimeViewModelCellValue::Number(2.0)));
+        assert_eq!(
+            container.begin_update(|_| false),
+            Some(vec![0]),
+            "DataConverter::markConverterDirty must enqueue only the first repeated occurrence"
+        );
+        container.begin_occurrence(0);
+        container.finish_update();
+
+        assert!(second.set_value(RuntimeViewModelCellValue::Number(3.0)));
+        assert_eq!(
+            container.begin_update(|_| false),
+            Some(vec![1]),
+            "the same converter definition's sibling retains a distinct parent DataBind pointer"
+        );
+        container.begin_occurrence(1);
+        container.finish_update();
+    }
+
+    #[test]
+    fn scripted_group_occurrence_paths_attach_atomically_and_remain_distinct() {
+        let mask = crate::script_asset::RuntimeScriptImplementedMethods::DATA_CONVERT;
+        let group = RuntimeDataBindGraphConverter::Group(vec![
+            scripted_converter(77, mask),
+            scripted_converter(77, mask),
+        ]);
+        let mut graph = graph_with_scripted_converters([group]);
+        let (first, _, _) = occurrence_probe(10.0);
+        let (second, _, _) = occurrence_probe(20.0);
+
+        assert!(!graph.attach_scripted_instance_at_occurrence(0, &[2], 77, &first));
+        assert!(!graph.attach_scripted_instance_at_occurrence(0, &[0], 78, &first));
+        assert!(
+            graph
+                .scripted_converter_occurrence_snapshots()
+                .iter()
+                .all(|occurrence| !occurrence.attached),
+            "a wrong path or definition id must not partially mount either sibling"
+        );
+
+        assert!(graph.attach_scripted_instance_at_occurrence(0, &[0], 77, &first));
+        assert!(graph.attach_scripted_instance_at_occurrence(0, &[1], 77, &second));
+        assert_eq!(
+            graph.scripted_converter_instance_at_occurrence(0, &[0]),
+            Some(first.clone())
+        );
+        assert_eq!(
+            graph.scripted_converter_instance_at_occurrence(0, &[1]),
+            Some(second.clone())
+        );
+        assert_ne!(first, second);
+        assert_eq!(
+            first
+                .borrow_mut()
+                .call_data_converter(ScriptDataConverterMethod::Convert, ScriptValue::Number(1.0),)
+                .unwrap(),
+            ScriptValue::Number(11.0)
+        );
+        assert_eq!(
+            second
+                .borrow_mut()
+                .call_data_converter(ScriptDataConverterMethod::Convert, ScriptValue::Number(1.0),)
+                .unwrap(),
+            ScriptValue::Number(21.0)
+        );
+    }
+
+    #[test]
+    fn scripted_rebind_retains_cache_while_fresh_snapshot_is_cold() {
+        let mask = crate::script_asset::RuntimeScriptImplementedMethods::DATA_CONVERT;
+        let mut graph = graph_with_scripted_converters([scripted_converter(77, mask)]);
+        let (instance, _, _) = occurrence_probe(10.0);
+        assert!(graph.attach_scripted_instance_at_occurrence(0, &[], 77, &instance));
+        let RuntimeDataBindGraphConverterState::Scripted(state) =
+            &mut graph.sources[0].converter_state
+        else {
+            panic!("scripted converter state");
+        };
+        state.set_cached_value_for_test(RuntimeDataBindGraphValue::Number(19.0));
+
+        graph.context_kind = RuntimeDataBindGraphContextKind::Empty;
+        assert!(graph.bind_default_view_model_context());
+        let RuntimeDataBindGraphConverterState::Scripted(state) = &graph.sources[0].converter_state
+        else {
+            panic!("scripted converter state");
+        };
+        assert_eq!(
+            state.cached_value_for_test(),
+            Some(&RuntimeDataBindGraphValue::Number(19.0)),
+            "ScriptedDataConverter::m_dataValue survives bindFromContext/reinit"
+        );
+        assert_eq!(
+            graph.scripted_converter_instance_at_occurrence(0, &[]),
+            Some(instance.clone()),
+            "the same occurrence retains its table across a context rebind"
+        );
+
+        let cold = graph.clone_for_state_machine_snapshot();
+        assert_eq!(
+            graph.scripted_converter_instance_at_occurrence(0, &[]),
+            Some(instance)
+        );
+        assert!(
+            cold.scripted_converter_instance_at_occurrence(0, &[])
+                .is_none(),
+            "a fresh StateMachineInstance snapshot cannot alias the live Lua table"
+        );
+        let RuntimeDataBindGraphConverterState::Scripted(cold_state) =
+            &cold.sources[0].converter_state
+        else {
+            panic!("cold scripted converter state");
+        };
+        assert_eq!(
+            cold_state.cached_value_for_test(),
+            None,
+            "only a genuinely fresh converter occurrence starts with no conversion cache"
+        );
+    }
+
+    #[test]
+    fn ordinary_scripted_converter_advance_gates_source_and_wakes_parent() {
+        let mask = crate::script_asset::RuntimeScriptImplementedMethods::ADVANCE;
+        let mut graph = graph_with_scripted_converters([scripted_converter(77, mask)]);
+        let (instance, advances, _) = occurrence_probe(0.0);
+        assert!(graph.attach_scripted_instance_at_occurrence(0, &[], 77, &instance));
+        let mut container = RuntimeDataBindContainerQueue::default();
+        graph.add_data_binds_to_container(&mut container);
+        let mut host = crate::NoopScriptHost;
+
+        assert_eq!(
+            graph
+                .advance_stateful_converter_with_scripted(0, 0.0, &mut host)
+                .unwrap(),
+            RuntimeDataBindGraphStatefulAdvance::default()
+        );
+        assert_eq!(advances.get(), 0, "C++ skips scripted advance at zero");
+        assert_eq!(container.begin_update(|_| false), Some(Vec::new()));
+        container.finish_update();
+
+        let advanced = graph
+            .advance_stateful_converter_with_scripted(0, 0.25, &mut host)
+            .unwrap();
+        assert_eq!(
+            advanced,
+            RuntimeDataBindGraphStatefulAdvance {
+                changed: true,
+                keep_going: true,
+            }
+        );
+        assert_eq!(advances.get(), 1);
+        assert_eq!(
+            container.begin_update(|_| false),
+            Some(vec![0]),
+            "a truthy scripted advance marks and queues the exact parent DataBind"
+        );
+        container.finish_update();
+
+        graph.sources[0].bound = false;
+        assert_eq!(
+            graph
+                .advance_stateful_converter_with_scripted(0, 0.25, &mut host)
+                .unwrap(),
+            RuntimeDataBindGraphStatefulAdvance::default()
+        );
+        assert_eq!(advances.get(), 1, "an unresolved C++ m_Source is inert");
     }
 
     /// #RB-1 e3: a migrated source refreshes its copy from retained-cell
@@ -11045,7 +12379,7 @@ mod tests {
         );
 
         let selected = graph
-            .retained_trigger_source_for_bindable_target(7)
+            .retained_source_for_bindable_target(7)
             .expect("last source-to-target bind retains its trigger source");
         assert!(selected.ptr_eq(&last_to_target));
     }
@@ -11058,9 +12392,7 @@ mod tests {
         append_trigger_binding(&mut graph, 1, 0, None);
 
         assert!(
-            graph
-                .retained_trigger_source_for_bindable_target(7)
-                .is_none(),
+            graph.retained_source_for_bindable_target(7).is_none(),
             "C++ bindableDataBindToTarget keeps the selected DataBind even when its source is unresolved (state_machine_instance.cpp:1754-1804,3212-3221)"
         );
     }
@@ -11104,6 +12436,7 @@ mod tests {
         let updates = graph.take_default_view_model_binding_updates(
             true,
             RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse,
+            None,
         );
 
         let [(target, value)] = updates.as_slice() else {
@@ -11126,6 +12459,7 @@ mod tests {
         let updates = graph.take_default_view_model_binding_updates(
             true,
             RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse,
+            None,
         );
 
         assert!(updates.is_empty());
@@ -11143,11 +12477,48 @@ mod tests {
         let updates = graph.take_default_view_model_binding_updates(
             true,
             RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse,
+            None,
         );
 
         assert_eq!(updates.len(), 1);
         assert!(!graph.sources[0].defer_source_to_target_until_next_update);
         assert!(!graph.default_view_model_bindings_dirty);
+    }
+
+    #[test]
+    fn selected_false_update_clears_occurrence_dirt_before_a_later_target_change() {
+        let mut graph = graph_with_number_binding(DATA_BIND_FLAG_TWO_WAY);
+        graph.sources[0].mark_reconcile_dirty();
+        let mut container = RuntimeDataBindContainerQueue::default();
+        assert_eq!(
+            graph.add_data_binds_to_container(&mut container),
+            vec![(0, 0)]
+        );
+        assert_eq!(container.begin_update(|_| true), Some(vec![0]));
+        container.begin_occurrence(0);
+
+        with_empty_graph_targets(|targets| {
+            graph
+                .update_default_view_model_binding(
+                    0,
+                    targets,
+                    RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse,
+                )
+                .expect("the selected C++ updateDataBind(false) occurrence succeeds");
+        });
+        assert!(
+            graph.sources[0].retained_bind.pending_dirt().is_empty(),
+            "C++ clears the selected DataBind dirt before DataBind::update (data_bind_container.cpp:144-147)"
+        );
+        container.finish_update();
+
+        assert!(graph.mark_number_target_dirty_for_data_bind(0));
+        assert_eq!(
+            container.begin_update(|_| true),
+            Some(vec![0]),
+            "a later target notification must enqueue the same occurrence after its prior dirt was cleared"
+        );
+        container.finish_update();
     }
 
     impl ScriptInstance for DoublingConverter {
@@ -11191,6 +12562,10 @@ mod tests {
     fn scripted_converter_attaches_without_changing_unattached_passthrough() {
         let mut converter = RuntimeDataBindGraphConverter::Scripted {
             global_id: 7,
+            serialized_implemented_methods:
+                crate::script_asset::RuntimeScriptImplementedMethods::METHOD_MASK,
+            definition:
+                crate::scripted_data_converter::RuntimeScriptedDataConverterDefinition::default(),
             instance: None,
         };
         let input = RuntimeDataBindGraphValue::Number(3.0);
@@ -11217,6 +12592,11 @@ mod tests {
         let live =
             RuntimeDataBindGraphConverter::Group(vec![RuntimeDataBindGraphConverter::Scripted {
                 global_id: 7,
+                serialized_implemented_methods:
+                    crate::script_asset::RuntimeScriptImplementedMethods::METHOD_MASK,
+                definition:
+                    crate::scripted_data_converter::RuntimeScriptedDataConverterDefinition::default(
+                    ),
                 instance: Some(handle),
             }]);
         let mut detached = live.clone();
@@ -11334,6 +12714,96 @@ mod tests {
         }
 
         read_runtime_file_with_scripting(&bytes).expect("exact Project .riv import")
+    }
+
+    #[derive(Clone, Copy)]
+    enum ScriptedConverterAssetFixture {
+        Missing,
+        WrongType,
+        Module,
+        ProtocolDefault,
+        ProtocolMask(u32),
+    }
+
+    fn scripted_converter_asset_fixture(asset: ScriptedConverterAssetFixture) -> RuntimeFile {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_test_var_uint(&mut bytes, 7);
+        push_test_var_uint(&mut bytes, 0);
+        push_test_var_uint(&mut bytes, 91_002);
+        push_test_var_uint(&mut bytes, 0);
+        push_test_object(&mut bytes, "Backboard", |_| {});
+        match asset {
+            ScriptedConverterAssetFixture::Missing => {}
+            ScriptedConverterAssetFixture::WrongType => {
+                push_test_object(&mut bytes, "ImageAsset", |bytes| {
+                    push_test_uint_property(bytes, "FileAsset", "assetId", 0);
+                });
+            }
+            ScriptedConverterAssetFixture::Module
+            | ScriptedConverterAssetFixture::ProtocolDefault
+            | ScriptedConverterAssetFixture::ProtocolMask(_) => {
+                push_test_object(&mut bytes, "ScriptAsset", |bytes| {
+                    push_test_uint_property(bytes, "FileAsset", "assetId", 0);
+                    if matches!(asset, ScriptedConverterAssetFixture::Module) {
+                        push_test_uint_property(bytes, "ScriptAsset", "isModule", 1);
+                    }
+                    if let ScriptedConverterAssetFixture::ProtocolMask(mask) = asset {
+                        push_test_uint_property(
+                            bytes,
+                            "ScriptAsset",
+                            "serializedImplementedMethods",
+                            u64::from(mask),
+                        );
+                    }
+                });
+            }
+        }
+        push_test_object(&mut bytes, "ScriptedDataConverter", |bytes| {
+            push_test_uint_property(bytes, "ScriptedDataConverter", "scriptAssetId", 0);
+        });
+        read_runtime_file_with_scripting(&bytes).expect("scripted-converter asset fixture")
+    }
+
+    #[test]
+    fn scripted_converter_method_bits_require_an_executable_protocol_asset() {
+        const EXPLICIT_MASK: u32 = 1 << 10;
+        for (asset, expected_mask) in [
+            (ScriptedConverterAssetFixture::Missing, 0),
+            (ScriptedConverterAssetFixture::WrongType, 0),
+            (ScriptedConverterAssetFixture::Module, 0),
+            (
+                ScriptedConverterAssetFixture::ProtocolDefault,
+                crate::script_asset::RuntimeScriptImplementedMethods::METHOD_MASK,
+            ),
+            (
+                ScriptedConverterAssetFixture::ProtocolMask(EXPLICIT_MASK),
+                EXPLICIT_MASK,
+            ),
+        ] {
+            let file = scripted_converter_asset_fixture(asset);
+            let converter = file.data_converter(0).expect("scripted converter");
+            let graph = runtime_data_bind_graph_converter_for_object(
+                &file,
+                converter,
+                &mut BTreeSet::new(),
+                true,
+                0,
+                &mut RuntimeDataBindGraphConverterBuildCache::default(),
+            )
+            .expect("scripted converter graph");
+            let RuntimeDataBindGraphConverter::Scripted {
+                serialized_implemented_methods,
+                ..
+            } = graph
+            else {
+                panic!("fixture must remain an ordinary ScriptedDataConverter");
+            };
+            assert_eq!(
+                serialized_implemented_methods, expected_mask,
+                "OptionalScriptedMethods stays zero for an invalid asset occurrence and copies only a valid protocol ScriptAsset bitfield (`script_asset.hpp:97-108`; `script_asset.cpp:139-161`)"
+            );
+        }
     }
 
     fn exact_scripted_converter_for_payload(payload: &[u8]) -> RuntimeDataBindGraphConverter {
@@ -11667,6 +13137,39 @@ mod tests {
             [0.75],
             "C++ group dirt reaches every Formula, but only the Formula whose own random mode is sourceChange clears its cached state (`data_converter_group.cpp:63-73`, `data_converter_formula.cpp:537-542`)"
         );
+    }
+
+    #[test]
+    fn cached_formula_random_calls_share_cpp_slot_zero_while_always_mode_consumes_each() {
+        fn converted(random_mode: u64) -> (f32, usize) {
+            let tokens = [
+                RuntimeDataBindGraphFormulaToken::Function {
+                    function_type: 16,
+                    arguments_count: 0,
+                    random_mode,
+                },
+                RuntimeDataBindGraphFormulaToken::Function {
+                    function_type: 16,
+                    arguments_count: 0,
+                    random_mode,
+                },
+                RuntimeDataBindGraphFormulaToken::Operation { operation_type: 0 },
+            ];
+            let mut state = RuntimeDataBindGraphFormulaState::default();
+            let mut source = RuntimeDataBindGraphFormulaRandomSource::default();
+            source.set_values(&[0.25, 0.75]);
+            let value = runtime_data_bind_graph_convert_formula_with_state(
+                0.0,
+                &tokens,
+                &mut state,
+                &mut source,
+            );
+            (value, source.call_count)
+        }
+
+        assert_eq!(converted(0), (0.5, 1));
+        assert_eq!(converted(2), (0.5, 1));
+        assert_eq!(converted(1), (1.0, 2));
     }
 
     #[test]

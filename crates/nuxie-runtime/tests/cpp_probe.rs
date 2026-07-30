@@ -4,20 +4,41 @@ use nuxie_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDataContext,
     RuntimeDataContextLookupKind, RuntimeDataContextLookupReport, RuntimeDrawableDispatchKind,
     RuntimeFeatherState, RuntimeGradientStop, RuntimeImportedViewModelInstanceContext,
-    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
-    RuntimeOwnedViewModelInstance, RuntimePathCommand, RuntimeShapePaintKind,
-    RuntimeShapePaintPathKind, RuntimeShapePaintState, RuntimeViewModelLinkError,
-    StateMachineInputKind, StateMachineInstance, TransformProperty,
-    bound_script_view_model_from_owned_context, runtime_data_context_lookup_reports,
-    script_view_model_from_owned,
+    RuntimeKeyFrame, RuntimeNestedEventChainPhase, RuntimeNestedEventChainTrace,
+    RuntimeNestedNotifyBatchTrace, RuntimeOwnedViewModelContext,
+    RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+    RuntimePathCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
+    RuntimeStateMachineDataConverterBindStep, RuntimeViewModelLinkError, ScriptError, ScriptHost,
+    ScriptInputViewModelPropertyPath, ScriptInstance, ScriptMethod, ScriptValue,
+    ScriptedStateMachineObjectKind, StateMachineInputKind, StateMachineInstance, TransformProperty,
+    bound_script_view_model_from_owned_context, bound_script_view_model_from_owned_path,
+    bound_script_view_model_snapshot, bound_script_view_model_snapshot_from_path,
+    runtime_data_context_lookup_reports, runtime_random_call_count, script_view_model_from_owned,
+    set_runtime_random_test_values,
 };
 use nuxie_schema::definition_by_name;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, AtomicU64, Ordering},
+};
+use std::thread;
+use std::time::{Duration, Instant};
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn cpp_probe_temp_path(prefix: &str, label: &str) -> PathBuf {
+    static NEXT_FIXTURE_ID: AtomicU64 = AtomicU64::new(0);
+    std::env::temp_dir().join(format!(
+        "{prefix}-{}-{}-{}.riv",
+        std::process::id(),
+        NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed),
+        label.replace('/', "-")
+    ))
 }
 
 fn default_probe_path() -> PathBuf {
@@ -43,6 +64,45 @@ fn probe_path() -> Option<PathBuf> {
 
     let path = default_probe_path();
     path.exists().then_some(path)
+}
+
+fn scripted_probe_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("RIVE_CPP_PROBE_SCRIPTED") {
+        let path = PathBuf::from(path);
+        if path.is_absolute() {
+            return Some(path);
+        }
+        return Some(repo_root().join(path));
+    }
+
+    let os = match std::env::consts::OS {
+        "macos" => "macosx",
+        other => other,
+    };
+    let path = repo_root()
+        .join("tools/cpp-probe/build")
+        .join(os)
+        .join("bin/debug/rive_cpp_probe_scripted");
+    path.exists().then_some(path)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppAnimationResetColorRoundtrip {
+    input: u32,
+    stored_float_bits: u32,
+    output: u32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppTransitionIntegerComparisonSamples {
+    left: u32,
+    right: u32,
+    equal: bool,
+    not_equal: bool,
+    less_than: bool,
+    greater_than: bool,
 }
 
 fn cpp_runtime_fixture(relative: &str) -> PathBuf {
@@ -245,6 +305,26 @@ fn push_keyframe_double(bytes: &mut Vec<u8>, frame: u64, value: f32, interpolati
     });
 }
 
+fn push_keyframe_double_with_interpolator(
+    bytes: &mut Vec<u8>,
+    frame: u64,
+    value: f32,
+    interpolation_type: u64,
+    interpolator_id: u64,
+) {
+    push_object_with_properties(bytes, "KeyFrameDouble", |bytes| {
+        push_uint_property(bytes, "KeyFrameDouble", "frame", frame);
+        push_uint_property(
+            bytes,
+            "KeyFrameDouble",
+            "interpolationType",
+            interpolation_type,
+        );
+        push_uint_property(bytes, "KeyFrameDouble", "interpolatorId", interpolator_id);
+        push_f32_property(bytes, "KeyFrameDouble", "value", value);
+    });
+}
+
 fn push_keyframe_color(bytes: &mut Vec<u8>, frame: u64, value: u32, interpolation_type: u64) {
     push_object_with_properties(bytes, "KeyFrameColor", |bytes| {
         push_uint_property(bytes, "KeyFrameColor", "frame", frame);
@@ -399,6 +479,258 @@ fn synthetic_linear_animation_with_options(
         });
         push_keyframe_double(bytes, first_frame, first_value, first_interpolation_type);
         push_keyframe_double(bytes, second_frame, second_value, 0);
+    })
+}
+
+fn synthetic_linear_animation_wrong_type_interpolator(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "y")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 3.0, 1);
+        push_keyframe_double(bytes, 10, 13.0, 0);
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double_with_interpolator(bytes, 0, 12.0, 1, 1);
+        push_keyframe_double(bytes, 10, 22.0, 0);
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "y")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 13.0, 1);
+        push_keyframe_double(bytes, 10, 23.0, 0);
+    })
+}
+
+fn synthetic_two_animation_importer_cursor(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 10, 12.0, 1);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 20);
+            push_uint_property(bytes, "LinearAnimation", "duration", 40);
+        });
+        push_keyframe_double(bytes, 20, 22.0, 0);
+    })
+}
+
+fn synthetic_invalid_keyed_object_property_sink(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 2.0, 1);
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 99);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 10, 12.0, 0);
+    })
+}
+
+fn synthetic_two_animation_loop_values(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "loopValue", 1);
+        });
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "loopValue", 2);
+        });
+    })
+}
+
+fn synthetic_cross_artboard_animation_definition_owners(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_string_property(bytes, "Artboard", "name", "retained-owner-a");
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+            push_f32_property(bytes, "LinearAnimation", "speed", 1.0);
+            push_uint_property(bytes, "LinearAnimation", "loopValue", 1);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 2.0, 1);
+        push_keyframe_double(bytes, 10, 12.0, 0);
+
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_string_property(bytes, "Artboard", "name", "caller-target-b");
+        });
+        push_transform_node(bytes, 0, 100.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 10);
+            push_f32_property(bytes, "LinearAnimation", "speed", 2.0);
+            push_uint_property(bytes, "LinearAnimation", "loopValue", 0);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 100.0, 1);
+        push_keyframe_double(bytes, 10, 200.0, 0);
+    })
+}
+
+#[derive(Clone, Copy, Debug)]
+enum SyntheticCrossArtboardBlendKind {
+    Blend1D,
+    BlendDirect,
+}
+
+fn synthetic_cross_artboard_blend_definition_owner(
+    file_id: u64,
+    kind: SyntheticCrossArtboardBlendKind,
+    animations: [(f32, f32); 2],
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        // Keep the application target baseline identical between owner and
+        // caller so the differential isolates definition ownership even when
+        // sequential blend mixing retains part of the target's prior value.
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        for (from, to) in animations {
+            push_animation_for_single_node(bytes, 1, from, to);
+        }
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineNumber", |bytes| {
+            push_string_property(bytes, "StateMachineNumber", "name", "blend");
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        match kind {
+            SyntheticCrossArtboardBlendKind::Blend1D => {
+                push_object_with_properties(bytes, "BlendState1DInput", |bytes| {
+                    push_uint_property(bytes, "BlendState1DInput", "inputId", 0);
+                });
+                push_blend_animation_1d(bytes, 0, 0.0);
+                push_blend_animation_1d(bytes, 1, 1.0);
+            }
+            SyntheticCrossArtboardBlendKind::BlendDirect => {
+                push_object_with_properties(bytes, "BlendStateDirect", |_| {});
+                // A full first mix removes target-baseline history from the
+                // clone/remount comparison while the second animation still
+                // proves that both retained definitions belong to owner A.
+                push_blend_animation_direct_mix_value(bytes, 0, 100.0);
+                push_blend_animation_direct_input(bytes, 1, 0);
+            }
+        }
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_negative_speed_nested_remap(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        push_object_with_properties(bytes, "NestedRemapAnimation", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+            push_uint_property(bytes, "NestedAnimation", "animationId", 0);
+            push_f32_property(bytes, "NestedRemapAnimation", "time", 0.0);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+            push_f32_property(bytes, "LinearAnimation", "speed", -1.0);
+            push_uint_property(bytes, "LinearAnimation", "loopValue", 0);
+        });
     })
 }
 
@@ -901,6 +1233,12 @@ enum SyntheticInputTransitionKind {
 }
 
 #[derive(Debug, Clone, Copy)]
+enum SyntheticFocusComparator {
+    Missing,
+    WrongType,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct SyntheticTransitionOptions {
     duration: u64,
     flags: u64,
@@ -908,6 +1246,7 @@ struct SyntheticTransitionOptions {
     any_state_transition: bool,
     source_second_frame: u64,
     source_second_value: f32,
+    source_animation_duration: u64,
     cubic_transition_interpolator: bool,
     elastic_transition_interpolator: bool,
 }
@@ -921,6 +1260,7 @@ impl Default for SyntheticTransitionOptions {
             any_state_transition: false,
             source_second_frame: 10,
             source_second_value: 12.0,
+            source_animation_duration: 20,
             cubic_transition_interpolator: false,
             elastic_transition_interpolator: false,
         }
@@ -958,6 +1298,34 @@ fn synthetic_state_machine_input_transition_with_options(
     kind: SyntheticInputTransitionKind,
     transition: SyntheticTransitionOptions,
 ) -> Vec<u8> {
+    synthetic_state_machine_input_transition_with_condition(file_id, kind, kind, 0, transition)
+}
+
+fn synthetic_state_machine_input_transition_with_condition(
+    file_id: u64,
+    input_kind: SyntheticInputTransitionKind,
+    condition_kind: SyntheticInputTransitionKind,
+    condition_input_id: u64,
+    transition: SyntheticTransitionOptions,
+) -> Vec<u8> {
+    synthetic_state_machine_input_transition_with_condition_and_null_slot(
+        file_id,
+        input_kind,
+        condition_kind,
+        condition_input_id,
+        transition,
+        false,
+    )
+}
+
+fn synthetic_state_machine_input_transition_with_condition_and_null_slot(
+    file_id: u64,
+    input_kind: SyntheticInputTransitionKind,
+    condition_kind: SyntheticInputTransitionKind,
+    condition_input_id: u64,
+    transition: SyntheticTransitionOptions,
+    null_input_prefix: bool,
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
         push_object_with_properties(bytes, "Artboard", |_| {});
@@ -982,7 +1350,12 @@ fn synthetic_state_machine_input_transition_with_options(
         push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
         push_object_with_properties(bytes, "LinearAnimation", |bytes| {
             push_uint_property(bytes, "LinearAnimation", "fps", 10);
-            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+            push_uint_property(
+                bytes,
+                "LinearAnimation",
+                "duration",
+                transition.source_animation_duration,
+            );
         });
         push_object_with_properties(bytes, "KeyedObject", |bytes| {
             push_uint_property(bytes, "KeyedObject", "objectId", animated_local_id);
@@ -1020,7 +1393,12 @@ fn synthetic_state_machine_input_transition_with_options(
         push_keyframe_double(bytes, 0, 20.0, 1);
         push_keyframe_double(bytes, 10, 30.0, 0);
         push_object_with_properties(bytes, "StateMachine", |_| {});
-        match kind {
+        if null_input_prefix {
+            // The abstract base decodes as a C++ null object. The
+            // StateMachineImporter consumes it as an input occurrence.
+            push_object_with_properties(bytes, "StateMachineInput", |_| {});
+        }
+        match input_kind {
             SyntheticInputTransitionKind::Bool => {
                 push_object_with_properties(bytes, "StateMachineBool", |bytes| {
                     push_string_property(bytes, "StateMachineBool", "name", "armed");
@@ -1044,7 +1422,7 @@ fn synthetic_state_machine_input_transition_with_options(
                 push_uint_property(bytes, "StateTransition", "stateToId", 3);
                 push_synthetic_transition_options(bytes, transition);
             });
-            push_synthetic_transition_condition(bytes, kind);
+            push_synthetic_transition_condition(bytes, condition_kind, condition_input_id);
         }
         push_object_with_properties(bytes, "EntryState", |_| {});
         push_object_with_properties(bytes, "StateTransition", |bytes| {
@@ -1057,7 +1435,7 @@ fn synthetic_state_machine_input_transition_with_options(
             push_uint_property(bytes, "StateTransition", "stateToId", 3);
             push_synthetic_transition_options(bytes, transition);
         });
-        push_synthetic_transition_condition(bytes, kind);
+        push_synthetic_transition_condition(bytes, condition_kind, condition_input_id);
         push_object_with_properties(bytes, "AnimationState", |bytes| {
             push_uint_property(bytes, "AnimationState", "animationId", 1);
         });
@@ -1080,21 +1458,25 @@ fn push_synthetic_transition_options(bytes: &mut Vec<u8>, transition: SyntheticT
     }
 }
 
-fn push_synthetic_transition_condition(bytes: &mut Vec<u8>, kind: SyntheticInputTransitionKind) {
+fn push_synthetic_transition_condition(
+    bytes: &mut Vec<u8>,
+    kind: SyntheticInputTransitionKind,
+    input_id: u64,
+) {
     match kind {
         SyntheticInputTransitionKind::Bool => {
-            push_synthetic_bool_transition_condition(bytes, 0);
+            push_synthetic_bool_transition_condition(bytes, input_id);
         }
         SyntheticInputTransitionKind::Number => {
             push_object_with_properties(bytes, "TransitionNumberCondition", |bytes| {
-                push_uint_property(bytes, "TransitionNumberCondition", "inputId", 0);
+                push_uint_property(bytes, "TransitionNumberCondition", "inputId", input_id);
                 push_uint_property(bytes, "TransitionNumberCondition", "opValue", 5);
                 push_f32_property(bytes, "TransitionNumberCondition", "value", 3.0);
             });
         }
         SyntheticInputTransitionKind::Trigger => {
             push_object_with_properties(bytes, "TransitionTriggerCondition", |bytes| {
-                push_uint_property(bytes, "TransitionTriggerCondition", "inputId", 0);
+                push_uint_property(bytes, "TransitionTriggerCondition", "inputId", input_id);
             });
         }
     }
@@ -1109,6 +1491,258 @@ fn push_synthetic_bool_transition_condition(bytes: &mut Vec<u8>, input_index: u6
 
 fn synthetic_state_machine_bool_transition(file_id: u64) -> Vec<u8> {
     synthetic_state_machine_input_transition(file_id, SyntheticInputTransitionKind::Bool)
+}
+
+fn synthetic_state_machine_focus_transition(
+    file_id: u64,
+    comparator: SyntheticFocusComparator,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_object_with_properties(bytes, "TransitionFocusCondition", |bytes| {
+            if matches!(comparator, SyntheticFocusComparator::WrongType) {
+                // C++ returns false before applying != when no component
+                // comparator exists (`transition_focus_condition.cpp:30-39`).
+                push_uint_property(bytes, "TransitionFocusCondition", "opValue", 1);
+            }
+        });
+        if matches!(comparator, SyntheticFocusComparator::WrongType) {
+            push_object_with_properties(bytes, "TransitionValueNumberComparator", |bytes| {
+                push_f32_property(bytes, "TransitionValueNumberComparator", "value", 1.0);
+            });
+        }
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn push_transition_duration_data_bind_context(bytes: &mut Vec<u8>, path: &[u32]) {
+    push_transition_duration_data_bind_context_with_converter(bytes, path, None);
+}
+
+fn push_transition_duration_data_bind_context_with_converter(
+    bytes: &mut Vec<u8>,
+    path: &[u32],
+    converter_id: Option<u64>,
+) {
+    let mut source_path_ids = Vec::new();
+    for path_id in path {
+        push_var_uint(&mut source_path_ids, u64::from(*path_id));
+    }
+    push_object_with_properties(bytes, "DataBindContext", |bytes| {
+        push_uint_property(
+            bytes,
+            "DataBindContext",
+            "propertyKey",
+            u64::from(property_key_for_name("StateTransition", "duration")),
+        );
+        push_bytes_property(bytes, "DataBindContext", "sourcePathIds", &source_path_ids);
+        if let Some(converter_id) = converter_id {
+            push_uint_property(bytes, "DataBindContext", "converterId", converter_id);
+        }
+    });
+}
+
+fn synthetic_state_machine_duplicate_transition_duration_bindings(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        for name in ["first", "second"] {
+            push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+                push_string_property(bytes, "ViewModelPropertyNumber", "name", name);
+            });
+        }
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        for (property_id, value) in [(0, 1000.0), (1, 0.0)] {
+            push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+                push_uint_property(
+                    bytes,
+                    "ViewModelInstanceNumber",
+                    "viewModelPropertyId",
+                    property_id,
+                );
+                push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", value);
+            });
+        }
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "go");
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            push_uint_property(bytes, "StateTransition", "duration", 500);
+        });
+        push_transition_duration_data_bind_context(bytes, &[0, 0]);
+        push_transition_duration_data_bind_context(bytes, &[0, 1]);
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_nested_transition_duration_binding(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyViewModel", "name", "child");
+            push_uint_property(
+                bytes,
+                "ViewModelPropertyViewModel",
+                "viewModelReferenceId",
+                1,
+            );
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Child");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "duration");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "child");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 1);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 1000.0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceViewModel", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceViewModel",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+        });
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "go");
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            push_uint_property(bytes, "StateTransition", "duration", 1000);
+        });
+        push_transition_duration_data_bind_context(bytes, &[0, 0, 0]);
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_string_to_number_transition_duration_binding(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyString", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyString", "name", "duration");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceString", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceString", "viewModelPropertyId", 0);
+            push_string_property(bytes, "ViewModelInstanceString", "propertyValue", "1000");
+        });
+        push_object_with_properties(bytes, "DataConverterToNumber", |_| {});
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "go");
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            push_uint_property(bytes, "StateTransition", "duration", 0);
+        });
+        push_transition_duration_data_bind_context_with_converter(bytes, &[0, 0], Some(0));
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
 }
 
 fn synthetic_state_machine_entry_timed_transition(file_id: u64) -> Vec<u8> {
@@ -1173,6 +1807,33 @@ fn push_animation_for_single_node_with_duration(
     push_object_with_properties(bytes, "LinearAnimation", |bytes| {
         push_uint_property(bytes, "LinearAnimation", "fps", 10);
         push_uint_property(bytes, "LinearAnimation", "duration", duration);
+    });
+    push_object_with_properties(bytes, "KeyedObject", |bytes| {
+        push_uint_property(bytes, "KeyedObject", "objectId", target_local_id);
+    });
+    push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+        push_uint_property(
+            bytes,
+            "KeyedProperty",
+            "propertyKey",
+            u64::from(property_key_for_name("Node", "x")),
+        );
+    });
+    push_keyframe_double(bytes, 0, first_value, 1);
+    push_keyframe_double(bytes, 10, second_value, 0);
+}
+
+fn push_animation_for_single_node_with_loop(
+    bytes: &mut Vec<u8>,
+    target_local_id: u64,
+    first_value: f32,
+    second_value: f32,
+    loop_value: u64,
+) {
+    push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+        push_uint_property(bytes, "LinearAnimation", "fps", 10);
+        push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        push_uint_property(bytes, "LinearAnimation", "loopValue", loop_value);
     });
     push_object_with_properties(bytes, "KeyedObject", |bytes| {
         push_uint_property(bytes, "KeyedObject", "objectId", target_local_id);
@@ -1489,7 +2150,7 @@ fn synthetic_state_machine_trigger_done_event(file_id: u64) -> Vec<u8> {
         push_object_with_properties(bytes, "StateTransition", |bytes| {
             push_uint_property(bytes, "StateTransition", "stateToId", 3);
         });
-        push_synthetic_transition_condition(bytes, SyntheticInputTransitionKind::Trigger);
+        push_synthetic_transition_condition(bytes, SyntheticInputTransitionKind::Trigger, 0);
         push_state_machine_fire_event(bytes, DONE_EVENT, 0);
         push_object_with_properties(bytes, "AnimationState", |bytes| {
             push_uint_property(bytes, "AnimationState", "animationId", 1);
@@ -1539,6 +2200,312 @@ fn synthetic_state_machine_fire_event_listener_input_change(file_id: u64) -> Vec
         });
         push_state_machine_fire_event(bytes, REPORTED_EVENT, AT_START);
         push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_self_chaining_event(file_id: u64) -> Vec<u8> {
+    const AT_START: u64 = 0;
+    const REPORTED_EVENT: u64 = 2;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "Event", |bytes| {
+            push_string_property(bytes, "Event", "name", "loop");
+        });
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 5);
+            push_uint_property(
+                bytes,
+                "StateMachineListenerSingle",
+                "eventId",
+                REPORTED_EVENT,
+            );
+        });
+        push_object_with_properties(bytes, "ListenerFireEvent", |bytes| {
+            push_uint_property(bytes, "ListenerFireEvent", "eventId", REPORTED_EVENT);
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_state_machine_fire_event(bytes, REPORTED_EVENT, AT_START);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_sibling_nested_event_reporters(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        for (host_local, artboard_id) in [(1, 1), (3, 2)] {
+            push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+                push_uint_property(bytes, "Node", "parentId", 0);
+                push_uint_property(bytes, "NestedArtboard", "artboardId", artboard_id);
+            });
+            push_object_with_properties(bytes, "NestedStateMachine", |bytes| {
+                push_uint_property(bytes, "Component", "parentId", host_local);
+                push_uint_property(bytes, "NestedAnimation", "animationId", 0);
+            });
+        }
+        for name in ["A-root", "B-root"] {
+            push_object_with_properties(bytes, "Event", |bytes| {
+                push_string_property(bytes, "Event", "name", name);
+            });
+        }
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        for (host_local, root_event_local) in [(1, 5), (3, 6)] {
+            push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+                push_uint_property(bytes, "StateMachineListenerSingle", "targetId", host_local);
+                push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 5);
+                push_uint_property(bytes, "StateMachineListenerSingle", "eventId", 1);
+            });
+            push_object_with_properties(bytes, "ListenerFireEvent", |bytes| {
+                push_uint_property(bytes, "ListenerFireEvent", "eventId", root_event_local);
+            });
+        }
+
+        for name in ["A-local", "B-local"] {
+            push_object_with_properties(bytes, "Artboard", |_| {});
+            push_object_with_properties(bytes, "AudioEvent", |bytes| {
+                push_uint_property(bytes, "AudioEvent", "parentId", 0);
+                push_string_property(bytes, "Event", "name", name);
+            });
+            push_transform_node(bytes, 0, 0.0, 0.0, 1.0, 1.0, 1.0);
+            push_animation_for_single_node(bytes, 2, 0.0, 1.0);
+            push_object_with_properties(bytes, "StateMachine", |_| {});
+            push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+            push_object_with_properties(bytes, "AnyState", |_| {});
+            push_object_with_properties(bytes, "EntryState", |_| {});
+            push_object_with_properties(bytes, "StateTransition", |bytes| {
+                push_uint_property(bytes, "StateTransition", "stateToId", 2);
+            });
+            push_object_with_properties(bytes, "AnimationState", |bytes| {
+                push_uint_property(bytes, "AnimationState", "animationId", 0);
+            });
+            push_state_machine_fire_event(bytes, 1, 0);
+            push_object_with_properties(bytes, "ExitState", |_| {});
+        }
+    })
+}
+
+fn synthetic_same_host_nested_event_reporters(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        for animation_id in [0, 1] {
+            push_object_with_properties(bytes, "NestedStateMachine", |bytes| {
+                push_uint_property(bytes, "Component", "parentId", 1);
+                push_uint_property(bytes, "NestedAnimation", "animationId", animation_id);
+            });
+        }
+        for name in ["A-root", "B-root"] {
+            push_object_with_properties(bytes, "Event", |bytes| {
+                push_string_property(bytes, "Event", "name", name);
+            });
+        }
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        for (child_event_local, root_event_local) in [(1, 4), (2, 5)] {
+            push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+                push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 1);
+                push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 5);
+                push_uint_property(
+                    bytes,
+                    "StateMachineListenerSingle",
+                    "eventId",
+                    child_event_local,
+                );
+            });
+            push_object_with_properties(bytes, "ListenerFireEvent", |bytes| {
+                push_uint_property(bytes, "ListenerFireEvent", "eventId", root_event_local);
+            });
+        }
+
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        for name in ["A-local", "B-local"] {
+            push_object_with_properties(bytes, "AudioEvent", |bytes| {
+                push_uint_property(bytes, "AudioEvent", "parentId", 0);
+                push_string_property(bytes, "Event", "name", name);
+            });
+        }
+        push_transform_node(bytes, 0, 0.0, 0.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 3, 0.0, 1.0);
+        for event_local in [1, 2] {
+            push_object_with_properties(bytes, "StateMachine", |_| {});
+            push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+            push_object_with_properties(bytes, "AnyState", |_| {});
+            push_object_with_properties(bytes, "EntryState", |_| {});
+            push_object_with_properties(bytes, "StateTransition", |bytes| {
+                push_uint_property(bytes, "StateTransition", "stateToId", 2);
+            });
+            push_object_with_properties(bytes, "AnimationState", |bytes| {
+                push_uint_property(bytes, "AnimationState", "animationId", 0);
+            });
+            push_state_machine_fire_event(bytes, event_local, 0);
+            push_object_with_properties(bytes, "ExitState", |_| {});
+        }
+    })
+}
+
+fn synthetic_deep_nested_event_reporter(file_id: u64) -> Vec<u8> {
+    const AT_START: u64 = 0;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        // Root: the selected middle state machine reports event local 3 through
+        // host 1, and the root listener turns it into root-local.
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        push_object_with_properties(bytes, "NestedStateMachine", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+            push_uint_property(bytes, "NestedAnimation", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "AudioEvent", |bytes| {
+            push_uint_property(bytes, "AudioEvent", "parentId", 0);
+            push_string_property(bytes, "Event", "name", "root-local");
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 1);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 5);
+            push_uint_property(bytes, "StateMachineListenerSingle", "eventId", 3);
+        });
+        push_object_with_properties(bytes, "ListenerFireEvent", |bytes| {
+            push_uint_property(bytes, "ListenerFireEvent", "eventId", 3);
+        });
+
+        // Middle: the leaf reports event local 1 through host 1. This selected
+        // middle owner reports middle-local, which must immediately continue
+        // through the root listener before the middle subtree resumes.
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 2);
+        });
+        push_object_with_properties(bytes, "NestedStateMachine", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+            push_uint_property(bytes, "NestedAnimation", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "AudioEvent", |bytes| {
+            push_uint_property(bytes, "AudioEvent", "parentId", 0);
+            push_string_property(bytes, "Event", "name", "middle-local");
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 1);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 5);
+            push_uint_property(bytes, "StateMachineListenerSingle", "eventId", 1);
+        });
+        push_object_with_properties(bytes, "ListenerFireEvent", |bytes| {
+            push_uint_property(bytes, "ListenerFireEvent", "eventId", 3);
+        });
+
+        // Leaf: its selected state machine reports one AudioEvent at entry.
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "AudioEvent", |bytes| {
+            push_uint_property(bytes, "AudioEvent", "parentId", 0);
+            push_string_property(bytes, "Event", "name", "leaf-local");
+        });
+        push_transform_node(bytes, 0, 0.0, 0.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 2, 0.0, 1.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_state_machine_fire_event(bytes, 1, AT_START);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_nested_simple_timeline_events(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        push_object_with_properties(bytes, "NestedSimpleAnimation", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+            push_uint_property(bytes, "NestedAnimation", "animationId", 0);
+            push_bool_property(bytes, "NestedSimpleAnimation", "isPlaying", true);
+            push_f32_property(bytes, "NestedLinearAnimation", "mix", 1.0);
+        });
+        push_object_with_properties(bytes, "Event", |bytes| {
+            push_string_property(bytes, "Event", "name", "parent-fired");
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 1);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 5);
+            push_uint_property(bytes, "StateMachineListenerSingle", "eventId", 1);
+        });
+        push_object_with_properties(bytes, "ListenerFireEvent", |bytes| {
+            push_uint_property(bytes, "ListenerFireEvent", "eventId", 3);
+        });
+
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Event", |bytes| {
+            push_string_property(bytes, "Event", "name", "timeline-event");
+        });
+        push_object_with_properties(bytes, "AudioEvent", |bytes| {
+            push_uint_property(bytes, "AudioEvent", "parentId", 0);
+            push_string_property(bytes, "Event", "name", "timeline-audio");
+        });
+        push_transform_node(bytes, 0, 2.0, 0.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        for event_local in [1, 2] {
+            push_object_with_properties(bytes, "KeyedObject", |bytes| {
+                push_uint_property(bytes, "KeyedObject", "objectId", event_local);
+            });
+            push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+                push_uint_property(
+                    bytes,
+                    "KeyedProperty",
+                    "propertyKey",
+                    u64::from(property_key_for_name("Event", "trigger")),
+                );
+            });
+            push_keyframe_callback(bytes, 5);
+        }
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 3);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 2.0, 1);
+        push_keyframe_double(bytes, 20, 12.0, 0);
     })
 }
 
@@ -1956,7 +2923,7 @@ fn synthetic_state_machine_scheduled_listener_input_change(
         push_object_with_properties(bytes, "StateTransition", |bytes| {
             push_uint_property(bytes, "StateTransition", "stateToId", 3);
         });
-        push_synthetic_transition_condition(bytes, kind);
+        push_synthetic_transition_condition(bytes, kind, 0);
         push_object_with_properties(bytes, "AnimationState", |bytes| {
             push_uint_property(bytes, "AnimationState", "animationId", 1);
         });
@@ -2108,6 +3075,73 @@ fn synthetic_state_machine_blend_state_1d_input(file_id: u64) -> Vec<u8> {
     })
 }
 
+fn synthetic_state_machine_empty_baseline_reset(file_id: u64) -> Vec<u8> {
+    const LAYER_STATE_RESET: u64 = 1 << 1;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 7.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "y")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 3.0, 1);
+        push_keyframe_double(bytes, 10, 13.0, 0);
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "y")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 3.0, 1);
+        push_keyframe_double(bytes, 10, 13.0, 0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineNumber", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "BlendState1DInput", |bytes| {
+            push_uint_property(bytes, "BlendState1DInput", "inputId", 0);
+            push_uint_property(bytes, "BlendState1DInput", "flags", LAYER_STATE_RESET);
+        });
+        push_blend_animation_1d(bytes, 0, 0.0);
+        push_blend_animation_1d(bytes, 1, 1.0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn synthetic_state_machine_blend_state_1d_view_model(file_id: u64, value: f32) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
@@ -2208,6 +3242,50 @@ fn synthetic_state_machine_default_viewmodel_number_blend_state_with_state_machi
             push_blend_animation_1d(bytes, 1, 1.0);
             push_object_with_properties(bytes, "ExitState", |_| {});
         }
+    })
+}
+
+fn synthetic_state_machine_number_two_way_context_blend_state(file_id: u64) -> Vec<u8> {
+    const DATA_BIND_TWO_WAY: u64 = 1 << 1;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 1.0);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_bindable_number_data_bind_context_with_converter_and_flags(
+            bytes,
+            0.0,
+            &[0, 0],
+            None,
+            DATA_BIND_TWO_WAY,
+        );
+        push_object_with_properties(bytes, "BlendState1DViewModel", |_| {});
+        push_blend_animation_1d(bytes, 0, 0.0);
+        push_blend_animation_1d(bytes, 1, 1.0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
     })
 }
 
@@ -2535,6 +3613,27 @@ fn synthetic_state_machine_nested_viewmodel_number_blend_state_with_state_machin
     source_path: &[u32],
     include_script_input: bool,
 ) -> Vec<u8> {
+    let script_input_path = include_script_input.then_some(&[0, 0][..]);
+    synthetic_state_machine_nested_viewmodel_number_blend_state_with_script_input_options(
+        file_id,
+        child_number_value,
+        state_machine_count,
+        source_path,
+        script_input_path,
+        false,
+        &[],
+    )
+}
+
+fn synthetic_state_machine_nested_viewmodel_number_blend_state_with_script_input_options(
+    file_id: u64,
+    child_number_value: f32,
+    state_machine_count: usize,
+    source_path: &[u32],
+    script_input_path: Option<&[u32]>,
+    script_input_relative: bool,
+    manifest_entries: &[(u32, u32, &[u8])],
+) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "ViewModel", |bytes| {
             push_string_property(bytes, "ViewModel", "name", "Root");
@@ -2555,6 +3654,23 @@ fn synthetic_state_machine_nested_viewmodel_number_blend_state_with_state_machin
             push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
         });
         push_object_with_properties(bytes, "Backboard", |_| {});
+        if !manifest_entries.is_empty() {
+            push_manifest_name_path_asset_entries(bytes, manifest_entries);
+            // Exercise the exact FileAssetImporter ownership boundary:
+            // ScriptAsset claims its own later FileAssetContents while the
+            // File keeps the earlier ManifestAsset resolver installed.
+            push_object_with_properties(bytes, "ScriptAsset", |bytes| {
+                push_string_property(bytes, "ScriptAsset", "name", "later-script");
+            });
+            push_object_with_properties(bytes, "FileAssetContents", |bytes| {
+                push_bytes_property(
+                    bytes,
+                    "FileAssetContents",
+                    "bytes",
+                    b"return function() end",
+                );
+            });
+        }
         push_object_with_properties(bytes, "Artboard", |bytes| {
             if source_path == [1, 0] {
                 push_uint_property(bytes, "Artboard", "viewModelId", 1);
@@ -2589,22 +3705,23 @@ fn synthetic_state_machine_nested_viewmodel_number_blend_state_with_state_machin
         push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
         push_animation_for_single_node(bytes, 1, 2.0, 12.0);
         push_animation_for_single_node(bytes, 1, 20.0, 30.0);
-        if include_script_input {
+        if let Some(script_input_path) = script_input_path {
             let mut encoded_path = Vec::new();
-            push_var_uint(&mut encoded_path, 0);
-            push_var_uint(&mut encoded_path, 0);
+            for path_id in script_input_path {
+                push_var_uint(&mut encoded_path, u64::from(*path_id));
+            }
             push_object_with_properties(bytes, "DataBindPath", |bytes| {
                 push_bytes_property(bytes, "DataBindPath", "path", &encoded_path);
+                if script_input_relative {
+                    push_bool_property(bytes, "DataBindPath", "isRelative", true);
+                }
             });
             push_object_with_properties(bytes, "ScriptedDrawable", |_| {});
-            push_object_with_properties(bytes, "ScriptInputViewModelProperty", |bytes| {
-                push_bytes_property(
-                    bytes,
-                    "ScriptInputViewModelProperty",
-                    "dataBindPathIds",
-                    &encoded_path,
-                );
-            });
+            // A serialized occurrence owns either the preceding DataBindPath
+            // or the legacy inline dataBindPathIds buffer, never both.
+            // `DataBindPathReferencer::importDataBindPath` asserts that a
+            // claimed path does not replace an already decoded inline path.
+            push_object_with_properties(bytes, "ScriptInputViewModelProperty", |_| {});
         }
         for _ in 0..state_machine_count {
             push_object_with_properties(bytes, "StateMachine", |_| {});
@@ -8802,6 +9919,94 @@ fn push_manifest_name_path_asset(bytes: &mut Vec<u8>, path_id: u32, name_id: u32
     push_manifest_name_path_asset_entries(bytes, &[(path_id, name_id, name)]);
 }
 
+fn push_manifest_unmapped_name_path_asset(bytes: &mut Vec<u8>, path_id: u32, name_id: u32) {
+    let manifest_names = vec![0];
+
+    let mut manifest_paths = Vec::new();
+    push_var_uint(&mut manifest_paths, 1);
+    push_var_uint(&mut manifest_paths, u64::from(path_id));
+    push_var_uint(&mut manifest_paths, 1);
+    push_var_uint(&mut manifest_paths, u64::from(name_id));
+
+    let mut manifest_bytes = Vec::new();
+    push_var_uint(&mut manifest_bytes, 0);
+    push_var_uint(&mut manifest_bytes, manifest_names.len() as u64);
+    manifest_bytes.extend_from_slice(&manifest_names);
+    push_var_uint(&mut manifest_bytes, 1);
+    push_var_uint(&mut manifest_bytes, manifest_paths.len() as u64);
+    manifest_bytes.extend_from_slice(&manifest_paths);
+
+    push_object_with_properties(bytes, "ManifestAsset", |_| {});
+    push_object_with_properties(bytes, "FileAssetContents", |bytes| {
+        push_bytes_property(bytes, "FileAssetContents", "bytes", &manifest_bytes);
+    });
+}
+
+fn push_manifest_unmapped_intermediate_name_path_asset(
+    bytes: &mut Vec<u8>,
+    path_id: u32,
+    unmapped_name_id: u32,
+    final_name_id: u32,
+    final_name: &[u8],
+) {
+    let mut manifest_names = Vec::new();
+    push_var_uint(&mut manifest_names, 1);
+    push_var_uint(&mut manifest_names, u64::from(final_name_id));
+    push_var_uint(&mut manifest_names, final_name.len() as u64);
+    manifest_names.extend_from_slice(final_name);
+
+    let mut manifest_paths = Vec::new();
+    push_var_uint(&mut manifest_paths, 1);
+    push_var_uint(&mut manifest_paths, u64::from(path_id));
+    push_var_uint(&mut manifest_paths, 2);
+    push_var_uint(&mut manifest_paths, u64::from(unmapped_name_id));
+    push_var_uint(&mut manifest_paths, u64::from(final_name_id));
+
+    let mut manifest_bytes = Vec::new();
+    push_var_uint(&mut manifest_bytes, 0);
+    push_var_uint(&mut manifest_bytes, manifest_names.len() as u64);
+    manifest_bytes.extend_from_slice(&manifest_names);
+    push_var_uint(&mut manifest_bytes, 1);
+    push_var_uint(&mut manifest_bytes, manifest_paths.len() as u64);
+    manifest_bytes.extend_from_slice(&manifest_paths);
+
+    push_object_with_properties(bytes, "ManifestAsset", |_| {});
+    push_object_with_properties(bytes, "FileAssetContents", |bytes| {
+        push_bytes_property(bytes, "FileAssetContents", "bytes", &manifest_bytes);
+    });
+}
+
+fn push_manifest_name_path_asset_path(bytes: &mut Vec<u8>, path_id: u32, names: &[(u32, &[u8])]) {
+    let mut manifest_names = Vec::new();
+    push_var_uint(&mut manifest_names, names.len() as u64);
+    for (name_id, name) in names {
+        push_var_uint(&mut manifest_names, u64::from(*name_id));
+        push_var_uint(&mut manifest_names, name.len() as u64);
+        manifest_names.extend_from_slice(name);
+    }
+
+    let mut manifest_paths = Vec::new();
+    push_var_uint(&mut manifest_paths, 1);
+    push_var_uint(&mut manifest_paths, u64::from(path_id));
+    push_var_uint(&mut manifest_paths, names.len() as u64);
+    for (name_id, _) in names {
+        push_var_uint(&mut manifest_paths, u64::from(*name_id));
+    }
+
+    let mut manifest_bytes = Vec::new();
+    push_var_uint(&mut manifest_bytes, 0);
+    push_var_uint(&mut manifest_bytes, manifest_names.len() as u64);
+    manifest_bytes.extend_from_slice(&manifest_names);
+    push_var_uint(&mut manifest_bytes, 1);
+    push_var_uint(&mut manifest_bytes, manifest_paths.len() as u64);
+    manifest_bytes.extend_from_slice(&manifest_paths);
+
+    push_object_with_properties(bytes, "ManifestAsset", |_| {});
+    push_object_with_properties(bytes, "FileAssetContents", |bytes| {
+        push_bytes_property(bytes, "FileAssetContents", "bytes", &manifest_bytes);
+    });
+}
+
 fn push_manifest_name_path_asset_entries(bytes: &mut Vec<u8>, entries: &[(u32, u32, &[u8])]) {
     let mut manifest_names = Vec::new();
     push_var_uint(&mut manifest_names, entries.len() as u64);
@@ -9684,6 +10889,25 @@ fn synthetic_state_machine_blend_state_direct(file_id: u64) -> Vec<u8> {
         push_object_with_properties(bytes, "BlendStateDirect", |_| {});
         push_blend_animation_direct_mix_value(bytes, 0, 25.0);
         push_blend_animation_direct_input(bytes, 1, 0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_direct_nan_mix(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 7.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "BlendStateDirect", |_| {});
+        push_blend_animation_direct_mix_value(bytes, 0, f32::NAN);
         push_object_with_properties(bytes, "ExitState", |_| {});
     })
 }
@@ -13698,6 +14922,264 @@ fn synthetic_view_model_listener_trigger_then_number_transition(file_id: u64) ->
     })
 }
 
+fn synthetic_claimed_data_bind_path_view_model_listener(
+    file_id: u64,
+    is_relative: bool,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "watch");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+        });
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "observed");
+        });
+
+        let mut listener_path = Vec::new();
+        push_var_uint(&mut listener_path, 0);
+        push_var_uint(&mut listener_path, 0);
+        push_object_with_properties(bytes, "DataBindPath", |bytes| {
+            push_bytes_property(bytes, "DataBindPath", "path", &listener_path);
+            if is_relative {
+                push_bool_property(bytes, "DataBindPath", "isRelative", true);
+            }
+        });
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 11);
+        });
+        push_object_with_properties(bytes, "ListenerBoolChange", |bytes| {
+            push_uint_property(bytes, "ListenerBoolChange", "inputId", 0);
+            push_uint_property(bytes, "ListenerBoolChange", "value", 1);
+        });
+    })
+}
+
+fn synthetic_relative_claimed_data_bind_path_view_model_listener(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyBoolean", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyBoolean", "name", "watch");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_manifest_name_path_asset(bytes, 79, 7, b"watch");
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "observed");
+        });
+
+        let mut listener_path = Vec::new();
+        push_var_uint(&mut listener_path, 79);
+        push_object_with_properties(bytes, "DataBindPath", |bytes| {
+            push_bytes_property(bytes, "DataBindPath", "path", &listener_path);
+            push_bool_property(bytes, "DataBindPath", "isRelative", true);
+        });
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 11);
+        });
+        push_object_with_properties(bytes, "ListenerBoolChange", |bytes| {
+            push_uint_property(bytes, "ListenerBoolChange", "inputId", 0);
+            push_uint_property(bytes, "ListenerBoolChange", "value", 1);
+        });
+    })
+}
+
+fn synthetic_unmapped_name_relative_claimed_data_bind_path_view_model_listener(
+    file_id: u64,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyBoolean", |_| {});
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_manifest_unmapped_name_path_asset(bytes, 79, 999);
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "observed");
+        });
+
+        let mut listener_path = Vec::new();
+        push_var_uint(&mut listener_path, 79);
+        push_object_with_properties(bytes, "DataBindPath", |bytes| {
+            push_bytes_property(bytes, "DataBindPath", "path", &listener_path);
+            push_bool_property(bytes, "DataBindPath", "isRelative", true);
+        });
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 11);
+        });
+        push_object_with_properties(bytes, "ListenerBoolChange", |bytes| {
+            push_uint_property(bytes, "ListenerBoolChange", "inputId", 0);
+            push_uint_property(bytes, "ListenerBoolChange", "value", 1);
+        });
+    })
+}
+
+fn synthetic_unmapped_intermediate_name_relative_claimed_data_bind_path_view_model_listener(
+    file_id: u64,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelPropertyViewModel",
+                "viewModelReferenceId",
+                1,
+            );
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Child");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_manifest_unmapped_intermediate_name_path_asset(bytes, 79, 999, 8, b"amount");
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "child");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 1);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceViewModel", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceViewModel",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+        });
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "observed");
+        });
+        push_bindable_number_data_bind_context(bytes, 0.0, &[0, 0, 0]);
+
+        let mut listener_path = Vec::new();
+        push_var_uint(&mut listener_path, 79);
+        push_object_with_properties(bytes, "DataBindPath", |bytes| {
+            push_bytes_property(bytes, "DataBindPath", "path", &listener_path);
+            push_bool_property(bytes, "DataBindPath", "isRelative", true);
+        });
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 11);
+        });
+        push_object_with_properties(bytes, "ListenerBoolChange", |bytes| {
+            push_uint_property(bytes, "ListenerBoolChange", "inputId", 0);
+            push_uint_property(bytes, "ListenerBoolChange", "value", 1);
+        });
+    })
+}
+
+fn synthetic_nested_relative_claimed_data_bind_path_view_model_listener(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyViewModel", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyViewModel", "name", "child");
+            push_uint_property(
+                bytes,
+                "ViewModelPropertyViewModel",
+                "viewModelReferenceId",
+                1,
+            );
+        });
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Child");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "amount");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_manifest_name_path_asset_path(
+            bytes,
+            79,
+            &[(7, b"child".as_slice()), (8, b"amount".as_slice())],
+        );
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "child-instance");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 1);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root-instance");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceViewModel", |bytes| {
+            push_uint_property(
+                bytes,
+                "ViewModelInstanceViewModel",
+                "viewModelPropertyId",
+                0,
+            );
+            push_uint_property(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+        });
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "observed");
+        });
+        push_bindable_number_data_bind_context(bytes, 0.0, &[0, 0, 0]);
+
+        let mut listener_path = Vec::new();
+        push_var_uint(&mut listener_path, 79);
+        push_object_with_properties(bytes, "DataBindPath", |bytes| {
+            push_bytes_property(bytes, "DataBindPath", "path", &listener_path);
+            push_bool_property(bytes, "DataBindPath", "isRelative", true);
+        });
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+            push_uint_property(bytes, "StateMachineListenerSingle", "listenerTypeValue", 11);
+        });
+        push_object_with_properties(bytes, "ListenerBoolChange", |bytes| {
+            push_uint_property(bytes, "ListenerBoolChange", "inputId", 0);
+            push_uint_property(bytes, "ListenerBoolChange", "value", 1);
+        });
+    })
+}
+
 fn synthetic_state_machine_viewmodel_boolean_condition(
     file_id: u64,
     initial_value: bool,
@@ -14402,6 +15884,114 @@ fn synthetic_state_machine_component_artboard_unsupported_direction(file_id: u64
     })
 }
 
+fn synthetic_state_machine_viewmodel_comparator_matrix_case(
+    file_id: u64,
+    push_condition: impl FnOnce(&mut Vec<u8>),
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_f32_property(bytes, "Artboard", "width", 200.0);
+            push_f32_property(bytes, "Artboard", "height", 100.0);
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_condition(bytes);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_viewmodel_integer_pair_condition(
+    file_id: u64,
+    left: u64,
+    right: u64,
+    op_value: u64,
+) -> Vec<u8> {
+    synthetic_state_machine_viewmodel_comparator_matrix_case(file_id, |bytes| {
+        push_bindable_integer_data_bind(bytes, left);
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+            push_uint_property(bytes, "TransitionViewModelCondition", "opValue", op_value);
+        });
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+        push_bindable_integer_data_bind(bytes, right);
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+    })
+}
+
+fn synthetic_state_machine_viewmodel_trigger_pair_condition(
+    file_id: u64,
+    left: u64,
+    right: u64,
+    op_value: u64,
+) -> Vec<u8> {
+    synthetic_state_machine_viewmodel_comparator_matrix_case(file_id, |bytes| {
+        push_bindable_trigger_data_bind(bytes, left);
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+            push_uint_property(bytes, "TransitionViewModelCondition", "opValue", op_value);
+        });
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+        push_bindable_trigger_data_bind(bytes, right);
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+    })
+}
+
+fn synthetic_state_machine_viewmodel_artboard_literal_condition(
+    file_id: u64,
+    left: u64,
+    right: u64,
+    op_value: u64,
+) -> Vec<u8> {
+    synthetic_state_machine_viewmodel_comparator_matrix_case(file_id, |bytes| {
+        push_bindable_artboard_data_bind(bytes, left);
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+            push_uint_property(bytes, "TransitionViewModelCondition", "opValue", op_value);
+        });
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+        push_object_with_properties(bytes, "TransitionValueArtboardComparator", |bytes| {
+            push_uint_property(bytes, "TransitionValueArtboardComparator", "value", right);
+        });
+    })
+}
+
+fn synthetic_state_machine_artboard_viewmodel_number_condition(
+    file_id: u64,
+    right: f32,
+    op_value: u64,
+) -> Vec<u8> {
+    synthetic_state_machine_viewmodel_comparator_matrix_case(file_id, |bytes| {
+        push_bindable_number_data_bind(bytes, right);
+        push_object_with_properties(bytes, "TransitionViewModelCondition", |bytes| {
+            push_uint_property(bytes, "TransitionViewModelCondition", "opValue", op_value);
+        });
+        push_object_with_properties(bytes, "TransitionPropertyArtboardComparator", |bytes| {
+            push_uint_property(
+                bytes,
+                "TransitionPropertyArtboardComparator",
+                "propertyType",
+                0,
+            );
+        });
+        push_object_with_properties(bytes, "TransitionPropertyViewModelComparator", |_| {});
+    })
+}
+
 #[derive(Clone, Copy)]
 enum SyntheticComponentViewModelOrder {
     ComponentLeft,
@@ -14667,6 +16257,444 @@ fn synthetic_state_machine_direct_blend_state_transition(file_id: u64) -> Vec<u8
     })
 }
 
+fn synthetic_state_machine_missing_system_state(file_id: u64, missing: &'static str) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        for type_name in ["AnyState", "EntryState", "ExitState"] {
+            if type_name != missing {
+                push_object_with_properties(bytes, type_name, |_| {});
+            }
+        }
+    })
+}
+
+fn synthetic_state_machine_bad_transition_target(file_id: u64, state_to_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", state_to_id);
+        });
+        push_object_with_properties(bytes, "LayerState", |_| {});
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_duplicate_system_states(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 4);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_generic_system_state(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        // The base LayerState is deliberately not a recognized animation or
+        // blend state. Pinned C++ still retains its authored slot and creates
+        // the base no-op SystemStateInstance for it.
+        push_object_with_properties(bytes, "LayerState", |_| {});
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_weighted_random_transition(
+    file_id: u64,
+    first_weight: u64,
+    second_weight: u64,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_animation_for_single_node(bytes, 1, 40.0, 50.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+            push_uint_property(bytes, "LayerState", "flags", 1);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            push_uint_property(bytes, "StateTransition", "randomWeight", first_weight);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 4);
+            push_uint_property(bytes, "StateTransition", "randomWeight", second_weight);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 2);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_weighted_random_wait_then_select(file_id: u64) -> Vec<u8> {
+    const LAYER_STATE_RANDOM: u64 = 1 << 0;
+    const ENABLE_EXIT_TIME: u64 = 1 << 2;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_animation_for_single_node(bytes, 1, 40.0, 50.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+            push_uint_property(bytes, "LayerState", "flags", LAYER_STATE_RANDOM);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            push_uint_property(bytes, "StateTransition", "randomWeight", 1);
+            push_uint_property(bytes, "StateTransition", "flags", ENABLE_EXIT_TIME);
+            push_uint_property(bytes, "StateTransition", "exitTime", 1000);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 4);
+            push_uint_property(bytes, "StateTransition", "randomWeight", 1);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 2);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_fl_c5_layer_state_queries(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "enabled");
+        });
+
+        // Layer 0: one conditional edge followed by an unconditional edge.
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 4);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+
+        // Layer 1: an interleaved non-animation current state.
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+
+        // Layer 2: starts on the same animation definition as layer 0, then
+        // changes to a non-animation state.
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+        });
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_nested_state_machines_without_child_instances(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "NestedArtboard", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_uint_property(bytes, "NestedArtboard", "artboardId", 1);
+        });
+        push_object_with_properties(bytes, "NestedStateMachine", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "NestedBool", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_uint_property(bytes, "NestedInput", "inputId", 9);
+        });
+        push_object_with_properties(bytes, "NestedTrigger", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 2);
+            push_uint_property(bytes, "NestedInput", "inputId", 9);
+        });
+        push_object_with_properties(bytes, "NestedStateMachine", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+            push_uint_property(bytes, "NestedAnimation", "animationId", 7);
+        });
+        push_object_with_properties(bytes, "NestedNumber", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 5);
+            push_uint_property(bytes, "NestedInput", "inputId", 3);
+        });
+        push_object_with_properties(bytes, "NestedTrigger", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 5);
+        });
+        push_object_with_properties(bytes, "Artboard", |_| {});
+    })
+}
+
+fn synthetic_state_machine_serial_layer_entry_initialization(file_id: u64) -> Vec<u8> {
+    const STATE_AT_START: u64 = 2 << 1;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineNumber", |bytes| {
+            push_string_property(bytes, "StateMachineNumber", "name", "level");
+        });
+
+        push_object_with_properties(bytes, "StateMachineLayer", |bytes| {
+            push_string_property(bytes, "StateMachineLayer", "name", "producer");
+        });
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "ListenerNumberChange", |bytes| {
+            push_uint_property(bytes, "ListenerNumberChange", "inputId", 0);
+            push_uint_property(bytes, "ListenerNumberChange", "flags", STATE_AT_START);
+            push_f32_property(bytes, "ListenerNumberChange", "value", 7.0);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+
+        push_object_with_properties(bytes, "StateMachineLayer", |bytes| {
+            push_string_property(bytes, "StateMachineLayer", "name", "consumer");
+        });
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_synthetic_transition_condition(bytes, SyntheticInputTransitionKind::Number, 0);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+#[derive(Clone, Copy)]
+enum SyntheticEntryFocusAction {
+    TargetScope,
+    TraverseNext,
+}
+
+fn synthetic_state_machine_entry_focus_before_tree(
+    file_id: u64,
+    action: SyntheticEntryFocusAction,
+) -> Vec<u8> {
+    const STATE_AT_START: u64 = 2 << 1;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        // Scope Node 1 owns FocusData 2. Its descendant Node 3 owns leaf
+        // FocusData 4. The focus transition below observes the leaf, so it
+        // distinguishes constructor-time focus resting on the unattached
+        // scope from focus descending through an incorrectly prebuilt tree.
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "FocusData", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 1);
+        });
+        push_transform_node(bytes, 1, 5.0, 7.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "FocusData", |bytes| {
+            push_uint_property(bytes, "Component", "parentId", 3);
+        });
+        push_animation_for_single_node(bytes, 3, 5.0, 15.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        match action {
+            SyntheticEntryFocusAction::TargetScope => {
+                push_object_with_properties(bytes, "FocusActionTarget", |bytes| {
+                    push_uint_property(bytes, "ListenerAction", "flags", STATE_AT_START);
+                    push_uint_property(bytes, "FocusActionTarget", "targetId", 1);
+                });
+            }
+            SyntheticEntryFocusAction::TraverseNext => {
+                push_object_with_properties(bytes, "FocusActionTraversal", |bytes| {
+                    push_uint_property(bytes, "ListenerAction", "flags", STATE_AT_START);
+                    push_uint_property(bytes, "FocusActionTraversal", "traversalKind", 0);
+                });
+            }
+        }
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "TransitionFocusCondition", |_| {});
+        push_object_with_properties(bytes, "TransitionPropertyComponentComparator", |bytes| {
+            push_uint_property(
+                bytes,
+                "TransitionPropertyComponentComparator",
+                "objectId",
+                3,
+            );
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_transition_interruption(file_id: u64) -> Vec<u8> {
+    const ENABLE_EARLY_EXIT: u64 = 1 << 5;
+
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_animation_for_single_node(bytes, 1, 20.0, 30.0);
+        push_animation_for_single_node(bytes, 1, 40.0, 50.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "first");
+        });
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "second");
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            push_uint_property(bytes, "StateTransition", "duration", 1000);
+            push_uint_property(bytes, "StateTransition", "flags", ENABLE_EARLY_EXIT);
+        });
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 4);
+            push_uint_property(bytes, "StateTransition", "duration", 1000);
+        });
+        push_synthetic_bool_transition_condition(bytes, 1);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 2);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_state_machine_same_state_transition(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "go");
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn push_blend_animation_direct_mix_value(bytes: &mut Vec<u8>, animation_id: u64, mix_value: f32) {
     push_object_with_properties(bytes, "BlendAnimationDirect", |bytes| {
         push_uint_property(bytes, "BlendAnimationDirect", "animationId", animation_id);
@@ -14919,6 +16947,144 @@ fn synthetic_state_machine_blend_state_pause_on_exit(file_id: u64) -> Vec<u8> {
     })
 }
 
+fn synthetic_fl_c5_state_machine_definition(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "StateMachine", |bytes| {
+            push_string_property(bytes, "StateMachine", "name", "definition");
+        });
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "duplicate");
+        });
+        push_object_with_properties(bytes, "StateMachineNumber", |bytes| {
+            push_string_property(bytes, "StateMachineNumber", "name", "duplicate");
+        });
+        push_object_with_properties(bytes, "StateMachineTrigger", |bytes| {
+            push_string_property(bytes, "StateMachineTrigger", "name", "Case");
+        });
+        for name in ["duplicate", "duplicate", "Case"] {
+            push_object_with_properties(bytes, "StateMachineLayer", |bytes| {
+                push_string_property(bytes, "StateMachineLayer", "name", name);
+            });
+            push_object_with_properties(bytes, "AnyState", |_| {});
+            push_object_with_properties(bytes, "EntryState", |_| {});
+            push_object_with_properties(bytes, "ExitState", |_| {});
+        }
+        // No listener input type makes the first authored listener inert. Its
+        // generated targetId remains u32::MAX. The second occurrence is valid
+        // and must remain at authored index one.
+        push_object_with_properties(bytes, "StateMachineListener", |_| {});
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+        });
+    })
+}
+
+fn synthetic_fl_c5_state_machine_definition_null_hole(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "StateMachine", |bytes| {
+            push_string_property(bytes, "StateMachine", "name", "definition");
+        });
+        push_object_with_properties(bytes, "StateMachineNumber", |bytes| {
+            push_string_property(bytes, "StateMachineNumber", "name", "x");
+        });
+        push_object_with_properties(bytes, "StateMachineInput", |bytes| {
+            push_string_property(bytes, "StateMachineInput", "name", "hole");
+        });
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "x");
+        });
+        push_object_with_properties(bytes, "StateMachineTrigger", |bytes| {
+            push_string_property(bytes, "StateMachineTrigger", "name", "x");
+        });
+        for name in ["duplicate", "duplicate", "Case"] {
+            push_object_with_properties(bytes, "StateMachineLayer", |bytes| {
+                push_string_property(bytes, "StateMachineLayer", "name", name);
+            });
+            push_object_with_properties(bytes, "AnyState", |_| {});
+            push_object_with_properties(bytes, "EntryState", |_| {});
+            push_object_with_properties(bytes, "ExitState", |_| {});
+        }
+        push_object_with_properties(bytes, "StateMachineListener", |_| {});
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+        });
+        // The binary replay identifies StateMachine-owned DataBinds through
+        // their latest bindable target. The focused C++ seam can call
+        // StateMachineImporter::addDataBind directly, so this inert carrier
+        // exists only to express the same ownership in a serialized stream.
+        push_object_with_properties(bytes, "BindablePropertyNumber", |_| {});
+        for _ in 0..2 {
+            push_object_with_properties(bytes, "DataBind", |bytes| {
+                push_uint_property(bytes, "DataBind", "propertyKey", 586);
+            });
+        }
+    })
+}
+
+fn synthetic_fl_c5_malformed_listener(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        // No listener input type makes the first authored listener inert. Its
+        // generated targetId remains u32::MAX. The second occurrence is valid
+        // and must remain at authored index one.
+        push_object_with_properties(bytes, "StateMachineListener", |_| {});
+        push_object_with_properties(bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint_property(bytes, "StateMachineListenerSingle", "targetId", 0);
+        });
+    })
+}
+
+fn synthetic_fl_c5_typed_named_inputs(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineNumber", |bytes| {
+            push_string_property(bytes, "StateMachineNumber", "name", "x");
+        });
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "x");
+        });
+        push_object_with_properties(bytes, "StateMachineTrigger", |bytes| {
+            push_string_property(bytes, "StateMachineTrigger", "name", "x");
+        });
+    })
+}
+
+fn synthetic_fl_c5_empty_state_machine(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+    })
+}
+
+fn synthetic_fl_c5_state_machine_animation_loop(file_id: u64, loop_value: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node_with_loop(bytes, 1, 2.0, 12.0, loop_value);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
 fn read_cpp_probe_bytes(probe: &Path, label: &str, bytes: &[u8]) -> CppProbeFile {
     read_cpp_probe_bytes_with_args(probe, label, bytes, &[])
 }
@@ -14939,11 +17105,7 @@ fn read_cpp_probe_bytes_with_args(
     bytes: &[u8],
     extra_args: &[String],
 ) -> CppProbeFile {
-    let path = std::env::temp_dir().join(format!(
-        "rive-rust-runtime-{}-{}.riv",
-        std::process::id(),
-        label.replace('/', "-")
-    ));
+    let path = cpp_probe_temp_path("rive-rust-runtime", label);
     std::fs::write(&path, bytes)
         .unwrap_or_else(|err| panic!("failed to write {}: {err}", path.display()));
 
@@ -14974,6 +17136,34 @@ fn read_cpp_probe_bytes_with_args(
 
     serde_json::from_slice(&output.stdout)
         .unwrap_or_else(|err| panic!("invalid probe JSON for {label}: {err}"))
+}
+
+fn cpp_probe_accepts_bytes(probe: &Path, label: &str, bytes: &[u8]) -> bool {
+    let path = cpp_probe_temp_path("rive-rust-runtime", label);
+    std::fs::write(&path, bytes)
+        .unwrap_or_else(|err| panic!("failed to write {}: {err}", path.display()));
+    let status = Command::new(probe)
+        .arg("--no-advance")
+        .arg("--instance-artboards")
+        .arg("--file")
+        .arg(&path)
+        .status()
+        .unwrap_or_else(|err| panic!("failed to run {}: {err}", probe.display()));
+    let _ = std::fs::remove_file(path);
+    status.success()
+}
+
+fn rust_accepts_artboard_instance(bytes: &[u8]) -> bool {
+    let Ok(runtime) = read_runtime_file(bytes) else {
+        return false;
+    };
+    let Ok(graph) = GraphFile::from_runtime_file(&runtime) else {
+        return false;
+    };
+    graph
+        .artboards
+        .first()
+        .is_some_and(|artboard| ArtboardInstance::from_graph(&runtime, artboard).is_ok())
 }
 
 fn read_rust_instance_from_bytes(bytes: &[u8], label: &str) -> (RuntimeFile, ArtboardInstance) {
@@ -15139,7 +17329,7 @@ fn runtime_update_matches_cpp_for_transform_hierarchy() {
                     type_key_for_name(type_name),
                     "slot core type mismatch for local {local_id} in {label}"
                 );
-                assert_eq!(cpp_object.is_component, rust_slot.component_index.is_some());
+                assert_eq!(cpp_object.is_component, rust.component(local_id).is_some());
             }
             (None, None) => {}
             _ => panic!("slot presence mismatch for local {local_id} in {label}"),
@@ -15208,7 +17398,6 @@ fn runtime_drawable_dispatch_stream_filters_hidden_and_opacity_like_cpp_probe() 
             )
         })
         .collect::<Vec<_>>();
-
     assert_eq!(
         cpp_commands,
         vec![(Some(1), RuntimeDrawableDispatchKind::Draw, true)],
@@ -15845,6 +18034,319 @@ fn runtime_drawable_dispatch_stream_exposes_rounded_point_path_payloads_like_cpp
         &cpp_path_commands,
         "Rust rounded point path commands",
     );
+}
+
+#[test]
+fn translation_constraint_bone_virtual_offsets_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_translation_constraint_bone_offset.riv";
+    let bytes = synthetic_runtime_file(8222, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "RootBone", |bytes| {
+            push_uint_property(bytes, "RootBone", "parentId", 0);
+            push_f32_property(bytes, "RootBone", "length", 10.0);
+        });
+        push_object_with_properties(bytes, "Bone", |bytes| {
+            push_uint_property(bytes, "Bone", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "x", 20.0);
+            push_f32_property(bytes, "Node", "y", 7.0);
+        });
+        push_object_with_properties(bytes, "TranslationConstraint", |bytes| {
+            push_uint_property(bytes, "TranslationConstraint", "parentId", 2);
+            push_uint_property(bytes, "TranslationConstraint", "targetId", 3);
+            push_bool_property(bytes, "TranslationConstraint", "offset", true);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, _, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    let report = rust.update_components();
+    let cpp_update = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .expect("C++ runtime update");
+    assert_eq!(cpp_update.did_update, report.did_update);
+    let cpp_bone = cpp_update
+        .components
+        .iter()
+        .find(|component| component.local_id == 2)
+        .expect("C++ constrained Bone");
+    let rust_bone = rust.component(2).expect("Rust constrained Bone");
+    compare_mat2d(
+        cpp_bone.world_transform,
+        Some(rust_bone.transform.world_transform),
+        "world transform",
+        2,
+        label,
+    );
+    assert_eq!(
+        cpp_bone
+            .world_transform
+            .map(|matrix| (matrix[4], matrix[5])),
+        Some((30.0, 7.0))
+    );
+}
+
+#[test]
+fn transform_constraint_reads_retained_layout_target_bounds_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_transform_constraint_layout_target.riv";
+    let bytes = synthetic_runtime_file(8234, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_f32_property(bytes, "LayoutComponent", "width", 200.0);
+            push_f32_property(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object_with_properties(bytes, "LayoutComponent", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "LayoutComponent", "width", 100.0);
+            push_f32_property(bytes, "LayoutComponent", "height", 50.0);
+            push_uint_property(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object_with_properties(bytes, "LayoutComponentStyle", |_| {});
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "TransformConstraint", |bytes| {
+            push_uint_property(bytes, "TransformConstraint", "parentId", 3);
+            push_uint_property(bytes, "TransformConstraint", "targetId", 1);
+            push_f32_property(bytes, "TransformConstraint", "originX", 0.5);
+            push_f32_property(bytes, "TransformConstraint", "originY", 0.5);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, _, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    let report = rust.update_components();
+    let cpp_update = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .expect("C++ runtime update");
+    assert_eq!(cpp_update.did_update, report.did_update);
+    let cpp_node = cpp_update
+        .components
+        .iter()
+        .find(|component| component.local_id == 3)
+        .expect("C++ constrained Node");
+    let rust_node = rust.component(3).expect("Rust constrained Node");
+    compare_mat2d(
+        cpp_node.world_transform,
+        Some(rust_node.transform.world_transform),
+        "layout-target constrained world transform",
+        3,
+        label,
+    );
+    assert_eq!(
+        cpp_node
+            .world_transform
+            .map(|matrix| (matrix[4], matrix[5])),
+        Some((50.0, 25.0))
+    );
+}
+
+#[test]
+fn follow_path_constraint_retains_measure_and_applies_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_follow_path_retained_measure.riv";
+    let bytes = synthetic_runtime_file(8235, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Shape", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "PointsPath", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "StraightVertex", "parentId", 2);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "StraightVertex", "parentId", 2);
+            push_f32_property(bytes, "StraightVertex", "x", 10.0);
+        });
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "FollowPathConstraint", |bytes| {
+            push_uint_property(bytes, "FollowPathConstraint", "parentId", 5);
+            push_uint_property(bytes, "FollowPathConstraint", "targetId", 1);
+            push_f32_property(bytes, "FollowPathConstraint", "distance", 0.5);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, _, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    let report = rust.update_components();
+    let cpp_update = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .expect("C++ runtime update");
+    assert_eq!(cpp_update.did_update, report.did_update);
+    for local_id in [1, 2, 5, 6] {
+        let cpp_component = cpp_update
+            .components
+            .iter()
+            .find(|component| component.local_id == local_id)
+            .unwrap_or_else(|| panic!("missing C++ component {local_id}"));
+        let rust_component = rust
+            .component(local_id)
+            .unwrap_or_else(|| panic!("missing Rust component {local_id}"));
+        compare_component(cpp_component, rust_component, label);
+    }
+
+    // StraightVertex is not a dependency-graph node in pinned C++; its
+    // graphOrder scalar is therefore indeterminate and is intentionally not
+    // compared. The constrained Node proves FollowPath::update retained and
+    // consumed the path measure (`follow_path_constraint.cpp:119-145`).
+    let cpp_node = cpp_update
+        .components
+        .iter()
+        .find(|component| component.local_id == 5)
+        .expect("C++ constrained Node");
+    let rust_node = rust.component(5).expect("Rust constrained Node");
+    compare_mat2d(
+        cpp_node.world_transform,
+        Some(rust_node.transform.world_transform),
+        "follow-path constrained world transform",
+        5,
+        label,
+    );
+    assert_eq!(
+        cpp_node
+            .world_transform
+            .map(|matrix| (matrix[4], matrix[5])),
+        Some((5.0, 0.0))
+    );
+}
+
+#[test]
+fn list_follow_path_constraint_registers_and_updates_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_list_follow_path_registration.riv";
+    let bytes = synthetic_runtime_file(8236, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "ArtboardComponentList", |bytes| {
+            push_uint_property(bytes, "ArtboardComponentList", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Shape", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "PointsPath", "parentId", 2);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "StraightVertex", "parentId", 3);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "StraightVertex", "parentId", 3);
+            push_f32_property(bytes, "StraightVertex", "x", 10.0);
+        });
+        push_object_with_properties(bytes, "ListFollowPathConstraint", |bytes| {
+            push_uint_property(bytes, "ListFollowPathConstraint", "parentId", 1);
+            push_uint_property(bytes, "ListFollowPathConstraint", "targetId", 2);
+            push_f32_property(bytes, "ListFollowPathConstraint", "distanceEnd", 1.0);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, _, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    let report = rust.update_components();
+    let cpp_update = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .expect("C++ runtime update");
+    assert_eq!(cpp_update.did_update, report.did_update);
+    for local_id in [1, 2, 3, 6] {
+        let cpp_component = cpp_update
+            .components
+            .iter()
+            .find(|component| component.local_id == local_id)
+            .unwrap_or_else(|| panic!("missing C++ component {local_id}"));
+        let rust_component = rust
+            .component(local_id)
+            .unwrap_or_else(|| panic!("missing Rust component {local_id}"));
+        compare_component(cpp_component, rust_component, label);
+    }
+}
+
+#[test]
+fn ik_constraint_retains_fk_chain_and_solves_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_ik_retained_chain.riv";
+    let bytes = synthetic_runtime_file(8237, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "RootBone", |bytes| {
+            push_uint_property(bytes, "RootBone", "parentId", 0);
+            push_f32_property(bytes, "RootBone", "length", 10.0);
+        });
+        push_object_with_properties(bytes, "Bone", |bytes| {
+            push_uint_property(bytes, "Bone", "parentId", 1);
+            push_f32_property(bytes, "Bone", "length", 10.0);
+        });
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "x", 10.0);
+            push_f32_property(bytes, "Node", "y", 10.0);
+        });
+        push_object_with_properties(bytes, "IKConstraint", |bytes| {
+            push_uint_property(bytes, "IKConstraint", "parentId", 2);
+            push_uint_property(bytes, "IKConstraint", "targetId", 3);
+            push_uint_property(bytes, "IKConstraint", "parentBoneCount", 1);
+        });
+    });
+
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, _, mut rust) = read_rust_graph_instance_from_bytes(&bytes, label);
+    let report = rust.update_components();
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+
+    let cpp_update = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .expect("C++ runtime update");
+    for local_id in [1, 2] {
+        let cpp_bone = cpp_update
+            .components
+            .iter()
+            .find(|component| component.local_id == local_id)
+            .unwrap_or_else(|| panic!("missing C++ bone {local_id}"));
+        let rust_bone = rust
+            .component(local_id)
+            .unwrap_or_else(|| panic!("missing Rust bone {local_id}"));
+        compare_mat2d(
+            cpp_bone.world_transform,
+            Some(rust_bone.transform.world_transform),
+            "IK constrained world transform",
+            local_id,
+            label,
+        );
+    }
 }
 
 #[test]
@@ -17089,6 +19591,213 @@ fn linear_animation_apply_matches_cpp_probe() {
 }
 
 #[test]
+fn invalid_keyframe_interpolator_erases_entire_keyed_object_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_linear_animation_wrong_type_interpolator_cpp.riv";
+    let bytes = synthetic_linear_animation_wrong_type_interpolator(8218);
+    let args = [
+        "--runtime-apply-animation".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    assert_eq!(cpp.artboards[0].animations[0].keyed_objects.len(), 0);
+
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    assert_eq!(
+        rust.linear_animation(0)
+            .expect("Rust animation")
+            .keyed_objects
+            .len(),
+        cpp.artboards[0].animations[0].keyed_objects.len(),
+        "wrong-type interpolator must erase the keyed object, including its valid sibling property"
+    );
+    rust.apply_linear_animation(0, 0.0, 1.0);
+    let report = rust.update_components();
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn keyed_property_importer_cursor_survives_next_animation_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_two_animation_importer_cursor_cpp.riv";
+    let bytes = synthetic_two_animation_importer_cursor(8219);
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let cpp_frames =
+        &cpp.artboards[0].animations[0].keyed_objects[0].keyed_properties[0].key_frames;
+    assert_eq!(
+        cpp_frames
+            .iter()
+            .map(|frame| (frame.frame, frame.seconds))
+            .collect::<Vec<_>>(),
+        vec![(10, 1.0), (20, 2.0)]
+    );
+    assert!(cpp.artboards[0].animations[1].keyed_objects.is_empty());
+
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let rust_frames = &rust
+        .linear_animation(0)
+        .expect("Rust animation A")
+        .keyed_objects[0]
+        .keyed_properties[0]
+        .key_frames;
+    let rust_frame_times = rust_frames
+        .iter()
+        .map(|frame| match frame {
+            RuntimeKeyFrame::Double(frame) => (frame.frame, frame.seconds),
+            other => panic!("unexpected Rust keyframe for {label}: {other:?}"),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rust_frame_times,
+        cpp_frames
+            .iter()
+            .map(|frame| (frame.frame, frame.seconds))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        rust.linear_animation(1)
+            .expect("Rust animation B")
+            .keyed_objects
+            .is_empty()
+    );
+}
+
+#[test]
+fn invalid_keyed_object_replaces_property_cursor_with_sink_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_invalid_keyed_object_property_sink_cpp.riv";
+    let bytes = synthetic_invalid_keyed_object_property_sink(8229);
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let cpp_frames =
+        &cpp.artboards[0].animations[0].keyed_objects[0].keyed_properties[0].key_frames;
+    assert_eq!(cpp_frames.len(), 1);
+
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let rust_animation = rust
+        .linear_animation(0)
+        .unwrap_or_else(|| panic!("missing Rust animation for {label}"));
+    assert_eq!(rust_animation.keyed_objects.len(), 1);
+    let rust_frames = &rust_animation.keyed_objects[0].keyed_properties[0].key_frames;
+    assert_eq!(
+        rust_frames.len(),
+        cpp_frames.len(),
+        "the frame owned by the invalid keyed object must be erased with its replacement property"
+    );
+}
+
+#[test]
+fn negative_speed_nested_remap_uses_effective_start_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_negative_speed_nested_remap_cpp.riv";
+    let bytes = synthetic_negative_speed_nested_remap(8220);
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let cpp_report = cpp.artboards[0]
+        .nested_remap_animations
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ nested remap report for {label}"));
+    assert_eq!(cpp_report.local_id, 2);
+    assert_close(
+        cpp_report
+            .animation_time
+            .unwrap_or_else(|| panic!("missing C++ remap animation for {label}")),
+        2.0,
+        "C++ negative-speed remap time",
+    );
+
+    let runtime = read_runtime_file(&bytes).expect("Rust imports negative-speed remap bytes");
+    let graph =
+        GraphFile::from_runtime_file(&runtime).expect("Rust graphs negative-speed remap bytes");
+    let rust = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        graph.artboards.first().expect("parent artboard"),
+        &graph.artboards,
+    )
+    .expect("Rust mounts the child artboard from the same bytes");
+    let rust_report = rust
+        .runtime_nested_remap_animation_reports()
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| panic!("missing Rust nested remap report for {label}"));
+    assert_eq!(rust_report.local_id, cpp_report.local_id);
+    assert_close(
+        rust_report.animation_time,
+        cpp_report.animation_time.unwrap(),
+        "Rust negative-speed remap time",
+    );
+}
+
+#[test]
+fn animation_reset_color_roundtrip_matches_pinned_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let output = Command::new(&probe)
+        .args(["--animation-reset-color-roundtrip", "0x011d1d1d"])
+        .output()
+        .unwrap_or_else(|err| panic!("failed to run {}: {err}", probe.display()));
+    assert!(
+        output.status.success(),
+        "C++ reset-color probe failed\nstatus: {}\nstdout:\n{}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let cpp: CppAnimationResetColorRoundtrip =
+        serde_json::from_slice(&output.stdout).expect("valid reset-color probe JSON");
+    assert_eq!(cpp.input, 0x011d_1d1d);
+    assert_eq!(cpp.stored_float_bits, 0x4b8e_8e8e);
+    assert_eq!(cpp.output, 0x011d_1d1c);
+}
+
+#[test]
+fn transition_integer_comparison_matches_pinned_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let output = Command::new(&probe)
+        .arg("--transition-integer-comparison-samples")
+        .output()
+        .unwrap_or_else(|err| panic!("failed to run {}: {err}", probe.display()));
+    assert!(
+        output.status.success(),
+        "C++ transition-integer probe failed\nstatus: {}\nstdout:\n{}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let cpp: CppTransitionIntegerComparisonSamples =
+        serde_json::from_slice(&output.stdout).expect("valid transition-integer probe JSON");
+    assert_eq!(cpp.left, 0x0100_0001);
+    assert_eq!(cpp.right, 0x0100_0000);
+    assert!(!cpp.equal);
+    assert!(cpp.not_equal);
+    assert!(!cpp.less_than);
+    assert!(!cpp.greater_than);
+}
+
+#[test]
 fn linear_animation_instance_advance_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -17247,6 +19956,394 @@ fn linear_animation_instance_advance_matches_cpp_probe() {
             label,
         );
         compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+#[test]
+fn linear_animation_loop_value_definition_fallback_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_linear_animation_loop_value_signed_cpp.riv";
+    let bytes = synthetic_linear_animation_with_options(
+        8227,
+        0,
+        2.0,
+        10,
+        12.0,
+        1,
+        LinearAnimationFixtureOptions {
+            loop_value: 1,
+            ..Default::default()
+        },
+    );
+    let cpp_fallback = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-advance-animation".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ],
+    );
+    let cpp_fallback_value = cpp_fallback.artboards[0].runtime_animation_advances[0].loop_value;
+    assert_eq!(cpp_fallback_value, 1);
+
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let animation = rust
+        .linear_animation_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust animation instance for {label}"));
+    assert_eq!(i64::from(animation.loop_value()), cpp_fallback_value);
+}
+
+#[test]
+fn linear_animation_loop_value_arbitrary_signed_override_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_linear_animation_loop_value_signed_cpp.riv";
+    let bytes = synthetic_linear_animation_with_options(
+        8227,
+        0,
+        2.0,
+        10,
+        12.0,
+        1,
+        LinearAnimationFixtureOptions {
+            loop_value: 1,
+            ..Default::default()
+        },
+    );
+    let cpp_override = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-set-animation-loop-value".to_owned(),
+            "0".to_owned(),
+            "-2".to_owned(),
+            "--runtime-advance-animation".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ],
+    );
+    let cpp_override_value = cpp_override.artboards[0].runtime_animation_advances[0].loop_value;
+    assert_eq!(cpp_override_value, -2);
+
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut animation = rust
+        .linear_animation_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust animation instance for {label}"));
+    animation.set_loop_value(-2);
+    assert_eq!(i64::from(animation.loop_value()), cpp_override_value);
+}
+
+#[test]
+fn linear_animation_loop_value_uses_retained_definition_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_linear_animation_retained_loop_value_cpp.riv";
+    let bytes = synthetic_two_animation_loop_values(8228);
+    let cpp_fallback = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-advance-animation".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ],
+    );
+    let cpp_fallback_value = cpp_fallback.artboards[0].runtime_animation_advances[0].loop_value;
+    assert_eq!(cpp_fallback_value, 1);
+
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut animation = rust
+        .linear_animation_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust animation instance A for {label}"));
+    let mismatched_definition = rust
+        .linear_animation(1)
+        .unwrap_or_else(|| panic!("missing Rust animation definition B for {label}"));
+    assert_eq!(mismatched_definition.loop_value, 2);
+    drop(rust);
+    assert_eq!(
+        i64::from(animation.loop_value()),
+        cpp_fallback_value,
+        "instance A must retain definition A instead of consulting definition B"
+    );
+
+    let cpp_override = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-set-animation-loop-value".to_owned(),
+            "0".to_owned(),
+            "2".to_owned(),
+            "--runtime-advance-animation".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ],
+    );
+    let cpp_override_value = cpp_override.artboards[0].runtime_animation_advances[0].loop_value;
+    assert_eq!(cpp_override_value, 2);
+    animation.set_loop_value(2);
+    assert_eq!(i64::from(animation.loop_value()), cpp_override_value);
+}
+
+#[test]
+fn linear_animation_instance_from_artboard_a_uses_a_definition_when_called_through_artboard_b_like_cpp_probe()
+ {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_cross_artboard_animation_definition_owner_cpp.riv";
+    let bytes = synthetic_cross_artboard_animation_definition_owners(8231);
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-advance-animation".to_owned(),
+            "0".to_owned(),
+            "0.5".to_owned(),
+            "1".to_owned(),
+        ],
+    );
+    let cpp_a = cpp.artboards[0]
+        .runtime_animation_advances
+        .first()
+        .expect("C++ artboard A animation report");
+    let cpp_b = cpp.artboards[1]
+        .runtime_animation_advances
+        .first()
+        .expect("C++ artboard B animation report");
+    assert_eq!(cpp_a.loop_value, 1);
+    assert_eq!(cpp_b.loop_value, 0);
+    assert_close(cpp_a.time, 0.5, "C++ retained artboard A time");
+    assert_close(cpp_b.time, 1.0, "C++ distinct artboard B time");
+    assert!(cpp_a.keep_going);
+    assert!(!cpp_b.keep_going);
+
+    let runtime = read_runtime_file(&bytes).expect("Rust imports cross-artboard fixture");
+    let graph = GraphFile::from_runtime_file(&runtime).expect("Rust graphs cross-artboard fixture");
+    let artboard_a =
+        ArtboardInstance::from_graph(&runtime, &graph.artboards[0]).expect("Rust artboard A");
+    let mut artboard_b =
+        ArtboardInstance::from_graph(&runtime, &graph.artboards[1]).expect("Rust artboard B");
+    let mut animation = artboard_a
+        .linear_animation_instance(0)
+        .expect("animation instance retained from artboard A");
+
+    let advanced = artboard_b.advance_linear_animation_instance(&mut animation, 0.5);
+    let applied = artboard_b.apply_linear_animation_instance(&animation, 1.0);
+    let keep_going = artboard_b.linear_animation_instance_keep_going(&animation);
+
+    assert_eq!(advanced, cpp_a.advanced);
+    assert_eq!(keep_going, cpp_a.keep_going);
+    assert_eq!(i64::from(animation.loop_value()), cpp_a.loop_value);
+    assert_close(
+        animation.time(),
+        cpp_a.time,
+        "Rust retained artboard A time",
+    );
+    assert!(applied);
+    assert_close(
+        transform_x(&artboard_b, 1),
+        7.0,
+        "the retained A definition applies to caller target B",
+    );
+    assert_close(
+        transform_x(&artboard_a, 1),
+        2.0,
+        "the Rust caller artboard remains the application target",
+    );
+}
+
+#[test]
+fn state_machine_from_artboard_a_uses_a_timing_exit_and_reset_definitions_when_advanced_through_artboard_b_like_cpp_probe()
+ {
+    const DURATION_IS_PERCENTAGE: u64 = 1 << 1;
+    const ENABLE_EXIT_TIME: u64 = 1 << 2;
+    const EXIT_TIME_IS_PERCENTAGE: u64 = 1 << 3;
+    const PAUSE_ON_EXIT: u64 = 1 << 4;
+
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_cross_artboard_state_machine_definition_owner_cpp.riv";
+    let owner_bytes = synthetic_state_machine_input_transition_with_options(
+        82_832,
+        SyntheticInputTransitionKind::Bool,
+        SyntheticTransitionOptions {
+            duration: 50,
+            flags: DURATION_IS_PERCENTAGE
+                | ENABLE_EXIT_TIME
+                | EXIT_TIME_IS_PERCENTAGE
+                | PAUSE_ON_EXIT,
+            exit_time: Some(50),
+            source_second_frame: 20,
+            source_second_value: 22.0,
+            source_animation_duration: 20,
+            ..Default::default()
+        },
+    );
+    let caller_bytes = synthetic_state_machine_input_transition_with_options(
+        82_833,
+        SyntheticInputTransitionKind::Bool,
+        SyntheticTransitionOptions {
+            duration: 50,
+            flags: DURATION_IS_PERCENTAGE
+                | ENABLE_EXIT_TIME
+                | EXIT_TIME_IS_PERCENTAGE
+                | PAUSE_ON_EXIT,
+            exit_time: Some(50),
+            source_second_frame: 10,
+            source_second_value: 102.0,
+            source_animation_duration: 10,
+            ..Default::default()
+        },
+    );
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.5".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &owner_bytes, &args);
+    let (_, mut owner_artboard) = read_rust_instance_from_bytes(&owner_bytes, label);
+    let (_, mut caller_artboard) = read_rust_instance_from_bytes(&caller_bytes, label);
+    let mut state_machine = owner_artboard
+        .state_machine_instance(0)
+        .expect("state-machine instance retained from artboard A");
+
+    let mut rust_reports = Vec::new();
+    let advanced = caller_artboard.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(state_machine.set_bool(0, true));
+    for seconds in [0.0, 0.5] {
+        let advanced = caller_artboard.advance_state_machine_instance(&mut state_machine, seconds);
+        rust_reports.push((advanced, state_machine.clone()));
+    }
+
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), rust_reports.len());
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&rust_reports).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} cross-artboard step {step}"),
+        );
+    }
+    let update = caller_artboard.update_components();
+    compare_cpp_runtime_update(&cpp, &caller_artboard, &update, label);
+}
+
+#[test]
+fn blend_states_from_artboard_a_use_a_definitions_through_wrong_artboard_and_clone_remount_like_cpp_probe()
+ {
+    let probe = probe_path().expect("the blend wrong-artboard differential requires cpp_probe");
+
+    for (case, kind, input, clone_remount) in [
+        (
+            "blend-1d-clone-remount",
+            SyntheticCrossArtboardBlendKind::Blend1D,
+            0.5,
+            true,
+        ),
+        (
+            "blend-direct-clone-remount",
+            SyntheticCrossArtboardBlendKind::BlendDirect,
+            50.0,
+            true,
+        ),
+    ] {
+        let label = format!("synthetic/runtime_cross_artboard_{case}_definition_owner_cpp.riv");
+        let owner_bytes = synthetic_cross_artboard_blend_definition_owner(
+            82_834,
+            kind,
+            [(2.0, 12.0), (20.0, 30.0)],
+        );
+        let caller_bytes = synthetic_cross_artboard_blend_definition_owner(
+            82_835,
+            kind,
+            [(100.0, 200.0), (300.0, 400.0)],
+        );
+        let args = [
+            "--runtime-set-state-machine-number".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            input.to_string(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+            "--runtime-update".to_owned(),
+        ];
+        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &owner_bytes, &args);
+        let (_, mut owner_artboard) = read_rust_instance_from_bytes(&owner_bytes, &label);
+        let (_, mut caller_artboard) = read_rust_instance_from_bytes(&caller_bytes, &label);
+        let mut state_machine = owner_artboard
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing retained owner state machine for {case}"));
+        assert!(state_machine.set_number(0, input));
+
+        let mut rust_reports = Vec::new();
+        let advanced = caller_artboard.advance_state_machine_instance(&mut state_machine, 0.0);
+        rust_reports.push((advanced, state_machine.clone()));
+
+        if clone_remount {
+            state_machine = state_machine.clone();
+            let (_, remounted_caller) = read_rust_instance_from_bytes(&caller_bytes, &label);
+            caller_artboard = remounted_caller;
+        }
+        let advanced = caller_artboard.advance_state_machine_instance(&mut state_machine, 1.0);
+        rust_reports.push((advanced, state_machine.clone()));
+
+        let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+        assert_eq!(cpp_reports.len(), rust_reports.len(), "{case} report count");
+        for (step, (cpp_report, (advanced, rust_report))) in
+            cpp_reports.iter().zip(&rust_reports).enumerate()
+        {
+            compare_state_machine_advance(
+                cpp_report,
+                rust_report,
+                *advanced,
+                &format!("{label} wrong-artboard step {step}"),
+            );
+        }
+        let update = caller_artboard.update_components();
+        compare_cpp_runtime_update(&cpp, &caller_artboard, &update, &label);
     }
 }
 
@@ -17451,6 +20548,371 @@ fn composite_listener_trigger_survives_a_later_view_model_write_until_transition
         Some(1),
         "the earlier trigger action must remain fireable after the later action rebinds the context"
     );
+}
+
+#[test]
+fn claimed_data_bind_path_view_model_listener_fires_on_property_mutation() {
+    let label = "synthetic/runtime_claimed_data_bind_path_view_model_listener.riv";
+    let bytes = synthetic_claimed_data_bind_path_view_model_listener(9692, false);
+    assert_claimed_data_bind_path_view_model_listener_fires(label, &bytes);
+}
+
+#[test]
+fn resolverless_relative_claimed_data_bind_path_listener_uses_cpp_absolute_fallback() {
+    let label =
+        "synthetic/runtime_resolverless_relative_claimed_data_bind_path_view_model_listener.riv";
+    let bytes = synthetic_claimed_data_bind_path_view_model_listener(9695, true);
+    assert_claimed_data_bind_path_view_model_listener_fires(label, &bytes);
+}
+
+fn assert_claimed_data_bind_path_view_model_listener_fires(label: &str, bytes: &[u8]) {
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}")),
+    );
+    let contexts = RuntimeOwnedViewModelContext::from_main_handle(context.clone());
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(state_machine.bind_owned_view_model_contexts(&contexts));
+    assert_eq!(
+        state_machine.input(0).and_then(|input| input.bool_value()),
+        Some(false)
+    );
+    assert!(
+        context
+            .borrow_mut()
+            .set_number_by_property_name("watch", 1.0),
+        "{label} failed to change the claimed listener source"
+    );
+
+    let _ = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    assert_eq!(
+        state_machine.input(0).and_then(|input| input.bool_value()),
+        Some(true),
+        "the claimed DataBindPath listener must register a dependent and fire its action"
+    );
+}
+
+#[test]
+fn relative_claimed_data_bind_path_view_model_listener_matches_cpp_on_property_mutation() {
+    let label = "synthetic/runtime_relative_claimed_data_bind_path_view_model_listener.riv";
+    let bytes = synthetic_relative_claimed_data_bind_path_view_model_listener(9693);
+    let cpp = probe_path().map(|probe| {
+        let args = [
+            "--runtime-bind-created-default-view-model-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-set-owned-view-model-source-bool-by-name".to_owned(),
+            "0".to_owned(),
+            "watch".to_owned(),
+            "true".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ];
+        read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args)
+    });
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(state_machine.bind_owned_view_model_context(&context));
+    let mut rust_reports = vec![(
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    )];
+    assert!(
+        context.set_boolean_by_property_name("watch", true),
+        "{label} failed to change the relative listener source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.input(0).and_then(|input| input.bool_value()),
+        Some(true),
+        "the relative claimed DataBindPath listener must resolve its only segment as a property name"
+    );
+    if let Some(cpp) = cpp {
+        let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+        assert_eq!(cpp_reports.len(), rust_reports.len());
+        for (step, (cpp_report, (advanced, rust_report))) in
+            cpp_reports.iter().zip(&rust_reports).enumerate()
+        {
+            compare_state_machine_advance(
+                cpp_report,
+                rust_report,
+                *advanced,
+                &format!("{label} action {step}"),
+            );
+            compare_state_machine_bool_inputs(
+                cpp_report,
+                rust_report,
+                &format!("{label} action {step}"),
+            );
+        }
+    } else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+    }
+}
+
+#[test]
+fn unmapped_name_relative_claimed_data_bind_path_view_model_listener_matches_cpp() {
+    let label =
+        "synthetic/runtime_unmapped_name_relative_claimed_data_bind_path_view_model_listener.riv";
+    let bytes = synthetic_unmapped_name_relative_claimed_data_bind_path_view_model_listener(9696);
+    let cpp = probe_path().map(|probe| {
+        let args = [
+            "--runtime-bind-created-default-view-model-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-set-owned-view-model-source-bool-by-name".to_owned(),
+            "0".to_owned(),
+            String::new(),
+            "true".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ];
+        read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args)
+    });
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(state_machine.bind_owned_view_model_context(&context));
+    let mut rust_reports = vec![(
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    )];
+    assert!(
+        context.set_boolean_by_property_name("", true),
+        "{label} failed to change the unnamed listener source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+
+    assert_eq!(
+        state_machine.input(0).and_then(|input| input.bool_value()),
+        Some(true),
+        "an unmapped manifest name id must resolve to the empty property name"
+    );
+    if let Some(cpp) = cpp {
+        let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+        assert_eq!(cpp_reports.len(), rust_reports.len());
+        for (step, (cpp_report, (advanced, rust_report))) in
+            cpp_reports.iter().zip(&rust_reports).enumerate()
+        {
+            compare_state_machine_advance(
+                cpp_report,
+                rust_report,
+                *advanced,
+                &format!("{label} action {step}"),
+            );
+            compare_state_machine_bool_inputs(
+                cpp_report,
+                rust_report,
+                &format!("{label} action {step}"),
+            );
+        }
+    } else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+    }
+}
+
+#[test]
+fn unmapped_intermediate_name_relative_claimed_data_bind_path_listener_matches_cpp() {
+    let label = "synthetic/runtime_unmapped_intermediate_name_relative_claimed_data_bind_path_view_model_listener.riv";
+    let bytes =
+        synthetic_unmapped_intermediate_name_relative_claimed_data_bind_path_view_model_listener(
+            9697,
+        );
+    let cpp = probe_path().map(|probe| {
+        let args = [
+            "--runtime-bind-created-default-view-model-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-set-owned-view-model-source-number".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ];
+        read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args)
+    });
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(state_machine.bind_owned_view_model_context(&context));
+    let mut rust_reports = vec![(
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    )];
+    assert!(
+        state_machine.set_owned_view_model_context_number_source_for_data_bind(
+            &mut context,
+            0,
+            1.0,
+        ),
+        "{label} failed to change the nested unnamed listener source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+
+    assert_eq!(
+        state_machine.input(0).and_then(|input| input.bool_value()),
+        Some(true),
+        "an unmapped intermediate name id must resolve to the empty ViewModel property name"
+    );
+    if let Some(cpp) = cpp {
+        let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+        assert_eq!(cpp_reports.len(), rust_reports.len());
+        for (step, (cpp_report, (advanced, rust_report))) in
+            cpp_reports.iter().zip(&rust_reports).enumerate()
+        {
+            compare_state_machine_advance(
+                cpp_report,
+                rust_report,
+                *advanced,
+                &format!("{label} action {step}"),
+            );
+            compare_state_machine_bool_inputs(
+                cpp_report,
+                rust_report,
+                &format!("{label} action {step}"),
+            );
+        }
+    } else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+    }
+}
+
+#[test]
+fn nested_relative_claimed_data_bind_path_view_model_listener_matches_cpp() {
+    let label = "synthetic/runtime_nested_relative_claimed_data_bind_path_view_model_listener.riv";
+    let bytes = synthetic_nested_relative_claimed_data_bind_path_view_model_listener(9694);
+    let cpp = probe_path().map(|probe| {
+        let args = [
+            "--runtime-bind-owned-view-model-number-name-path-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "child/amount".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-then-set-owned-view-model-source-number-by-name".to_owned(),
+            "0".to_owned(),
+            "child/amount".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ];
+        read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args)
+    });
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut context = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(state_machine.bind_owned_view_model_context(&context));
+    let mut rust_reports = vec![(
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    )];
+    assert!(
+        state_machine.set_owned_view_model_context_number_source_for_data_bind(
+            &mut context,
+            0,
+            1.0,
+        ),
+        "{label} failed to change the nested relative listener source"
+    );
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.input(0).and_then(|input| input.bool_value()),
+        Some(true),
+        "the relative claimed path must resolve every nested segment as a property name"
+    );
+    if let Some(cpp) = cpp {
+        let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+        assert_eq!(cpp_reports.len(), rust_reports.len());
+        for (step, (cpp_report, (advanced, rust_report))) in
+            cpp_reports.iter().zip(&rust_reports).enumerate()
+        {
+            compare_state_machine_advance(
+                cpp_report,
+                rust_report,
+                *advanced,
+                &format!("{label} action {step}"),
+            );
+            compare_state_machine_bool_inputs(
+                cpp_report,
+                rust_report,
+                &format!("{label} action {step}"),
+            );
+        }
+    } else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+    }
 }
 
 #[test]
@@ -17752,6 +21214,7 @@ fn state_machine_timed_transition_mixing_matches_cpp_probe() {
 #[test]
 fn state_machine_exit_time_transition_matches_cpp_probe() {
     const ENABLE_EXIT_TIME: u64 = 1 << 2;
+    const EXIT_TIME_IS_PERCENTAGE: u64 = 1 << 3;
 
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -17784,6 +21247,23 @@ fn state_machine_exit_time_transition_matches_cpp_probe() {
                     ..Default::default()
                 },
             ),
+            vec![0.0],
+        ),
+        (
+            "synthetic/runtime_state_machine_zero_duration_loop_exit_time_cpp.riv",
+            synthetic_state_machine_input_transition_with_options(
+                8246,
+                SyntheticInputTransitionKind::Bool,
+                SyntheticTransitionOptions {
+                    flags: ENABLE_EXIT_TIME | EXIT_TIME_IS_PERCENTAGE,
+                    exit_time: Some(0),
+                    source_animation_duration: 0,
+                    ..Default::default()
+                },
+            ),
+            // Pinned C++ computes floor(0/0)*0, producing NaN. `time < NaN`
+            // is false, so the transition is allowed on this same advance
+            // (`state_transition.cpp:147-174`).
             vec![0.0],
         ),
     ] {
@@ -17837,6 +21317,1308 @@ fn state_machine_exit_time_transition_matches_cpp_probe() {
             compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
         }
         compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+#[test]
+fn state_machine_input_conditions_reject_wrong_types_and_bad_indices_like_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let cases = [
+        (
+            "bool-wrong-type",
+            SyntheticInputTransitionKind::Number,
+            SyntheticInputTransitionKind::Bool,
+            0,
+        ),
+        (
+            "bool-bad-index",
+            SyntheticInputTransitionKind::Bool,
+            SyntheticInputTransitionKind::Bool,
+            1,
+        ),
+        (
+            "number-wrong-type",
+            SyntheticInputTransitionKind::Trigger,
+            SyntheticInputTransitionKind::Number,
+            0,
+        ),
+        (
+            "number-bad-index",
+            SyntheticInputTransitionKind::Number,
+            SyntheticInputTransitionKind::Number,
+            1,
+        ),
+        (
+            "trigger-wrong-type",
+            SyntheticInputTransitionKind::Bool,
+            SyntheticInputTransitionKind::Trigger,
+            0,
+        ),
+        (
+            "trigger-bad-index",
+            SyntheticInputTransitionKind::Trigger,
+            SyntheticInputTransitionKind::Trigger,
+            1,
+        ),
+    ];
+
+    for (offset, (case, input_kind, condition_kind, input_id)) in cases.into_iter().enumerate() {
+        let label = format!("synthetic/runtime_state_machine_input_condition_{case}.riv");
+        let bytes = synthetic_state_machine_input_transition_with_condition(
+            8800 + offset as u64,
+            input_kind,
+            condition_kind,
+            input_id,
+            SyntheticTransitionOptions::default(),
+        );
+        let cpp = read_cpp_probe_bytes_with_args(
+            &probe,
+            &label,
+            &bytes,
+            &[
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+            ],
+        );
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+        rust.update_components();
+        compare_state_machine_advance(
+            &cpp.artboards[0].runtime_state_machine_advances[0],
+            &state_machine,
+            advanced,
+            &label,
+        );
+        assert_eq!(
+            rust.component(1).unwrap().transform.local_transform.0[4],
+            20.0,
+            "{label} retained a direct-input condition C++ rejects during import"
+        );
+    }
+}
+
+#[test]
+fn state_machine_input_conditions_preserve_cpp_null_slots_and_evaluate_them_true() {
+    for (offset, kind) in [
+        SyntheticInputTransitionKind::Bool,
+        SyntheticInputTransitionKind::Number,
+        SyntheticInputTransitionKind::Trigger,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let label = format!("synthetic/runtime_state_machine_null_{kind:?}_condition.riv");
+        let bytes = synthetic_state_machine_input_transition_with_condition_and_null_slot(
+            8810 + offset as u64,
+            kind,
+            kind,
+            0,
+            SyntheticTransitionOptions::default(),
+            true,
+        );
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+        assert_eq!(
+            state_machine.input_count(),
+            2,
+            "{label} compacted the null slot"
+        );
+        assert!(
+            state_machine.input(0).is_none(),
+            "{label} exposed a null C++ input occurrence"
+        );
+        assert!(
+            state_machine.input(1).is_some(),
+            "{label} shifted away the later concrete input"
+        );
+
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+        rust.update_components();
+        assert!(advanced);
+        assert_eq!(
+            rust.component(1).unwrap().transform.local_transform.0[4],
+            20.0,
+            "{label} did not evaluate the null input condition true as required by pinned C++ transition bool/number/trigger condition sources"
+        );
+    }
+}
+
+#[test]
+fn transition_duration_bindings_preserve_duplicate_authored_order_like_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_duplicate_transition_duration_binds_cpp.riv";
+    let bytes = synthetic_state_machine_duplicate_transition_duration_bindings(8806);
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.25".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(state_machine.bind_default_view_model_context());
+    assert!(state_machine.advance_data_context());
+    assert_eq!(
+        state_machine.transition_duration_binding_count(),
+        2,
+        "{label} must retain both authored DataBind occurrences"
+    );
+    let mut rust_reports = vec![(false, state_machine.clone())];
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.25),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        [
+            state_machine.transition_duration_binding_value(0),
+            state_machine.transition_duration_binding_value(1),
+        ],
+        [Some(1000.0), Some(0.0)],
+        "{label} must retain transition-duration occurrences in authored order"
+    );
+    assert!(state_machine.set_bool(0, true));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust.update_components();
+
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), rust_reports.len());
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&rust_reports).enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        compare_state_machine_advance(cpp_report, rust_report, *advanced, &step_label);
+    }
+    assert_eq!(
+        rust.component(1).unwrap().transform.local_transform.0[4],
+        20.0,
+        "{label} must read the last authored duration occurrence"
+    );
+}
+
+#[test]
+fn nested_transition_duration_path_resolves_before_same_advance_fire_like_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_nested_transition_duration_bind_cpp.riv";
+    let bytes = synthetic_state_machine_nested_transition_duration_binding(8807);
+    let args = [
+        "--runtime-bind-owned-view-model-number-name-path-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "child/duration".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}"));
+
+    assert!(context.set_number_by_property_name_path("child/duration", 0.0));
+    assert!(state_machine.bind_owned_view_model_context(&context));
+    assert!(state_machine.advance_data_context());
+    let mut rust_reports = vec![(false, state_machine.clone())];
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(state_machine.set_bool(0, true));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust.update_components();
+
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), rust_reports.len());
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&rust_reports).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} action {step}"),
+        );
+    }
+    assert_eq!(
+        rust.component(1).unwrap().transform.local_transform.0[4],
+        20.0,
+        "{label} nested duration must settle before the same zero-second advance"
+    );
+}
+
+#[test]
+fn transition_duration_binding_converts_non_number_source_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_string_to_number_transition_duration_bind_cpp.riv";
+    let bytes = synthetic_state_machine_string_to_number_transition_duration_binding(10031);
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.5".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(state_machine.bind_default_view_model_context());
+    assert!(state_machine.advance_data_context());
+    assert_eq!(state_machine.transition_duration_binding_count(), 1);
+    assert_eq!(
+        state_machine.transition_duration_binding_value(0),
+        Some(0.0),
+        "{label} binding alone must only retain context dirt; C++ bindDataBindsFromContext binds without updating (data_bind_container.cpp:25-34; state_machine_instance.cpp:2901-2905)"
+    );
+    let mut rust_reports = vec![(false, state_machine.clone())];
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert_eq!(
+        state_machine.transition_duration_binding_value(0),
+        Some(1000.0),
+        "{label} first ordinary advance must convert the string source before reading duration milliseconds (state_machine_instance.cpp:2562; data_bind_container.cpp:115-153)"
+    );
+    assert!(state_machine.set_bool(0, true));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.5),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len()
+    );
+    for (step, (cpp_report, (advanced, rust_report))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} action {step}"),
+        );
+    }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn focus_transition_conditions_match_cpp_for_duplicate_and_failing_candidates() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "focus_test.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read C++ focus fixture {label}: {error}"));
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.016".to_owned(),
+        "--runtime-pointer-down-state-machine".to_owned(),
+        "0".to_owned(),
+        "55".to_owned(),
+        "65".to_owned(),
+        "--runtime-pointer-up-state-machine".to_owned(),
+        "0".to_owned(),
+        "55".to_owned(),
+        "65".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.016".to_owned(),
+        "--runtime-pointer-down-state-machine".to_owned(),
+        "0".to_owned(),
+        "442".to_owned(),
+        "65".to_owned(),
+        "--runtime-pointer-up-state-machine".to_owned(),
+        "0".to_owned(),
+        "442".to_owned(),
+        "65".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.016".to_owned(),
+    ];
+    let cpp = read_cpp_probe_fixture_with_args(&probe, label, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    assert!(state_machine.bind_default_view_model_context());
+
+    let mut rust_reports = Vec::new();
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.016);
+    rust_reports.push((advanced, state_machine.clone()));
+    rust.update_components();
+    state_machine.pointer_down(&mut rust, 55.0, 65.0, 0);
+    rust_reports.push((false, state_machine.clone()));
+    state_machine.pointer_up(&mut rust, 55.0, 65.0, 0);
+    rust_reports.push((false, state_machine.clone()));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.016);
+    rust_reports.push((advanced, state_machine.clone()));
+    rust.update_components();
+    state_machine.pointer_down(&mut rust, 442.0, 65.0, 0);
+    rust_reports.push((false, state_machine.clone()));
+    state_machine.pointer_up(&mut rust, 442.0, 65.0, 0);
+    rust_reports.push((false, state_machine.clone()));
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.016);
+    rust_reports.push((advanced, state_machine.clone()));
+    rust.update_components();
+
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), rust_reports.len());
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&rust_reports).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} action {step}"),
+        );
+    }
+}
+
+#[test]
+fn focus_transition_conditions_without_component_comparator_stay_blocked_like_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (offset, comparator) in [
+        SyntheticFocusComparator::Missing,
+        SyntheticFocusComparator::WrongType,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let label = format!(
+            "synthetic/runtime_state_machine_focus_condition_{comparator:?}_comparator.riv"
+        );
+        let bytes = synthetic_state_machine_focus_transition(8820 + offset as u64, comparator);
+        let cpp = read_cpp_probe_bytes_with_args(
+            &probe,
+            &label,
+            &bytes,
+            &[
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+            ],
+        );
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+        rust.update_components();
+
+        compare_state_machine_advance(
+            &cpp.artboards[0].runtime_state_machine_advances[0],
+            &state_machine,
+            advanced,
+            &label,
+        );
+        assert_eq!(
+            rust.component(1).unwrap().transform.local_transform.0[4],
+            2.0,
+            "{label} dropped the authored false focus condition and made its transition unconditional"
+        );
+    }
+}
+
+fn assert_cpp_scripted_input_matches_rust(
+    cpp: &CppRuntimeScriptedInput,
+    rust: &nuxie_runtime::ScriptListenerInputSnapshot,
+    label: &str,
+) {
+    assert_eq!(
+        cpp.source_name.as_bytes(),
+        rust.name.as_bytes(),
+        "{label} name"
+    );
+    assert_eq!(cpp.occurrence_name, cpp.source_name, "{label} clone name");
+    assert!(cpp.occurrence_present, "{label} occurrence");
+    assert!(cpp.distinct_clone, "{label} clone identity");
+    assert!(
+        cpp.backpointer_matches_occurrence,
+        "{label} occurrence backpointer"
+    );
+    assert_eq!(
+        cpp.source_core_type, cpp.occurrence_core_type,
+        "{label} Core type"
+    );
+    if cpp.source_bind_present {
+        assert!(cpp.bind_present, "{label} cloned DataBind");
+        assert!(cpp.bind_distinct_from_source, "{label} DataBind identity");
+        assert!(cpp.bind_collection_index.is_some(), "{label} bind owner");
+        assert!(cpp.bind_target_is_clone, "{label} bind target");
+        assert_eq!(
+            cpp.bind_collection_index, cpp.final_bind_index,
+            "{label} final ScriptInput DataBind"
+        );
+    }
+    if cpp.value_kind == "viewModelProperty" {
+        let path = rust
+            .view_model_path
+            .as_ref()
+            .unwrap_or_else(|| panic!("{label} occurrence-owned ViewModel path"));
+        assert_eq!(cpp.view_model_path_ids, path.path_ids, "{label} raw path");
+        assert_eq!(
+            cpp.view_model_resolved_path_ids, path.resolved_path_ids,
+            "{label} resolved path"
+        );
+        assert_eq!(
+            cpp.view_model_path_is_relative,
+            Some(path.is_relative),
+            "{label} relative path"
+        );
+    } else {
+        assert!(
+            rust.view_model_path.is_none(),
+            "{label} non-ViewModel input cannot own a DataBindPath"
+        );
+    }
+    match (&cpp.value_kind[..], &rust.value) {
+        (
+            "boolean",
+            Some(nuxie_runtime::ScriptListenerInputSnapshotValue::Value(ScriptValue::Bool(value))),
+        ) => assert_eq!(cpp.boolean_value, Some(*value), "{label} boolean"),
+        (
+            "number",
+            Some(nuxie_runtime::ScriptListenerInputSnapshotValue::Value(ScriptValue::Number(
+                value,
+            ))),
+        ) => assert_eq!(cpp.number_value, Some(*value as f32), "{label} number"),
+        (
+            "string",
+            Some(nuxie_runtime::ScriptListenerInputSnapshotValue::Value(ScriptValue::CoreString(
+                value,
+            ))),
+        ) => assert_eq!(
+            cpp.string_value.as_deref().map(str::as_bytes),
+            Some(value.as_bytes()),
+            "{label} string"
+        ),
+        (
+            "color",
+            Some(nuxie_runtime::ScriptListenerInputSnapshotValue::Value(ScriptValue::Color(value))),
+        ) => assert_eq!(cpp.color_value, Some(*value), "{label} color"),
+        ("artboard", Some(nuxie_runtime::ScriptListenerInputSnapshotValue::Artboard(value))) => {
+            assert_eq!(
+                cpp.referenced_artboard_id,
+                Some(*value as i32),
+                "{label} artboard"
+            )
+        }
+        ("trigger" | "viewModelProperty", None) => {}
+        other => panic!("{label} value mismatch: {other:?} versus {rust:?}"),
+    }
+}
+
+#[test]
+fn null_viewmodel_script_input_keeps_hydrating_later_inputs_like_cpp() {
+    let Some(probe) = scripted_probe_path() else {
+        eprintln!(
+            "skipping scripted C++ runtime comparison; set RIVE_CPP_PROBE_SCRIPTED to enable"
+        );
+        return;
+    };
+
+    let label = "script_create_viewmodel_instance.riv";
+    let cpp = read_cpp_probe_fixture_with_args(
+        &probe,
+        label,
+        &[
+            "--runtime-snapshot-state-machine-scripts".to_owned(),
+            "0".to_owned(),
+            "--runtime-bind-owned-view-model-null-viewmodel-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "5".to_owned(),
+            "6".to_owned(),
+            "--runtime-snapshot-state-machine-scripts".to_owned(),
+            "0".to_owned(),
+        ],
+    );
+    let reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(reports.len(), 2);
+    let cold = reports[0]
+        .artboard_scripted_objects
+        .iter()
+        .find(|object| object.source_core_type == 603)
+        .expect("cold C++ ScriptedPathEffect occurrence");
+    let live = reports[1]
+        .artboard_scripted_objects
+        .iter()
+        .find(|object| object.source_core_type == 603)
+        .expect("live C++ ScriptedPathEffect occurrence");
+
+    assert!(!cold.has_data_context);
+    assert!(!cold.user_lua_init_done);
+    assert_eq!(cold.inputs.len(), 7);
+    assert!(
+        cold.inputs
+            .iter()
+            .all(|input| input.bound_view_model_instance_ordinal.is_none())
+    );
+
+    assert!(live.has_data_context);
+    assert!(live.data_context_matches_state_machine);
+    assert!(
+        live.user_lua_init_done,
+        "a valid ViewModel-valued property whose selected child is null does not abort the authored hydration batch"
+    );
+    assert_eq!(
+        live.inputs
+            .iter()
+            .map(|input| input.source_name.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "vm",
+            "settings",
+            "newButton",
+            "swapButton",
+            "popButton",
+            "shiftButton",
+            "newAtButton",
+        ]
+    );
+    assert_eq!(
+        live.inputs
+            .iter()
+            .map(|input| input.view_model_path_ids.clone())
+            .collect::<Vec<_>>(),
+        [
+            vec![5, 6],
+            vec![5, 5],
+            vec![5, 4],
+            vec![5, 2],
+            vec![5, 3],
+            vec![5, 0],
+            vec![5, 1],
+        ]
+    );
+    assert_eq!(
+        live.inputs
+            .iter()
+            .map(|input| input.bound_view_model_instance_ordinal)
+            .collect::<Vec<_>>(),
+        [None, Some(0), Some(1), Some(2), Some(3), Some(4), Some(5)],
+        "C++ leaves only the null child field unchanged, then hydrates every later authored input before init"
+    );
+}
+
+#[test]
+fn viewmodel_script_input_rehydrates_the_same_occurrence_to_the_new_child_like_cpp() {
+    let Some(probe) = scripted_probe_path() else {
+        eprintln!(
+            "skipping scripted C++ runtime comparison; set RIVE_CPP_PROBE_SCRIPTED to enable"
+        );
+        return;
+    };
+
+    let label = "relative_data_bind_path.riv";
+    let cpp = read_cpp_probe_fixture_with_args(
+        &probe,
+        label,
+        &[
+            "--runtime-bind-owned-view-model-viewmodel-default-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "3".to_owned(),
+            "0".to_owned(),
+            "--runtime-snapshot-state-machine-scripts".to_owned(),
+            "0".to_owned(),
+            "--runtime-bind-owned-view-model-viewmodel-default-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+            "0".to_owned(),
+            "--runtime-snapshot-state-machine-scripts".to_owned(),
+            "0".to_owned(),
+        ],
+    );
+    let reports = &cpp.artboards[1].runtime_state_machine_advances;
+    assert_eq!(reports.len(), 2);
+    let occurrences = reports
+        .iter()
+        .map(|report| {
+            report
+                .artboard_scripted_objects
+                .iter()
+                .find(|object| object.source_core_type == 603)
+                .expect("C++ ScriptedPathEffect occurrence")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(occurrences[0].occurrence_ordinal, Some(0));
+    assert_eq!(
+        occurrences[0].occurrence_table_ordinal, occurrences[1].occurrence_table_ordinal,
+        "a DataContext replacement rehydrates the retained ScriptedObject table instead of regenerating it"
+    );
+    assert!(occurrences.iter().all(|occurrence| {
+        occurrence.has_data_context
+            && occurrence.user_lua_init_done
+            && occurrence.inputs.len() == 1
+            && occurrence.inputs[0].source_name == "inp"
+            && occurrence.inputs[0].view_model_path_ids == [1]
+            && occurrence.inputs[0].view_model_path_is_relative == Some(true)
+    }));
+    assert_eq!(
+        occurrences
+            .iter()
+            .map(|occurrence| occurrence.inputs[0].bound_view_model_instance_ordinal)
+            .collect::<Vec<_>>(),
+        [Some(0), Some(1)],
+        "the same occurrence installs the concrete child selected by each explicit hydration boundary"
+    );
+}
+
+#[test]
+fn repeated_script_input_trigger_edges_reset_like_cpp() {
+    let Some(probe) = scripted_probe_path() else {
+        eprintln!(
+            "skipping scripted C++ runtime comparison; set RIVE_CPP_PROBE_SCRIPTED to enable"
+        );
+        return;
+    };
+
+    let label = "script_inputs_test_1.riv";
+    let cpp = read_cpp_probe_fixture_with_args(
+        &probe,
+        label,
+        &[
+            "--runtime-bind-created-default-view-model-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "--runtime-snapshot-state-machine-scripts".to_owned(),
+            "0".to_owned(),
+            "--runtime-fire-owned-view-model-trigger-by-name".to_owned(),
+            "0".to_owned(),
+            "Trigger".to_owned(),
+            "--runtime-update-artboard-pass".to_owned(),
+            "0".to_owned(),
+            "--runtime-snapshot-state-machine-scripts".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine-data-context".to_owned(),
+            "0".to_owned(),
+            "--runtime-reset-artboard".to_owned(),
+            "0".to_owned(),
+            "--runtime-update-artboard-pass".to_owned(),
+            "0".to_owned(),
+            "--runtime-snapshot-state-machine-scripts".to_owned(),
+            "0".to_owned(),
+            "--runtime-fire-owned-view-model-trigger-by-name".to_owned(),
+            "0".to_owned(),
+            "Trigger".to_owned(),
+            "--runtime-update-artboard-pass".to_owned(),
+            "0".to_owned(),
+            "--runtime-snapshot-state-machine-scripts".to_owned(),
+            "0".to_owned(),
+        ],
+    );
+    let snapshots = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .filter_map(|report| {
+            report
+                .artboard_scripted_objects
+                .iter()
+                .find(|object| object.source_core_type == 603)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(snapshots.len(), 4);
+    assert!(snapshots.iter().all(|object| object.user_lua_init_done));
+    assert_eq!(
+        snapshots
+            .iter()
+            .map(|object| {
+                object
+                    .inputs
+                    .iter()
+                    .find(|input| input.value_kind == "trigger")
+                    .and_then(|input| input.trigger_value)
+                    .expect("C++ ScriptInputTrigger occurrence")
+            })
+            .collect::<Vec<_>>(),
+        [0, 1, 0, 1],
+        "pinned C++ exposes two distinct 0→1 target edges around the source's suppressed reset plus the next update pass; each nonzero edge calls the retained script field (`script_input_trigger.cpp:60-67`; `viewmodel_instance_trigger.cpp:20-27`; `state_machine_instance.cpp:2606-2647`)"
+    );
+}
+
+#[test]
+fn scripted_listener_action_occurrence_lifecycle_matches_cpp_probe() {
+    let Some(probe) = scripted_probe_path() else {
+        eprintln!(
+            "skipping scripted C++ runtime comparison; set RIVE_CPP_PROBE_SCRIPTED to enable"
+        );
+        return;
+    };
+
+    let label = "listener_action_inputs.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read C++ scripted fixture {label}: {error}"));
+    let cpp = read_cpp_probe_fixture_with_args(
+        &probe,
+        label,
+        &[
+            "--runtime-snapshot-state-machine-scripts".to_owned(),
+            "0".to_owned(),
+        ],
+    );
+    let report = &cpp.artboards[0].runtime_state_machine_advances[0];
+    assert_eq!(
+        report
+            .scripted_objects
+            .iter()
+            .map(|object| object.source_core_type)
+            .collect::<Vec<_>>(),
+        vec![647, 646],
+        "C++ must retain authored scripted-object order"
+    );
+    let occurrence_ordinals = report
+        .scripted_objects
+        .iter()
+        .map(|object| object.occurrence_ordinal.expect("scripted occurrence"))
+        .collect::<Vec<_>>();
+    assert_eq!(occurrence_ordinals, vec![0, 1]);
+    let table_ordinals = report
+        .scripted_objects
+        .iter()
+        .map(|object| {
+            object
+                .occurrence_table_ordinal
+                .expect("cold listener/condition table")
+        })
+        .collect::<Vec<_>>();
+    assert_ne!(table_ordinals[0], table_ordinals[1]);
+    for object in &report.scripted_objects {
+        assert!(object.occurrence_present);
+        assert!(object.occurrence_distinct_from_source);
+        assert!(object.source_table_ordinal.is_none());
+        assert!(!object.has_data_context);
+        assert!(!object.data_context_matches_state_machine);
+        assert!(object.user_lua_init_done);
+        assert!(object.has_script_asset);
+        assert_eq!(
+            object.occurrence_implemented_methods as u32,
+            object.asset_serialized_implemented_methods & ((1 << 21) - 1)
+        );
+        assert_eq!(object.definition_implemented_methods, 0);
+        assert_eq!(object.definition_input_count, object.occurrence_input_count);
+        assert!(object.probe_trace.is_none());
+    }
+
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let definition = machine
+        .scripted_listener_actions()
+        .iter()
+        .find(|definition| definition.inputs().len() == 2)
+        .expect("scripted listener definition");
+    let rust_inputs = machine
+        .scripted_listener_action_input_snapshots(definition.action_global_id())
+        .expect("scripted listener input occurrence");
+    let cpp_listener = report
+        .scripted_objects
+        .iter()
+        .find(|object| object.source_core_type == 646)
+        .expect("C++ ScriptedListenerAction occurrence");
+    assert_eq!(cpp_listener.source_index, 1);
+    assert_eq!(cpp_listener.inputs.len(), rust_inputs.len());
+    for (index, (cpp_input, rust_input)) in cpp_listener.inputs.iter().zip(&rust_inputs).enumerate()
+    {
+        assert_eq!(cpp_input.index, index);
+        assert_cpp_scripted_input_matches_rust(
+            cpp_input,
+            rust_input,
+            &format!("{label} input {index}"),
+        );
+    }
+
+    let condition_definition = machine
+        .scripted_objects()
+        .iter()
+        .find(|definition| {
+            definition.scripted_object_kind() == ScriptedStateMachineObjectKind::TransitionCondition
+        })
+        .expect("scripted transition-condition definition");
+    let rust_condition_inputs = machine
+        .scripted_listener_action_input_snapshots(condition_definition.scripted_object_global_id())
+        .expect("scripted transition-condition input occurrence");
+    let cpp_condition = report
+        .scripted_objects
+        .iter()
+        .find(|object| object.source_core_type == 647)
+        .expect("C++ ScriptedTransitionCondition occurrence");
+    assert_eq!(cpp_condition.source_index, 0);
+    assert_eq!(cpp_condition.inputs.len(), rust_condition_inputs.len());
+    for (index, (cpp_input, rust_input)) in cpp_condition
+        .inputs
+        .iter()
+        .zip(&rust_condition_inputs)
+        .enumerate()
+    {
+        assert_eq!(cpp_input.index, index);
+        assert_cpp_scripted_input_matches_rust(
+            cpp_input,
+            rust_input,
+            &format!("{label} transition-condition input {index}"),
+        );
+    }
+}
+
+#[test]
+fn repeated_scripted_data_converter_occurrences_match_cpp_probe() {
+    let Some(probe) = scripted_probe_path() else {
+        eprintln!(
+            "skipping scripted C++ runtime comparison; set RIVE_CPP_PROBE_SCRIPTED to enable"
+        );
+        return;
+    };
+
+    let label = "scripted_data_converter_bound_input.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read C++ scripted fixture {label}: {error}"));
+    let cpp = read_cpp_probe_fixture_with_args(
+        &probe,
+        label,
+        &[
+            "--runtime-snapshot-state-machine-scripts".to_owned(),
+            "0".to_owned(),
+            "--runtime-bind-created-default-view-model-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "--runtime-snapshot-state-machine-scripts".to_owned(),
+            "0".to_owned(),
+        ],
+    );
+    let reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(reports.len(), 2);
+    let cold = &reports[0].scripted_converters;
+    let live = &reports[1].scripted_converters;
+    assert_eq!(cold.len(), 2);
+    assert_eq!(live.len(), 2);
+    assert_eq!(
+        cold.iter()
+            .map(|converter| converter.parent_bind_index)
+            .collect::<Vec<_>>(),
+        vec![0, 1]
+    );
+    assert_eq!(
+        cold.iter()
+            .map(|converter| converter.converter_id)
+            .collect::<Vec<_>>(),
+        vec![0, 0],
+        "two authored DataBinds must retain two uses of converter definition 0"
+    );
+    for (index, (cold, live)) in cold.iter().zip(live).enumerate() {
+        assert!(cold.converter_path.is_empty());
+        assert!(cold.definition_present);
+        assert!(cold.occurrence_present);
+        assert_eq!(cold.definition_core_type, 629);
+        assert_eq!(cold.occurrence_core_type, 629);
+        assert!(cold.occurrence_distinct_from_definition);
+        assert_eq!(cold.occurrence_ordinal, Some(index));
+        assert!(cold.definition_table_ordinal.is_none());
+        assert!(cold.occurrence_table_ordinal.is_none());
+        assert!(!cold.has_data_context);
+        assert!(!cold.data_context_matches_state_machine);
+        assert!(!cold.user_lua_init_done);
+        assert!(cold.has_script_asset);
+        assert_eq!(cold.definition_implemented_methods, 0);
+        assert_eq!(cold.occurrence_implemented_methods, 0);
+        assert_eq!(cold.definition_input_count, 2);
+        assert_eq!(cold.occurrence_input_count, 2);
+        assert_eq!(cold.definition_data_bind_count, 2);
+        assert_eq!(cold.occurrence_data_bind_count, 2);
+        assert!(cold.probe_trace.is_none());
+        assert!(live.has_data_context);
+        assert!(live.data_context_matches_state_machine);
+        assert!(live.user_lua_init_done);
+        assert_eq!(
+            live.occurrence_implemented_methods as u32,
+            live.asset_serialized_implemented_methods & ((1 << 21) - 1)
+        );
+        assert!(live.occurrence_table_ordinal.is_some());
+        assert_eq!(cold.inputs.len(), 2);
+        assert_eq!(cold.data_binds.len(), 2);
+        for (data_bind_index, data_bind) in cold.data_binds.iter().enumerate() {
+            assert_eq!(data_bind.index, data_bind_index);
+            assert!(data_bind.source_present);
+            assert!(data_bind.occurrence_present);
+            assert_eq!(data_bind.source_core_type, 447);
+            assert_eq!(data_bind.occurrence_core_type, 447);
+            assert_eq!(data_bind.core_type, 447);
+            assert_eq!(data_bind.flags, data_bind.source_flags);
+            assert_eq!(data_bind.property_key, data_bind.source_property_key);
+            assert_eq!(data_bind.converter_id, data_bind.source_converter_id);
+            assert_eq!(
+                data_bind.occurrence_path_ids, data_bind.source_path_ids,
+                "cold clone preserves the authored DataBindContext source path"
+            );
+            assert!(data_bind.distinct_clone);
+            assert_ne!(
+                data_bind.source_bind_ordinal, data_bind.occurrence_bind_ordinal,
+                "each child DataBind is a distinct occurrence"
+            );
+            assert_eq!(data_bind.target_input_index, Some(data_bind_index));
+            assert!(data_bind.target_is_occurrence_input);
+            assert!(data_bind.is_final_for_target);
+            assert_eq!(
+                data_bind.occurrence_bind_ordinal,
+                cold.inputs[data_bind_index].occurrence_bind_ordinal,
+                "the collection entry and ScriptInput backpointer identify the same cloned DataBind"
+            );
+        }
+    }
+    for input_index in 0..cold[0].inputs.len() {
+        assert_ne!(
+            cold[0].inputs[input_index].source_input_ordinal,
+            cold[1].inputs[input_index].source_input_ordinal,
+            "BackboardImporter clones the referenced converter into each authored DataBind, so \
+             each DataBind owns a distinct ScriptInput definition"
+        );
+        assert_ne!(
+            cold[0].inputs[input_index].occurrence_input_ordinal,
+            cold[1].inputs[input_index].occurrence_input_ordinal,
+            "StateMachineInstance then gives each DataBind occurrence another distinct \
+             ScriptInput clone"
+        );
+        assert_ne!(
+            cold[0].inputs[input_index].source_bind_ordinal,
+            cold[1].inputs[input_index].source_bind_ordinal,
+            "each authored DataBind-owned converter owns distinct child DataBinds"
+        );
+        assert_ne!(
+            cold[0].inputs[input_index].occurrence_bind_ordinal,
+            cold[1].inputs[input_index].occurrence_bind_ordinal,
+            "each state-machine converter occurrence owns distinct cloned child DataBinds"
+        );
+    }
+    for (cold_occurrence, live_occurrence) in cold.iter().zip(live) {
+        for (cold_input, live_input) in cold_occurrence.inputs.iter().zip(&live_occurrence.inputs) {
+            assert_eq!(
+                cold_input.source_input_ordinal, live_input.source_input_ordinal,
+                "binding a live context must not replace the authored DataBind-owned input"
+            );
+            assert_eq!(
+                cold_input.occurrence_input_ordinal, live_input.occurrence_input_ordinal,
+                "binding a live context must not replace the occurrence-owned input"
+            );
+            assert_eq!(
+                cold_input.source_bind_ordinal, live_input.source_bind_ordinal,
+                "binding a live context must not replace the authored child DataBind"
+            );
+            assert_eq!(
+                cold_input.occurrence_bind_ordinal, live_input.occurrence_bind_ordinal,
+                "binding a live context must not replace the occurrence-owned child DataBind"
+            );
+        }
+    }
+    assert_ne!(
+        live[0].occurrence_table_ordinal, live[1].occurrence_table_ordinal,
+        "C++ gives each repeated converter occurrence its own Lua table"
+    );
+
+    let (rust_file, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let bind_steps = machine.state_machine_data_converter_bind_steps();
+    assert_eq!(
+        bind_steps
+            .iter()
+            .filter_map(|step| match step {
+                RuntimeStateMachineDataConverterBindStep::BindOuter { data_bind_index } =>
+                    Some(*data_bind_index),
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        vec![0, 1],
+        "outer DataBinds must enter the converter call stack in authored order"
+    );
+    assert_eq!(
+        bind_steps
+            .iter()
+            .filter_map(|step| match step {
+                RuntimeStateMachineDataConverterBindStep::Rehydrate {
+                    data_bind_index,
+                    converter_path,
+                    ..
+                } => Some((*data_bind_index, converter_path.clone())),
+                _ => None,
+            })
+            .collect::<Vec<_>>(),
+        vec![(0, vec![]), (1, vec![])],
+        "each repeated scripted converter occurrence must reinitialize before the next outer bind"
+    );
+    let rust_occurrences = machine.scripted_data_converter_occurrence_snapshots();
+    assert_eq!(rust_occurrences.len(), cold.len());
+    for (cpp_occurrence, rust_occurrence) in cold.iter().zip(&rust_occurrences) {
+        assert_eq!(
+            rust_occurrence.parent_data_bind_index,
+            cpp_occurrence.parent_bind_index
+        );
+        assert_eq!(
+            rust_occurrence.converter_path,
+            cpp_occurrence.converter_path
+        );
+        assert_eq!(
+            rust_occurrence.converter_global_id,
+            rust_file
+                .data_converter(cpp_occurrence.converter_id as usize)
+                .expect("C++ converter id resolves in the same imported file")
+                .id
+        );
+        assert_eq!(
+            rust_occurrence.serialized_implemented_methods,
+            cpp_occurrence.asset_serialized_implemented_methods & ((1 << 21) - 1)
+        );
+        assert!(!rust_occurrence.attached);
+        assert_eq!(rust_occurrence.inputs.len(), cpp_occurrence.inputs.len());
+        assert_eq!(
+            rust_occurrence.data_binds.len(),
+            cpp_occurrence.data_binds.len()
+        );
+        for (input_index, (cpp_input, rust_input)) in cpp_occurrence
+            .inputs
+            .iter()
+            .zip(&rust_occurrence.inputs)
+            .enumerate()
+        {
+            assert_cpp_scripted_input_matches_rust(
+                cpp_input,
+                rust_input,
+                &format!(
+                    "{label} bind {} input {input_index}",
+                    cpp_occurrence.parent_bind_index
+                ),
+            );
+        }
+        for (cpp_bind, rust_bind) in cpp_occurrence
+            .data_binds
+            .iter()
+            .zip(&rust_occurrence.data_binds)
+        {
+            assert_eq!(rust_bind.collection_index, cpp_bind.index);
+            assert_eq!(Some(rust_bind.input_index), cpp_bind.target_input_index);
+            assert_eq!(rust_bind.input_data_bind_index, 0);
+            assert!(rust_bind.context_bindable);
+            assert_eq!(
+                rust_bind.source_path.as_deref(),
+                Some(cpp_bind.source_path_ids.as_slice())
+            );
+            assert_eq!(rust_bind.name_based, cpp_bind.source_flags & (1 << 4) != 0);
+            assert_eq!(rust_bind.property_key, cpp_bind.source_property_key);
+            assert_eq!(rust_bind.flags, u64::from(cpp_bind.source_flags));
+            assert_eq!(rust_bind.converter_id, cpp_bind.source_converter_id);
+            assert_eq!(rust_bind.is_final_for_target, cpp_bind.is_final_for_target);
+        }
+    }
+}
+
+struct DifferentialScriptedTransitionCondition {
+    result: Arc<AtomicBool>,
+}
+
+impl ScriptInstance for DifferentialScriptedTransitionCondition {
+    fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+        Ok(method == ScriptMethod::Evaluate)
+    }
+
+    fn call_method(
+        &mut self,
+        method: ScriptMethod,
+        _args: &[ScriptValue],
+        _host: &mut dyn ScriptHost,
+    ) -> Result<ScriptValue, ScriptError> {
+        if method != ScriptMethod::Evaluate {
+            return Err(ScriptError::new("unexpected scripted transition method"));
+        }
+        Ok(ScriptValue::Bool(self.result.load(Ordering::Relaxed)))
+    }
+
+    fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+        Ok(ScriptValue::Nil)
+    }
+
+    fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+        Ok(())
+    }
+}
+
+#[test]
+fn scripted_transition_conditions_match_live_cpp_success_and_failure_order() {
+    let Some(probe) = scripted_probe_path() else {
+        eprintln!(
+            "skipping scripted C++ runtime comparison; set RIVE_CPP_PROBE_SCRIPTED to enable"
+        );
+        return;
+    };
+
+    let label = "scripted_transition_condition.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read C++ scripted fixture {label}: {error}"));
+    let args = [
+        "--runtime-bind-created-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.1".to_owned(),
+        "--runtime-set-owned-view-model-source-bool-by-name".to_owned(),
+        "0".to_owned(),
+        "timelineBool".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.016".to_owned(),
+        "--runtime-set-owned-view-model-source-bool-by-name".to_owned(),
+        "0".to_owned(),
+        "anyStateBool".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.016".to_owned(),
+    ];
+    let cpp = read_cpp_probe_fixture_with_args(&probe, label, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let mut context = RuntimeOwnedViewModelInstance::from_instance(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing Rust default view-model context for {label}"));
+    assert!(state_machine.bind_owned_view_model_context(&context));
+
+    let scripted_globals = runtime
+        .objects
+        .iter()
+        .flatten()
+        .filter(|object| object.type_name == "ScriptedTransitionCondition")
+        .map(|object| object.id)
+        .collect::<Vec<_>>();
+    assert_eq!(scripted_globals.len(), 2);
+    let timeline_result = Arc::new(AtomicBool::new(false));
+    let any_state_result = Arc::new(AtomicBool::new(false));
+    for (global_id, result) in [
+        (scripted_globals[0], timeline_result.clone()),
+        (scripted_globals[1], any_state_result.clone()),
+    ] {
+        state_machine.set_script_instance_for_global(
+            global_id,
+            Box::new(DifferentialScriptedTransitionCondition { result }),
+        );
+    }
+    // These injected tables represent the complete synchronous C++ clone /
+    // context / init pass. Direct low-level construction otherwise exposes a
+    // Rust-only preparation state that C++ callers cannot observe.
+    state_machine.mark_scripted_object_initialization_complete(None);
+
+    let mut rust_reports = Vec::new();
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.1);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(context.set_boolean_by_property_name("timelineBool", true));
+    timeline_result.store(true, Ordering::Relaxed);
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.016);
+    rust_reports.push((advanced, state_machine.clone()));
+    assert!(context.set_boolean_by_property_name("anyStateBool", true));
+    any_state_result.store(true, Ordering::Relaxed);
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.016);
+    rust_reports.push((advanced, state_machine.clone()));
+
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), rust_reports.len());
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&rust_reports).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} action {step}"),
+        );
     }
 }
 
@@ -18703,8 +23485,174 @@ fn cpp_pointer_and_advance_event_boundaries_pin_flow_session_order() {
     assert_eq!(combined, ["Third", "First", "Second", "Third"]);
 }
 
+fn assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+    label: &str,
+    x: f32,
+    y: f32,
+    x_argument: &str,
+    y_argument: &str,
+) {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read C++ pointer fixture {label}: {error}"));
+    let args = [
+        "--runtime-update-artboard-pass".to_owned(),
+        "0".to_owned(),
+        "--runtime-pointer-down-state-machine".to_owned(),
+        "0".to_owned(),
+        x_argument.to_owned(),
+        y_argument.to_owned(),
+        "--runtime-pointer-up-state-machine".to_owned(),
+        "0".to_owned(),
+        x_argument.to_owned(),
+        y_argument.to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let rust_updated = rust.update_components();
+    let after_update = state_machine.clone();
+
+    let rust_pointer_down_hit = state_machine.pointer_down(&mut rust, x, y, 0);
+    let after_down = state_machine.clone();
+    let _ = state_machine.pointer_up(&mut rust, x, y, 0);
+    let after_up = state_machine.clone();
+    let rust_reports = [(false, after_down), (false, after_up)];
+    let all_cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(all_cpp_reports.len(), 3, "{label} action count");
+    assert!(!all_cpp_reports[0].pointer_input_probe);
+    compare_state_machine_advance(
+        &all_cpp_reports[0],
+        &after_update,
+        rust_updated.did_update,
+        &format!("{label} WP3 initial update"),
+    );
+    let cpp_reports = &all_cpp_reports[1..];
+    assert_eq!(
+        cpp_reports.len(),
+        rust_reports.len(),
+        "{label} action count"
+    );
+    assert!(cpp_reports[0].pointer_input_probe);
+    assert_eq!(
+        rust_pointer_down_hit,
+        cpp_reports[0].pointer_hit_result != 0,
+        "{label} pointer-down tri-state/boolean projection at ({x}, {y}); C++ raw HitResult={}",
+        cpp_reports[0].pointer_hit_result
+    );
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&rust_reports).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} WP3 pointer action {step}"),
+        );
+    }
+}
+
 #[test]
-fn state_machine_fire_event_listeners_apply_on_the_next_frame() {
+fn fl_c5_hit_component_shared_target_down_up_matches_cpp_probe() {
+    assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+        "pointer_events.riv",
+        425.0,
+        425.0,
+        "425",
+        "425",
+    );
+    // The pinned opaque fixture has a non-opaque overlay and two overlapping
+    // opaque targets. These three points respectively exercise the front
+    // target, back target, and opaque-front suppression of the back target.
+    for (x, y, x_argument, y_argument) in [
+        (100.0, 50.0, "100", "50"),
+        (100.0, 250.0, "100", "250"),
+        (100.0, 110.0, "100", "110"),
+    ] {
+        assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+            "opaque_hit_test.riv",
+            x,
+            y,
+            x_argument,
+            y_argument,
+        );
+    }
+    // This fixture's four authored targets are, in order: a shape inside a
+    // no-path shape, a nested artboard inside a no-path shape, a text run
+    // inside a path shape, and a nested artboard inside a path shape.
+    for (x, y, x_argument, y_argument) in [
+        (150.0, 150.0, "150", "150"),
+        (300.0, 200.0, "300", "200"),
+        (100.0, 250.0, "100", "250"),
+        (400.0, 350.0, "400", "350"),
+    ] {
+        assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+            "hit_test_nested.riv",
+            x,
+            y,
+            x_argument,
+            y_argument,
+        );
+    }
+    assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+        "hittest_collapsed_layouts.riv",
+        250.0,
+        50.0,
+        "250",
+        "50",
+    );
+}
+
+#[test]
+fn fl_c5_nested_pointer_authored_child_routing_matches_cpp_probe() {
+    assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+        "pointer_events_nested_artboards_in_solos.riv",
+        200.0,
+        300.0,
+        "200",
+        "300",
+    );
+}
+
+#[test]
+fn fl_c5_component_list_pointer_reverse_overlap_matches_cpp_probe() {
+    // Reverse orderedListIndices routing at both overlap boundaries, followed
+    // by a non-overlap control on the first item.
+    for (x, x_argument) in [(175.0, "175"), (325.0, "325"), (100.0, "100")] {
+        assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+            "component_list_hit_order.riv",
+            x,
+            50.0,
+            x_argument,
+            "50",
+        );
+    }
+}
+
+#[test]
+fn fl_c5_pointer_fp_nonfinite_coordinates_match_cpp_probe() {
+    assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+        "pointer_events.riv",
+        f32::NAN,
+        f32::INFINITY,
+        "nan",
+        "inf",
+    );
+    assert_fl_c5_pointer_down_up_fixture_matches_cpp(
+        "pointer_events.riv",
+        -0.0,
+        f32::NEG_INFINITY,
+        "-0",
+        "-inf",
+    );
+}
+
+fn assert_state_machine_fire_event_listeners_apply_on_the_next_frame() {
     let label = "synthetic/runtime_state_machine_fire_event_listener_input_change.riv";
     let bytes = synthetic_state_machine_fire_event_listener_input_change(8921);
     let cpp = probe_path().map(|probe| {
@@ -18745,7 +23693,9 @@ fn state_machine_fire_event_listeners_apply_on_the_next_frame() {
     let second_advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
     assert!(
         !second_advanced,
-        "{label} listener delivery alone must not keep the C++ frame advancing"
+        "{label} listener delivery alone must not keep the raw C++ state-machine advance going; \
+         the higher-level advanceAndApply facade separately forces zero-second frames true \
+         (`state_machine_instance.cpp:2555-2584,2608-2613`)"
     );
     assert_eq!(
         state_machine
@@ -18775,6 +23725,60 @@ fn state_machine_fire_event_listeners_apply_on_the_next_frame() {
             label,
         );
     }
+}
+
+fn assert_fl_c5_self_chaining_event_stops_at_100_against_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_self_chaining_event_100.riv";
+    let bytes = synthetic_state_machine_self_chaining_event(96_964);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut machine = rust
+        .state_machine_instance(0)
+        .expect("self-chaining Rust machine");
+    let rust_reports = [
+        (
+            rust.advance_state_machine_instance(&mut machine, 0.0),
+            machine.clone(),
+        ),
+        (
+            rust.advance_state_machine_instance(&mut machine, 0.0),
+            machine.clone(),
+        ),
+    ];
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), 2);
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&rust_reports).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} step {step}"),
+        );
+    }
+    assert_eq!(
+        cpp_reports[1].reported_event_count, 1,
+        "pinned C++ leaves batch 101 pending after exactly 100 callbacks"
+    );
+    assert_eq!(rust_reports[1].1.reported_event_count(), 1);
+}
+
+#[test]
+fn state_machine_fire_event_listeners_apply_on_the_next_frame() {
+    assert_state_machine_fire_event_listeners_apply_on_the_next_frame();
 }
 
 #[test]
@@ -19318,38 +24322,50 @@ fn state_machine_scheduled_listener_fire_events_match_cpp_probe() {
 }
 
 #[test]
-fn state_machine_listener_writes_round_trip_through_the_retained_owned_handle() {
-    let label = "synthetic/runtime_state_machine_listener_retained_number_round_trip.riv";
+fn state_machine_entry_viewmodel_change_waits_for_cpp_databind_construction_boundary() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_entry_viewmodel_change_before_databinds_cpp.riv";
     let bytes = synthetic_state_machine_scheduled_listener_owned_number_change(9623);
-    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
-    let context = RuntimeOwnedViewModelHandle::new(
-        RuntimeOwnedViewModelInstance::new(&runtime, 0)
-            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}")),
-    );
-    let script = script_view_model_from_owned(&runtime, &context)
-        .unwrap_or_else(|| panic!("missing script view-model wrapper for {label}"));
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
 
-    assert!(state_machine.bind_owned_view_model_handle(&context));
-    assert!(rust.advance_state_machine_instance(&mut state_machine, 0.0));
-    assert_eq!(
-        context.borrow().number_value_by_property_name("amount"),
-        Some(42.0),
-        "{label} listener write must update the retained host graph"
-    );
-    assert_eq!(
-        script.number("amount"),
-        Some(42.0),
-        "{label} listener write must be visible through the script alias"
-    );
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
 
-    assert!(state_machine.advance_data_context());
+    let cpp_state_machine = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("C++ state-machine report");
+    compare_state_machine_advance(cpp_state_machine, &state_machine, advanced, label);
+    let cpp_binding = cpp_state_machine
+        .number_bindings
+        .iter()
+        .find(|binding| binding.data_bind_index == 0)
+        .expect("C++ number binding");
     assert_eq!(
-        context.borrow().number_value_by_property_name("amount"),
-        Some(42.0),
-        "{label} retained refresh must not overwrite the runtime-origin write"
+        cpp_binding.source_value, None,
+        "{label} C++ has no live source before a DataContext is attached"
+    );
+    assert_eq!(
+        state_machine.default_view_model_number_source_value_for_data_bind(0),
+        Some(0.0),
+        "{label} Rust's dormant source slot must remain at its authored default"
+    );
+    assert_eq!(
+        cpp_binding.target_value,
+        state_machine.bindable_number_value_for_data_bind(0),
+        "{label} entry callback cannot mutate the bindable occurrence before C++ constructs it"
     );
 }
 
@@ -19390,6 +24406,7 @@ fn state_machine_scheduled_listener_input_changes_match_cpp_probe() {
             .state_machine_instance(0)
             .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
 
+        let rust_needs_advance_before = state_machine.needs_advance();
         let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
         let rust_reports = [(advanced, state_machine.clone())];
         let report = rust.update_components();
@@ -19402,6 +24419,15 @@ fn state_machine_scheduled_listener_input_changes_match_cpp_probe() {
             cpp_artboard.runtime_state_machine_advances.len(),
             rust_reports.len(),
             "{label} state-machine report count mismatch"
+        );
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances[0].needs_advance_before,
+            rust_needs_advance_before,
+            "{label} constructor-time needsAdvance mismatch"
+        );
+        assert!(
+            !rust_needs_advance_before,
+            "{label} the action belongs to the destination AnimationState, so layer init enters only EntryState and cannot run it before the first transition advance (`state_machine_instance.cpp:150-175,378-408`)"
         );
         for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
             .runtime_state_machine_advances
@@ -19475,6 +24501,49 @@ fn state_machine_blend_state_1d_input_matches_cpp_probe() {
 }
 
 #[test]
+fn empty_baseline_animation_reset_matches_cpp_reader_underflow_zero() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_empty_baseline_reset_cpp.riv";
+    let bytes = synthetic_state_machine_empty_baseline_reset(8222);
+    let args = [
+        "--runtime-set-state-machine-number".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    assert!(state_machine.set_number(0, 1.0));
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    let report = rust.update_components();
+
+    let cpp_x = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .and_then(|update| {
+            update
+                .components
+                .iter()
+                .find(|component| component.local_id == 1)
+        })
+        .and_then(|component| component.local_transform)
+        .map(|transform| transform[4])
+        .unwrap_or_else(|| panic!("missing C++ target transform for {label}"));
+    assert_eq!(cpp_x, 0.0, "C++ empty baseline resets x to zero");
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
 fn state_machine_blend_state_direct_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -19531,6 +24600,44 @@ fn state_machine_blend_state_direct_matches_cpp_probe() {
     {
         compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
     }
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn direct_blend_nan_mix_value_skips_target_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_direct_nan_mix_cpp.riv";
+    let bytes = synthetic_state_machine_direct_nan_mix(8221);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    let report = rust.update_components();
+
+    let cpp_x = cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .and_then(|update| {
+            update
+                .components
+                .iter()
+                .find(|component| component.local_id == 1)
+        })
+        .and_then(|component| component.local_transform)
+        .map(|transform| transform[4])
+        .unwrap_or_else(|| panic!("missing C++ target transform for {label}"));
+    assert_eq!(cpp_x, 7.0, "C++ ordered max/min collapses NaN to zero");
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
 
@@ -19596,6 +24703,74 @@ fn state_machine_bindable_blend_sources_match_cpp_probe() {
         }
         compare_cpp_runtime_update(&cpp, &rust, &report, label);
     }
+}
+
+#[test]
+fn base_data_bind_occurrence_is_retained_but_context_inert_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_base_data_bind_context_inert_cpp.riv";
+    let bytes = synthetic_state_machine_blend_state_1d_view_model(10034, 0.5);
+    let args = [
+        "--runtime-bind-empty-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine-data-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+    assert!(state_machine.bind_empty_data_context());
+    assert!(state_machine.advance_data_context());
+    let rust_reports = [
+        (false, state_machine.clone()),
+        (
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ),
+    ];
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len()
+    );
+    for (step, (cpp_report, (advanced, rust_report))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        compare_state_machine_advance(cpp_report, rust_report, *advanced, &step_label);
+        compare_state_machine_number_binding(cpp_report, rust_report, 0, &step_label);
+    }
+    assert_eq!(
+        state_machine.default_view_model_number_source_value_for_data_bind(0),
+        None,
+        "{label} plain DataBind must not acquire a context source"
+    );
+    assert_close(
+        state_machine
+            .bindable_number_value_for_data_bind(0)
+            .expect("retained plain DataBind target"),
+        0.5,
+        &format!("{label} retained target"),
+    );
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
 
 #[test]
@@ -20261,9 +25436,16 @@ fn nested_script_view_model_wraps_the_same_root_owned_handle_graph() {
     let child = script
         .view_model("child")
         .unwrap_or_else(|| panic!("missing nested script view-model wrapper for {label}"));
+    let selected_child = context
+        .linked_view_model_by_property_name_path("child")
+        .expect("selected generated child");
 
-    assert!(child.owned_handle().shares_root_with(&context));
-    assert_eq!(child.owned_handle().scope_path(), &[0]);
+    // Pinned C++ recursively creates and retains the concrete generated child
+    // before ScriptedPropertyViewModel wraps it (`src/file.cpp:1141-1200`;
+    // `src/lua/lua_properties.cpp:536-559`).
+    assert!(child.owned_handle().shares_root_with(&selected_child));
+    assert!(child.owned_handle().root_handle().ptr_eq(&selected_child));
+    assert!(child.owned_handle().scope_path().is_empty());
     assert_eq!(child.owned_handle().view_model_index(), Some(1));
     assert!(child.set_number("amount", 42.0));
     assert_eq!(child.number("amount"), Some(42.0));
@@ -20297,9 +25479,16 @@ fn nested_script_view_model_context_preserves_an_imported_child_selection() {
         .view_model("child")
         .unwrap_or_else(|| panic!("missing selected child wrapper for {label}"));
     let child_context = child.owned_handle();
+    let selected_child = context
+        .linked_view_model_by_property_name_path("child")
+        .expect("selected imported child");
 
-    assert!(child_context.shares_root_with(&context));
-    assert_eq!(child_context.scope_path(), &[0]);
+    // Pinned C++ ScriptedPropertyViewModel::pushValue wraps the concrete
+    // referenceViewModelInstance, not an outer-root scoped projection
+    // (src/lua/lua_properties.cpp:536-559).
+    assert!(child_context.shares_root_with(&selected_child));
+    assert!(child_context.root_handle().ptr_eq(&selected_child));
+    assert!(child_context.scope_path().is_empty());
     assert_eq!(child_context.view_model_index(), Some(1));
     assert_eq!(child.number("amount"), Some(0.25));
     assert_eq!(
@@ -20332,9 +25521,12 @@ fn script_input_view_model_hydration_retains_the_selected_child_context() {
         .unwrap_or_else(|| panic!("failed to hydrate retained child script input for {label}"));
     let root_script = script_view_model_from_owned(&runtime, &root)
         .unwrap_or_else(|| panic!("missing root script view-model for {label}"));
+    let selected_child = root
+        .linked_view_model_by_property_name_path("child")
+        .expect("selected retained child");
 
-    assert!(child.owned_handle().shares_root_with(&root));
-    assert_eq!(child.owned_handle().scope_path(), &[0]);
+    assert!(child.owned_handle().shares_root_with(&selected_child));
+    assert!(child.owned_handle().scope_path().is_empty());
     assert_eq!(child.owned_handle().view_model_index(), Some(1));
     assert!(child.set_number("amount", 42.0));
     assert_eq!(
@@ -20343,6 +25535,167 @@ fn script_input_view_model_hydration_retains_the_selected_child_context() {
             .and_then(|child| child.number("amount")),
         Some(42.0)
     );
+}
+
+#[test]
+fn relative_script_input_without_manifest_falls_back_to_authored_absolute_path() {
+    let label = "synthetic/runtime_script_input_relative_no_manifest.riv";
+    let bytes =
+        synthetic_state_machine_nested_viewmodel_number_blend_state_with_script_input_options(
+            9629,
+            0.25,
+            1,
+            &[0, 0, 0],
+            Some(&[0, 0]),
+            true,
+            &[],
+        );
+    let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
+    assert!(
+        runtime.scripting_manifest().is_none(),
+        "the fixture must exercise C++'s no-DataResolver fallback"
+    );
+    let root_instance = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing generated root view-model context for {label}"));
+    let root = RuntimeOwnedViewModelHandle::new(root_instance.clone());
+    let context = RuntimeOwnedViewModelContextHandle::root(&runtime, root.clone());
+    let input = (0..runtime.object_count())
+        .filter_map(|id| runtime.object(id))
+        .find(|object| object.type_name == "ScriptInputViewModelProperty")
+        .unwrap_or_else(|| panic!("missing script view-model input for {label}"));
+    let path = runtime
+        .data_bind_path_for_referencer_object(input)
+        .expect("relative DataBindPath");
+    assert!(path.is_relative);
+    assert_eq!(path.path_ids, [0, 0]);
+
+    let retained = bound_script_view_model_from_owned_context(&runtime, &context, input)
+        .expect("retained hydration falls back to authored absolute ids");
+    let snapshot = bound_script_view_model_snapshot(&runtime, &root_instance, input)
+        .expect("snapshot hydration falls back to authored absolute ids");
+    let selected_child = root
+        .linked_view_model_by_property_name_path("child")
+        .expect("selected retained child");
+    assert!(retained.owned_handle().shares_root_with(&selected_child));
+    assert!(retained.owned_handle().scope_path().is_empty());
+    assert_eq!(retained.owned_handle().view_model_index(), Some(1));
+    assert_eq!(
+        snapshot.number("amount"),
+        Some(0.0),
+        "the selected generated child keeps its authored default"
+    );
+}
+
+#[test]
+fn relative_script_input_with_manifest_does_not_fallback_after_resolution_miss() {
+    let label = "synthetic/runtime_script_input_relative_manifest_miss.riv";
+    let bytes =
+        synthetic_state_machine_nested_viewmodel_number_blend_state_with_script_input_options(
+            9630,
+            0.25,
+            1,
+            &[0, 0, 0],
+            Some(&[999]),
+            true,
+            &[(77, 7, b"child")],
+        );
+    let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
+    assert!(
+        runtime.scripting_manifest().is_some(),
+        "the fixture must install C++'s DataResolver"
+    );
+    let root_instance = RuntimeOwnedViewModelInstance::new(&runtime, 0)
+        .unwrap_or_else(|| panic!("missing generated root view-model context for {label}"));
+    let root = RuntimeOwnedViewModelHandle::new(root_instance.clone());
+    let context = RuntimeOwnedViewModelContextHandle::root(&runtime, root);
+    let input = (0..runtime.object_count())
+        .filter_map(|id| runtime.object(id))
+        .find(|object| object.type_name == "ScriptInputViewModelProperty")
+        .unwrap_or_else(|| panic!("missing script view-model input for {label}"));
+    let path = runtime
+        .data_bind_path_for_referencer_object(input)
+        .expect("relative DataBindPath");
+    assert!(path.is_relative);
+    assert!(
+        path.resolved_path_ids.is_empty(),
+        "manifest path id 999 is intentionally unresolved"
+    );
+
+    assert!(
+        bound_script_view_model_from_owned_context(&runtime, &context, input).is_none(),
+        "once a resolver exists, C++ keeps a failed relative lookup unresolved"
+    );
+    assert!(
+        bound_script_view_model_snapshot(&runtime, &root_instance, input).is_none(),
+        "the detached snapshot uses the same no-fallback rule"
+    );
+}
+
+#[test]
+fn relative_script_input_consumes_resolved_name_ids_once_when_ids_collide() {
+    let Some(probe) = scripted_probe_path() else {
+        eprintln!(
+            "skipping scripted C++ runtime comparison; set RIVE_CPP_PROBE_SCRIPTED to enable"
+        );
+        return;
+    };
+
+    let label = "synthetic/runtime_script_input_relative_manifest_id_collision.riv";
+    // Path id 77 resolves to name id 7 ("child"). Name id 7 deliberately also
+    // exists as a path id and resolves to name id 8 ("missing"). C++ expands
+    // 77 once, then consumes 7 directly as a name id; a second resolvePath(7)
+    // would fail the otherwise valid child lookup.
+    let bytes =
+        synthetic_state_machine_nested_viewmodel_number_blend_state_with_script_input_options(
+            9631,
+            0.25,
+            1,
+            &[0, 0, 0],
+            Some(&[77]),
+            true,
+            &[(77, 7, b"child"), (7, 8, b"missing")],
+        );
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let cpp_input = cpp.artboards[0]
+        .objects
+        .iter()
+        .flatten()
+        .find(|object| object.core_type == type_key_for_name("ScriptInputViewModelProperty"))
+        .expect("C++ imported ScriptInputViewModelProperty");
+    assert_eq!(cpp_input.data_bind_path_ids.as_deref(), Some(&[77][..]));
+    assert_eq!(
+        cpp_input.resolved_data_bind_path_ids.as_deref(),
+        Some(&[7][..]),
+        "pinned C++ DataBindPath::resolvedPath expands the manifest path exactly once"
+    );
+
+    let (runtime, _) = read_rust_instance_from_bytes(&bytes, label);
+    let root = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing generated root view-model context for {label}")),
+    );
+    let context = RuntimeOwnedViewModelContextHandle::root(&runtime, root.clone());
+    let input = (0..runtime.object_count())
+        .filter_map(|id| runtime.object(id))
+        .find(|object| object.type_name == "ScriptInputViewModelProperty")
+        .unwrap_or_else(|| panic!("missing script view-model input for {label}"));
+    let occurrence_path = ScriptInputViewModelPropertyPath::from_imported(&runtime, input)
+        .expect("occurrence-owned relative path");
+    assert_eq!(occurrence_path.path_ids, [77]);
+    assert_eq!(occurrence_path.resolved_path_ids, [7]);
+
+    let retained = bound_script_view_model_from_owned_path(&runtime, &context, &occurrence_path)
+        .expect("resolved name id 7 selects the authored child");
+    let snapshot =
+        bound_script_view_model_snapshot_from_path(&runtime, &root.borrow(), &occurrence_path)
+            .expect("detached hydration uses the same single-resolution rule");
+    let selected_child = root
+        .linked_view_model_by_property_name_path("child")
+        .expect("selected retained child");
+    assert!(retained.owned_handle().shares_root_with(&selected_child));
+    assert!(retained.owned_handle().scope_path().is_empty());
+    assert_eq!(retained.owned_handle().view_model_index(), Some(1));
+    assert_eq!(snapshot.owned_handle().view_model_index(), Some(1));
 }
 
 #[test]
@@ -20446,7 +25799,7 @@ fn state_machine_name_based_number_bind_source_is_unresolved_like_cpp_probe() {
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -20859,6 +26212,11 @@ fn assert_number_public_update_target_to_source_matches_cpp_probe(label: &str, b
         state_machine.bind_default_view_model_context(),
         "{label} failed to bind default view-model context"
     );
+    // The low-level differential bypasses the facade that normally completes
+    // C++'s synchronous ScriptedObject constructor pass. An unavailable
+    // ScriptedDataConverter table is already the inert post-construction
+    // occurrence represented by the pinned probe.
+    state_machine.mark_scripted_object_initialization_complete(None);
     rust_reports.push((
         rust.advance_state_machine_instance(&mut state_machine, 0.0),
         state_machine.clone(),
@@ -20935,6 +26293,169 @@ fn data_converter_operation_public_update_target_to_source_matches_cpp_probe() {
             DATA_BIND_TWO_WAY,
         );
     assert_number_public_update_target_to_source_matches_cpp_probe(label, bytes);
+}
+
+#[test]
+fn state_machine_owned_viewmodel_number_public_update_target_to_source_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_state_machine_owned_number_public_update_target_to_source_cpp.riv";
+    let bytes = synthetic_state_machine_number_two_way_context_blend_state(10032);
+    let target_value = 4.46_f32;
+    let args = [
+        "--runtime-bind-owned-view-model-number-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bindable-number".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        target_value.to_string(),
+        "--runtime-update-state-machine-data-binds".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&runtime, 0)
+            .unwrap_or_else(|| panic!("missing Rust owned view-model context for {label}")),
+    );
+    assert!(context.borrow_mut().set_number_by_property_index(0, 1.0));
+    assert!(state_machine.bind_owned_view_model_handle(&context));
+
+    let mut rust_reports = vec![(
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    )];
+    assert!(state_machine.set_bindable_number_for_data_bind(0, target_value));
+    assert!(state_machine.update_data_binds_apply_target_to_source());
+    rust_reports.push((false, state_machine.clone()));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len()
+    );
+    for (step, (cpp_report, (advanced, rust_report))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        compare_state_machine_advance(cpp_report, rust_report, *advanced, &step_label);
+        compare_state_machine_number_binding(cpp_report, rust_report, 0, &step_label);
+    }
+    assert_close(
+        context
+            .borrow()
+            .number_value_by_property_index(0)
+            .expect("owned retained source value"),
+        target_value,
+        &format!("{label} retained owner"),
+    );
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
+}
+
+#[test]
+fn state_machine_imported_viewmodel_number_public_update_target_to_source_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label =
+        "synthetic/runtime_state_machine_imported_number_public_update_target_to_source_cpp.riv";
+    let bytes = synthetic_state_machine_number_two_way_context_blend_state(10033);
+    let target_value = 4.46_f32;
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bindable-number".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        target_value.to_string(),
+        "--runtime-update-state-machine-data-binds".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+    let imported_context = RuntimeImportedViewModelInstanceContext::new(&runtime, 0, 0)
+        .unwrap_or_else(|| panic!("missing Rust imported view-model context for {label}"));
+    assert!(state_machine.bind_imported_view_model_context(&runtime, &imported_context));
+
+    let mut rust_reports = vec![(
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    )];
+    assert!(state_machine.set_bindable_number_for_data_bind(0, target_value));
+    assert!(state_machine.update_data_binds_apply_target_to_source());
+    rust_reports.push((false, state_machine.clone()));
+    rust_reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    let report = rust.update_components();
+
+    let cpp_artboard = cpp
+        .artboards
+        .first()
+        .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+    assert_eq!(
+        cpp_artboard.runtime_state_machine_advances.len(),
+        rust_reports.len()
+    );
+    for (step, (cpp_report, (advanced, rust_report))) in cpp_artboard
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&rust_reports)
+        .enumerate()
+    {
+        let step_label = format!("{label} action {step}");
+        compare_state_machine_advance(cpp_report, rust_report, *advanced, &step_label);
+        compare_state_machine_number_binding(cpp_report, rust_report, 0, &step_label);
+    }
+    assert_close(
+        state_machine
+            .default_view_model_number_source_value_for_data_bind(0)
+            .expect("imported retained source value"),
+        target_value,
+        &format!("{label} retained source"),
+    );
+    compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
 
 #[test]
@@ -37131,7 +42652,7 @@ fn state_machine_default_viewmodel_list_formula_fallback_to_bindable_list_explic
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -37192,7 +42713,7 @@ fn state_machine_default_viewmodel_list_formula_fallback_to_bindable_list_public
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -37466,7 +42987,7 @@ fn state_machine_default_viewmodel_list_formula_random_fallback_to_bindable_list
         let seeded_random_values = [0.875_f32, 0.625];
         let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
         let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &probe_args);
-        let (_, rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
         let mut state_machine = rust
             .state_machine_instance(0)
             .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -37546,7 +43067,7 @@ fn state_machine_default_viewmodel_list_formula_random_fallback_to_bindable_list
         let seeded_random_values = [0.875_f32, 0.625];
         let probe_args = counted_runtime_random_probe_args(&seeded_random_values, &args);
         let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &probe_args);
-        let (_, rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
         let mut state_machine = rust
             .state_machine_instance(0)
             .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -54472,6 +59993,13 @@ fn artboard_default_viewmodel_list_to_component_list_direct_update_matches_cpp_p
         rust.bind_default_view_model_artboard_list_context(&runtime),
         "{label} failed to apply default artboard list context"
     );
+    // Match the probe's direct `Artboard::updateDataBinds(true)` call
+    // (`src/artboard.cpp:1195-1201`). Binding the Rust context alone is the
+    // pre-update boundary.
+    assert!(
+        rust.advance_artboard_data_binds(),
+        "{label} failed to update artboard data binds"
+    );
 
     let cpp_artboard = cpp
         .artboards
@@ -54604,6 +60132,9 @@ fn owned_view_model_links_reject_transitive_cycles_atomically() {
     let a = make_handle();
     let b = make_handle();
     let c = make_handle();
+    let authored_c_next = c
+        .linked_view_model_by_property_name_path("next")
+        .expect("generated ViewModel property starts with its concrete C++ child");
 
     assert_eq!(
         a.link_view_model_by_property_name_path("next", &b),
@@ -54617,7 +60148,11 @@ fn owned_view_model_links_reject_transitive_cycles_atomically() {
         c.link_view_model_by_property_name_path("next", &a),
         Err(RuntimeViewModelLinkError::Cycle)
     );
-    assert!(c.linked_view_model_by_property_name_path("next").is_none());
+    assert!(
+        c.linked_view_model_by_property_name_path("next")
+            .is_some_and(|linked| linked.ptr_eq(&authored_c_next)),
+        "rejected replacement preserves the concrete child created for the property (`file.cpp:1141-1200`)"
+    );
     assert!(
         a.linked_view_model_by_property_name_path("next")
             .is_some_and(|linked| linked.ptr_eq(&b))
@@ -54936,6 +60471,13 @@ fn artboard_default_viewmodel_number_to_list_component_list_direct_update_matche
     assert!(
         rust.bind_default_view_model_artboard_list_context(&runtime),
         "{label} failed to apply default artboard list context"
+    );
+    // Match the probe's direct `Artboard::updateDataBinds(true)` call
+    // (`src/artboard.cpp:1195-1201`). Binding the Rust context alone is the
+    // pre-update boundary.
+    assert!(
+        rust.advance_artboard_data_binds(),
+        "{label} failed to update artboard data binds"
     );
 
     let cpp_artboard = cpp
@@ -55550,7 +61092,7 @@ fn bindable_list_main_to_source_target_to_source_matches_cpp_probe() {
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -55609,7 +61151,7 @@ fn bindable_list_public_update_target_to_source_matches_cpp_probe() {
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -55667,7 +61209,7 @@ fn number_to_bindable_list_public_update_target_to_source_matches_cpp_probe() {
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -55726,7 +61268,7 @@ fn number_to_bindable_list_main_to_source_target_to_source_matches_cpp_probe() {
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -70615,7 +76157,7 @@ fn state_machine_imported_viewmodel_viewmodel_source_relink_is_shared_across_sta
     ];
 
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (runtime, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let (runtime, mut rust) = read_rust_instance_from_bytes(&bytes, label);
     let mut state_machine_a = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing first Rust state-machine instance for {label}"));
@@ -75319,6 +80861,95 @@ fn state_machine_default_viewmodel_nested_boolean_source_handle_mutation_matches
 }
 
 #[test]
+fn state_machine_viewmodel_comparator_matrix_edges_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (label, bytes) in [
+        (
+            "synthetic/runtime_state_machine_viewmodel_integer_pair_exact_cpp.riv",
+            synthetic_state_machine_viewmodel_integer_pair_condition(
+                8360,
+                0x0100_0001,
+                0x0100_0000,
+                1,
+            ),
+        ),
+        (
+            "synthetic/runtime_state_machine_viewmodel_trigger_pair_cpp.riv",
+            synthetic_state_machine_viewmodel_trigger_pair_condition(8361, 7, 7, 0),
+        ),
+        (
+            "synthetic/runtime_state_machine_viewmodel_artboard_literal_cpp.riv",
+            synthetic_state_machine_viewmodel_artboard_literal_condition(8362, 11, 11, 0),
+        ),
+        (
+            "synthetic/runtime_state_machine_artboard_viewmodel_number_cpp.riv",
+            synthetic_state_machine_artboard_viewmodel_number_condition(8363, 150.0, 5),
+        ),
+    ] {
+        let args = [
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-bind-empty-state-machine-context".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "1".to_owned(),
+        ];
+
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
+
+        let mut rust_reports = Vec::new();
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        assert!(
+            state_machine.bind_empty_data_context(),
+            "{label} failed to bind empty data context"
+        );
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 0.0),
+            state_machine.clone(),
+        ));
+        rust_reports.push((
+            rust.advance_state_machine_instance(&mut state_machine, 1.0),
+            state_machine.clone(),
+        ));
+        let report = rust.update_components();
+
+        let cpp_artboard = cpp
+            .artboards
+            .first()
+            .unwrap_or_else(|| panic!("missing C++ artboard for {label}"));
+        assert_eq!(
+            cpp_artboard.runtime_state_machine_advances.len(),
+            rust_reports.len(),
+            "{label} state-machine report count mismatch"
+        );
+        for (cpp_state_machine, (advanced, rust_state_machine)) in cpp_artboard
+            .runtime_state_machine_advances
+            .iter()
+            .zip(&rust_reports)
+        {
+            compare_state_machine_advance(cpp_state_machine, rust_state_machine, *advanced, label);
+        }
+        compare_cpp_runtime_update(&cpp, &rust, &report, label);
+    }
+}
+
+#[test]
 fn state_machine_component_viewmodel_conditions_match_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -76031,6 +81662,1261 @@ fn state_machine_direct_blend_state_transition_matches_cpp_probe() {
 }
 
 #[test]
+fn fl_c5_state_machine_definition_empty_and_missing_importer_match_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let empty_label = "synthetic/fl_c5_empty_state_machine.riv";
+    let empty_bytes = synthetic_fl_c5_empty_state_machine(90_501);
+    let cpp = read_cpp_probe_bytes(&probe, empty_label, &empty_bytes);
+    let (_, rust) = read_rust_instance_from_bytes(&empty_bytes, empty_label);
+    let cpp_machine = &cpp.artboards[0].state_machines[0];
+    let rust_machine = rust.state_machine(0).expect("Rust empty StateMachine");
+    assert_eq!(cpp_machine.index, 0);
+    assert_eq!(cpp_machine.name, "");
+    assert_eq!(cpp_machine.layer_count, rust_machine.layer_count());
+    assert_eq!(cpp_machine.input_count, rust_machine.input_count());
+    assert_eq!(cpp_machine.listener_count, rust_machine.listener_count());
+    assert_eq!(cpp_machine.data_bind_count, rust_machine.data_bind_count());
+    assert_eq!(
+        cpp_machine.scripted_object_count,
+        rust_machine.scripted_object_count()
+    );
+    assert_eq!(
+        (
+            cpp_machine.layer_count,
+            cpp_machine.input_count,
+            cpp_machine.listener_count,
+            cpp_machine.data_bind_count,
+            cpp_machine.scripted_object_count,
+        ),
+        (0, 0, 0, 0, 0)
+    );
+
+    let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let source = std::fs::read_to_string(
+        PathBuf::from(runtime_root).join("src/animation/state_machine.cpp"),
+    )
+    .expect("read pinned C++ StateMachine source");
+    let import_start = source
+        .find("StatusCode StateMachine::import")
+        .expect("C++ StateMachine::import");
+    let import_end = source[import_start..]
+        .find("void StateMachine::addLayer")
+        .map(|offset| import_start + offset)
+        .expect("end of C++ StateMachine::import");
+    let import_body = &source[import_start..import_end];
+    assert!(
+        import_body.contains("if (artboardImporter == nullptr)")
+            && import_body.contains("return StatusCode::MissingObject;")
+            && import_body.find("return StatusCode::MissingObject;")
+                < import_body.find("artboardImporter->addStateMachine(this);"),
+        "pinned C++ must reject a missing ArtboardImporter before attachment"
+    );
+    assert!(
+        import_body.contains("return Super::import(importStack);"),
+        "successful C++ attachment must still delegate to Super::import"
+    );
+}
+
+#[test]
+fn fl_c5_state_machine_definition_authored_collections_match_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct DefinitionSample {
+        input_count: usize,
+        inputs: Vec<Option<DefinitionInput>>,
+        layers: Vec<DefinitionLayer>,
+        listeners: Vec<DefinitionListener>,
+        data_bind_property_keys: Vec<u32>,
+    }
+    #[derive(Deserialize)]
+    struct DefinitionInput {
+        index: usize,
+        name: String,
+    }
+    #[derive(Deserialize)]
+    struct DefinitionLayer {
+        index: usize,
+        name: String,
+    }
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct DefinitionListener {
+        index: usize,
+        target_id: u32,
+    }
+
+    let label = "synthetic/fl_c5_state_machine_definition_collections.riv";
+    let bytes = synthetic_fl_c5_state_machine_definition(90_503);
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let cpp_machine = &cpp.artboards[0].state_machines[0];
+    let rust_machine = rust.state_machine(0).expect("Rust StateMachine definition");
+
+    assert_eq!(cpp_machine.name, "definition");
+    assert_eq!(cpp_machine.layer_count, rust_machine.layer_count());
+    assert_eq!(cpp_machine.input_count, rust_machine.input_count());
+    assert_eq!(cpp_machine.listener_count, rust_machine.listener_count());
+    assert_eq!(cpp_machine.data_bind_count, rust_machine.data_bind_count());
+    assert_eq!(
+        cpp_machine.scripted_object_count,
+        rust_machine.scripted_object_count()
+    );
+    assert_eq!(
+        cpp_machine
+            .inputs
+            .iter()
+            .map(|input| input
+                .as_ref()
+                .map(|input| (input.index, input.name.as_str())))
+            .collect::<Vec<_>>(),
+        vec![
+            Some((0, "duplicate")),
+            Some((1, "duplicate")),
+            Some((2, "Case")),
+        ]
+    );
+    assert_eq!(
+        cpp_machine
+            .layers
+            .iter()
+            .map(|layer| (layer.index, layer.name.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(0, "duplicate"), (1, "duplicate"), (2, "Case")]
+    );
+    assert_eq!(
+        rust_machine
+            .input_named("duplicate")
+            .map(|input| input.global_id),
+        rust_machine.input_at(0).map(|input| input.global_id)
+    );
+    assert!(rust_machine.input_named("DUPLICATE").is_none());
+    assert_eq!(
+        rust_machine
+            .layer_named("duplicate")
+            .map(|layer| layer.global_id),
+        rust_machine.layer_at(0).map(|layer| layer.global_id)
+    );
+    assert!(rust_machine.layer_named("case").is_none());
+
+    // Importing an unsupported input through the full pinned C++ file
+    // lifecycle would make StateMachine::onAddedDirty dereference its null
+    // clone. Exercise that authored collection with the focused C++ seam,
+    // while Rust reads the equivalent serialized object sequence.
+    let null_hole_label = "synthetic/fl_c5_state_machine_definition_null_hole.riv";
+    let null_hole_bytes = synthetic_fl_c5_state_machine_definition_null_hole(90_509);
+    let output = Command::new(&probe)
+        .arg("--state-machine-definition-null-hole-sample")
+        .output()
+        .unwrap_or_else(|error| panic!("failed to run {}: {error}", probe.display()));
+    assert!(
+        output.status.success(),
+        "C++ definition-seam probe failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let cpp: DefinitionSample = serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|error| panic!("invalid C++ definition-seam JSON: {error}"));
+    let (_, rust) = read_rust_instance_from_bytes(&null_hole_bytes, null_hole_label);
+    let rust_machine = rust.state_machine(0).expect("Rust StateMachine definition");
+
+    assert_eq!(rust_machine.name.as_deref(), Some("definition"));
+    assert_eq!(cpp.input_count, rust_machine.input_count());
+    assert_eq!(cpp.layers.len(), rust_machine.layer_count());
+    assert_eq!(cpp.listeners.len(), rust_machine.listener_count());
+    assert_eq!(
+        cpp.data_bind_property_keys.len(),
+        rust_machine.data_bind_count(),
+        "the Rust definition must retain both duplicate bind occurrences exercised by the C++ seam",
+    );
+    assert_eq!(rust_machine.scripted_object_count(), 0);
+    let cpp_inputs = cpp
+        .inputs
+        .iter()
+        .map(|input| {
+            input
+                .as_ref()
+                .map(|input| (input.index, input.name.clone()))
+        })
+        .collect::<Vec<_>>();
+    let rust_inputs = (0..rust_machine.input_count())
+        .map(|index| {
+            rust_machine
+                .input_at(index)
+                .map(|input| (index, input.name.as_deref().unwrap_or("").to_owned()))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(cpp_inputs, rust_inputs);
+    assert_eq!(
+        cpp_inputs,
+        vec![
+            Some((0, "x".to_owned())),
+            None,
+            Some((2, "x".to_owned())),
+            Some((3, "x".to_owned())),
+        ]
+    );
+    let cpp_layers = cpp
+        .layers
+        .iter()
+        .map(|layer| (layer.index, layer.name.clone()))
+        .collect::<Vec<_>>();
+    let rust_layers = (0..rust_machine.layer_count())
+        .map(|index| {
+            let layer = rust_machine
+                .layer_at(index)
+                .expect("authored layer slot must be populated");
+            (index, layer.name.as_deref().unwrap_or("").to_owned())
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(cpp_layers, rust_layers);
+    assert_eq!(
+        cpp_layers,
+        vec![
+            (0, "duplicate".to_owned()),
+            (1, "duplicate".to_owned()),
+            (2, "Case".to_owned()),
+        ]
+    );
+    assert_eq!(
+        cpp.inputs
+            .iter()
+            .map(|input| input
+                .as_ref()
+                .map(|input| (input.index, input.name.as_str())))
+            .collect::<Vec<_>>(),
+        vec![Some((0, "x")), None, Some((2, "x")), Some((3, "x")),]
+    );
+    assert_eq!(
+        cpp.listeners
+            .iter()
+            .map(|listener| (listener.index, listener.target_id))
+            .collect::<Vec<_>>(),
+        [(0, u32::MAX), (1, 0)]
+    );
+    assert_eq!(
+        cpp.data_bind_property_keys,
+        [586, 586],
+        "the definition importer retains duplicate authored binds"
+    );
+    assert_eq!(
+        rust_machine.input_named("x").map(|input| input.global_id),
+        rust_machine.input_at(0).map(|input| input.global_id)
+    );
+    assert_eq!(rust_machine.input_count(), 4);
+    assert!(
+        rust_machine.input_at(1).is_none(),
+        "the uncloneable generic input retains an authored null hole"
+    );
+    assert!(rust_machine.input_named("X").is_none());
+    assert_eq!(
+        rust_machine
+            .layer_named("duplicate")
+            .map(|layer| layer.global_id),
+        rust_machine.layer_at(0).map(|layer| layer.global_id)
+    );
+    assert!(rust_machine.layer_named("case").is_none());
+}
+
+#[test]
+fn fl_c5_typed_named_inputs_match_cpp_with_an_earlier_wrong_type() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping live C++ typed-input comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_typed_named_inputs_wrong_type_first.riv";
+    let bytes = synthetic_fl_c5_typed_named_inputs(90_508);
+    let args = [
+        "--runtime-snapshot-named-inputs".to_owned(),
+        "0".to_owned(),
+        "x".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let cpp = &cpp.artboards[0].runtime_state_machine_advances[0];
+    assert!(cpp.named_input_probe);
+
+    let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, label);
+    let machine = artboard
+        .state_machine_instance(0)
+        .expect("Rust typed-input state machine");
+    let input_index = |input: Option<&nuxie_runtime::StateMachineInputInstance>| {
+        input
+            .and_then(|input| {
+                (0..machine.input_count()).find(|index| {
+                    machine
+                        .input(*index)
+                        .is_some_and(|slot| std::ptr::eq(slot, input))
+                })
+            })
+            .map_or(-1, |index| index as i32)
+    };
+    let rust = (
+        input_index(machine.get_bool("x")),
+        input_index(machine.get_number("x")),
+        input_index(machine.get_trigger("x")),
+    );
+    assert_eq!(
+        rust,
+        (
+            cpp.named_bool_input_index,
+            cpp.named_number_input_index,
+            cpp.named_trigger_input_index,
+        )
+    );
+    assert_eq!(
+        rust,
+        (1, 0, 2),
+        "typed lookup ignores the earlier wrong type"
+    );
+}
+
+#[test]
+fn malformed_listener_retains_authored_index() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/fl_c5_malformed_listener_index.riv";
+    let bytes = synthetic_fl_c5_malformed_listener(90_504);
+    let cpp = read_cpp_probe_bytes(&probe, label, &bytes);
+    let (_, rust) = read_rust_instance_from_bytes(&bytes, label);
+    let cpp_machine = &cpp.artboards[0].state_machines[0];
+    let rust_machine = rust.state_machine(0).expect("Rust StateMachine definition");
+
+    assert_eq!(
+        cpp_machine
+            .listeners
+            .iter()
+            .map(|listener| (listener.index, listener.target_id))
+            .collect::<Vec<_>>(),
+        [(0, u64::from(u32::MAX)), (1, 0)]
+    );
+    assert_eq!(cpp_machine.listener_count, 2);
+    assert_eq!(
+        rust_machine.listener_count(),
+        2,
+        "the inert listener must not compact the later valid listener out of authored index one"
+    );
+}
+
+#[test]
+fn state_machine_added_phases_match_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let source_path = PathBuf::from(runtime_root).join("src/animation/state_machine.cpp");
+    let source = std::fs::read_to_string(&source_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", source_path.display()));
+    let member_body = |start: &str, end: &str| {
+        let start = source.find(start).expect("pinned member start");
+        let end = source[start..]
+            .find(end)
+            .map(|offset| start + offset)
+            .expect("pinned member end");
+        &source[start..end]
+    };
+
+    for (member, next) in [
+        (
+            "StatusCode StateMachine::onAddedDirty",
+            "StatusCode StateMachine::onAddedClean",
+        ),
+        (
+            "StatusCode StateMachine::onAddedClean",
+            "StatusCode StateMachine::import",
+        ),
+    ] {
+        let body = member_body(member, next);
+        let inputs = body.find("m_Inputs").expect("inputs phase");
+        let layers = body.find("m_Layers").expect("layers phase");
+        let listeners = body.find("m_Listeners").expect("listeners phase");
+        assert!(
+            inputs < layers && layers < listeners,
+            "{member} phase order"
+        );
+        assert_eq!(
+            body.matches("return code;").count(),
+            3,
+            "{member} must stop on the first child failure"
+        );
+        assert!(
+            !body.contains("m_dataBinds") && !body.contains("m_scriptedObjects"),
+            "{member} must not visit definition collections outside the pinned three phases"
+        );
+    }
+
+    let import = member_body(
+        "StatusCode StateMachine::import",
+        "void StateMachine::addLayer",
+    );
+    assert!(
+        import.find("artboardImporter == nullptr") < import.find("addStateMachine(this)"),
+        "missing importer must fail before attachment"
+    );
+    assert!(
+        import.find("addStateMachine(this)") < import.find("Super::import(importStack)"),
+        "attachment must precede the superclass import status"
+    );
+
+    // A layer failure is observable through both real runtimes. The source
+    // comparison above locks the earlier input callbacks and later-listener
+    // suppression; the focused Rust unit test records the retained earlier
+    // callbacks to prove the documented no-rollback adaptation.
+    let label = "synthetic/fl_c5_added_dirty_invalid_layer.riv";
+    let bytes = synthetic_state_machine_missing_system_state(90_505, "ExitState");
+    assert!(!cpp_probe_accepts_bytes(&probe, label, &bytes));
+    assert!(!rust_accepts_artboard_instance(&bytes));
+}
+
+#[test]
+fn fl_c5_constructor_order_source_and_runtime_boundaries_match_cpp() {
+    let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let cpp_path = PathBuf::from(runtime_root).join("src/animation/state_machine_instance.cpp");
+    let cpp_source = std::fs::read_to_string(&cpp_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", cpp_path.display()));
+    let constructor_start = cpp_source
+        .find("StateMachineInstance::StateMachineInstance")
+        .expect("pinned C++ constructor");
+    let constructor_end = cpp_source[constructor_start..]
+        .find("StateMachineInstance::scriptedObject")
+        .map(|offset| constructor_start + offset)
+        .expect("pinned C++ constructor end");
+    let constructor = &cpp_source[constructor_start..constructor_end];
+    let positions = [
+        "m_inputInstances.resize(count)",
+        "m_layers = new StateMachineLayerInstance",
+        "auto dataBindCount = machine->dataBindCount()",
+        "for (std::size_t i = 0; i < machine->listenerCount(); i++)",
+        "component->listenerGroups()",
+        "for (auto nestedArtboard : instance->nestedArtboards())",
+        "for (auto& scriptedOb : machine->scriptedObjects())",
+        "sortHitComponents()",
+        "m_artboardInstance->buildFocusTree",
+    ]
+    .map(|needle| {
+        constructor
+            .find(needle)
+            .unwrap_or_else(|| panic!("missing C++ constructor phase {needle}"))
+    });
+    assert!(
+        positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "pinned C++ constructor phases must remain strictly ordered"
+    );
+
+    let rust_path =
+        repo_root().join("crates/nuxie-runtime/src/state_machine/state_machine_instance.rs");
+    let rust_source = std::fs::read_to_string(&rust_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", rust_path.display()));
+    let rust_constructor_start = rust_source
+        .find("pub(crate) fn new(")
+        .expect("Rust StateMachineInstance::new");
+    let rust_constructor_end = rust_source[rust_constructor_start..]
+        .find("fn initialize_ordinary_data_bind_container")
+        .map(|offset| rust_constructor_start + offset)
+        .expect("Rust constructor end");
+    let rust_constructor = &rust_source[rust_constructor_start..rust_constructor_end];
+    let rust_positions = [
+        "RuntimeConstructorPhase::Inputs",
+        "initialize_layers_in_authored_order",
+        "initialize_ordinary_data_bind_container",
+        "initialize_authored_listener_categories",
+        "initialize_component_provided_groups",
+        "initialize_nested_list_text_hit_ownership",
+        "initialize_scripted_clones_and_facilities",
+        "sort_hit_components",
+        "build_initial_focus_tree",
+    ]
+    .map(|needle| {
+        rust_constructor
+            .find(needle)
+            .unwrap_or_else(|| panic!("missing Rust constructor phase {needle}"))
+    });
+    assert!(
+        rust_positions.windows(2).all(|pair| pair[0] < pair[1]),
+        "Rust constructor phase ownership must match the pinned C++ order"
+    );
+
+    let bytes = synthetic_fl_c5_empty_state_machine(90_506);
+    let (_, mut rust) =
+        read_rust_instance_from_bytes(&bytes, "synthetic/fl_c5_wp2_empty_instance.riv");
+    let mut machine = rust
+        .state_machine_instance(0)
+        .expect("Rust empty state-machine occurrence");
+    assert_eq!(machine.input_count(), 0);
+    assert!(machine.current_animation(0).is_none());
+    machine.dispose();
+    machine.dispose();
+}
+
+#[test]
+fn fl_c5_dispose_nested_event_source_order_and_rust_idempotence() {
+    let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let cpp_path = PathBuf::from(runtime_root).join("src/animation/state_machine_instance.cpp");
+    let cpp_source = std::fs::read_to_string(&cpp_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", cpp_path.display()));
+    let dispose_start = cpp_source
+        .find("void StateMachineInstance::dispose()")
+        .expect("pinned C++ dispose");
+    let dispose_end = cpp_source[dispose_start..]
+        .find("#ifdef WITH_RIVE_TOOLS")
+        .map(|offset| dispose_start + offset)
+        .expect("pinned C++ removeEventListeners end");
+    let lifecycle = &cpp_source[dispose_start..dispose_end];
+    assert!(
+        lifecycle.find("removeEventListeners();") < lifecycle.find("nestedArtboards()")
+            && lifecycle.find("nestedArtboards()") < lifecycle.find("nestedAnimations()")
+            && lifecycle.find("nestedAnimations()")
+                < lifecycle.find("removeNestedEventListener(this)"),
+        "dispose must delegate to current nested traversal before removing every notifier registration"
+    );
+    assert_eq!(
+        lifecycle.matches("removeNestedEventListener(this)").count(),
+        2,
+        "state-machine and linear-animation notifiers both detach"
+    );
+
+    let bytes = synthetic_fl_c5_empty_state_machine(90_507);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, "synthetic/fl_c5_wp2_dispose.riv");
+    let mut machine = rust
+        .state_machine_instance(0)
+        .expect("Rust empty state-machine occurrence");
+    machine.dispose();
+    machine.dispose();
+    assert!(
+        !rust.advance_state_machine_instance(&mut machine, 0.0),
+        "a repeatedly disposed empty occurrence remains inert"
+    );
+}
+
+#[test]
+fn fl_c5_state_changed_layers_and_convergence_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/fl_c5_state_changed_layers_and_convergence.riv";
+    let bytes = synthetic_fl_c5_layer_state_queries(90_508);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    let mut reports = vec![(
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    )];
+    assert!(state_machine.set_bool(0, true));
+    reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), reports.len());
+    for (step, (cpp_report, (advanced, rust_report))) in
+        cpp_reports.iter().zip(&reports).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_report,
+            rust_report,
+            *advanced,
+            &format!("{label} action {step}"),
+        );
+    }
+    assert_eq!(reports[0].1.changed_state_count(), 3);
+    assert_eq!(
+        reports[1].1.changed_state_count(),
+        2,
+        "layers 0 and 2 changed, while multiple layer-0 transitions count once"
+    );
+    assert_eq!(
+        reports[1]
+            .1
+            .changed_state(0)
+            .and_then(|state| state.type_name),
+        Some("AnimationState")
+    );
+    assert_eq!(
+        reports[1]
+            .1
+            .changed_state(1)
+            .and_then(|state| state.type_name),
+        Some("ExitState")
+    );
+    assert!(reports[1].1.changed_state(2).is_none());
+    assert_eq!(
+        reports[2].1.changed_state_count(),
+        0,
+        "a later new frame clears every retained layer flag"
+    );
+}
+
+#[test]
+fn fl_c5_current_state_and_animation_authored_compression_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/fl_c5_current_state_and_animation.riv";
+    let bytes = synthetic_fl_c5_layer_state_queries(90_509);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    let cpp_report = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("C++ state-machine report");
+    compare_state_machine_advance(cpp_report, &state_machine, advanced, label);
+
+    assert_eq!(state_machine.current_animation_count(), 2);
+    assert_eq!(
+        state_machine
+            .current_animation(0)
+            .map(|animation| animation.animation_index()),
+        Some(0)
+    );
+    assert_eq!(
+        state_machine
+            .current_animation(1)
+            .map(|animation| animation.animation_index()),
+        Some(0),
+        "two authored layers using one animation remain two occurrences"
+    );
+    assert!(state_machine.current_animation(2).is_none());
+    assert_eq!(
+        (0..state_machine.changed_state_count())
+            .map(|index| state_machine
+                .changed_state(index)
+                .and_then(|state| state.type_name))
+            .collect::<Vec<_>>(),
+        [
+            Some("AnimationState"),
+            Some("ExitState"),
+            Some("AnimationState")
+        ],
+        "current states retain compressed authored-layer order across a non-animation layer"
+    );
+}
+
+#[test]
+fn state_machine_required_system_states_reject_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (index, missing) in ["AnyState", "EntryState", "ExitState"]
+        .into_iter()
+        .enumerate()
+    {
+        let label = format!("synthetic/runtime_state_machine_missing_{missing}_cpp.riv");
+        let bytes = synthetic_state_machine_missing_system_state(8270 + index as u64, missing);
+        assert!(
+            !cpp_probe_accepts_bytes(&probe, &label, &bytes),
+            "pinned C++ must reject a layer missing {missing}"
+        );
+        assert!(
+            !rust_accepts_artboard_instance(&bytes),
+            "Rust must reject a layer missing {missing}"
+        );
+    }
+}
+
+#[test]
+fn state_machine_bad_transition_targets_reject_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (index, state_to_id) in [u64::MAX, 99].into_iter().enumerate() {
+        let label = format!("synthetic/runtime_state_machine_bad_target_{state_to_id}_cpp.riv");
+        let bytes = synthetic_state_machine_bad_transition_target(8274 + index as u64, state_to_id);
+        assert!(
+            !cpp_probe_accepts_bytes(&probe, &label, &bytes),
+            "pinned C++ must reject stateToId={state_to_id}"
+        );
+        assert!(
+            !rust_accepts_artboard_instance(&bytes),
+            "Rust must reject stateToId={state_to_id}"
+        );
+    }
+}
+
+#[test]
+fn state_machine_last_authored_entry_state_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_duplicate_entry_cpp.riv";
+    let bytes = synthetic_state_machine_duplicate_system_states(8273);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    let cpp_state_machine = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("C++ state-machine report");
+    compare_state_machine_advance(cpp_state_machine, &state_machine, advanced, label);
+    assert_eq!(
+        state_machine
+            .current_animation(0)
+            .map(|animation| animation.animation_index()),
+        Some(1),
+        "the last authored EntryState must select the second animation"
+    );
+}
+
+#[test]
+fn state_machine_generic_layer_state_occurrence_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_generic_layer_state_cpp.riv";
+    let bytes = synthetic_state_machine_generic_system_state(8278);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.25".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    let reports = [0.0, 0.25]
+        .into_iter()
+        .map(|seconds| {
+            let advanced = rust.advance_state_machine_instance(&mut state_machine, seconds);
+            (advanced, state_machine.clone())
+        })
+        .collect::<Vec<_>>();
+
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), reports.len());
+    for (cpp_report, (advanced, rust_state_machine)) in cpp_reports.iter().zip(&reports) {
+        compare_state_machine_advance(cpp_report, rust_state_machine, *advanced, label);
+    }
+}
+
+#[test]
+fn fl_c5_random_transition_edges_weighted_boundaries_and_wraparound_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (label, bytes, draw, expected_animation, expected_calls) in [
+        (
+            "synthetic/runtime_state_machine_weighted_random_zero_draw_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(8278, 1, 3),
+            0.0_f32,
+            1_usize,
+            1_usize,
+        ),
+        (
+            "synthetic/runtime_state_machine_weighted_random_negative_draw_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(82_780, 1, 3),
+            -0.25_f32,
+            1_usize,
+            1_usize,
+        ),
+        (
+            "synthetic/runtime_state_machine_weighted_random_strict_boundary_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(8279, 1, 3),
+            0.25_f32,
+            2_usize,
+            1_usize,
+        ),
+        (
+            "synthetic/runtime_state_machine_weighted_random_later_candidate_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(8280, 1, 3),
+            0.75_f32,
+            2_usize,
+            1_usize,
+        ),
+        (
+            "synthetic/runtime_state_machine_weighted_random_one_draw_selects_none_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(8281, 1, 3),
+            1.0_f32,
+            0_usize,
+            1_usize,
+        ),
+        (
+            "synthetic/runtime_state_machine_weighted_random_nan_selects_none_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(82_810, 1, 3),
+            f32::NAN,
+            0_usize,
+            1_usize,
+        ),
+        (
+            "synthetic/runtime_state_machine_weighted_random_zero_total_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(8282, 0, 0),
+            0.75_f32,
+            0_usize,
+            0_usize,
+        ),
+        (
+            "synthetic/runtime_state_machine_weighted_random_u32_wrap_cpp.riv",
+            synthetic_state_machine_weighted_random_transition(
+                8283,
+                u64::from(u32::MAX),
+                u64::from(u32::MAX),
+            ),
+            0.75_f32,
+            1_usize,
+            1_usize,
+        ),
+    ] {
+        let args = counted_runtime_random_probe_args(
+            &[draw],
+            &[
+                "--runtime-advance-state-machine".to_owned(),
+                "0".to_owned(),
+                "0".to_owned(),
+            ],
+        );
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .expect("Rust state-machine instance");
+        let _random_values = set_runtime_random_test_values(&[draw]);
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+
+        let cpp_state_machine = cpp.artboards[0]
+            .runtime_state_machine_advances
+            .first()
+            .expect("C++ state-machine report");
+        compare_state_machine_advance(cpp_state_machine, &state_machine, advanced, label);
+        assert_eq!(
+            cpp_state_machine.random_total_calls, expected_calls,
+            "{label} C++ random draw count"
+        );
+        assert_eq!(
+            runtime_random_call_count(),
+            cpp_state_machine.random_total_calls,
+            "{label} Rust random-provider call count"
+        );
+        assert_eq!(
+            state_machine
+                .current_animation(0)
+                .map(|animation| animation.animation_index()),
+            Some(expected_animation),
+            "{label} selected animation"
+        );
+    }
+}
+
+#[test]
+fn state_machine_weighted_random_wait_then_selected_transition_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_weighted_random_wait_then_select_cpp.riv";
+    let bytes = synthetic_state_machine_weighted_random_wait_then_select(8284);
+    let args = counted_runtime_random_probe_args(
+        &[0.0],
+        &[
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ],
+    );
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    let _random_values = set_runtime_random_test_values(&[0.0]);
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+
+    let cpp_state_machine = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("C++ state-machine report");
+    compare_state_machine_advance(cpp_state_machine, &state_machine, advanced, label);
+    assert_eq!(
+        state_machine
+            .current_animation(0)
+            .map(|animation| animation.animation_index()),
+        Some(2),
+        "{label} later selectable candidate"
+    );
+}
+
+#[test]
+fn nested_state_machine_missing_and_out_of_range_children_match_cpp_empty_owner_contract() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_nested_state_machine_empty_owner_cpp.riv";
+    let bytes = synthetic_nested_state_machines_without_child_instances(8281);
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &[]);
+    let nested = &cpp.artboards[0].nested_state_machines;
+    let runtime = read_runtime_file(&bytes).expect("Rust imports the same nested-owner bytes");
+    let graph = GraphFile::from_runtime_file(&runtime).expect("Rust graphs the nested-owner bytes");
+    let rust = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        graph.artboards.first().expect("parent artboard"),
+        &graph.artboards,
+    )
+    .expect("Rust mounts the child artboard from the same bytes");
+    let rust_nested = rust.runtime_nested_state_machine_reports();
+    let cloned_nested = rust.clone().runtime_nested_state_machine_reports();
+    assert_eq!(nested.len(), 2);
+    assert_eq!(
+        rust_nested, cloned_nested,
+        "cold clone preserves owner order"
+    );
+    assert_eq!(rust_nested.len(), nested.len());
+
+    for (owner, rust_owner, expected_local, expected_animation, expected_inputs) in [
+        (
+            &nested[0],
+            &rust_nested[0],
+            2_usize,
+            u32::MAX,
+            vec![9_u32, 9_u32],
+        ),
+        (
+            &nested[1],
+            &rust_nested[1],
+            5_usize,
+            7_u32,
+            vec![3_u32, u32::MAX],
+        ),
+    ] {
+        assert_eq!(owner.local_id, expected_local);
+        assert_eq!(owner.animation_id, expected_animation);
+        assert!(!owner.has_instance);
+        assert_eq!(owner.input_count, expected_inputs.len());
+        assert_eq!(owner.inputs.len(), expected_inputs.len());
+        for (index, expected_input) in expected_inputs.iter().copied().enumerate() {
+            assert_eq!(owner.inputs[index].index, index);
+            assert_eq!(owner.inputs[index].input_id, Some(expected_input));
+            assert_eq!(owner.inputs[index].name.as_deref(), Some(""));
+        }
+        assert_eq!(owner.empty_advance, Some(false));
+        assert_eq!(owner.empty_hit_test, Some(false));
+        assert_eq!(owner.empty_pointer_down, Some(true));
+        assert_eq!(owner.empty_pointer_move, Some(true));
+        assert_eq!(owner.empty_pointer_up, Some(true));
+        assert_eq!(owner.empty_pointer_exit, Some(true));
+        assert_eq!(owner.empty_drag_start, Some(true));
+        assert_eq!(owner.empty_drag_end, Some(true));
+        assert_eq!(owner.empty_try_change_state, Some(false));
+        assert_eq!(owner.empty_context_forwarding_completed, Some(true));
+
+        assert_eq!(rust_owner.local_id, owner.local_id);
+        assert_eq!(rust_owner.animation_id, owner.animation_id as usize);
+        assert_eq!(rust_owner.has_instance, owner.has_instance);
+        assert_eq!(
+            rust_owner.input_ids,
+            expected_inputs
+                .into_iter()
+                .map(|input| input as usize)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            rust_owner.input_names,
+            vec![String::new(); owner.input_count]
+        );
+        assert_eq!(rust_owner.empty_advance, owner.empty_advance.unwrap());
+        assert_eq!(rust_owner.empty_hit_test, owner.empty_hit_test.unwrap());
+        assert_eq!(
+            rust_owner.empty_pointer_down,
+            owner.empty_pointer_down.unwrap()
+        );
+        assert_eq!(
+            rust_owner.empty_pointer_move,
+            owner.empty_pointer_move.unwrap()
+        );
+        assert_eq!(rust_owner.empty_pointer_up, owner.empty_pointer_up.unwrap());
+        assert_eq!(
+            rust_owner.empty_pointer_exit,
+            owner.empty_pointer_exit.unwrap()
+        );
+        assert_eq!(rust_owner.empty_drag_start, owner.empty_drag_start.unwrap());
+        assert_eq!(rust_owner.empty_drag_end, owner.empty_drag_end.unwrap());
+        assert_eq!(
+            rust_owner.empty_try_change_state,
+            owner.empty_try_change_state.unwrap()
+        );
+        assert_eq!(
+            rust_owner.empty_context_forwarding_completed,
+            owner.empty_context_forwarding_completed.unwrap()
+        );
+    }
+}
+
+#[test]
+fn state_machine_layer_entry_effects_match_cpp_after_serial_initialization() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_serial_layer_entry_cpp.riv";
+    let bytes = synthetic_state_machine_serial_layer_entry_initialization(8282);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+
+    let cpp_state_machine = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("C++ state-machine report");
+    compare_state_machine_advance(cpp_state_machine, &state_machine, advanced, label);
+    assert_eq!(
+        state_machine
+            .input(0)
+            .and_then(|input| input.number_value()),
+        Some(7.0),
+        "the first authored layer's entry action runs during initialization"
+    );
+    assert_eq!(
+        state_machine
+            .current_animation(0)
+            .map(|animation| animation.animation_index()),
+        Some(0),
+        "the second layer consumes the initialized input on the first advance"
+    );
+}
+
+#[test]
+fn state_machine_entry_focus_actions_run_before_the_focus_tree_is_built() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (offset, action, action_name) in [
+        (
+            0_u64,
+            SyntheticEntryFocusAction::TargetScope,
+            "target_scope",
+        ),
+        (
+            1_u64,
+            SyntheticEntryFocusAction::TraverseNext,
+            "traverse_next",
+        ),
+    ] {
+        let label =
+            format!("synthetic/runtime_state_machine_entry_focus_{action_name}_before_tree.riv");
+        let bytes = synthetic_state_machine_entry_focus_before_tree(8283 + offset, action);
+        let args = [
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            "0".to_owned(),
+        ];
+        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &args);
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut state_machine = rust
+            .state_machine_instance(0)
+            .expect("Rust state-machine instance");
+        let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+
+        let cpp_state_machine = cpp.artboards[0]
+            .runtime_state_machine_advances
+            .first()
+            .expect("C++ state-machine report");
+        compare_state_machine_advance(cpp_state_machine, &state_machine, advanced, &label);
+        assert_eq!(
+            state_machine.current_animation_count(),
+            0,
+            "{action_name}: constructor-time focus must not reach the leaf before the final tree build"
+        );
+    }
+}
+
+#[test]
+fn state_machine_transition_interruption_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_transition_interruption_cpp.riv";
+    let bytes = synthetic_state_machine_transition_interruption(8276);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.5".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    let mut reports = Vec::new();
+    reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(state_machine.set_bool(0, true));
+    reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(state_machine.set_bool(1, true));
+    reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.5),
+        state_machine.clone(),
+    ));
+
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), reports.len());
+    for (cpp_report, (advanced, rust_state_machine)) in cpp_reports.iter().zip(&reports) {
+        compare_state_machine_advance(cpp_report, rust_state_machine, *advanced, label);
+    }
+}
+
+#[test]
+fn state_machine_same_state_transition_is_a_noop_like_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_state_machine_same_state_transition_cpp.riv";
+    let bytes = synthetic_state_machine_same_state_transition(8277);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "true".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.25".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    let mut reports = Vec::new();
+    reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.0),
+        state_machine.clone(),
+    ));
+    assert!(state_machine.set_bool(0, true));
+    reports.push((
+        rust.advance_state_machine_instance(&mut state_machine, 0.25),
+        state_machine.clone(),
+    ));
+
+    for (cpp_report, (advanced, rust_state_machine)) in cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .zip(&reports)
+    {
+        compare_state_machine_advance(cpp_report, rust_state_machine, *advanced, label);
+    }
+    assert_eq!(
+        reports[1].1.changed_state_count(),
+        0,
+        "a self-target must not replace the current occurrence"
+    );
+}
+
+#[test]
 fn state_machine_blend_state_transition_exit_time_matches_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
@@ -76442,6 +83328,2290 @@ fn state_machine_animation_state_advance_matches_cpp_probe() {
     compare_cpp_runtime_update(&cpp, &rust, &report, label);
 }
 
+fn fl_c5_cpp_state_machine_instance_source() -> String {
+    let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let source_path = PathBuf::from(runtime_root).join("src/animation/state_machine_instance.cpp");
+    std::fs::read_to_string(&source_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", source_path.display()))
+}
+
+fn fl_c5_cpp_member<'a>(source: &'a str, start: &str, end: &str) -> &'a str {
+    let start = source
+        .find(start)
+        .unwrap_or_else(|| panic!("missing pinned C++ member {start}"));
+    let end = source[start..]
+        .find(end)
+        .map(|offset| start + offset)
+        .unwrap_or_else(|| panic!("missing pinned C++ member boundary {end}"));
+    &source[start..end]
+}
+
+fn fl_c5_run_rust_unit_probe(filter: &str) -> String {
+    let output = Command::new(env!("CARGO"))
+        .current_dir(repo_root())
+        .args([
+            "test",
+            "-q",
+            "-p",
+            "nuxie-runtime",
+            "--lib",
+            filter,
+            "--",
+            "--nocapture",
+        ])
+        .output()
+        .unwrap_or_else(|error| panic!("run Rust WP5 probe {filter}: {error}"));
+    assert!(
+        output.status.success(),
+        "Rust WP5 probe {filter} failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    String::from_utf8(output.stdout)
+        .unwrap_or_else(|error| panic!("Rust WP5 probe {filter} emitted non-UTF-8 output: {error}"))
+}
+
+#[test]
+fn fl_c5_focus_queue_snapshot_and_duplicate_source_contract() {
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_focus_semantic_batches_snapshot_clear_and_keep_focus_then_semantic_fifo",
+    );
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let queue = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::queueFocusEvent",
+        "void StateMachineInstance::setFocus",
+    );
+    assert!(queue.contains("m_queuedFocusEvents.push_back({group, isFocus});"));
+    assert!(queue.contains("m_needsAdvance = true;"));
+
+    let process = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::processFocusEvents",
+        "void StateMachineInstance::queueSemanticEvent",
+    );
+    let move_batch = process
+        .find("auto events = std::move(m_queuedFocusEvents);")
+        .expect("focus batch move");
+    let clear_member = process
+        .find("m_queuedFocusEvents.clear();")
+        .expect("focus member clear");
+    let callback_loop = process
+        .find("for (const auto& event : events)")
+        .expect("focus callback loop");
+    assert!(move_batch < clear_member && clear_member < callback_loop);
+    assert!(process.contains("event.group->listener()"));
+    assert!(process.contains("ListenerType::focus"));
+    assert!(process.contains("ListenerType::blur"));
+}
+
+#[test]
+fn fl_c5_focus_queue_chained_callback_waits_source_contract() {
+    fl_c5_run_rust_unit_probe("fl_c5_advance_focus_chaining_and_hidden_target_boundaries");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let process = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::processFocusEvents",
+        "void StateMachineInstance::queueSemanticEvent",
+    );
+    assert!(process.contains("auto events = std::move(m_queuedFocusEvents);"));
+    assert!(process.contains("ListenerInvocation::focus(event.group, event.isFocus)"));
+    assert!(
+        !process.contains("while (!m_queuedFocusEvents.empty())"),
+        "focus callbacks do not drain a newly queued batch in the same phase"
+    );
+}
+
+#[test]
+fn fl_c5_semantic_queue_snapshot_null_and_duplicate_source_contract() {
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_focus_semantic_batches_snapshot_clear_and_keep_focus_then_semantic_fifo",
+    );
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_focus_semantic_recorded_semantic_manager_boundaries_keep_call_order",
+    );
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let queue = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::queueSemanticEvent",
+        "void StateMachineInstance::processSemanticEvents",
+    );
+    assert!(queue.contains("m_queuedSemanticEvents.push_back({group, actionType});"));
+    assert!(queue.contains("m_needsAdvance = true;"));
+
+    let process = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::processSemanticEvents",
+        "void StateMachineInstance::fireSemanticAction",
+    );
+    let move_batch = process
+        .find("auto events = std::move(m_queuedSemanticEvents);")
+        .expect("semantic batch move");
+    let clear_member = process
+        .find("m_queuedSemanticEvents.clear();")
+        .expect("semantic member clear");
+    let callback_loop = process
+        .find("for (const auto& event : events)")
+        .expect("semantic callback loop");
+    assert!(move_batch < clear_member && clear_member < callback_loop);
+    assert!(process.contains("if (event.group == nullptr)"));
+    assert!(process.contains("if (listener == nullptr)"));
+    assert!(
+        !process.contains("while (!m_queuedSemanticEvents.empty())"),
+        "semantic callbacks do not drain a newly queued batch in the same phase"
+    );
+}
+
+#[test]
+fn fl_c5_semantic_queue_focus_then_semantic_phase_contract() {
+    fl_c5_run_rust_unit_probe("fl_c5_advance_raw_order_and_clean_zero_bookkeeping");
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_focus_semantic_callback_generated_batches_obey_phase_snapshots",
+    );
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let advance = fl_c5_cpp_member(
+        &source,
+        "bool StateMachineInstance::advance(float seconds, bool newFrame)",
+        "bool StateMachineInstance::advanceAndApply",
+    );
+    let focus = advance
+        .find("processFocusEvents();")
+        .expect("focus processing phase");
+    let semantic = advance
+        .find("processSemanticEvents();")
+        .expect("semantic processing phase");
+    assert!(
+        focus < semantic,
+        "focus-generated semantic work can join the later same-frame semantic snapshot"
+    );
+}
+
+#[test]
+fn fl_c5_focus_manager_switch_order() {
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_focus_semantic_manager_switch_is_identity_noop_and_restores_internal",
+    );
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let switch = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::setExternalFocusManager",
+        "void StateMachineInstance::enableSemantics",
+    );
+    let identity_noop = switch
+        .find("if (m_externalFocusManager == manager)")
+        .expect("same-manager no-op");
+    let cleanup = switch
+        .find("m_artboardInstance->cleanupFocusTree();")
+        .expect("old-tree cleanup");
+    let assign = switch
+        .find("m_externalFocusManager = manager;")
+        .expect("external manager assignment");
+    let rebuild = switch
+        .find("m_artboardInstance->buildFocusTree(focusManager(), nullptr);")
+        .expect("selected-manager rebuild");
+    assert!(identity_noop < cleanup && cleanup < assign && assign < rebuild);
+}
+
+#[test]
+fn fl_c5_focus_state() {
+    fl_c5_run_rust_unit_probe("fl_c5_focus_semantic_focus_state_and_owner_safe_focus_accessors");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let focus_state = fl_c5_cpp_member(
+        &source,
+        "StateMachineInstance::FocusState StateMachineInstance::focusState() const",
+        "void StateMachineInstance::processFocusEvents",
+    );
+    let poll = focus_state
+        .find("primaryFocusPtr()")
+        .expect("poll-friendly primary focus");
+    let missing = focus_state
+        .find("if (focus == nullptr)")
+        .expect("missing focus return");
+    let has_focus = focus_state
+        .find("state.hasFocus = true;")
+        .expect("focused state");
+    let focusable = focus_state
+        .find("if (Focusable* focusable = focus->focusable())")
+        .expect("optional focusable");
+    let keyboard = focus_state
+        .find("focusable->acceptsKeyboardInput()")
+        .expect("keyboard capability");
+    assert!(poll < missing && missing < has_focus);
+    assert!(has_focus < focusable && focusable < keyboard);
+}
+
+fn push_fl_c5_keyframe_data_bind_context(bytes: &mut Vec<u8>, path: &[u32]) {
+    push_fl_c5_keyframe_data_bind_context_with_converter(bytes, path, None);
+}
+
+fn push_fl_c5_keyframe_data_bind_context_with_converter(
+    bytes: &mut Vec<u8>,
+    path: &[u32],
+    converter_id: Option<u64>,
+) {
+    let mut source_path_ids = Vec::new();
+    for path_id in path {
+        push_var_uint(&mut source_path_ids, u64::from(*path_id));
+    }
+    push_object_with_properties(bytes, "DataBindContext", |bytes| {
+        push_uint_property(
+            bytes,
+            "DataBindContext",
+            "propertyKey",
+            u64::from(property_key_for_name("KeyFrameDouble", "value")),
+        );
+        push_bytes_property(bytes, "DataBindContext", "sourcePathIds", &source_path_ids);
+        if let Some(converter_id) = converter_id {
+            push_uint_property(bytes, "DataBindContext", "converterId", converter_id);
+        }
+    });
+}
+
+fn synthetic_fl_c5_keyframe_data_bind(
+    file_id: u64,
+    duplicate_source_bind: bool,
+    transition_after_bind: bool,
+    multiply_source: bool,
+) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        for name in ["first", "second"] {
+            push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+                push_string_property(bytes, "ViewModelPropertyNumber", "name", name);
+            });
+        }
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        for (property_id, value) in [(0, 11.0), (1, 99.0)] {
+            push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+                push_uint_property(
+                    bytes,
+                    "ViewModelInstanceNumber",
+                    "viewModelPropertyId",
+                    property_id,
+                );
+                push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", value);
+            });
+        }
+        if multiply_source {
+            push_object_with_properties(bytes, "DataConverterOperationValue", |bytes| {
+                push_uint_property(bytes, "DataConverterOperationValue", "operationType", 2);
+                push_f32_property(bytes, "DataConverterOperationValue", "operationValue", 2.0);
+            });
+        }
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 2.0, 1);
+        push_fl_c5_keyframe_data_bind_context_with_converter(
+            bytes,
+            &[0, 0],
+            multiply_source.then_some(0),
+        );
+        if duplicate_source_bind {
+            push_fl_c5_keyframe_data_bind_context(bytes, &[0, 1]);
+        }
+        push_keyframe_double(bytes, 10, 12.0, 0);
+
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        if transition_after_bind {
+            push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+                push_string_property(bytes, "StateMachineBool", "name", "go");
+            });
+        }
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        if transition_after_bind {
+            push_object_with_properties(bytes, "StateTransition", |bytes| {
+                push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            });
+            push_synthetic_bool_transition_condition(bytes, 0);
+            push_object_with_properties(bytes, "AnimationState", |bytes| {
+                push_uint_property(bytes, "AnimationState", "animationId", 0);
+            });
+        }
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn synthetic_fl_c5_interrupted_transition_keyframe_bind(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "ViewModel", |bytes| {
+            push_string_property(bytes, "ViewModel", "name", "Root");
+        });
+        push_object_with_properties(bytes, "ViewModelPropertyNumber", |bytes| {
+            push_string_property(bytes, "ViewModelPropertyNumber", "name", "bound");
+        });
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+            push_string_property(bytes, "ViewModelInstance", "name", "root");
+            push_uint_property(bytes, "ViewModelInstance", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "ViewModelInstanceNumber", |bytes| {
+            push_uint_property(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+            push_f32_property(bytes, "ViewModelInstanceNumber", "propertyValue", 11.0);
+        });
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        for (animation_index, (from, to)) in
+            [(0, (2.0, 12.0)), (1, (20.0, 30.0)), (2, (40.0, 50.0))]
+        {
+            push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+                push_uint_property(bytes, "LinearAnimation", "fps", 10);
+                push_uint_property(bytes, "LinearAnimation", "duration", 20);
+            });
+            push_object_with_properties(bytes, "KeyedObject", |bytes| {
+                push_uint_property(bytes, "KeyedObject", "objectId", 1);
+            });
+            push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+                push_uint_property(
+                    bytes,
+                    "KeyedProperty",
+                    "propertyKey",
+                    u64::from(property_key_for_name("Node", "x")),
+                );
+            });
+            push_keyframe_double(bytes, 0, from, 1);
+            if animation_index == 0 {
+                push_fl_c5_keyframe_data_bind_context(bytes, &[0, 0]);
+            }
+            push_keyframe_double(bytes, 10, to, 0);
+        }
+
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        for name in ["to-b", "to-c"] {
+            push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+                push_string_property(bytes, "StateMachineBool", "name", name);
+            });
+        }
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 3);
+            push_uint_property(bytes, "StateTransition", "duration", 1000);
+        });
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 1);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 4);
+            push_uint_property(bytes, "StateTransition", "duration", 1000);
+        });
+        push_synthetic_bool_transition_condition(bytes, 1);
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 2);
+        });
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}
+
+fn cpp_runtime_update_transform_x(cpp: &CppProbeFile, local_id: usize) -> f32 {
+    cpp.artboards[0]
+        .runtime_update
+        .as_ref()
+        .and_then(|update| {
+            update
+                .components
+                .iter()
+                .find(|component| component.local_id == local_id)
+        })
+        .and_then(|component| component.local_transform)
+        .map(|transform| transform[4])
+        .unwrap_or_else(|| panic!("missing C++ runtime-update transform for local {local_id}"))
+}
+
+#[test]
+fn fl_c5_keyframe_data_bind_supported_holder_and_removal_source_contract() {
+    fl_c5_run_rust_unit_probe("fl_c5_keyframe_data_bind_supported_holders_and_live_resolution");
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_keyframe_data_bind_duplicate_build_tracks_and_removes_in_build_order",
+    );
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_keyframe_data_bind_converter_advancement_keeps_going_per_occurrence",
+    );
+
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let build = fl_c5_cpp_member(
+        &source,
+        "static uint32_t keyFrameHolderPropertyKey",
+        "bool StateMachineInstance::hasFocusNodes()",
+    );
+    for required in [
+        "KeyFrameDoubleBase::typeKey",
+        "KeyFrameColorBase::typeKey",
+        "KeyFrameBoolBase::typeKey",
+        "KeyFrameStringBase::typeKey",
+        "default:\n            return 0;",
+        "default:\n            return nullptr;",
+        "firstBindByTarget.emplace(target, dataBind);",
+        "m_stateKeyFrameDataBinds[stateInstance].push_back",
+        "auto it = m_stateKeyFrameDataBinds.find(stateInstance);",
+        "if (it == m_stateKeyFrameDataBinds.end())",
+        "removeDataBind(dataBind);\n        delete dataBind;",
+        "m_stateKeyFrameDataBinds.erase(it);",
+    ] {
+        assert!(
+            build.contains(required),
+            "pinned keyframe lifecycle omitted {required:?}"
+        );
+    }
+    let build_member = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::buildStateKeyFrameBinds",
+        "void StateMachineInstance::removeStateKeyFrameBinds",
+    );
+    assert!(
+        !build_member.contains("if (keyframe == nullptr)"),
+        "pinned C++ deliberately dereferences a retained null keyframe slot"
+    );
+    let destructor = fl_c5_cpp_member(
+        &source,
+        "StateMachineInstance::~StateMachineInstance()",
+        "void StateMachineInstance::dispose()",
+    );
+    let delete_binds = destructor.find("deleteDataBinds();").expect("delete binds");
+    let clear_tracking = destructor
+        .find("m_stateKeyFrameDataBinds.clear();")
+        .expect("clear keyframe tracking");
+    let delete_layers = destructor
+        .find("delete[] m_layers;")
+        .expect("delete layers");
+    assert!(delete_binds < clear_tracking);
+    assert!(clear_tracking < delete_layers);
+}
+
+#[test]
+fn fl_c5_keyframe_first_source_bind() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_keyframe_first_source_bind.riv";
+    let bytes = synthetic_fl_c5_keyframe_data_bind(96_980, true, false, false);
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-update".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (file, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    assert!(state_machine.bind_view_model_instance_context(&file, 0, 0));
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust.update_components();
+
+    assert_close(
+        cpp_runtime_update_transform_x(&cpp, 1),
+        11.0,
+        "C++ first source bind",
+    );
+    assert_close(transform_x(&rust, 1), 11.0, "Rust first source bind");
+}
+
+#[test]
+fn fl_c5_keyframe_initialize_converter_and_enrollment_are_observed_end_to_end() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_keyframe_initialize_converter_enrollment.riv";
+    let bytes = synthetic_fl_c5_keyframe_data_bind(96_982, false, false, true);
+    let args = [
+        "--runtime-bind-owned-view-model-number-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "11".to_owned(),
+        "--runtime-advance-then-set-owned-view-model-source-number-by-name".to_owned(),
+        "0".to_owned(),
+        "first".to_owned(),
+        "0".to_owned(),
+        "13".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-update".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (file, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    let context = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(&file, 0).expect("Rust owned ViewModel context"),
+    );
+    assert!(context.borrow_mut().set_number_by_property_index(0, 11.0));
+    assert!(state_machine.bind_owned_view_model_handle(&context));
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    assert_close(
+        transform_x(&rust, 1),
+        22.0,
+        "the initialized keyframe clone exposes its converted source",
+    );
+    assert!(context.borrow_mut().set_number_by_property_index(0, 13.0));
+    rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    rust.update_components();
+
+    assert_close(
+        cpp_runtime_update_transform_x(&cpp, 1),
+        26.0,
+        "C++ initialized, converted, enrolled keyframe bind",
+    );
+    assert_close(
+        transform_x(&rust, 1),
+        26.0,
+        "Rust initialized, converted, enrolled keyframe bind",
+    );
+}
+
+#[test]
+fn fl_c5_keyframe_initialize_converter_order() {
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let build = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::buildStateKeyFrameBinds",
+        "void StateMachineInstance::removeStateKeyFrameBinds",
+    );
+    let holder = build.find("makeKeyFrameValueHolder").expect("holder");
+    let clone = build.find("dataBind->clone()").expect("clone");
+    let file = build.find("dataBindClone->file(").expect("file");
+    let target = build.find("dataBindClone->target(").expect("target");
+    let property = build
+        .find("dataBindClone->propertyKey(")
+        .expect("property key");
+    let initialize = build
+        .find("dataBindClone->initialize();")
+        .expect("initialize");
+    let converter = build
+        .find("dataBindClone->converter(dataBind->converter()")
+        .expect("converter");
+    let enrollment = build
+        .find("addDataBind(dataBindClone);")
+        .expect("enrollment");
+    let tracking = build
+        .find("m_stateKeyFrameDataBinds[stateInstance].push_back")
+        .expect("state tracking");
+    assert!(holder < clone);
+    assert!(clone < file);
+    assert!(file < target);
+    assert!(target < property);
+    assert!(property < initialize);
+    assert!(initialize < converter);
+    assert!(converter < enrollment);
+    assert!(enrollment < tracking);
+    fl_c5_run_rust_unit_probe("fl_c5_keyframe_data_bind_supported_holders_and_live_resolution");
+}
+
+#[test]
+fn fl_c5_keyframe_bound_context_lifecycle() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_keyframe_bound_context_lifecycle.riv";
+    let bytes = synthetic_fl_c5_keyframe_data_bind(96_981, false, true, false);
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.25".to_owned(),
+        "--runtime-update".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (file, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    assert!(state_machine.bind_view_model_instance_context(&file, 0, 0));
+    let mut snapshot = state_machine.clone();
+    let (_, mut snapshot_artboard) = read_rust_instance_from_bytes(&bytes, label);
+    snapshot_artboard.advance_state_machine_instance(&mut snapshot, 0.0);
+    snapshot_artboard.update_components();
+    assert_close(
+        transform_x(&snapshot_artboard, 1),
+        11.0,
+        "Rust snapshot rebuilds isolated keyframe bind occurrences",
+    );
+    assert!(state_machine.set_bool(0, true));
+    rust.advance_state_machine_instance(&mut state_machine, 0.25);
+    rust.update_components();
+
+    assert_close(
+        cpp_runtime_update_transform_x(&cpp, 1),
+        11.0,
+        "C++ already-bound new occurrence",
+    );
+    assert_close(
+        transform_x(&rust, 1),
+        11.0,
+        "Rust already-bound new occurrence",
+    );
+}
+
+#[test]
+fn fl_c5_interrupted_transition_releases_old_keyframe_binds_before_reset() {
+    let probe = probe_path().expect("the interrupted-transition differential requires cpp_probe");
+    let label = "synthetic/fl_c5_interrupted_transition_keyframe_bind.riv";
+    let bytes = synthetic_fl_c5_interrupted_transition_keyframe_bind(96_998);
+    let args = [
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.25".to_owned(),
+        "--runtime-set-state-machine-bool".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "1".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-update".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (file, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut machine = rust
+        .state_machine_instance(0)
+        .expect("Rust interrupted-transition machine");
+    assert!(machine.bind_view_model_instance_context(&file, 0, 0));
+    let mut rust_steps = Vec::new();
+    let advanced = rust.advance_state_machine_instance(&mut machine, 0.0);
+    rust_steps.push((advanced, machine.clone()));
+    assert!(machine.set_bool(0, true));
+    let advanced = rust.advance_state_machine_instance(&mut machine, 0.25);
+    rust_steps.push((advanced, machine.clone()));
+    assert!(machine.set_bool(1, true));
+    let advanced = rust.advance_state_machine_instance(&mut machine, 0.0);
+    rust_steps.push((advanced, machine.clone()));
+    let advanced = rust.advance_state_machine_instance(&mut machine, 0.0);
+    rust_steps.push((advanced, machine.clone()));
+    rust.update_components();
+
+    let cpp_steps = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_steps.len(), rust_steps.len());
+    for (index, (cpp_step, (advanced, rust_step))) in cpp_steps.iter().zip(&rust_steps).enumerate()
+    {
+        compare_state_machine_advance(
+            cpp_step,
+            rust_step,
+            *advanced,
+            &format!("{label} step {index}"),
+        );
+    }
+    assert_close(
+        transform_x(&rust, 1),
+        cpp_runtime_update_transform_x(&cpp, 1),
+        "interrupted transition with an old bound source",
+    );
+
+    let layer_source = std::fs::read_to_string(
+        repo_root().join("crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"),
+    )
+    .expect("read Rust state-machine layer owner");
+    let interruption = layer_source
+        .find("// A transition interruption releases the older transition-source")
+        .expect("interrupted-transition teardown");
+    let ordered = &layer_source[interruption..];
+    let remove_binds = ordered
+        .find("state_from.remove_key_frame_data_binds();")
+        .expect("old source bind removal");
+    let release = ordered
+        .find("self.state_from = None;")
+        .expect("old source release");
+    let replace = ordered
+        .find("self.state_from = previous_state;")
+        .expect("new source assignment");
+    let reset = ordered
+        .find("AnimationResetFactory::from_animation_instances(")
+        .expect("replacement reset construction");
+    assert!(
+        remove_binds < release && release < replace && replace < reset,
+        "the live interrupted-transition proof is guarded against restoring the old reset-before-teardown inversion",
+    );
+}
+
+fn fl_c5_rust_probe_receipt<'a>(output: &'a str, marker: &str) -> &'a str {
+    output
+        .lines()
+        .find_map(|line| line.trim().strip_prefix(marker))
+        .unwrap_or_else(|| panic!("Rust differential probe omitted {marker:?}\n{output}"))
+}
+
+fn synthetic_fl_c5_bind_family_contexts(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        for (view_model_index, (name, global)) in [
+            ("Main", false),
+            ("Global A", true),
+            ("Global B", true),
+            ("Standard", false),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            push_object_with_properties(bytes, "ViewModel", |bytes| {
+                push_string_property(bytes, "ViewModel", "name", name);
+                if global {
+                    push_uint_property(bytes, "ViewModel", "viewModelType", 2);
+                }
+            });
+            push_object_with_properties(bytes, "ViewModelInstance", |bytes| {
+                push_string_property(
+                    bytes,
+                    "ViewModelInstance",
+                    "name",
+                    &format!("{name} instance"),
+                );
+                push_uint_property(
+                    bytes,
+                    "ViewModelInstance",
+                    "viewModelId",
+                    u64::try_from(view_model_index).expect("small fixture index"),
+                );
+            });
+        }
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_uint_property(bytes, "Artboard", "viewModelId", 0);
+        });
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+    })
+}
+
+#[test]
+fn fl_c5_bind_family_typed_default_context_matches_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/fl_c5_bind_family_default_context.riv";
+    let bytes = synthetic_state_machine_default_viewmodel_number_blend_state(90_510);
+    let args = [
+        "--runtime-bind-default-view-model-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut state_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust state-machine instance");
+    assert!(
+        state_machine.bind_default_view_model_context(),
+        "typed default-context adaptation must bind through the WP5 primary path"
+    );
+    let advanced = rust.advance_state_machine_instance(&mut state_machine, 0.0);
+    let cpp_report = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("C++ state-machine bind report");
+    compare_state_machine_advance(cpp_report, &state_machine, advanced, label);
+
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let bind = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::bind()",
+        "void StateMachineInstance::completeViewModelInstances()",
+    );
+    let complete = bind
+        .find("completeViewModelInstances();")
+        .expect("C++ bind completion phase");
+    let artboard = bind
+        .find("m_artboardInstance->internalDataContext(m_DataContext);")
+        .expect("C++ bind artboard phase");
+    let machine = bind
+        .rfind("internalDataContext(m_DataContext);")
+        .expect("C++ bind machine phase");
+    assert!(
+        complete < artboard && artboard < machine,
+        "C++ bind must complete, then bind artboard, then bind state machine"
+    );
+}
+
+#[test]
+fn fl_c5_bind_null_matrix_matches_pinned_cpp_members() {
+    let rust_output =
+        fl_c5_run_rust_unit_probe("fl_c5_bind_null_matrix_keeps_every_cpp_branch_distinct");
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_bind_null_matrix_live_cpp.riv";
+    let bytes = synthetic_fl_c5_bind_family_contexts(96_960);
+    let args = [
+        "--runtime-set-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "3".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-bind-null-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(reports.len(), 3);
+    assert!(reports[0].has_data_context && reports[0].has_main_view_model_instance);
+    assert_eq!(
+        (
+            reports[0].main_view_model_index,
+            reports[0].main_view_model_instance_index
+        ),
+        (0, 0),
+        "setViewModelInstance must stage the selected main without binding"
+    );
+    assert_eq!(
+        (
+            reports[1].main_view_model_index,
+            reports[1].main_view_model_instance_index
+        ),
+        (3, 0),
+        "non-null bindViewModelInstance must replace and bind the main"
+    );
+    assert!(
+        !reports[2].has_data_context,
+        "null bindViewModelInstance must clear the machine context"
+    );
+    let cpp_receipt = format!(
+        " staged={} bound={} cleared={}",
+        reports[0].main_view_model_index,
+        reports[1].main_view_model_index,
+        usize::from(!reports[2].has_data_context)
+    );
+    assert_eq!(
+        fl_c5_rust_probe_receipt(&rust_output, "FLC5_BIND_NULL_DIFF"),
+        cpp_receipt,
+        "the Rust and pinned-C++ null/set/bind branches must produce the same live receipt"
+    );
+}
+
+#[test]
+fn fl_c5_inherit_context_a_then_b_retains_pinned_cpp_registration_hazard() {
+    let rust_output = fl_c5_run_rust_unit_probe(
+        "fl_c5_bind_inherit_a_then_b_retains_the_prior_registration_hazard",
+    );
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_inherit_a_then_b_live_cpp.riv";
+    let bytes = synthetic_fl_c5_bind_family_contexts(96_961);
+    let args = [
+        "--runtime-inherit-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-inherit-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "3".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let report = &cpp.artboards[0].runtime_state_machine_advances[0];
+    assert_eq!(
+        (
+            report.main_view_model_index,
+            report.main_view_model_instance_index
+        ),
+        (3, 0),
+        "the second inherited context must become current"
+    );
+    assert_eq!(
+        report.inherited_data_context_dependent_counts,
+        [1, 1],
+        "A→B inheritance must retain A's registration while registering B"
+    );
+    let cpp_receipt = format!(
+        " current={} a_registered={} b_registered={}",
+        report.main_view_model_index,
+        usize::from(report.inherited_data_context_dependent_counts[0] != 0),
+        usize::from(report.inherited_data_context_dependent_counts[1] != 0)
+    );
+    assert_eq!(
+        fl_c5_rust_probe_receipt(&rust_output, "FLC5_INHERIT_DIFF"),
+        cpp_receipt,
+        "the Rust and pinned-C++ A→B inheritance hazards must match live"
+    );
+}
+
+#[test]
+fn fl_c5_complete_view_models_main_then_globals_matches_pinned_cpp() {
+    let rust_output = fl_c5_run_rust_unit_probe(
+        "fl_c5_bind_staged_main_and_globals_apply_only_through_primary_bind",
+    );
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_complete_view_models_live_cpp.riv";
+    let bytes = synthetic_fl_c5_bind_family_contexts(96_962);
+    let args = [
+        "--runtime-set-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-global-view-model-instance-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "1".to_owned(),
+        "3".to_owned(),
+        "0".to_owned(),
+        "--runtime-complete-view-model-instances-state-machine-context".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let report = &cpp.artboards[0].runtime_state_machine_advances[0];
+    assert_eq!(
+        (
+            report.main_view_model_index,
+            report.main_view_model_instance_index
+        ),
+        (0, 0),
+        "completion must preserve an occupied main"
+    );
+    assert_eq!(report.global_view_model_slots.len(), 2);
+    assert_eq!(
+        (
+            report.global_view_model_slots[0].slot_view_model_index,
+            report.global_view_model_slots[0].instance_view_model_index,
+            report.global_view_model_slots[0].instance_index,
+        ),
+        (1, 3, 0),
+        "completion must preserve a cross-model occupant by slot identity"
+    );
+    assert!(
+        report.global_view_model_slots[1].has_instance,
+        "completion must fill the next missing global slot"
+    );
+    let cpp_receipt = format!(
+        " main={} global_a={} global_b={}",
+        report.main_view_model_index,
+        report.global_view_model_slots[0].instance_view_model_index,
+        usize::from(report.global_view_model_slots[1].has_instance)
+    );
+    assert_eq!(
+        fl_c5_rust_probe_receipt(&rust_output, "FLC5_COMPLETE_DIFF"),
+        cpp_receipt,
+        "the Rust and pinned-C++ main/global completion receipts must match live"
+    );
+}
+
+#[test]
+fn fl_c5_apply_events_chaining_and_listener_order() {
+    assert_state_machine_fire_event_listeners_apply_on_the_next_frame();
+    fl_c5_run_rust_unit_probe("fl_c5_event_apply_batches_chaining_and_exact_100_cap");
+    fl_c5_run_rust_unit_probe("fl_c5_event_listener_major_event_minor_single_and_multi_order");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let apply = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::applyEvents()",
+        "void StateMachineInstance::setExternalFocusManager(",
+    );
+    let events = apply.find("notifyEventListeners").expect("C++ event phase");
+    let view_models = apply
+        .find("notifyListenerViewModels")
+        .expect("C++ ViewModel phase");
+    assert!(events < view_models);
+}
+
+#[test]
+fn fl_c5_apply_events_100_batches() {
+    assert_fl_c5_self_chaining_event_stops_at_100_against_cpp();
+    fl_c5_run_rust_unit_probe("fl_c5_event_apply_batches_chaining_and_exact_100_cap");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let apply = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::applyEvents()",
+        "void StateMachineInstance::setExternalFocusManager(",
+    );
+    assert!(apply.contains("int maxIterations = 100;"));
+    assert!(apply.contains("currentIteration++ < maxIterations"));
+}
+
+#[test]
+fn fl_c5_event_mid_callback_visibility() {
+    assert_state_machine_fire_event_listeners_apply_on_the_next_frame();
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_event_mid_callback_visibility_excludes_the_reporting_snapshot",
+    );
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let apply = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::applyEvents()",
+        "void StateMachineInstance::setExternalFocusManager(",
+    );
+    let snapshot = apply
+        .find("m_reportingEvents = m_reportedEvents;")
+        .expect("C++ event snapshot");
+    let clear = apply
+        .find("m_reportedEvents.clear();")
+        .expect("C++ pending clear");
+    let notify = apply
+        .find("notifyEventListeners")
+        .expect("C++ notification");
+    assert!(snapshot < clear && clear < notify);
+}
+
+#[test]
+fn fl_c5_trigger_zero_suppression() {
+    assert_state_machine_fire_event_listeners_apply_on_the_next_frame();
+    fl_c5_run_rust_unit_probe("fl_c5_event_trigger_zero_suppression_and_duplicate_listener_fifo");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let listener = fl_c5_cpp_member(
+        &source,
+        "class ListenerViewModel",
+        "ListenerViewModelPropertyBinding::ListenerViewModelPropertyBinding(",
+    );
+    assert!(listener.contains("propertyValue() != 0"));
+}
+
+#[test]
+fn fl_c5_event_bubbling_audio_seam_order() {
+    assert_state_machine_fire_event_listeners_apply_on_the_next_frame();
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_event_bubbling_precedes_the_recorded_audio_seam_through_two_ancestors",
+    );
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let notify = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::notifyEventListeners(",
+        "void StateMachineInstance::enablePointerEvents(",
+    );
+    let local = notify
+        .find("for (size_t i = 0; i < m_machine->listenerCount(); i++)")
+        .expect("C++ local event-listener phase");
+    let bubble = notify
+        .find("for (auto listener : nestedEventListeners())")
+        .expect("C++ nested bubbling phase");
+    let audio = notify
+        .find("event->is<AudioEvent>()")
+        .expect("C++ audio phase");
+    assert!(local < bubble && bubble < audio);
+}
+
+#[test]
+fn fl_c5_production_event_source_chains_are_atomic() {
+    fl_c5_run_rust_unit_probe(
+        "production_advance_and_apply_dispatches_each_sibling_reporter_chain_atomically",
+    );
+    fl_c5_run_rust_unit_probe(
+        "production_advance_and_apply_flushes_prior_source_audio_before_later_script_error",
+    );
+    let probe = probe_path().expect("the production atomicity differential requires cpp_probe");
+    let label = "synthetic/fl_c5_sibling_nested_event_reporters.riv";
+    let bytes = synthetic_sibling_nested_event_reporters(96_995);
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-advance-and-apply-state-machine".to_owned(),
+            "0".to_owned(),
+            "0.25".to_owned(),
+            "--runtime-advance-and-apply-state-machine".to_owned(),
+            "0".to_owned(),
+            "0.25".to_owned(),
+        ],
+    );
+    let cpp_snapshots = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .map(|report| {
+            report
+                .reported_events
+                .iter()
+                .filter_map(|event| event.event_name.clone())
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cpp_snapshots,
+        [
+            Vec::<String>::new(),
+            vec!["A-root".to_owned(), "B-root".to_owned()],
+        ],
+        "the live pinned-C++ advanceAndApply path must preserve sibling source order A then B; \
+         the paired Rust production unit above asserts each source's complete local/root/audio \
+         chain in that same order through its real advance_and_apply facade"
+    );
+    let runtime = read_runtime_file(&bytes).expect("Rust imports the sibling reporter fixture");
+    let graph =
+        GraphFile::from_runtime_file(&runtime).expect("Rust graphs the sibling reporter fixture");
+    let mut rust = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        graph.artboards.first().expect("Rust root artboard"),
+        &graph.artboards,
+    )
+    .expect("Rust mounts both sibling reporter artboards");
+    assert_eq!(rust.runtime_nested_state_machine_reports().len(), 2);
+    let mut rust_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust root state-machine occurrence");
+    let rust_trace = RuntimeNestedEventChainTrace::start();
+    rust_machine
+        .advance_and_apply(&mut rust, 0.25)
+        .expect("Rust production sibling-source reporting advance");
+    rust_machine
+        .advance_and_apply(&mut rust, 0.25)
+        .expect("Rust production sibling-source notify advance");
+    let rust_steps = rust_trace.finish();
+    let rust_root_names = (0..rust_machine.reported_event_count())
+        .filter_map(|index| {
+            rust_machine
+                .reported_event(&rust, index)
+                .and_then(|event| event.name().map(str::to_owned))
+        })
+        .collect::<Vec<_>>();
+
+    let cpp_first = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("pinned C++ source-reporting frame");
+    assert_eq!(
+        cpp_first
+            .nested_reported_events
+            .iter()
+            .map(|source| source.local_id)
+            .collect::<Vec<_>>(),
+        [2, 4],
+        "pinned C++ advances the authored A then B NestedStateMachine sources"
+    );
+    let audio_event_core_type = u32::from(
+        definition_by_name("AudioEvent")
+            .expect("AudioEvent schema definition")
+            .type_key
+            .int,
+    );
+    let cpp_notified_sources = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .flat_map(|report| &report.nested_reported_events)
+        .filter(|source| !source.notify_batches.is_empty())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cpp_notified_sources
+            .iter()
+            .map(|source| source.local_id)
+            .collect::<Vec<_>>(),
+        [2, 4],
+        "the actual pinned-C++ notify entries must preserve authored source order"
+    );
+    let cpp_local_names = cpp_notified_sources
+        .iter()
+        .map(|source| {
+            let [event] = source.reported_events.as_slice() else {
+                panic!("each pinned C++ sibling must report exactly one event");
+            };
+            assert_eq!(
+                source
+                    .notify_batches
+                    .iter()
+                    .map(Vec::len)
+                    .collect::<Vec<_>>(),
+                [1],
+                "each pinned-C++ sibling must enter notify with one singleton batch"
+            );
+            assert_eq!(event.event_core_type, Some(audio_event_core_type));
+            assert_eq!(event.seconds_delay, 0.0);
+            event
+                .event_name
+                .clone()
+                .expect("pinned C++ AudioEvent name")
+        })
+        .collect::<Vec<_>>();
+    let cpp_root_names = cpp_snapshots
+        .iter()
+        .find(|snapshot| !snapshot.is_empty())
+        .expect("pinned C++ root-listener reporting snapshot");
+    assert_eq!(rust_root_names, *cpp_root_names);
+
+    // The probe live-compares the authored source order and both report-name
+    // phases. The C++ audio positions below are source-established rather
+    // than probe-recorded; notifyEventListeners synchronously bubbles before
+    // its AudioEvent branch, as asserted immediately after this comparison.
+    let source_established_cpp_total_order = cpp_local_names
+        .iter()
+        .zip(cpp_root_names)
+        .flat_map(|(local, root)| {
+            let source = local
+                .strip_suffix("-local")
+                .expect("source event carries the local phase suffix");
+            [local.clone(), root.clone(), format!("{source}-audio")]
+        })
+        .collect::<Vec<_>>();
+    let rust_total_order = rust_steps
+        .iter()
+        .map(|step| {
+            let source = match step.source_local_id {
+                2 => "A",
+                4 => "B",
+                other => panic!("unexpected Rust nested source {other}"),
+            };
+            let phase = match step.phase {
+                RuntimeNestedEventChainPhase::SourceLocal => "local",
+                RuntimeNestedEventChainPhase::AncestorDispatch => "root",
+                RuntimeNestedEventChainPhase::AudioUnwind => "audio",
+            };
+            format!("{source}-{phase}")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rust_total_order, source_established_cpp_total_order,
+        "live-compared C++ report names plus the cited synchronous audio chronology require \
+         A-local/root/audio before B-local/root/audio on the Rust production path"
+    );
+
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let notify = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::notifyEventListeners(",
+        "void StateMachineInstance::enablePointerEvents(",
+    );
+    let local = notify
+        .find("for (size_t i = 0; i < m_machine->listenerCount(); i++)")
+        .expect("C++ local event-listener phase");
+    let synchronous_bubble = notify
+        .find("listener->notify(events, nestedArtboard());")
+        .expect("C++ synchronous parent notification");
+    let audio_unwind = notify
+        .find("event->is<AudioEvent>()")
+        .expect("C++ audio unwind");
+    assert!(
+        local < synchronous_bubble && synchronous_bubble < audio_unwind,
+        "pinned C++ must finish the source's local, ancestor, and audio phases in one call"
+    );
+}
+
+#[test]
+fn fl_c5_same_host_multi_reporter_chains_are_atomic() {
+    fl_c5_run_rust_unit_probe(
+        "production_advance_and_apply_dispatches_each_same_host_reporter_chain_atomically",
+    );
+    let probe = probe_path().expect("the same-host atomicity differential requires cpp_probe");
+    let label = "synthetic/fl_c5_same_host_nested_event_reporters.riv";
+    let bytes = synthetic_same_host_nested_event_reporters(96_996);
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-advance-and-apply-state-machine".to_owned(),
+            "0".to_owned(),
+            "0.25".to_owned(),
+            "--runtime-advance-and-apply-state-machine".to_owned(),
+            "0".to_owned(),
+            "0.25".to_owned(),
+        ],
+    );
+    let cpp_root_names = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .flat_map(|report| &report.reported_events)
+        .filter_map(|event| event.event_name.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(cpp_root_names, ["A-root", "B-root"]);
+    let cpp_sources = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .flat_map(|report| &report.nested_reported_events)
+        .filter(|source| !source.notify_batches.is_empty())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cpp_sources
+            .iter()
+            .map(|source| source.local_id)
+            .collect::<Vec<_>>(),
+        [2, 3],
+        "pinned C++ advances both authored NestedStateMachine owners on the one host",
+    );
+    assert_eq!(
+        cpp_sources
+            .iter()
+            .map(|source| {
+                assert_eq!(
+                    source
+                        .notify_batches
+                        .iter()
+                        .map(Vec::len)
+                        .collect::<Vec<_>>(),
+                    [1],
+                    "each same-host C++ reporter must enter notify with one singleton batch"
+                );
+                source.reported_events[0].event_name.as_deref()
+            })
+            .collect::<Vec<_>>(),
+        [Some("A-local"), Some("B-local")],
+    );
+
+    let runtime = read_runtime_file(&bytes).expect("Rust imports same-host reporter fixture");
+    let graph =
+        GraphFile::from_runtime_file(&runtime).expect("Rust graphs same-host reporter fixture");
+    let mut rust = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        graph.artboards.first().expect("Rust root artboard"),
+        &graph.artboards,
+    )
+    .expect("Rust mounts the same-host reporter artboard");
+    let mut rust_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust root state-machine occurrence");
+    let rust_trace = RuntimeNestedEventChainTrace::start();
+    rust_machine
+        .advance_and_apply(&mut rust, 0.25)
+        .expect("Rust production same-host reporting advance");
+    rust_machine
+        .advance_and_apply(&mut rust, 0.25)
+        .expect("Rust production same-host notify advance");
+    let rust_steps = rust_trace.finish();
+    assert_eq!(
+        rust_steps
+            .iter()
+            .map(|step| (step.source_local_id, step.phase))
+            .collect::<Vec<_>>(),
+        [
+            (2, RuntimeNestedEventChainPhase::SourceLocal),
+            (2, RuntimeNestedEventChainPhase::AncestorDispatch),
+            (2, RuntimeNestedEventChainPhase::AudioUnwind),
+            (3, RuntimeNestedEventChainPhase::SourceLocal),
+            (3, RuntimeNestedEventChainPhase::AncestorDispatch),
+            (3, RuntimeNestedEventChainPhase::AudioUnwind),
+        ],
+        "each animation owner completes its production report chain before the next owner advances",
+    );
+
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let notify = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::notifyEventListeners(",
+        "void StateMachineInstance::enablePointerEvents(",
+    );
+    assert!(
+        notify.find("listener->notify(events, nestedArtboard())")
+            < notify.find("event->is<AudioEvent>()"),
+        "source inspection establishes the C++ ancestor-before-audio chronology; the live probe compares authored source and report order",
+    );
+}
+
+#[test]
+fn fl_c5_deep_nested_owner_reports_complete_to_root_before_subtree_and_error() {
+    fl_c5_run_rust_unit_probe(
+        "production_deep_nested_owner_chain_reaches_root_before_subtree_continuation",
+    );
+    fl_c5_run_rust_unit_probe(
+        "production_deep_nested_owner_chain_survives_later_subtree_script_error",
+    );
+
+    let probe = probe_path().expect("the deep nested-event differential requires cpp_probe");
+    let label = "synthetic/fl_c5_deep_nested_event_reporter.riv";
+    let bytes = synthetic_deep_nested_event_reporter(96_998);
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-advance-and-apply-state-machine".to_owned(),
+            "0".to_owned(),
+            "0.25".to_owned(),
+            "--runtime-advance-and-apply-state-machine".to_owned(),
+            "0".to_owned(),
+            "0.25".to_owned(),
+            "--runtime-advance-and-apply-state-machine".to_owned(),
+            "0".to_owned(),
+            "0.25".to_owned(),
+        ],
+    );
+    let cpp_middle_names = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .flat_map(|report| &report.nested_reported_events)
+        .flat_map(|source| &source.reported_events)
+        .filter_map(|event| event.event_name.as_deref())
+        .collect::<Vec<_>>();
+    let cpp_root_names = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .flat_map(|report| &report.reported_events)
+        .filter_map(|event| event.event_name.as_deref())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cpp_middle_names,
+        ["leaf-local", "middle-local"],
+        "the pinned-C++ leaf report first crosses the intermediate owner, whose own queued report follows on the next applyEvents frame",
+    );
+    assert_eq!(
+        cpp_root_names,
+        ["root-local"],
+        "the pinned-C++ intermediate report reaches the top-level owner",
+    );
+    let cpp_middle_report = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .rev()
+        .flat_map(|report| &report.nested_reported_events)
+        .find(|source| !source.pre_mix_node_xs.is_empty())
+        .expect("pinned-C++ ancestor notification observes the middle source");
+    assert_eq!(cpp_middle_report.notify_batches.len(), 1);
+    assert_eq!(
+        cpp_middle_report.notify_batches[0].len(),
+        1,
+        "the middle state-machine report enters the ancestor as one live batch",
+    );
+    let cpp_report_time_source_x = cpp_middle_report.pre_mix_node_xs[0];
+    assert!(
+        cpp_middle_report.has_mixed_node_x
+            && cpp_report_time_source_x != cpp_middle_report.mixed_node_x,
+        "the C++ ancestor sees the source layer before the remainder of that source frame mixes",
+    );
+
+    let runtime = read_runtime_file(&bytes).expect("Rust imports the deep event fixture");
+    let graph = GraphFile::from_runtime_file(&runtime).expect("Rust graphs the deep event fixture");
+    let mut rust = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        graph.artboards.first().expect("Rust root artboard"),
+        &graph.artboards,
+    )
+    .expect("Rust mounts the three-level event topology");
+    let mut rust_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust root state-machine occurrence");
+    let rust_trace = RuntimeNestedEventChainTrace::start();
+    let rust_notify_batches = RuntimeNestedNotifyBatchTrace::start();
+    for _ in 0..3 {
+        rust_machine
+            .advance_and_apply(&mut rust, 0.25)
+            .expect("Rust production deep nested-event frame");
+    }
+    let rust_steps = rust_trace.finish();
+    let rust_notify_batches = rust_notify_batches.finish();
+    let rust_phases = rust_steps.iter().map(|step| step.phase).collect::<Vec<_>>();
+    assert_eq!(
+        &rust_phases[..6],
+        [
+            RuntimeNestedEventChainPhase::SourceLocal,
+            RuntimeNestedEventChainPhase::SourceLocal,
+            RuntimeNestedEventChainPhase::AncestorDispatch,
+            RuntimeNestedEventChainPhase::AudioUnwind,
+            RuntimeNestedEventChainPhase::AncestorDispatch,
+            RuntimeNestedEventChainPhase::AudioUnwind,
+        ],
+        "the original full-height callback-major leaf/intermediate chain remains exact",
+    );
+    assert_eq!(
+        &rust_phases[6..],
+        [
+            RuntimeNestedEventChainPhase::SourceLocal,
+            RuntimeNestedEventChainPhase::AncestorDispatch,
+            RuntimeNestedEventChainPhase::AudioUnwind,
+        ],
+        "the later queued intermediate report completes its own exact chain",
+    );
+    let rust_report_time_source_x = rust_notify_batches
+        .iter()
+        .rev()
+        .find_map(|batch| batch.source_layer_value)
+        .expect("Rust actual ancestor notify entry records the live source-layer value");
+    assert_close(
+        rust_report_time_source_x,
+        cpp_report_time_source_x,
+        "Rust and C++ expose the same pre-mix source-layer value to the ancestor",
+    );
+    let mut rust_mixed_source_x = None;
+    rust.try_visit_nested_artboard_instances_mut(&mut |depth,
+                                                       _graph_global_id,
+                                                       child|
+     -> Result<(), ()> {
+        if depth == 2 {
+            rust_mixed_source_x = child.transform_property(2, TransformProperty::X);
+        }
+        Ok(())
+    })
+    .expect("visit the Rust deep source layer");
+    assert_eq!(
+        rust_mixed_source_x,
+        Some(cpp_middle_report.mixed_node_x),
+        "both runtimes finish the source frame at the same later mixed value",
+    );
+    assert_ne!(
+        rust_report_time_source_x,
+        rust_mixed_source_x.expect("Rust final source-layer value"),
+        "Rust ancestor visibility is report-time/pre-mix rather than post-frame",
+    );
+
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let notify = fl_c5_cpp_member(
+        &source,
+        "void StateMachineInstance::notifyEventListeners(",
+        "void StateMachineInstance::enablePointerEvents(",
+    );
+    assert!(
+        notify.find("listener->notify(events, nestedArtboard())")
+            < notify.find("event->is<AudioEvent>()"),
+        "pinned C++ recursively finishes ancestor notification before each audio unwind",
+    );
+}
+
+#[test]
+fn fl_c5_nested_simple_callbacks_are_singleton_and_overshoot_delay_is_zero() {
+    fl_c5_run_rust_unit_probe(
+        "production_nested_simple_animation_delivers_each_callback_chain_before_mix",
+    );
+    let probe = probe_path().expect("the nested-simple differential requires cpp_probe");
+    let label = "synthetic/fl_c5_nested_simple_timeline_events.riv";
+    let bytes = synthetic_nested_simple_timeline_events(96_997);
+    let args = [
+        "--runtime-advance-and-apply-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.75".to_owned(),
+        "--runtime-advance-and-apply-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let cpp_root_names = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .flat_map(|report| &report.reported_events)
+        .filter_map(|event| event.event_name.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cpp_root_names,
+        ["parent-fired"],
+        "the pinned-C++ parent listener fires for the nested simple timeline Event",
+    );
+    let cpp_nested_simple = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .first()
+        .expect("pinned-C++ nested-simple reporting frame")
+        .nested_reported_events
+        .iter()
+        .find(|source| source.local_id == 2)
+        .expect("pinned-C++ nested simple reporter");
+    let event_core_type = u32::from(
+        definition_by_name("Event")
+            .expect("Event schema definition")
+            .type_key
+            .int,
+    );
+    let audio_event_core_type = u32::from(
+        definition_by_name("AudioEvent")
+            .expect("AudioEvent schema definition")
+            .type_key
+            .int,
+    );
+    assert_eq!(
+        cpp_nested_simple
+            .reported_events
+            .iter()
+            .map(|event| {
+                (
+                    event.event_core_type,
+                    event.event_name.as_deref(),
+                    event.seconds_delay,
+                )
+            })
+            .collect::<Vec<_>>(),
+        [
+            (Some(event_core_type), Some("timeline-event"), 0.0),
+            (Some(audio_event_core_type), Some("timeline-audio"), 0.0,),
+        ],
+        "the live C++ nested linear reporter emits the Event followed by exactly one AudioEvent",
+    );
+    assert_eq!(
+        cpp_nested_simple
+            .notify_batches
+            .iter()
+            .map(Vec::len)
+            .collect::<Vec<_>>(),
+        [1, 1],
+        "pinned C++ notifies once per crossed callback instead of flattening the frame",
+    );
+    assert_eq!(
+        cpp_nested_simple
+            .notify_batches
+            .iter()
+            .map(|batch| batch[0].seconds_delay)
+            .collect::<Vec<_>>(),
+        [0.0, 0.0],
+        "pinned C++ discards nested-simple overshoot delay at the reporter seam",
+    );
+    assert_eq!(
+        cpp_nested_simple.pre_mix_node_xs,
+        [2.0, 2.0],
+        "each live C++ callback observes the authored pre-mix Node.x before the nested-simple mix",
+    );
+    assert!(cpp_nested_simple.has_mixed_node_x);
+    assert_close(
+        cpp_nested_simple.mixed_node_x,
+        5.75,
+        "pinned C++ nested-simple final mixed Node.x",
+    );
+
+    let runtime = read_runtime_file(&bytes).expect("Rust imports nested-simple event fixture");
+    let graph =
+        GraphFile::from_runtime_file(&runtime).expect("Rust graphs nested-simple event fixture");
+    let mut rust = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        graph.artboards.first().expect("Rust root artboard"),
+        &graph.artboards,
+    )
+    .expect("Rust mounts nested-simple event fixture");
+    let mut rust_machine = rust
+        .state_machine_instance(0)
+        .expect("Rust root state-machine occurrence");
+    let rust_trace = RuntimeNestedEventChainTrace::start();
+    let rust_notify_batches = RuntimeNestedNotifyBatchTrace::start();
+    rust_machine
+        .advance_and_apply(&mut rust, 0.75)
+        .expect("Rust nested-simple production advance");
+    let rust_steps = rust_trace.finish();
+    let rust_notify_batches = rust_notify_batches.finish();
+    let mut rust_root_names = (0..rust_machine.reported_event_count())
+        .filter_map(|index| {
+            rust_machine
+                .reported_event(&rust, index)
+                .and_then(|event| event.name().map(str::to_owned))
+        })
+        .collect::<Vec<_>>();
+    rust_machine
+        .advance_and_apply(&mut rust, 0.0)
+        .expect("Rust publishes the parent listener report");
+    rust_root_names.extend(
+        (0..rust_machine.reported_event_count()).filter_map(|index| {
+            rust_machine
+                .reported_event(&rust, index)
+                .and_then(|event| event.name().map(str::to_owned))
+        }),
+    );
+    assert_eq!(rust_root_names, cpp_root_names);
+    assert_eq!(
+        rust_steps
+            .iter()
+            .map(|step| (step.source_local_id, step.phase))
+            .collect::<Vec<_>>(),
+        [
+            (2, RuntimeNestedEventChainPhase::SourceLocal),
+            (2, RuntimeNestedEventChainPhase::AncestorDispatch),
+            (2, RuntimeNestedEventChainPhase::AudioUnwind),
+            (2, RuntimeNestedEventChainPhase::SourceLocal),
+            (2, RuntimeNestedEventChainPhase::AncestorDispatch),
+            (2, RuntimeNestedEventChainPhase::AudioUnwind),
+        ],
+        "Rust completes each singleton callback chain before advancing to the next callback",
+    );
+    assert_eq!(
+        rust_notify_batches
+            .iter()
+            .map(|batch| batch.size)
+            .collect::<Vec<_>>(),
+        [1, 1],
+        "Rust records singleton boundaries at the real notify entry; batching both callbacks must fail",
+    );
+    assert_eq!(
+        rust_steps
+            .iter()
+            .filter(|step| step.phase == RuntimeNestedEventChainPhase::SourceLocal)
+            .map(|step| step.seconds_delay)
+            .collect::<Vec<_>>(),
+        [Some(0.0), Some(0.0)],
+        "Rust discards the observable 0.25-second overshoot at the nested-simple seam",
+    );
+    let mut rust_mixed_node_x = None;
+    rust.try_visit_nested_artboard_instances_mut(&mut |depth,
+                                                       _graph_global_id,
+                                                       child|
+     -> Result<(), ()> {
+        if depth == 1 {
+            rust_mixed_node_x = child.transform_property(3, TransformProperty::X);
+        }
+        Ok(())
+    })
+    .expect("visit the Rust nested-simple child");
+    assert_eq!(
+        rust_mixed_node_x,
+        Some(cpp_nested_simple.mixed_node_x),
+        "Rust and pinned C++ finish the callback-major frame with the same nonzero mix",
+    );
+
+    let runtime_root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let nested_simple = std::fs::read_to_string(
+        PathBuf::from(&runtime_root).join("src/animation/nested_simple_animation.cpp"),
+    )
+    .expect("read pinned nested_simple_animation.cpp");
+    let reporting_advance = nested_simple
+        .find("m_AnimationInstance->advance(elapsedSeconds * speed(),")
+        .expect("nested simple advance call");
+    let reporting_facade = nested_simple[reporting_advance..]
+        .find("m_AnimationInstance.get())")
+        .expect("nested simple animation reports through its LinearAnimationInstance");
+    assert!(reporting_facade > 0);
+    let linear = std::fs::read_to_string(
+        PathBuf::from(runtime_root).join("src/animation/linear_animation_instance.cpp"),
+    )
+    .expect("read pinned linear_animation_instance.cpp");
+    assert!(linear.contains("notifyListeners(events);"));
+    let state_machine = fl_c5_cpp_state_machine_instance_source();
+    let notify = fl_c5_cpp_member(
+        &state_machine,
+        "void StateMachineInstance::notifyEventListeners(",
+        "void StateMachineInstance::enablePointerEvents(",
+    );
+    assert!(
+        notify.find("listener->notify(events, nestedArtboard())")
+            < notify.find("event->is<AudioEvent>()"),
+        "pinned C++ synchronously delivers the parent listener before consuming the exact \
+         AudioEvent proven by the live reporter",
+    );
+}
+
+#[test]
+fn fl_c5_live_event_projection() {
+    fl_c5_run_rust_unit_probe("fl_c5_event_listener_fire_reports_live_payload_before_advance");
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_live_event_projection.riv";
+    let bytes = synthetic_state_machine_fire_event_listener_input_change(96_963);
+    let event_name_key = property_key_for_name("Event", "name");
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-set-object-string".to_owned(),
+        "0".to_owned(),
+        "2".to_owned(),
+        event_name_key.to_string(),
+        "latest".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let mut machine = rust
+        .state_machine_instance(0)
+        .expect("live projection Rust machine");
+    let first_advanced = rust.advance_state_machine_instance(&mut machine, 0.0);
+    let first = machine.clone();
+    assert!(rust.set_string_property(2, event_name_key, b"latest".to_vec()));
+    machine
+        .reported_event(&rust, 0)
+        .expect("refresh Rust report through the live Event identity");
+    let second = machine.clone();
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    assert_eq!(cpp_reports.len(), 2);
+    compare_state_machine_advance(&cpp_reports[0], &first, first_advanced, label);
+    compare_state_machine_advance(&cpp_reports[1], &second, false, label);
+    assert_eq!(
+        cpp_reports[1].reported_events[0].event_name.as_deref(),
+        Some("latest"),
+        "pinned C++ EventReport retains a live Event pointer across the mutation"
+    );
+}
+
+fn fl_c5_bounded_command_completes(mut command: Command, timeout: Duration) -> bool {
+    command.stdout(Stdio::null()).stderr(Stdio::null());
+    let mut child = command
+        .spawn()
+        .unwrap_or_else(|error| panic!("spawn bounded WP7 probe: {error}"));
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .unwrap_or_else(|error| panic!("poll bounded WP7 probe: {error}"))
+        {
+            return status.success();
+        }
+        if Instant::now() >= deadline {
+            child
+                .kill()
+                .unwrap_or_else(|error| panic!("kill bounded WP7 probe: {error}"));
+            let _ = child.wait();
+            return false;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+fn fl_c5_bounded_cpp_state_machine_advance(
+    probe: &Path,
+    label: &str,
+    bytes: &[u8],
+    seconds: &str,
+) -> bool {
+    let path = cpp_probe_temp_path("rive-rust-runtime-wp7-bounded", label);
+    std::fs::write(&path, bytes)
+        .unwrap_or_else(|error| panic!("write bounded WP7 fixture {}: {error}", path.display()));
+    let mut command = Command::new(probe);
+    command
+        .arg("--no-advance")
+        .arg("--instance-artboards")
+        .arg("--runtime-update")
+        .arg("--runtime-advance-state-machine")
+        .arg("0")
+        .arg("0")
+        .arg("--runtime-advance-state-machine")
+        .arg("0")
+        .arg(seconds)
+        .arg("--file")
+        .arg(&path);
+    let completed = fl_c5_bounded_command_completes(command, Duration::from_millis(1_500));
+    std::fs::remove_file(&path)
+        .unwrap_or_else(|error| panic!("remove bounded WP7 fixture {}: {error}", path.display()));
+    completed
+}
+
+fn fl_c5_bounded_rust_state_machine_advance(mode: &str) -> bool {
+    let mut command = Command::new(
+        std::env::current_exe().expect("resolve the current cpp_probe integration-test binary"),
+    );
+    command
+        .arg("fl_c5_advance_fp_matrix_bounded_child")
+        .arg("--exact")
+        .env("FLC5_ADVANCE_FP_BOUNDED_CHILD", mode);
+    fl_c5_bounded_command_completes(command, Duration::from_millis(1_500))
+}
+
+#[test]
+fn fl_c5_advance_fp_matrix_bounded_child() {
+    let Ok(mode) = std::env::var("FLC5_ADVANCE_FP_BOUNDED_CHILD") else {
+        return;
+    };
+    let (loop_value, seconds) = match mode.as_str() {
+        "one-shot-nan" => (0, f32::NAN),
+        "loop-positive-infinity" => (1, f32::INFINITY),
+        "ping-pong-positive-infinity" => (2, f32::INFINITY),
+        other => panic!("unknown WP7 bounded child mode {other}"),
+    };
+    let label = format!("synthetic/fl_c5_advance_fp_bounded_{mode}.riv");
+    let bytes = synthetic_fl_c5_state_machine_animation_loop(96_970 + loop_value, loop_value);
+    let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, &label);
+    let mut machine = artboard
+        .state_machine_instance(0)
+        .expect("bounded WP7 Rust state machine");
+    let _ = artboard.advance_state_machine_instance(&mut machine, 0.0);
+    let _ = artboard.advance_state_machine_instance(&mut machine, seconds);
+}
+
+#[test]
+fn fl_c5_raw_advance_order_matches_pinned_cpp() {
+    fl_c5_run_rust_unit_probe("fl_c5_advance_raw_order_and_clean_zero_bookkeeping");
+    fl_c5_run_rust_unit_probe("fl_c5_advance_new_frame_false_preserves_the_sticky_latch");
+
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let advance = fl_c5_cpp_member(
+        &source,
+        "bool StateMachineInstance::advance(float seconds, bool newFrame)",
+        "void StateMachineInstance::advancedDataContext()",
+    );
+    let phases = [
+        "m_drawOrderChangeCounter !=",
+        "processFocusEvents();",
+        "processSemanticEvents();",
+        "applyEvents();",
+        "m_needsAdvance = false;",
+        "updateDataBinds(false);",
+        "m_layers[i].advance(seconds, newFrame)",
+        "advanceDataBinds(seconds)",
+        "inst->advanced();",
+        "return m_needsAdvance || !m_reportedEvents.empty() ||",
+    ];
+    let mut cursor = 0;
+    for phase in phases {
+        let offset = advance[cursor..]
+            .find(phase)
+            .unwrap_or_else(|| panic!("pinned C++ raw advance omitted phase {phase:?}"));
+        cursor += offset + phase.len();
+    }
+}
+
+#[test]
+fn fl_c5_zero_delta_bookkeeping() {
+    fl_c5_run_rust_unit_probe("fl_c5_advance_raw_order_and_clean_zero_bookkeeping");
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping live C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for (label, seconds) in [
+        ("synthetic/fl_c5_advance_idle_positive_zero.riv", "0"),
+        ("synthetic/fl_c5_advance_idle_negative_zero.riv", "-0"),
+    ] {
+        let bytes = synthetic_fl_c5_empty_state_machine(96_971);
+        let args = [
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            seconds.to_owned(),
+        ];
+        let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+        let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, label);
+        let mut machine = artboard
+            .state_machine_instance(0)
+            .expect("idle WP7 Rust state machine");
+        let advanced = artboard.advance_state_machine_instance(
+            &mut machine,
+            if seconds.starts_with('-') { -0.0 } else { 0.0 },
+        );
+        compare_state_machine_advance(
+            &cpp.artboards[0].runtime_state_machine_advances[0],
+            &machine,
+            advanced,
+            label,
+        );
+    }
+
+    let label = "synthetic/fl_c5_advance_fired_trigger_negative_zero.riv";
+    let bytes =
+        synthetic_state_machine_input_transition(96_972, SyntheticInputTransitionKind::Trigger);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.25".to_owned(),
+        "--runtime-fire-state-machine-trigger".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "-0".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, label);
+    let mut machine = artboard
+        .state_machine_instance(0)
+        .expect("trigger WP7 Rust state machine");
+    let first = artboard.advance_state_machine_instance(&mut machine, 0.25);
+    let first_machine = machine.clone();
+    assert!(machine.fire_trigger(0));
+    let second = artboard.advance_state_machine_instance(&mut machine, -0.0);
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    compare_state_machine_advance(&cpp_reports[0], &first_machine, first, label);
+    compare_state_machine_advance(&cpp_reports[1], &machine, second, label);
+    assert_eq!(
+        machine.input(0).and_then(|input| input.trigger_fired()),
+        Some(false),
+        "input advanced() must clear a trigger even at negative zero"
+    );
+}
+
+#[test]
+fn fl_c5_advance_fp_matrix() {
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_advance_fp_values_forward_without_validation_and_zero_forces_facade",
+    );
+
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let advance = fl_c5_cpp_member(
+        &source,
+        "bool StateMachineInstance::advance(float seconds, bool newFrame)",
+        "void StateMachineInstance::advancedDataContext()",
+    );
+    assert!(
+        !advance.contains("isfinite") && !advance.contains("isnan"),
+        "the pinned C++ path forwards every float classification"
+    );
+
+    if let Some(probe) = probe_path() {
+        let cases = [
+            ("one-shot-nan", 0, "nan", true),
+            ("loop-positive-infinity", 1, "inf", true),
+            ("ping-pong-positive-infinity", 2, "inf", false),
+        ];
+        for (case, loop_value, seconds, expected_completion) in cases {
+            let bytes =
+                synthetic_fl_c5_state_machine_animation_loop(96_973 + loop_value, loop_value);
+            assert_eq!(
+                fl_c5_bounded_cpp_state_machine_advance(&probe, case, &bytes, seconds),
+                expected_completion,
+                "pinned C++ bounded completion classification for {case}"
+            );
+            assert_eq!(
+                fl_c5_bounded_rust_state_machine_advance(case),
+                expected_completion,
+                "Rust bounded completion classification for {case}"
+            );
+        }
+    } else {
+        eprintln!("skipping bounded live C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+    }
+
+    let Some(probe) = probe_path() else {
+        return;
+    };
+    for (index, (seconds_text, seconds)) in [("-17.25", -17.25), ("0", 0.0), ("-0", -0.0)]
+        .into_iter()
+        .enumerate()
+    {
+        let label = format!("synthetic/fl_c5_advance_fp_finite_{index}.riv");
+        let bytes = synthetic_fl_c5_empty_state_machine(96_980 + index as u64);
+        let args = [
+            "--runtime-advance-state-machine".to_owned(),
+            "0".to_owned(),
+            seconds_text.to_owned(),
+        ];
+        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &args);
+        let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut machine = artboard
+            .state_machine_instance(0)
+            .expect("finite-matrix WP7 Rust state machine");
+        let advanced = artboard.advance_state_machine_instance(&mut machine, seconds);
+        compare_state_machine_advance(
+            &cpp.artboards[0].runtime_state_machine_advances[0],
+            &machine,
+            advanced,
+            &label,
+        );
+    }
+}
+
+#[test]
+fn fl_c5_advance_return_terms() {
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_advance_fp_values_forward_without_validation_and_zero_forces_facade",
+    );
+    fl_c5_run_rust_unit_probe("fl_c5_advance_bind_generated_report_is_a_raw_return_term");
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let raw = fl_c5_cpp_member(
+        &source,
+        "bool StateMachineInstance::advance(float seconds, bool newFrame)",
+        "void StateMachineInstance::advancedDataContext()",
+    );
+    assert!(raw.contains(
+        "return m_needsAdvance || !m_reportedEvents.empty() ||\n           !m_reportedListenerViewModels.empty();"
+    ));
+    let facade = fl_c5_cpp_member(
+        &source,
+        "bool StateMachineInstance::advanceAndApply(float seconds)",
+        "void StateMachineInstance::markNeedsAdvance()",
+    );
+    assert!(facade.contains("this->advance(seconds, true) || seconds == 0.0f"));
+    assert!(facade.contains(
+        "return keepGoing || !m_reportedEvents.empty() ||\n           !m_reportedListenerViewModels.empty();"
+    ));
+
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping live C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    for (index, (seconds_text, seconds)) in [("0", 0.0), ("-0", -0.0)].into_iter().enumerate() {
+        let label = format!("synthetic/fl_c5_advance_return_zero_{index}.riv");
+        let bytes = synthetic_fl_c5_empty_state_machine(96_990 + index as u64);
+        let args = [
+            "--runtime-advance-and-apply-state-machine".to_owned(),
+            "0".to_owned(),
+            seconds_text.to_owned(),
+        ];
+        let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &bytes, &args);
+        let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, &label);
+        let mut machine = artboard
+            .state_machine_instance(0)
+            .expect("return-terms WP7 Rust state machine");
+        let advanced = machine
+            .advance_and_apply(&mut artboard, seconds)
+            .expect("WP7 Rust advanceAndApply");
+        compare_state_machine_advance(
+            &cpp.artboards[0].runtime_state_machine_advances[0],
+            &machine,
+            advanced,
+            &label,
+        );
+        assert!(advanced, "exact zero of either sign forces the facade true");
+    }
+
+    let label = "synthetic/fl_c5_advance_return_layer_report.riv";
+    let bytes = synthetic_state_machine_trigger_done_event(96_992);
+    let args = [
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.5".to_owned(),
+        "--runtime-fire-state-machine-trigger".to_owned(),
+        "0".to_owned(),
+        "0".to_owned(),
+        "--runtime-advance-state-machine".to_owned(),
+        "0".to_owned(),
+        "0.25".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, label);
+    let mut machine = artboard
+        .state_machine_instance(0)
+        .expect("layer-report WP7 Rust state machine");
+    let first = artboard.advance_state_machine_instance(&mut machine, 0.5);
+    let first_machine = machine.clone();
+    assert!(machine.fire_trigger(0));
+    let second = artboard.advance_state_machine_instance(&mut machine, 0.25);
+    let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    compare_state_machine_advance(&cpp_reports[0], &first_machine, first, label);
+    compare_state_machine_advance(&cpp_reports[1], &machine, second, label);
+    assert_eq!(machine.reported_event_count(), 1);
+    assert!(
+        second,
+        "a report created after applyEvents during layer advance is a raw return term"
+    );
+}
+
+#[test]
+fn fl_c5_five_pass_unconditional_probe() {
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let facade = fl_c5_cpp_member(
+        &source,
+        "bool StateMachineInstance::advanceAndApply(float seconds)",
+        "void StateMachineInstance::markNeedsAdvance()",
+    );
+    assert!(facade.contains("for (int outerOptionC = 0; outerOptionC < 5; outerOptionC++)"));
+    let update = facade
+        .find("m_artboardInstance->updatePass(true)")
+        .expect("pinned C++ update pass");
+    let probe = facade
+        .find("if (this->tryChangeState())")
+        .expect("pinned C++ unconditional transition probe");
+    let follow_up = facade
+        .find("this->advance(0.0f, false);")
+        .expect("pinned C++ zero-time state-machine follow-up");
+    let outer = facade
+        .rfind("m_artboardInstance->advanceInternal(")
+        .expect("pinned C++ zero-time Artboard follow-up");
+    assert!(update < probe && probe < follow_up && follow_up < outer);
+
+    let rust_output = fl_c5_run_rust_unit_probe(
+        "fl_c5_advance_and_apply_persistent_dirt_component_stops_after_five_passes",
+    );
+    let rust_receipt = fl_c5_rust_probe_receipt(&rust_output, "FL_C5_PERSISTENT_DIRT_RECEIPT ");
+
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping live C++ persistent-dirt comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let label = "synthetic/fl_c5_sixth_settlement_pass_required.riv";
+    let bytes = synthetic_fl_c5_empty_state_machine(96_993);
+    let args = [
+        "--runtime-advance-and-apply-persistent-dirt".to_owned(),
+        "0".to_owned(),
+        "0.25".to_owned(),
+    ];
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
+    let cpp = &cpp.artboards[0].runtime_state_machine_advances[0];
+    assert!(cpp.persistent_dirt_probe);
+
+    assert_eq!(
+        rust_receipt,
+        format!(
+            "advanced={} advance_count={} update_count={} dirt_remaining={}",
+            cpp.advanced,
+            cpp.persistent_dirt_advance_count,
+            cpp.persistent_dirt_update_count,
+            cpp.persistent_dirt_remaining,
+        ),
+        "both runtimes must expose the same five-pass cap under dirt that requires a sixth pass"
+    );
+    assert_eq!(
+        (
+            cpp.persistent_dirt_advance_count,
+            cpp.persistent_dirt_update_count,
+            cpp.persistent_dirt_remaining,
+        ),
+        (6, 5, true),
+        "one main advance plus five settlement advances leaves sixth-pass dirt pending"
+    );
+}
+
+#[test]
+fn fl_c5_advance_view_models_false() {
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_advance_view_models_false_skips_only_data_context_advancement",
+    );
+    let source = fl_c5_cpp_state_machine_instance_source();
+    let facade = fl_c5_cpp_member(
+        &source,
+        "bool StateMachineInstance::advanceAndApply(float seconds)",
+        "void StateMachineInstance::markNeedsAdvance()",
+    );
+    assert!(facade.contains("if (advanceViewModels)"));
+    assert!(facade.contains("reset(); // advancedDataContext() (VM consume) + artboard reset"));
+    assert!(facade.contains("m_artboardInstance->reset(); // artboard component reset only"));
+    assert!(facade.contains("m_artboardInstance->advanceScriptedViewModels();"));
+}
+
 fn assert_close(actual: f32, expected: f32, label: &str) {
     assert!(
         (actual - expected).abs() <= 0.0001,
@@ -76558,8 +85728,8 @@ fn compare_animation_advance(
     );
     assert_eq!(cpp.did_loop, rust.did_loop(), "{label} didLoop mismatch");
     assert_eq!(
-        cpp.loop_value as u64,
-        rust.loop_value().unwrap_or(runtime_animation.loop_value),
+        cpp.loop_value,
+        i64::from(rust.loop_value()),
         "{label} loopValue override mismatch"
     );
 }
@@ -76586,6 +85756,18 @@ fn compare_state_machine_advance(
         rust.changed_state_count(),
         "{label} changedStateCount mismatch"
     );
+    let rust_changed_state_core_types = (0..rust.changed_state_count())
+        .map(|index| {
+            rust.changed_state(index)
+                .and_then(|state| state.type_name)
+                .and_then(nuxie_schema::definition_by_name)
+                .map_or(0, |definition| definition.type_key.int)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cpp.changed_state_core_types, rust_changed_state_core_types,
+        "{label} stateChangedByIndex current-state order mismatch"
+    );
     assert_eq!(
         cpp.reported_event_count,
         rust.reported_event_count(),
@@ -76608,7 +85790,7 @@ fn compare_state_machine_advance(
     }
     for (event_index, cpp_event) in cpp.reported_events.iter().enumerate() {
         let rust_event = rust
-            .reported_event(event_index)
+            .reported_event_snapshot(event_index)
             .unwrap_or_else(|| panic!("missing Rust reported event {event_index} for {label}"));
         assert_eq!(
             cpp_event.event_local,
@@ -76650,6 +85832,33 @@ fn compare_state_machine_advance(
             Some(cpp_trigger.value),
             rust.view_model_trigger_count(trigger_index),
             "{label} view-model trigger {trigger_index} value mismatch"
+        );
+    }
+}
+
+fn compare_state_machine_bool_inputs(
+    cpp: &CppRuntimeStateMachineAdvance,
+    rust: &nuxie_runtime::StateMachineInstance,
+    label: &str,
+) {
+    let rust_bool_input_count = (0..rust.input_count())
+        .filter(|index| {
+            rust.input(*index)
+                .is_some_and(|input| input.kind() == StateMachineInputKind::Bool)
+        })
+        .count();
+    assert_eq!(
+        cpp.bool_inputs.len(),
+        rust_bool_input_count,
+        "{label} bool input count mismatch"
+    );
+    for cpp_input in &cpp.bool_inputs {
+        assert_eq!(
+            rust.input(cpp_input.index)
+                .and_then(|input| input.bool_value()),
+            Some(cpp_input.value),
+            "{label} bool input {} value mismatch",
+            cpp_input.index
         );
     }
 }
@@ -77038,10 +86247,31 @@ fn compare_cpp_runtime_update(
 }
 
 fn compare_component(cpp: &CppRuntimeComponent, rust: &RuntimeComponent, label: &str) {
-    assert_eq!(
-        cpp.graph_order, rust.graph_order,
-        "graph order mismatch for {label}"
-    );
+    if cpp.scheduled {
+        assert_eq!(
+            cpp.graph_order,
+            rust.graph_order(),
+            "graph order mismatch for scheduled local {} in {label}",
+            cpp.local_id
+        );
+        assert!(
+            cpp.graph_order.is_some(),
+            "scheduled local {} omitted graph order in {label}",
+            cpp.local_id
+        );
+    } else {
+        assert_eq!(
+            None, cpp.graph_order,
+            "unscheduled local {} exposed indeterminate C++ graph order in {label}",
+            cpp.local_id
+        );
+        assert_eq!(
+            None,
+            rust.graph_order(),
+            "unscheduled local {} manufactured graph order in {label}",
+            cpp.local_id
+        );
+    }
     assert_eq!(
         cpp.dirt, rust.dirt.0,
         "dirt mismatch for local {} in {label}",
@@ -77284,6 +86514,10 @@ struct CppArtboard {
     #[serde(rename = "objectCount")]
     object_count: usize,
     objects: Vec<Option<CppObject>>,
+    #[serde(default)]
+    animations: Vec<CppLinearAnimationDefinition>,
+    #[serde(default, rename = "stateMachines")]
+    state_machines: Vec<CppStateMachineDefinition>,
     #[serde(default, rename = "drawCommandStream")]
     draw_command_stream: Vec<CppDrawCommand>,
     #[serde(rename = "runtimeUpdate")]
@@ -77294,6 +86528,99 @@ struct CppArtboard {
     runtime_state_machine_advances: Vec<CppRuntimeStateMachineAdvance>,
     #[serde(default, rename = "dataBinds")]
     data_binds: Vec<CppArtboardDataBind>,
+    #[serde(default, rename = "nestedStateMachines")]
+    nested_state_machines: Vec<CppNestedStateMachine>,
+    #[serde(default, rename = "nestedRemapAnimations")]
+    nested_remap_animations: Vec<CppNestedRemapAnimation>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppNestedRemapAnimation {
+    local_id: usize,
+    animation_time: Option<f32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppLinearAnimationDefinition {
+    keyed_objects: Vec<CppKeyedObjectDefinition>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppKeyedObjectDefinition {
+    keyed_properties: Vec<CppKeyedPropertyDefinition>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppKeyedPropertyDefinition {
+    key_frames: Vec<CppKeyFrameDefinition>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppKeyFrameDefinition {
+    frame: u64,
+    seconds: f32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppStateMachineDefinition {
+    index: usize,
+    name: String,
+    layer_count: usize,
+    input_count: usize,
+    listener_count: usize,
+    data_bind_count: usize,
+    scripted_object_count: usize,
+    layers: Vec<CppStateMachineDefinitionComponent>,
+    inputs: Vec<Option<CppStateMachineDefinitionComponent>>,
+    listeners: Vec<CppStateMachineDefinitionListener>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppStateMachineDefinitionComponent {
+    index: usize,
+    name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppStateMachineDefinitionListener {
+    index: usize,
+    target_id: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppNestedStateMachine {
+    local_id: usize,
+    animation_id: u32,
+    has_instance: bool,
+    input_count: usize,
+    inputs: Vec<CppNestedStateMachineInput>,
+    empty_advance: Option<bool>,
+    empty_hit_test: Option<bool>,
+    empty_pointer_down: Option<bool>,
+    empty_pointer_move: Option<bool>,
+    empty_pointer_up: Option<bool>,
+    empty_pointer_exit: Option<bool>,
+    empty_drag_start: Option<bool>,
+    empty_drag_end: Option<bool>,
+    empty_try_change_state: Option<bool>,
+    empty_context_forwarding_completed: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppNestedStateMachineInput {
+    index: usize,
+    input_id: Option<u32>,
+    name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -77550,6 +86877,10 @@ struct CppObject {
     core_type: u16,
     #[serde(rename = "isComponent")]
     is_component: bool,
+    #[serde(default, rename = "dataBindPathIds")]
+    data_bind_path_ids: Option<Vec<u32>>,
+    #[serde(default, rename = "resolvedDataBindPathIds")]
+    resolved_data_bind_path_ids: Option<Vec<u32>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -77590,23 +86921,63 @@ struct CppRuntimeAnimationAdvance {
 struct CppRuntimeStateMachineAdvance {
     #[serde(rename = "stateMachineIndex")]
     state_machine_index: usize,
+    #[serde(default, rename = "needsAdvanceBefore")]
+    needs_advance_before: bool,
     advanced: bool,
+    #[serde(default, rename = "persistentDirtProbe")]
+    persistent_dirt_probe: bool,
+    #[serde(default, rename = "persistentDirtAdvanceCount")]
+    persistent_dirt_advance_count: usize,
+    #[serde(default, rename = "persistentDirtUpdateCount")]
+    persistent_dirt_update_count: usize,
+    #[serde(default, rename = "persistentDirtRemaining")]
+    persistent_dirt_remaining: bool,
+    #[serde(default, rename = "namedInputProbe")]
+    named_input_probe: bool,
+    #[serde(default, rename = "namedBoolInputIndex")]
+    named_bool_input_index: i32,
+    #[serde(default, rename = "namedNumberInputIndex")]
+    named_number_input_index: i32,
+    #[serde(default, rename = "namedTriggerInputIndex")]
+    named_trigger_input_index: i32,
+    #[serde(default, rename = "pointerInputProbe")]
+    pointer_input_probe: bool,
+    #[serde(default, rename = "pointerHitResult")]
+    pointer_hit_result: i32,
     #[serde(rename = "currentAnimationCount")]
     current_animation_count: usize,
     #[serde(rename = "changedStateCount")]
     changed_state_count: usize,
+    #[serde(default, rename = "changedStateCoreTypes")]
+    changed_state_core_types: Vec<u16>,
     #[serde(default, rename = "reportedEventCount")]
     reported_event_count: usize,
     #[serde(default, rename = "randomTotalCalls")]
     random_total_calls: usize,
+    #[serde(default, rename = "boolInputs")]
+    bool_inputs: Vec<CppRuntimeStateMachineBoolInput>,
     #[serde(rename = "currentAnimations")]
     current_animations: Vec<CppRuntimeStateMachineCurrentAnimation>,
     #[serde(default, rename = "reportedEvents")]
     reported_events: Vec<CppRuntimeStateMachineReportedEvent>,
+    #[serde(default, rename = "nestedReportedEvents")]
+    nested_reported_events: Vec<CppRuntimeNestedStateMachineReportedEvents>,
     #[serde(default, rename = "viewModelTriggers")]
     view_model_triggers: Vec<CppRuntimeStateMachineViewModelTrigger>,
     #[serde(default, rename = "viewModelBindings")]
     view_model_bindings: Vec<CppRuntimeStateMachineViewModelBinding>,
+    #[serde(default, rename = "hasDataContext")]
+    has_data_context: bool,
+    #[serde(default, rename = "hasMainViewModelInstance")]
+    has_main_view_model_instance: bool,
+    #[serde(default, rename = "mainViewModelIndex")]
+    main_view_model_index: usize,
+    #[serde(default, rename = "mainViewModelInstanceIndex")]
+    main_view_model_instance_index: usize,
+    #[serde(default, rename = "inheritedDataContextDependentCounts")]
+    inherited_data_context_dependent_counts: Vec<usize>,
+    #[serde(default, rename = "globalViewModelSlots")]
+    global_view_model_slots: Vec<CppRuntimeStateMachineGlobalViewModelSlot>,
     #[serde(default, rename = "numberBindings")]
     number_bindings: Vec<CppRuntimeStateMachineNumberBinding>,
     #[serde(default, rename = "booleanBindings")]
@@ -77627,6 +86998,164 @@ struct CppRuntimeStateMachineAdvance {
     trigger_bindings: Vec<CppRuntimeStateMachineTriggerBinding>,
     #[serde(default, rename = "listBindings")]
     list_bindings: Vec<CppRuntimeStateMachineListBinding>,
+    #[serde(default, rename = "scriptedObjects")]
+    scripted_objects: Vec<CppRuntimeStateMachineScriptedObject>,
+    #[serde(default, rename = "artboardScriptedObjects")]
+    artboard_scripted_objects: Vec<CppRuntimeStateMachineScriptedObject>,
+    #[serde(default, rename = "scriptedConverters")]
+    scripted_converters: Vec<CppRuntimeStateMachineScriptedConverter>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppRuntimeNestedStateMachineReportedEvents {
+    local_id: usize,
+    reported_events: Vec<CppRuntimeStateMachineReportedEvent>,
+    #[serde(default)]
+    notify_batches: Vec<Vec<CppRuntimeStateMachineReportedEvent>>,
+    #[serde(default)]
+    pre_mix_node_xs: Vec<f32>,
+    #[serde(default)]
+    has_mixed_node_x: bool,
+    #[serde(default)]
+    mixed_node_x: f32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppRuntimeStateMachineGlobalViewModelSlot {
+    slot_view_model_index: usize,
+    has_instance: bool,
+    instance_view_model_index: usize,
+    instance_index: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct CppRuntimeStateMachineBoolInput {
+    index: usize,
+    value: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppRuntimeScriptedInput {
+    index: usize,
+    source_core_type: u16,
+    source_name: String,
+    occurrence_present: bool,
+    occurrence_core_type: u16,
+    occurrence_name: String,
+    distinct_clone: bool,
+    source_input_ordinal: Option<usize>,
+    occurrence_input_ordinal: Option<usize>,
+    backpointer_matches_occurrence: bool,
+    source_bind_present: bool,
+    bind_present: bool,
+    bind_collection_index: Option<usize>,
+    bind_distinct_from_source: bool,
+    source_bind_ordinal: Option<usize>,
+    occurrence_bind_ordinal: Option<usize>,
+    bind_flags: u32,
+    bind_target_is_clone: bool,
+    final_bind_index: Option<usize>,
+    value_kind: String,
+    boolean_value: Option<bool>,
+    number_value: Option<f32>,
+    string_value: Option<String>,
+    color_value: Option<u32>,
+    trigger_value: Option<u32>,
+    artboard_id: Option<u32>,
+    referenced_artboard_id: Option<i32>,
+    #[serde(default)]
+    view_model_path_ids: Vec<u32>,
+    #[serde(default)]
+    view_model_resolved_path_ids: Vec<u32>,
+    view_model_path_is_relative: Option<bool>,
+    bound_view_model_instance_ordinal: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppRuntimeStateMachineScriptedObject {
+    source_index: usize,
+    source_core_type: u16,
+    occurrence_present: bool,
+    occurrence_distinct_from_source: bool,
+    occurrence_ordinal: Option<usize>,
+    source_table_ordinal: Option<usize>,
+    occurrence_table_ordinal: Option<usize>,
+    has_data_context: bool,
+    data_context_matches_state_machine: bool,
+    user_lua_init_done: bool,
+    has_script_asset: bool,
+    asset_serialized_implemented_methods: u32,
+    definition_implemented_methods: i32,
+    occurrence_implemented_methods: i32,
+    definition_input_count: usize,
+    occurrence_input_count: usize,
+    probe_trace: Option<Vec<String>>,
+    #[serde(default)]
+    inputs: Vec<CppRuntimeScriptedInput>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppRuntimeScriptedDataBind {
+    index: usize,
+    source_present: bool,
+    occurrence_present: bool,
+    source_core_type: u16,
+    occurrence_core_type: u16,
+    core_type: u16,
+    source_flags: u32,
+    flags: u32,
+    source_property_key: u32,
+    property_key: u32,
+    source_converter_id: u32,
+    converter_id: u32,
+    #[serde(default)]
+    source_path_ids: Vec<u32>,
+    #[serde(default)]
+    occurrence_path_ids: Vec<u32>,
+    distinct_clone: bool,
+    source_bind_ordinal: Option<usize>,
+    occurrence_bind_ordinal: Option<usize>,
+    target_input_index: Option<usize>,
+    target_is_occurrence_input: bool,
+    is_final_for_target: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppRuntimeStateMachineScriptedConverter {
+    parent_bind_index: usize,
+    #[serde(default)]
+    converter_path: Vec<usize>,
+    converter_id: u32,
+    definition_present: bool,
+    occurrence_present: bool,
+    definition_core_type: u16,
+    occurrence_core_type: u16,
+    occurrence_ordinal: Option<usize>,
+    occurrence_distinct_from_definition: bool,
+    definition_table_ordinal: Option<usize>,
+    occurrence_table_ordinal: Option<usize>,
+    has_data_context: bool,
+    data_context_matches_state_machine: bool,
+    user_lua_init_done: bool,
+    has_script_asset: bool,
+    asset_serialized_implemented_methods: u32,
+    definition_implemented_methods: i32,
+    occurrence_implemented_methods: i32,
+    definition_input_count: usize,
+    occurrence_input_count: usize,
+    definition_data_bind_count: usize,
+    occurrence_data_bind_count: usize,
+    probe_trace: Option<Vec<String>>,
+    #[serde(default)]
+    inputs: Vec<CppRuntimeScriptedInput>,
+    #[serde(default)]
+    data_binds: Vec<CppRuntimeScriptedDataBind>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -77773,7 +87302,8 @@ struct CppRuntimeComponent {
     #[serde(rename = "localId")]
     local_id: usize,
     #[serde(rename = "graphOrder")]
-    graph_order: usize,
+    graph_order: Option<usize>,
+    scheduled: bool,
     dirt: u16,
     collapsed: bool,
     #[serde(rename = "worldTransform")]

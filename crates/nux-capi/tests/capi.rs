@@ -547,7 +547,8 @@ fn c_api_instance_functions_reject_null_arguments() {
     assert_eq!(status, NuxStatus::NullArgument);
 
     let mut state_machine: *mut NuxStateMachineInstance = std::ptr::dangling_mut();
-    let status = unsafe { nux_state_machine_instance_new(std::ptr::null(), 0, &mut state_machine) };
+    let status =
+        unsafe { nux_state_machine_instance_new(std::ptr::null_mut(), 0, &mut state_machine) };
     assert_eq!(status, NuxStatus::NullArgument);
     assert!(state_machine.is_null());
 
@@ -631,7 +632,13 @@ fn c_api_pointer_events_reject_null_arguments() {
 
     let mut hit = true;
     let status = unsafe {
-        nux_state_machine_instance_pointer_down(std::ptr::null(), state_machine, 0.0, 0.0, &mut hit)
+        nux_state_machine_instance_pointer_down(
+            std::ptr::null_mut(),
+            state_machine,
+            0.0,
+            0.0,
+            &mut hit,
+        )
     };
     assert_eq!(status, NuxStatus::NullArgument);
     assert!(!hit, "out_hit must be reset even on error");
@@ -649,7 +656,7 @@ fn c_api_pointer_events_reject_null_arguments() {
 
     let status = unsafe {
         nux_state_machine_instance_pointer_up(
-            std::ptr::null(),
+            std::ptr::null_mut(),
             std::ptr::null_mut(),
             0.0,
             0.0,

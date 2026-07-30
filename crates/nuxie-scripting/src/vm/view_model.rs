@@ -128,6 +128,55 @@ impl ScriptViewModelFrameContext {
             });
     }
 
+    /// Mirror `ViewModelInstanceViewModel::referenceViewModelInstance` for
+    /// the scripting registry's detached-root projection.
+    ///
+    /// The retained runtime owner performs the real remove/store/add sequence.
+    /// This companion edge update keeps C++'s `hasParents()` classification
+    /// visible to `advanceDetachedViewModels`: the replaced child becomes a
+    /// detached root and the replacement becomes attached immediately.
+    pub(crate) fn replace_explicit_parent(
+        &self,
+        previous: Option<&ScriptViewModel>,
+        replacement: &ScriptViewModel,
+        parent: &ScriptViewModel,
+    ) {
+        let parent_instance = parent.owned_instance();
+        let parent_key = instance_key(&parent_instance);
+        let mut tracked = self.tracked.borrow_mut();
+        Self::ensure_entry(&mut tracked, &parent_instance);
+
+        if let Some(previous) = previous {
+            let previous_instance = previous.owned_instance();
+            let previous_entry = Self::ensure_entry(&mut tracked, &previous_instance);
+            let remove = previous_entry
+                .parents
+                .get_mut(&parent_key)
+                .is_some_and(|relationship| {
+                    relationship.explicit = false;
+                    !relationship.list
+                });
+            if remove {
+                previous_entry.parents.remove(&parent_key);
+            }
+        }
+
+        let replacement_instance = replacement.owned_instance();
+        let replacement_entry = Self::ensure_entry(&mut tracked, &replacement_instance);
+        replacement_entry
+            .parents
+            .entry(parent_key)
+            .and_modify(|relationship| {
+                relationship.instance = Rc::downgrade(&parent_instance);
+                relationship.explicit = true;
+            })
+            .or_insert_with(|| ParentRelationship {
+                instance: Rc::downgrade(&parent_instance),
+                explicit: true,
+                list: false,
+            });
+    }
+
     pub(crate) fn sync_list_parents(&self, parent: &ScriptViewModel) {
         let parent_instance = parent.owned_instance();
         self.sync_list_parent_instance(&parent_instance);
@@ -270,6 +319,17 @@ impl ScriptViewModelFrameContext {
             .get(&instance_key(&model.owned_instance()))
             .map(|entry| entry.registrations)
             .unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    fn has_explicit_parent(&self, child: &ScriptViewModel, parent: &ScriptViewModel) -> bool {
+        let parent_key = instance_key(&parent.owned_instance());
+        self.tracked
+            .borrow()
+            .instances
+            .get(&instance_key(&child.owned_instance()))
+            .and_then(|entry| entry.parents.get(&parent_key))
+            .is_some_and(|relationship| relationship.explicit)
     }
 }
 
@@ -446,9 +506,10 @@ fn create_scripted_view_model_with_parent(
         "getViewModel",
         lua.create_function(move |lua, (_self, name): (Table, String)| {
             Ok(match get_view_model.view_model(&name) {
-                Some(model) => Value::UserData(lua.create_userdata(
-                    ScriptedPropertyViewModel::new(model, get_view_model.clone()),
-                )?),
+                Some(_) => Value::UserData(lua.create_userdata(ScriptedPropertyViewModel::new(
+                    get_view_model.clone(),
+                    name,
+                ))?),
                 None => Value::Nil,
             })
         })?,
@@ -493,12 +554,12 @@ fn create_scripted_view_model_with_parent(
             }
             ScriptViewModelProperty::List => unreachable!("lists are installed before wrapping"),
             ScriptViewModelProperty::ViewModel => {
-                let nested = model.view_model(name).ok_or_else(|| {
+                model.view_model(name).ok_or_else(|| {
                     luaur_rt::Error::runtime(format!(
                         "view-model property '{name}' has no active instance"
                     ))
                 })?;
-                lua.create_userdata(ScriptedPropertyViewModel::new(nested, model.clone()))?
+                lua.create_userdata(ScriptedPropertyViewModel::new(model.clone(), name.clone()))?
             }
             ScriptViewModelProperty::SymbolListIndex => unreachable!(
                 "symbol-list indices are exposed as scalar values before property wrapping"
@@ -537,21 +598,38 @@ pub(super) fn model_from_table(table: &Table) -> luaur_rt::Result<ScriptViewMode
 }
 
 struct ScriptedPropertyViewModel {
-    model: ScriptViewModel,
     parent: ScriptViewModel,
+    name: String,
 }
 
 impl ScriptedPropertyViewModel {
-    fn new(model: ScriptViewModel, parent: ScriptViewModel) -> Self {
-        Self { model, parent }
+    fn new(parent: ScriptViewModel, name: String) -> Self {
+        Self { parent, name }
     }
 }
 
 impl UserData for ScriptedPropertyViewModel {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("value", |lua, this| {
-            create_scripted_view_model_with_parent(lua, this.model.clone(), Some(&this.parent))
-                .map(Value::Table)
+            let model = this.parent.view_model(&this.name).ok_or_else(|| {
+                luaur_rt::Error::runtime(format!(
+                    "view-model property '{}' has no active instance",
+                    this.name
+                ))
+            })?;
+            create_scripted_view_model_with_parent(lua, model, Some(&this.parent)).map(Value::Table)
+        });
+        fields.add_field_method_set("value", |lua, this, value: Table| {
+            let value = model_from_table(&value)?;
+            let previous = this.parent.view_model(&this.name);
+            if this.parent.set_view_model(&this.name, &value) {
+                ScriptViewModelFrameContext::for_lua(lua).replace_explicit_parent(
+                    previous.as_ref(),
+                    &value,
+                    &this.parent,
+                );
+            }
+            Ok(())
         });
     }
 }
@@ -876,9 +954,11 @@ impl UserData for ScriptedPropertyList {
 
 pub(super) struct ScriptedContext {
     model: Rc<RefCell<Option<ScriptViewModel>>>,
+    context_present: Rc<Cell<bool>>,
     parents: Vec<ScriptViewModel>,
     missing_requested_data: Rc<Cell<bool>>,
     gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
+    alive: Rc<Cell<bool>>,
 }
 
 impl ScriptedContext {
@@ -888,11 +968,46 @@ impl ScriptedContext {
         missing_requested_data: Rc<Cell<bool>>,
         gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
     ) -> Self {
-        Self {
+        let context_present = Rc::new(Cell::new(model.borrow().is_some()));
+        Self::new_with_lifetime(
             model,
+            context_present,
             parents,
             missing_requested_data,
             gpu_canvas,
+            Rc::new(Cell::new(true)),
+        )
+    }
+
+    pub(super) fn new_with_lifetime(
+        model: Rc<RefCell<Option<ScriptViewModel>>>,
+        context_present: Rc<Cell<bool>>,
+        parents: Vec<ScriptViewModel>,
+        missing_requested_data: Rc<Cell<bool>>,
+        gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
+        alive: Rc<Cell<bool>>,
+    ) -> Self {
+        Self {
+            model,
+            context_present,
+            parents,
+            missing_requested_data,
+            gpu_canvas,
+            alive,
+        }
+    }
+
+    pub(super) fn set_parents(&mut self, parents: Vec<ScriptViewModel>) {
+        self.parents = parents;
+    }
+
+    fn require_live(&self, method: &str) -> luaur_rt::Result<()> {
+        if self.alive.get() {
+            Ok(())
+        } else {
+            Err(luaur_rt::Error::runtime(format!(
+                "context:{method}() called on a disposed context — the context passed to init() must not be used after init() returns",
+            )))
         }
     }
 }
@@ -900,6 +1015,7 @@ impl ScriptedContext {
 impl UserData for ScriptedContext {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("viewModel", |lua, this, ()| {
+            this.require_live("viewModel")?;
             Ok(match this.model.borrow().clone() {
                 Some(model) => Value::Table(create_scripted_view_model_with_parent(
                     lua,
@@ -913,6 +1029,7 @@ impl UserData for ScriptedContext {
             })
         });
         methods.add_method("rootViewModel", |lua, this, ()| {
+            this.require_live("rootViewModel")?;
             Ok(
                 match this
                     .parents
@@ -929,17 +1046,28 @@ impl UserData for ScriptedContext {
             )
         });
         methods.add_method("dataContext", |lua, this, ()| {
-            let Some(model) = this.model.borrow().clone() else {
+            this.require_live("dataContext")?;
+            if !this.context_present.get() {
                 this.missing_requested_data.set(true);
                 return Ok(Value::Nil);
-            };
+            }
             lua.create_userdata(ScriptedDataContext {
-                model,
+                model: this.model.borrow().clone(),
                 parents: this.parents.clone(),
             })
             .map(Value::UserData)
         });
+        methods.add_method("markNeedsUpdate", |_, this, ()| {
+            this.require_live("markNeedsUpdate")?;
+            // Base ScriptedObject deliberately owns no component dirt target.
+            // Listener actions and data converters therefore accept this API
+            // as a live no-op; component-derived scripted owners override it
+            // on the C++ side (`lua_scripted_context.cpp:188-210`;
+            // `scripted_object.cpp:556`).
+            Ok(())
+        });
         methods.add_method("image", |lua, this, name: String| {
+            this.require_live("image")?;
             let Some(model) = this.model.borrow().clone() else {
                 this.missing_requested_data.set(true);
                 return Ok(Value::Nil);
@@ -950,6 +1078,7 @@ impl UserData for ScriptedContext {
             })
         });
         methods.add_method("gpuCanvas", |lua, this, ()| {
+            this.require_live("gpuCanvas")?;
             let gpu_canvas = this
                 .gpu_canvas
                 .as_ref()
@@ -957,6 +1086,7 @@ impl UserData for ScriptedContext {
             gpu_canvas.canvas_userdata(lua)
         });
         methods.add_method("shader", |lua, this, name: String| {
+            this.require_live("shader")?;
             let gpu_canvas = this
                 .gpu_canvas
                 .as_ref()
@@ -967,22 +1097,23 @@ impl UserData for ScriptedContext {
 }
 
 struct ScriptedDataContext {
-    model: ScriptViewModel,
+    model: Option<ScriptViewModel>,
     parents: Vec<ScriptViewModel>,
 }
 
 impl UserData for ScriptedDataContext {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("viewModel", |lua, this, ()| {
-            create_scripted_view_model_with_parent(lua, this.model.clone(), this.parents.first())
-                .map(Value::Table)
+        methods.add_method("viewModel", |lua, this, ()| match this.model.clone() {
+            Some(model) => create_scripted_view_model_with_parent(lua, model, this.parents.first())
+                .map(Value::Table),
+            None => Ok(Value::Nil),
         });
         methods.add_method("parent", |lua, this, ()| {
             let Some((parent, remaining)) = this.parents.split_first() else {
                 return Ok(Value::Nil);
             };
             lua.create_userdata(ScriptedDataContext {
-                model: parent.clone(),
+                model: Some(parent.clone()),
                 parents: remaining.to_vec(),
             })
             .map(Value::UserData)
@@ -1102,6 +1233,81 @@ mod tests {
         assert!(missing_requested_data.get());
     }
 
+    #[test]
+    fn attached_empty_data_context_remains_non_nil_and_keeps_its_parent() {
+        let lua = Lua::new();
+        let parent = fixture_models()
+            .into_values()
+            .next()
+            .expect("fixture parent view model");
+        let missing_requested_data = Rc::new(Cell::new(false));
+        let context = lua
+            .create_userdata(ScriptedContext::new_with_lifetime(
+                Rc::new(RefCell::new(None)),
+                Rc::new(Cell::new(true)),
+                vec![parent],
+                Rc::clone(&missing_requested_data),
+                None,
+                Rc::new(Cell::new(true)),
+            ))
+            .expect("scripted context");
+        lua.globals()
+            .set("context", context)
+            .expect("context global");
+
+        let (has_context, has_local_model, has_parent, has_parent_model): (bool, bool, bool, bool) =
+            lua.load(
+                r#"
+                local dataContext = context:dataContext()
+                local parent = dataContext:parent()
+                context:markNeedsUpdate()
+                return dataContext ~= nil,
+                    dataContext:viewModel() ~= nil,
+                    parent ~= nil,
+                    parent:viewModel() ~= nil
+                "#,
+            )
+            .eval()
+            .expect("attached empty context evaluates");
+
+        assert!(has_context);
+        assert!(!has_local_model);
+        assert!(has_parent);
+        assert!(has_parent_model);
+        assert!(
+            !missing_requested_data.get(),
+            "requesting the retained DataContext object itself is not missing data"
+        );
+    }
+
+    #[test]
+    fn mark_needs_update_is_a_live_noop_and_rejects_a_disposed_context() {
+        let lua = Lua::new();
+        let alive = Rc::new(Cell::new(true));
+        let context = lua
+            .create_userdata(ScriptedContext::new_with_lifetime(
+                Rc::new(RefCell::new(None)),
+                Rc::new(Cell::new(true)),
+                Vec::new(),
+                Rc::new(Cell::new(false)),
+                None,
+                Rc::clone(&alive),
+            ))
+            .expect("scripted context");
+        lua.globals()
+            .set("context", context)
+            .expect("context global");
+        lua.load("context:markNeedsUpdate()")
+            .exec()
+            .expect("base C++ ScriptedObject accepts the live no-op");
+        alive.set(false);
+        let error = lua
+            .load("context:markNeedsUpdate()")
+            .exec()
+            .expect_err("escaped disposed Context must reject every method");
+        assert!(error.to_string().contains("disposed context"));
+    }
+
     fn fixture_models_from(asset: &str) -> BTreeMap<String, ScriptViewModel> {
         let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
             .map(std::path::PathBuf::from)
@@ -1210,6 +1416,56 @@ mod tests {
         let _parent_registration = context.register(&parent);
         assert!(context.advance_detached());
         assert_eq!(child.trigger(&trigger), Some(0));
+    }
+
+    #[test]
+    fn view_model_property_assignment_replaces_the_frame_parent_edge() {
+        let (parent, property_name) = model_with_property(ScriptViewModelProperty::ViewModel);
+        let previous = parent
+            .view_model(&property_name)
+            .expect("authored child occurrence");
+        let replacement = previous
+            .named_instance(None)
+            .expect("fresh replacement occurrence");
+        let lua = Lua::new();
+        let context = ScriptViewModelFrameContext::for_lua(&lua);
+        let parent_table =
+            create_scripted_view_model(&lua, parent.clone()).expect("scripted parent");
+        let replacement_table =
+            create_scripted_view_model(&lua, replacement.clone()).expect("replacement child");
+        lua.globals()
+            .set("parent", parent_table)
+            .expect("parent global");
+        lua.globals()
+            .set("propertyName", property_name.clone())
+            .expect("property name global");
+        lua.globals()
+            .set("replacement", replacement_table)
+            .expect("replacement global");
+
+        lua.load(
+            "oldChild = parent[propertyName].value\n\
+             parent[propertyName].value = replacement",
+        )
+        .exec()
+        .expect("replace child through ScriptedPropertyViewModel");
+
+        let old_table = lua.globals().get::<Table>("oldChild").expect("old child");
+        let old = model_from_table(&old_table).expect("old child model");
+        assert!(!context.has_explicit_parent(&old, &parent));
+        assert!(context.has_explicit_parent(&replacement, &parent));
+
+        let current = parent
+            .view_model(&property_name)
+            .expect("replacement remains reachable from parent");
+        assert!(Rc::ptr_eq(
+            &current.owned_instance(),
+            &replacement.owned_instance()
+        ));
+        assert!(!Rc::ptr_eq(
+            &old.owned_instance(),
+            &replacement.owned_instance()
+        ));
     }
 
     #[test]

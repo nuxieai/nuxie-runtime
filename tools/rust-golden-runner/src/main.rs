@@ -11,7 +11,8 @@ use nuxie_render_api::{
 };
 use nuxie_runtime::{
     ArtboardInstance, RuntimeLayoutBoundsReport, RuntimeOwnedViewModelContext,
-    RuntimeOwnedViewModelInstance, StateMachineInstance, static_text_support_error,
+    RuntimeOwnedViewModelInstance, StateMachineInstance, set_runtime_deterministic_mode,
+    static_text_support_error,
 };
 #[cfg(feature = "scripting")]
 use nuxie_runtime::{
@@ -100,6 +101,17 @@ fn reset_coverage_profile_for_frame_loop_if_requested() {
     }
 }
 
+fn reset_coverage_profile_for_occurrence_if_requested() {
+    #[cfg(feature = "coverage-trace")]
+    if env::var_os("RIVE_GOLDEN_COVERAGE_OCCURRENCE_ONLY").is_some() {
+        // SAFETY: this feature is only linked with `-Cinstrument-coverage`;
+        // the symbol is supplied by that compiler runtime.
+        unsafe {
+            __llvm_profile_reset_counters();
+        }
+    }
+}
+
 fn reset_frame_loop_allocation_counter_if_requested() {
     #[cfg(feature = "coverage-trace")]
     if env::var_os("RIVE_GOLDEN_ALLOCATION_COUNTER").is_some() {
@@ -121,9 +133,12 @@ fn stop_frame_loop_allocation_counter() -> u64 {
 fn validate_trace_options(options: &Options) -> Result<()> {
     let frame_only = env::var_os("RIVE_GOLDEN_COVERAGE_FRAME_ONLY").is_some();
     let allocations = env::var_os("RIVE_GOLDEN_ALLOCATION_COUNTER").is_some();
+    let steady_only = env::var_os("RIVE_GOLDEN_COVERAGE_STEADY_ONLY").is_some();
+    let occurrence_only = env::var_os("RIVE_GOLDEN_COVERAGE_OCCURRENCE_ONLY").is_some();
+    let mechanism_input = env::var_os("RIVE_GOLDEN_COVERAGE_MECHANISM_INPUT").is_some();
 
     #[cfg(not(feature = "coverage-trace"))]
-    if frame_only || allocations {
+    if frame_only || allocations || occurrence_only || mechanism_input {
         bail!(
             "frame-loop coverage/allocation tracing requires \
              --features coverage-trace and RUSTFLAGS=-Cinstrument-coverage"
@@ -138,6 +153,29 @@ fn validate_trace_options(options: &Options) -> Result<()> {
     }
     if options.layout_bounds && (frame_only || allocations) {
         bail!("frame-loop tracing cannot be combined with --layout-bounds");
+    }
+    if mechanism_input
+        && (!frame_only
+            || occurrence_only
+            || steady_only
+            || options.input_script.is_none()
+            || options.benchmark_repeat != 1)
+    {
+        bail!(
+            "mechanism input coverage requires frame-only coverage, an input \
+             script, --benchmark-repeat 1, and non-occurrence/non-steady mode"
+        );
+    }
+    if steady_only
+        && (!frame_only
+            || options.samples.len() != 1
+            || options.benchmark_repeat != 1
+            || options.input_script.is_some())
+    {
+        bail!(
+            "steady-only coverage requires frame-only coverage, one sample, \
+             --benchmark-repeat 1, and no input script"
+        );
     }
     Ok(())
 }
@@ -253,6 +291,11 @@ fn scripting_unsupported_feature(error: &anyhow::Error) -> Option<&'static str> 
 }
 
 fn run() -> Result<String> {
+    // Pinned C++'s golden runner enables `File::deterministicMode` before
+    // importing or constructing any runtime occurrence
+    // (`tools/golden-runner/main.cpp:973`). This selects the same fixed
+    // state-machine-layer random seed on the Rust side.
+    set_runtime_deterministic_mode(true);
     let options = Options::parse(env::args().skip(1).collect())?;
     validate_trace_options(&options)?;
     let input_events = options
@@ -270,6 +313,9 @@ fn run() -> Result<String> {
     if !options.layout_bounds {
         ensure_static_draw_supported(&runtime, &graph, artboard, !input_events.is_empty())?;
     }
+    // Construction evidence compares the live occurrence arena, not the
+    // immutable RuntimeFile/GraphFile definition import above.
+    reset_coverage_profile_for_occurrence_if_requested();
     let mut instance =
         ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
             .context("failed to instantiate artboard")?;
@@ -294,7 +340,7 @@ fn run() -> Result<String> {
     #[cfg(feature = "scripting")]
     let mut registered_script_file = None;
     #[cfg(feature = "scripting")]
-    let script_artboard_render_state = if has_scripted_layout {
+    let mut script_artboard_render_state = if has_scripted_layout {
         let _source_paints = preallocate_source_render_paints(&runtime, factory.as_factory());
         if !script_assets.is_empty() {
             registered_script_file = Some(register_script_file(
@@ -310,7 +356,7 @@ fn run() -> Result<String> {
             &graph.artboards,
             &mut instance,
             factory.as_factory(),
-            registered_script_file.as_mut(),
+            registered_script_file.as_ref(),
         )?;
         instance.initialize_scripted_artboard_renderer_after_source_resources(
             &runtime,
@@ -337,7 +383,7 @@ fn run() -> Result<String> {
             &graph.artboards,
             &mut instance,
             factory.as_factory(),
-            registered_script_file.as_mut(),
+            registered_script_file.as_ref(),
         )
         .context("failed to initialize scripted drawables")?;
         instance.initialize_scripted_artboard_renderer_after_source_resources(
@@ -378,7 +424,7 @@ fn run() -> Result<String> {
             &graph.artboards,
             &mut instance,
             factory.as_factory(),
-            registered_script_file.as_mut(),
+            registered_script_file.as_ref(),
         )?
     };
     #[cfg(not(feature = "scripting"))]
@@ -430,43 +476,90 @@ fn run() -> Result<String> {
         })
         .transpose()?;
     #[cfg(feature = "scripting")]
+    if state_machine
+        .as_ref()
+        .is_some_and(StateMachineInstance::has_fixed_scripted_data_context_owner)
+        && registered_script_file.is_none()
+    {
+        registered_script_file = Some(register_script_file(
+            &runtime,
+            &script_assets,
+            factory.as_factory(),
+        )?);
+    }
+    #[cfg(feature = "scripting")]
+    if state_machine
+        .as_ref()
+        .is_some_and(StateMachineInstance::has_fixed_scripted_data_context_owner)
+        && script_artboard_render_state.is_none()
+    {
+        script_artboard_render_state = Some(Rc::new(RefCell::new(
+            RunnerScriptArtboardRenderState::default(),
+        )));
+    }
+    #[cfg(feature = "scripting")]
     if let (Some(state_machine_index), Some(state_machine)) =
         (scene.state_machine_index, state_machine.as_mut())
     {
         initialize_state_machine_scripted_objects(
             &runtime,
             artboard,
+            &graph.artboards,
             state_machine_index,
             state_machine,
-            factory.as_factory(),
+            Some(factory.as_factory()),
             owned_view_model_context.as_ref(),
             script_artboard_render_state.as_ref(),
-            registered_script_file.as_mut(),
+            registered_script_file.as_ref(),
         )?;
     }
+    #[cfg(feature = "scripting")]
+    if let (Some(state_machine), Some(context)) =
+        (state_machine.as_mut(), owned_view_model_context.as_ref())
+    {
+        // The golden driver performs a real same-root Scene bind after
+        // construction. C++ applies the Artboard half first, then the
+        // StateMachine half (`state_machine_instance.cpp:2776-2790`;
+        // `tools/golden-runner/main.cpp:817-820`).
+        bind_selected_artboard_view_model_context(&mut instance, &runtime, context);
+        if let Some(state) = script_artboard_render_state.as_ref() {
+            bind_scripted_drawable_context(
+                &runtime,
+                artboard,
+                &graph.artboards,
+                &mut instance,
+                state,
+                factory.as_factory(),
+                Some(context),
+                false,
+            )?;
+        }
+        if state_machine.has_fixed_scripted_data_context_owner() {
+            let state = script_artboard_render_state.as_ref().ok_or_else(|| {
+                anyhow!("fixed scripted state-machine owner has no Artboard render state")
+            })?;
+            let registered = registered_script_file.as_ref().ok_or_else(|| {
+                anyhow!("fixed scripted state-machine owner has no registered File VM")
+            })?;
+            rebind_state_machine_scripted_objects_after_artboard(
+                &runtime,
+                &graph.artboards,
+                state_machine,
+                factory.as_factory(),
+                context,
+                state,
+                registered,
+            )?;
+        } else {
+            state_machine.bind_owned_view_model_contexts(context);
+        }
+    }
     if let Some(state_machine) = state_machine.as_mut() {
+        #[cfg(not(feature = "scripting"))]
         if let Some(context) = owned_view_model_context.as_ref() {
             state_machine.bind_owned_view_model_contexts(context);
         }
         state_machine.advance_data_context();
-    }
-    #[cfg(feature = "scripting")]
-    if state_machine.is_some()
-        && let Some(state) = script_artboard_render_state.as_ref()
-    {
-        // `Scene::bindViewModelInstance` repoints the DataContext shared by
-        // the candidate artboard and state machine. Attached artboard scripts
-        // hydrate once more, while their completed user init remains set.
-        bind_scripted_drawable_context(
-            &runtime,
-            artboard,
-            &graph.artboards,
-            &mut instance,
-            state,
-            factory.as_factory(),
-            owned_view_model_context.as_ref(),
-            false,
-        )?;
     }
     #[cfg(feature = "scripting")]
     if let Some(state) = script_artboard_render_state.as_ref() {
@@ -526,6 +619,41 @@ fn run() -> Result<String> {
     factory.source(&options.file.to_string_lossy(), &artboard_name, &scene.name);
     factory.frame_size(frame_dimension(width), frame_dimension(height));
 
+    let mut current_seconds = 0.0;
+    if env::var_os("RIVE_GOLDEN_COVERAGE_STEADY_ONLY").is_some() {
+        advance_scene_to(
+            &mut instance,
+            &runtime,
+            state_machine.as_mut(),
+            owned_view_model_context.as_ref(),
+            #[cfg(feature = "scripting")]
+            script_artboard_render_state
+                .as_ref()
+                .map(|state| state as &dyn RootScriptFrameTail),
+            options.samples[0],
+            &mut current_seconds,
+        )?;
+        instance.synchronize_artboard_renderer(
+            &runtime,
+            artboard,
+            &graph.artboards,
+            &external_images,
+            factory.as_factory(),
+            None,
+        )?;
+        instance
+            .draw_artboard(
+                &runtime,
+                artboard,
+                &graph.artboards,
+                factory.as_factory(),
+                &mut *renderer,
+                &external_images,
+                None,
+                true,
+            )
+            .map_err(unsupported_static_text_draw_error)?;
+    }
     reset_coverage_profile_for_frame_loop_if_requested();
     reset_frame_loop_allocation_counter_if_requested();
     let benchmark_start = Instant::now();
@@ -533,7 +661,6 @@ fn run() -> Result<String> {
     let mut input_elapsed = Duration::ZERO;
     let mut prepare_elapsed = Duration::ZERO;
     let mut draw_elapsed = Duration::ZERO;
-    let mut current_seconds = 0.0;
     let mut next_input = 0;
     #[cfg(feature = "scripting")]
     let mut bound_script_artboards = BTreeMap::new();
@@ -566,13 +693,13 @@ fn run() -> Result<String> {
                         &mut instance,
                         factory.as_factory(),
                         state,
-                        registered_script_file.as_mut(),
+                        registered_script_file.as_ref(),
                     )?;
                 }
                 timed(options.benchmark, &mut input_elapsed, || {
                     apply_input_event(
                         event,
-                        &instance,
+                        &mut instance,
                         state_machine.as_mut(),
                         owned_view_model_context.as_mut(),
                     );
@@ -613,7 +740,7 @@ fn run() -> Result<String> {
                     &mut instance,
                     factory.as_factory(),
                     state,
-                    registered_script_file.as_mut(),
+                    registered_script_file.as_ref(),
                 )?;
                 refresh_bound_script_artboard_inputs(
                     &runtime,
@@ -812,19 +939,51 @@ fn run_benchmark_repeat_pass(
     #[cfg(feature = "scripting")]
     let script_frame_state = Rc::new(RefCell::new(RunnerScriptArtboardRenderState::default()));
     #[cfg(feature = "scripting")]
+    let script_assets = extract_script_assets(runtime);
+    #[cfg(feature = "scripting")]
+    let registered_script_file = state_machine
+        .as_ref()
+        .is_some_and(StateMachineInstance::has_fixed_scripted_data_context_owner)
+        .then(|| register_script_file(runtime, &script_assets, &mut factory))
+        .transpose()?;
+    #[cfg(feature = "scripting")]
     if let (Some(state_machine_index), Some(state_machine)) =
         (scene.state_machine_index, state_machine.as_mut())
     {
         initialize_state_machine_scripted_objects(
             runtime,
             artboard,
+            &graph.artboards,
             state_machine_index,
             state_machine,
-            &mut factory,
+            Some(&mut factory),
             owned_view_model_context.as_ref(),
             Some(&script_frame_state),
-            None,
+            registered_script_file.as_ref(),
         )?;
+    }
+    #[cfg(feature = "scripting")]
+    if let (Some(state_machine), Some(context)) =
+        (state_machine.as_mut(), owned_view_model_context.as_ref())
+    {
+        bind_selected_artboard_view_model_context(&mut instance, runtime, context);
+        if state_machine.has_fixed_scripted_data_context_owner() {
+            let registered_file = registered_script_file.as_ref().ok_or_else(|| {
+                anyhow!("benchmark fixed scripted owner has no registered File VM")
+            })?;
+            rebind_state_machine_scripted_objects_after_artboard(
+                runtime,
+                &graph.artboards,
+                state_machine,
+                &mut factory,
+                context,
+                &script_frame_state,
+                registered_file,
+            )?;
+        } else {
+            state_machine.bind_owned_view_model_contexts(context);
+        }
+        state_machine.advance_data_context();
     }
     let external_images = BTreeMap::new();
     let mut renderer = factory.make_renderer();
@@ -927,6 +1086,12 @@ fn instantiate_scene_state(
 )> {
     let mut instance = ArtboardInstance::from_graph_with_artboards(runtime, artboard, artboards)
         .context("failed to instantiate artboard")?;
+    let owned_view_model_context =
+        selected_artboard_owned_view_model_context(runtime, artboard_index);
+    instance.bind_default_view_model_artboard_list_context(runtime);
+    if let Some(context) = owned_view_model_context.as_ref() {
+        bind_selected_artboard_view_model_context(&mut instance, runtime, context);
+    }
     let mut state_machine = scene
         .state_machine_index
         .map(|index| {
@@ -935,17 +1100,8 @@ fn instantiate_scene_state(
                 .with_context(|| format!("failed to instantiate state machine index {index}"))
         })
         .transpose()?;
-    let owned_view_model_context =
-        selected_artboard_owned_view_model_context(runtime, artboard_index);
-    instance.bind_default_view_model_artboard_list_context(runtime);
     if let Some(state_machine) = state_machine.as_mut() {
-        if let Some(context) = owned_view_model_context.as_ref() {
-            state_machine.bind_owned_view_model_contexts(context);
-        }
         state_machine.advance_data_context();
-    }
-    if let Some(context) = owned_view_model_context.as_ref() {
-        bind_selected_artboard_view_model_context(&mut instance, runtime, context);
     }
     Ok((instance, state_machine, owned_view_model_context))
 }
@@ -976,20 +1132,20 @@ fn bind_script_view_model_artboard_context(
     if context.is_root() {
         let mut contexts = RuntimeOwnedViewModelContext::from_main_handle(context.root_handle());
         contexts.complete_for_artboard(runtime, artboard_index);
+        bind_selected_artboard_view_model_context(instance, runtime, &contexts);
         if let Some(state_machine) = state_machine {
             state_machine.bind_owned_view_model_contexts(&contexts);
             state_machine.advance_data_context();
         }
-        bind_selected_artboard_view_model_context(instance, runtime, &contexts);
         return;
     }
 
+    instance.bind_owned_view_model_artboard_context_handle(runtime, &context);
+    instance.rebind_nested_script_owned_contexts(runtime);
     if let Some(state_machine) = state_machine {
         state_machine.bind_owned_view_model_context_handle(&context);
         state_machine.advance_data_context();
     }
-    instance.bind_owned_view_model_artboard_context_handle(runtime, &context);
-    instance.rebind_nested_script_owned_contexts(runtime);
 }
 
 fn timed_result<T>(
@@ -1318,7 +1474,7 @@ fn parse_script_float(value: &str, context: &str) -> Result<f32> {
 
 fn apply_input_event(
     event: &InputEvent,
-    instance: &ArtboardInstance,
+    instance: &mut ArtboardInstance,
     state_machine: Option<&mut StateMachineInstance>,
     owned_view_model_context: Option<&mut RuntimeOwnedViewModelContext>,
 ) {
@@ -1499,7 +1655,7 @@ mod tests {
 
     #[cfg(feature = "scripting")]
     #[test]
-    fn zero_duration_root_frames_advance_detached_view_models_exactly_once() {
+    fn file_vm_tail_requires_a_root_state_machine_and_runs_once_per_host_frame() {
         #[derive(Default)]
         struct CountingFrameTail(std::cell::Cell<usize>);
 
@@ -1530,9 +1686,8 @@ mod tests {
             &mut current_seconds,
         )
         .expect("zero-duration frame advances");
-        assert_eq!(frame_tail.0.get(), 1);
+        assert_eq!(frame_tail.0.get(), 0);
 
-        // Event boundaries can produce another root frame at the same time.
         advance_scene_to(
             &mut instance,
             &runtime,
@@ -1543,31 +1698,89 @@ mod tests {
             &mut current_seconds,
         )
         .expect("same-time event boundary advances");
-        assert_eq!(frame_tail.0.get(), 2);
+        assert_eq!(
+            frame_tail.0.get(),
+            0,
+            "StaticScene has no StateMachineInstance::advanceAndApply root tail"
+        );
+
+        let bytes = include_bytes!("../../../fixtures/animation/smi_test.riv");
+        let runtime = read_runtime_file(bytes).expect("state-machine fixture imports");
+        let graph = GraphFile::from_runtime_file(&runtime).expect("state-machine graph builds");
+        let artboard = graph
+            .artboards
+            .first()
+            .expect("state-machine fixture has an artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
+                .expect("state-machine artboard instantiates");
+        let mut machine = instance
+            .state_machine_instance(0)
+            .expect("state-machine fixture has a machine");
+        let mut current_seconds = 0.0;
+
+        advance_scene_to(
+            &mut instance,
+            &runtime,
+            Some(&mut machine),
+            None,
+            Some(&frame_tail),
+            0.0,
+            &mut current_seconds,
+        )
+        .expect("zero-duration state-machine frame advances");
+        assert_eq!(frame_tail.0.get(), 1);
+        advance_scene_to(
+            &mut instance,
+            &runtime,
+            Some(&mut machine),
+            None,
+            Some(&frame_tail),
+            0.0,
+            &mut current_seconds,
+        )
+        .expect("same-time state-machine boundary advances");
+        assert_eq!(
+            frame_tail.0.get(),
+            2,
+            "each root StateMachineInstance host call owns exactly one File VM tail"
+        );
     }
 
     #[cfg(feature = "scripting")]
     #[test]
     fn scripted_data_converter_ignores_the_unbound_asset_sentinel() {
-        let assets = BTreeMap::from([(
-            1,
-            ExtractedScriptAsset {
-                asset_id: 1,
-                name: "real-converter".to_owned(),
-                scope: ScopeKey::ROOT,
-                is_module: false,
-                payload: Vec::new(),
-            },
-        )]);
-
-        assert!(
-            resolved_scripted_data_converter_asset(&assets, Some(u64::from(u32::MAX))).is_none()
-        );
         assert_eq!(
-            resolved_scripted_data_converter_asset(&assets, Some(1))
-                .map(|asset| asset.name.as_str()),
-            Some("real-converter")
+            scripted_data_converter_asset_ordinal(Some(u64::from(u32::MAX))),
+            None
         );
+        assert_eq!(scripted_data_converter_asset_ordinal(Some(1)), Some(1));
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn shared_file_vm_contributes_one_host_frame_tail() {
+        let registered = RegisteredScriptFile {
+            vm: Rc::new(ScriptVm::new()),
+            script_programs: Rc::new(BTreeMap::new()),
+            frame_identity: Rc::new(()),
+        };
+        let other_registered = RegisteredScriptFile {
+            vm: Rc::new(ScriptVm::new()),
+            script_programs: Rc::new(BTreeMap::new()),
+            frame_identity: Rc::new(()),
+        };
+        let mut state = RunnerScriptArtboardRenderState::default();
+
+        state.retain_registered_view_model_frame(&registered);
+        state.retain_registered_view_model_frame(&registered);
+        state.retain_registered_view_model_frame(&registered.clone());
+        assert_eq!(state.detached_view_model_frames.len(), 1);
+        assert_eq!(state.registered_view_model_frame_identities.len(), 1);
+
+        state.retain_registered_view_model_frame(&other_registered);
+        assert_eq!(state.detached_view_model_frames.len(), 2);
+        assert_eq!(state.registered_view_model_frame_identities.len(), 2);
     }
 }
 
@@ -1637,29 +1850,33 @@ fn advance_scene_to(
     let elapsed_seconds = (target_seconds - *current_seconds).max(0.0);
     if let Some(state_machine) = state_machine.as_deref_mut() {
         instance.advance_state_machine_instance(state_machine, elapsed_seconds);
-        if instance.advance_nested_artboards_with_state_machine(elapsed_seconds, state_machine) {
+        if instance
+            .advance_frame_components_with_state_machine(elapsed_seconds, state_machine)
+            .context("retained frame-component advance failed")?
+        {
             instance.advance_state_machine_instance(state_machine, 0.0);
         }
     } else {
-        instance.advance_nested_artboards(elapsed_seconds);
+        instance
+            .advance_frame_components(elapsed_seconds)
+            .context("retained frame-component advance failed")?;
     }
     let _ = (runtime, owned_view_model_context);
-    instance.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
-    instance
-        .advance_script_instances(elapsed_seconds)
-        .context("scripted drawable advance failed")?;
-    instance
-        .update_script_instances()
-        .context("scripted drawable update failed")?;
     if let Some(state_machine) = state_machine.as_deref_mut() {
-        instance.settle_state_machine_update_passes_after_main_advance(std::slice::from_mut(
-            state_machine,
-        ));
+        instance
+            .settle_state_machine_update_passes_after_main_advance_with_script_errors(
+                std::slice::from_mut(state_machine),
+            )
+            .context("dependency-ordered scripted drawable update failed")?;
     } else {
-        instance.update_pass();
+        instance
+            .update_pass_with_script_errors()
+            .context("dependency-ordered scripted drawable update failed")?;
     }
     #[cfg(feature = "scripting")]
-    if let Some(script_frame_tail) = script_frame_tail {
+    if state_machine.is_some()
+        && let Some(script_frame_tail) = script_frame_tail
+    {
         script_frame_tail.advance_detached_view_models();
     }
     *current_seconds = target_seconds;
@@ -1830,6 +2047,7 @@ struct ExtractedScriptAsset {
     /// `FileAsset` ordinal: the stable identity C++ uses when registering a
     /// protocol script. Names are only for diagnostics and module resolution.
     asset_id: u64,
+    global_id: u32,
     name: String,
     scope: ScopeKey,
     is_module: bool,
@@ -1837,9 +2055,13 @@ struct ExtractedScriptAsset {
 }
 
 #[cfg(feature = "scripting")]
+#[derive(Clone)]
 struct RegisteredScriptFile {
-    vm: ScriptVm,
-    script_programs: BTreeMap<u64, ScriptProgram>,
+    vm: Rc<ScriptVm>,
+    script_programs: Rc<BTreeMap<u64, ScriptProgram>>,
+    /// Clone-stable File registration identity. The render state retains this
+    /// tiny token so allocator address reuse cannot alias a later File VM.
+    frame_identity: Rc<()>,
 }
 
 #[cfg(feature = "scripting")]
@@ -1848,8 +2070,14 @@ struct RunnerScriptArtboard {
     artboards: Vec<ArtboardGraph>,
     artboard_index: usize,
     instance: Rc<RefCell<ArtboardInstance>>,
+    state_machine_index: Option<usize>,
     state_machine: Option<StateMachineInstance>,
     view_model: Option<nuxie_runtime::ScriptViewModel>,
+    registered_file: Option<RegisteredScriptFile>,
+    parent_context: Option<nuxie_runtime::ScriptArtboardParentContext>,
+    // C++ ScriptReffedArtboard retains the exact local + parent context for
+    // the lifetime of the projected ScriptInputArtboard occurrence.
+    _data_context: Option<nuxie_runtime::ScriptArtboardDataContext>,
     width: f32,
     height: f32,
     frame_origin: bool,
@@ -1861,13 +2089,101 @@ struct RunnerScriptArtboard {
 struct RunnerScriptArtboardRenderState {
     pending: Vec<(usize, Weak<RefCell<ArtboardInstance>>)>,
     deferred_script_inits: BTreeSet<u32>,
+    registered_view_model_frames: BTreeSet<usize>,
+    registered_view_model_frame_identities: Vec<Rc<()>>,
     detached_view_model_frames: Vec<DetachedViewModelFrame>,
 }
 
 #[cfg(feature = "scripting")]
+#[derive(Clone)]
+struct RunnerScriptArtboardResolver {
+    runtime: RuntimeFile,
+    artboards: Vec<ArtboardGraph>,
+    render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
+    registered_file: RegisteredScriptFile,
+}
+
+#[cfg(feature = "scripting")]
+#[derive(Clone)]
+struct RunnerScriptViewModelInputResolver {
+    runtime: RuntimeFile,
+    context: nuxie_runtime::ScriptArtboardParentContext,
+}
+
+#[cfg(feature = "scripting")]
+impl std::fmt::Debug for RunnerScriptArtboardResolver {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RunnerScriptArtboardResolver")
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "scripting")]
+impl std::fmt::Debug for RunnerScriptViewModelInputResolver {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RunnerScriptViewModelInputResolver")
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "scripting")]
+impl nuxie_runtime::ScriptArtboardResolver for RunnerScriptArtboardResolver {
+    fn resolve_script_artboard(
+        &self,
+        artboard_id: u64,
+        parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
+    ) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
+        let artboard_index = usize::try_from(artboard_id).map_err(|_| {
+            ScriptError::new(format!(
+                "script artboard id {artboard_id} does not fit this platform"
+            ))
+        })?;
+        let mut artboard = RunnerScriptArtboard::new_with_parent_context(
+            &self.runtime,
+            &self.artboards,
+            artboard_index,
+            Rc::clone(&self.render_state),
+            parent_context,
+            Some(&self.registered_file),
+        )
+        .map_err(|error| ScriptError::new(error.to_string()))?;
+        artboard.bind_view_model();
+        artboard
+            .prepare_state_machine_once()
+            .map_err(|error| ScriptError::new(error.to_string()))?;
+        Ok(Box::new(artboard))
+    }
+}
+
+#[cfg(feature = "scripting")]
+impl nuxie_runtime::ScriptViewModelInputResolver for RunnerScriptViewModelInputResolver {
+    fn resolve_script_view_model(
+        &self,
+        input_global_id: u32,
+        path: &nuxie_runtime::ScriptInputViewModelPropertyPath,
+    ) -> std::result::Result<Option<ScriptViewModel>, ScriptError> {
+        self.context
+            .resolve_script_view_model_input(&self.runtime, path)
+            .ok_or_else(|| {
+                ScriptError::new(format!(
+                    "ScriptInputViewModelProperty global {input_global_id} became unresolved during authored hydration"
+                ))
+            })
+    }
+}
+
+#[cfg(feature = "scripting")]
 impl RunnerScriptArtboardRenderState {
-    fn retain_detached_view_model_frame(&mut self, frame: DetachedViewModelFrame) {
-        self.detached_view_model_frames.push(frame);
+    fn retain_registered_view_model_frame(&mut self, registered_file: &RegisteredScriptFile) {
+        let identity = Rc::as_ptr(&registered_file.frame_identity) as usize;
+        if self.registered_view_model_frames.insert(identity) {
+            self.registered_view_model_frame_identities
+                .push(Rc::clone(&registered_file.frame_identity));
+            self.detached_view_model_frames
+                .push(registered_file.vm.detached_view_model_frame());
+        }
     }
 
     fn advance_detached_view_models(&self) -> bool {
@@ -1941,6 +2257,17 @@ impl RunnerScriptArtboard {
         artboard_index: usize,
         render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
     ) -> Result<Self> {
+        Self::new_with_parent_context(runtime, artboards, artboard_index, render_state, None, None)
+    }
+
+    fn new_with_parent_context(
+        runtime: &RuntimeFile,
+        artboards: &[ArtboardGraph],
+        artboard_index: usize,
+        render_state: Rc<RefCell<RunnerScriptArtboardRenderState>>,
+        parent_context: Option<&nuxie_runtime::ScriptArtboardParentContext>,
+        registered_file: Option<&RegisteredScriptFile>,
+    ) -> Result<Self> {
         let graph = artboards
             .get(artboard_index)
             .with_context(|| format!("missing scripted artboard index {artboard_index}"))?;
@@ -1955,8 +2282,8 @@ impl RunnerScriptArtboard {
             .and_then(|artboard| artboard.uint_property("defaultStateMachineId"))
             .and_then(|index| usize::try_from(index).ok())
             .filter(|index| graph.state_machines.get(*index).is_some());
-        let state_machine =
-            state_machine_index.and_then(|index| instance.borrow().state_machine_instance(index));
+        let state_machine = state_machine_index
+            .and_then(|index| instance.borrow_mut().state_machine_instance(index));
         let object = runtime.object(graph.global_id as usize);
         render_state
             .borrow_mut()
@@ -1966,11 +2293,15 @@ impl RunnerScriptArtboard {
             artboards: artboards.to_vec(),
             artboard_index,
             instance,
+            state_machine_index,
             state_machine,
             view_model: selected_artboard_owned_view_model_context(runtime, artboard_index)
                 .as_ref()
                 .and_then(RuntimeOwnedViewModelContext::main_handle)
                 .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context)),
+            registered_file: registered_file.cloned(),
+            parent_context: parent_context.cloned(),
+            _data_context: None,
             width: object
                 .and_then(|object| object.double_property("width"))
                 .unwrap_or(0.0),
@@ -1986,6 +2317,18 @@ impl RunnerScriptArtboard {
         let Some(view_model) = self.view_model.as_ref() else {
             return;
         };
+        if let Some(parent_context) = self.parent_context.clone() {
+            let local = view_model.owned_handle();
+            let data_context = parent_context.with_local_view_model(&local);
+            self.instance
+                .borrow_mut()
+                .bind_script_artboard_data_context(&self.runtime, &data_context);
+            if let Some(state_machine) = self.state_machine.as_mut() {
+                state_machine.bind_script_artboard_data_context(&data_context);
+            }
+            self._data_context = Some(data_context);
+            return;
+        }
         bind_script_view_model_artboard_context(
             &mut self.instance.borrow_mut(),
             &self.runtime,
@@ -1993,6 +2336,37 @@ impl RunnerScriptArtboard {
             self.state_machine.as_mut(),
             view_model,
         );
+    }
+
+    fn prepare_state_machine_once(&mut self) -> Result<()> {
+        let (Some(state_machine_index), Some(state_machine), Some(registered_file)) = (
+            self.state_machine_index,
+            self.state_machine.as_mut(),
+            self.registered_file.as_ref(),
+        ) else {
+            return Ok(());
+        };
+        let artboard = self
+            .artboards
+            .get(self.artboard_index)
+            .with_context(|| format!("missing scripted artboard index {}", self.artboard_index))?;
+        // `ScriptReffedArtboard` constructs its default state-machine
+        // occurrence synchronously and that constructor initializes every
+        // fixed scripted owner before the child can be returned to Lua
+        // (`lua_artboards.cpp:20-50`;
+        // `state_machine_instance.cpp:2072-2082`). Reuse the File-level VM
+        // and protocol programs, but retain fresh occurrence tables.
+        initialize_state_machine_scripted_objects(
+            &self.runtime,
+            artboard,
+            &self.artboards,
+            state_machine_index,
+            state_machine,
+            None,
+            None,
+            Some(&self.render_state),
+            Some(registered_file),
+        )
     }
 }
 
@@ -2037,15 +2411,25 @@ impl ScriptArtboard for RunnerScriptArtboard {
         &self,
         view_model: Option<nuxie_runtime::ScriptViewModel>,
     ) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
-        let mut instance = RunnerScriptArtboard::new(
+        let mut instance = RunnerScriptArtboard::new_with_parent_context(
             &self.runtime,
             &self.artboards,
             self.artboard_index,
             Rc::clone(&self.render_state),
+            self.parent_context.as_ref(),
+            self.registered_file.as_ref(),
         )
         .map_err(|error| ScriptError::new(error.to_string()))?;
-        instance.view_model = view_model;
+        // Pinned `ScriptedArtboard::instance(nil)` keeps the referenced
+        // Artboard's authored default instance; only an explicit model
+        // replaces it (`lua_artboards.cpp:20-38,334-345`).
+        if let Some(view_model) = view_model {
+            instance.view_model = Some(view_model);
+        }
         instance.bind_view_model();
+        instance
+            .prepare_state_machine_once()
+            .map_err(|error| ScriptError::new(error.to_string()))?;
         Ok(Box::new(instance))
     }
 
@@ -2154,7 +2538,7 @@ fn initialize_scripted_drawables_and_realize(
     artboards: &[ArtboardGraph],
     instance: &mut ArtboardInstance,
     factory: &mut dyn RenderFactory,
-    registered_file: Option<&mut RegisteredScriptFile>,
+    registered_file: Option<&RegisteredScriptFile>,
 ) -> Result<Option<Rc<RefCell<RunnerScriptArtboardRenderState>>>> {
     let state = initialize_scripted_drawables(
         runtime,
@@ -2166,7 +2550,13 @@ fn initialize_scripted_drawables_and_realize(
         registered_file,
     )
     .context("failed to initialize scripted drawables")?;
+    // Ordinary scripted Artboards complete their initial Component pass
+    // before their retained backend resources are realized. ScriptInputArtboard
+    // roots deliberately use `initialize_scripted_drawables` directly so
+    // their input-cloned children stay lazy until the scene frame begins
+    // (`scripted_drawable.cpp:346-356`; `scripted_object.cpp:43-61`).
     if let Some(state) = state.as_ref() {
+        instance.update_pass();
         state
             .borrow_mut()
             .realize_pending(runtime, artboards, factory)
@@ -2183,7 +2573,7 @@ fn initialize_scripted_drawables(
     artboards: &[ArtboardGraph],
     instance: &mut ArtboardInstance,
     factory: &mut dyn RenderFactory,
-    registered_file: Option<&mut RegisteredScriptFile>,
+    registered_file: Option<&RegisteredScriptFile>,
 ) -> Result<Option<Rc<RefCell<RunnerScriptArtboardRenderState>>>> {
     let script_assets = extract_script_assets(runtime);
     if script_assets.is_empty() {
@@ -2218,7 +2608,7 @@ fn initialize_nested_scripted_drawables(
     instance: &mut ArtboardInstance,
     factory: &mut dyn RenderFactory,
     render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
-    mut registered_file: Option<&mut RegisteredScriptFile>,
+    registered_file: Option<&RegisteredScriptFile>,
 ) -> Result<()> {
     let script_assets = extract_script_assets(runtime);
     let root_context_model = selected_script_view_model(runtime, root_artboard_index);
@@ -2258,7 +2648,7 @@ fn initialize_nested_scripted_drawables(
                 parent_context_models,
                 true,
                 true,
-                registered_file.as_deref_mut(),
+                registered_file,
             )?;
             if !initialized {
                 context_models_by_depth.push(child_context_model);
@@ -2336,7 +2726,7 @@ fn initialize_scripted_drawables_for_artboard(
     parent_context_models: Vec<ScriptViewModel>,
     script_context_is_bound: bool,
     initialize_only_missing: bool,
-    registered_file: Option<&mut RegisteredScriptFile>,
+    registered_file: Option<&RegisteredScriptFile>,
 ) -> Result<bool> {
     if initialize_only_missing
         && !artboard.local_objects.iter().any(|local_object| {
@@ -2349,27 +2739,30 @@ fn initialize_scripted_drawables_for_artboard(
         return Ok(false);
     }
 
-    let mut local_registered_file;
+    let local_registered_file;
     let registered_file = match registered_file {
         Some(registered_file) => registered_file,
         None => {
             local_registered_file = register_script_file(runtime, script_assets, factory)?;
-            &mut local_registered_file
+            &local_registered_file
         }
     };
     let RegisteredScriptFile {
         vm,
         script_programs,
+        ..
     } = registered_file;
     let bound_context_model = context_model.clone();
-    vm.set_default_context_view_model_chain(context_model, parent_context_models);
+    let generator_context_model = bound_context_model.clone();
+    let generator_parent_context_models = parent_context_models;
     let mut host = NoopScriptHost;
     initialize_scripted_data_converters(
         runtime,
         instance,
         factory,
         script_assets,
-        bound_context_model.as_ref(),
+        generator_context_model.as_ref(),
+        &generator_parent_context_models,
         vm,
         script_programs,
         &mut host,
@@ -2398,14 +2791,21 @@ fn initialize_scripted_drawables_for_artboard(
                 local_object.global_id, script_asset_id
             )
         })?;
-        let mut script_instance =
-            instantiate_extracted_script(vm, script_programs, script, &mut host, factory)
-                .with_context(|| {
-                    format!(
-                        "failed to instantiate ScriptAsset '{}' for ScriptedDrawable global {}",
-                        script.name, local_object.global_id
-                    )
-                })?;
+        let mut script_instance = instantiate_extracted_script_with_context(
+            vm,
+            script_programs,
+            script,
+            &mut host,
+            Some(factory),
+            generator_context_model.clone(),
+            generator_parent_context_models.clone(),
+        )
+        .with_context(|| {
+            format!(
+                "failed to instantiate ScriptAsset '{}' for ScriptedDrawable global {}",
+                script.name, local_object.global_id
+            )
+        })?;
         if !script_context_is_bound {
             script_instance
                 .clear_unresolved_context_view_model()
@@ -2496,12 +2896,15 @@ fn initialize_scripted_drawables_for_artboard(
     if let Some(model) = bound_context_model {
         bind_script_view_model_artboard_context(instance, runtime, artboard_index, None, &model);
         instance.advance_artboard_data_binds();
-        instance.update_pass();
+        // Hydration dirties ScriptUpdate but C++ does not consume that dirt
+        // while attaching the DataContext. The ordinary Artboard update owns
+        // the first `scriptUpdate()` call (`scripted_object.cpp:43-117,
+        // 399-436`; `scripted_drawable.cpp:346-356`).
     }
 
     render_state
         .borrow_mut()
-        .retain_detached_view_model_frame(vm.detached_view_model_frame());
+        .retain_registered_view_model_frame(registered_file);
 
     Ok(true)
 }
@@ -2513,8 +2916,9 @@ fn initialize_scripted_data_converters(
     factory: &mut dyn RenderFactory,
     script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
     context_model: Option<&ScriptViewModel>,
-    vm: &mut ScriptVm,
-    script_programs: &mut BTreeMap<u64, ScriptProgram>,
+    context_parent_view_models: &[ScriptViewModel],
+    vm: &ScriptVm,
+    script_programs: &BTreeMap<u64, ScriptProgram>,
     host: &mut NoopScriptHost,
 ) -> Result<()> {
     for converter in runtime
@@ -2526,18 +2930,19 @@ fn initialize_scripted_data_converters(
         // UINT_MAX default. It is a schema/template record, not a script
         // instance to initialize; only a resolved ScriptAsset creates the
         // converter-side generator reference.
-        let Some(script) = resolved_scripted_data_converter_asset(
-            script_assets,
-            converter.uint_property("scriptAssetId"),
-        ) else {
+        let Some(script) =
+            resolved_scripted_data_converter_asset(runtime, script_assets, converter)
+        else {
             continue;
         };
-        let mut script_instance = instantiate_extracted_script(
+        let mut script_instance = instantiate_extracted_script_with_context(
             vm,
             script_programs,
             script,
             host,
-            factory,
+            Some(factory),
+            context_model.cloned(),
+            context_parent_view_models.to_vec(),
         )
         .with_context(|| {
             format!(
@@ -2588,12 +2993,27 @@ fn initialize_scripted_data_converters(
 
 #[cfg(feature = "scripting")]
 fn resolved_scripted_data_converter_asset<'a>(
+    runtime: &RuntimeFile,
     script_assets: &'a BTreeMap<u64, ExtractedScriptAsset>,
-    script_asset_id: Option<u64>,
+    converter: &RuntimeObject,
 ) -> Option<&'a ExtractedScriptAsset> {
-    script_asset_id
-        .filter(|&id| id != u64::from(u32::MAX))
-        .and_then(|id| script_assets.get(&id))
+    let ordinal = scripted_data_converter_asset_ordinal(converter.uint_property("scriptAssetId"))?;
+    let resolved = runtime.resolved_file_asset_for_referencer(converter)?;
+    let asset = script_assets.get(&ordinal)?;
+    // A wrong-typed or catalog-mismatched referencer never acquires a
+    // ScriptAsset generator. A module registers only its module value, not a
+    // protocol generator, so the converter remains inert
+    // (`script_asset.cpp:99-110,139-145`).
+    (resolved.type_name == "ScriptAsset"
+        && resolved.id == asset.global_id
+        && !resolved.bool_property("isModule").unwrap_or(false)
+        && !asset.is_module)
+        .then_some(asset)
+}
+
+#[cfg(feature = "scripting")]
+fn scripted_data_converter_asset_ordinal(script_asset_id: Option<u64>) -> Option<u64> {
+    script_asset_id.filter(|&id| id != u64::from(u32::MAX))
 }
 
 #[cfg(feature = "scripting")]
@@ -2635,112 +3055,1108 @@ fn default_script_input_value(input: &nuxie_binary::RuntimeObject) -> Option<Scr
 }
 
 #[cfg(feature = "scripting")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RunnerScriptHydrationPhase {
+    Cold,
+    Live,
+}
+
+#[cfg(feature = "scripting")]
+enum RunnerPreparedScriptInput {
+    Value {
+        name: nuxie_runtime::ScriptCoreString,
+        value: ScriptValue,
+    },
+    Artboard {
+        name: nuxie_runtime::ScriptCoreString,
+        artboard_id: usize,
+    },
+    ViewModel {
+        input_global_id: u32,
+        name: nuxie_runtime::ScriptCoreString,
+        path: nuxie_runtime::ScriptInputViewModelPropertyPath,
+    },
+}
+
+#[cfg(feature = "scripting")]
+fn runner_script_or_inert<T>(result: std::result::Result<T, ScriptError>) -> Result<Option<T>> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(error) if error.resource_code().is_some() => Err(anyhow!(error)),
+        // Pinned C++ keeps the imported owner and continues construction when
+        // one protocol generator/init/hydration attempt fails.
+        Err(_) => Ok(None),
+    }
+}
+
+#[cfg(feature = "scripting")]
+fn reborrow_render_factory<'a>(
+    factory: &'a mut Option<&mut dyn RenderFactory>,
+) -> Option<&'a mut dyn RenderFactory> {
+    match factory {
+        Some(factory) => Some(&mut **factory),
+        None => None,
+    }
+}
+
+#[cfg(feature = "scripting")]
+fn state_machine_script_context_hydration(
+    runtime: &RuntimeFile,
+    state_machine: &StateMachineInstance,
+    owned_context: Option<&RuntimeOwnedViewModelContext>,
+    phase: RunnerScriptHydrationPhase,
+) -> nuxie_runtime::ScriptListenerActionHydration {
+    if phase == RunnerScriptHydrationPhase::Cold {
+        return nuxie_runtime::ScriptListenerActionHydration::unresolved(Vec::new());
+    }
+    let fallback_root = owned_context.and_then(RuntimeOwnedViewModelContext::main_handle);
+    let (context_view_model, context_parent_view_models) =
+        state_machine.scripted_listener_data_context_view_models(runtime, fallback_root);
+    if state_machine.has_scripted_listener_data_context() || fallback_root.is_some() {
+        nuxie_runtime::ScriptListenerActionHydration::new_with_context_chain(
+            context_view_model,
+            context_parent_view_models,
+            Vec::new(),
+        )
+    } else {
+        nuxie_runtime::ScriptListenerActionHydration::unresolved(Vec::new())
+    }
+}
+
+#[cfg(feature = "scripting")]
+#[allow(clippy::too_many_arguments)]
+fn prepare_state_machine_script_hydration_from_snapshots(
+    runtime: &RuntimeFile,
+    artboards: &[ArtboardGraph],
+    state_machine: &StateMachineInstance,
+    snapshots: Vec<nuxie_runtime::ScriptListenerInputSnapshot>,
+    owner: &str,
+    owned_context: Option<&RuntimeOwnedViewModelContext>,
+    render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
+    registered_file: &RegisteredScriptFile,
+    phase: RunnerScriptHydrationPhase,
+) -> std::result::Result<nuxie_runtime::ScriptListenerActionHydration, ScriptError> {
+    let fallback_root = (phase == RunnerScriptHydrationPhase::Live)
+        .then(|| owned_context.and_then(RuntimeOwnedViewModelContext::main_handle))
+        .flatten();
+    let root_context =
+        fallback_root.map(|root| RuntimeOwnedViewModelContextHandle::root(runtime, root.clone()));
+    let (context_view_model, context_parent_view_models) =
+        if phase == RunnerScriptHydrationPhase::Live {
+            state_machine.scripted_listener_data_context_view_models(runtime, fallback_root)
+        } else {
+            (None, Vec::new())
+        };
+    let context_resolved = phase == RunnerScriptHydrationPhase::Live
+        && (state_machine.has_scripted_listener_data_context() || fallback_root.is_some());
+    let artboard_parent_context = if phase == RunnerScriptHydrationPhase::Live {
+        state_machine.scripted_listener_artboard_parent_context(root_context.as_ref())
+    } else {
+        None
+    };
+
+    // Validate the complete cloned input collection before constructing a
+    // child artboard or touching the Lua table (`scripted_object.cpp:399-426`).
+    let mut prepared = Vec::with_capacity(snapshots.len());
+    for snapshot in snapshots {
+        let input = runtime
+            .object(snapshot.input_global_id as usize)
+            .ok_or_else(|| {
+                ScriptError::new(format!(
+                    "{owner} input global {}: object is absent",
+                    snapshot.input_global_id
+                ))
+            })?;
+        let expected_type = match snapshot.kind {
+            nuxie_runtime::ScriptListenerInputKind::Boolean => "ScriptInputBoolean",
+            nuxie_runtime::ScriptListenerInputKind::Number => "ScriptInputNumber",
+            nuxie_runtime::ScriptListenerInputKind::Color => "ScriptInputColor",
+            nuxie_runtime::ScriptListenerInputKind::String => "ScriptInputString",
+            nuxie_runtime::ScriptListenerInputKind::Trigger => "ScriptInputTrigger",
+            nuxie_runtime::ScriptListenerInputKind::Artboard => "ScriptInputArtboard",
+            nuxie_runtime::ScriptListenerInputKind::ViewModelProperty => {
+                "ScriptInputViewModelProperty"
+            }
+        };
+        if input.type_name != expected_type {
+            return Err(ScriptError::new(format!(
+                "{owner} input global {}: expected {expected_type}, found {}",
+                input.id, input.type_name
+            )));
+        }
+        let name = snapshot.name;
+        match snapshot.kind {
+            nuxie_runtime::ScriptListenerInputKind::Boolean
+            | nuxie_runtime::ScriptListenerInputKind::Number
+            | nuxie_runtime::ScriptListenerInputKind::Color
+            | nuxie_runtime::ScriptListenerInputKind::String => {
+                let Some(nuxie_runtime::ScriptListenerInputSnapshotValue::Value(value)) =
+                    snapshot.value
+                else {
+                    return Err(ScriptError::new(format!(
+                        "{owner} input global {}: cloned scalar value is unavailable",
+                        input.id
+                    )));
+                };
+                prepared.push(RunnerPreparedScriptInput::Value { name, value });
+            }
+            // Base hydration never invokes an authored trigger callback.
+            nuxie_runtime::ScriptListenerInputKind::Trigger => {}
+            nuxie_runtime::ScriptListenerInputKind::Artboard => {
+                let artboard_id = match snapshot.value {
+                    Some(nuxie_runtime::ScriptListenerInputSnapshotValue::Artboard(value)) => {
+                        Some(value)
+                    }
+                    _ => None,
+                }
+                .filter(|id| *id != u64::from(u32::MAX))
+                .and_then(|id| usize::try_from(id).ok())
+                .ok_or_else(|| {
+                    ScriptError::new(format!(
+                        "{owner} input global {}: referenced artboard is unresolved",
+                        input.id
+                    ))
+                })?;
+                if artboards.get(artboard_id).is_none() {
+                    return Err(ScriptError::new(format!(
+                        "{owner} input global {}: referenced artboard {artboard_id} is unavailable",
+                        input.id
+                    )));
+                }
+                prepared.push(RunnerPreparedScriptInput::Artboard { name, artboard_id });
+            }
+            nuxie_runtime::ScriptListenerInputKind::ViewModelProperty => {
+                if phase == RunnerScriptHydrationPhase::Cold {
+                    return Err(ScriptError::new(format!(
+                        "{owner} input global {}: view-model property path is unresolved during cold initialization",
+                        input.id
+                    )));
+                }
+                let path = snapshot.view_model_path.ok_or_else(|| {
+                    ScriptError::new(format!(
+                        "{owner} input global {}: cloned view-model property path is absent",
+                        input.id
+                    ))
+                })?;
+                state_machine
+                    .scripted_listener_bound_view_model(runtime, &path, root_context.as_ref())
+                    .ok_or_else(|| {
+                        ScriptError::new(format!(
+                            "{owner} input global {}: view-model property path is unresolved",
+                            input.id
+                        ))
+                    })?;
+                prepared.push(RunnerPreparedScriptInput::ViewModel {
+                    input_global_id: input.id,
+                    name,
+                    path,
+                });
+            }
+        }
+    }
+
+    let artboard_resolver: Rc<dyn nuxie_runtime::ScriptArtboardResolver> =
+        Rc::new(RunnerScriptArtboardResolver {
+            runtime: runtime.clone(),
+            artboards: artboards.to_vec(),
+            render_state: Rc::clone(render_state),
+            registered_file: registered_file.clone(),
+        });
+    let view_model_resolver = artboard_parent_context.clone().map(|context| {
+        Rc::new(RunnerScriptViewModelInputResolver {
+            runtime: runtime.clone(),
+            context,
+        }) as Rc<dyn nuxie_runtime::ScriptViewModelInputResolver>
+    });
+    let mut inputs = Vec::with_capacity(prepared.len());
+    for input in prepared {
+        match input {
+            RunnerPreparedScriptInput::Value { name, value } => {
+                inputs.push(nuxie_runtime::ScriptListenerInputHydration::Value { name, value });
+            }
+            RunnerPreparedScriptInput::Artboard { name, artboard_id } => {
+                inputs.push(nuxie_runtime::ScriptListenerInputHydration::Artboard {
+                    name,
+                    artboard_id: u64::try_from(artboard_id)
+                        .expect("validated ScriptInputArtboard id originated as u64"),
+                    resolver: Rc::clone(&artboard_resolver),
+                    parent_context: artboard_parent_context.clone(),
+                });
+            }
+            RunnerPreparedScriptInput::ViewModel {
+                input_global_id,
+                name,
+                path,
+            } => {
+                inputs.push(nuxie_runtime::ScriptListenerInputHydration::ViewModel {
+                    name,
+                    input_global_id,
+                    path,
+                    resolver: Rc::clone(
+                        view_model_resolver
+                            .as_ref()
+                            .expect("validated ViewModel input retains its DataContext"),
+                    ),
+                });
+            }
+        }
+    }
+    Ok(if context_resolved {
+        nuxie_runtime::ScriptListenerActionHydration::new_with_context_chain(
+            context_view_model,
+            context_parent_view_models,
+            inputs,
+        )
+    } else {
+        nuxie_runtime::ScriptListenerActionHydration::unresolved(inputs)
+    })
+}
+
+#[cfg(feature = "scripting")]
+#[allow(clippy::too_many_arguments)]
+fn instantiate_state_machine_scripted_object_table(
+    runtime: &RuntimeFile,
+    state_machine: &mut StateMachineInstance,
+    definition: &nuxie_runtime::ScriptListenerActionDefinition,
+    factory: &mut Option<&mut dyn RenderFactory>,
+    owned_context: Option<&RuntimeOwnedViewModelContext>,
+    script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+    vm: &ScriptVm,
+    script_programs: &BTreeMap<u64, ScriptProgram>,
+    phase: RunnerScriptHydrationPhase,
+) -> Result<bool> {
+    if state_machine.has_scripted_object_instance(definition.scripted_object_global_id()) {
+        return Ok(true);
+    }
+    if !definition.has_protocol_asset() {
+        return Ok(false);
+    }
+    let Some(script) = script_assets.get(&(definition.asset_ordinal() as u64)) else {
+        return Ok(false);
+    };
+    let (context_view_model, context_parent_view_models) =
+        if phase == RunnerScriptHydrationPhase::Live {
+            state_machine.scripted_listener_data_context_view_models(
+                runtime,
+                owned_context.and_then(RuntimeOwnedViewModelContext::main_handle),
+            )
+        } else {
+            (None, Vec::new())
+        };
+    let mut host = NoopScriptHost;
+    let Some(instance) = runner_script_or_inert(instantiate_extracted_script_with_context(
+        vm,
+        script_programs,
+        script,
+        &mut host,
+        reborrow_render_factory(factory),
+        context_view_model,
+        context_parent_view_models,
+    ))?
+    else {
+        return Ok(false);
+    };
+    state_machine
+        .set_scripted_object_instance(definition.scripted_object_global_id(), instance)
+        .map_err(|error| anyhow!(error))?;
+    Ok(true)
+}
+
+#[cfg(feature = "scripting")]
+#[allow(clippy::too_many_arguments)]
+fn instantiate_state_machine_scripted_converter_table(
+    runtime: &RuntimeFile,
+    state_machine: &StateMachineInstance,
+    converter_global_id: u32,
+    factory: &mut Option<&mut dyn RenderFactory>,
+    owned_context: Option<&RuntimeOwnedViewModelContext>,
+    script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+    vm: &ScriptVm,
+    script_programs: &BTreeMap<u64, ScriptProgram>,
+) -> Result<Option<Box<dyn nuxie_runtime::ScriptInstance>>> {
+    let Some(converter) = runtime.object(converter_global_id as usize) else {
+        return Ok(None);
+    };
+    let Some(script) = resolved_scripted_data_converter_asset(runtime, script_assets, converter)
+    else {
+        return Ok(None);
+    };
+    let (context_view_model, context_parent_view_models) = state_machine
+        .scripted_listener_data_context_view_models(
+            runtime,
+            owned_context.and_then(RuntimeOwnedViewModelContext::main_handle),
+        );
+    let mut host = NoopScriptHost;
+    runner_script_or_inert(instantiate_extracted_script_with_context(
+        vm,
+        script_programs,
+        script,
+        &mut host,
+        reborrow_render_factory(factory),
+        context_view_model,
+        context_parent_view_models,
+    ))
+}
+
+#[cfg(feature = "scripting")]
+#[allow(clippy::too_many_arguments)]
+fn bind_state_machine_scripted_data_converters(
+    runtime: &RuntimeFile,
+    artboards: &[ArtboardGraph],
+    state_machine: &mut StateMachineInstance,
+    factory: &mut Option<&mut dyn RenderFactory>,
+    owned_context: Option<&RuntimeOwnedViewModelContext>,
+    render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
+    registered_file: &RegisteredScriptFile,
+    script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+    vm: &ScriptVm,
+    script_programs: &BTreeMap<u64, ScriptProgram>,
+    explicit_rebind: bool,
+) -> Result<()> {
+    for step in state_machine.state_machine_data_converter_bind_steps() {
+        let (parent_data_bind_index, converter_path, converter_global_id, inits) = match step {
+            nuxie_runtime::RuntimeStateMachineDataConverterBindStep::BindOuter {
+                data_bind_index,
+            } => {
+                let _ = state_machine.bind_state_machine_data_bind_source(data_bind_index);
+                continue;
+            }
+            nuxie_runtime::RuntimeStateMachineDataConverterBindStep::BindConverter {
+                data_bind_index,
+                converter_path,
+            } => {
+                let root = owned_context.and_then(RuntimeOwnedViewModelContext::main);
+                let _ = state_machine.bind_state_machine_data_converter_own_sources(
+                    runtime,
+                    root.as_deref(),
+                    data_bind_index,
+                    &converter_path,
+                    explicit_rebind,
+                );
+                drop(root);
+                continue;
+            }
+            nuxie_runtime::RuntimeStateMachineDataConverterBindStep::Rehydrate {
+                data_bind_index,
+                converter_path,
+                converter_global_id,
+                inits,
+            } => (data_bind_index, converter_path, converter_global_id, inits),
+            nuxie_runtime::RuntimeStateMachineDataConverterBindStep::RebindFinalInput {
+                data_bind_index,
+                converter_path,
+                converter_input_index,
+                inner_data_bind_index,
+            } => {
+                let root = owned_context.and_then(RuntimeOwnedViewModelContext::main);
+                let _ = state_machine.rebind_state_machine_data_converter_final_input(
+                    runtime,
+                    root.as_deref(),
+                    data_bind_index,
+                    &converter_path,
+                    converter_input_index,
+                    inner_data_bind_index,
+                );
+                drop(root);
+                continue;
+            }
+            nuxie_runtime::RuntimeStateMachineDataConverterBindStep::FinalizeOuter {
+                data_bind_index,
+            } => {
+                let _ = state_machine.finalize_state_machine_data_bind_source(data_bind_index);
+                continue;
+            }
+        };
+
+        if !state_machine
+            .has_scripted_data_converter_instance(parent_data_bind_index, &converter_path)
+        {
+            let Some(instance) = instantiate_state_machine_scripted_converter_table(
+                runtime,
+                state_machine,
+                converter_global_id,
+                factory,
+                owned_context,
+                script_assets,
+                vm,
+                script_programs,
+            )?
+            else {
+                continue;
+            };
+            state_machine
+                .set_scripted_data_converter_instance(
+                    parent_data_bind_index,
+                    &converter_path,
+                    converter_global_id,
+                    instance,
+                )
+                .map_err(|error| anyhow!(error))?;
+        }
+        let context = state_machine_script_context_hydration(
+            runtime,
+            state_machine,
+            owned_context,
+            RunnerScriptHydrationPhase::Live,
+        );
+        let owner = format!(
+            "state-machine DataBind {parent_data_bind_index} ScriptedDataConverter occurrence {converter_path:?}"
+        );
+        let result = state_machine.hydrate_and_initialize_scripted_data_converter_instance(
+            parent_data_bind_index,
+            &converter_path,
+            context,
+            inits,
+            reborrow_render_factory(factory),
+            |state_machine| {
+                let snapshots = state_machine
+                    .scripted_data_converter_input_snapshots(
+                        parent_data_bind_index,
+                        &converter_path,
+                    )
+                    .ok_or_else(|| {
+                        ScriptError::new(format!("{owner}: cloned input occurrence is absent"))
+                    })?;
+                prepare_state_machine_script_hydration_from_snapshots(
+                    runtime,
+                    artboards,
+                    state_machine,
+                    snapshots,
+                    &owner,
+                    owned_context,
+                    render_state,
+                    registered_file,
+                    RunnerScriptHydrationPhase::Live,
+                )
+            },
+        );
+        let _ = runner_script_or_inert(result)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
+#[allow(clippy::too_many_arguments)]
+fn bind_scripted_listener_data_converters(
+    runtime: &RuntimeFile,
+    artboards: &[ArtboardGraph],
+    state_machine: &mut StateMachineInstance,
+    factory: &mut Option<&mut dyn RenderFactory>,
+    owned_context: Option<&RuntimeOwnedViewModelContext>,
+    render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
+    registered_file: &RegisteredScriptFile,
+    script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+    vm: &ScriptVm,
+    script_programs: &BTreeMap<u64, ScriptProgram>,
+    explicit_rebind: bool,
+) -> Result<()> {
+    for step in state_machine.scripted_listener_data_converter_bind_steps() {
+        let (
+            action_global_id,
+            input_global_id,
+            converter_path,
+            converter_global_id,
+            inits,
+        ) = match step {
+            nuxie_runtime::RuntimeScriptedListenerDataConverterBindStep::BindListenerInput {
+                action_global_id,
+                listener_input_global_id,
+            } => {
+                let root = owned_context.and_then(RuntimeOwnedViewModelContext::main);
+                let _ = state_machine.bind_scripted_listener_input_source(
+                    runtime,
+                    root.as_deref(),
+                    action_global_id,
+                    listener_input_global_id,
+                    explicit_rebind,
+                );
+                drop(root);
+                continue;
+            }
+            nuxie_runtime::RuntimeScriptedListenerDataConverterBindStep::BindConverter {
+                action_global_id,
+                listener_input_global_id,
+                converter_path,
+            } => {
+                let root = owned_context.and_then(RuntimeOwnedViewModelContext::main);
+                let _ = state_machine.bind_scripted_listener_converter_own_sources(
+                    runtime,
+                    root.as_deref(),
+                    action_global_id,
+                    listener_input_global_id,
+                    &converter_path,
+                    explicit_rebind,
+                );
+                drop(root);
+                continue;
+            }
+            nuxie_runtime::RuntimeScriptedListenerDataConverterBindStep::Rehydrate {
+                action_global_id,
+                listener_input_global_id,
+                converter_path,
+                converter_global_id,
+                inits,
+            } => (
+                action_global_id,
+                listener_input_global_id,
+                converter_path,
+                converter_global_id,
+                inits,
+            ),
+            nuxie_runtime::RuntimeScriptedListenerDataConverterBindStep::RebindFinalInput {
+                action_global_id,
+                listener_input_global_id,
+                converter_path,
+                converter_input_index,
+                data_bind_index,
+            } => {
+                let root = owned_context.and_then(RuntimeOwnedViewModelContext::main);
+                let _ = state_machine.rebind_scripted_listener_data_converter_final_input(
+                    runtime,
+                    root.as_deref(),
+                    action_global_id,
+                    listener_input_global_id,
+                    &converter_path,
+                    converter_input_index,
+                    data_bind_index,
+                );
+                drop(root);
+                continue;
+            }
+            nuxie_runtime::RuntimeScriptedListenerDataConverterBindStep::FinalizeListenerInput {
+                action_global_id,
+                listener_input_global_id,
+            } => {
+                let _ = state_machine.finalize_scripted_listener_input_sources(
+                    action_global_id,
+                    listener_input_global_id,
+                );
+                continue;
+            }
+        };
+
+        if !state_machine.has_scripted_listener_data_converter_instance(
+            action_global_id,
+            input_global_id,
+            &converter_path,
+        ) {
+            let Some(instance) = instantiate_state_machine_scripted_converter_table(
+                runtime,
+                state_machine,
+                converter_global_id,
+                factory,
+                owned_context,
+                script_assets,
+                vm,
+                script_programs,
+            )?
+            else {
+                continue;
+            };
+            state_machine
+                .set_scripted_listener_data_converter_instance(
+                    action_global_id,
+                    input_global_id,
+                    &converter_path,
+                    converter_global_id,
+                    instance,
+                )
+                .map_err(|error| anyhow!(error))?;
+        }
+        let context = state_machine_script_context_hydration(
+            runtime,
+            state_machine,
+            owned_context,
+            RunnerScriptHydrationPhase::Live,
+        );
+        let owner = format!(
+            "ScriptedObject global {action_global_id} input global {input_global_id} ScriptedDataConverter occurrence {converter_path:?}"
+        );
+        let result = state_machine
+            .hydrate_and_initialize_scripted_listener_data_converter_instance(
+                action_global_id,
+                input_global_id,
+                &converter_path,
+                context,
+                inits,
+                reborrow_render_factory(factory),
+                |state_machine| {
+                    let snapshots = state_machine
+                        .scripted_listener_data_converter_input_snapshots(
+                            action_global_id,
+                            input_global_id,
+                            &converter_path,
+                        )
+                        .ok_or_else(|| {
+                            ScriptError::new(format!("{owner}: cloned input occurrence is absent"))
+                        })?;
+                    prepare_state_machine_script_hydration_from_snapshots(
+                        runtime,
+                        artboards,
+                        state_machine,
+                        snapshots,
+                        &owner,
+                        owned_context,
+                        render_state,
+                        registered_file,
+                        RunnerScriptHydrationPhase::Live,
+                    )
+                },
+            );
+        let _ = runner_script_or_inert(result)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
+#[allow(clippy::too_many_arguments)]
+fn hydrate_live_state_machine_scripted_objects(
+    runtime: &RuntimeFile,
+    artboards: &[ArtboardGraph],
+    state_machine: &mut StateMachineInstance,
+    definitions: &[nuxie_runtime::ScriptListenerActionDefinition],
+    factory: &mut Option<&mut dyn RenderFactory>,
+    owned_context: Option<&RuntimeOwnedViewModelContext>,
+    render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
+    registered_file: &RegisteredScriptFile,
+    script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+    vm: &ScriptVm,
+    script_programs: &BTreeMap<u64, ScriptProgram>,
+) -> Result<()> {
+    // `internalDataContext` assigns the live context to every retained table
+    // before `initScriptedObjects` enters its first occurrence
+    // (`state_machine_instance.cpp:2901-2913`).
+    let live_context = state_machine_script_context_hydration(
+        runtime,
+        state_machine,
+        owned_context,
+        RunnerScriptHydrationPhase::Live,
+    );
+    for definition in definitions {
+        if state_machine.has_scripted_object_instance(definition.scripted_object_global_id()) {
+            state_machine
+                .install_scripted_object_data_context(
+                    definition.scripted_object_global_id(),
+                    &live_context,
+                )
+                .map_err(|error| anyhow!(error))?;
+        }
+    }
+    for definition in definitions {
+        let already_attached =
+            state_machine.has_scripted_object_instance(definition.scripted_object_global_id());
+        if !instantiate_state_machine_scripted_object_table(
+            runtime,
+            state_machine,
+            definition,
+            factory,
+            owned_context,
+            script_assets,
+            vm,
+            script_programs,
+            RunnerScriptHydrationPhase::Live,
+        )? {
+            continue;
+        }
+        if !already_attached {
+            state_machine
+                .install_scripted_object_data_context(
+                    definition.scripted_object_global_id(),
+                    &live_context,
+                )
+                .map_err(|error| anyhow!(error))?;
+        }
+        let owner = format!(
+            "state-machine ScriptedObject global {}",
+            definition.scripted_object_global_id()
+        );
+        let result = state_machine
+            .hydrate_and_initialize_scripted_object_instance_after_context_install(
+                definition.scripted_object_global_id(),
+                definition.inits(),
+                reborrow_render_factory(factory),
+                |state_machine| {
+                    let snapshots = state_machine
+                        .scripted_listener_action_input_snapshots(
+                            definition.scripted_object_global_id(),
+                        )
+                        .ok_or_else(|| {
+                            ScriptError::new(format!("{owner}: cloned input occurrence is absent"))
+                        })?;
+                    prepare_state_machine_script_hydration_from_snapshots(
+                        runtime,
+                        artboards,
+                        state_machine,
+                        snapshots,
+                        &owner,
+                        owned_context,
+                        render_state,
+                        registered_file,
+                        RunnerScriptHydrationPhase::Live,
+                    )
+                },
+            );
+        let _ = runner_script_or_inert(result)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
+#[allow(clippy::too_many_arguments)]
+fn retry_cold_state_machine_scripted_objects_during_constructor(
+    runtime: &RuntimeFile,
+    artboards: &[ArtboardGraph],
+    state_machine: &mut StateMachineInstance,
+    definitions: &[nuxie_runtime::ScriptListenerActionDefinition],
+    factory: &mut Option<&mut dyn RenderFactory>,
+    render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
+    registered_file: &RegisteredScriptFile,
+    script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+    vm: &ScriptVm,
+    script_programs: &BTreeMap<u64, ScriptProgram>,
+) -> Result<()> {
+    // C++ follows clone/reinit with a second `initScriptedObjects` loop even
+    // when the owning Artboard's DataContext is null. Failed cold
+    // generator/init attempts therefore retry before any later context bind
+    // (`state_machine_instance.cpp:2072-2082`;
+    // `scripted_object.cpp:532-540`).
+    for definition in definitions {
+        if !instantiate_state_machine_scripted_object_table(
+            runtime,
+            state_machine,
+            definition,
+            factory,
+            None,
+            script_assets,
+            vm,
+            script_programs,
+            RunnerScriptHydrationPhase::Cold,
+        )? {
+            continue;
+        }
+        let context = state_machine_script_context_hydration(
+            runtime,
+            state_machine,
+            None,
+            RunnerScriptHydrationPhase::Cold,
+        );
+        let owner = format!(
+            "state-machine ScriptedObject global {}",
+            definition.scripted_object_global_id()
+        );
+        let result = state_machine.hydrate_and_initialize_scripted_object_instance(
+            definition.scripted_object_global_id(),
+            context,
+            definition.inits(),
+            reborrow_render_factory(factory),
+            |state_machine| {
+                let snapshots = state_machine
+                    .scripted_listener_action_input_snapshots(
+                        definition.scripted_object_global_id(),
+                    )
+                    .ok_or_else(|| {
+                        ScriptError::new(format!("{owner}: cloned input occurrence is absent"))
+                    })?;
+                prepare_state_machine_script_hydration_from_snapshots(
+                    runtime,
+                    artboards,
+                    state_machine,
+                    snapshots,
+                    &owner,
+                    None,
+                    render_state,
+                    registered_file,
+                    RunnerScriptHydrationPhase::Cold,
+                )
+            },
+        );
+        let _ = runner_script_or_inert(result)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
 #[allow(clippy::too_many_arguments)]
 fn initialize_state_machine_scripted_objects(
     runtime: &RuntimeFile,
     artboard: &ArtboardGraph,
+    artboards: &[ArtboardGraph],
     state_machine_index: usize,
     state_machine: &mut StateMachineInstance,
-    factory: &mut dyn RenderFactory,
+    factory: Option<&mut dyn RenderFactory>,
     owned_context: Option<&RuntimeOwnedViewModelContext>,
     script_frame_state: Option<&Rc<RefCell<RunnerScriptArtboardRenderState>>>,
-    registered_file: Option<&mut RegisteredScriptFile>,
+    registered_file: Option<&RegisteredScriptFile>,
 ) -> Result<()> {
-    let Some(definition) = artboard.state_machines.get(state_machine_index) else {
+    if artboard.state_machines.get(state_machine_index).is_none() {
         return Ok(());
-    };
-    if definition.scripted_objects.is_empty() {
+    }
+    let definitions = state_machine.scripted_objects().to_vec();
+    let constructor_context_was_prebound =
+        state_machine.scripted_constructor_context_was_prebound();
+    if definitions.is_empty()
+        && state_machine
+            .state_machine_data_converter_bind_steps()
+            .is_empty()
+        && state_machine
+            .scripted_listener_data_converter_bind_steps()
+            .is_empty()
+    {
         return Ok(());
     }
 
     let script_assets = extract_script_assets(runtime);
-    let mut local_registered_file;
+    let mut factory = factory;
+    let local_registered_file;
     let registered_file = match registered_file {
         Some(registered_file) => registered_file,
         None => {
-            local_registered_file = register_script_file(runtime, &script_assets, factory)?;
-            &mut local_registered_file
+            let Some(registration_factory) = reborrow_render_factory(&mut factory) else {
+                bail!(
+                    "state-machine scripted owners require either a registered File VM or a renderer factory"
+                );
+            };
+            local_registered_file =
+                register_script_file(runtime, &script_assets, registration_factory)?;
+            &local_registered_file
         }
     };
     let RegisteredScriptFile {
         vm,
         script_programs,
+        ..
     } = registered_file;
-    let context_model = owned_context
-        .and_then(RuntimeOwnedViewModelContext::main_handle)
-        .and_then(|context| nuxie_runtime::script_view_model_from_owned(runtime, context));
-    vm.set_default_context_view_model(context_model);
-    let mut host = NoopScriptHost;
+    let render_state = script_frame_state
+        .cloned()
+        .unwrap_or_else(|| Rc::new(RefCell::new(RunnerScriptArtboardRenderState::default())));
+    state_machine.set_scripted_listener_artboard_resolver(Box::new(RunnerScriptArtboardResolver {
+        runtime: runtime.clone(),
+        artboards: artboards.to_vec(),
+        render_state: Rc::clone(&render_state),
+        registered_file: registered_file.clone(),
+    }));
 
-    for scripted_object in &definition.scripted_objects {
-        let object = runtime
-            .object(scripted_object.global_id as usize)
-            .with_context(|| {
-                format!(
-                    "missing {} global {}",
-                    scripted_object.type_name, scripted_object.global_id
-                )
-            })?;
-        let script_asset_id = object.uint_property("scriptAssetId").unwrap_or(0);
-        let script = script_assets.get(&script_asset_id).with_context(|| {
-            format!(
-                "{} global {} references missing ScriptAsset id {}",
-                scripted_object.type_name, scripted_object.global_id, script_asset_id
-            )
-        })?;
-        let mut script_instance =
-            instantiate_extracted_script(vm, script_programs, script, &mut host, factory)
-                .with_context(|| {
-                    format!(
-                        "failed to instantiate ScriptAsset '{}' for {} global {}",
-                        script.name, scripted_object.type_name, scripted_object.global_id
-                    )
-                })?;
-
-        for input_node in &scripted_object.inputs {
-            let Some(input) = runtime.object(input_node.global_id as usize) else {
-                continue;
-            };
-            let Some(name) = input.string_property("name") else {
-                continue;
-            };
-            let bound_value = match owned_context.and_then(RuntimeOwnedViewModelContext::main) {
-                Some(context) => nuxie_runtime::bound_script_input_value(runtime, &context, input)
-                    .map_err(|error| anyhow!(error))?,
-                None => None,
-            };
-            let value = bound_value.or_else(|| default_script_input_value(input));
-            if let Some(value) = value {
-                script_instance.set_input(name, value).with_context(|| {
-                    format!(
-                        "failed to hydrate input '{name}' for {} global {}",
-                        scripted_object.type_name, scripted_object.global_id
-                    )
-                })?;
-            }
-        }
-
-        if script_instance
-            .has_method(ScriptMethod::Init)
-            .context("failed to inspect state-machine script init method")?
-            && !script_instance
-                .call_init_with_factory(&mut host, factory)
-                .with_context(|| {
-                    format!(
-                        "script init failed for {} global {}",
-                        scripted_object.type_name, scripted_object.global_id
-                    )
-                })?
-        {
+    // Clone/reinit the complete fixed ScriptedObject collection before the
+    // live DataContext is assigned (`state_machine_instance.cpp:2072-2082`).
+    for definition in &definitions {
+        if !instantiate_state_machine_scripted_object_table(
+            runtime,
+            state_machine,
+            definition,
+            &mut factory,
+            owned_context,
+            &script_assets,
+            vm,
+            script_programs,
+            RunnerScriptHydrationPhase::Cold,
+        )? {
             continue;
         }
-        state_machine.set_script_instance_for_global(scripted_object.global_id, script_instance);
+        let context = state_machine_script_context_hydration(
+            runtime,
+            state_machine,
+            owned_context,
+            RunnerScriptHydrationPhase::Cold,
+        );
+        let owner = format!(
+            "state-machine ScriptedObject global {}",
+            definition.scripted_object_global_id()
+        );
+        let result = state_machine.hydrate_and_initialize_scripted_object_instance(
+            definition.scripted_object_global_id(),
+            context,
+            definition.inits(),
+            reborrow_render_factory(&mut factory),
+            |state_machine| {
+                let snapshots = state_machine
+                    .scripted_listener_action_input_snapshots(
+                        definition.scripted_object_global_id(),
+                    )
+                    .ok_or_else(|| {
+                        ScriptError::new(format!("{owner}: cloned input occurrence is absent"))
+                    })?;
+                prepare_state_machine_script_hydration_from_snapshots(
+                    runtime,
+                    artboards,
+                    state_machine,
+                    snapshots,
+                    &owner,
+                    owned_context,
+                    &render_state,
+                    registered_file,
+                    RunnerScriptHydrationPhase::Cold,
+                )
+            },
+        );
+        let _ = runner_script_or_inert(result)?;
     }
-    if let Some(script_frame_state) = script_frame_state {
-        script_frame_state
-            .borrow_mut()
-            .retain_detached_view_model_frame(vm.detached_view_model_frame());
+
+    if constructor_context_was_prebound {
+        // A root golden Scene binds its Artboard ViewModel before asking for
+        // the default StateMachineInstance. The C++ constructor first clones
+        // and cold-reinitializes every fixed ScriptedObject, then installs
+        // that already-live Artboard DataContext and retries hydration/init
+        // before `stateMachineAt` calls `inheritDataContext` and binds the
+        // converter graph (`state_machine_instance.cpp:2072-2082`;
+        // `artboard.cpp:2844-2856`). A ScriptInputArtboard child is different:
+        // its default machine is constructed before the child ViewModel is
+        // bound, so its caller passes false and reaches live hydration only
+        // through the bind below (`lua_artboards.cpp:20-50`).
+        hydrate_live_state_machine_scripted_objects(
+            runtime,
+            artboards,
+            state_machine,
+            &definitions,
+            &mut factory,
+            owned_context,
+            &render_state,
+            registered_file,
+            &script_assets,
+            vm,
+            script_programs,
+        )?;
+    } else {
+        retry_cold_state_machine_scripted_objects_during_constructor(
+            runtime,
+            artboards,
+            state_machine,
+            &definitions,
+            &mut factory,
+            &render_state,
+            registered_file,
+            &script_assets,
+            vm,
+            script_programs,
+        )?;
     }
+
+    if let Some(root) = owned_context.and_then(RuntimeOwnedViewModelContext::main_handle) {
+        state_machine.begin_scripted_object_data_context_bind(root);
+    } else {
+        state_machine.begin_retained_scripted_object_data_context_rebind();
+    }
+    bind_state_machine_scripted_data_converters(
+        runtime,
+        artboards,
+        state_machine,
+        &mut factory,
+        owned_context,
+        &render_state,
+        registered_file,
+        &script_assets,
+        vm,
+        script_programs,
+        false,
+    )?;
+    bind_scripted_listener_data_converters(
+        runtime,
+        artboards,
+        state_machine,
+        &mut factory,
+        owned_context,
+        &render_state,
+        registered_file,
+        &script_assets,
+        vm,
+        script_programs,
+        false,
+    )?;
+    state_machine.finish_scripted_object_data_context_bind();
+
+    hydrate_live_state_machine_scripted_objects(
+        runtime,
+        artboards,
+        state_machine,
+        &definitions,
+        &mut factory,
+        owned_context,
+        &render_state,
+        registered_file,
+        &script_assets,
+        vm,
+        script_programs,
+    )?;
+    state_machine.mark_scripted_object_initialization_complete(
+        owned_context.and_then(RuntimeOwnedViewModelContext::main_handle),
+    );
+
+    render_state
+        .borrow_mut()
+        .retain_registered_view_model_frame(registered_file);
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
+#[allow(clippy::too_many_arguments)]
+fn rebind_state_machine_scripted_objects_after_artboard(
+    runtime: &RuntimeFile,
+    artboards: &[ArtboardGraph],
+    state_machine: &mut StateMachineInstance,
+    factory: &mut dyn RenderFactory,
+    owned_context: &RuntimeOwnedViewModelContext,
+    render_state: &Rc<RefCell<RunnerScriptArtboardRenderState>>,
+    registered_file: &RegisteredScriptFile,
+) -> Result<()> {
+    // `StateMachineInstance::bind()` applies one Scene root atomically:
+    // Artboard::internalDataContext has already completed when this state-
+    // machine half begins (`state_machine_instance.cpp:2776-2790`;
+    // `tools/golden-runner/main.cpp:817-820`).
+    let definitions = state_machine.scripted_objects().to_vec();
+    let script_assets = extract_script_assets(runtime);
+    let RegisteredScriptFile {
+        vm,
+        script_programs,
+        ..
+    } = registered_file;
+    let mut factory = Some(factory);
+    state_machine.require_scripted_object_data_context_rebind();
+    let Some(root) = owned_context.main_handle() else {
+        return Ok(());
+    };
+    if !state_machine.begin_scripted_object_data_context_bind(root) {
+        return Ok(());
+    }
+    bind_state_machine_scripted_data_converters(
+        runtime,
+        artboards,
+        state_machine,
+        &mut factory,
+        Some(owned_context),
+        render_state,
+        registered_file,
+        &script_assets,
+        vm,
+        script_programs,
+        true,
+    )?;
+    bind_scripted_listener_data_converters(
+        runtime,
+        artboards,
+        state_machine,
+        &mut factory,
+        Some(owned_context),
+        render_state,
+        registered_file,
+        &script_assets,
+        vm,
+        script_programs,
+        true,
+    )?;
+    state_machine.finish_scripted_object_data_context_bind();
+    hydrate_live_state_machine_scripted_objects(
+        runtime,
+        artboards,
+        state_machine,
+        &definitions,
+        &mut factory,
+        Some(owned_context),
+        render_state,
+        registered_file,
+        &script_assets,
+        vm,
+        script_programs,
+    )?;
+    state_machine.mark_scripted_facade_root_hydrated(Some(root));
     Ok(())
 }
 
@@ -2787,6 +4203,7 @@ fn extract_script_assets(runtime: &RuntimeFile) -> BTreeMap<u64, ExtractedScript
                 entry.ordinal as u64,
                 ExtractedScriptAsset {
                     asset_id: entry.ordinal as u64,
+                    global_id: entry.asset.id,
                     name: if folder.is_empty() {
                         name.to_owned()
                     } else {
@@ -2902,32 +4319,54 @@ fn register_script_file(
         script_programs.insert(script.asset_id, program);
     }
     Ok(RegisteredScriptFile {
-        vm,
-        script_programs,
+        vm: Rc::new(vm),
+        script_programs: Rc::new(script_programs),
+        frame_identity: Rc::new(()),
     })
 }
 
 #[cfg(feature = "scripting")]
-fn instantiate_extracted_script(
+fn extracted_script_program(
+    script_programs: &BTreeMap<u64, ScriptProgram>,
+    script: &ExtractedScriptAsset,
+) -> std::result::Result<ScriptProgram, ScriptError> {
+    script_programs
+        .get(&script.asset_id)
+        .cloned()
+        .ok_or_else(|| {
+            ScriptError::new(format!(
+                "ScriptAsset '{}' ordinal {} has no registered protocol generator",
+                script.name, script.asset_id
+            ))
+        })
+}
+
+#[cfg(feature = "scripting")]
+#[allow(clippy::too_many_arguments)]
+fn instantiate_extracted_script_with_context(
     vm: &ScriptVm,
-    script_programs: &mut BTreeMap<u64, ScriptProgram>,
+    script_programs: &BTreeMap<u64, ScriptProgram>,
     script: &ExtractedScriptAsset,
     host: &mut dyn nuxie_runtime::ScriptHost,
-    factory: &mut dyn RenderFactory,
+    factory: Option<&mut dyn RenderFactory>,
+    context_view_model: Option<ScriptViewModel>,
+    context_parent_view_models: Vec<ScriptViewModel>,
 ) -> std::result::Result<Box<dyn nuxie_runtime::ScriptInstance>, ScriptError> {
-    let program = if let Some(program) = script_programs.get(&script.asset_id) {
-        program.clone()
-    } else {
-        let program = vm.register_protocol_script_with_factory_scoped(
-            &script.name,
-            script.scope,
-            &script.payload,
+    let program = extracted_script_program(script_programs, script)?;
+    match factory {
+        Some(factory) => vm.instantiate_registered_script_with_factory_and_context(
+            &program,
+            host,
             factory,
-        )?;
-        script_programs.insert(script.asset_id, program.clone());
-        program
-    };
-    vm.instantiate_registered_script_with_factory(&program, host, factory)
+            context_view_model,
+            context_parent_view_models,
+        ),
+        None => vm.instantiate_registered_script_with_context(
+            &program,
+            context_view_model,
+            context_parent_view_models,
+        ),
+    }
 }
 
 #[cfg(feature = "scripting")]
@@ -3293,9 +4732,13 @@ fn ensure_static_draw_supported_for_artboard(
         );
     }
 
-    if let Some(scroll_constraint) =
-        unsupported_scroll_constraint_global(runtime, graph, artboard, has_input_events)
-    {
+    let trace_scroll_input = env::var_os("RIVE_GOLDEN_COVERAGE_MECHANISM_INPUT").is_some();
+    if let Some(scroll_constraint) = unsupported_scroll_constraint_global(
+        runtime,
+        graph,
+        artboard,
+        has_input_events && !trace_scroll_input,
+    ) {
         bail!(
             "unsupported: scroll-constraints in Rust golden runner (global {})",
             scroll_constraint

@@ -2213,6 +2213,178 @@ fn cpp_probe_matches_rust_view_model_instance_value_property_links_when_complete
     );
 }
 
+fn compare_synthetic_import_stack_fixture(probe: &Path, name: &str, bytes: &[u8]) {
+    let path = std::env::temp_dir().join(format!(
+        "rive-rust-cpp-import-stack-{}-{name}.riv",
+        std::process::id()
+    ));
+    std::fs::write(&path, bytes)
+        .unwrap_or_else(|err| panic!("failed to write {}: {err}", path.display()));
+    let cpp = read_cpp_probe_path_inner(probe, &path, name, false);
+    let _ = std::fs::remove_file(&path);
+    let rust = read_runtime_file(bytes)
+        .unwrap_or_else(|err| panic!("Rust failed to import {name}: {err:#}"));
+
+    compare_artboard_object_slots_from_imports(&cpp, &rust, name);
+    assert_eq!(
+        cpp.artboards.len(),
+        rust.artboards().len(),
+        "{name}: imported Artboard count",
+    );
+    for (artboard_index, cpp_artboard) in cpp.artboards.iter().enumerate() {
+        compare_corpus_artboard_animation_summary(cpp_artboard, &rust, artboard_index, name)
+            .unwrap_or_else(|err| panic!("{err}"));
+    }
+}
+
+#[test]
+fn cpp_probe_matches_rust_file_global_import_stack_lifecycle_when_available() {
+    let Some(probe) = probe_path() else {
+        eprintln!(
+            "skipping C++ file-global ImportStack comparison; set RIVE_CPP_PROBE or run make cpp-probe"
+        );
+        return;
+    };
+
+    let fixtures = [
+        (
+            "dropped_artboard_does_not_shift_imported_owner",
+            synthetic_runtime_file(6090, |bytes| {
+                // C++ drops this Artboard because BackboardImporter does not
+                // exist yet. It must not consume an imported-Artboard index.
+                push_empty_object(bytes, "Artboard");
+                push_empty_object(bytes, "Backboard");
+                push_empty_object(bytes, "Artboard");
+                push_empty_object(bytes, "CubicEaseInterpolator");
+                push_empty_object(bytes, "Event");
+                push_empty_object(bytes, "StateMachine");
+                push_empty_object(bytes, "StateMachineLayer");
+                push_empty_object(bytes, "AnyState");
+                push_empty_object(bytes, "EntryState");
+                push_empty_object(bytes, "ExitState");
+                push_empty_object(bytes, "AnimationState");
+                push_object_with_properties(bytes, "StateMachineFireEvent", |bytes| {
+                    push_uint_property(bytes, "StateMachineFireEvent", "eventId", 2);
+                });
+                push_object_with_properties(bytes, "StateTransition", |bytes| {
+                    push_uint_property(bytes, "StateTransition", "stateToId", 0);
+                    push_uint_property(bytes, "StateTransition", "interpolatorId", 1);
+                });
+            }),
+        ),
+        (
+            "keyed_property_null_has_one_importer_owner",
+            synthetic_runtime_file(6091, |bytes| {
+                push_empty_object(bytes, "Backboard");
+                push_empty_object(bytes, "Artboard");
+                push_empty_object(bytes, "StateMachine");
+                push_empty_object(bytes, "StateMachineLayer");
+                push_empty_object(bytes, "AnyState");
+                push_empty_object(bytes, "EntryState");
+                push_empty_object(bytes, "ExitState");
+                push_empty_object(bytes, "LinearAnimation");
+                push_empty_object(bytes, "KeyedObject");
+                push_empty_object(bytes, "KeyedProperty");
+                // An unknown Core key deserializes as null. ImportStack offers
+                // it newest-first, so KeyedPropertyImporter alone consumes it.
+                push_var_uint(bytes, i32::MAX as u64);
+                push_var_uint(bytes, 0);
+                push_object_with_properties(bytes, "Shape", |bytes| {
+                    push_uint_property(bytes, "Shape", "parentId", 0);
+                });
+            }),
+        ),
+        (
+            "state_machine_owner_layer_capture_and_record_time_artboards",
+            synthetic_runtime_file(6092, |bytes| {
+                push_empty_object(bytes, "Backboard");
+                // The StateMachine permanently belongs to Artboard A.
+                push_empty_object(bytes, "Artboard");
+                push_empty_object(bytes, "Event");
+                push_empty_object(bytes, "StateMachine");
+                push_empty_object(bytes, "StateMachineNumber");
+                // The later layer importer captures Artboard B's animations.
+                push_empty_object(bytes, "Artboard");
+                push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+                    push_string_property(bytes, "LinearAnimation", "name", "layer-captured-b");
+                });
+                push_empty_object(bytes, "Event");
+                push_empty_object(bytes, "StateMachineLayer");
+                push_empty_object(bytes, "AnyState");
+                push_empty_object(bytes, "EntryState");
+                push_empty_object(bytes, "ExitState");
+                push_object_with_properties(bytes, "AnimationState", |bytes| {
+                    push_uint_property(bytes, "AnimationState", "animationId", 0);
+                });
+                push_empty_object(bytes, "BlendStateDirect");
+                // BlendAnimation resolves against record-time Artboard C.
+                push_empty_object(bytes, "Artboard");
+                push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+                    push_string_property(bytes, "LinearAnimation", "name", "record-time-c");
+                });
+                push_empty_object(bytes, "Event");
+                push_object_with_properties(bytes, "BlendAnimationDirect", |bytes| {
+                    push_uint_property(bytes, "BlendAnimationDirect", "animationId", 0);
+                    push_uint_property(bytes, "BlendAnimationDirect", "inputId", 0);
+                });
+                // FireEvent still resolves through StateMachine owner A.
+                push_object_with_properties(bytes, "StateMachineFireEvent", |bytes| {
+                    push_uint_property(bytes, "StateMachineFireEvent", "eventId", 1);
+                });
+            }),
+        ),
+        (
+            "artboard_and_layer_resolve_boundaries",
+            synthetic_runtime_file(6093, |bytes| {
+                push_empty_object(bytes, "Backboard");
+                push_empty_object(bytes, "Artboard");
+                push_empty_object(bytes, "CubicEaseInterpolator");
+                push_empty_object(bytes, "StateMachine");
+                push_empty_object(bytes, "StateMachineLayer");
+                push_empty_object(bytes, "AnyState");
+                push_empty_object(bytes, "EntryState");
+                push_empty_object(bytes, "ExitState");
+                push_empty_object(bytes, "AnimationState");
+                // Replacing the Artboard initializes the StateMachine owner.
+                push_empty_object(bytes, "Artboard");
+                push_empty_object(bytes, "CubicEaseInterpolator");
+                // The target resolves when the old layer importer is replaced,
+                // but the already-initialized owner cannot fill interpolator.
+                push_object_with_properties(bytes, "StateTransition", |bytes| {
+                    push_uint_property(bytes, "StateTransition", "stateToId", 0);
+                    push_uint_property(bytes, "StateTransition", "interpolatorId", 1);
+                });
+                // Replacing the layer resolves its existing transitions.
+                push_empty_object(bytes, "StateMachineLayer");
+                // LayerStateImporter still owns AnimationState from layer 0,
+                // but this late transition can no longer resolve stateTo.
+                push_object_with_properties(bytes, "StateTransition", |bytes| {
+                    push_uint_property(bytes, "StateTransition", "stateToId", 0);
+                });
+                push_empty_object(bytes, "AnyState");
+                push_empty_object(bytes, "EntryState");
+                push_empty_object(bytes, "ExitState");
+            }),
+        ),
+        (
+            "late_layer_skips_completed_owner_validation",
+            synthetic_runtime_file(6094, |bytes| {
+                push_empty_object(bytes, "Backboard");
+                push_empty_object(bytes, "Artboard");
+                push_empty_object(bytes, "StateMachine");
+                // Artboard A initializes before the still-latest
+                // StateMachineImporter receives this empty layer.
+                push_empty_object(bytes, "Artboard");
+                push_empty_object(bytes, "StateMachineLayer");
+            }),
+        ),
+    ];
+
+    for (name, bytes) in fixtures {
+        compare_synthetic_import_stack_fixture(&probe, name, &bytes);
+    }
+}
+
 #[test]
 fn cpp_probe_matches_rust_state_machine_layer_transition_graph_when_available() {
     let Some(probe) = probe_path() else {
@@ -8462,9 +8634,13 @@ fn compare_state_machine_children(
         .zip(&rust_children.inputs)
         .enumerate()
     {
-        let cpp_input = cpp_input
-            .as_ref()
-            .unwrap_or_else(|| panic!("{label} input {input_index} is null in C++"));
+        let (Some(cpp_input), Some(rust_input)) = (cpp_input.as_ref(), rust_input.as_ref()) else {
+            assert!(
+                cpp_input.is_none() && rust_input.is_none(),
+                "{label} input {input_index} null occurrence mismatch"
+            );
+            continue;
+        };
         assert_eq!(
             cpp_input.index, input_index,
             "{label} input {input_index} C++ index mismatch"
@@ -13186,7 +13362,12 @@ fn runtime_artboard_ranges(file: &RuntimeFile) -> Vec<(usize, usize)> {
         .iter()
         .enumerate()
         .filter_map(|(index, object)| match object {
-            Some(object) if object.type_name == "Artboard" => Some(index),
+            Some(object)
+                if object.type_name == "Artboard"
+                    && file.import_status(index) == Some(RuntimeImportStatus::Imported) =>
+            {
+                Some(index)
+            }
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -13214,111 +13395,12 @@ fn runtime_artboard_local_objects(
     file: &RuntimeFile,
     range: (usize, usize),
 ) -> Vec<Option<&RuntimeObject>> {
-    let mut objects = file.objects[range.0..range.1]
+    let artboard_index = runtime_artboard_ranges(file)
         .iter()
-        .filter_map(|object| match object {
-            None => Some(None),
-            Some(object) if runtime_object_is_artboard_local(object) => Some(Some(object)),
-            Some(_) => None,
-        })
-        .collect::<Vec<_>>();
-    validate_runtime_artboard_local_objects(&mut objects);
-    objects
-}
-
-fn validate_runtime_artboard_local_objects(objects: &mut [Option<&RuntimeObject>]) {
-    loop {
-        let mut changed = false;
-        for index in 1..objects.len() {
-            let Some(object) = objects[index] else {
-                continue;
-            };
-            if !runtime_artboard_local_object_is_valid(object, objects) {
-                objects[index] = None;
-                changed = true;
-            }
-        }
-
-        if !changed {
-            break;
-        }
-    }
-}
-
-fn runtime_artboard_local_object_is_valid(
-    object: &RuntimeObject,
-    objects: &[Option<&RuntimeObject>],
-) -> bool {
-    let Some(definition) = definition_by_type_key(object.type_key) else {
-        return false;
-    };
-
-    if definition.name == "Artboard" {
-        return true;
-    }
-
-    if definition.is_a("Component") {
-        let Some(parent) = local_object_reference(objects, object.uint_property("parentId")) else {
-            return false;
-        };
-        if !runtime_object_is_container_component(parent) {
-            return false;
-        }
-    }
-
-    if definition.is_a("TargetedConstraint") {
-        match local_object_reference(objects, object.uint_property("targetId")) {
-            Some(target) => return runtime_object_is_transform_component(target),
-            None => return !targeted_constraint_requires_target(definition.name),
-        }
-    }
-
-    if definition.is_a("NestedAnimation") {
-        let Some(parent) = local_object_reference(objects, object.uint_property("parentId")) else {
-            return false;
-        };
-        return runtime_object_is_nested_artboard(parent);
-    }
-
-    if definition.is_a("TextStyle") {
-        let Some(parent) = local_object_reference(objects, object.uint_property("parentId")) else {
-            return false;
-        };
-        return runtime_object_is_text_interface(parent);
-    }
-
-    if definition.name == "ScrollBarConstraint" {
-        let Some(scroll_constraint) =
-            local_object_reference(objects, object.uint_property("scrollConstraintId"))
-        else {
-            return false;
-        };
-        return runtime_object_is_scroll_constraint(scroll_constraint);
-    }
-
-    if definition.name == "Feather" {
-        let Some(parent) = local_object_reference(objects, object.uint_property("parentId")) else {
-            return false;
-        };
-        return runtime_object_is_shape_paint(parent);
-    }
-
-    if definition.name == "ArtboardListMapRule" {
-        let Some(parent) = local_object_reference(objects, object.uint_property("parentId")) else {
-            return false;
-        };
-        return runtime_object_is_artboard_component_list(parent);
-    }
-
-    true
-}
-
-fn local_object_reference<'a>(
-    objects: &[Option<&'a RuntimeObject>],
-    id: Option<u64>,
-) -> Option<&'a RuntimeObject> {
-    let id = usize::try_from(id?).ok()?;
-    objects.get(id).and_then(|object| *object)
+        .position(|candidate| *candidate == range)
+        .expect("runtime Artboard range must come from the imported-Artboard table");
+    file.artboard_local_object_slots(artboard_index)
+        .expect("runtime Artboard index")
 }
 
 fn runtime_file_assets(file: &RuntimeFile) -> Vec<&RuntimeObject> {
@@ -13364,59 +13446,6 @@ fn scroll_physics_core_type_for_constraint(
 ) -> Option<u16> {
     file.resolved_scroll_physics_for_constraint_object(object)
         .map(|physics| physics.type_key)
-}
-
-fn runtime_object_is_artboard_local(object: &RuntimeObject) -> bool {
-    definition_by_type_key(object.type_key).is_some_and(|definition| {
-        // Match import ownership, not just schema ancestry. C++ routes user
-        // inputs into Artboard::objects(), while scripted inputs are usually
-        // owned by ScriptedObject importers despite inheriting Component.
-        (definition.is_a("Component")
-            && !definition.name.starts_with("ScriptInput")
-            && !definition.is_a("ScrollPhysics"))
-            || definition.is_a("KeyFrameInterpolator")
-            || definition.is_a("UserInput")
-    })
-}
-
-fn runtime_object_is_container_component(object: &RuntimeObject) -> bool {
-    definition_by_type_key(object.type_key)
-        .is_some_and(|definition| definition.is_a("ContainerComponent"))
-}
-
-fn runtime_object_is_artboard_component_list(object: &RuntimeObject) -> bool {
-    object.type_name == "ArtboardComponentList"
-}
-
-fn runtime_object_is_transform_component(object: &RuntimeObject) -> bool {
-    definition_by_type_key(object.type_key)
-        .is_some_and(|definition| definition.is_a("TransformComponent"))
-}
-
-fn runtime_object_is_nested_artboard(object: &RuntimeObject) -> bool {
-    definition_by_type_key(object.type_key)
-        .is_some_and(|definition| definition.is_a("NestedArtboard"))
-}
-
-fn runtime_object_is_text_interface(object: &RuntimeObject) -> bool {
-    definition_by_type_key(object.type_key)
-        .is_some_and(|definition| matches!(definition.name, "Text" | "TextInput"))
-}
-
-fn runtime_object_is_scroll_constraint(object: &RuntimeObject) -> bool {
-    definition_by_type_key(object.type_key)
-        .is_some_and(|definition| definition.name == "ScrollConstraint")
-}
-
-fn runtime_object_is_shape_paint(object: &RuntimeObject) -> bool {
-    definition_by_type_key(object.type_key).is_some_and(|definition| definition.is_a("ShapePaint"))
-}
-
-fn targeted_constraint_requires_target(type_name: &str) -> bool {
-    !matches!(
-        type_name,
-        "RotationConstraint" | "ScaleConstraint" | "TranslationConstraint"
-    )
 }
 
 fn runtime_object_is_component(object: &RuntimeObject) -> bool {
@@ -15168,6 +15197,8 @@ struct CppProbeLayerState {
     animation_id: Option<u64>,
     #[serde(default, rename = "animationCoreType")]
     animation_core_type: Option<u16>,
+    #[serde(default, rename = "animationName")]
+    animation_name: Option<String>,
     #[serde(rename = "fireActionCount")]
     fire_action_count: usize,
     #[serde(rename = "listenerActionCount")]
@@ -15197,6 +15228,8 @@ struct CppProbeBlendAnimation {
     animation_index: Option<usize>,
     #[serde(default, rename = "animationCoreType")]
     animation_core_type: Option<u16>,
+    #[serde(default, rename = "animationName")]
+    animation_name: Option<String>,
     #[serde(default, rename = "propertyValues")]
     property_values: Vec<CppProbePropertyValue>,
 }
@@ -17555,8 +17588,13 @@ fn compare_corpus_state_machine_children(
         .zip(&rust_children.inputs)
         .enumerate()
     {
-        let Some(cpp_input) = cpp_input.as_ref() else {
-            return Err(format!("{label} input {input_index} is null in C++"));
+        let (Some(cpp_input), Some(rust_input)) = (cpp_input.as_ref(), rust_input.as_ref()) else {
+            if cpp_input.is_none() && rust_input.is_none() {
+                continue;
+            }
+            return Err(format!(
+                "{label} input {input_index} null occurrence mismatch"
+            ));
         };
         if cpp_input.index != input_index {
             return Err(format!(
@@ -18132,6 +18170,15 @@ fn compare_state_machine_layer_states(
                 cpp_state.animation_core_type, rust_animation_core_type
             ));
         }
+        let rust_animation_name = rust_state
+            .animation
+            .map(|animation| animation.string_property("name").unwrap_or_default());
+        if cpp_state.animation_name.as_deref() != rust_animation_name {
+            return Err(format!(
+                "{label} state {state_index} animation name mismatch, C++ {:?}, Rust {:?}",
+                cpp_state.animation_name, rust_animation_name
+            ));
+        }
         compare_cpp_registry_properties_result(
             &cpp_state.property_values,
             rust_state_object,
@@ -18386,7 +18433,35 @@ fn compare_blend_animation(
             rust_blend_animation.object.uint_property("animationId")
         ));
     }
-    if cpp_blend_animation.animation_index != rust_blend_animation.animation_index {
+    let linear_animation_type = definition_by_name("LinearAnimation")
+        .expect("LinearAnimation schema definition")
+        .type_key
+        .int;
+    let cpp_uses_static_empty_animation = cpp_blend_animation.animation_index.is_none()
+        && cpp_blend_animation.animation_core_type == Some(linear_animation_type)
+        && cpp_blend_animation.animation_name.as_deref() == Some("")
+        && rust_blend_animation.animation_index.is_none()
+        && rust_blend_animation.animation.is_none();
+    if cpp_uses_static_empty_animation {
+        // Pinned C++ exposes its process-global m_EmptyAnimation through
+        // BlendAnimation::animation(). RuntimeFile can only reference objects
+        // retained in the file, so this inspection graph uses None for that
+        // non-file sentinel; the live runtime maps it to the FL-B4 shared
+        // per-Artboard empty definition under FLR-1/FLR-2.
+        return compare_cpp_registry_properties_result(
+            &cpp_blend_animation.property_values,
+            rust_blend_animation.object,
+            label,
+        );
+    }
+    // The probe's index is relative to the StateMachine-owning Artboard. A
+    // BlendAnimation can faithfully retain a non-null animation from the
+    // record-time Artboard, in which case C++ has a resolved pointer but no
+    // index in this Artboard. The resolved type/name below are the identity
+    // proof for that cross-Artboard branch.
+    if cpp_blend_animation.animation_index.is_some()
+        && cpp_blend_animation.animation_index != rust_blend_animation.animation_index
+    {
         return Err(format!(
             "{label} animation index mismatch, C++ {:?}, Rust {:?}",
             cpp_blend_animation.animation_index, rust_blend_animation.animation_index
@@ -18399,6 +18474,15 @@ fn compare_blend_animation(
         return Err(format!(
             "{label} animation core type mismatch, C++ {:?}, Rust {:?}",
             cpp_blend_animation.animation_core_type, rust_animation_core_type
+        ));
+    }
+    let rust_animation_name = rust_blend_animation
+        .animation
+        .map(|animation| animation.string_property("name").unwrap_or_default());
+    if cpp_blend_animation.animation_name.as_deref() != rust_animation_name {
+        return Err(format!(
+            "{label} animation name mismatch, C++ {:?}, Rust {:?}",
+            cpp_blend_animation.animation_name, rust_animation_name
         ));
     }
     compare_cpp_registry_properties_result(

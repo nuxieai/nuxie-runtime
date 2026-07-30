@@ -1841,6 +1841,35 @@ impl RuntimeOwnedViewModelHandle {
         Some(Self::from_shared(linked))
     }
 
+    /// Return the concrete retained child reached through a numeric
+    /// ViewModel-property path.
+    ///
+    /// Pinned C++ `ScriptedPropertyViewModel::pushValue` retains the current
+    /// child `rcp<ViewModelInstance>`, rather than a path that follows a later
+    /// replacement (`lua_properties.cpp:536-559`). Walking the linked
+    /// occurrences here gives scripting that same concrete identity.
+    pub(crate) fn linked_view_model_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<RuntimeOwnedViewModelHandle> {
+        let (property_index, rest) = property_path.split_first()?;
+        let linked = {
+            let instance = self.instance.try_borrow().ok()?;
+            instance
+                .view_models
+                .iter()
+                .find(|view_model| view_model.property_index == *property_index)?
+                .endpoint
+                .linked_instance()?
+        };
+        let linked = Self::from_shared(linked);
+        if rest.is_empty() {
+            Some(linked)
+        } else {
+            linked.linked_view_model_by_property_path(rest)
+        }
+    }
+
     /// Assigns one existing retained instance to an outer view-model property
     /// without cloning it. The assignment is rejected before mutation when
     /// its schema is incompatible or the resulting retained graph would
@@ -1856,21 +1885,49 @@ impl RuntimeOwnedViewModelHandle {
         if property_path.contains('/') {
             return Err(RuntimeViewModelLinkError::NestedPathUnsupported);
         }
-        let (property_index, expected_schema, previous) = {
+        let property_index = {
             let instance = self
                 .instance
                 .try_borrow()
                 .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?;
-            let property_index = instance
+            instance
                 .property_index_by_name(property_path)
+                .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?
+        };
+        self.link_view_model_by_property_path(&[property_index], value)
+    }
+
+    /// Replace one concrete retained ViewModel-valued property by numeric path.
+    ///
+    /// Each intermediate linked occurrence is a C++ `rcp<ViewModelInstance>`;
+    /// recurse through that concrete owner, then run the same unconditional
+    /// detach/store/attach/dirt/relink sequence as the direct-name API.
+    pub(crate) fn link_view_model_by_property_path(
+        &self,
+        property_path: &[usize],
+        value: &RuntimeOwnedViewModelHandle,
+    ) -> Result<bool, RuntimeViewModelLinkError> {
+        let (property_index, parent_path) = property_path
+            .split_last()
+            .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?;
+        if !parent_path.is_empty() {
+            let parent = self
+                .linked_view_model_by_property_path(parent_path)
                 .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?;
+            return parent.link_view_model_by_property_path(&[*property_index], value);
+        }
+
+        let (expected_schema, previous) = {
+            let instance = self
+                .instance
+                .try_borrow()
+                .map_err(|_| RuntimeViewModelLinkError::BorrowConflict)?;
             let property = instance
                 .view_models
                 .iter()
-                .find(|view_model| view_model.property_index == property_index)
+                .find(|view_model| view_model.property_index == *property_index)
                 .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?;
             (
-                property_index,
                 property
                     .referenced_view_model_index
                     .ok_or(RuntimeViewModelLinkError::SchemaMismatch)?,
@@ -1921,7 +1978,7 @@ impl RuntimeOwnedViewModelHandle {
         let property = instance
             .view_models
             .iter_mut()
-            .find(|view_model| view_model.property_index == property_index)
+            .find(|view_model| view_model.property_index == *property_index)
             .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?;
         if let Some(previous_relay) = previous_relay {
             RuntimeOwnedViewModelParentRelay::remove_parent(&previous_relay, &parent_relay);
@@ -3743,7 +3800,7 @@ impl Clone for RuntimeOwnedViewModelEndpoint {
 }
 
 #[derive(Debug, Clone)]
-struct RuntimeOwnedViewModelViewModel {
+pub(crate) struct RuntimeOwnedViewModelViewModel {
     property_index: usize,
     property_name: String,
     endpoint: RuntimeOwnedViewModelEndpoint,
@@ -4018,7 +4075,7 @@ impl RuntimeOwnedViewModelViewModel {
         }
     }
 
-    fn property_index_by_name(&self, property_name: &str) -> Option<usize> {
+    pub(crate) fn property_index_by_name(&self, property_name: &str) -> Option<usize> {
         runtime_owned_view_model_property_index_by_name(&self.property_names, property_name)
     }
 
@@ -4496,6 +4553,12 @@ impl RuntimeOwnedViewModelViewModel {
     }
 
     fn materialize_active_instance(&self) -> Option<RuntimeOwnedViewModelInstance> {
+        let mut instance = self.materialize_active_instance_unbound()?;
+        instance.bind_structural_ownership();
+        Some(instance)
+    }
+
+    fn materialize_active_instance_unbound(&self) -> Option<RuntimeOwnedViewModelInstance> {
         if let Some(linked) = self.endpoint.linked_instance() {
             return Some(linked.try_borrow().ok()?.clone());
         }
@@ -4542,7 +4605,7 @@ impl RuntimeOwnedViewModelViewModel {
                 _ => Vec::new(),
             },
         };
-        instance.detach_list_storage();
+        instance.detach_list_storage_unbound();
         Some(instance)
     }
 
@@ -7481,11 +7544,10 @@ impl RuntimeOwnedViewModelInstance {
         bind_owned_view_model_child_parent_relays(&mut self.view_models, &self.parent_relay);
     }
 
-    fn detach_list_storage(&mut self) {
+    fn detach_list_storage_unbound(&mut self) {
         let parent_relay = Rc::clone(&self.parent_relay);
         detach_owned_view_model_list_storage(&mut self.lists, &parent_relay);
         detach_owned_view_model_child_list_storage(&mut self.view_models, &parent_relay);
-        self.bind_structural_ownership();
     }
 
     /// Advance the values stored directly in this instance and in embedded
@@ -7515,7 +7577,36 @@ impl RuntimeOwnedViewModelInstance {
     }
 
     pub fn new(file: &RuntimeFile, view_model_index: usize) -> Option<Self> {
-        Self::from_view_model(file, view_model_index, None)
+        let mut instance = Self::from_view_model_unbound(file, view_model_index, None)?;
+        Self::complete_generated_view_model_links(&mut instance)?;
+        Some(instance)
+    }
+
+    /// Complete the retained ViewModel-valued property graph created for a
+    /// generated instance.
+    ///
+    /// Pinned C++ `File::createViewModelInstance` recursively creates a
+    /// concrete `ViewModelInstance` for every ViewModel-valued property and
+    /// installs it as that property's `referenceViewModelInstance`
+    /// (`src/file.cpp:1141-1200`). Keep the same concrete identity here so
+    /// scripting and DataContext consumers retain the selected child itself
+    /// instead of reconstructing a scoped projection of the outer root.
+    fn complete_generated_view_model_links(instance: &mut Self) -> Option<()> {
+        for child in &mut instance.view_models {
+            if !matches!(
+                child.endpoint.value(),
+                RuntimeViewModelPointer::OwnedGenerated { .. }
+            ) {
+                continue;
+            }
+            let mut linked = child.materialize_active_instance_unbound()?;
+            Self::complete_generated_view_model_links(&mut linked)?;
+            child
+                .endpoint
+                .set_linked_instance_silent(Some(Rc::new(RefCell::new(linked))));
+        }
+        instance.bind_structural_ownership();
+        Some(())
     }
 
     /// Clone and complete one authored instance exactly like C++
@@ -7658,6 +7749,16 @@ impl RuntimeOwnedViewModelInstance {
         view_model_index: usize,
         instance: Option<&RuntimeObject>,
     ) -> Option<Self> {
+        let mut instance = Self::from_view_model_unbound(file, view_model_index, instance)?;
+        instance.bind_structural_ownership();
+        Some(instance)
+    }
+
+    fn from_view_model_unbound(
+        file: &RuntimeFile,
+        view_model_index: usize,
+        instance: Option<&RuntimeObject>,
+    ) -> Option<Self> {
         file.view_model(view_model_index)?;
         let use_generated_defaults = instance.is_none();
         let parent_path = [view_model_index];
@@ -7731,7 +7832,7 @@ impl RuntimeOwnedViewModelInstance {
             use_generated_defaults,
         );
         let parent_relay = RuntimeOwnedViewModelParentRelay::new();
-        let mut instance = Self {
+        let instance = Self {
             view_model_index,
             instance_identity: Self::next_instance_identity(),
             allocation_identity: Self::next_allocation_identity(),
@@ -7750,11 +7851,10 @@ impl RuntimeOwnedViewModelInstance {
             triggers,
             view_models,
         };
-        instance.bind_structural_ownership();
         Some(instance)
     }
 
-    fn property_index_by_name(&self, property_name: &str) -> Option<usize> {
+    pub(crate) fn property_index_by_name(&self, property_name: &str) -> Option<usize> {
         runtime_owned_view_model_property_index_by_name(&self.property_names, property_name)
     }
 
@@ -10024,7 +10124,7 @@ impl RuntimeOwnedViewModelInstance {
         true
     }
 
-    fn view_model_by_property_path(
+    pub(crate) fn view_model_by_property_path(
         &self,
         property_path: &[usize],
     ) -> Option<&RuntimeOwnedViewModelViewModel> {
@@ -11053,6 +11153,9 @@ impl RuntimeOwnedViewModelInstance {
             .iter()
             .find(|view_model| view_model.property_index == *property_index)?;
         if rest.is_empty() {
+            if let Some(linked) = view_model.endpoint.linked_instance() {
+                return Some(linked.try_borrow().ok()?.view_model_index());
+            }
             match view_model.endpoint.value() {
                 RuntimeViewModelPointer::OwnedGenerated { .. }
                 | RuntimeViewModelPointer::Imported { .. } => {
@@ -11092,6 +11195,32 @@ impl RuntimeOwnedViewModelInstance {
         )
     }
 
+    /// Resolve a name-based path through the File-owned resolver that remains
+    /// installed while later ScriptAsset/ShaderAsset contents import.
+    ///
+    /// The binary model exposes `manifest()` for a build where script assets
+    /// do not create FileAsset importers and `scripting_manifest()` for the
+    /// pinned scripting build. Scripted objects and their converter-owned
+    /// DataBinds must use the latter whenever it exists; C++
+    /// `DataBindContext::resolvePath` reads the persistent `File::dataResolver`
+    /// rather than reassigning contents to the most recent asset
+    /// (`data_bind_context.cpp:22-50`).
+    pub(crate) fn property_path_for_context_source_path_with_persistent_resolver(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        name_based: bool,
+    ) -> Option<Vec<usize>> {
+        self.property_path_for_context_source_path_with_manifest_mode(
+            file,
+            context_path,
+            source_path,
+            name_based,
+            name_based && file.scripting_manifest().is_some(),
+        )
+    }
+
     pub(crate) fn property_path_for_context_source_path_with_manifest_mode(
         &self,
         file: &RuntimeFile,
@@ -11125,6 +11254,30 @@ impl RuntimeOwnedViewModelInstance {
         Some(property_path)
     }
 
+    /// Resolve name ids that have already passed through
+    /// `DataBindPath::resolvedPath`.
+    ///
+    /// Pinned C++ expands a one-element manifest path id exactly once, then
+    /// `DataContext::tryGetRelativeViewModelProperty` consumes the resulting
+    /// values directly as name ids (`data_bind_path.cpp:36-52`;
+    /// `data_context.cpp:300-330`). Re-entering `resolvePath` here can select a
+    /// different path when the first name id also happens to be a valid path
+    /// id.
+    pub(crate) fn property_path_for_context_resolved_name_path(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        resolved_name_ids: &[u32],
+        scripting_manifest: bool,
+    ) -> Option<Vec<usize>> {
+        self.property_path_for_context_name_ids(
+            file,
+            context_path,
+            resolved_name_ids,
+            scripting_manifest,
+        )
+    }
+
     fn property_path_for_context_name_source_path(
         &self,
         file: &RuntimeFile,
@@ -11145,6 +11298,33 @@ impl RuntimeOwnedViewModelInstance {
             .and_then(|path_id| manifest.resolve_path(*path_id))
             .filter(|resolved_path| !resolved_path.is_empty())
             .unwrap_or(source_path);
+        self.property_path_for_context_name_ids_with_manifest(context_path, source_path, &manifest)
+    }
+
+    fn property_path_for_context_name_ids(
+        &self,
+        file: &RuntimeFile,
+        context_path: &[usize],
+        source_path: &[u32],
+        scripting_manifest: bool,
+    ) -> Option<Vec<usize>> {
+        if source_path.is_empty() {
+            return None;
+        }
+        let manifest = if scripting_manifest {
+            file.scripting_manifest()?
+        } else {
+            file.manifest()?
+        };
+        self.property_path_for_context_name_ids_with_manifest(context_path, source_path, &manifest)
+    }
+
+    fn property_path_for_context_name_ids_with_manifest(
+        &self,
+        context_path: &[usize],
+        source_path: &[u32],
+        manifest: &nuxie_binary::RuntimeManifest,
+    ) -> Option<Vec<usize>> {
         let mut property_path = Vec::with_capacity(context_path.len() + source_path.len());
         property_path.extend_from_slice(context_path);
         for name_id in source_path {
@@ -13619,6 +13799,11 @@ mod owned_context_tests {
             Ok(true)
         );
         assert_eq!(
+            row.borrow().view_model_index_by_property_path(&[1]),
+            Some(2),
+            "C++ DataContext::tryGetViewModelInstance follows the live ViewModelInstanceViewModel reference when the authored path ends at that property (`data_context.cpp:335-363`)"
+        );
+        assert_eq!(
             source.view_model_pointer(),
             Some(RuntimeViewModelPointer::Retained {
                 allocation_identity: child_allocation,
@@ -13733,10 +13918,19 @@ mod owned_context_tests {
         assert!(instance.set_trigger_by_property_name_path("child/fire", 1));
         assert_eq!(instance.trigger_value_by_property_path(&[0, 0]), Some(1));
 
-        let (changed, shared_children) = instance.advance_script_frame_local();
+        let (mut changed, mut shared_children) = instance.advance_script_frame_local();
+        assert!(
+            !changed && shared_children.len() == 1,
+            "C++ File::createViewModelInstance retains the generated child as a concrete referenceViewModelInstance (`file.cpp:1141-1200`)"
+        );
+        while let Some(child) = shared_children.pop() {
+            let (child_changed, mut grandchildren) =
+                child.borrow_mut().advance_script_frame_local();
+            changed |= child_changed;
+            shared_children.append(&mut grandchildren);
+        }
 
         assert!(changed);
-        assert!(shared_children.is_empty());
         assert_eq!(instance.trigger_value_by_property_path(&[0, 0]), Some(0));
     }
 }

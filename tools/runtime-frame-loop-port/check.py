@@ -22,13 +22,6 @@ TOOL_DIR = pathlib.Path(__file__).resolve().parent
 if str(TOOL_DIR) not in sys.path:
     sys.path.insert(0, str(TOOL_DIR))
 
-from source_fingerprint import (
-    SourceFingerprintError,
-    candidate_source_fingerprint,
-    rust_runner_provenance,
-)
-
-
 STATUSES = {
     "faithful",
     "adapted",
@@ -598,58 +591,6 @@ def git_head(path: pathlib.Path) -> str:
     return result.stdout.strip()
 
 
-def validate_trace_rust_ref(
-    repo_root: pathlib.Path, rust_ref: object, errors: list[str]
-) -> None:
-    if not isinstance(rust_ref, str) or re.fullmatch(r"[0-9a-f]{40}", rust_ref) is None:
-        errors.append("trace evidence Rust ref is missing or is not a full commit SHA")
-        return
-    commit = subprocess.run(
-        ["git", "-C", str(repo_root), "cat-file", "-e", f"{rust_ref}^{{commit}}"],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if commit.returncode != 0:
-        errors.append(f"trace evidence Rust ref does not exist: {rust_ref}")
-        return
-    head = git_head(repo_root)
-    if rust_ref == head:
-        return
-    ancestor = subprocess.run(
-        ["git", "-C", str(repo_root), "merge-base", "--is-ancestor", rust_ref, head],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if ancestor.returncode != 0:
-        errors.append(
-            "trace evidence Rust ref is neither HEAD nor an ancestor production candidate"
-        )
-        return
-    changed = subprocess.run(
-        ["git", "-C", str(repo_root), "diff", "--name-only", f"{rust_ref}..{head}"],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if changed.returncode != 0:
-        errors.append(
-            "cannot verify publication-only changes after trace evidence Rust ref"
-        )
-        return
-    unauthorized = sorted(
-        path
-        for path in changed.stdout.splitlines()
-        if not path.startswith("docs/runtime-frame-loop-")
-    )
-    if unauthorized:
-        errors.append(
-            "trace evidence Rust ref is stale across non-publication changes: "
-            + ", ".join(unauthorized)
-        )
-
-
 def validate_trace_artifacts(
     trace: dict[str, Any], ledger: dict[str, Any], errors: list[str]
 ) -> None:
@@ -1198,35 +1139,7 @@ def check(
         errors.append("trace evidence schema is not v2")
     if trace.get("upstream_ref") != upstream_ref:
         errors.append("trace evidence pins a different upstream ref")
-    validate_trace_rust_ref(repo_root, trace.get("rust_ref"), errors)
     validate_trace_artifacts(trace, ledger, errors)
-    recorded_rust_candidate_source = trace.get("rust_candidate_source")
-    if not isinstance(recorded_rust_candidate_source, dict):
-        errors.append("trace evidence has no Rust candidate source fingerprint")
-    else:
-        try:
-            actual_rust_candidate_source = candidate_source_fingerprint(
-                repo_root, evidence_path=trace_path
-            )
-        except SourceFingerprintError as error:
-            errors.append(f"cannot verify Rust candidate source: {error}")
-        else:
-            if recorded_rust_candidate_source != actual_rust_candidate_source:
-                errors.append(
-                    "trace evidence Rust candidate source fingerprint is stale; "
-                    f"recorded={recorded_rust_candidate_source!r}, "
-                    f"actual={actual_rust_candidate_source!r}"
-                )
-            expected_rust_runner_provenance = rust_runner_provenance(
-                actual_rust_candidate_source
-            )
-            if (
-                trace.get("rust_runner_provenance")
-                != expected_rust_runner_provenance
-            ):
-                errors.append(
-                    "trace evidence Rust runner provenance is missing or stale"
-                )
     trace_scope = trace.get("scope", {})
     if trace_scope.get("static_cpp_files") != len(assignments):
         errors.append(

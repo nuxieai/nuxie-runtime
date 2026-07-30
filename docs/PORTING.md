@@ -24,7 +24,7 @@ what is idiomatic Rust.
   per meaningful C++ file. A family is not publishable while any import,
   ownership, ordering, cloning, lifecycle, floating-point, or dispatch row is
   still uncertain. `// TODO(golden):` may mark an internal work-in-progress,
-  but never substitutes for closure evidence in a review candidate.
+  but never substitutes for closure evidence for the family.
 - During Phase R's mechanical renderer translation, `nuxie-schema` and
   `nuxie-binary` are frozen — do not touch them. A Phase S upstream-sync cycle
   may regenerate schema artifacts and update the binary decoder when the
@@ -59,7 +59,9 @@ what is idiomatic Rust.
 > paragraph. Rationale: rounds 10-12 of the FL-B/FL-C5 campaign produced
 > zero behavioral findings while consuming days on tooling review; the
 > upstream test estate (1,320 TEST_CASEs, 238 silvers) is a stricter and
-> cheaper oracle than review rounds.
+> cheaper oracle than review rounds. In PR #89, the retired staleness gates
+> also forced five fingerprint-rebind commits in a single day as the source
+> changed.
 
 1. **Read the whole family first.** Read every mapped implementation and header,
    plus the importer and concrete subclasses that establish its lifecycle.
@@ -77,31 +79,17 @@ what is idiomatic Rust.
    indices, duplicate authored occurrences, failed candidates, zero values,
    nested paths, same-frame timing, clone isolation, and malformed import
    behavior wherever the family admits them.
-5. **Publish only a closed checklist.** Every row must have a live pinned-C++
-   differential or a source-cited structural proof. Turn each review finding
-   into a permanent differential or checker negative control before
-   resubmission.
+5. **Close the checklist before flipping manifest rows.** Every row must have a
+   live pinned-C++ differential or a source-cited structural proof. Turn each
+   behavioral gap into a permanent differential or checker negative control
+   before completing the family.
 
-Focused tests run continuously while the family is being translated. The
-expensive full battery runs once after the checklist is closed and before the
-immutable candidate is published. Do not start the next production family
-until the current candidate has an acceptance verdict.
-
-Long-running gates and independent review do not create research idle time.
-While they run, prepare the **next** dependency-ready family's read-only C++
-source walk and closure checklist. That preparation may add no production
-writer, may not alter the frozen candidate base, and may not begin semantic
-Rust edits before the current verdict. Large waves such as DataBind/Artboard
+Focused tests run continuously while the family is being translated. Run the
+expensive full battery once after the checklist is closed, then land the family
+in one PR that flips its manifest rows. Large waves such as DataBind/Artboard
 and Text/Layout must be partitioned into dependency-complete owner-family
 checklists before their first production edit; a wave-sized file count is not
-itself a reviewable family.
-
-One publication packet carries the complete checklist, exact pinned-C++
-citations, adversarial cases, permanent structural ratchets, immutable
-candidate SHA, and all applicable gate results. Reviewers must not reconstruct
-the closure from commits or discover missing family members incrementally.
-Every review finding becomes a durable differential or checker negative before
-resubmission.
+itself a family.
 
 Keep one production writer. Parallel work is limited to read-only source
 mapping, oracle-probe design, and independent review. Rebase only at declared

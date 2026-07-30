@@ -1244,7 +1244,7 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_event_recursive_owner_total_order_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "\\A(?=[\\s\\S]*fn\\s+advance_nested_animation_owner_with\\b[\\s\\S]{0,2200}dispatch\\(artboard,\\s*host_local,\\s*&reported_events\\)[\\s\\S]{0,500}flush_nested_animation_owner_audio_at\\(\\s*artboard,\\s*host_local,\\s*animation_index)(?=[\\s\\S]*fn\\s+dispatch_nested_event_sources_with\\b[\\s\\S]{0,1600}state_machine\\.notify_events\\(artboard,\\s*Some\\(host_local\\),\\s*events\\))(?=[\\s\\S]*fn\\s+fl_c5_event_bubbling_precedes_the_recorded_audio_seam_through_two_ancestors\\b[\\s\\S]{0,9000}\"leaf-local\"[\\s\\S]{0,100}\"parent-local\"[\\s\\S]{0,100}\"root-local\"[\\s\\S]{0,100}\"root-audio\"[\\s\\S]{0,100}\"parent-audio\"[\\s\\S]{0,100}\"leaf-audio\")(?=[\\s\\S]*fn\\s+fl_c5_event_bubbling_cross_instance_total_order_through_one_ancestor\\b[\\s\\S]{0,5000}\"leaf-local\"[\\s\\S]{0,100}\"parent-local\"[\\s\\S]{0,100}\"parent-audio\"[\\s\\S]{0,100}\"leaf-audio\")"
+pattern = "\\A(?=[\\s\\S]*fn\\s+advance_nested_animation_owner_with\\b[\\s\\S]{0,9000}for\\s+event\\s+in\\s+reported_events[\\s\\S]{0,900}complete_nested_report_chain\\([\\s\\S]{0,1000}flush_deferred_owner_audio_event\\(&audio_event\\)[\\s\\S]{0,700}flush_deferred_owner_audio_events\\(\\))(?=[\\s\\S]*fn\\s+complete_nested_report_chain\\b[\\s\\S]{0,1800}deliver_to_ancestor\\(parent_artboard,\\s*host_local,\\s*&singleton\\)[\\s\\S]{0,700}RuntimeNestedEventChainPhase::AncestorDispatch)(?=[\\s\\S]*fn\\s+dispatch_nested_events_to_animation_owners\\b[\\s\\S]{0,4000}notify_events\\(child,\\s*Some\\(source_local_id\\),\\s*events\\)[\\s\\S]{0,1800}reported_event_count\\(\\)[\\s\\S]{0,1800}complete_nested_report_chain\\([\\s\\S]{0,500}flush_deferred_owner_audio_event\\(&audio_event\\)[\\s\\S]{0,700}flush_deferred_owner_audio_events\\(\\))"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1376,14 +1376,14 @@ max_occurrences = 0
 [[ratchet]]
 id = "state_machine_artboard_single_nested_delegation_required"
 globs = ["crates/nuxie-runtime/src/artboard.rs"]
-pattern = "\\A(?=[\\s\\S]*pub\\s+fn\\s+advance_nested_artboards_with_state_machine\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_nested_event_sources_with\\([\\s\\S]{0,1400}Some\\(nested_event_dispatch\\))(?=[\\s\\S]*pub\\s+fn\\s+advance_frame_components_with_state_machine\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_nested_event_sources_with\\([\\s\\S]{0,1400}Some\\(nested_event_dispatch\\))(?=[\\s\\S]*fn\\s+advance_nested_artboard_entry\\b[\\s\\S]{0,3600}advance_nested_animation_owner_with\\([\\s\\S]{0,1800}advance_nested_descendant_event_sources_with\\()"
+pattern = "\\A(?=[\\s\\S]*pub\\s+fn\\s+advance_nested_artboards_with_state_machine\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_nested_event_sources_with\\([\\s\\S]{0,1400}Some\\(nested_event_dispatch\\))(?=[\\s\\S]*pub\\s+fn\\s+advance_frame_components_with_state_machine\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_nested_event_sources_with\\([\\s\\S]{0,1400}Some\\(nested_event_dispatch\\))(?=[\\s\\S]*fn\\s+advance_nested_artboard_entry\\b[\\s\\S]{0,4200}advance_nested_animation_owner_with\\([\\s\\S]{0,1800}advance_after_animation_owners\\()"
 min_occurrences = 1
 max_occurrences = 1
 
 [[ratchet]]
 id = "state_machine_nested_event_source_policy_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "\\A(?=[\\s\\S]*fn\\s+advance_nested_animation_owner_with\\b[\\s\\S]{0,1000}let\\s+mut\\s+reported_events\\s*=\\s*Vec::new\\(\\)[\\s\\S]{0,1800}dispatch\\(artboard,\\s*host_local,\\s*&reported_events\\)[\\s\\S]{0,500}flush_nested_animation_owner_audio_at)(?=[\\s\\S]*fn\\s+advance_nested_animation_owner\\b[\\s\\S]{0,1800}advance_linear_animation_instance_with_events[\\s\\S]{0,1800}reported_event_count\\(\\)[\\s\\S]{0,500}reported_event\\(child,\\s*index\\))(?=[\\s\\S]*fn\\s+dispatch_nested_events_to_animation_owners\\b[\\s\\S]{0,1800}notify_events\\([\\s\\S]{0,700}advance_on_artboard)(?=[\\s\\S]*fn\\s+flush_nested_animation_owner_audio_at\\b[\\s\\S]{0,1000}flush_deferred_owner_audio_events)"
+pattern = "\\A(?=[\\s\\S]*fn\\s+advance_nested_animation_owner_with\\b[\\s\\S]{0,5000}advance_linear_animation_instance_with_callback_sink[\\s\\S]{0,4000}reported_event_count\\(\\)[\\s\\S]{0,700}reported_event\\(&nested\\.child,\\s*index\\)[\\s\\S]{0,1200}complete_nested_report_chain\\([\\s\\S]{0,1800}flush_deferred_owner_audio_events\\(\\))(?=[\\s\\S]*fn\\s+dispatch_nested_events_to_animation_owners\\b[\\s\\S]{0,2400}notify_events\\([\\s\\S]{0,700}advance_on_artboard[\\s\\S]{0,1400}complete_nested_report_chain\\([\\s\\S]{0,1400}flush_deferred_owner_audio_events\\(\\))"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1396,25 +1396,25 @@ max_occurrences = 0
 [[ratchet]]
 id = "state_machine_nested_event_collection_outside_instance_policy"
 globs = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/state_machine/nested_state_machine.rs"]
-pattern = "reported_event_count\\(\\)[\\s\\S]{0,700}reported_event\\s*\\("
+detector = "rust_nested_event_owner_boundary"
 max_occurrences = 0
 
 [[ratchet]]
 id = "state_machine_nested_animation_selection_outside_instance_policy"
 globs = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/state_machine/nested_state_machine.rs"]
-pattern = "impl\\s+RuntimeNestedAnimationInstance\\b[\\s\\S]{0,1200}fn\\s+\\w+\\b[^\\{]{0,900}reported_events:\\s*Option<&mut\\s+Vec<StateMachineReportedEvent>>[\\s\\S]{0,1800}(?:Self|RuntimeNestedAnimationInstance)::StateMachine"
+detector = "rust_nested_event_owner_boundary"
 max_occurrences = 0
 
 [[ratchet]]
 id = "state_machine_nested_event_dispatch_outside_instance_policy"
 globs = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/state_machine/nested_state_machine.rs"]
-pattern = "(?:\\.notify_events(?:_with_owned_view_model_context)?\\s*\\(|(?:if\\s+)?!(\\w+)\\.is_empty\\(\\)\\s*(?:&&|\\{)[\\s\\S]{0,500}\\b\\w+\\s*\\([^;{}]*\\b\\1\\b)"
+detector = "rust_nested_event_owner_boundary"
 max_occurrences = 0
 
 [[ratchet]]
 id = "state_machine_nested_audio_unwind_outside_instance_policy"
 globs = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/state_machine/nested_state_machine.rs"]
-pattern = "(?:\\.flush_deferred_owner_audio_events\\s*\\(|StateMachineInstance::flush_nested_(?:source|animation_owner)_audio\\s*\\()"
+detector = "rust_nested_event_owner_boundary"
 max_occurrences = 0
 
 [[ratchet]]

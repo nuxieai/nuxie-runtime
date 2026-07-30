@@ -52,6 +52,13 @@ UNBOUND_SCRIPTED_CONSTRUCTOR_RATCHET = (
 SEMANTIC_ORDINAL_PROJECTION_RATCHET = (
     "state_machine_semantic_ordinal_projection"
 )
+NESTED_EVENT_OWNER_BOUNDARY_RATCHETS = {
+    "state_machine_nested_event_collection_outside_instance_policy": "collection",
+    "state_machine_nested_animation_selection_outside_instance_policy": "selection",
+    "state_machine_nested_event_dispatch_outside_instance_policy": "dispatch",
+    "state_machine_nested_audio_unwind_outside_instance_policy": "audio",
+}
+NESTED_EVENT_OWNER_BOUNDARY_DETECTOR = "rust_nested_event_owner_boundary"
 FL_B_FROZEN_SCOPE_REF = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 FL_B_FROZEN_SCOPE_FILES = frozenset(
     {
@@ -368,6 +375,97 @@ def semantic_ordinal_projection_hits(
         ):
             hits.append(function.start())
     return hits
+
+
+def rust_function_ranges(stripped: str) -> list[tuple[int, int]]:
+    """Return concrete Rust function ranges with balanced bodies."""
+
+    function_pattern = re.compile(
+        r"(?m)^[ \t]*(?:(?:pub(?:\([^\n)]*\))?|const|async|unsafe|"
+        r"extern(?:[ \t]+\"[^\n\"]*\")?)[ \t]+)*fn[ \t]+[A-Za-z_]\w*"
+    )
+    ranges: list[tuple[int, int]] = []
+    for function in function_pattern.finditer(stripped):
+        open_brace = stripped.find("{", function.end())
+        if open_brace == -1:
+            continue
+        if stripped.find(";", function.end(), open_brace) != -1:
+            continue
+        depth = 0
+        for index in range(open_brace, len(stripped)):
+            if stripped[index] == "{":
+                depth += 1
+            elif stripped[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    ranges.append((function.start(), index + 1))
+                    break
+    return ranges
+
+
+def nested_event_owner_boundary_hits(source: str, kind: str) -> list[int]:
+    """Find event-delivery mechanics displaced from the instance owner module."""
+
+    test_module = re.search(
+        r"(?m)^#\[cfg\(test\)\][ \t\r\n]*mod[ \t]+tests[ \t]*\{",
+        source,
+    )
+    production = source[: test_module.start()] if test_module else source
+    stripped = strip_rust_comments_and_strings(production)
+    function_bodies = [
+        (stripped.find("{", start, end) + 1, end - 1)
+        for start, end in rust_function_ranges(stripped)
+    ]
+
+    def call_hits(name_pattern: str) -> list[int]:
+        call = re.compile(r"\b(?:" + name_pattern + r")\s*\(")
+        return [
+            start
+            for start, end in function_bodies
+            if call.search(stripped, start, end)
+        ]
+
+    def identifier_hits(name_pattern: str) -> list[int]:
+        identifier = re.compile(r"\b(?:" + name_pattern + r")\b")
+        return [
+            start
+            for start, end in function_bodies
+            if identifier.search(stripped, start, end)
+        ]
+
+    if kind == "collection":
+        # Collection mechanics are forbidden as values as well as direct
+        # calls. Otherwise a function-item alias can move the owner boundary
+        # while evading a call-shaped scanner:
+        # `let collect = StateMachineInstance::reported_event;`.
+        return identifier_hits(
+            r"reported_event_count|reported_event|"
+            r"take_(?:\w*event\w*|\w*report\w*)"
+        )
+    if kind == "dispatch":
+        return call_hits(r"notify_events(?:_[A-Za-z_]\w*)?")
+    if kind == "audio":
+        return call_hits(
+            r"[A-Za-z_]\w*audio[A-Za-z_]\w*|[A-Za-z_]\w*Audio[A-Za-z_]\w*"
+        )
+    if kind == "selection":
+        selection = re.compile(
+            r"(?:RuntimeNestedAnimationInstance|Self)::StateMachine\b"
+        )
+        event_mechanic = re.compile(
+            r"\bStateMachineReportedEvent\b|"
+            r"\breported_event(?:_count)?\b|"
+            r"\bnotify_events(?:_[A-Za-z_]\w*)?\b|"
+            r"\b[A-Za-z_]\w*audio[A-Za-z_]\w*\b",
+            re.IGNORECASE,
+        )
+        return [
+            start
+            for start, end in rust_function_ranges(stripped)
+            if selection.search(stripped, start, end)
+            and event_mechanic.search(stripped, start, end)
+        ]
+    raise ValueError(f"unknown nested-event boundary detector kind: {kind}")
 
 
 def read_toml(path: pathlib.Path) -> dict[str, Any]:
@@ -1356,6 +1454,7 @@ def check(
     for row in ratchet_rows:
         ratchet_id = str(row.get("id", ""))
         pattern_text = str(row.get("pattern", ""))
+        detector = str(row.get("detector", ""))
         globs = [str(value) for value in row.get("globs", [])]
         content_begin = str(row.get("content_begin", ""))
         content_end = str(row.get("content_end", ""))
@@ -1364,7 +1463,13 @@ def check(
         minimum = row.get("min_occurrences", 0)
         if (
             not ratchet_id
-            or not pattern_text
+            or (
+                not pattern_text
+                and not (
+                    detector == NESTED_EVENT_OWNER_BOUNDARY_DETECTOR
+                    and ratchet_id in NESTED_EVENT_OWNER_BOUNDARY_RATCHETS
+                )
+            )
             or not globs
             or not isinstance(maximum, int)
             or not isinstance(minimum, int)
@@ -1382,11 +1487,13 @@ def check(
                 f"ratchet {ratchet_id} has incomplete content digest metadata"
             )
             continue
-        try:
-            pattern = re.compile(pattern_text)
-        except re.error as error:
-            errors.append(f"ratchet {ratchet_id} has invalid regex: {error}")
-            continue
+        pattern = None
+        if pattern_text:
+            try:
+                pattern = re.compile(pattern_text)
+            except re.error as error:
+                errors.append(f"ratchet {ratchet_id} has invalid regex: {error}")
+                continue
         count = 0
         hits: list[str] = []
         content_regions: list[bytes] = []
@@ -1402,7 +1509,13 @@ def check(
                         source,
                         resolver_seam_exists=semantic_resolver_seam_exists,
                     )
+                elif detector == NESTED_EVENT_OWNER_BOUNDARY_DETECTOR:
+                    found_offsets = nested_event_owner_boundary_hits(
+                        source,
+                        NESTED_EVENT_OWNER_BOUNDARY_RATCHETS[ratchet_id],
+                    )
                 else:
+                    assert pattern is not None
                     found_offsets = [
                         match.start() for match in pattern.finditer(source)
                     ]

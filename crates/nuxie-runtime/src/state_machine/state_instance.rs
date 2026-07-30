@@ -147,8 +147,8 @@ impl RuntimeStateInstance {
         }
     }
 
-    pub(super) fn apply(&self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
-        match &self.kind {
+    pub(super) fn apply(&mut self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
+        match &mut self.kind {
             RuntimeStateInstanceKind::System(instance) => instance.apply(),
             RuntimeStateInstanceKind::Animation { animation, .. } => animation.apply(artboard, mix),
             RuntimeStateInstanceKind::Blend1D(instance) => instance.apply(artboard, mix),

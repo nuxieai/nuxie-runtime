@@ -962,14 +962,14 @@ impl StateMachineLayerInstance {
             let mix_from = interpolator
                 .map(|interpolator| interpolator.transform(self.transition_mix_from))
                 .unwrap_or(self.transition_mix_from);
-            if let Some(state_from) = self.state_from.as_ref() {
+            if let Some(state_from) = self.state_from.as_mut() {
                 changed |= state_from.apply(artboard, mix_from);
             }
         }
         let mix = interpolator
             .map(|interpolator| interpolator.transform(self.transition_mix))
             .unwrap_or(self.transition_mix);
-        if let Some(current_state) = self.current_state.as_ref() {
+        if let Some(current_state) = self.current_state.as_mut() {
             changed |= current_state.apply(artboard, mix);
         }
         changed

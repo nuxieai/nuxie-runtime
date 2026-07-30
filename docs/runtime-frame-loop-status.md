@@ -831,8 +831,7 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Publish the staged E4 evidence/docs packet without changing immutable
-   production candidate `9434b39cd1e888ac5f3300a9f6708b303516da2d`.
-2. Request the independent round-six FL-B reacceptance review against E4.
-3. Request the independent round-six FL-C5 oracle review against E4.
-4. Request the independent round-six FL-C5 standards review against E4.
+1. Request the independent round-seven FL-C5 oracle, standards, and FL-B
+   reacceptance reviews against this publication.
+2. Resolve every orchestrator-upheld review finding before promotion.
+3. Promote FL-C5 only after all three independent round-seven reviews accept.

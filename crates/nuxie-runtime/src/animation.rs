@@ -1046,8 +1046,7 @@ impl RuntimeLinearAnimation {
         seconds_to: f32,
         speed_direction: f32,
         from_pong: bool,
-        reported_events: &mut Vec<StateMachineReportedEvent>,
-        keyed_callbacks: &mut Vec<RuntimeKeyedCallback>,
+        callback_sink: &mut dyn FnMut(RuntimeKeyedCallback, Option<StateMachineReportedEvent>),
     ) {
         let starting_time = self.start_time_with_speed(speed_direction);
         let is_at_start_frame = starting_time == seconds_from;
@@ -1063,8 +1062,7 @@ impl RuntimeLinearAnimation {
                     seconds_from,
                     seconds_to,
                     is_at_start_frame,
-                    reported_events,
-                    keyed_callbacks,
+                    callback_sink,
                 );
             }
         }
@@ -1408,8 +1406,7 @@ impl RuntimeKeyedProperty {
         seconds_from: f32,
         seconds_to: f32,
         is_at_start_frame: bool,
-        reported_events: &mut Vec<StateMachineReportedEvent>,
-        keyed_callbacks: &mut Vec<RuntimeKeyedCallback>,
+        callback_sink: &mut dyn FnMut(RuntimeKeyedCallback, Option<StateMachineReportedEvent>),
     ) {
         if self.key_frames.is_empty() || seconds_from == seconds_to {
             return;
@@ -1443,16 +1440,20 @@ impl RuntimeKeyedProperty {
         while index_to > index {
             let key_frame = &self.key_frames[index];
             let seconds_delay = seconds_to - key_frame.seconds();
-            keyed_callbacks.push(RuntimeKeyedCallback {
+            let callback = RuntimeKeyedCallback {
                 target_local_id,
                 property_key: self.property_key,
                 seconds_delay,
-            });
-            if let RuntimeKeyedPropertyTarget::Callback { event: Some(event) } = &self.target {
-                let mut reported_event = event.clone();
-                reported_event.seconds_delay = seconds_delay;
-                reported_events.push(reported_event);
-            }
+            };
+            let reported_event =
+                if let RuntimeKeyedPropertyTarget::Callback { event: Some(event) } = &self.target {
+                    let mut reported_event = event.clone();
+                    reported_event.seconds_delay = seconds_delay;
+                    Some(reported_event)
+                } else {
+                    None
+                };
+            callback_sink(callback, reported_event);
             index += 1;
         }
     }
@@ -2280,7 +2281,7 @@ impl LinearAnimationInstance {
         let Some(animation) = self.animation.resolve(&definitions, &empty_definition) else {
             return false;
         };
-        self.advance_and_report(animation, elapsed_seconds, None, None)
+        self.advance_and_report(animation, elapsed_seconds, None)
     }
 
     pub(crate) fn advance_with_events(
@@ -2294,20 +2295,36 @@ impl LinearAnimationInstance {
         let Some(animation) = self.animation.resolve(&definitions, &empty_definition) else {
             return false;
         };
-        self.advance_and_report(
-            animation,
-            elapsed_seconds,
-            Some(reported_events),
-            Some(keyed_callbacks),
-        )
+        let mut callback_sink =
+            |callback: RuntimeKeyedCallback, event: Option<StateMachineReportedEvent>| {
+                keyed_callbacks.push(callback);
+                if let Some(event) = event {
+                    reported_events.push(event);
+                }
+            };
+        self.advance_and_report(animation, elapsed_seconds, Some(&mut callback_sink))
+    }
+
+    pub(crate) fn advance_with_callback_sink(
+        &mut self,
+        elapsed_seconds: f32,
+        callback_sink: &mut dyn FnMut(RuntimeKeyedCallback, Option<StateMachineReportedEvent>),
+    ) -> bool {
+        let definitions = Arc::clone(&self.animation_definitions);
+        let empty_definition = Arc::clone(&self.empty_animation_definition);
+        let Some(animation) = self.animation.resolve(&definitions, &empty_definition) else {
+            return false;
+        };
+        self.advance_and_report(animation, elapsed_seconds, Some(callback_sink))
     }
 
     fn advance_and_report(
         &mut self,
         animation: &RuntimeLinearAnimation,
         elapsed_seconds: f32,
-        mut reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
-        mut keyed_callbacks: Option<&mut Vec<RuntimeKeyedCallback>>,
+        mut callback_sink: Option<
+            &mut dyn FnMut(RuntimeKeyedCallback, Option<StateMachineReportedEvent>),
+        >,
     ) -> bool {
         let delta_seconds = elapsed_seconds * animation.speed * self.direction;
         self.spilled_time = 0.0;
@@ -2323,17 +2340,13 @@ impl LinearAnimationInstance {
 
         let mut last_time = self.time;
         self.time += delta_seconds;
-        if let (Some(events), Some(callbacks)) = (
-            reported_events.as_deref_mut(),
-            keyed_callbacks.as_deref_mut(),
-        ) {
+        if let Some(callback_sink) = callback_sink.as_deref_mut() {
             animation.report_keyed_callbacks(
                 last_time,
                 self.time,
                 self.speed_direction,
                 false,
-                events,
-                callbacks,
+                callback_sink,
             );
         }
         let fps = animation.fps_as_f32();
@@ -2371,17 +2384,13 @@ impl LinearAnimationInstance {
                     frames = start + remainder;
                     self.time = frames / fps;
                     did_loop = true;
-                    if let (Some(events), Some(callbacks)) = (
-                        reported_events.as_deref_mut(),
-                        keyed_callbacks.as_deref_mut(),
-                    ) {
+                    if let Some(callback_sink) = callback_sink.as_deref_mut() {
                         animation.report_keyed_callbacks(
                             0.0,
                             self.time,
                             self.speed_direction,
                             false,
-                            events,
-                            callbacks,
+                            callback_sink,
                         );
                     }
                 } else if direction == -1 && frames <= start {
@@ -2392,17 +2401,13 @@ impl LinearAnimationInstance {
                     frames = end - remainder;
                     self.time = frames / fps;
                     did_loop = true;
-                    if let (Some(events), Some(callbacks)) = (
-                        reported_events.as_deref_mut(),
-                        keyed_callbacks.as_deref_mut(),
-                    ) {
+                    if let Some(callback_sink) = callback_sink.as_deref_mut() {
                         animation.report_keyed_callbacks(
                             end / fps,
                             self.time,
                             self.speed_direction,
                             false,
-                            events,
-                            callbacks,
+                            callback_sink,
                         );
                     }
                 }
@@ -2425,17 +2430,13 @@ impl LinearAnimationInstance {
                     self.direction *= -1.0;
                     direction *= -1;
                     did_loop = true;
-                    if let (Some(events), Some(callbacks)) = (
-                        reported_events.as_deref_mut(),
-                        keyed_callbacks.as_deref_mut(),
-                    ) {
+                    if let Some(callback_sink) = callback_sink.as_deref_mut() {
                         animation.report_keyed_callbacks(
                             last_time,
                             self.time,
                             self.speed_direction,
                             from_pong,
-                            events,
-                            callbacks,
+                            callback_sink,
                         );
                     }
                     from_pong = !from_pong;

@@ -168,6 +168,7 @@ size_t randomProviderTotalCalls();
 #include "rive/data_bind/data_bind.hpp"
 #include "rive/data_bind_flags.hpp"
 #include "rive/importers/state_machine_importer.hpp"
+#include "rive/node.hpp"
 #include "rive/data_bind/bindable_property_list.hpp"
 #include "rive/data_bind/data_bind_list_item_consumer.hpp"
 #include "rive/data_bind/bindable_property_artboard.hpp"
@@ -357,12 +358,40 @@ struct RuntimeStateMachineReportedEventReport
     float secondsDelay;
 };
 
+bool firstNestedNodeX(rive::NestedArtboard* nestedArtboard, float* value)
+{
+    if (nestedArtboard == nullptr || value == nullptr)
+    {
+        return false;
+    }
+    auto child = nestedArtboard->artboardInstance();
+    if (child == nullptr)
+    {
+        return false;
+    }
+    for (auto object : child->objects())
+    {
+        if (object != nullptr && object->coreType() == rive::Node::typeKey)
+        {
+            *value = object->as<rive::Node>()->x();
+            return true;
+        }
+    }
+    return false;
+}
+
 class RuntimeNestedEventRecorder final : public rive::NestedEventListener
 {
 public:
     void notify(const std::vector<rive::EventReport>& events,
-                rive::NestedArtboard*) override
+                rive::NestedArtboard* nestedArtboard) override
     {
+        float preMixNodeX = 0.0f;
+        if (firstNestedNodeX(nestedArtboard, &preMixNodeX))
+        {
+            m_preMixNodeXs.push_back(preMixNodeX);
+        }
+        std::vector<RuntimeStateMachineReportedEventReport> batch;
         for (const auto& eventReport : events)
         {
             auto event = eventReport.event();
@@ -373,8 +402,10 @@ public:
             reportedEvent.coreType = event == nullptr ? 0 : event->coreType();
             reportedEvent.name = event == nullptr ? "" : event->name();
             reportedEvent.secondsDelay = eventReport.secondsDelay();
+            batch.push_back(reportedEvent);
             m_reportedEvents.push_back(std::move(reportedEvent));
         }
+        m_notifyBatches.push_back(std::move(batch));
     }
 
     const std::vector<RuntimeStateMachineReportedEventReport>& reportedEvents()
@@ -383,8 +414,22 @@ public:
         return m_reportedEvents;
     }
 
+    const std::vector<std::vector<RuntimeStateMachineReportedEventReport>>&
+    notifyBatches() const
+    {
+        return m_notifyBatches;
+    }
+
+    const std::vector<float>& preMixNodeXs() const
+    {
+        return m_preMixNodeXs;
+    }
+
 private:
     std::vector<RuntimeStateMachineReportedEventReport> m_reportedEvents;
+    std::vector<std::vector<RuntimeStateMachineReportedEventReport>>
+        m_notifyBatches;
+    std::vector<float> m_preMixNodeXs;
 };
 
 struct RuntimeAnimationAdvanceReport
@@ -840,10 +885,17 @@ struct RuntimeStateMachineAdvanceReport
     std::vector<std::pair<size_t, bool>> boolInputs;
     std::vector<RuntimeStateMachineCurrentAnimationReport> currentAnimations;
     std::vector<RuntimeStateMachineReportedEventReport> reportedEvents;
-    std::vector<std::pair<
-        size_t,
-        std::vector<RuntimeStateMachineReportedEventReport>>>
-        nestedReportedEvents;
+    struct NestedReportedEvents
+    {
+        size_t localId;
+        std::vector<RuntimeStateMachineReportedEventReport> reportedEvents;
+        std::vector<std::vector<RuntimeStateMachineReportedEventReport>>
+            notifyBatches;
+        std::vector<float> preMixNodeXs;
+        bool hasMixedNodeX;
+        float mixedNodeX;
+    };
+    std::vector<NestedReportedEvents> nestedReportedEvents;
     std::vector<RuntimeStateMachineViewModelTriggerReport> viewModelTriggers;
     std::vector<RuntimeStateMachineViewModelBindingReport> viewModelBindings;
     bool hasDataContext = false;
@@ -7908,12 +7960,22 @@ apply_runtime_state_machine_advances(rive::File* file,
                 nestedEvents.push_back(reportedEvent);
             }
             report.nestedReportedEvents.push_back(
-                {localId, std::move(nestedEvents)});
+                {localId, std::move(nestedEvents), {}, {}, false, 0.0f});
         }
         for (const auto& [localId, recorder] : nestedSimpleRecorders)
         {
-            report.nestedReportedEvents.push_back(
-                {localId, recorder->reportedEvents()});
+            auto nestedSimple =
+                occurrenceObjects[localId]->as<rive::NestedSimpleAnimation>();
+            float mixedNodeX = 0.0f;
+            const bool hasMixedNodeX = firstNestedNodeX(
+                nestedSimple->animationInstance()->nestedArtboard(),
+                &mixedNodeX);
+            report.nestedReportedEvents.push_back({localId,
+                                                   recorder->reportedEvents(),
+                                                   recorder->notifyBatches(),
+                                                   recorder->preMixNodeXs(),
+                                                   hasMixedNodeX,
+                                                   mixedNodeX});
         }
         report.viewModelTriggers =
             collect_default_view_model_trigger_reports(file);
@@ -8530,10 +8592,33 @@ void write_runtime_state_machine_advance_reports(
             {
                 out << ',';
             }
-            out << "{\"localId\":" << report.nestedReportedEvents[j].first;
+            const auto& nested = report.nestedReportedEvents[j];
+            out << "{\"localId\":" << nested.localId;
             out << ",\"reportedEvents\":";
-            write_runtime_reported_events(
-                out, report.nestedReportedEvents[j].second);
+            write_runtime_reported_events(out, nested.reportedEvents);
+            out << ",\"notifyBatches\":[";
+            for (size_t k = 0; k < nested.notifyBatches.size(); ++k)
+            {
+                if (k != 0)
+                {
+                    out << ',';
+                }
+                write_runtime_reported_events(out, nested.notifyBatches[k]);
+            }
+            out << ']';
+            out << ",\"preMixNodeXs\":[";
+            for (size_t k = 0; k < nested.preMixNodeXs.size(); ++k)
+            {
+                if (k != 0)
+                {
+                    out << ',';
+                }
+                out << nested.preMixNodeXs[k];
+            }
+            out << ']';
+            out << ",\"hasMixedNodeX\":"
+                << (nested.hasMixedNodeX ? "true" : "false");
+            out << ",\"mixedNodeX\":" << nested.mixedNodeX;
             out << '}';
         }
         out << ']';

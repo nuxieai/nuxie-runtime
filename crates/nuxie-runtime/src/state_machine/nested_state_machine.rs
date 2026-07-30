@@ -190,6 +190,15 @@ impl RuntimeNestedStateMachineInstance {
         self.state_machine.as_mut()
     }
 
+    pub(crate) fn take_state_machine(&mut self) -> Option<StateMachineInstance> {
+        self.state_machine.take()
+    }
+
+    pub(crate) fn restore_state_machine(&mut self, state_machine: StateMachineInstance) {
+        debug_assert!(self.state_machine.is_none());
+        self.state_machine = Some(state_machine);
+    }
+
     pub(crate) fn install_external_focus(
         &mut self,
         parent_focus: &RuntimeFocusTree,

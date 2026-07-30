@@ -823,6 +823,8 @@ pub(crate) struct BlendState1DInstance {
     from: Option<RuntimeBlendAnimationHandle>,
     to: Option<RuntimeBlendAnimationHandle>,
     animation_reset: Option<AnimationReset>,
+    last_applied_artboard_identity: Option<u64>,
+    last_applied_values: Option<AnimationReset>,
 }
 
 impl BlendState1DInstance {
@@ -865,6 +867,8 @@ impl BlendState1DInstance {
             from: None,
             to: None,
             animation_reset,
+            last_applied_artboard_identity: None,
+            last_applied_values: None,
         }
     }
 
@@ -1040,8 +1044,18 @@ impl BlendState1DInstance {
         }
     }
 
-    pub(crate) fn apply(&self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
+    pub(crate) fn apply(&mut self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
         let mut changed = false;
+        let artboard_identity = artboard.instance_identity();
+        if self
+            .last_applied_artboard_identity
+            .is_some_and(|identity| identity != artboard_identity)
+        {
+            changed |= self
+                .last_applied_values
+                .as_ref()
+                .is_some_and(|reset| reset.apply(artboard));
+        }
         if let Some(reset) = self.animation_reset.as_ref() {
             changed |= reset.apply(artboard);
         }
@@ -1052,6 +1066,12 @@ impl BlendState1DInstance {
             }
             changed |= animation.animation.apply(artboard, animation_mix);
         }
+        self.last_applied_artboard_identity = Some(artboard_identity);
+        self.last_applied_values = Some(AnimationResetFactory::from_animation_instances(
+            artboard,
+            self.animations.iter().map(|animation| &animation.animation),
+            false,
+        ));
         changed
     }
 }

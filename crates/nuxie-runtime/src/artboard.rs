@@ -430,6 +430,13 @@ pub struct ArtboardInstance {
     /// only a shared, non-projecting domain handle and is reset on cold clone.
     external_focus_domain: Option<crate::focus::RuntimeFocusTree>,
     pub(crate) nested_artboards: RuntimeNestedArtboards,
+    /// State machines detached from one actively advancing nested occurrence.
+    ///
+    /// The occurrence itself must leave `nested_artboards` so Rust can hand
+    /// the parent and child to the callback-major policy simultaneously.
+    /// Keeping its state-machine owners here preserves same-host nested-input
+    /// listener actions while each callback completes through the parent.
+    pub(crate) active_nested_state_machines: BTreeMap<usize, StateMachineInstance>,
     pub(crate) nested_artboard_locals: Vec<usize>,
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
     pub(crate) graph_global_id: u32,
@@ -551,6 +558,7 @@ impl Clone for ArtboardInstance {
             script_update_error: None,
             external_focus_domain: None,
             nested_artboards: self.nested_artboards.clone(),
+            active_nested_state_machines: BTreeMap::new(),
             nested_artboard_locals: self.nested_artboard_locals.clone(),
             newly_uncollapsed_nested_artboards: self.newly_uncollapsed_nested_artboards.clone(),
             graph_global_id: self.graph_global_id,
@@ -2517,6 +2525,7 @@ impl ArtboardInstance {
             script_update_error: None,
             external_focus_domain: None,
             nested_artboards,
+            active_nested_state_machines: BTreeMap::new(),
             nested_artboard_locals,
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
             graph_global_id: graph.global_id,
@@ -4489,6 +4498,33 @@ impl ArtboardInstance {
         changed
     }
 
+    pub(crate) fn advance_linear_animation_instance_with_callback_sink(
+        &mut self,
+        instance: &mut LinearAnimationInstance,
+        elapsed_seconds: f32,
+        callback_sink: &mut dyn FnMut(
+            &mut ArtboardInstance,
+            Option<StateMachineReportedEvent>,
+        ) -> bool,
+    ) -> bool {
+        let Some(animation) = instance.retained_definition() else {
+            return false;
+        };
+        if !animation.has_keyed_callbacks {
+            return instance.advance(elapsed_seconds);
+        }
+
+        let mut changed = false;
+        let mut apply_and_deliver =
+            |callback: RuntimeKeyedCallback, event: Option<StateMachineReportedEvent>| {
+                changed |= self.apply_keyed_callback(callback);
+                changed |= callback_sink(self, event);
+            };
+        let keep_going =
+            instance.advance_with_callback_sink(elapsed_seconds, &mut apply_and_deliver);
+        changed | keep_going
+    }
+
     pub fn apply_linear_animation_instance(
         &mut self,
         instance: &LinearAnimationInstance,
@@ -6128,6 +6164,37 @@ impl ArtboardInstance {
         true
     }
 
+    fn detach_active_nested_state_machines(&mut self, nested: &mut RuntimeNestedArtboardInstance) {
+        debug_assert!(self.active_nested_state_machines.is_empty());
+        for animation in &mut nested.animations {
+            let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation else {
+                continue;
+            };
+            let local_id = occurrence.local_id();
+            if let Some(state_machine) = occurrence.take_state_machine() {
+                let previous = self
+                    .active_nested_state_machines
+                    .insert(local_id, state_machine);
+                debug_assert!(previous.is_none());
+            }
+        }
+    }
+
+    fn restore_active_nested_state_machines(&mut self, nested: &mut RuntimeNestedArtboardInstance) {
+        for animation in &mut nested.animations {
+            let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation else {
+                continue;
+            };
+            if let Some(state_machine) = self
+                .active_nested_state_machines
+                .remove(&occurrence.local_id())
+            {
+                occurrence.restore_state_machine(state_machine);
+            }
+        }
+        debug_assert!(self.active_nested_state_machines.is_empty());
+    }
+
     fn advance_nested_artboard_entry(
         &mut self,
         host_local: usize,
@@ -6170,24 +6237,21 @@ impl ArtboardInstance {
         }
 
         let keep_going = if new_frame {
-            let begin = self
-                .nested_artboards
-                .get_mut(&host_local)
-                .map(|nested| nested.begin_advance(elapsed_seconds));
-            match begin {
-                None => false,
-                Some(Err(changed)) => changed,
-                Some(Ok(local_elapsed_seconds)) => {
-                    let animation_count = self
-                        .nested_artboards
-                        .get(&host_local)
-                        .map_or(0, |nested| nested.animations.len());
+            let Some(mut nested) = self.nested_artboards.remove(&host_local) else {
+                return Ok(false);
+            };
+            self.detach_active_nested_state_machines(&mut nested);
+            let result = match nested.begin_advance(elapsed_seconds) {
+                Err(changed) => Ok(changed),
+                Ok(local_elapsed_seconds) => (|| {
+                    let animation_count = nested.animations.len();
                     let mut changed = false;
                     for animation_index in 0..animation_count {
                         changed |= match nested_event_dispatch.as_mut() {
                             Some(dispatch) => {
                                 StateMachineInstance::advance_nested_animation_owner_with(
                                     self,
+                                    &mut nested,
                                     host_local,
                                     animation_index,
                                     local_elapsed_seconds,
@@ -6197,6 +6261,7 @@ impl ArtboardInstance {
                             }
                             None => StateMachineInstance::advance_nested_animation_owner_with(
                                 self,
+                                &mut nested,
                                 host_local,
                                 animation_index,
                                 local_elapsed_seconds,
@@ -6206,47 +6271,29 @@ impl ArtboardInstance {
                         };
                     }
                     changed |= match nested_event_dispatch.as_mut() {
-                        Some(dispatch) => {
-                            StateMachineInstance::advance_nested_descendant_event_sources_with(
-                                self,
-                                host_local,
-                                nested_events.as_deref_mut(),
-                                Some(&mut **dispatch),
-                                |artboard, reported_events| {
-                                    let Some(nested) =
-                                        artboard.nested_artboards.get_mut(&host_local)
-                                    else {
-                                        return Ok(false);
-                                    };
-                                    nested.advance_after_animation_owners(
-                                        local_elapsed_seconds,
-                                        script_mode,
-                                        reported_events,
-                                    )
-                                },
-                            )?
-                        }
-                        None => StateMachineInstance::advance_nested_descendant_event_sources_with(
+                        Some(dispatch) => nested.advance_after_animation_owners(
                             self,
                             host_local,
+                            local_elapsed_seconds,
+                            script_mode,
+                            nested_events.as_deref_mut(),
+                            Some(&mut **dispatch),
+                        )?,
+                        None => nested.advance_after_animation_owners(
+                            self,
+                            host_local,
+                            local_elapsed_seconds,
+                            script_mode,
                             nested_events.as_deref_mut(),
                             None,
-                            |artboard, reported_events| {
-                                let Some(nested) = artboard.nested_artboards.get_mut(&host_local)
-                                else {
-                                    return Ok(false);
-                                };
-                                nested.advance_after_animation_owners(
-                                    local_elapsed_seconds,
-                                    script_mode,
-                                    reported_events,
-                                )
-                            },
                         )?,
                     };
-                    changed
-                }
-            }
+                    Ok(changed)
+                })(),
+            };
+            self.restore_active_nested_state_machines(&mut nested);
+            self.nested_artboards.insert(host_local, nested);
+            result?
         } else {
             self.nested_artboards
                 .get_mut(&host_local)
@@ -8782,7 +8829,7 @@ impl ArtboardInstance {
         changed
     }
 
-    fn apply_keyed_callback(&mut self, callback: RuntimeKeyedCallback) -> bool {
+    pub(crate) fn apply_keyed_callback(&mut self, callback: RuntimeKeyedCallback) -> bool {
         let _seconds_delay = callback.seconds_delay;
         match self
             .slot(callback.target_local_id)
@@ -9728,15 +9775,27 @@ impl ArtboardInstance {
         &self,
         state_machine_local_id: usize,
     ) -> Option<&StateMachineInstance> {
-        self.nested_artboards
-            .state_machine(state_machine_local_id)
-            .and_then(RuntimeNestedStateMachineInstance::state_machine)
+        self.active_nested_state_machines
+            .get(&state_machine_local_id)
+            .or_else(|| {
+                self.nested_artboards
+                    .state_machine(state_machine_local_id)
+                    .and_then(RuntimeNestedStateMachineInstance::state_machine)
+            })
     }
 
     pub(crate) fn nested_state_machine_mut(
         &mut self,
         state_machine_local_id: usize,
     ) -> Option<&mut StateMachineInstance> {
+        if self
+            .active_nested_state_machines
+            .contains_key(&state_machine_local_id)
+        {
+            return self
+                .active_nested_state_machines
+                .get_mut(&state_machine_local_id);
+        }
         self.nested_artboards
             .state_machine_mut(state_machine_local_id)
             .and_then(RuntimeNestedStateMachineInstance::state_machine_mut)
@@ -10237,9 +10296,14 @@ impl RuntimeNestedArtboardInstance {
 
     fn advance_after_animation_owners(
         &mut self,
+        parent_artboard: &mut ArtboardInstance,
+        parent_host_local: usize,
         local_elapsed_seconds: f32,
         script_mode: &mut RuntimeScriptAdvanceMode<'_>,
-        mut reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
+        mut nested_events: Option<&mut Vec<(usize, Vec<StateMachineReportedEvent>)>>,
+        mut ancestor_dispatch: Option<
+            &mut dyn FnMut(&mut ArtboardInstance, usize, &[StateMachineReportedEvent]) -> bool,
+        >,
     ) -> Result<bool, ScriptError> {
         // C++ advances the ENTIRE nested subtree before any data-bind pass
         // reaches it: `NestedArtboard::advanceComponent` only advances
@@ -10257,13 +10321,30 @@ impl RuntimeNestedArtboardInstance {
             |child: &mut ArtboardInstance,
              host_local: usize,
              events: &[StateMachineReportedEvent]| {
-                StateMachineInstance::dispatch_nested_events_to_animation_owners(
-                    animations,
-                    child,
-                    host_local,
-                    events,
-                    reported_events.as_deref_mut(),
-                )
+                match ancestor_dispatch.as_deref_mut() {
+                    Some(dispatch) => {
+                        StateMachineInstance::dispatch_nested_events_to_animation_owners(
+                            parent_artboard,
+                            parent_host_local,
+                            animations,
+                            child,
+                            host_local,
+                            events,
+                            nested_events.as_deref_mut(),
+                            Some(dispatch),
+                        )
+                    }
+                    None => StateMachineInstance::dispatch_nested_events_to_animation_owners(
+                        parent_artboard,
+                        parent_host_local,
+                        animations,
+                        child,
+                        host_local,
+                        events,
+                        nested_events.as_deref_mut(),
+                        None,
+                    ),
+                }
             };
         let mut changed = self
             .child
@@ -10971,8 +11052,8 @@ mod tests {
     use super::*;
     use crate::Mat2D;
     use crate::animation::{
-        RuntimeKeyFrame, RuntimeKeyFrameCallback, RuntimeKeyedObject, RuntimeKeyedProperty,
-        RuntimeKeyedPropertyTarget,
+        RuntimeKeyFrame, RuntimeKeyFrameCallback, RuntimeKeyFrameDouble, RuntimeKeyedObject,
+        RuntimeKeyedProperty, RuntimeKeyedPropertyTarget,
     };
     use crate::components::{
         DataBindHandle, RuntimeComponentCapabilities, SoloMappingWork, TransformRuntimeState,
@@ -10985,10 +11066,10 @@ mod tests {
     use crate::state_machine::{
         RuntimeBlendState1D, RuntimeBlendState1DSource, RuntimeLayerState,
         RuntimeListenerBoolChange, RuntimeListenerInputTarget, RuntimeListenerNumberChange,
-        RuntimeListenerTriggerChange, RuntimeListenerType, RuntimeScheduledListenerAction,
-        RuntimeStateMachineInput, RuntimeStateMachineLayer, RuntimeStateMachineListener,
-        ScriptGamepadMappingKind, ScriptGamepadSnapshot, ScriptListenerInvocation,
-        StateMachineInputInstance,
+        RuntimeListenerTriggerChange, RuntimeListenerType, RuntimeNestedEventChainPhase,
+        RuntimeNestedEventChainTrace, RuntimeScheduledListenerAction, RuntimeStateMachineInput,
+        RuntimeStateMachineLayer, RuntimeStateMachineListener, ScriptGamepadMappingKind,
+        ScriptGamepadSnapshot, ScriptListenerInvocation, StateMachineInputInstance,
     };
     use nuxie_binary::{
         AuthoringProperty, AuthoringRecord, AuthoringValue, BytesValue, FieldValue, RuntimeObject,
@@ -11383,6 +11464,7 @@ mod tests {
             script_update_error: None,
             external_focus_domain: None,
             nested_artboards: RuntimeNestedArtboards::default(),
+            active_nested_state_machines: BTreeMap::new(),
             nested_artboard_locals: Vec::new(),
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
             graph_global_id: 0,
@@ -11757,6 +11839,8 @@ mod tests {
             Rc::clone(&total_order),
             [1, 2],
         );
+        root_machine
+            .configure_nested_event_settlement_test("root-settled", Rc::clone(&total_order));
 
         root_machine
             .advance_and_apply(&mut root, 0.25)
@@ -11768,13 +11852,15 @@ mod tests {
                 "A-local",
                 "root-local",
                 "root-audio",
+                "root-settled",
                 "A-audio",
                 "B-local",
                 "root-local",
                 "root-audio",
+                "root-settled",
                 "B-audio",
             ],
-            "each source completes local dispatch, ancestor dispatch, and audio unwind before the next authored component advances",
+            "each source completes local dispatch, ancestor dispatch, root settlement, and audio unwind before the next authored component advances",
         );
         assert_eq!(
             root_machine.audio_event_seam_receipt(),
@@ -11830,6 +11916,137 @@ mod tests {
         assert_eq!(
             nested_machine.audio_event_seam_receipt(),
             (1, Some((7, event_core_type))),
+        );
+    }
+
+    fn deep_nested_event_topology(
+        fail_after_leaf: bool,
+    ) -> (
+        ArtboardInstance,
+        StateMachineInstance,
+        Rc<RefCell<Vec<&'static str>>>,
+        u32,
+    ) {
+        let total_order = Rc::new(RefCell::new(Vec::new()));
+        let (event, event_core_type) = nested_audio_event(7);
+
+        let mut middle_components = vec![
+            synthetic_component_for_type(0, "Artboard"),
+            synthetic_component_for_type(1, "NestedArtboard"),
+        ];
+        let mut middle_order = vec![0, 1];
+        if fail_after_leaf {
+            middle_components.push(synthetic_component_for_type(2, "ScriptedDrawable"));
+            middle_order.push(2);
+        }
+        let mut middle = synthetic_instance(middle_components, middle_order);
+        middle.nested_artboards.insert(
+            1,
+            nested_event_source(102, event.clone(), "leaf-local", "leaf-audio", &total_order),
+        );
+        if fail_after_leaf {
+            middle.set_script_instance_for_global(
+                2,
+                Box::new(FailOnceAdvanceScriptInstance {
+                    attempts: Rc::new(RefCell::new(Vec::new())),
+                    should_fail: Rc::new(Cell::new(true)),
+                }),
+            );
+        }
+        middle.state_machines = Arc::new(vec![empty_state_machine(101)]);
+        let middle_definitions = Arc::clone(&middle.state_machines);
+        let mut middle_owner = StateMachineInstance::new(0, &middle_definitions[0], &mut middle);
+        middle_owner.configure_nested_event_forwarder_test(
+            "middle-local",
+            "middle-audio",
+            Rc::clone(&total_order),
+            1,
+            event,
+        );
+
+        let mut outer = synthetic_nested_artboard_instance(101);
+        outer.child = Box::new(middle);
+        outer
+            .animations
+            .push(RuntimeNestedAnimationInstance::StateMachine(
+                RuntimeNestedStateMachineInstance::new(2, middle_owner, Vec::new()),
+            ));
+
+        let mut root = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "NestedArtboard"),
+            ],
+            vec![0, 1],
+        );
+        root.nested_artboards.insert(1, outer);
+        root.state_machines = Arc::new(vec![empty_state_machine(100)]);
+        let root_definitions = Arc::clone(&root.state_machines);
+        let mut root_machine = StateMachineInstance::new(0, &root_definitions[0], &mut root);
+        root_machine.configure_nested_event_root_test(
+            "root-local",
+            "root-audio",
+            Rc::clone(&total_order),
+            [1],
+        );
+        (root, root_machine, total_order, event_core_type)
+    }
+
+    #[test]
+    fn production_deep_nested_owner_chain_reaches_root_before_subtree_continuation() {
+        let (mut root, mut root_machine, total_order, event_core_type) =
+            deep_nested_event_topology(false);
+
+        root_machine
+            .advance_and_apply(&mut root, 0.25)
+            .expect("three-level nested event frame");
+
+        assert_eq!(
+            total_order.borrow().as_slice(),
+            [
+                "leaf-local",
+                "middle-local",
+                "root-local",
+                "root-audio",
+                "middle-audio",
+                "leaf-audio",
+            ],
+            "the intermediate owner completes the report to the root and audio unwinds before subtree continuation",
+        );
+        assert_eq!(
+            root_machine.audio_event_seam_receipt(),
+            (1, Some((7, event_core_type))),
+        );
+    }
+
+    #[test]
+    fn production_deep_nested_owner_chain_survives_later_subtree_script_error() {
+        let (mut root, mut root_machine, total_order, event_core_type) =
+            deep_nested_event_topology(true);
+
+        root_machine
+            .advance_and_apply(&mut root, 0.25)
+            .expect_err("the scripted sibling after the leaf fails");
+
+        assert_eq!(
+            total_order.borrow().as_slice(),
+            [
+                "leaf-local",
+                "middle-local",
+                "root-local",
+                "root-audio",
+                "middle-audio",
+                "leaf-audio",
+            ],
+            "the completed deep chain remains delivered through every audio tail before the later error propagates",
+        );
+        assert_eq!(
+            root_machine.audio_event_seam_receipt(),
+            (1, Some((7, event_core_type))),
+        );
+        assert!(
+            root.nested_artboards.contains_key(&1),
+            "the active nested occurrence is restored before ScriptError propagation",
         );
     }
 
@@ -14006,8 +14223,45 @@ mod tests {
         }
     }
 
+    fn add_nested_simple_transform_curve(animation: &mut RuntimeLinearAnimation) {
+        let mut keyed_objects = animation.keyed_objects.as_ref().clone();
+        keyed_objects.push(RuntimeKeyedObject {
+            global_id: 100,
+            object_id: 1,
+            target_local_id: 1,
+            keyed_properties: vec![RuntimeKeyedProperty {
+                global_id: 101,
+                property_key: property_key_for_name("Node", "x").expect("Node.x"),
+                target: RuntimeKeyedPropertyTarget::Double {
+                    transform_property: Some(TransformProperty::X),
+                },
+                key_frames: vec![
+                    RuntimeKeyFrame::Double(RuntimeKeyFrameDouble {
+                        global_id: 102,
+                        frame: 0,
+                        seconds: 0.0,
+                        interpolation_type: 1,
+                        interpolator_id: None,
+                        interpolator: None,
+                        value: 0.0,
+                    }),
+                    RuntimeKeyFrame::Double(RuntimeKeyFrameDouble {
+                        global_id: 103,
+                        frame: 2,
+                        seconds: 2.0,
+                        interpolation_type: 0,
+                        interpolator_id: None,
+                        interpolator: None,
+                        value: 10.0,
+                    }),
+                ],
+            }],
+        });
+        animation.keyed_objects = Arc::new(keyed_objects);
+    }
+
     #[test]
-    fn production_nested_simple_animation_reports_timeline_event_and_audio_to_parent() {
+    fn production_nested_simple_animation_delivers_each_callback_chain_before_mix() {
         let event_core_type = u32::from(
             definition_by_name("Event")
                 .expect("Event definition")
@@ -14026,11 +14280,59 @@ mod tests {
             seconds_delay: 0.0,
         };
         let (audio, audio_core_type) = nested_audio_event(9);
-        let mut child =
-            synthetic_instance(vec![synthetic_component_for_type(0, "Artboard")], vec![0]);
-        child.linear_animations = Arc::new(vec![callback_route_animation_with_events(vec![
-            event, audio,
-        ])]);
+        let mut child = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "Node"),
+            ],
+            vec![0, 1],
+        );
+        let mut timeline = callback_route_animation_with_events(vec![event, audio]);
+        add_nested_simple_transform_curve(&mut timeline);
+        child.linear_animations = Arc::new(vec![timeline]);
+
+        let mut callback_probe_child = child.clone();
+        let mut callback_probe_animation = callback_probe_child
+            .linear_animation_instance(0)
+            .expect("callback-order probe animation");
+        let callback_observations = Rc::new(RefCell::new(Vec::new()));
+        let callback_observations_sink = Rc::clone(&callback_observations);
+        assert!(
+            callback_probe_child.advance_linear_animation_instance_with_callback_sink(
+                &mut callback_probe_animation,
+                1.25,
+                &mut |artboard, event| {
+                    if event.is_some() {
+                        callback_observations_sink.borrow_mut().push(
+                            artboard
+                                .transform_property(1, TransformProperty::X)
+                                .expect("callback-time Node.x"),
+                        );
+                    }
+                    false
+                },
+            )
+        );
+        assert_eq!(
+            *callback_observations.borrow(),
+            [0.0, 0.0],
+            "both callbacks observe authored state because no animation mix has run yet",
+        );
+        assert!(
+            callback_probe_child.apply_linear_animation_instance(&callback_probe_animation, 1.0,)
+        );
+        assert_eq!(
+            callback_probe_child.transform_property(1, TransformProperty::X),
+            Some(6.25),
+            "the exact callback-sink path applies the sampled transform only after delivery",
+        );
+
+        let mut nested_target_definition = empty_state_machine(102);
+        nested_target_definition.inputs = Arc::new(vec![Some(
+            RuntimeStateMachineInput::new_number(1, Some("nested-observed".to_owned()), 0.0),
+        )]);
+        let nested_target = StateMachineInstance::new(0, &nested_target_definition, &mut child);
+        child.state_machines = Arc::new(vec![nested_target_definition]);
         let animation = child
             .linear_animation_instance(0)
             .expect("nested simple animation instance");
@@ -14043,16 +14345,28 @@ mod tests {
                 animation,
                 is_playing: true,
                 speed: 1.0,
-                mix: 0.0,
+                mix: 1.0,
             });
+        nested
+            .animations
+            .push(RuntimeNestedAnimationInstance::StateMachine(
+                RuntimeNestedStateMachineInstance::new(3, nested_target, Vec::new()),
+            ));
 
         let mut root = synthetic_instance(
             vec![
                 synthetic_component_for_type(0, "Artboard"),
                 synthetic_component_for_type(1, "NestedArtboard"),
+                synthetic_component_for_type(4, "NestedNumber"),
             ],
-            vec![0, 1],
+            vec![0, 1, 4],
         );
+        let parent_id_key =
+            property_key_for_name("Component", "parentId").expect("Component.parentId");
+        let input_id_key =
+            property_key_for_name("NestedInput", "inputId").expect("NestedInput.inputId");
+        assert!(root.objects.set_uint_property(4, parent_id_key, 3));
+        assert!(root.objects.set_uint_property(4, input_id_key, 0));
         root.nested_artboards.insert(1, nested);
         let mut definition = empty_state_machine(100);
         definition.inputs = Arc::new(vec![Some(RuntimeStateMachineInput::new_number(
@@ -14071,24 +14385,38 @@ mod tests {
             keyboard_input_types: Vec::new(),
             semantic_input_types: Vec::new(),
             hit_paths: Vec::new(),
-            listener_actions: vec![RuntimeScheduledListenerAction::NumberChange(
-                RuntimeListenerNumberChange::for_test(
-                    0,
-                    RuntimeListenerInputTarget {
-                        direct_input_index: Some(0),
-                        nested_input_local_id: None,
-                    },
-                    7.0,
+            listener_actions: vec![
+                RuntimeScheduledListenerAction::NumberChange(
+                    RuntimeListenerNumberChange::for_test(
+                        0,
+                        RuntimeListenerInputTarget {
+                            direct_input_index: Some(0),
+                            nested_input_local_id: None,
+                        },
+                        7.0,
+                    ),
                 ),
-            )],
+                RuntimeScheduledListenerAction::NumberChange(
+                    RuntimeListenerNumberChange::for_test(
+                        0,
+                        RuntimeListenerInputTarget {
+                            direct_input_index: None,
+                            nested_input_local_id: Some(4),
+                        },
+                        9.0,
+                    ),
+                ),
+            ],
         }]);
         root.state_machines = Arc::new(vec![definition]);
         let definitions = Arc::clone(&root.state_machines);
         let mut root_machine = StateMachineInstance::new(0, &definitions[0], &mut root);
 
+        let trace = RuntimeNestedEventChainTrace::start();
         root_machine
-            .advance_and_apply(&mut root, 1.0)
+            .advance_and_apply(&mut root, 1.25)
             .expect("nested simple animation production advance");
+        let steps = trace.finish();
 
         assert_eq!(
             root_machine
@@ -14101,6 +14429,35 @@ mod tests {
             root_machine.audio_event_seam_receipt(),
             (1, Some((9, audio_core_type))),
             "the parent audio seam receives exactly the nested simple timeline AudioEvent",
+        );
+        assert_eq!(
+            root.nested_state_machine(3)
+                .and_then(|machine| machine.input(0))
+                .and_then(StateMachineInputInstance::number_value),
+            Some(9.0),
+            "the parent callback can mutate a same-host nested state-machine occurrence while that host is actively advancing",
+        );
+        assert_eq!(
+            root.nested_artboards
+                .get(&1)
+                .and_then(|nested| { nested.child.transform_property(1, TransformProperty::X) }),
+            Some(6.25),
+            "the child finishes with the nonzero nested-simple mix after both callback chains",
+        );
+        assert_eq!(
+            steps
+                .iter()
+                .map(|step| (step.source_local_id, step.phase))
+                .collect::<Vec<_>>(),
+            [
+                (2, RuntimeNestedEventChainPhase::SourceLocal),
+                (2, RuntimeNestedEventChainPhase::AncestorDispatch),
+                (2, RuntimeNestedEventChainPhase::AudioUnwind),
+                (2, RuntimeNestedEventChainPhase::SourceLocal),
+                (2, RuntimeNestedEventChainPhase::AncestorDispatch),
+                (2, RuntimeNestedEventChainPhase::AudioUnwind),
+            ],
+            "each crossed callback completes its singleton local/ancestor/audio chain before the next callback and before the animation mix",
         );
     }
 

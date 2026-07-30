@@ -3,10 +3,14 @@
 Base publication commit:
 `ff94a5f264f461a54ee81328e687f3d5ae0bed21`.
 
-This is an uncommitted handoff. It is not the final P3/E2 publication receipt.
-The orchestrator must split production from evidence, commit production as P3,
-rerun every floor with P3 stamped inside each receipt, regenerate the trace
-with `rust_ref=P3`, and land the resulting evidence-only packet as E2.
+Immutable combined production candidate:
+`95333c41fe68ab6a2a5486874ffd0c59cd4381be`.
+
+Round-four corrective production landed as `2e2d3c6d`; `95333c41` completed
+the Makefile tools-feature probe target. This report is now the E2 handoff:
+every external floor was rerun with the full P3 SHA stamped inside its
+operative receipt, and the trace and in-sandbox receipts are regenerated
+against P3. This evidence-only delta makes no additional production change.
 
 ## Per-finding corrections
 
@@ -35,10 +39,10 @@ with `rust_ref=P3`, and land the resulting evidence-only packet as E2.
   inside the file. `floor2-apple.log` discloses the attempt-1 dirty-tree
   refusal and points to the successful clean-tree XCFramework attempt.
   `stamp_floor_receipt.py` atomically stamps future P3 copies, with positive,
-  replacement, malformed-SHA, and tracked-receipt tests. W41 now identifies
-  its reviews as INTERNAL closeouts; independent W39/W40/W45/W46/W47
-  rejection verdicts are archived here; the status NEXT section now directs
-  P3, stamped reruns, then E2.
+  replacement, malformed-SHA, and tracked-receipt tests. W41 now describes
+  its internal subagent closeouts only as non-acceptance context; independent
+  W39/W40/W45/W46/W47 rejection verdicts are archived here. The status NEXT
+  section now directs E2 and the next independent reviews.
 - **B-a:** the checker accepts only a full existing `rust_ref` equal to HEAD or
   an ancestor separated by publication-only documentation. It requires the
   exact eight-hash v2 artifact schema and equality with the packet manifest.
@@ -67,17 +71,17 @@ with `rust_ref=P3`, and land the resulting evidence-only packet as E2.
   exact segments; zero divergences, unsupported features, or not-yet cases.
 - Frame-loop checker tests: 66/66, including every new injected negative and
   the 13-receipt stamp assertion.
-- Live structural/provenance checker: green after regenerating the current
-  uncommitted-candidate trace and matching all eight artifact hashes.
+- Live structural/provenance checker: green after regenerating the P3 trace
+  and matching `rust_ref`, the manifest, and all eight artifact hashes.
 - `cargo fmt --all -- --check`, unstaged `git diff --check`, and staged
-  `git diff --cached --check`: green at handoff; nothing is staged or
-  committed.
+  `git diff --cached --check`: green at handoff. The E2 evidence files are
+  staged separately; no commit is created here.
 
 ## Required production/evidence split
 
 P3 contains runtime code, feature declarations, differentials, checker and
 stamp tooling, Makefile wiring, and the live gaps/ownership ratchets. E2
 contains this evidence directory, the regenerated P3 trace, closure/status
-prose, P3-stamped floor reruns, and the final P3 acceptance counts. The
-historical floor stamps remain historical evidence and must not substitute for
-P3 reruns.
+prose, P3-stamped floor3 reruns, and the final P3 acceptance counts. The
+historical floor and floor2 stamps remain superseded historical evidence and
+must not substitute for the operative floor3 set.

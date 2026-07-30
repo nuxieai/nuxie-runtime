@@ -860,9 +860,11 @@ The structural checker and injected negatives must permanently reject:
 Candidate identity:
 
 - immutable combined-family production candidate:
-  `edddf4916e0ff0b7f55e41686704d5d988fae9f4`. FL-C5 round-two production
-  landed as `ea38d33b`; FL-B round-two corrections then landed as
-  `edddf491`, so all publication artifacts and floors name the latter;
+  `95333c41fe68ab6a2a5486874ffd0c59cd4381be`. FL-C5 round-two production
+  landed as `ea38d33b`, FL-B round-two corrections as `edddf491`,
+  round-four corrective production as `2e2d3c6d`, and `95333c41` completed
+  the tools-enabled probe target. All operative E2 artifacts and floors name
+  the full `95333c41` candidate;
 - pinned C++:
   `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
 - trace source fingerprint and Rust runner provenance:
@@ -875,19 +877,19 @@ Gate receipts:
 | Gate | Green receipt |
 | --- | --- |
 | W34 family-review repairs | `docs/runtime-frame-loop-fl-c5-evidence/W34-fix-round-report.md` maps O1–O4 and S1–S5/S7 (plus the S6 clarification) to their production changes, pinned C++ citations, strengthened tests, honest proof-gap dispositions, and refreshed acceptance receipts. |
-| W41 FL-C5 round-two repairs | `docs/runtime-frame-loop-fl-c5-evidence/W41-report.md` records the binding resolver/audio/delegation/O1/inventory/five-pass seams, both clean INTERNAL closeouts, the immutable production identity, and the final in-sandbox and external receipts. The independent W39/W40/W45/W46/W47 rejection verdicts are tracked separately in the evidence directory. |
-| W43 FL-B round-two corrections | `docs/runtime-frame-loop-fl-c5-evidence/W43-report.md` records retained-handle `loopValue`, the doomed keyed-object sink, their live differentials, and the combined-candidate rerun. FL-B remains pending round-three reacceptance. |
+| W41 FL-C5 round-two repairs | `docs/runtime-frame-loop-fl-c5-evidence/W41-report.md` records the binding resolver/audio/delegation/O1/inventory/five-pass seams and P3 receipts. It explicitly treats internal closeouts as non-acceptance context; the independent W39/W40/W45/W46/W47 rejection verdicts remain tracked separately. |
+| W43 FL-B round-two corrections | `docs/runtime-frame-loop-fl-c5-evidence/W43-report.md` records retained-handle `loopValue`, the doomed keyed-object sink, their live differentials, and the P3 rerun. FL-B remains pending post-E2 independent reacceptance. |
 | Seven reopened member behaviors | This W31 run executes one passing test for each named receipt: `state_machine_generic_layer_state_occurrence_matches_cpp_probe` (`currentState`, `stateChangedByIndex`), `state_machine_viewmodel_trigger_conditions_match_cpp_probe` (`advance(seconds,newFrame)`), `flow_pointer_callbacks_receive_event_time_and_the_prior_delivered_position` (`pointerDown`), both `synchronous_*` event-cycle tests (`applyEvents`), `first_factory_pointer_prepares_and_applies_fixed_bindings_before_callback` (`internalDataContext`), and `listener_missing_context_hydration_keeps_the_table_until_context_arrives` (`pointerDown`, `internalDataContext`, `initScriptedObjects`). |
 | Focused and broad behavioral floor | `docs/runtime-frame-loop-fl-c5-evidence/W30-report.md`: C++ probes 804/804, `nuxie --lib` 146/146, runtime library 713/713, scripting library 205/205, and `sound` 1/1 exact. W31 reruns the complete runtime library and C++ probe gates below. |
-| Structural checker and provenance | Final `make runtime-frame-loop-port-check`: 59/59 checker tests, including the W41 re-keyed ratchets and renamed-duplicate negatives, followed by the ownership/ratchet checker accepting the regenerated candidate fingerprint and Rust runner provenance. |
+| Structural checker and provenance | Final `make runtime-frame-loop-port-check`: 66/66 checker tests, including receipt stamps, exact inventory/gating/semantic negatives, and mutated-ref/artifact negatives, followed by the live checker accepting P3 `rust_ref`, candidate fingerprint, manifest, Rust runner provenance, and all eight artifact hashes. |
 | Public/downstream API | The final sandbox run passes 14/14 code/API cases; only `public_api_exposes_the_default_rust_renderer` cannot construct an adapter because this sandbox reports `metal found no adapters`. The historical external `floor-public-api.log` remains the 15/15 adapter-capable receipt. No test was skipped or weakened. |
 | Ordinary and scripted golden corpora | Both final direct comparisons against the pinned C++ runners are 317/317 exact entries and 647/647 exact segments, with zero divergences, unsupported features, or not-yet cases. |
-| Static-reference renderer corpus | `docs/runtime-frame-loop-fl-c5-evidence/floor2-pixel-static.log`: exact=1,468, byte-exact=837, diverges=0, gated=0. |
-| Same-runner pixel corpus | `docs/runtime-frame-loop-fl-c5-evidence/floor2-pixel-same.log`: exact=1,468, byte-exact=1,370, diverges=0, gated=0. |
-| Browser/WebGPU | `docs/runtime-frame-loop-fl-c5-evidence/floor2-browser.log`: browser and GPU smoke pass; prohibited surface and CPU presentation are zero; typed readback is one; error-scope, uniform-limit, alpha, and bounded-recovery invariants hold. |
-| Link-closure size | `docs/runtime-frame-loop-fl-c5-evidence/floor2-size.log`: scripting off=8,201,448 bytes and scripting on=9,302,200 bytes, both below the 9 MiB (9,437,184-byte) budget. |
-| Apple | `docs/runtime-frame-loop-fl-c5-evidence/floor2-apple.log` records green product checks followed by its disclosed attempt-1 dirty-tree packaging refusal; `floor2-xcframework.log` records the clean attempt-2 rerun passing with checksum `def916bee255bb3915d23ff898bb23dcd82d6c7351b10e118e8439670e5ccb7e`. |
-| Final named commands | On `edddf491`: runtime library 715/715; live C++ differential suite 815/815; `nuxie --lib` 146/146; exhaustive FL-C5 public inventory 1/1; C API 3 library + 16 integration tests; both golden comparisons 317/317 and 647/647; `make runtime-frame-loop-port-check` green; `cargo fmt --all -- --check` green; working-tree and staged `git diff --check` green. Earlier historical counts remain preserved in their reports rather than silently rewritten. |
+| Static-reference renderer corpus | Operative `docs/runtime-frame-loop-fl-c5-evidence/floor3-pixel-static.log`: P3-stamped, exact=1,468, byte-exact=837, diverges=0, gated=0. |
+| Same-runner pixel corpus | Operative `docs/runtime-frame-loop-fl-c5-evidence/floor3-pixel-same.log`: P3-stamped, exact=1,468, byte-exact=1,370, diverges=0, gated=0. |
+| Browser/WebGPU | Operative `docs/runtime-frame-loop-fl-c5-evidence/floor3-browser.log`: P3-stamped; browser and GPU smoke pass; prohibited surface and CPU presentation are zero; typed readback is one; error-scope, uniform-limit, alpha, and bounded-recovery invariants hold. |
+| Link-closure size | Operative `docs/runtime-frame-loop-fl-c5-evidence/floor3-size.log`: P3-stamped; scripting off=8,218,008 bytes and scripting on=9,302,232 bytes, both below the 9 MiB (9,437,184-byte) budget. |
+| Apple | Operative `docs/runtime-frame-loop-fl-c5-evidence/floor3-apple.log`: P3-stamped clean product and XCFramework run, checksum `765b11cf03e3dd52b347f712cfa9411821bba01edc96a0b15c52122b450b39ef`. README separately discloses the superseded floor2 attempt-1 dirty-tree refusal and successful attempt-2. |
+| Final named commands | On `95333c41`: runtime library 716/716; live tools-enabled C++ differential suite 816/816; `nuxie --lib` 146/146; exhaustive FL-C5 public inventory 1/1; C API 3 library + 16 integration tests; both golden comparisons 317/317 and 647/647; `make runtime-frame-loop-port-check` green with 66/66 tests and live provenance; `cargo fmt --all -- --check` green; working-tree and staged `git diff --check` green. Earlier historical counts remain preserved in their reports rather than silently rewritten. |
 
 Remaining out-of-scope work is unchanged and explicitly `RECORDED`: pending
 rows `B6-0259` (`listener_group.cpp`), `B6-0083`

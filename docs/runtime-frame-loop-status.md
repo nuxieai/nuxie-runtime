@@ -4,12 +4,13 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: joint FL-B/FL-C5 round-four corrective. The evidence publication
-  commit `ff94a5f264f461a54ee81328e687f3d5ae0bed21` is already landed; independent
-  reviews W45/W46/W47 rejected it with the findings archived under
-  `docs/runtime-frame-loop-fl-c5-evidence/`. The current uncommitted corrective
-  is the production-P3 handoff and does not promote an additional file/member
-  row.
+- Phase: final E2 evidence publication on immutable combined production
+  candidate `95333c41fe68ab6a2a5486874ffd0c59cd4381be`. Round-four corrective
+  production landed as `2e2d3c6d`; `95333c41` completed the Makefile
+  tools-feature target. Independent W45/W46/W47 rejections of publication
+  `ff94a5f2` remain archived as historical verdicts; P3 addresses their
+  production and packet findings. This E2 delta is evidence/docs only and
+  promotes no additional file/member row.
 - Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
   on that provisional implementation without claiming FL-B verification.
   FL-C's corrected 56-file/eight-member lane map is
@@ -829,11 +830,8 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Review this uncommitted round-four handoff, then commit the production
-   subset as P3 without including the evidence/documentation subset.
-2. Rerun every required in-sandbox and external floor on P3. Copy each raw
-   receipt through `tools/runtime-frame-loop-port/stamp_floor_receipt.py` so
-   the P3 SHA is inside the receipt.
-3. Run the final evidence pass, name P3 in the corrective report and all
-   receipts, and land that evidence-only packet as E2 before requesting the
-   next independent reviews.
+1. Land this evidence/docs-only packet as E2 on immutable P3
+   `95333c41fe68ab6a2a5486874ffd0c59cd4381be`.
+2. Request the next independent FL-B reacceptance, FL-C5 oracle, and FL-C5
+   standards reviews against E2. P3 and the operative floor3 receipts remain
+   unchanged during those reviews.

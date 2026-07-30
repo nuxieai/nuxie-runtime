@@ -1,11 +1,13 @@
 # W41 FL-C5 family fix round two
 
 Immutable combined-family production candidate:
-`edddf4916e0ff0b7f55e41686704d5d988fae9f4`.
+`95333c41fe68ab6a2a5486874ffd0c59cd4381be`.
 
 FL-C5 round-two production landed as `ea38d33b`; FL-B round-two corrections
-then landed as `edddf491`. The latter is the production identity used for
-every publication artifact, trace hash, and final floor.
+then landed as `edddf491`. Round-four corrective production landed as
+`2e2d3c6d`, and `95333c41` completed its tools-enabled probe target. The full
+`95333c41` commit is the production identity used for every operative E2
+artifact, trace hash, and floor.
 
 ## Binding seam repairs
 
@@ -28,14 +30,16 @@ every publication artifact, trace hash, and final floor.
 - The five-pass persistent-dirt differential drives the real
   `advance_and_apply` facade and a genuinely scheduled component fixture.
 
-Both INTERNAL round-two closeout reviews completed with no findings. They
-were not independent acceptance reviews; the independent W39/W40 and
-W45/W46/W47 verdicts are tracked separately in this evidence directory.
+Two internal subagent closeouts during W41 reported no further findings to
+the writer, but they are neither archived independent verdicts nor acceptance
+evidence. The independent W39/W40 and W45/W46/W47 verdicts in this directory
+rejected earlier candidates. P3 addresses their round-four production and
+packet findings; independent post-E2 acceptance remains separate.
 
-## Final in-sandbox floors on `edddf491`
+## Final in-sandbox floors on `95333c41`
 
-- `cargo test -p nuxie-runtime --lib`: 715 passed.
-- `cargo test -p nuxie-runtime --test cpp_probe`: 815 passed.
+- `cargo test -p nuxie-runtime --lib`: 716 passed.
+- `cargo test -p nuxie-runtime --features tools --test cpp_probe`: 816 passed.
 - `cargo test -p nuxie --lib`: 146 passed.
 - `cargo test -p nuxie-runtime --test public_api_fl_c5`: 1 passed.
 - `cargo test -p nux-capi`: 3 library and 16 integration tests passed; doc
@@ -49,22 +53,24 @@ W45/W46/W47 verdicts are tracked separately in this evidence directory.
 - Scripted golden comparison with all diagnostic verifiers: 317/317 exact
   entries and 647/647 exact segments; zero divergences, unsupported features,
   or not-yet cases.
-- `make runtime-frame-loop-port-test`: 59/59, including the re-keyed W41
-  ratchets and renamed-duplicate negatives.
+- `make runtime-frame-loop-port-test`: 66/66, including the W41 ratchets,
+  renamed-duplicate negatives, round-four exact-inventory/gating/semantic
+  negatives, receipt-stamp checks, and trace identity/artifact negatives.
 - Publication validity is enforced by the final
   `make runtime-frame-loop-port-check` after trace regeneration.
 
-## External floors on `edddf491`
+## External floors on `95333c41`
 
-- Apple: the product checks in `floor2-apple.log` passed, then its attempt-1
-  packaging step correctly refused a dirty tree with Error 4. The separate
-  clean-tree attempt-2 in `floor2-xcframework.log` passed; XCFramework checksum
-  `def916bee255bb3915d23ff898bb23dcd82d6c7351b10e118e8439670e5ccb7e`.
+- Apple: the operative `floor3-apple.log` is one SHA-stamped clean run whose
+  product checks and XCFramework packaging pass; checksum
+  `765b11cf03e3dd52b347f712cfa9411821bba01edc96a0b15c52122b450b39ef`.
+  The superseded floor2 attempt-1 dirty-tree refusal and successful clean
+  attempt-2 remain disclosed in README and their historical receipts.
 - Browser: every WebGPU-only invariant passes.
 - Same-runner pixels: exact=1,468, byte-exact=1,370, diverges=0.
 - Static-reference pixels: exact=1,468, byte-exact=837, diverges=0.
-- Size: 8,201,448 bytes without scripting and 9,302,200 bytes with
+- Size: 8,218,008 bytes without scripting and 9,302,232 bytes with
   scripting, both below the 9 MiB budget.
 
-All six `floor2-*` receipts in this evidence directory are copies with
-trailing spaces and tabs removed.
+All five operative `floor3-*` receipts name the full P3 SHA and are copied
+with trailing spaces and tabs removed. The floor2 set is superseded.

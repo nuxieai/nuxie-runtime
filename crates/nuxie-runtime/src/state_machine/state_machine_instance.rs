@@ -5,6 +5,8 @@ use super::listener_types::RuntimeListenerViewModelPath;
 use super::*;
 use crate::artboard_component_list_order::runtime_component_list_order;
 use crate::artboard_data_bind::RuntimeOwnedDataContext;
+#[cfg(any(test, feature = "tools"))]
+use crate::components::TransformProperty;
 use crate::components::{ComponentHandle, RuntimeShapeState};
 use crate::constraints::{
     RuntimeDraggableProxy, runtime_draggable_proxies, runtime_draggable_proxy_drag,
@@ -71,6 +73,8 @@ use crate::{ScriptListenerActionMethod, ScriptMethod};
 thread_local! {
     static RUNTIME_NESTED_EVENT_CHAIN_TRACE:
         RefCell<Option<Vec<RuntimeNestedEventChainStep>>> = const { RefCell::new(None) };
+    static RUNTIME_NESTED_NOTIFY_BATCH_TRACE:
+        RefCell<Option<Vec<RuntimeNestedNotifyBatchEntry>>> = const { RefCell::new(None) };
 }
 
 /// Tools-only chronology for the production nested-reporter policy.
@@ -127,6 +131,63 @@ impl Drop for RuntimeNestedEventChainTrace {
     }
 }
 
+/// Scoped recorder for batches entering the real Rust event-notify seam.
+#[cfg(any(test, feature = "tools"))]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RuntimeNestedNotifyBatchEntry {
+    pub size: usize,
+    pub source_layer_value: Option<f32>,
+}
+
+/// Scoped recorder for batches entering the real Rust event-notify seam.
+#[cfg(any(test, feature = "tools"))]
+pub struct RuntimeNestedNotifyBatchTrace {
+    active: bool,
+}
+
+#[cfg(any(test, feature = "tools"))]
+impl RuntimeNestedNotifyBatchTrace {
+    pub fn start() -> Self {
+        RUNTIME_NESTED_NOTIFY_BATCH_TRACE.with(|trace| {
+            assert!(
+                trace.borrow().is_none(),
+                "nested notify-batch tracing is already active on this thread"
+            );
+            *trace.borrow_mut() = Some(Vec::new());
+        });
+        Self { active: true }
+    }
+
+    pub fn finish(mut self) -> Vec<RuntimeNestedNotifyBatchEntry> {
+        self.active = false;
+        RUNTIME_NESTED_NOTIFY_BATCH_TRACE
+            .with(|trace| trace.borrow_mut().take().unwrap_or_default())
+    }
+}
+
+#[cfg(any(test, feature = "tools"))]
+impl Drop for RuntimeNestedNotifyBatchTrace {
+    fn drop(&mut self) {
+        if self.active {
+            RUNTIME_NESTED_NOTIFY_BATCH_TRACE.with(|trace| {
+                trace.borrow_mut().take();
+            });
+        }
+    }
+}
+
+#[cfg(any(test, feature = "tools"))]
+fn record_runtime_nested_notify_batch(size: usize, source_layer_value: Option<f32>) {
+    RUNTIME_NESTED_NOTIFY_BATCH_TRACE.with(|trace| {
+        if let Some(trace) = trace.borrow_mut().as_mut() {
+            trace.push(RuntimeNestedNotifyBatchEntry {
+                size,
+                source_layer_value,
+            });
+        }
+    });
+}
+
 #[cfg(any(test, feature = "tools"))]
 fn record_runtime_nested_event_chain_step(
     source_local_id: usize,
@@ -156,6 +217,26 @@ fn record_runtime_nested_event_report_step(source_local_id: usize, seconds_delay
     });
 }
 
+#[cfg(any(test, feature = "tools"))]
+fn runtime_nested_source_layer_value(artboard: &ArtboardInstance) -> Option<f32> {
+    artboard
+        .components()
+        .iter()
+        .find(|component| component.type_name == "Node")
+        .and_then(|component| artboard.transform_property(component.local_id, TransformProperty::X))
+        .or_else(|| {
+            artboard
+                .nested_artboards
+                .values()
+                .find_map(|nested| runtime_nested_source_layer_value(&nested.child))
+        })
+}
+
+#[cfg(not(any(test, feature = "tools")))]
+fn runtime_nested_source_layer_value(_artboard: &ArtboardInstance) -> Option<f32> {
+    None
+}
+
 /// Instance-owned boundary for C++ `semanticManager()->nodeById(id)`.
 ///
 /// The deferred semantic-manager family installs the production resolver.
@@ -169,6 +250,19 @@ pub(crate) trait SemanticNodeResolver: std::fmt::Debug {
 struct AudioEventOccurrence {
     event_local_index: usize,
     event_core_type: u32,
+}
+
+struct RuntimeNestedApplyEventsPhase {
+    next_event_index: usize,
+    event_iterations: usize,
+}
+
+struct RuntimeLocalEventListenerBatch {
+    next_event_index: usize,
+    changed: bool,
+    bubbled_events: Vec<StateMachineReportedEvent>,
+    listener_indices: Vec<usize>,
+    resume_view_model_listeners: bool,
 }
 
 /// Instance-owned production boundary later replaced by `AudioEvent::play`.
@@ -7321,6 +7415,11 @@ impl StateMachineInstance {
         {
             return Ok(false);
         }
+        #[cfg(any(test, feature = "tools"))]
+        record_runtime_nested_notify_batch(
+            events.len(),
+            runtime_nested_source_layer_value(artboard),
+        );
         self.notifying_event_listeners = true;
         self.record_event_dispatch_phase("local-dispatch");
         let listener_definitions = Arc::clone(&self.listener_definitions);
@@ -7419,6 +7518,10 @@ impl StateMachineInstance {
     /// the local `applyEvents` queue.
     #[cfg(test)]
     pub(crate) fn take_bubbled_event_reports(&mut self) -> Vec<StateMachineReportedEvent> {
+        self.drain_bubbled_event_reports()
+    }
+
+    fn drain_bubbled_event_reports(&mut self) -> Vec<StateMachineReportedEvent> {
         self.bubbled_event_report_index = 0;
         std::mem::take(&mut self.bubbled_event_reports)
     }
@@ -7601,99 +7704,13 @@ impl StateMachineInstance {
                 break;
             }
             event_iterations += 1;
-
-            // Mirrors C++ `StateMachineInstance::applyEvents()` updating
-            // data binds before each queued notification batch
-            // (`state_machine_instance.cpp:2320-2335`). Layer advancement is
-            // deliberately left to the caller's single ordinary advance.
-            let mut binding_host = NoopScriptHost;
-            if let Err(error) =
-                self.update_data_binds_false(artboard, owned_context.as_deref(), &mut binding_host)
-            {
-                self.script_error = Some(error);
-                break;
-            }
-            let mut events = std::mem::take(&mut self.reporting_events);
-            events.clear();
-            events.extend_from_slice(&self.reported_events[next_event_index..]);
-            for event in &mut events {
-                event.refresh_from_live_artboard(artboard);
-            }
-            next_event_index = self.reported_events.len();
-            // The reporting snapshot is no longer pending before either
-            // callback family runs. Count/At inspection from a callback sees
-            // only reports appended for a later batch.
-            self.reported_event_listener_index = next_event_index;
-            // C++ swaps BOTH queues before notifying either one. Event
-            // actions that mutate a listener cell therefore enqueue the next
-            // batch rather than joining this reporting batch
-            // (`state_machine_instance.cpp:2328-2335`).
-            let mut newly_reported = std::mem::take(&mut self.reporting_listener_view_models);
-            self.reported_listener_view_models
-                .swap_into(&mut newly_reported);
-            let mut listener_indices = newly_reported;
-            let event_changed = self.notify_events_with_context(
+            let (next, batch_changed) = self.apply_local_event_listener_batch(
                 artboard,
-                None,
-                &events,
+                next_event_index,
                 owned_context.as_deref_mut(),
             );
-            self.reporting_events = events;
-            changed |= event_changed;
-            if self.script_error.is_some() {
-                self.reporting_listener_view_models = listener_indices;
-                break;
-            }
-            if event_changed && let Some(context) = owned_context.as_deref_mut() {
-                changed |= self.bind_owned_view_model_context_mut(context);
-            }
-
-            // C++ reports the listener pointer once per genuine mutation and
-            // preserves duplicates/FIFO order (`reportListenerViewModel`,
-            // state_machine_instance.cpp:3021-3025,3048-3058). Temporarily
-            // take both retained tables so actions can mutate this machine
-            // and enqueue chained reports without cloning action vectors.
-            let data_context = self.owned_data_context.take();
-            let listeners = std::mem::take(&mut self.view_model_listeners);
-            for &listener_index in &listener_indices {
-                let Some(listener) = listeners.get(listener_index) else {
-                    continue;
-                };
-                let invocation = ScriptListenerInvocation::ViewModelChange { listener_index };
-                let action_result = if let Some(context) = owned_context.as_deref_mut() {
-                    self.perform_listener_actions(
-                        artboard,
-                        listener.actions(),
-                        Some(context),
-                        &invocation,
-                        &mut NoopScriptHost,
-                    )
-                } else if let Some(data_context) = data_context.as_ref() {
-                    self.perform_listener_actions_for_data_context(
-                        artboard,
-                        data_context,
-                        listener.actions(),
-                        &invocation,
-                    )
-                } else {
-                    self.perform_listener_actions(
-                        artboard,
-                        listener.actions(),
-                        None,
-                        &invocation,
-                        &mut NoopScriptHost,
-                    )
-                };
-                let action_changed = self.retain_script_result(action_result);
-                changed |= action_changed;
-                if self.script_error.is_some() {
-                    break;
-                }
-            }
-            self.view_model_listeners = listeners;
-            self.owned_data_context = data_context;
-            listener_indices.clear();
-            self.reporting_listener_view_models = listener_indices;
+            next_event_index = next;
+            changed |= batch_changed;
             if self.script_error.is_some() {
                 break;
             }
@@ -7703,6 +7720,147 @@ impl StateMachineInstance {
         }
         self.reported_event_listener_index = next_event_index.min(self.reported_events.len());
         changed
+    }
+
+    /// Execute one C++ `applyEvents()` queue snapshot. Nested state-machine
+    /// owners use the returned bubble batch to complete the synchronous
+    /// ancestor chain before asking this instance for the next snapshot.
+    fn apply_local_event_listener_batch(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        next_event_index: usize,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> (usize, bool) {
+        let batch = self.begin_local_event_listener_batch(
+            artboard,
+            next_event_index,
+            owned_context.as_deref_mut(),
+            false,
+        );
+        self.finish_local_event_listener_batch(artboard, batch, owned_context.as_deref_mut())
+    }
+
+    fn begin_local_event_listener_batch(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        mut next_event_index: usize,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        capture_bubbled_events: bool,
+    ) -> RuntimeLocalEventListenerBatch {
+        // Mirrors C++ `StateMachineInstance::applyEvents()` updating data
+        // binds before each queued notification batch
+        // (`state_machine_instance.cpp:2320-2335`).
+        let mut binding_host = NoopScriptHost;
+        if let Err(error) =
+            self.update_data_binds_false(artboard, owned_context.as_deref(), &mut binding_host)
+        {
+            self.script_error = Some(error);
+            return RuntimeLocalEventListenerBatch {
+                next_event_index,
+                changed: false,
+                bubbled_events: Vec::new(),
+                listener_indices: Vec::new(),
+                resume_view_model_listeners: false,
+            };
+        }
+        let mut events = std::mem::take(&mut self.reporting_events);
+        events.clear();
+        events.extend_from_slice(&self.reported_events[next_event_index..]);
+        for event in &mut events {
+            event.refresh_from_live_artboard(artboard);
+        }
+        next_event_index = self.reported_events.len();
+        // The reporting snapshot is no longer pending before either callback
+        // family runs. Count/At inspection from a callback sees only reports
+        // appended for a later batch.
+        self.reported_event_listener_index = next_event_index;
+        // C++ swaps BOTH queues before notifying either one. Event actions
+        // that mutate a listener cell therefore enqueue the next batch rather
+        // than joining this reporting batch.
+        let mut newly_reported = std::mem::take(&mut self.reporting_listener_view_models);
+        self.reported_listener_view_models
+            .swap_into(&mut newly_reported);
+        let mut listener_indices = newly_reported;
+        let changed =
+            self.notify_events_with_context(artboard, None, &events, owned_context.as_deref_mut());
+        let bubbled_events = if capture_bubbled_events {
+            self.drain_bubbled_event_reports()
+        } else {
+            Vec::new()
+        };
+        self.reporting_events = events;
+        let resume_view_model_listeners = self.script_error.is_none();
+        if !resume_view_model_listeners {
+            self.reporting_listener_view_models = std::mem::take(&mut listener_indices);
+        }
+        RuntimeLocalEventListenerBatch {
+            next_event_index,
+            changed,
+            bubbled_events,
+            listener_indices,
+            resume_view_model_listeners,
+        }
+    }
+
+    fn finish_local_event_listener_batch(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        mut batch: RuntimeLocalEventListenerBatch,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+    ) -> (usize, bool) {
+        if !batch.resume_view_model_listeners {
+            return (batch.next_event_index, batch.changed);
+        }
+        if batch.changed
+            && let Some(context) = owned_context.as_deref_mut()
+        {
+            batch.changed |= self.bind_owned_view_model_context_mut(context);
+        }
+
+        // C++ reports the listener pointer once per genuine mutation and
+        // preserves duplicates/FIFO order. Temporarily take both retained
+        // tables so actions can enqueue chained reports without cloning.
+        let data_context = self.owned_data_context.take();
+        let listeners = std::mem::take(&mut self.view_model_listeners);
+        for &listener_index in &batch.listener_indices {
+            let Some(listener) = listeners.get(listener_index) else {
+                continue;
+            };
+            let invocation = ScriptListenerInvocation::ViewModelChange { listener_index };
+            let action_result = if let Some(context) = owned_context.as_deref_mut() {
+                self.perform_listener_actions(
+                    artboard,
+                    listener.actions(),
+                    Some(context),
+                    &invocation,
+                    &mut NoopScriptHost,
+                )
+            } else if let Some(data_context) = data_context.as_ref() {
+                self.perform_listener_actions_for_data_context(
+                    artboard,
+                    data_context,
+                    listener.actions(),
+                    &invocation,
+                )
+            } else {
+                self.perform_listener_actions(
+                    artboard,
+                    listener.actions(),
+                    None,
+                    &invocation,
+                    &mut NoopScriptHost,
+                )
+            };
+            batch.changed |= self.retain_script_result(action_result);
+            if self.script_error.is_some() {
+                break;
+            }
+        }
+        self.view_model_listeners = listeners;
+        self.owned_data_context = data_context;
+        batch.listener_indices.clear();
+        self.reporting_listener_view_models = batch.listener_indices;
+        (batch.next_event_index, batch.changed)
     }
 
     fn process_deferred_listener_group_events(
@@ -12475,15 +12633,7 @@ impl StateMachineInstance {
                 layer.begin_new_frame();
             }
         }
-        self.record_advance_phase("draw-sort-check");
-        let draw_order_change_counter = artboard.prepared_epoch();
-        if self.draw_order_change_counter != draw_order_change_counter {
-            self.sort_hit_components(artboard);
-            self.draw_order_change_counter = draw_order_change_counter;
-        }
-        if !self.focus.is_inert() {
-            self.focus.sync(artboard);
-        }
+        self.prepare_advance_event_phase(artboard);
         if new_frame {
             let next_event_index = self.next_unapplied_reported_event_index();
             self.apply_local_event_listeners(
@@ -12499,6 +12649,35 @@ impl StateMachineInstance {
             self.record_advance_phase("clear-latch");
             self.needs_advance = false;
         }
+        self.finish_advance_after_apply_events(
+            artboard,
+            state_machine,
+            elapsed_seconds,
+            owned_context,
+            host,
+        )
+    }
+
+    fn prepare_advance_event_phase(&mut self, artboard: &ArtboardInstance) {
+        self.record_advance_phase("draw-sort-check");
+        let draw_order_change_counter = artboard.prepared_epoch();
+        if self.draw_order_change_counter != draw_order_change_counter {
+            self.sort_hit_components(artboard);
+            self.draw_order_change_counter = draw_order_change_counter;
+        }
+        if !self.focus.is_inert() {
+            self.focus.sync(artboard);
+        }
+    }
+
+    fn finish_advance_after_apply_events(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        state_machine: &RuntimeStateMachine,
+        elapsed_seconds: f32,
+        mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<bool, ScriptError> {
         // A retained context can be mutated through any alias between frames.
         // Collect its pushed source dirt before the pre-layer bind pass.
         self.collect_retained_owned_view_model_dirt();
@@ -12651,6 +12830,104 @@ impl StateMachineInstance {
         Ok(advanced)
     }
 
+    fn begin_nested_apply_events(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+    ) -> Option<RuntimeNestedApplyEventsPhase> {
+        if self.script_error.is_some() {
+            return None;
+        }
+        #[cfg(test)]
+        {
+            self.raw_advance_call_count += 1;
+            self.advance_phase_trace.clear();
+        }
+        for layer in &mut self.layers {
+            layer.begin_new_frame();
+        }
+        self.prepare_advance_event_phase(artboard);
+        let next_event_index = self.next_unapplied_reported_event_index();
+        self.process_deferred_listener_group_events(artboard, None);
+        self.record_advance_phase("apply-events");
+        Some(RuntimeNestedApplyEventsPhase {
+            next_event_index,
+            event_iterations: 0,
+        })
+    }
+
+    fn begin_nested_apply_events_batch(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        phase: &mut RuntimeNestedApplyEventsPhase,
+    ) -> Option<RuntimeLocalEventListenerBatch> {
+        const MAX_EVENT_ITERATIONS: usize = 100;
+
+        if self.script_error.is_some()
+            || (phase.next_event_index >= self.reported_events.len()
+                && self.reported_listener_view_models.is_empty())
+        {
+            return None;
+        }
+        if phase.event_iterations >= MAX_EVENT_ITERATIONS {
+            eprintln!("StateMachine exceeded max event iterations");
+            return None;
+        }
+        phase.event_iterations += 1;
+        let batch =
+            self.begin_local_event_listener_batch(artboard, phase.next_event_index, None, true);
+        phase.next_event_index = batch.next_event_index;
+        Some(batch)
+    }
+
+    fn finish_nested_apply_events_batch(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        notifier_local: usize,
+        mut batch: RuntimeLocalEventListenerBatch,
+        ancestor_changed: bool,
+    ) -> bool {
+        batch.changed |= ancestor_changed;
+        for event in &batch.bubbled_events {
+            self.flush_deferred_owner_audio_event(event);
+            #[cfg(any(test, feature = "tools"))]
+            record_runtime_nested_event_chain_step(
+                notifier_local,
+                RuntimeNestedEventChainPhase::AudioUnwind,
+            );
+        }
+        if !batch.bubbled_events.is_empty() {
+            self.flush_deferred_owner_audio_events();
+        }
+        self.finish_local_event_listener_batch(artboard, batch, None)
+            .1
+    }
+
+    fn finish_nested_advance_after_apply_events(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        elapsed_seconds: f32,
+        phase: RuntimeNestedApplyEventsPhase,
+    ) -> bool {
+        self.reported_event_listener_index = phase.next_event_index.min(self.reported_events.len());
+        let applied_report_count = self.next_unapplied_reported_event_index();
+        self.discard_reported_event_prefix(applied_report_count);
+        self.record_advance_phase("clear-latch");
+        self.needs_advance = false;
+
+        let definitions = artboard.state_machine_definition_owner(self);
+        let Some(state_machine) = definitions.get(self.state_machine_index) else {
+            return false;
+        };
+        let result = self.finish_advance_after_apply_events(
+            artboard,
+            state_machine,
+            elapsed_seconds,
+            None,
+            &mut NoopScriptHost,
+        );
+        self.retain_script_result(result)
+    }
+
     /// Advance one authored nested animation and complete every report's full
     /// singleton chain before the next callback, mix, owner, or subtree step.
     pub(crate) fn advance_nested_animation_owner_with(
@@ -12694,18 +12971,19 @@ impl StateMachineInstance {
                     if should_deliver {
                         let notifier_local = *local_id;
                         let mut deliver =
-                            |_: &mut ArtboardInstance, event: Option<StateMachineReportedEvent>| {
+                            |_source_artboard: &mut ArtboardInstance,
+                             event: Option<StateMachineReportedEvent>| {
                                 let Some(mut event) = event else {
                                     return false;
                                 };
                                 // Pinned C++ NestedSimpleAnimation discards
                                 // the computed overshoot at this reporter seam.
                                 event.seconds_delay = 0.0;
-                                let notified = Self::complete_nested_report_chain(
+                                let notified = Self::complete_nested_report_batch(
                                     parent_artboard,
                                     host_local,
                                     notifier_local,
-                                    event,
+                                    std::slice::from_ref(&event),
                                     &mut deliver_to_ancestor,
                                 );
                                 #[cfg(any(test, feature = "tools"))]
@@ -12743,67 +13021,73 @@ impl StateMachineInstance {
             }
             crate::artboard::RuntimeNestedAnimationInstance::StateMachine(occurrence) => {
                 let notifier_local = occurrence.local_id();
-                let changed = match parent_artboard
-                    .active_nested_state_machines
-                    .get_mut(&notifier_local)
-                {
-                    Some(state_machine) => nested
-                        .child
-                        .advance_state_machine_instance(state_machine, elapsed_seconds),
-                    None => occurrence.advance(&mut nested.child, elapsed_seconds),
-                };
-                let mut reported_events = Vec::new();
-                let state_machine = parent_artboard
-                    .active_nested_state_machines
-                    .get_mut(&notifier_local)
-                    .or_else(|| occurrence.state_machine_mut());
-                if should_deliver && let Some(state_machine) = state_machine {
-                    for index in 0..state_machine.reported_event_count() {
-                        if let Some(event) = state_machine.reported_event(&nested.child, index) {
-                            reported_events.push(event.clone());
-                        }
-                    }
-                }
-                let mut notified = false;
-                for event in reported_events {
-                    let audio_event = event.clone();
-                    notified |= Self::complete_nested_report_chain(
-                        parent_artboard,
-                        host_local,
-                        notifier_local,
-                        event,
-                        &mut deliver_to_ancestor,
-                    );
-                    if let Some(state_machine) = parent_artboard
-                        .active_nested_state_machines
-                        .get_mut(&notifier_local)
-                        .or_else(|| occurrence.state_machine_mut())
-                    {
-                        state_machine.flush_deferred_owner_audio_event(&audio_event);
-                    }
-                    #[cfg(any(test, feature = "tools"))]
-                    record_runtime_nested_event_chain_step(
-                        notifier_local,
-                        RuntimeNestedEventChainPhase::AudioUnwind,
-                    );
-                }
-                if let Some(state_machine) = parent_artboard
+                let phase = parent_artboard
                     .active_nested_state_machines
                     .get_mut(&notifier_local)
                     .or_else(|| occurrence.state_machine_mut())
-                {
-                    state_machine.flush_deferred_owner_audio_events();
+                    .and_then(|state_machine| {
+                        state_machine.begin_nested_apply_events(&mut nested.child)
+                    });
+                let Some(mut phase) = phase else {
+                    return Ok(false);
+                };
+                let mut changed = false;
+                loop {
+                    let batch = parent_artboard
+                        .active_nested_state_machines
+                        .get_mut(&notifier_local)
+                        .or_else(|| occurrence.state_machine_mut())
+                        .and_then(|state_machine| {
+                            state_machine
+                                .begin_nested_apply_events_batch(&mut nested.child, &mut phase)
+                        });
+                    let Some(batch) = batch else {
+                        break;
+                    };
+                    let ancestor_changed = should_deliver
+                        && !batch.bubbled_events.is_empty()
+                        && Self::complete_nested_report_batch(
+                            parent_artboard,
+                            host_local,
+                            notifier_local,
+                            &batch.bubbled_events,
+                            &mut deliver_to_ancestor,
+                        );
+                    let batch_changed = parent_artboard
+                        .active_nested_state_machines
+                        .get_mut(&notifier_local)
+                        .or_else(|| occurrence.state_machine_mut())
+                        .map_or(ancestor_changed, |state_machine| {
+                            state_machine.finish_nested_apply_events_batch(
+                                &mut nested.child,
+                                notifier_local,
+                                batch,
+                                ancestor_changed,
+                            )
+                        });
+                    changed |= batch_changed;
                 }
-                Ok(changed | notified)
+                changed |= parent_artboard
+                    .active_nested_state_machines
+                    .get_mut(&notifier_local)
+                    .or_else(|| occurrence.state_machine_mut())
+                    .is_some_and(|state_machine| {
+                        state_machine.finish_nested_advance_after_apply_events(
+                            &mut nested.child,
+                            elapsed_seconds,
+                            phase,
+                        )
+                    });
+                Ok(changed)
             }
         }
     }
 
-    fn complete_nested_report_chain(
+    fn complete_nested_report_batch(
         parent_artboard: &mut ArtboardInstance,
         host_local: usize,
         _notifier_local: usize,
-        event: StateMachineReportedEvent,
+        events: &[StateMachineReportedEvent],
         deliver_to_ancestor: &mut dyn FnMut(
             &mut ArtboardInstance,
             usize,
@@ -12811,14 +13095,17 @@ impl StateMachineInstance {
         ) -> bool,
     ) -> bool {
         #[cfg(any(test, feature = "tools"))]
-        record_runtime_nested_event_report_step(_notifier_local, event.seconds_delay());
-        let singleton = [event];
-        let notified = deliver_to_ancestor(parent_artboard, host_local, &singleton);
+        for event in events {
+            record_runtime_nested_event_report_step(_notifier_local, event.seconds_delay());
+        }
+        let notified = deliver_to_ancestor(parent_artboard, host_local, events);
         #[cfg(any(test, feature = "tools"))]
-        record_runtime_nested_event_chain_step(
-            _notifier_local,
-            RuntimeNestedEventChainPhase::AncestorDispatch,
-        );
+        for _ in events {
+            record_runtime_nested_event_chain_step(
+                _notifier_local,
+                RuntimeNestedEventChainPhase::AncestorDispatch,
+            );
+        }
         notified
     }
 
@@ -12855,7 +13142,7 @@ impl StateMachineInstance {
                 continue;
             };
             let notifier_local = occurrence.local_id();
-            let reported_events = {
+            let (accepts_source, bubbled_events) = {
                 let state_machine = parent_artboard
                     .active_nested_state_machines
                     .get_mut(&notifier_local)
@@ -12868,24 +13155,14 @@ impl StateMachineInstance {
                     && state_machine.nested_event_source_registered(source_local_id);
                 let notified = state_machine.notify_events(child, Some(source_local_id), events);
                 changed |= notified;
-                if accepts_source {
-                    changed |= state_machine.advance_on_artboard(child, 0.0, false, None);
-                }
-                let mut reported_events = Vec::new();
-                for index in 0..state_machine.reported_event_count() {
-                    if let Some(event) = state_machine.reported_event(child, index) {
-                        reported_events.push(event.clone());
-                    }
-                }
-                reported_events
+                (accepts_source, state_machine.drain_bubbled_event_reports())
             };
-            for event in reported_events {
-                let audio_event = event.clone();
-                changed |= Self::complete_nested_report_chain(
+            if !bubbled_events.is_empty() {
+                changed |= Self::complete_nested_report_batch(
                     parent_artboard,
                     parent_host_local,
                     notifier_local,
-                    event,
+                    &bubbled_events,
                     &mut deliver_to_ancestor,
                 );
                 if let Some(state_machine) = parent_artboard
@@ -12893,20 +13170,25 @@ impl StateMachineInstance {
                     .get_mut(&notifier_local)
                     .or_else(|| occurrence.state_machine_mut())
                 {
-                    state_machine.flush_deferred_owner_audio_event(&audio_event);
+                    for event in &bubbled_events {
+                        state_machine.flush_deferred_owner_audio_event(event);
+                        #[cfg(any(test, feature = "tools"))]
+                        record_runtime_nested_event_chain_step(
+                            notifier_local,
+                            RuntimeNestedEventChainPhase::AudioUnwind,
+                        );
+                    }
                 }
-                #[cfg(any(test, feature = "tools"))]
-                record_runtime_nested_event_chain_step(
-                    notifier_local,
-                    RuntimeNestedEventChainPhase::AudioUnwind,
-                );
             }
-            if let Some(state_machine) = parent_artboard
-                .active_nested_state_machines
-                .get_mut(&notifier_local)
-                .or_else(|| occurrence.state_machine_mut())
+            if accepts_source
+                && let Some(state_machine) = parent_artboard
+                    .active_nested_state_machines
+                    .get_mut(&notifier_local)
+                    .or_else(|| occurrence.state_machine_mut())
             {
-                state_machine.flush_deferred_owner_audio_events();
+                let settlement =
+                    state_machine.update_data_binds_false(child, None, &mut NoopScriptHost);
+                state_machine.retain_script_result(settlement.map(|()| false));
             }
         }
         changed
@@ -12930,10 +13212,13 @@ impl StateMachineInstance {
                     && state_machine.nested_event_source_registered(host_local);
                 let source_notified =
                     state_machine.notify_events(artboard, Some(host_local), events);
-                let source_settled =
-                    accepts_source && state_machine.advance_on_artboard(artboard, 0.0, false, None);
-                changed |= source_notified | source_settled;
-                source_notified | source_settled
+                if accepts_source {
+                    let settlement =
+                        state_machine.update_data_binds_false(artboard, None, &mut NoopScriptHost);
+                    state_machine.retain_script_result(settlement.map(|()| false));
+                }
+                changed |= source_notified;
+                source_notified
             };
         advance(artboard, &mut dispatch_source)?;
         Ok(changed)
@@ -13021,12 +13306,12 @@ impl StateMachineInstance {
                     };
                     callback_changed |= notified;
                     if accepts_source {
-                        callback_changed |= state_machine.advance_on_artboard(
+                        let settlement = state_machine.update_data_binds_false(
                             artboard,
-                            0.0,
-                            false,
-                            owned_context.as_deref_mut(),
+                            owned_context.as_deref(),
+                            &mut NoopScriptHost,
                         );
+                        state_machine.retain_script_result(settlement.map(|()| false));
                     }
                 }
                 callback_changed

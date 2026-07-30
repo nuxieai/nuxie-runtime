@@ -5,12 +5,12 @@ use nuxie_runtime::{
     RuntimeDataContextLookupKind, RuntimeDataContextLookupReport, RuntimeDrawableDispatchKind,
     RuntimeFeatherState, RuntimeGradientStop, RuntimeImportedViewModelInstanceContext,
     RuntimeKeyFrame, RuntimeNestedEventChainPhase, RuntimeNestedEventChainTrace,
-    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
-    RuntimeOwnedViewModelInstance, RuntimePathCommand, RuntimeShapePaintKind,
-    RuntimeShapePaintPathKind, RuntimeShapePaintState, RuntimeStateMachineDataConverterBindStep,
-    RuntimeViewModelLinkError, ScriptError, ScriptHost, ScriptInputViewModelPropertyPath,
-    ScriptInstance, ScriptMethod, ScriptValue, ScriptedStateMachineObjectKind,
-    StateMachineInputKind, StateMachineInstance, TransformProperty,
+    RuntimeNestedNotifyBatchTrace, RuntimeOwnedViewModelContext,
+    RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+    RuntimePathCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
+    RuntimeStateMachineDataConverterBindStep, RuntimeViewModelLinkError, ScriptError, ScriptHost,
+    ScriptInputViewModelPropertyPath, ScriptInstance, ScriptMethod, ScriptValue,
+    ScriptedStateMachineObjectKind, StateMachineInputKind, StateMachineInstance, TransformProperty,
     bound_script_view_model_from_owned_context, bound_script_view_model_from_owned_path,
     bound_script_view_model_snapshot, bound_script_view_model_snapshot_from_path,
     runtime_data_context_lookup_reports, runtime_random_call_count, script_view_model_from_owned,
@@ -84533,7 +84533,10 @@ fn fl_c5_production_event_source_chains_are_atomic() {
     let rust_trace = RuntimeNestedEventChainTrace::start();
     rust_machine
         .advance_and_apply(&mut rust, 0.25)
-        .expect("Rust production sibling-source advance");
+        .expect("Rust production sibling-source reporting advance");
+    rust_machine
+        .advance_and_apply(&mut rust, 0.25)
+        .expect("Rust production sibling-source notify advance");
     let rust_steps = rust_trace.finish();
     let rust_root_names = (0..rust_machine.reported_event_count())
         .filter_map(|index| {
@@ -84562,13 +84565,35 @@ fn fl_c5_production_event_source_chains_are_atomic() {
             .type_key
             .int,
     );
-    let cpp_local_names = cpp_first
-        .nested_reported_events
+    let cpp_notified_sources = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .flat_map(|report| &report.nested_reported_events)
+        .filter(|source| !source.notify_batches.is_empty())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cpp_notified_sources
+            .iter()
+            .map(|source| source.local_id)
+            .collect::<Vec<_>>(),
+        [2, 4],
+        "the actual pinned-C++ notify entries must preserve authored source order"
+    );
+    let cpp_local_names = cpp_notified_sources
         .iter()
         .map(|source| {
             let [event] = source.reported_events.as_slice() else {
                 panic!("each pinned C++ sibling must report exactly one event");
             };
+            assert_eq!(
+                source
+                    .notify_batches
+                    .iter()
+                    .map(Vec::len)
+                    .collect::<Vec<_>>(),
+                [1],
+                "each pinned-C++ sibling must enter notify with one singleton batch"
+            );
             assert_eq!(event.event_core_type, Some(audio_event_core_type));
             assert_eq!(event.seconds_delay, 0.0);
             event
@@ -84668,7 +84693,12 @@ fn fl_c5_same_host_multi_reporter_chains_are_atomic() {
         .filter_map(|event| event.event_name.clone())
         .collect::<Vec<_>>();
     assert_eq!(cpp_root_names, ["A-root", "B-root"]);
-    let cpp_sources = &cpp.artboards[0].runtime_state_machine_advances[0].nested_reported_events;
+    let cpp_sources = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .flat_map(|report| &report.nested_reported_events)
+        .filter(|source| !source.notify_batches.is_empty())
+        .collect::<Vec<_>>();
     assert_eq!(
         cpp_sources
             .iter()
@@ -84680,7 +84710,18 @@ fn fl_c5_same_host_multi_reporter_chains_are_atomic() {
     assert_eq!(
         cpp_sources
             .iter()
-            .map(|source| source.reported_events[0].event_name.as_deref())
+            .map(|source| {
+                assert_eq!(
+                    source
+                        .notify_batches
+                        .iter()
+                        .map(Vec::len)
+                        .collect::<Vec<_>>(),
+                    [1],
+                    "each same-host C++ reporter must enter notify with one singleton batch"
+                );
+                source.reported_events[0].event_name.as_deref()
+            })
             .collect::<Vec<_>>(),
         [Some("A-local"), Some("B-local")],
     );
@@ -84700,7 +84741,10 @@ fn fl_c5_same_host_multi_reporter_chains_are_atomic() {
     let rust_trace = RuntimeNestedEventChainTrace::start();
     rust_machine
         .advance_and_apply(&mut rust, 0.25)
-        .expect("Rust production same-host reporter advance");
+        .expect("Rust production same-host reporting advance");
+    rust_machine
+        .advance_and_apply(&mut rust, 0.25)
+        .expect("Rust production same-host notify advance");
     let rust_steps = rust_trace.finish();
     assert_eq!(
         rust_steps
@@ -84753,10 +84797,10 @@ fn fl_c5_deep_nested_owner_reports_complete_to_root_before_subtree_and_error() {
             "0.25".to_owned(),
             "--runtime-advance-and-apply-state-machine".to_owned(),
             "0".to_owned(),
-            "0.0".to_owned(),
+            "0.25".to_owned(),
             "--runtime-advance-and-apply-state-machine".to_owned(),
             "0".to_owned(),
-            "0.0".to_owned(),
+            "0.25".to_owned(),
         ],
     );
     let cpp_middle_names = cpp.artboards[0]
@@ -84774,13 +84818,32 @@ fn fl_c5_deep_nested_owner_reports_complete_to_root_before_subtree_and_error() {
         .collect::<Vec<_>>();
     assert_eq!(
         cpp_middle_names,
-        ["middle-local"],
-        "the pinned-C++ leaf report synchronously causes the selected intermediate owner to report",
+        ["leaf-local", "middle-local"],
+        "the pinned-C++ leaf report first crosses the intermediate owner, whose own queued report follows on the next applyEvents frame",
     );
     assert_eq!(
         cpp_root_names,
         ["root-local"],
         "the pinned-C++ intermediate report reaches the top-level owner",
+    );
+    let cpp_middle_report = cpp.artboards[0]
+        .runtime_state_machine_advances
+        .iter()
+        .rev()
+        .flat_map(|report| &report.nested_reported_events)
+        .find(|source| !source.pre_mix_node_xs.is_empty())
+        .expect("pinned-C++ ancestor notification observes the middle source");
+    assert_eq!(cpp_middle_report.notify_batches.len(), 1);
+    assert_eq!(
+        cpp_middle_report.notify_batches[0].len(),
+        1,
+        "the middle state-machine report enters the ancestor as one live batch",
+    );
+    let cpp_report_time_source_x = cpp_middle_report.pre_mix_node_xs[0];
+    assert!(
+        cpp_middle_report.has_mixed_node_x
+            && cpp_report_time_source_x != cpp_middle_report.mixed_node_x,
+        "the C++ ancestor sees the source layer before the remainder of that source frame mixes",
     );
 
     let runtime = read_runtime_file(&bytes).expect("Rust imports the deep event fixture");
@@ -84795,12 +84858,17 @@ fn fl_c5_deep_nested_owner_reports_complete_to_root_before_subtree_and_error() {
         .state_machine_instance(0)
         .expect("Rust root state-machine occurrence");
     let rust_trace = RuntimeNestedEventChainTrace::start();
-    rust_machine
-        .advance_and_apply(&mut rust, 0.25)
-        .expect("Rust production deep nested-event frame");
+    let rust_notify_batches = RuntimeNestedNotifyBatchTrace::start();
+    for _ in 0..3 {
+        rust_machine
+            .advance_and_apply(&mut rust, 0.25)
+            .expect("Rust production deep nested-event frame");
+    }
     let rust_steps = rust_trace.finish();
+    let rust_notify_batches = rust_notify_batches.finish();
+    let rust_phases = rust_steps.iter().map(|step| step.phase).collect::<Vec<_>>();
     assert_eq!(
-        rust_steps.iter().map(|step| step.phase).collect::<Vec<_>>(),
+        &rust_phases[..6],
         [
             RuntimeNestedEventChainPhase::SourceLocal,
             RuntimeNestedEventChainPhase::SourceLocal,
@@ -84809,7 +84877,47 @@ fn fl_c5_deep_nested_owner_reports_complete_to_root_before_subtree_and_error() {
             RuntimeNestedEventChainPhase::AncestorDispatch,
             RuntimeNestedEventChainPhase::AudioUnwind,
         ],
-        "the leaf and intermediate reports form one full-height callback-major chain",
+        "the original full-height callback-major leaf/intermediate chain remains exact",
+    );
+    assert_eq!(
+        &rust_phases[6..],
+        [
+            RuntimeNestedEventChainPhase::SourceLocal,
+            RuntimeNestedEventChainPhase::AncestorDispatch,
+            RuntimeNestedEventChainPhase::AudioUnwind,
+        ],
+        "the later queued intermediate report completes its own exact chain",
+    );
+    let rust_report_time_source_x = rust_notify_batches
+        .iter()
+        .rev()
+        .find_map(|batch| batch.source_layer_value)
+        .expect("Rust actual ancestor notify entry records the live source-layer value");
+    assert_close(
+        rust_report_time_source_x,
+        cpp_report_time_source_x,
+        "Rust and C++ expose the same pre-mix source-layer value to the ancestor",
+    );
+    let mut rust_mixed_source_x = None;
+    rust.try_visit_nested_artboard_instances_mut(&mut |depth,
+                                                       _graph_global_id,
+                                                       child|
+     -> Result<(), ()> {
+        if depth == 2 {
+            rust_mixed_source_x = child.transform_property(2, TransformProperty::X);
+        }
+        Ok(())
+    })
+    .expect("visit the Rust deep source layer");
+    assert_eq!(
+        rust_mixed_source_x,
+        Some(cpp_middle_report.mixed_node_x),
+        "both runtimes finish the source frame at the same later mixed value",
+    );
+    assert_ne!(
+        rust_report_time_source_x,
+        rust_mixed_source_x.expect("Rust final source-layer value"),
+        "Rust ancestor visibility is report-time/pre-mix rather than post-frame",
     );
 
     let source = fl_c5_cpp_state_machine_instance_source();
@@ -84934,10 +85042,12 @@ fn fl_c5_nested_simple_callbacks_are_singleton_and_overshoot_delay_is_zero() {
         .state_machine_instance(0)
         .expect("Rust root state-machine occurrence");
     let rust_trace = RuntimeNestedEventChainTrace::start();
+    let rust_notify_batches = RuntimeNestedNotifyBatchTrace::start();
     rust_machine
         .advance_and_apply(&mut rust, 0.75)
         .expect("Rust nested-simple production advance");
     let rust_steps = rust_trace.finish();
+    let rust_notify_batches = rust_notify_batches.finish();
     let mut rust_root_names = (0..rust_machine.reported_event_count())
         .filter_map(|index| {
             rust_machine
@@ -84970,6 +85080,14 @@ fn fl_c5_nested_simple_callbacks_are_singleton_and_overshoot_delay_is_zero() {
             (2, RuntimeNestedEventChainPhase::AudioUnwind),
         ],
         "Rust completes each singleton callback chain before advancing to the next callback",
+    );
+    assert_eq!(
+        rust_notify_batches
+            .iter()
+            .map(|batch| batch.size)
+            .collect::<Vec<_>>(),
+        [1, 1],
+        "Rust records singleton boundaries at the real notify entry; batching both callbacks must fail",
     );
     assert_eq!(
         rust_steps

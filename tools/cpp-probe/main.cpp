@@ -358,18 +358,13 @@ struct RuntimeStateMachineReportedEventReport
     float secondsDelay;
 };
 
-bool firstNestedNodeX(rive::NestedArtboard* nestedArtboard, float* value)
+bool firstNodeX(rive::ArtboardInstance* artboard, float* value)
 {
-    if (nestedArtboard == nullptr || value == nullptr)
+    if (artboard == nullptr || value == nullptr)
     {
         return false;
     }
-    auto child = nestedArtboard->artboardInstance();
-    if (child == nullptr)
-    {
-        return false;
-    }
-    for (auto object : child->objects())
+    for (auto object : artboard->objects())
     {
         if (object != nullptr && object->coreType() == rive::Node::typeKey)
         {
@@ -377,7 +372,24 @@ bool firstNestedNodeX(rive::NestedArtboard* nestedArtboard, float* value)
             return true;
         }
     }
+    for (auto nested : artboard->nestedArtboards())
+    {
+        if (nested != nullptr &&
+            firstNodeX(nested->artboardInstance(), value))
+        {
+            return true;
+        }
+    }
     return false;
+}
+
+bool firstNestedNodeX(rive::NestedArtboard* nestedArtboard, float* value)
+{
+    if (nestedArtboard == nullptr)
+    {
+        return false;
+    }
+    return firstNodeX(nestedArtboard->artboardInstance(), value);
 }
 
 class RuntimeNestedEventRecorder final : public rive::NestedEventListener
@@ -7647,23 +7659,43 @@ apply_runtime_state_machine_advances(rive::File* file,
             size_t,
             std::unique_ptr<RuntimeNestedEventRecorder>>>
             nestedSimpleRecorders;
+        std::vector<std::pair<
+            size_t,
+            std::unique_ptr<RuntimeNestedEventRecorder>>>
+            nestedStateMachineRecorders;
         for (size_t localId = 0; localId < occurrenceObjects.size(); ++localId)
         {
             auto object = occurrenceObjects[localId];
-            if (object == nullptr || !object->is<rive::NestedSimpleAnimation>())
+            if (object == nullptr)
             {
                 continue;
             }
-            auto animation =
-                object->as<rive::NestedSimpleAnimation>()->animationInstance();
-            if (animation == nullptr)
+            if (object->is<rive::NestedSimpleAnimation>())
             {
-                continue;
+                auto animation = object->as<rive::NestedSimpleAnimation>()
+                                     ->animationInstance();
+                if (animation == nullptr)
+                {
+                    continue;
+                }
+                auto recorder = std::make_unique<RuntimeNestedEventRecorder>();
+                animation->addNestedEventListener(recorder.get());
+                nestedSimpleRecorders.push_back(
+                    {localId, std::move(recorder)});
             }
-            auto recorder = std::make_unique<RuntimeNestedEventRecorder>();
-            animation->addNestedEventListener(recorder.get());
-            nestedSimpleRecorders.push_back(
-                {localId, std::move(recorder)});
+            else if (object->is<rive::NestedStateMachine>())
+            {
+                auto stateMachine = object->as<rive::NestedStateMachine>()
+                                        ->stateMachineInstance();
+                if (stateMachine == nullptr)
+                {
+                    continue;
+                }
+                auto recorder = std::make_unique<RuntimeNestedEventRecorder>();
+                stateMachine->addNestedEventListener(recorder.get());
+                nestedStateMachineRecorders.push_back(
+                    {localId, std::move(recorder)});
+            }
         }
         std::unique_ptr<PersistentDirtProbeComponent> persistentDirtProbe;
         if (action.kind ==
@@ -7756,6 +7788,13 @@ apply_runtime_state_machine_advances(rive::File* file,
             occurrenceObjects[localId]
                 ->as<rive::NestedSimpleAnimation>()
                 ->animationInstance()
+                ->removeNestedEventListener(recorder.get());
+        }
+        for (const auto& [localId, recorder] : nestedStateMachineRecorders)
+        {
+            occurrenceObjects[localId]
+                ->as<rive::NestedStateMachine>()
+                ->stateMachineInstance()
                 ->removeNestedEventListener(recorder.get());
         }
         RuntimeStateMachineAdvanceReport report;
@@ -7959,8 +7998,30 @@ apply_runtime_state_machine_advances(rive::File* file,
                 reportedEvent.secondsDelay = eventReport.secondsDelay();
                 nestedEvents.push_back(reportedEvent);
             }
+            auto recorder = std::find_if(
+                nestedStateMachineRecorders.begin(),
+                nestedStateMachineRecorders.end(),
+                [localId](const auto& entry) {
+                    return entry.first == localId;
+                });
+            float mixedNodeX = 0.0f;
+            const bool hasMixedNodeX =
+                firstNestedNodeX(nested->parent()->as<rive::NestedArtboard>(),
+                                 &mixedNodeX);
             report.nestedReportedEvents.push_back(
-                {localId, std::move(nestedEvents), {}, {}, false, 0.0f});
+                {localId,
+                 recorder == nestedStateMachineRecorders.end()
+                     ? std::move(nestedEvents)
+                     : recorder->second->reportedEvents(),
+                 recorder == nestedStateMachineRecorders.end()
+                     ? std::vector<
+                           std::vector<RuntimeStateMachineReportedEventReport>>{}
+                     : recorder->second->notifyBatches(),
+                 recorder == nestedStateMachineRecorders.end()
+                     ? std::vector<float>{}
+                     : recorder->second->preMixNodeXs(),
+                 hasMixedNodeX,
+                 mixedNodeX});
         }
         for (const auto& [localId, recorder] : nestedSimpleRecorders)
         {

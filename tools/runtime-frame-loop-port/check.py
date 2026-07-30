@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import collections
 import fnmatch
+import functools
 import hashlib
 import json
 import pathlib
@@ -59,6 +60,15 @@ NESTED_EVENT_OWNER_BOUNDARY_RATCHETS = {
     "state_machine_nested_audio_unwind_outside_instance_policy": "audio",
 }
 NESTED_EVENT_OWNER_BOUNDARY_DETECTOR = "rust_nested_event_owner_boundary"
+NESTED_EVENT_OWNER_MODULE = pathlib.PurePosixPath(
+    "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
+)
+NESTED_EVENT_AUDIO_GUARDED_PATTERN = (
+    r"flush_deferred_owner_audio_events?|"
+    r"defer_recorded_audio_event_seam|"
+    r"reach_recorded_audio_event_seam|"
+    r"deliver_recorded_audio_occurrence"
+)
 FL_B_FROZEN_SCOPE_REF = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 FL_B_FROZEN_SCOPE_FILES = frozenset(
     {
@@ -115,6 +125,16 @@ class CheckFailure(Exception):
     """Raised when the frame-loop proof is incomplete or inconsistent."""
 
 
+RUST_RAW_STRING_START = re.compile(r"(?:br|r)(?P<hashes>#{0,255})\"")
+RUST_CHAR_LITERAL = re.compile(
+    r"'(?:"
+    r"\\(?:[nrt0\\'\"]|x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f_]{1,6}\})"
+    r"|[^'\\\n]"
+    r")'"
+)
+
+
+@functools.lru_cache(maxsize=512)
 def strip_rust_comments_and_strings(source: str) -> str:
     """Replace Rust comments/string contents while preserving offsets/newlines."""
 
@@ -147,12 +167,12 @@ def strip_rust_comments_and_strings(source: str) -> str:
             block_depth = 1
             index += 2
             continue
-        raw = re.match(r"(?:br|r)(?P<hashes>#{0,255})\"", source[index:])
+        raw = RUST_RAW_STRING_START.match(source, index)
         if raw is not None:
             hashes = raw.group("hashes")
-            start_length = raw.end()
+            content_start = raw.end()
             terminator = '"' + hashes
-            end = source.find(terminator, index + start_length)
+            end = source.find(terminator, content_start)
             end = len(source) if end == -1 else end + len(terminator)
             for offset in range(index, end):
                 if source[offset] != "\n":
@@ -174,9 +194,9 @@ def strip_rust_comments_and_strings(source: str) -> str:
             index = cursor
             continue
         if source[index] == "'":
-            char_literal = re.match(r"'(?:\\.|[^'\\\n])+'", source[index:])
+            char_literal = RUST_CHAR_LITERAL.match(source, index)
             if char_literal is not None:
-                end = index + char_literal.end()
+                end = char_literal.end()
                 result[index:end] = " " * (end - index)
                 index = end
                 continue
@@ -377,7 +397,8 @@ def semantic_ordinal_projection_hits(
     return hits
 
 
-def rust_function_ranges(stripped: str) -> list[tuple[int, int]]:
+@functools.lru_cache(maxsize=512)
+def rust_function_ranges(stripped: str) -> tuple[tuple[int, int], ...]:
     """Return concrete Rust function ranges with balanced bodies."""
 
     function_pattern = re.compile(
@@ -400,70 +421,266 @@ def rust_function_ranges(stripped: str) -> list[tuple[int, int]]:
                 if depth == 0:
                     ranges.append((function.start(), index + 1))
                     break
-    return ranges
+    return tuple(ranges)
 
 
-def nested_event_owner_boundary_hits(source: str, kind: str) -> list[int]:
+@functools.lru_cache(maxsize=512)
+def rust_cfg_test_item_ranges(stripped: str) -> tuple[tuple[int, int], ...]:
+    """Return exact cfg(test) item spans without hiding later production."""
+
+    ranges: list[tuple[int, int]] = []
+    for attribute in re.finditer(
+        r"#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]",
+        stripped,
+    ):
+        cursor = attribute.end()
+        while True:
+            whitespace = re.match(r"\s*", stripped[cursor:])
+            assert whitespace is not None
+            cursor += whitespace.end()
+            if not stripped.startswith("#[", cursor):
+                break
+            attribute_end = stripped.find("]", cursor + 2)
+            if attribute_end == -1:
+                break
+            cursor = attribute_end + 1
+        open_brace = stripped.find("{", cursor)
+        semicolon = stripped.find(";", cursor)
+        if open_brace != -1 and (semicolon == -1 or open_brace < semicolon):
+            depth = 0
+            for index in range(open_brace, len(stripped)):
+                if stripped[index] == "{":
+                    depth += 1
+                elif stripped[index] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        ranges.append((attribute.start(), index + 1))
+                        break
+        elif semicolon != -1:
+            ranges.append((attribute.start(), semicolon + 1))
+    return tuple(ranges)
+
+
+def nested_event_audio_use_aliases(source: str) -> set[str]:
+    """Collect names exported or imported for an owned audio-unwind function."""
+
+    stripped = strip_rust_comments_and_strings(source)
+    excluded = rust_cfg_test_item_ranges(stripped)
+
+    def is_production(offset: int) -> bool:
+        return not any(start <= offset < end for start, end in excluded)
+
+    aliases = {
+        match.group(1)
+        for match in re.finditer(
+            r"\buse\s+(?:[A-Za-z_]\w*::)*"
+            r"(?:" + NESTED_EVENT_AUDIO_GUARDED_PATTERN + r")"
+            r"\s+as\s+([A-Za-z_]\w*)\s*;",
+            stripped,
+        )
+        if is_production(match.start())
+    }
+    aliases.update(
+        match.group(1)
+        for match in re.finditer(
+            r"\b(?:pub(?:\s*\([^)]*\))?\s+)?(?:const|static)\s+"
+            r"([A-Za-z_]\w*)\s*:[^=;]+=\s*"
+            r"(?:[A-Za-z_]\w*::)*(?:"
+            + NESTED_EVENT_AUDIO_GUARDED_PATTERN
+            + r")\b",
+            stripped,
+        )
+        if is_production(match.start())
+    )
+    return aliases
+
+
+def nested_event_owner_boundary_hits(
+    source: str,
+    kind: str,
+    *,
+    audio_aliases: Iterable[str] = (),
+) -> list[int]:
     """Find event-delivery mechanics displaced from the instance owner module."""
 
-    test_module = re.search(
-        r"(?m)^#\[cfg\(test\)\][ \t\r\n]*mod[ \t]+tests[ \t]*\{",
-        source,
-    )
-    production = source[: test_module.start()] if test_module else source
-    stripped = strip_rust_comments_and_strings(production)
-    function_bodies = [
-        (stripped.find("{", start, end) + 1, end - 1)
-        for start, end in rust_function_ranges(stripped)
+    stripped = strip_rust_comments_and_strings(source)
+    excluded_ranges = rust_cfg_test_item_ranges(stripped)
+    all_function_ranges = rust_function_ranges(stripped)
+    function_ranges = [
+        (start, end)
+        for start, end in all_function_ranges
+        if not any(
+            excluded_start <= start < excluded_end
+            for excluded_start, excluded_end in excluded_ranges
+        )
     ]
 
-    def call_hits(name_pattern: str) -> list[int]:
-        call = re.compile(r"\b(?:" + name_pattern + r")\s*\(")
-        return [
-            start
-            for start, end in function_bodies
-            if call.search(stripped, start, end)
-        ]
+    def coalesce_expression_offsets(offsets: Iterable[int]) -> list[int]:
+        owners = set()
+        for offset in offsets:
+            if any(start <= offset < end for start, end in excluded_ranges):
+                continue
+            owners.add(
+                next(
+                    (
+                        start
+                        for start, end in function_ranges
+                        if start <= offset < end
+                    ),
+                    offset,
+                )
+            )
+        return sorted(owners)
 
-    def identifier_hits(name_pattern: str) -> list[int]:
+    def identifier_offsets(name_pattern: str) -> list[int]:
         identifier = re.compile(r"\b(?:" + name_pattern + r")\b")
-        return [
-            start
-            for start, end in function_bodies
-            if identifier.search(stripped, start, end)
-        ]
+        return coalesce_expression_offsets(
+            match.start() for match in identifier.finditer(stripped)
+        )
+
+    def path_expression_offsets(name_pattern: str) -> list[int]:
+        path_expression = re.compile(
+            r"(?:(?:\b[A-Za-z_]\w*::)+|<[^<>{};]+>\s*::|\.)"
+            r"(?:" + name_pattern + r")\b"
+        )
+        return coalesce_expression_offsets(
+            match.start() for match in path_expression.finditer(stripped)
+        )
 
     if kind == "collection":
         # Collection mechanics are forbidden as values as well as direct
         # calls. Otherwise a function-item alias can move the owner boundary
         # while evading a call-shaped scanner:
         # `let collect = StateMachineInstance::reported_event;`.
-        return identifier_hits(
+        return path_expression_offsets(
             r"reported_event_count|reported_event|"
             r"take_(?:\w*event\w*|\w*report\w*)"
         )
     if kind == "dispatch":
-        return call_hits(r"notify_events(?:_[A-Za-z_]\w*)?")
+        # A path expression can be moved into a function item and invoked
+        # under an arbitrary local name. Guard the owned notify family at the
+        # reference, not merely at a direct-call shape.
+        return path_expression_offsets(r"notify_events(?:_[A-Za-z_]\w*)?")
     if kind == "audio":
-        return call_hits(
-            r"[A-Za-z_]\w*audio[A-Za-z_]\w*|[A-Za-z_]\w*Audio[A-Za-z_]\w*"
-        )
+        # These are the instance-owned unwind/seam functions. Matching their
+        # path-expression references catches `let finish = ...; finish(owner)`
+        # without treating arbitrary non-policy identifiers containing
+        # "audio" as ownership mechanics.
+        aliases = nested_event_audio_use_aliases(source)
+        aliases.update(audio_aliases)
+        hits = path_expression_offsets(NESTED_EVENT_AUDIO_GUARDED_PATTERN)
+        if aliases:
+            alias_declaration_ranges = [
+                (match.start(), match.end())
+                for match in re.finditer(
+                    r"\buse\b[^;]*\bas\s+(?:"
+                    + "|".join(re.escape(alias) for alias in aliases)
+                    + r")\s*;|"
+                    r"\b(?:pub(?:\s*\([^)]*\))?\s+)?(?:const|static)\s+"
+                    r"(?:"
+                    + "|".join(re.escape(alias) for alias in aliases)
+                    + r")\b[^;]*;",
+                    stripped,
+                )
+            ]
+            hits.extend(
+                coalesce_expression_offsets(
+                    match.start()
+                    for match in re.finditer(
+                        r"\b(?:"
+                        + "|".join(re.escape(alias) for alias in aliases)
+                        + r")\b",
+                        stripped,
+                    )
+                    if not any(
+                        start <= match.start() < end
+                        for start, end in alias_declaration_ranges
+                    )
+                )
+            )
+        return sorted(set(hits))
     if kind == "selection":
-        selection = re.compile(
-            r"(?:RuntimeNestedAnimationInstance|Self)::StateMachine\b"
+        variant_aliases = {
+            match.group(1)
+            for match in re.finditer(
+                r"\buse\s+(?:[A-Za-z_]\w*::)*"
+                r"(?:RuntimeNestedAnimationInstance|Self)::StateMachine"
+                r"\s+as\s+([A-Za-z_]\w*)\s*;",
+                stripped,
+            )
+        }
+        variant_aliases.update(
+            match.group(1)
+            for match in re.finditer(
+                r"\buse\s+(?:[A-Za-z_]\w*::)*"
+                r"(?:RuntimeNestedAnimationInstance|Self)::\{"
+                r"[^}]*\bStateMachine\s+as\s+([A-Za-z_]\w*)"
+                r"[^}]*\}\s*;",
+                stripped,
+            )
+        )
+        enum_aliases = {
+            match.group(1)
+            for match in re.finditer(
+                r"\buse\s+(?:[A-Za-z_]\w*::)*"
+                r"RuntimeNestedAnimationInstance"
+                r"\s+as\s+([A-Za-z_]\w*)\s*;",
+                stripped,
+            )
+        }
+        enum_aliases.update(
+            match.group(1)
+            for match in re.finditer(
+                r"\buse\s+(?:[A-Za-z_]\w*::)*\{"
+                r"[^}]*\bRuntimeNestedAnimationInstance"
+                r"\s+as\s+([A-Za-z_]\w*)[^}]*\}\s*;",
+                stripped,
+            )
+        )
+        direct_selection = re.compile(
+            r"(?:RuntimeNestedAnimationInstance|Self)::StateMachine\s*\("
+        )
+        variant_aliased_selection = (
+            re.compile(
+                r"\b(?:"
+                + "|".join(re.escape(alias) for alias in variant_aliases)
+                + r")\s*\("
+            )
+            if variant_aliases
+            else None
+        )
+        enum_aliased_selection = (
+            re.compile(
+                r"\b(?:"
+                + "|".join(re.escape(alias) for alias in enum_aliases)
+                + r")::StateMachine\s*\("
+            )
+            if enum_aliases
+            else None
         )
         event_mechanic = re.compile(
-            r"\bStateMachineReportedEvent\b|"
-            r"\breported_event(?:_count)?\b|"
-            r"\bnotify_events(?:_[A-Za-z_]\w*)?\b|"
-            r"\b[A-Za-z_]\w*audio[A-Za-z_]\w*\b",
-            re.IGNORECASE,
+            r"\breported_events\b|\bStateMachineReportedEvent\b|"
+            r"(?:(?:\b[A-Za-z_]\w*::)+|\.)"
+            r"(?:reported_event_count|reported_event|"
+            r"take_(?:\w*event\w*|\w*report\w*)|"
+            r"notify_events(?:_[A-Za-z_]\w*)?|"
+            r"flush_deferred_owner_audio_events?)\b"
         )
         return [
             start
-            for start, end in rust_function_ranges(stripped)
-            if selection.search(stripped, start, end)
-            and event_mechanic.search(stripped, start, end)
+            for start, end in function_ranges
+            if (
+                variant_aliased_selection is not None
+                and variant_aliased_selection.search(stripped, start, end)
+            )
+            or (
+                enum_aliased_selection is not None
+                and enum_aliased_selection.search(stripped, start, end)
+            )
+            or (
+                direct_selection.search(stripped, start, end)
+                and event_mechanic.search(stripped, start, end)
+            )
         ]
     raise ValueError(f"unknown nested-event boundary detector kind: {kind}")
 
@@ -1451,6 +1668,14 @@ def check(
         for path in repo_root.glob("crates/nuxie-runtime/src/state_machine/**/*.rs")
         if path.is_file()
     )
+    nested_event_audio_aliases = set()
+    for path in repo_root.glob("crates/nuxie-runtime/src/**/*.rs"):
+        if path.is_file():
+            nested_event_audio_aliases.update(
+                nested_event_audio_use_aliases(
+                    path.read_text(encoding="utf-8", errors="replace")
+                )
+            )
     for row in ratchet_rows:
         ratchet_id = str(row.get("id", ""))
         pattern_text = str(row.get("pattern", ""))
@@ -1510,9 +1735,15 @@ def check(
                         resolver_seam_exists=semantic_resolver_seam_exists,
                     )
                 elif detector == NESTED_EVENT_OWNER_BOUNDARY_DETECTOR:
+                    if (
+                        pathlib.PurePosixPath(path.relative_to(repo_root))
+                        == NESTED_EVENT_OWNER_MODULE
+                    ):
+                        continue
                     found_offsets = nested_event_owner_boundary_hits(
                         source,
                         NESTED_EVENT_OWNER_BOUNDARY_RATCHETS[ratchet_id],
+                        audio_aliases=nested_event_audio_aliases,
                     )
                 else:
                     assert pattern is not None

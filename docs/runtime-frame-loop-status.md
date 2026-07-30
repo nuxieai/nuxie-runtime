@@ -4,14 +4,16 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: E4 evidence publication for immutable combined production candidate
-  `9434b39cd1e888ac5f3300a9f6708b303516da2d`. E3 evidence was published as
-  `50bf85e8`; round-six production adds per-animation chain atomicity,
-  nested-simple event delivery, instance-owned seam mechanics, restored
-  reset order, and retained-definition blend proofs. The five SHA-stamped
-  floor5 receipts are operative. The final trace is regenerated
-  fingerprint-last, and the complete structural/provenance checker is green
-  on this exact tree.
+- Phase: pre-E5 round-seven corrective work. This tree is not an operative
+  publication, and its trace/fingerprint publication steps remain pending
+  E5. The operative publication is still E4 commit
+  `76ab8d86`, whose immutable production candidate is
+  `9434b39cd1e888ac5f3300a9f6708b303516da2d`. Its five SHA-stamped floor5
+  receipts and trace remain the operative evidence until E5. Round-seven work
+  moves nested report bubbling to the `applyEvents` phase, narrows recursive
+  notify settlement, and strengthens the differential and ownership
+  ratchets; it must not be described as checker-green publication evidence
+  before E5 regenerates the fingerprint, runner provenance, and trace.
 - Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
   on that provisional implementation without claiming FL-B verification.
   FL-C's corrected 56-file/eight-member lane map is
@@ -832,6 +834,9 @@ FL-A post-rebase floor, refreshed after final independent review:
 ## Next
 
 1. Request the independent round-seven FL-C5 oracle, standards, and FL-B
-   reacceptance reviews against this publication.
+   reacceptance reviews against this pre-E5 corrective tree, explicitly not
+   against a new publication.
 2. Resolve every orchestrator-upheld review finding before promotion.
-3. Promote FL-C5 only after all three independent round-seven reviews accept.
+3. Publish E5 and make it operative only after all three independent
+   round-seven reviews accept and the trace/fingerprint evidence is
+   regenerated on the accepted candidate.

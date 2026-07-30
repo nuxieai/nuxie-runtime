@@ -11067,9 +11067,10 @@ mod tests {
         RuntimeBlendState1D, RuntimeBlendState1DSource, RuntimeLayerState,
         RuntimeListenerBoolChange, RuntimeListenerInputTarget, RuntimeListenerNumberChange,
         RuntimeListenerTriggerChange, RuntimeListenerType, RuntimeNestedEventChainPhase,
-        RuntimeNestedEventChainTrace, RuntimeScheduledListenerAction, RuntimeStateMachineInput,
-        RuntimeStateMachineLayer, RuntimeStateMachineListener, ScriptGamepadMappingKind,
-        ScriptGamepadSnapshot, ScriptListenerInvocation, StateMachineInputInstance,
+        RuntimeNestedEventChainTrace, RuntimeNestedNotifyBatchTrace,
+        RuntimeScheduledListenerAction, RuntimeStateMachineInput, RuntimeStateMachineLayer,
+        RuntimeStateMachineListener, ScriptGamepadMappingKind, ScriptGamepadSnapshot,
+        ScriptListenerInvocation, StateMachineInputInstance,
     };
     use nuxie_binary::{
         AuthoringProperty, AuthoringRecord, AuthoringValue, BytesValue, FieldValue, RuntimeObject,
@@ -11852,19 +11853,98 @@ mod tests {
                 "A-local",
                 "root-local",
                 "root-audio",
-                "root-settled",
                 "A-audio",
                 "B-local",
                 "root-local",
                 "root-audio",
-                "root-settled",
                 "B-audio",
             ],
-            "each source completes local dispatch, ancestor dispatch, root settlement, and audio unwind before the next authored component advances",
+            "each source completes local dispatch, ancestor dispatch, and audio unwind before the next authored component advances",
+        );
+        assert!(
+            !total_order.borrow().contains(&"root-settled"),
+            "nested notify performs only updateDataBinds(false), never a full zero-time advance",
         );
         assert_eq!(
             root_machine.audio_event_seam_receipt(),
             (2, Some((7, event_core_type))),
+        );
+    }
+
+    #[test]
+    fn production_ancestor_listener_can_mutate_the_reporting_source_input() {
+        let total_order = Rc::new(RefCell::new(Vec::new()));
+        let (event, _) = nested_audio_event(7);
+        let mut nested = synthetic_nested_artboard_instance(101);
+        let mut source_definition = empty_state_machine(101);
+        source_definition.inputs = Arc::new(vec![Some(RuntimeStateMachineInput::new_number(
+            1,
+            Some("source-value".to_owned()),
+            0.0,
+        ))]);
+        nested.child.state_machines = Arc::new(vec![source_definition]);
+        append_nested_event_source(
+            &mut nested,
+            2,
+            event,
+            "source-local",
+            "source-audio",
+            &total_order,
+        );
+
+        let mut root = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "NestedArtboard"),
+                synthetic_component_for_type(3, "NestedNumber"),
+            ],
+            vec![0, 1, 3],
+        );
+        let parent_id_key =
+            property_key_for_name("Component", "parentId").expect("Component.parentId");
+        let input_id_key =
+            property_key_for_name("NestedInput", "inputId").expect("NestedInput.inputId");
+        assert!(root.objects.set_uint_property(3, parent_id_key, 2));
+        assert!(root.objects.set_uint_property(3, input_id_key, 0));
+        root.nested_artboards.insert(1, nested);
+        let mut root_definition = empty_state_machine(100);
+        root_definition.listeners = Arc::new(vec![RuntimeStateMachineListener {
+            target_local_id: 1,
+            is_single: true,
+            listener_types: vec![RuntimeListenerType::Event],
+            event_local_indices: vec![7],
+            view_model_path: None,
+            view_model_input_types: Vec::new(),
+            gamepad_input_types: Vec::new(),
+            keyboard_input_types: Vec::new(),
+            semantic_input_types: Vec::new(),
+            hit_paths: Vec::new(),
+            listener_actions: vec![RuntimeScheduledListenerAction::NumberChange(
+                RuntimeListenerNumberChange::for_test(
+                    0,
+                    RuntimeListenerInputTarget {
+                        direct_input_index: None,
+                        nested_input_local_id: Some(3),
+                    },
+                    9.0,
+                ),
+            )],
+        }]);
+        root.state_machines = Arc::new(vec![root_definition]);
+        let definitions = Arc::clone(&root.state_machines);
+        let mut root_machine = StateMachineInstance::new(0, &definitions[0], &mut root);
+        root_machine.configure_nested_event_root_test("root-local", "root-audio", total_order, [1]);
+
+        root_machine
+            .advance_and_apply(&mut root, 0.25)
+            .expect("source-addressability frame");
+
+        assert_eq!(
+            root.nested_state_machine(2)
+                .and_then(|machine| machine.input(0))
+                .and_then(StateMachineInputInstance::number_value),
+            Some(9.0),
+            "the reporting source stays addressable throughout synchronous ancestor delivery",
         );
     }
 
@@ -14413,10 +14493,12 @@ mod tests {
         let mut root_machine = StateMachineInstance::new(0, &definitions[0], &mut root);
 
         let trace = RuntimeNestedEventChainTrace::start();
+        let notify_batches = RuntimeNestedNotifyBatchTrace::start();
         root_machine
             .advance_and_apply(&mut root, 1.25)
             .expect("nested simple animation production advance");
         let steps = trace.finish();
+        let notify_batches = notify_batches.finish();
 
         assert_eq!(
             root_machine
@@ -14458,6 +14540,14 @@ mod tests {
                 (2, RuntimeNestedEventChainPhase::AudioUnwind),
             ],
             "each crossed callback completes its singleton local/ancestor/audio chain before the next callback and before the animation mix",
+        );
+        assert_eq!(
+            notify_batches
+                .iter()
+                .map(|batch| batch.size)
+                .collect::<Vec<_>>(),
+            [1, 1],
+            "the real Rust notify entry receives one singleton batch per crossed callback",
         );
     }
 

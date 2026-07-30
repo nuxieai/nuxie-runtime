@@ -2858,21 +2858,37 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             (
                 "state_machine_event_apply_order_required",
                 """
-                fn apply_local_event_listeners() {
+                fn apply_local_event_listener_batch() {
+                    let batch = self.begin_local_event_listener_batch();
+                    self.finish_local_event_listener_batch(batch);
+                }
+                fn begin_local_event_listener_batch() {
                     self.update_data_binds_false(artboard);
                     let events = std::mem::take(&mut self.reporting_events);
                     self.reported_listener_view_models.swap_into(&mut listeners);
                     self.notify_events_with_context(artboard, None, &events, None);
-                    for &listener_index in &listener_indices { notify(listener_index); }
+                }
+                fn finish_local_event_listener_batch() {
+                    for &listener_index in &batch.listener_indices {
+                        notify(listener_index);
+                    }
                 }
                 """,
                 """
-                fn apply_local_event_listeners() {
+                fn apply_local_event_listener_batch() {
+                    let batch = self.begin_local_event_listener_batch();
+                    self.finish_local_event_listener_batch(batch);
+                }
+                fn begin_local_event_listener_batch() {
                     self.update_data_binds_false(artboard);
                     let events = std::mem::take(&mut self.reporting_events);
                     self.reported_listener_view_models.swap_into(&mut listeners);
-                    for &listener_index in &listener_indices { notify(listener_index); }
-                    self.notify_events_with_context(artboard, None, &events, None);
+                    queue_for_later(events);
+                }
+                fn finish_local_event_listener_batch() {
+                    for &listener_index in &batch.listener_indices {
+                        notify(listener_index);
+                    }
                 }
                 """,
             ),
@@ -2965,40 +2981,46 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "state_machine_event_recursive_owner_total_order_required",
                 """
                 fn advance_nested_animation_owner_with() {
-                    for event in reported_events {
-                        complete_nested_report_chain();
-                        state_machine.flush_deferred_owner_audio_event(&audio_event);
-                    }
-                    state_machine.flush_deferred_owner_audio_events();
+                    state_machine.begin_nested_apply_events_batch();
+                    complete_nested_report_batch();
+                    state_machine.finish_nested_apply_events_batch();
+                    state_machine.finish_nested_advance_after_apply_events();
                 }
-                fn complete_nested_report_chain() {
-                    deliver_to_ancestor(parent_artboard, host_local, &singleton);
+                fn finish_nested_apply_events_batch() {
+                    for event in &batch.bubbled_events {
+                        self.flush_deferred_owner_audio_event(event);
+                    }
+                    self.finish_local_event_listener_batch();
+                }
+                fn complete_nested_report_batch() {
+                    deliver_to_ancestor(parent_artboard, host_local, events);
                     RuntimeNestedEventChainPhase::AncestorDispatch;
                 }
                 fn dispatch_nested_events_to_animation_owners() {
                     state_machine.notify_events(child, Some(source_local_id), events);
-                    state_machine.reported_event_count();
-                    complete_nested_report_chain();
-                    state_machine.flush_deferred_owner_audio_event(&audio_event);
-                    state_machine.flush_deferred_owner_audio_events();
+                    state_machine.drain_bubbled_event_reports();
+                    complete_nested_report_batch();
+                    state_machine.flush_deferred_owner_audio_event(event);
+                    state_machine.update_data_binds_false();
                 }
                 """,
                 """
                 fn advance_nested_animation_owner_with() {
-                    for event in reported_events {
-                        complete_nested_report_chain();
-                    }
-                    state_machine.flush_deferred_owner_audio_events();
+                    state_machine.begin_nested_apply_events_batch();
+                    state_machine.finish_nested_apply_events_batch();
+                    state_machine.finish_nested_advance_after_apply_events();
                 }
-                fn complete_nested_report_chain() {
+                fn finish_nested_apply_events_batch() {
+                    self.finish_local_event_listener_batch();
+                }
+                fn complete_nested_report_batch() {
                     RuntimeNestedEventChainPhase::AncestorDispatch;
-                    deliver_to_ancestor(parent_artboard, host_local, &singleton);
+                    deliver_to_ancestor(parent_artboard, host_local, events);
                 }
                 fn dispatch_nested_events_to_animation_owners() {
                     state_machine.notify_events(child, Some(source_local_id), events);
-                    state_machine.reported_event_count();
-                    complete_nested_report_chain();
-                    state_machine.flush_deferred_owner_audio_events();
+                    state_machine.drain_bubbled_event_reports();
+                    state_machine.update_data_binds_false();
                 }
                 """,
             ),
@@ -3175,9 +3197,15 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "state_machine_advance_raw_order_required",
                 """
                 fn advance_with_report_mode() {
-                    self.record_advance_phase("draw-sort-check");
+                    self.prepare_advance_event_phase();
                     self.apply_local_event_listeners();
                     self.record_advance_phase("clear-latch");
+                    self.finish_advance_after_apply_events();
+                }
+                fn prepare_advance_event_phase() {
+                    self.record_advance_phase("draw-sort-check");
+                }
+                fn finish_advance_after_apply_events() {
                     self.record_advance_phase("pre-layer-binds");
                     self.record_advance_phase("authored-layers");
                     self.record_advance_phase("converter-advance");
@@ -3186,9 +3214,15 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 """,
                 """
                 fn advance_with_report_mode() {
-                    self.record_advance_phase("draw-sort-check");
+                    self.prepare_advance_event_phase();
                     self.apply_local_event_listeners();
                     self.record_advance_phase("clear-latch");
+                    self.finish_advance_after_apply_events();
+                }
+                fn prepare_advance_event_phase() {
+                    self.record_advance_phase("draw-sort-check");
+                }
+                fn finish_advance_after_apply_events() {
                     self.record_advance_phase("authored-layers");
                     self.record_advance_phase("converter-advance");
                     self.record_advance_phase("inputs-advanced");
@@ -3360,16 +3394,17 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 """
                 fn advance_nested_animation_owner_with() {
                     child.advance_linear_animation_instance_with_callback_sink();
-                    state_machine.reported_event_count();
-                    state_machine.reported_event(&nested.child, index);
-                    complete_nested_report_chain();
-                    state_machine.flush_deferred_owner_audio_events();
+                    state_machine.begin_nested_apply_events();
+                    state_machine.begin_nested_apply_events_batch();
+                    complete_nested_report_batch();
+                    state_machine.finish_nested_apply_events_batch();
+                    state_machine.finish_nested_advance_after_apply_events();
                 }
                 fn dispatch_nested_events_to_animation_owners() {
                     machine.notify_events();
-                    machine.advance_on_artboard();
-                    complete_nested_report_chain();
-                    machine.flush_deferred_owner_audio_events();
+                    complete_nested_report_batch();
+                    machine.flush_deferred_owner_audio_event();
+                    machine.update_data_binds_false();
                 }
                 """
             ),
@@ -3377,14 +3412,15 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 """
                 fn advance_nested_animation_owner_with() {
                     child.advance_linear_animation_instance_with_events();
-                    state_machine.reported_event_count();
-                    state_machine.reported_event(&nested.child, index);
-                    state_machine.flush_deferred_owner_audio_events();
+                    state_machine.begin_nested_apply_events();
+                    state_machine.begin_nested_apply_events_batch();
+                    state_machine.finish_nested_apply_events_batch();
+                    state_machine.finish_nested_advance_after_apply_events();
                 }
                 fn dispatch_nested_events_to_animation_owners() {
                     machine.notify_events();
-                    machine.advance_on_artboard();
-                    machine.flush_deferred_owner_audio_events();
+                    machine.flush_deferred_owner_audio_event();
+                    machine.update_data_binds_false();
                 }
                 """
             ),
@@ -3646,6 +3682,55 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "crates/nuxie-runtime/src/artboard.rs",
             ),
             (
+                "state_machine_nested_event_collection_outside_instance_policy",
+                """
+                fn relocated_report_collector() {
+                    let event = StateMachineInstance::reported_event;
+                    collect(event(owner, child, index));
+                }
+                """,
+                """
+                fn relocated_report_collector() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, Some(dispatch),
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_event_collection_outside_instance_policy",
+                """
+                const GET: fn(_, _, _) -> _ =
+                    StateMachineInstance::reported_event;
+                """,
+                """
+                fn collect_through_owner() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, Some(dispatch),
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_event_collection_outside_instance_policy",
+                """
+                fn angle_bracket_ufcs_report_collector() {
+                    let event = <StateMachineInstance>::reported_event;
+                    collect(event(owner, child, index));
+                }
+                """,
+                """
+                fn angle_bracket_ufcs_report_collector() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, Some(dispatch),
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
                 "state_machine_nested_animation_selection_outside_instance_policy",
                 """
                 impl ArtboardInstance {
@@ -3669,6 +3754,88 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "crates/nuxie-runtime/src/artboard.rs",
             ),
             (
+                "state_machine_nested_animation_selection_outside_instance_policy",
+                """
+                fn aliased_owner_picker() {
+                    use RuntimeNestedAnimationInstance::StateMachine as Machine;
+                    if let Machine(owner) = animation {
+                        displace(owner);
+                    }
+                }
+                """,
+                """
+                fn aliased_owner_picker() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_animation_selection_outside_instance_policy",
+                """
+                fn braced_aliased_owner_picker() {
+                    use RuntimeNestedAnimationInstance::{
+                        StateMachine as Machine,
+                    };
+                    if let Machine(owner) = animation {
+                        displace(owner);
+                    }
+                }
+                """,
+                """
+                fn braced_aliased_owner_picker() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_animation_selection_outside_instance_policy",
+                """
+                fn enum_type_aliased_owner_picker() {
+                    use RuntimeNestedAnimationInstance as Anim;
+                    if let Anim::StateMachine(owner) = animation {
+                        displace(owner);
+                    }
+                }
+                """,
+                """
+                fn enum_type_aliased_owner_picker() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_animation_selection_outside_instance_policy",
+                """
+                use RuntimeNestedAnimationInstance as X;
+
+                fn file_aliased_owner_picker() {
+                    if let X::StateMachine(owner) = animation {
+                        displace(owner);
+                    }
+                }
+                """,
+                """
+                use RuntimeNestedAnimationInstance as X;
+
+                fn file_aliased_owner_picker() {
+                    let unrelated = PrefixX::StateMachine(owner);
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        self, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
                 "state_machine_nested_event_dispatch_outside_instance_policy",
                 """
                 fn renamed_report_sender() {
@@ -3686,6 +3853,79 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 }
                 """,
                 "crates/nuxie-runtime/src/state_machine/nested_state_machine.rs",
+            ),
+            (
+                "state_machine_nested_event_dispatch_outside_instance_policy",
+                """
+                fn aliased_report_sender() {
+                    let deliver = StateMachineInstance::notify_events;
+                    deliver(owner, child, Some(host), &batch);
+                }
+                """,
+                """
+                fn aliased_report_sender() {
+                    StateMachineInstance::
+                        dispatch_nested_events_to_animation_owners(
+                            owners, child, host, reports, None,
+                        );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_event_dispatch_outside_instance_policy",
+                """
+                fn labeled_aliased_report_sender() {
+                    'owner: loop {
+                        let deliver = StateMachineInstance::notify_events;
+                        deliver(owner, child, Some(host), &batch);
+                        break 'owner;
+                    }
+                }
+                """,
+                """
+                fn labeled_aliased_report_sender() {
+                    StateMachineInstance::
+                        dispatch_nested_events_to_animation_owners(
+                            owners, child, host, reports, None,
+                        );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_event_dispatch_outside_instance_policy",
+                """
+                const SEND: fn(_, _, _, _) -> _ =
+                    StateMachineInstance::notify_events;
+                """,
+                """
+                fn dispatch_through_owner() {
+                    StateMachineInstance::
+                        dispatch_nested_events_to_animation_owners(
+                            owners, child, host, reports, None,
+                        );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_event_dispatch_outside_instance_policy",
+                """
+                fn angle_bracket_ufcs_report_sender() {
+                    let send = <StateMachineInstance>::notify_events;
+                    send(owner, child, Some(host), &batch);
+                }
+                """,
+                """
+                fn angle_bracket_ufcs_report_sender() {
+                    StateMachineInstance::
+                        dispatch_nested_events_to_animation_owners(
+                            owners, child, host, reports, None,
+                        );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
             ),
             (
                 "state_machine_nested_audio_unwind_outside_instance_policy",
@@ -3709,9 +3949,9 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "state_machine_nested_audio_unwind_outside_instance_policy",
                 """
                 fn consistently_renamed_tail_player() {
-                    flush_nested_animation_owner_audio_at(
-                        artboard, host, animation_index,
-                    );
+                    let finish =
+                        StateMachineInstance::flush_deferred_owner_audio_events;
+                    finish(owner);
                 }
                 """,
                 """
@@ -3723,6 +3963,39 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 """,
                 "crates/nuxie-runtime/src/artboard.rs",
             ),
+            (
+                "state_machine_nested_audio_unwind_outside_instance_policy",
+                """
+                const FINISH: fn(_) =
+                    StateMachineInstance::flush_deferred_owner_audio_events;
+                """,
+                """
+                fn finish_through_owner() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        artboard, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
+            (
+                "state_machine_nested_audio_unwind_outside_instance_policy",
+                """
+                fn angle_bracket_ufcs_tail_player() {
+                    let finish =
+                        <StateMachineInstance>::flush_deferred_owner_audio_events;
+                    finish(owner);
+                }
+                """,
+                """
+                fn angle_bracket_ufcs_tail_player() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        artboard, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """,
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            ),
         ]
         for ratchet_id, forbidden, safe, source in forbidden_cases:
             with self.subTest(ratchet=ratchet_id):
@@ -3732,6 +4005,97 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     textwrap.dedent(forbidden),
                     textwrap.dedent(safe),
                 )
+
+        owner_alias_source = self.repo / (
+            "crates/nuxie-runtime/src/state_machine/"
+            "state_machine_instance.rs"
+        )
+        owner_alias_source.parent.mkdir(parents=True, exist_ok=True)
+        owner_alias_source.write_text(
+            "pub(crate) const PLAY_TAIL: fn(&mut StateMachineInstance) =\n"
+            "    StateMachineInstance::flush_deferred_owner_audio_events;\n"
+        )
+        renamed_audio_negative = textwrap.dedent(
+            """
+            fn consistently_renamed_tail_player() {
+                state_machine_instance::PLAY_TAIL(owner);
+            }
+            """
+        )
+        self.assertNotIn("audio", renamed_audio_negative.lower())
+        self.assert_production_ratchet_case(
+            "state_machine_nested_audio_unwind_outside_instance_policy",
+            "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            renamed_audio_negative,
+            textwrap.dedent(
+                """
+                fn consistently_renamed_tail_player() {
+                    StateMachineInstance::advance_nested_animation_owner_with(
+                        artboard, host, animation_index, elapsed, None, None,
+                    );
+                }
+                """
+            ),
+        )
+
+        base_gaps = self.gaps.read_text()
+        try:
+            ratchet_id = "state_machine_nested_event_dispatch_outside_instance_policy"
+            self.install_production_ratchet(ratchet_id)
+            scout = self.repo / (
+                "crates/nuxie-runtime/src/state_machine/scout_probe.rs"
+            )
+            scout.write_text(
+                textwrap.dedent(
+                    """
+                    #[cfg(test)]
+                    fn test_only_sender() {
+                        let deliver = StateMachineInstance::notify_events;
+                        deliver(owner, child, Some(host), &batch);
+                    }
+
+                    #[cfg(test)]
+                    mod tests {
+                        fn nested_test_only_sender() {
+                            StateMachineInstance::notify_events(
+                                owner, child, Some(host), &batch,
+                            );
+                        }
+                    }
+
+                    fn production_owner_path() {
+                        StateMachineInstance::
+                            dispatch_nested_events_to_animation_owners(
+                                owners, child, host, reports, None,
+                            );
+                    }
+                    """
+                )
+            )
+            result = self.run_check()
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            scout.write_text(
+                textwrap.dedent(
+                    """
+                    #[cfg(test)]
+                    mod tests {}
+
+                    fn displaced_after_test_module() {
+                        let deliver = StateMachineInstance::notify_events;
+                        deliver(owner, child, Some(host), &batch);
+                    }
+                    """
+                )
+            )
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                f"ratchet {ratchet_id} increased to 1 > 0",
+                result.stderr,
+            )
+        finally:
+            self.gaps.write_text(base_gaps)
 
     def test_fl_c5_keyframe_live_ratchets_and_negative_controls(self) -> None:
         required_cases = [

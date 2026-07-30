@@ -130,6 +130,7 @@ pub use state_machine::{
 #[doc(hidden)]
 pub use state_machine::{
     RuntimeNestedEventChainPhase, RuntimeNestedEventChainStep, RuntimeNestedEventChainTrace,
+    RuntimeNestedNotifyBatchEntry, RuntimeNestedNotifyBatchTrace,
 };
 pub(crate) use state_machine::{
     RuntimeTransitionInterpolator, StateMachineBindableArtboardInstance,

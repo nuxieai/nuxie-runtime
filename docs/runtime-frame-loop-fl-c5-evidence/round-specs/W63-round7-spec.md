@@ -1,7 +1,9 @@
 # W63 — Joint round-7 corrective (W60/W61/W62 findings)
 
-Reviews: .flc5/out/W60-oracle-round6.md, W61-standards-round6.md,
-W62-flb-round6.md. All orchestrator-upheld. The three delivery findings
+Tracked verdict lineage: [W55 oracle](../W55-oracle-round5.md),
+[W56 standards](../W56-standards-round5.md), and
+[W57 FL-B](../W57-flb-round5.md). The orchestrator-upheld round-six W60/W61/W62
+findings are restated in full below. The three delivery findings
 are ONE coherent redesign — implement them together, not as patches.
 
 ## 1. Per-callback singleton delivery (W60-1, W62-1) — BINDING DESIGN

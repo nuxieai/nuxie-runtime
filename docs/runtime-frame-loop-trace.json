@@ -7831,6 +7831,8 @@
     }
   },
   "mode": "frame-only counters reset after construction and before samples",
+  "evidence_status": "Operative E4 trace for publication 76ab8d86; pre-E5 round-seven work is not represented until E5 regeneration.",
+  "operative_publication_ref": "76ab8d86",
   "rust_candidate_source": {
     "file_count": 7303,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",

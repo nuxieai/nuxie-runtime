@@ -6,8 +6,9 @@ use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
 use syn::{
-    Attribute, Block, ExprMethodCall, ExprPath, File, ImplItem, ImplItemFn, Item, ItemFn, ItemMod,
-    Macro, Meta, PatStruct, PatTupleStruct, Path, Token, Type, UseTree,
+    Attribute, Block, ExprMethodCall, ExprPath, File, ImplItem, ImplItemFn, Item, ItemFn, ItemImpl,
+    ItemMod, ItemTrait, Macro, Meta, PatStruct, PatTupleStruct, Path, Token, TraitItem, Type,
+    TypePath, UseTree,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -80,6 +81,9 @@ enum TypeResolution {
 struct Bindings {
     types: HashMap<String, TypeTarget>,
     unresolved_types: HashSet<String>,
+    plain_types: HashMap<String, String>,
+    plain_members: HashMap<String, HashSet<String>>,
+    plain_values: HashSet<String>,
     modules: HashMap<String, Box<Bindings>>,
     variants: HashSet<String>,
     guarded_values: HashMap<String, GuardKind>,
@@ -102,6 +106,14 @@ fn path_names(path: &Path) -> Vec<String> {
         .iter()
         .map(|segment| ident_name(&segment.ident))
         .collect()
+}
+
+fn without_relative_prefixes(path: &[String]) -> &[String] {
+    let first_absolute = path
+        .iter()
+        .position(|segment| !matches!(segment.as_str(), "crate" | "self" | "super"))
+        .unwrap_or(path.len());
+    &path[first_absolute..]
 }
 
 fn flatten_use(tree: &UseTree, prefix: &mut Vec<String>, entries: &mut Vec<UseEntry>) {
@@ -170,7 +182,7 @@ fn cfg_test(attrs: &[Attribute]) -> bool {
 }
 
 fn resolution_in_bindings(path: &[String], bindings: &Bindings) -> Option<TypeResolution> {
-    let path = path.strip_prefix(&["self".to_owned()]).unwrap_or(path);
+    let path = without_relative_prefixes(path);
     let (first, rest) = path.split_first()?;
     if rest.is_empty() {
         if let Some(target) = bindings.types.get(first) {
@@ -185,6 +197,66 @@ fn resolution_in_bindings(path: &[String], bindings: &Bindings) -> Option<TypeRe
         .modules
         .get(first)
         .and_then(|module| resolution_in_bindings(rest, module))
+}
+
+fn plain_resolution_in_bindings(path: &[String], bindings: &Bindings) -> Option<String> {
+    let path = without_relative_prefixes(path);
+    let (first, rest) = path.split_first()?;
+    if rest.is_empty() {
+        return bindings.plain_types.get(first).cloned();
+    }
+    bindings
+        .modules
+        .get(first)
+        .and_then(|module| plain_resolution_in_bindings(rest, module))
+}
+
+fn plain_path_target(path: &[String], scopes: &[Bindings]) -> Option<String> {
+    for scope in scopes.iter().rev() {
+        if let Some(target) = plain_resolution_in_bindings(path, scope) {
+            return Some(target);
+        }
+    }
+    None
+}
+
+fn module_resolution_in_bindings(path: &[String], bindings: &Bindings) -> Option<Bindings> {
+    let path = without_relative_prefixes(path);
+    let (first, rest) = path.split_first()?;
+    let module = bindings.modules.get(first)?;
+    if rest.is_empty() {
+        return Some(module.as_ref().clone());
+    }
+    module_resolution_in_bindings(rest, module)
+}
+
+fn module_path_target(path: &[String], scopes: &[Bindings]) -> Option<Bindings> {
+    for scope in scopes.iter().rev() {
+        if let Some(module) = module_resolution_in_bindings(path, scope) {
+            return Some(module);
+        }
+    }
+    None
+}
+
+fn bindings_contain_plain_member(bindings: &Bindings, target: &str, member: &str) -> bool {
+    bindings
+        .plain_members
+        .get(target)
+        .is_some_and(|members| members.contains(member))
+        || bindings
+            .modules
+            .values()
+            .any(|module| bindings_contain_plain_member(module, target, member))
+}
+
+fn normalized_type_path(ty: &Type) -> Option<&syn::TypePath> {
+    match ty {
+        Type::Path(path) => Some(path),
+        Type::Group(group) => normalized_type_path(&group.elem),
+        Type::Paren(paren) => normalized_type_path(&paren.elem),
+        _ => None,
+    }
 }
 
 fn path_target(path: &[String], scopes: &[Bindings]) -> Option<TypeResolution> {
@@ -226,6 +298,8 @@ fn bindings_for_items(items: &[Item], scopes: &[Bindings], audio_aliases: &[Stri
 
     let mut uses = Vec::new();
     let mut type_aliases = Vec::new();
+    let mut plain_type_aliases = Vec::new();
+    let mut plain_impls = Vec::new();
     let mut associated_types = HashMap::new();
     for item in items {
         if cfg_test(item_attrs(item)) {
@@ -236,7 +310,7 @@ fn bindings_for_items(items: &[Item], scopes: &[Bindings], audio_aliases: &[Stri
                 flatten_use(&item_use.tree, &mut Vec::new(), &mut uses);
             }
             Item::Type(item_type) => {
-                if let Type::Path(path) = item_type.ty.as_ref() {
+                if let Some(path) = normalized_type_path(&item_type.ty) {
                     let target = if let Some(qself) = &path.qself {
                         let self_type = match qself.ty.as_ref() {
                             Type::Path(path) => path_names(&path.path).last().cloned(),
@@ -263,10 +337,58 @@ fn bindings_for_items(items: &[Item], scopes: &[Bindings], audio_aliases: &[Stri
                     } else {
                         TypeAliasTarget::Path(path_names(&path.path))
                     };
-                    type_aliases.push((ident_name(&item_type.ident), target));
+                    let alias = ident_name(&item_type.ident);
+                    if let TypeAliasTarget::Path(path) = &target {
+                        plain_type_aliases.push((alias.clone(), path.clone()));
+                    }
+                    type_aliases.push((alias, target));
                 }
             }
+            Item::Enum(item_enum) => {
+                let name = ident_name(&item_enum.ident);
+                let start = item_enum.span().start();
+                let target = format!("{name}@{}:{}", start.line, start.column);
+                bindings.plain_types.insert(name, target.clone());
+                bindings.plain_members.insert(
+                    target,
+                    item_enum
+                        .variants
+                        .iter()
+                        .map(|variant| ident_name(&variant.ident))
+                        .collect(),
+                );
+            }
+            Item::Struct(item_struct) => {
+                let name = ident_name(&item_struct.ident);
+                let start = item_struct.span().start();
+                let target = format!("{name}@{}:{}", start.line, start.column);
+                bindings.plain_types.insert(name, target);
+            }
+            Item::Union(item_union) => {
+                let name = ident_name(&item_union.ident);
+                let start = item_union.span().start();
+                let target = format!("{name}@{}:{}", start.line, start.column);
+                bindings.plain_types.insert(name, target);
+            }
+            Item::Fn(item_fn) => {
+                bindings.plain_values.insert(ident_name(&item_fn.sig.ident));
+            }
             Item::Impl(item_impl) => {
+                if let Some(self_type) = normalized_type_path(&item_impl.self_ty) {
+                    if self_type.qself.is_none() {
+                        let members = item_impl
+                            .items
+                            .iter()
+                            .filter_map(|impl_item| match impl_item {
+                                ImplItem::Const(item) => Some(ident_name(&item.ident)),
+                                ImplItem::Fn(item) => Some(ident_name(&item.sig.ident)),
+                                ImplItem::Type(item) => Some(ident_name(&item.ident)),
+                                _ => None,
+                            })
+                            .collect::<HashSet<_>>();
+                        plain_impls.push((path_names(&self_type.path), members));
+                    }
+                }
                 let Some((_, trait_path, _)) = &item_impl.trait_ else {
                     continue;
                 };
@@ -308,6 +430,18 @@ fn bindings_for_items(items: &[Item], scopes: &[Bindings], audio_aliases: &[Stri
         }
     }
 
+    let mut visible = scopes.to_vec();
+    visible.push(bindings.clone());
+    for (self_path, members) in plain_impls {
+        if let Some(target) = plain_path_target(&self_path, &visible) {
+            bindings
+                .plain_members
+                .entry(target)
+                .or_default()
+                .extend(members);
+        }
+    }
+
     for _ in 0..=(type_aliases.len() + uses.len()) {
         let mut changed = false;
         for (alias, target) in &type_aliases {
@@ -339,6 +473,17 @@ fn bindings_for_items(items: &[Item], scopes: &[Bindings], audio_aliases: &[Stri
                 None => {}
             }
         }
+        for (alias, path) in &plain_type_aliases {
+            if bindings.plain_types.contains_key(alias) {
+                continue;
+            }
+            let mut visible = scopes.to_vec();
+            visible.push(bindings.clone());
+            if let Some(target) = plain_path_target(path, &visible) {
+                bindings.plain_types.insert(alias.clone(), target);
+                changed = true;
+            }
+        }
         for entry in &uses {
             let mut visible = scopes.to_vec();
             visible.push(bindings.clone());
@@ -367,6 +512,19 @@ fn bindings_for_items(items: &[Item], scopes: &[Bindings], audio_aliases: &[Stri
                     continue;
                 }
                 None => {}
+            }
+            if let Some(target) = plain_path_target(&entry.path, &visible) {
+                if bindings.plain_types.insert(local.clone(), target.clone()) != Some(target) {
+                    changed = true;
+                }
+                continue;
+            }
+            if let Some(module) = module_path_target(&entry.path, &visible) {
+                if !bindings.modules.contains_key(local) {
+                    bindings.modules.insert(local.clone(), Box::new(module));
+                    changed = true;
+                }
+                continue;
             }
             let Some(member) = entry.path.last() else {
                 continue;
@@ -426,6 +584,18 @@ struct MechanicVisitor {
     found: bool,
 }
 
+#[derive(Default)]
+struct PatternBindingVisitor {
+    names: HashSet<String>,
+}
+
+impl<'ast> Visit<'ast> for PatternBindingVisitor {
+    fn visit_pat_ident(&mut self, pattern: &'ast syn::PatIdent) {
+        self.names.insert(ident_name(&pattern.ident));
+        visit::visit_pat_ident(self, pattern);
+    }
+}
+
 impl<'ast> Visit<'ast> for MechanicVisitor {
     fn visit_ident(&mut self, ident: &'ast syn::Ident) {
         let name = ident_name(ident);
@@ -453,7 +623,9 @@ struct Analyzer<'a> {
     audio_aliases: Vec<String>,
     hits: HashMap<GuardKind, BTreeSet<usize>>,
     sites: HashMap<GuardKind, BTreeSet<usize>>,
-    function_start: Option<usize>,
+    matches: HashMap<GuardKind, BTreeSet<(usize, usize, String, String)>>,
+    enclosing_item: Option<(usize, String)>,
+    item_context: Vec<String>,
     direct_selection_is_guarded: bool,
 }
 
@@ -473,7 +645,9 @@ impl<'a> Analyzer<'a> {
             audio_aliases,
             hits: HashMap::new(),
             sites: HashMap::new(),
-            function_start: None,
+            matches: HashMap::new(),
+            enclosing_item: None,
+            item_context: Vec::new(),
             direct_selection_is_guarded: false,
         }
     }
@@ -487,11 +661,71 @@ impl<'a> Analyzer<'a> {
             .min(self.source.len())
     }
 
-    fn record(&mut self, kind: GuardKind, span: Span) {
+    fn record(&mut self, kind: GuardKind, span: Span, guarded_name: &str) {
         let site_offset = self.offset(span.start());
         self.sites.entry(kind).or_default().insert(site_offset);
-        let offset = self.function_start.unwrap_or(site_offset);
+        let (offset, anchor) = self
+            .enclosing_item
+            .clone()
+            .unwrap_or((site_offset, "file".to_owned()));
         self.hits.entry(kind).or_default().insert(offset);
+        self.matches.entry(kind).or_default().insert((
+            offset,
+            site_offset,
+            anchor,
+            guarded_name.to_owned(),
+        ));
+    }
+
+    fn qualified_anchor(&self, name: &str) -> String {
+        self.item_context
+            .iter()
+            .map(String::as_str)
+            .chain(std::iter::once(name))
+            .collect::<Vec<_>>()
+            .join("::")
+    }
+
+    fn item_anchor_name(&self, item: &Item) -> Option<String> {
+        let name = match item {
+            Item::Const(item) => ident_name(&item.ident),
+            Item::Enum(item) => ident_name(&item.ident),
+            Item::ExternCrate(item) => ident_name(&item.ident),
+            Item::Fn(item) => ident_name(&item.sig.ident),
+            Item::Macro(item) => item.ident.as_ref().map(ident_name).unwrap_or_else(|| {
+                let start = item.span().start();
+                format!("macro_{}_{}", start.line, start.column)
+            }),
+            Item::Mod(item) => ident_name(&item.ident),
+            Item::Static(item) => ident_name(&item.ident),
+            Item::Struct(item) => ident_name(&item.ident),
+            Item::Trait(item) => ident_name(&item.ident),
+            Item::TraitAlias(item) => ident_name(&item.ident),
+            Item::Type(item) => ident_name(&item.ident),
+            Item::Union(item) => ident_name(&item.ident),
+            Item::Use(item) => {
+                let start = item.span().start();
+                format!("use_{}_{}", start.line, start.column)
+            }
+            _ => return None,
+        };
+        Some(self.qualified_anchor(&name))
+    }
+
+    fn impl_context_name(item: &ItemImpl) -> String {
+        let self_name = normalized_type_path(&item.self_ty)
+            .map(|path| path_names(&path.path).join("_"))
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| {
+                let start = item.span().start();
+                format!("impl_{}_{}", start.line, start.column)
+            });
+        item.trait_
+            .as_ref()
+            .map(|(_, trait_path, _)| {
+                format!("{}_for_{self_name}", path_names(trait_path).join("_"))
+            })
+            .unwrap_or(self_name)
     }
 
     fn resolve_type(&self, names: &[String]) -> Option<TypeResolution> {
@@ -512,60 +746,119 @@ impl<'a> Analyzer<'a> {
             .find_map(|scope| scope.guarded_values.get(name).copied())
     }
 
-    fn analyze_path(&mut self, path: &Path, qself: Option<&syn::QSelf>) {
-        let names = path_names(path);
+    fn path_is_known_non_guarded(&self, names: &[String]) -> bool {
+        let names = without_relative_prefixes(names);
+        let Some((member, prefix)) = names.split_last() else {
+            return false;
+        };
+        if prefix.is_empty() {
+            return self
+                .scopes
+                .iter()
+                .rev()
+                .any(|scope| scope.plain_values.contains(member));
+        }
+        let Some(target) = plain_path_target(prefix, &self.scopes) else {
+            return false;
+        };
+        self.scopes
+            .iter()
+            .rev()
+            .any(|scope| bindings_contain_plain_member(scope, &target, member))
+    }
+
+    fn analyze_names(&mut self, names: &[String], span: Span) {
         let Some(member) = names.last() else {
             return;
         };
-        let span = path.span();
+        let known_non_guarded = self.path_is_known_non_guarded(names);
 
         for kind in [GuardKind::Collection, GuardKind::Dispatch, GuardKind::Audio] {
-            if self.guarded_value(member) == Some(kind) {
-                self.record(kind, span);
-            } else if qself.is_some() && kind.matches_member(member) {
-                self.record(kind, span);
-            } else if names.len() > 1 && kind.matches_member(member) {
-                // Qualified paths, including spaced tokens and UFCS, are
-                // deliberately fail-closed on the guarded ownership names.
-                self.record(kind, span);
+            if kind.matches_member(member) && !known_non_guarded {
+                // The final-segment rule is intentionally independent of how
+                // much of the prefix can be resolved. Only a fully resolved
+                // local non-guarded item is exempt.
+                self.record(kind, span, member);
+            } else if self.guarded_value(member) == Some(kind) {
+                self.record(kind, span, member);
             }
         }
 
+        if member == "StateMachine" {
+            if !known_non_guarded {
+                self.record(GuardKind::Selection, span, member);
+            }
+            return;
+        }
         if names.len() == 1 {
             if self.variant_is_bound(member)
                 || (member == "StateMachine" && self.direct_selection_is_guarded)
             {
-                self.record(GuardKind::Selection, span);
+                self.record(GuardKind::Selection, span, member);
             }
             return;
         }
-        if member != "StateMachine" {
-            return;
-        }
-        let prefix = &names[..names.len() - 1];
-        let resolution = self.resolve_type(prefix);
-        let resolved = resolution == Some(TypeResolution::Target(TypeTarget::NestedAnimation));
-        let unresolved = resolution == Some(TypeResolution::Unresolved);
-        if !resolved && !unresolved && !self.direct_selection_is_guarded {
-            return;
-        }
-        let explicitly_canonical = prefix
-            .iter()
-            .any(|segment| segment == "RuntimeNestedAnimationInstance" || segment == "Self");
-        if unresolved || !resolved || !explicitly_canonical || self.direct_selection_is_guarded {
-            self.record(GuardKind::Selection, span);
+        if self.direct_selection_is_guarded
+            && self.resolve_type(&names[..names.len() - 1])
+                == Some(TypeResolution::Target(TypeTarget::NestedAnimation))
+        {
+            self.record(GuardKind::Selection, span, member);
         }
     }
 
-    fn macro_contains_guard(tokens: TokenStream, kind: GuardKind) -> bool {
-        tokens.into_iter().any(|token| match token {
-            TokenTree::Ident(ident) => {
-                let name = ident_name(&ident);
-                kind.matches_member(&name) || kind.matches_guarded_type(&name)
+    fn analyze_path(&mut self, path: &Path, _qself: Option<&syn::QSelf>) {
+        self.analyze_names(&path_names(path), path.span());
+    }
+
+    fn append_identifier_fragments(tokens: TokenStream, normalized: &mut String) {
+        for token in tokens {
+            match token {
+                TokenTree::Ident(ident) => normalized.push_str(&ident_name(&ident)),
+                TokenTree::Group(group) => {
+                    Self::append_identifier_fragments(group.stream(), normalized);
+                }
+                _ => {}
             }
-            TokenTree::Group(group) => Self::macro_contains_guard(group.stream(), kind),
-            _ => false,
-        })
+        }
+    }
+
+    fn macro_guarded_name(tokens: TokenStream, kind: GuardKind) -> Option<String> {
+        let mut normalized = String::new();
+        Self::append_identifier_fragments(tokens, &mut normalized);
+        let guarded_names: &[&str] = match kind {
+            GuardKind::Collection => &[
+                "reported_event_count",
+                "reported_event",
+                "StateMachineReportedEvent",
+                "reported_events",
+            ],
+            GuardKind::Selection => &["RuntimeNestedAnimationInstance", "StateMachine"],
+            GuardKind::Dispatch => &["notify_events", "StateMachineInstance"],
+            GuardKind::Audio => &[
+                "flush_deferred_owner_audio_events",
+                "flush_deferred_owner_audio_event",
+                "defer_recorded_audio_event_seam",
+                "reach_recorded_audio_event_seam",
+                "deliver_recorded_audio_occurrence",
+                "StateMachineInstance",
+            ],
+        };
+        let exact = guarded_names
+            .iter()
+            .copied()
+            .find(|name| normalized.contains(name));
+        if let Some(name) = exact {
+            return Some(name.to_owned());
+        }
+        if kind == GuardKind::Collection {
+            for (offset, _) in normalized.match_indices("take_") {
+                let suffix = &normalized[offset..];
+                if suffix.contains("event") || suffix.contains("report") {
+                    return Some("take_event_or_report".to_owned());
+                }
+            }
+        }
+        None
     }
 
     fn push_item_scope(&mut self, items: &[Item]) {
@@ -584,6 +877,14 @@ impl<'a> Analyzer<'a> {
             .collect::<Vec<_>>();
         self.push_item_scope(&items);
     }
+
+    fn add_local_pattern_bindings(&mut self, pattern: &syn::Pat) {
+        let mut visitor = PatternBindingVisitor::default();
+        visitor.visit_pat(pattern);
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.plain_values.extend(visitor.names);
+        }
+    }
 }
 
 impl<'ast> Visit<'ast> for Analyzer<'_> {
@@ -594,8 +895,16 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
     }
 
     fn visit_item(&mut self, item: &'ast Item) {
-        if !cfg_test(item_attrs(item)) {
-            visit::visit_item(self, item);
+        if cfg_test(item_attrs(item)) {
+            return;
+        }
+        let previous_item = self.item_anchor_name(item).map(|anchor| {
+            self.enclosing_item
+                .replace((self.offset(item.span().start()), anchor))
+        });
+        visit::visit_item(self, item);
+        if let Some(previous_item) = previous_item {
+            self.enclosing_item = previous_item;
         }
     }
 
@@ -603,12 +912,91 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
         if cfg_test(&item.attrs) {
             return;
         }
+        for attribute in &item.attrs {
+            self.visit_attribute(attribute);
+        }
         if let Some((_, items)) = &item.content {
+            self.item_context.push(ident_name(&item.ident));
             self.push_item_scope(items);
             for child in items {
                 self.visit_item(child);
             }
             self.scopes.pop();
+            self.item_context.pop();
+        }
+    }
+
+    fn visit_item_impl(&mut self, item: &'ast ItemImpl) {
+        if cfg_test(&item.attrs) {
+            return;
+        }
+        let context = Self::impl_context_name(item);
+        let previous_item = self.enclosing_item.replace((
+            self.offset(item.span().start()),
+            self.qualified_anchor(&context),
+        ));
+        self.item_context.push(context);
+        visit::visit_item_impl(self, item);
+        self.item_context.pop();
+        self.enclosing_item = previous_item;
+    }
+
+    fn visit_item_trait(&mut self, item: &'ast ItemTrait) {
+        if cfg_test(&item.attrs) {
+            return;
+        }
+        self.item_context.push(ident_name(&item.ident));
+        visit::visit_item_trait(self, item);
+        self.item_context.pop();
+    }
+
+    fn visit_impl_item(&mut self, item: &'ast ImplItem) {
+        let name = match item {
+            ImplItem::Const(item) => Some(ident_name(&item.ident)),
+            ImplItem::Fn(item) => Some(ident_name(&item.sig.ident)),
+            ImplItem::Macro(item) => item
+                .mac
+                .path
+                .segments
+                .last()
+                .map(|segment| format!("macro_{}", ident_name(&segment.ident))),
+            ImplItem::Type(item) => Some(ident_name(&item.ident)),
+            _ => None,
+        };
+        let previous_item = name.map(|name| {
+            self.enclosing_item.replace((
+                self.offset(item.span().start()),
+                self.qualified_anchor(&name),
+            ))
+        });
+        visit::visit_impl_item(self, item);
+        if let Some(previous_item) = previous_item {
+            self.enclosing_item = previous_item;
+        }
+    }
+
+    fn visit_trait_item(&mut self, item: &'ast TraitItem) {
+        let name = match item {
+            TraitItem::Const(item) => Some(ident_name(&item.ident)),
+            TraitItem::Fn(item) => Some(ident_name(&item.sig.ident)),
+            TraitItem::Macro(item) => item
+                .mac
+                .path
+                .segments
+                .last()
+                .map(|segment| format!("macro_{}", ident_name(&segment.ident))),
+            TraitItem::Type(item) => Some(ident_name(&item.ident)),
+            _ => None,
+        };
+        let previous_item = name.map(|name| {
+            self.enclosing_item.replace((
+                self.offset(item.span().start()),
+                self.qualified_anchor(&name),
+            ))
+        });
+        visit::visit_trait_item(self, item);
+        if let Some(previous_item) = previous_item {
+            self.enclosing_item = previous_item;
         }
     }
 
@@ -616,37 +1004,44 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
         if cfg_test(&item.attrs) {
             return;
         }
-        let previous_start = self
-            .function_start
-            .replace(self.offset(item.span().start()));
+        let previous_item = self.enclosing_item.replace((
+            self.offset(item.span().start()),
+            self.qualified_anchor(&ident_name(&item.sig.ident)),
+        ));
         let previous_selection = std::mem::replace(
             &mut self.direct_selection_is_guarded,
             block_has_event_mechanic(&item.block),
         );
         visit::visit_item_fn(self, item);
         self.direct_selection_is_guarded = previous_selection;
-        self.function_start = previous_start;
+        self.enclosing_item = previous_item;
     }
 
     fn visit_impl_item_fn(&mut self, item: &'ast ImplItemFn) {
         if cfg_test(&item.attrs) {
             return;
         }
-        let previous_start = self
-            .function_start
-            .replace(self.offset(item.span().start()));
+        let previous_item = self.enclosing_item.replace((
+            self.offset(item.span().start()),
+            self.qualified_anchor(&ident_name(&item.sig.ident)),
+        ));
         let previous_selection = std::mem::replace(
             &mut self.direct_selection_is_guarded,
             block_has_event_mechanic(&item.block),
         );
         visit::visit_impl_item_fn(self, item);
         self.direct_selection_is_guarded = previous_selection;
-        self.function_start = previous_start;
+        self.enclosing_item = previous_item;
     }
 
     fn visit_block(&mut self, block: &'ast Block) {
         self.push_block_scope(block);
-        visit::visit_block(self, block);
+        for statement in &block.stmts {
+            self.visit_stmt(statement);
+            if let syn::Stmt::Local(local) = statement {
+                self.add_local_pattern_bindings(&local.pat);
+            }
+        }
         self.scopes.pop();
     }
 
@@ -655,13 +1050,33 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
         visit::visit_expr_path(self, expression);
     }
 
+    fn visit_type_path(&mut self, path: &'ast TypePath) {
+        self.analyze_path(&path.path, path.qself.as_ref());
+        visit::visit_type_path(self, path);
+    }
+
+    fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
+        let mut entries = Vec::new();
+        flatten_use(&item.tree, &mut Vec::new(), &mut entries);
+        for entry in entries {
+            if entry.path.last().is_some_and(|member| {
+                GuardKind::ALL
+                    .iter()
+                    .any(|kind| kind.matches_member(member))
+            }) {
+                self.analyze_names(&entry.path, item.span());
+            }
+        }
+        visit::visit_item_use(self, item);
+    }
+
     fn visit_pat_tuple_struct(&mut self, pattern: &'ast PatTupleStruct) {
-        self.analyze_path(&pattern.path, None);
+        self.analyze_path(&pattern.path, pattern.qself.as_ref());
         visit::visit_pat_tuple_struct(self, pattern);
     }
 
     fn visit_pat_struct(&mut self, pattern: &'ast PatStruct) {
-        self.analyze_path(&pattern.path, None);
+        self.analyze_path(&pattern.path, pattern.qself.as_ref());
         visit::visit_pat_struct(self, pattern);
     }
 
@@ -669,7 +1084,7 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
         let member = ident_name(&expression.method);
         for kind in [GuardKind::Collection, GuardKind::Dispatch, GuardKind::Audio] {
             if kind.matches_member(&member) {
-                self.record(kind, expression.method.span());
+                self.record(kind, expression.method.span(), &member);
             }
         }
         visit::visit_expr_method_call(self, expression);
@@ -677,12 +1092,16 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
 
     fn visit_macro(&mut self, item: &'ast Macro) {
         for kind in GuardKind::ALL {
-            let path_guarded = item.path.segments.last().is_some_and(|segment| {
+            let path_guarded = item.path.segments.last().and_then(|segment| {
                 let name = ident_name(&segment.ident);
-                kind.matches_member(&name) || kind.matches_guarded_type(&name)
+                (kind.matches_member(&name) || kind.matches_guarded_type(&name)).then_some(name)
             });
-            if path_guarded || Self::macro_contains_guard(item.tokens.clone(), kind) {
-                self.record(kind, item.span());
+            let guarded_name = Self::macro_guarded_name(item.tokens.clone(), kind);
+            if path_guarded.is_some() || guarded_name.is_some() {
+                let name = guarded_name
+                    .or(path_guarded)
+                    .unwrap_or_else(|| kind.name().to_owned());
+                self.record(kind, item.span(), &name);
             }
         }
         visit::visit_macro(self, item);
@@ -694,12 +1113,16 @@ impl<'ast> Visit<'ast> for Analyzer<'_> {
             Meta::List(list) => list.tokens.clone(),
         };
         for kind in GuardKind::ALL {
-            let path_guarded = attribute.path().segments.last().is_some_and(|segment| {
+            let path_guarded = attribute.path().segments.last().and_then(|segment| {
                 let name = ident_name(&segment.ident);
-                kind.matches_member(&name) || kind.matches_guarded_type(&name)
+                (kind.matches_member(&name) || kind.matches_guarded_type(&name)).then_some(name)
             });
-            if path_guarded || Self::macro_contains_guard(tokens.clone(), kind) {
-                self.record(kind, attribute.span());
+            let guarded_name = Self::macro_guarded_name(tokens.clone(), kind);
+            if path_guarded.is_some() || guarded_name.is_some() {
+                let name = guarded_name
+                    .or(path_guarded)
+                    .unwrap_or_else(|| kind.name().to_owned());
+                self.record(kind, attribute.span(), &name);
             }
         }
         visit::visit_attribute(self, attribute);
@@ -802,6 +1225,14 @@ fn main() {
         if let Some(offsets) = analyzer.sites.get(&kind) {
             for offset in offsets {
                 println!("site {} {offset}", kind.name());
+            }
+        }
+        if let Some(records) = analyzer.matches.get(&kind) {
+            for (anchor_offset, site_offset, anchor, guarded_name) in records {
+                println!(
+                    "match {} {anchor_offset} {site_offset} {anchor} {guarded_name}",
+                    kind.name()
+                );
             }
         }
     }

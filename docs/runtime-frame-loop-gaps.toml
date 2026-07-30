@@ -65,7 +65,7 @@ counters = [
   "state_machine_transition_search",
   "component_dirt_consumptions",
 ]
-mechanism = "The complete listener/action family now dispatches ListenerAlignTarget through the retained target Node with the pinned transform/world-transform dirt writes. The merged E5 trace reaches exact transition-search and component-dirt-consumption counts, while its exact ordinary and scripted golden streams expose a remaining call-topology difference: pinned C++ enters StateMachineInstance::advance/applyEvents 30 times and Rust enters advance_with_report_mode/apply_local_event_listeners 11 times. Rust performs report-time nested bubbling and owner-mediated batch settlement through its retained safe facade rather than a raw parent-pointer recursion. The two coverage counters remain explicitly open for the independent round-nine reviews; output equality alone does not close this mechanism-level difference."
+mechanism = "The complete listener/action family now dispatches ListenerAlignTarget through the retained target Node with the pinned transform/world-transform dirt writes. The merged E5 trace reaches exact transition-search and component-dirt-consumption counts, while its exact ordinary and scripted golden streams expose a remaining call-topology difference: pinned C++ enters StateMachineInstance::advance/applyEvents 30 times and Rust enters advance_with_report_mode/apply_local_event_listeners 11 times. Rust performs callback-major batching and ancestor delivery, then report-time bubbling, audio unwind, deferred terminal-error retention, and owner-mediated settlement through its retained safe facade rather than a raw parent-pointer recursion. Independent round-nine standards review classified this 30-to-11 topology as a safe owner-boundary adaptation. The two coverage counters remain explicitly open; output equality alone does not close this mechanism-level difference."
 citations = [
   "cpp:src/animation/state_machine_instance.cpp:2320-2342",
   "cpp:src/animation/state_machine_instance.cpp:2548-2575",
@@ -74,8 +74,10 @@ citations = [
   "rust:crates/nuxie-runtime/src/state_machine/listener_align_target.rs:15-112",
   "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7672-7721",
   "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12613-12663",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12934",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:13115",
 ]
-closure = "FL-C4 closes ListenerAlignTarget and its component-dirt branch. FL-C5 closes transition-search count parity and displaced lookup paths. Independent round-nine FL-C5 oracle, standards, and FL-B reacceptance must classify the 30-to-11 advance/applyEvents call-topology difference as a cited safe owner-boundary adaptation or require exact call parity before these final two counters close."
+closure = "FL-C4 closes ListenerAlignTarget and its component-dirt branch. FL-C5 closes transition-search count parity and displaced lookup paths. The round-nine classification action is closed: the cited batching, ancestor-delivery, bubbling, audio, deferred-retention, and settlement path establishes the 30-to-11 advance/applyEvents topology as a safe owner-boundary adaptation. The final two counters remain tracked here for later aggregate trace closure rather than requiring exact call parity."
 
 [[gap]]
 id = "FL-G04"
@@ -1425,7 +1427,38 @@ max_occurrences = 0
 [[owner_boundary_allow]]
 file = "crates/nuxie-runtime/src/artboard.rs"
 kind = "selection"
-expected_occurrences = 1
+anchor = "ArtboardInstance::update_nested_artboard_from_host_dirt"
+guarded_name = "RuntimeNestedAnimationInstance"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedAnimationInstance::has_ongoing_work"
+guarded_name = "StateMachine"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs"
+kind = "selection"
+anchor = "ArtboardInstance::dispatch_nested_key_input_at_focus"
+guarded_name = "StateMachine"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs"
+kind = "selection"
+anchor = "ArtboardInstance::dispatch_nested_text_input_at_focus"
+guarded_name = "StateMachine"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs"
+kind = "selection"
+anchor = "ArtboardInstance::dispatch_nested_gamepad_at_focus"
+guarded_name = "StateMachine"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs"
+kind = "selection"
+anchor = "ArtboardInstance::broadcast_nested_gamepad_to_scripted_drawables"
+guarded_name = "StateMachine"
 
 [[ratchet]]
 id = "state_machine_persistent_dirt_component_schedule_required"

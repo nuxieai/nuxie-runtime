@@ -904,12 +904,22 @@ Candidate identity:
   over the exact round-nine production later frozen at that commit. The
   floor7 receipts on `171b5703` remain the standing complete-floor reference
   under the dated coordinator policy below;
+- independent E7 reviews W81/W82/W83 rejected unresolved guarded tails,
+  fragment-composed macro identifiers, cross-file re-exports, the fungible
+  file/kind registry quota, planning checklist state, incomplete FL-G03
+  citations, and stale publication pointers. The round-ten corrective makes
+  guarded final segments fail closed unless they fully resolve to a known
+  non-guarded item, normalizes identifier fragments in macro/attribute token
+  streams, and binds each registry row to an exact enclosing-item anchor and
+  guarded name. The prior E7 trace remains immutable; candidate fingerprint
+  and runner provenance regeneration are honestly pending E8;
 - pinned C++:
   `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
 - trace source fingerprint and Rust runner provenance:
-  `docs/runtime-frame-loop-trace.json`; `make
-  runtime-frame-loop-port-check` confirms both are current for this final
-  evidence tree.
+  `docs/runtime-frame-loop-trace.json`; E8 will regenerate both against the
+  final accepted W84 identity. Until then, the candidate-mode checker reports
+  those two provenance gates as pending rather than claiming the historical
+  E7 trace is current for this corrective tree.
 
 Coordinator floor-policy directive (Levi, 2026-07-30): interim correction
 rounds bind only the fast behavioral battery—runtime library, tools-enabled
@@ -928,12 +938,13 @@ imports, type aliases, raw identifiers, spaced paths, and angle-bracket UFCS.
 Macro or otherwise unresolved guarded-member tokens are a fail-closed
 regression tripwire rather than an enumerated evasion list. A deliberately
 blessed site must have an explicit `[[owner_boundary_allow]]` registry row in
-`docs/runtime-frame-loop-gaps.toml` naming its file, guarded kind, and exact
-expected site count. Inline comments and string literals have no suppression
-power, and the checker rejects registry drift in either direction. Permanent
-negatives retain every W66/W68/W71/W72/W73 spelling and fully-qualified
-controls; exotic future spellings containing a guarded type or member trip the
-token rule.
+`docs/runtime-frame-loop-gaps.toml` naming its file, guarded kind, exact
+enclosing-item anchor, and guarded name. Inline comments and string literals
+have no suppression power, and the checker rejects an unregistered hit, a
+missing registered anchor, duplicate substitution, or drift in either
+direction. Permanent negatives retain every W66/W68/W71/W72/W73/W81/W82/W83
+spelling and fully-qualified controls; exotic future spellings containing a
+guarded type or member trip the token rule.
 
 Gate receipts:
 
@@ -952,6 +963,8 @@ Gate receipts:
 | W74 round-eight corrective | `docs/runtime-frame-loop-fl-c5-evidence/W74-report.md` maps the W71/W72/W73 blockers to the symmetric Blend1D differential, failing-owner bubble/audio-tail completion, syn-AST resolver and fail-closed token tripwire, the orchestrator-probed module-re-export evasion, and the pre-E6 fast-suite receipts. It records runtime 725/725, tools differentials 823/823, supplemental `nuxie --lib` 147/147, and both golden corpora at 317/317 entries plus 647/647 exact segments with zero divergences. Trace fingerprint and artifact provenance remained intentionally owned by E6. |
 | W76/W77/W78 round-eight verdicts | `docs/runtime-frame-loop-fl-c5-evidence/W76-oracle-round8.md`, `W77-standards-round8.md`, and `W78-flb-round8.md` preserve the three independent rejection verdicts: incorrect negated/mixed cfg handling, module/associated-type/macro/attribute evasions, self-service allow suppression, non-reproducible detector packaging, early failing-owner error observability, loss of the held BlendDirect clone/remount proof, and E6 fingerprint/provenance generated from an uncommitted Cargo-lock state. |
 | W79 round-nine corrective | `docs/runtime-frame-loop-fl-c5-evidence/W79-report.md` maps every W76/W77/W78 blocker to exact cfg and resolution logic, fail-closed token scanning, the checker-validated registry, committed standalone detector lockfile, full-chain error withholding, restored BlendDirect proof, and the FL-G03 disposition. It records runtime 726/726, tools differentials 823/823, supplemental `nuxie --lib` 147/147, checker 71/71, and both golden corpora at 317/317 entries plus 647/647 exact segments with zero divergences. Trace fingerprint and artifact provenance remained intentionally owned by E7. |
+| W81/W82/W83 round-nine verdicts | `.flc5/out/W81-oracle-round9.md`, `.flc5/out/W82-standards-round9.md`, and `.flc5/out/W83-flb-round9.md` preserve the three independent E7 rejection verdicts and the exact round-ten negative forms. |
+| W84 round-ten corrective | Guarded unresolved tails, fragment-composed macro identifiers, and cross-file bridges now fail closed; exact anchor/name registry matching rejects one-for-one substitution; the candidate checklist invariant is active. Fast acceptance is runtime 726/726, tools differentials 823/823, supplemental `nuxie --lib` 147/147, checker tests 77/77, both golden corpora 317/317 entries plus 647/647 exact segments with zero divergences, and a clean-target `--locked` detector build. The E8 fingerprint and runner provenance remain intentionally pending. |
 | Seven reopened member behaviors | This W31 run executes one passing test for each named receipt: `state_machine_generic_layer_state_occurrence_matches_cpp_probe` (`currentState`, `stateChangedByIndex`), `state_machine_viewmodel_trigger_conditions_match_cpp_probe` (`advance(seconds,newFrame)`), `flow_pointer_callbacks_receive_event_time_and_the_prior_delivered_position` (`pointerDown`), both `synchronous_*` event-cycle tests (`applyEvents`), `first_factory_pointer_prepares_and_applies_fixed_bindings_before_callback` (`internalDataContext`), and `listener_missing_context_hydration_keeps_the_table_until_context_arrives` (`pointerDown`, `internalDataContext`, `initScriptedObjects`). |
 | Focused and broad behavioral floor | `docs/runtime-frame-loop-fl-c5-evidence/W30-report.md`: C++ probes 804/804, `nuxie --lib` 146/146, runtime library 713/713, scripting library 205/205, and `sound` 1/1 exact. W31 reruns the complete runtime library and C++ probe gates below. |
 | Structural checker and provenance | Final `make runtime-frame-loop-port-check`: 71/71 checker tests, including recursive tracked-receipt stamps, exact inventory/gating/repository-wide semantic and syn-AST seam-owner negatives, exact registry validation, the fail-closed tripwire, clean-cache locked detector packaging, and mutated-ref/artifact negatives, followed by the live checker accepting E7 `rust_ref`, candidate fingerprint, manifest, Rust runner provenance, and all eight artifact hashes. |
@@ -993,7 +1006,7 @@ Closure checklist:
   (`make runtime-frame-loop-port-test`: use the live count reported by the
   gate receipt);
 - [x] focused Rust tests and pinned-C++ differentials are green;
-- [x] the E6 interim fast behavioral floor and structural/provenance gates
+- [x] the E7 interim fast behavioral floor and structural/provenance gates
   required by the 2026-07-30 coordinator policy are green; floor7 remains the
   standing complete-floor reference, and the next complete pixel/browser/size
   run is reserved for the final independently accepted candidate before

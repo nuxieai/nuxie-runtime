@@ -347,6 +347,8 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         relative_source: str,
         forbidden_source: str,
         safe_source: str,
+        *,
+        expected_occurrences: int = 1,
     ) -> None:
         base_gaps = self.gaps.read_text()
         row = self.install_production_ratchet(ratchet_id)
@@ -369,7 +371,8 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            f"ratchet {ratchet_id} increased to 1 > 0",
+            "ratchet "
+            f"{ratchet_id} increased to {expected_occurrences} > 0",
             result.stderr,
         )
 
@@ -3837,6 +3840,10 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 """
                 use RuntimeNestedAnimationInstance as X;
 
+                enum PrefixX {
+                    StateMachine(usize),
+                }
+
                 fn file_aliased_owner_picker() {
                     let unrelated = PrefixX::StateMachine(owner);
                     StateMachineInstance::advance_nested_animation_owner_with(
@@ -4215,6 +4222,19 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     source,
                     textwrap.dedent(forbidden),
                     textwrap.dedent(safe),
+                    expected_occurrences=(
+                        2
+                        if (
+                            (
+                                "use RuntimeNestedAnimationInstance::StateMachine"
+                                in forbidden
+                                or "use RuntimeNestedAnimationInstance::{"
+                                in forbidden
+                            )
+                            and "fn " in forbidden
+                        )
+                        else 1
+                    ),
                 )
 
         owner_alias_source = self.repo / (
@@ -4423,6 +4443,202 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     safe,
                 )
 
+    def test_fl_c5_owner_detector_round_ten_unresolved_tails_fail_closed(
+        self,
+    ) -> None:
+        ratchet_id = (
+            "state_machine_nested_animation_selection_outside_instance_policy"
+        )
+        safe = textwrap.dedent(
+            """
+            enum PlainAnimation {
+                StateMachine(usize),
+            }
+
+            struct PlainDispatcher;
+            impl PlainDispatcher {
+                fn notify_events() {}
+            }
+
+            mod plain_bridge {
+                pub enum PlainAnimation {
+                    StateMachine(usize),
+                }
+            }
+            use plain_bridge as plain_alias;
+
+            fn plain_non_guarded_code_passes() {
+                let _ = PlainAnimation::StateMachine(7);
+                let _ = plain_alias::PlainAnimation::StateMachine(8);
+                PlainDispatcher::notify_events();
+                ordinary_animation.advance();
+            }
+            """
+        )
+        forbidden_cases = [
+            textwrap.dedent(
+                """
+                mod bridge {
+                    pub use RuntimeNestedAnimationInstance as Anim;
+                }
+
+                fn crate_qualified_reexport_selects_owner() {
+                    if let crate::bridge::Anim::StateMachine(owner) = animation {
+                        displace(owner);
+                    }
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                mod bridge {
+                    pub use RuntimeNestedAnimationInstance as Anim;
+                }
+                use bridge as b;
+
+                fn module_alias_selects_owner() {
+                    if let b::Anim::StateMachine(owner) = animation {
+                        displace(owner);
+                    }
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                mod defs {
+                    pub use RuntimeNestedAnimationInstance as Anim;
+                }
+                mod bridge {
+                    pub use crate::defs::Anim;
+                }
+
+                fn chained_reexport_selects_owner() {
+                    if let bridge::Anim::StateMachine(owner) = animation {
+                        displace(owner);
+                    }
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                trait Carrier {
+                    type Anim;
+                }
+                struct Host;
+
+                fn qualified_self_selects_owner() {
+                    if let <<Host as Carrier>::Anim>::StateMachine(owner) =
+                        animation
+                    {
+                        displace(owner);
+                    }
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                type Anim = (RuntimeNestedAnimationInstance);
+
+                fn parenthesized_alias_selects_owner() {
+                    if let Anim::StateMachine(owner) = animation {
+                        displace(owner);
+                    }
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                type Selected = unresolved_owner::StateMachine;
+                """
+            ),
+            textwrap.dedent(
+                """
+                use unresolved_owner::StateMachine;
+                """
+            ),
+            textwrap.dedent(
+                """
+                use unresolved_owner::{StateMachine as Selected};
+                """
+            ),
+            textwrap.dedent(
+                """
+                mod unrelated {
+                    enum Anim {
+                        StateMachine(usize),
+                    }
+                }
+                mod unresolved {
+                    struct Anim;
+                }
+
+                fn same_named_type_without_member_fails_closed() {
+                    let _ = unresolved::Anim::StateMachine(owner);
+                }
+                """
+            ),
+        ]
+        for forbidden in forbidden_cases:
+            with self.subTest(source=forbidden):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+                    forbidden,
+                    safe,
+                )
+
+    def test_fl_c5_owner_detector_cross_file_reexport_fails_closed(
+        self,
+    ) -> None:
+        ratchet_id = (
+            "state_machine_nested_animation_selection_outside_instance_policy"
+        )
+        relative_parent = (
+            "crates/nuxie-runtime/src/state_machine/scout_probe.rs"
+        )
+        base_gaps = self.gaps.read_text()
+        try:
+            self.install_production_ratchet(ratchet_id)
+            bridge = self.repo / (
+                "crates/nuxie-runtime/src/state_machine/bridge.rs"
+            )
+            bridge.parent.mkdir(parents=True, exist_ok=True)
+            bridge.write_text(
+                "pub(crate) use crate::artboard::"
+                "RuntimeNestedAnimationInstance as Anim;\n"
+            )
+            parent = self.repo / relative_parent
+            parent.write_text(
+                textwrap.dedent(
+                    """
+                    mod bridge;
+
+                    fn cross_file_reexport_selects_owner() {
+                        if let bridge::Anim::StateMachine(owner) = animation {
+                            displace(owner);
+                        }
+                    }
+                    """
+                )
+            )
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                f"ratchet {ratchet_id} increased to 1 > 0",
+                result.stderr,
+            )
+
+            bridge.write_text("pub(crate) struct PlainBridge;\n")
+            parent.write_text(
+                "fn plain_non_guarded_code_passes() {\n"
+                "    ordinary_animation.advance();\n"
+                "}\n"
+            )
+            result = self.run_check()
+            self.assertEqual(result.returncode, 0, result.stderr)
+        finally:
+            self.gaps.write_text(base_gaps)
+
     def test_fl_c5_owner_detector_macro_and_attribute_tokens_fail_closed(
         self,
     ) -> None:
@@ -4449,11 +4665,16 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 """
                 fn pasted_sender() {
                     paste! {
-                        StateMachineInstance::[<notify_ events>](
+                        owner.[<notify_ events>](
                             owner, child, Some(host), &batch,
                         );
                     }
                 }
+                """
+            ),
+            textwrap.dedent(
+                """
+                use unresolved_owner::notify_events;
                 """
             ),
         ]
@@ -4465,6 +4686,35 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     forbidden,
                     safe,
                 )
+
+    def test_fl_c5_owner_detector_fragmented_take_member_fails_closed(
+        self,
+    ) -> None:
+        ratchet_id = (
+            "state_machine_nested_event_collection_outside_instance_policy"
+        )
+        forbidden = textwrap.dedent(
+            """
+            fn pasted_collection() {
+                paste! {
+                    owner.[<take_ event_batch>]();
+                }
+            }
+            """
+        )
+        safe = textwrap.dedent(
+            """
+            fn plain_collection() {
+                owner.take_frame_batch();
+            }
+            """
+        )
+        self.assert_production_ratchet_case(
+            ratchet_id,
+            "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+            forbidden,
+            safe,
+        )
 
     def test_fl_c5_owner_detector_registry_is_exact_and_nonlexical(
         self,
@@ -4512,7 +4762,8 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 [[owner_boundary_allow]]
                 file = {json.dumps(relative_source)}
                 kind = "dispatch"
-                expected_occurrences = 1
+                anchor = "registered_sender"
+                guarded_name = "notify_events"
                 """
             )
             self.gaps.write_text(self.gaps.read_text() + registry)
@@ -4538,15 +4789,14 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             result = self.run_check()
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(
-                "owner boundary registry "
-                f"{relative_source} dispatch expected 1, found 2",
+                "unregistered owner boundary hit "
+                f"{relative_source} dispatch first_registered_sender "
+                "notify_events",
                 result.stderr,
             )
 
             scout.write_text(
-                "fn registered_sender_with_site_drift() {\n"
-                "    StateMachineInstance::notify_events("
-                "owner, child, Some(host), &batch);\n"
+                "fn substituted_sender() {\n"
                 "    StateMachineInstance::notify_events("
                 "owner, child, Some(host), &batch);\n"
                 "}\n"
@@ -4554,8 +4804,13 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             result = self.run_check()
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(
-                "owner boundary registry "
-                f"{relative_source} dispatch expected 1, found 2",
+                "unregistered owner boundary hit "
+                f"{relative_source} dispatch substituted_sender notify_events",
+                result.stderr,
+            )
+            self.assertIn(
+                "registered owner boundary anchor is missing "
+                f"{relative_source} dispatch registered_sender notify_events",
                 result.stderr,
             )
 
@@ -4563,8 +4818,184 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             result = self.run_check()
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(
-                "owner boundary registry "
-                f"{relative_source} dispatch expected 1, found 0",
+                "registered owner boundary anchor is missing "
+                f"{relative_source} dispatch registered_sender notify_events",
+                result.stderr,
+            )
+        finally:
+            self.gaps.write_text(base_gaps)
+
+    def test_fl_c5_owner_registry_rejects_one_for_one_site_substitution(
+        self,
+    ) -> None:
+        ratchet_id = (
+            "state_machine_nested_animation_selection_outside_instance_policy"
+        )
+        relative_source = "crates/nuxie-runtime/src/artboard.rs"
+        base_gaps = self.gaps.read_text()
+        try:
+            self.install_production_ratchet(ratchet_id)
+            registry = textwrap.dedent(
+                f"""
+
+                [[owner_boundary_allow]]
+                file = {json.dumps(relative_source)}
+                kind = "selection"
+                anchor = "Approved::choose"
+                guarded_name = "StateMachine"
+                """
+            )
+            self.gaps.write_text(self.gaps.read_text() + registry)
+            source = self.repo / relative_source
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(
+                "struct Approved;\n"
+                "impl Approved {\n"
+                "  fn choose() {\n"
+                "    if let FutureAnim::StateMachine(owner) = animation {\n"
+                "        approved_policy(owner);\n"
+                "    }\n"
+                "  }\n"
+                "}\n"
+            )
+            result = self.run_check()
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            source.write_text(
+                "struct Rejected;\n"
+                "impl Rejected {\n"
+                "  fn choose() {\n"
+                "    if let FutureAnim::StateMachine(owner) = animation {\n"
+                "        displaced_policy(owner);\n"
+                "    }\n"
+                "  }\n"
+                "}\n"
+            )
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "unregistered owner boundary hit "
+                f"{relative_source} selection "
+                "Rejected::choose StateMachine",
+                result.stderr,
+            )
+            self.assertIn(
+                "registered owner boundary anchor is missing "
+                f"{relative_source} selection Approved::choose StateMachine",
+                result.stderr,
+            )
+        finally:
+            self.gaps.write_text(base_gaps)
+
+    def test_fl_c5_owner_registry_rejects_const_item_substitution(
+        self,
+    ) -> None:
+        ratchet_id = (
+            "state_machine_nested_animation_selection_outside_instance_policy"
+        )
+        relative_source = "crates/nuxie-runtime/src/artboard.rs"
+        base_gaps = self.gaps.read_text()
+        try:
+            self.install_production_ratchet(ratchet_id)
+            registry = textwrap.dedent(
+                f"""
+
+                [[owner_boundary_allow]]
+                file = {json.dumps(relative_source)}
+                kind = "selection"
+                anchor = "APPROVED"
+                guarded_name = "StateMachine"
+                """
+            )
+            self.gaps.write_text(self.gaps.read_text() + registry)
+            source = self.repo / relative_source
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(
+                "const APPROVED: bool = matches!(\n"
+                "    animation, FutureAnim::StateMachine(_)\n"
+                ");\n"
+            )
+            result = self.run_check()
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            source.write_text(
+                "const FORBIDDEN: bool = matches!(\n"
+                "    animation, FutureAnim::StateMachine(_)\n"
+                ");\n"
+            )
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "unregistered owner boundary hit "
+                f"{relative_source} selection FORBIDDEN StateMachine",
+                result.stderr,
+            )
+            self.assertIn(
+                "registered owner boundary anchor is missing "
+                f"{relative_source} selection APPROVED StateMachine",
+                result.stderr,
+            )
+        finally:
+            self.gaps.write_text(base_gaps)
+
+    def test_fl_c5_owner_registry_qualifies_trait_impl_anchors(
+        self,
+    ) -> None:
+        ratchet_id = (
+            "state_machine_nested_animation_selection_outside_instance_policy"
+        )
+        relative_source = "crates/nuxie-runtime/src/artboard.rs"
+        base_gaps = self.gaps.read_text()
+        try:
+            self.install_production_ratchet(ratchet_id)
+            registry = textwrap.dedent(
+                f"""
+
+                [[owner_boundary_allow]]
+                file = {json.dumps(relative_source)}
+                kind = "selection"
+                anchor = "TraitA_for_Host::choose"
+                guarded_name = "StateMachine"
+                """
+            )
+            self.gaps.write_text(self.gaps.read_text() + registry)
+            source = self.repo / relative_source
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(
+                "trait TraitA { fn choose(); }\n"
+                "trait TraitB { fn choose(); }\n"
+                "struct Host;\n"
+                "impl TraitA for Host {\n"
+                "  fn choose() {\n"
+                "    let _ = FutureAnim::StateMachine(owner);\n"
+                "  }\n"
+                "}\n"
+            )
+            result = self.run_check()
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            source.write_text(
+                "trait TraitA { fn choose(); }\n"
+                "trait TraitB { fn choose(); }\n"
+                "struct Host;\n"
+                "impl TraitB for Host {\n"
+                "  fn choose() {\n"
+                "    let _ = FutureAnim::StateMachine(owner);\n"
+                "  }\n"
+                "}\n"
+            )
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "unregistered owner boundary hit "
+                f"{relative_source} selection "
+                "TraitB_for_Host::choose StateMachine",
+                result.stderr,
+            )
+            self.assertIn(
+                "registered owner boundary anchor is missing "
+                f"{relative_source} selection "
+                "TraitA_for_Host::choose StateMachine",
                 result.stderr,
             )
         finally:

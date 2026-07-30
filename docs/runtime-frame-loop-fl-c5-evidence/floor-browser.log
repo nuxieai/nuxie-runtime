@@ -1,3 +1,4 @@
+FLOOR_RECEIPT_TREE_SHA=41f2aeaf6edcfb0cca3b2c9e173b842760e73b11
 tools/browser-renderer-smoke/run.sh
     Updating crates.io index
   Installing wasm-bindgen-cli v0.2.126

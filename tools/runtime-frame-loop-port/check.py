@@ -49,6 +49,9 @@ CITATION_RE = re.compile(r"^(cpp|rust):(.+):(\d+)(?:-(\d+))?$")
 UNBOUND_SCRIPTED_CONSTRUCTOR_RATCHET = (
     "scripted_object_unbound_constructor_enters_live_context"
 )
+SEMANTIC_ORDINAL_PROJECTION_RATCHET = (
+    "state_machine_semantic_ordinal_projection"
+)
 FL_B_FROZEN_SCOPE_REF = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 FL_B_FROZEN_SCOPE_FILES = frozenset(
     {
@@ -298,6 +301,71 @@ def unbound_scripted_constructor_hits(source: str) -> list[int]:
     return []
 
 
+def semantic_ordinal_projection_hits(source: str) -> list[int]:
+    """Find renamed SemanticData ordinal scans coexisting with the resolver."""
+
+    if re.search(r"\btrait\s+SemanticNodeResolver\b", source) is None:
+        return []
+    stripped = strip_rust_comments_and_strings(source)
+    function_pattern = re.compile(
+        r"(?m)^[ \t]*(?:(?:pub(?:\([^\n)]*\))?|const|async|unsafe|"
+        r"extern(?:[ \t]+\"[^\n\"]*\")?)[ \t]+)*fn[ \t]+[A-Za-z_]\w*"
+    )
+    hits: list[int] = []
+    for function in function_pattern.finditer(stripped):
+        open_brace = stripped.find("{", function.end())
+        if open_brace == -1:
+            continue
+        semicolon = stripped.find(";", function.end(), open_brace)
+        if semicolon != -1:
+            continue
+        depth = 0
+        close_brace = None
+        for index in range(open_brace, len(stripped)):
+            character = stripped[index]
+            if character == "{":
+                depth += 1
+            elif character == "}":
+                depth -= 1
+                if depth == 0:
+                    close_brace = index
+                    break
+        if close_brace is None:
+            continue
+        body = source[open_brace + 1 : close_brace]
+        if '"SemanticData"' not in body:
+            continue
+        filtered_nth = re.search(
+            r"\.(?:iter|into_iter)\s*\(\)[\s\S]{0,800}"
+            r"(?:filter|filter_map)\s*\([\s\S]{0,500}\"SemanticData\""
+            r"[\s\S]{0,500}\.nth\s*\(",
+            body,
+        )
+        ordinal_loop = re.search(
+            r"\bfor\b[\s\S]{0,500}\.(?:iter|enumerate)\s*\(\)"
+            r"[\s\S]{0,800}\"SemanticData\"",
+            body,
+        )
+        increment = re.search(
+            r"\b([A-Za-z_]\w*)\s*(?:\+=\s*1|=\s*\1\.saturating_add\s*\(\s*1\s*\))",
+            body,
+        )
+        compared = (
+            increment is not None
+            and re.search(
+                rf"(?:\b{re.escape(increment.group(1))}\b\s*=="
+                rf"|==\s*\b{re.escape(increment.group(1))}\b)",
+                body,
+            )
+            is not None
+        )
+        if filtered_nth is not None or (
+            ordinal_loop is not None and increment is not None and compared
+        ):
+            hits.append(function.start())
+    return hits
+
+
 def read_toml(path: pathlib.Path) -> dict[str, Any]:
     try:
         with path.open("rb") as source:
@@ -318,6 +386,101 @@ def git_head(path: pathlib.Path) -> str:
             f"cannot resolve upstream HEAD at {path}: {result.stderr.strip()}"
         )
     return result.stdout.strip()
+
+
+def validate_trace_rust_ref(
+    repo_root: pathlib.Path, rust_ref: object, errors: list[str]
+) -> None:
+    if not isinstance(rust_ref, str) or re.fullmatch(r"[0-9a-f]{40}", rust_ref) is None:
+        errors.append("trace evidence Rust ref is missing or is not a full commit SHA")
+        return
+    commit = subprocess.run(
+        ["git", "-C", str(repo_root), "cat-file", "-e", f"{rust_ref}^{{commit}}"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if commit.returncode != 0:
+        errors.append(f"trace evidence Rust ref does not exist: {rust_ref}")
+        return
+    head = git_head(repo_root)
+    if rust_ref == head:
+        return
+    ancestor = subprocess.run(
+        ["git", "-C", str(repo_root), "merge-base", "--is-ancestor", rust_ref, head],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if ancestor.returncode != 0:
+        errors.append(
+            "trace evidence Rust ref is neither HEAD nor an ancestor production candidate"
+        )
+        return
+    changed = subprocess.run(
+        ["git", "-C", str(repo_root), "diff", "--name-only", f"{rust_ref}..{head}"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if changed.returncode != 0:
+        errors.append(
+            "cannot verify publication-only changes after trace evidence Rust ref"
+        )
+        return
+    unauthorized = sorted(
+        path
+        for path in changed.stdout.splitlines()
+        if not path.startswith("docs/runtime-frame-loop-")
+    )
+    if unauthorized:
+        errors.append(
+            "trace evidence Rust ref is stale across non-publication changes: "
+            + ", ".join(unauthorized)
+        )
+
+
+def validate_trace_artifacts(
+    trace: dict[str, Any], ledger: dict[str, Any], errors: list[str]
+) -> None:
+    required_keys = {
+        "cpp_binary_sha256",
+        "cpp_coverage_sha256",
+        "cpp_mechanism_coverage_sha256",
+        "cpp_steady_coverage_sha256",
+        "rust_binary_sha256",
+        "rust_coverage_sha256",
+        "rust_mechanism_coverage_sha256",
+        "rust_steady_coverage_sha256",
+    }
+    expected = ledger.get("expected_trace_artifacts")
+    artifacts = trace.get("artifacts")
+    if not isinstance(expected, dict) or set(expected) != required_keys:
+        errors.append(
+            "ownership ledger expected trace artifact hashes do not match the v2 schema"
+        )
+        return
+    if not isinstance(artifacts, dict) or set(artifacts) != required_keys:
+        errors.append("trace evidence artifact hashes do not match the v2 schema")
+        return
+    invalid = sorted(
+        key
+        for key in required_keys
+        if not isinstance(artifacts[key], str)
+        or re.fullmatch(r"[0-9a-f]{64}", artifacts[key]) is None
+        or not isinstance(expected[key], str)
+        or re.fullmatch(r"[0-9a-f]{64}", expected[key]) is None
+    )
+    if invalid:
+        errors.append(
+            "trace evidence artifact hashes do not match the v2 schema: "
+            + ", ".join(invalid)
+        )
+        return
+    if artifacts != expected:
+        errors.append(
+            "trace evidence artifact hashes do not match the ownership packet manifest"
+        )
 
 
 def duplicate_values(values: Iterable[str]) -> list[str]:
@@ -825,6 +988,8 @@ def check(
         errors.append("trace evidence schema is not v2")
     if trace.get("upstream_ref") != upstream_ref:
         errors.append("trace evidence pins a different upstream ref")
+    validate_trace_rust_ref(repo_root, trace.get("rust_ref"), errors)
+    validate_trace_artifacts(trace, ledger, errors)
     recorded_rust_candidate_source = trace.get("rust_candidate_source")
     if not isinstance(recorded_rust_candidate_source, dict):
         errors.append("trace evidence has no Rust candidate source fingerprint")
@@ -1219,6 +1384,8 @@ def check(
                 source = path.read_text(encoding="utf-8", errors="replace")
                 if ratchet_id == UNBOUND_SCRIPTED_CONSTRUCTOR_RATCHET:
                     found_offsets = unbound_scripted_constructor_hits(source)
+                elif ratchet_id == SEMANTIC_ORDINAL_PROJECTION_RATCHET:
+                    found_offsets = semantic_ordinal_projection_hits(source)
                 else:
                     found_offsets = [
                         match.start() for match in pattern.finditer(source)

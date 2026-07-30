@@ -1,3 +1,4 @@
+FLOOR_RECEIPT_TREE_SHA=41f2aeaf6edcfb0cca3b2c9e173b842760e73b11
 RIVE_RUNTIME_DIR="/Users/levi/dev/oss/rive-runtime" tools/fetch-test-assets.sh
 test assets ready (rive-runtime@d788e8ec6e8b598526607d6a1e8818e8b637b60c)
 RIVE_RUNTIME_DIR="/Users/levi/dev/oss/rive-runtime" RIVE_GOLDEN_WITH_SCRIPTING=1 RIVE_GOLDEN_RUNNER_NAME=rive_golden_runner_scripted tools/golden-runner/build.sh "release"

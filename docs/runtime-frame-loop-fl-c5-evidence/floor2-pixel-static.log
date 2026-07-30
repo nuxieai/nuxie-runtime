@@ -1,3 +1,4 @@
+FLOOR_RECEIPT_TREE_SHA=edddf4916e0ff0b7f55e41686704d5d988fae9f4
 cargo build --quiet -p renderer-replay
 warning: this lint expectation is unfulfilled
   --> vendor/wgpu-core-30.0.0/src/lock/ranked.rs:83:34

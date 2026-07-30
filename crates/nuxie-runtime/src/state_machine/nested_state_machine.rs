@@ -343,6 +343,40 @@ impl RuntimeNestedStateMachineInstance {
         changed
     }
 
+    /// Deliver reports from a nested child to this occurrence, then expose
+    /// this occurrence's outgoing owner batch. This is the owner-mediated
+    /// Rust form of C++'s synchronous Artboard parent walk.
+    pub(crate) fn notify_nested_events_and_collect(
+        &mut self,
+        child: &mut ArtboardInstance,
+        source_local_id: usize,
+        events: &[StateMachineReportedEvent],
+        mut reported_events: Option<&mut Vec<StateMachineReportedEvent>>,
+    ) -> bool {
+        let Some(state_machine) = self.state_machine.as_mut() else {
+            return false;
+        };
+        let notified = state_machine.notify_events(child, Some(source_local_id), events);
+        let mut changed = notified;
+        if notified {
+            changed |= state_machine.advance_on_artboard(child, 0.0, false, None);
+        }
+        if let Some(reported_events) = reported_events.as_mut() {
+            for index in 0..state_machine.reported_event_count() {
+                if let Some(event) = state_machine.reported_event(child, index) {
+                    (**reported_events).push(event.clone());
+                }
+            }
+        }
+        changed
+    }
+
+    pub(crate) fn flush_deferred_owner_audio_events(&mut self) {
+        if let Some(state_machine) = self.state_machine.as_mut() {
+            state_machine.flush_deferred_owner_audio_events();
+        }
+    }
+
     pub(crate) fn hit_test(&self, child: &ArtboardInstance, x: f32, y: f32) -> bool {
         self.state_machine
             .as_ref()

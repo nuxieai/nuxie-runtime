@@ -1516,6 +1516,11 @@ pub struct StateMachineInstance {
     /// values here avoids a raw child-to-parent pointer.
     bubbled_event_reports: Vec<StateMachineReportedEvent>,
     bubbled_event_report_index: usize,
+    /// Audio occurrences whose reporting machine has an owner. C++ reaches
+    /// these only after synchronous ancestor notification unwinds. Rust keeps
+    /// the typed occurrences here until the owner-mediated frame path has
+    /// completed that ancestor dispatch.
+    deferred_owner_audio_occurrences: Vec<AudioEventOccurrence>,
     /// Reused outer buffer for Artboard-collected nested reports. The
     /// instance-owned dispatch policy retains its per-frame scratch capacity.
     nested_event_dispatch_scratch: Vec<(usize, Vec<StateMachineReportedEvent>)>,
@@ -1549,6 +1554,8 @@ pub struct StateMachineInstance {
     bind_phase_trace: Vec<&'static str>,
     #[cfg(test)]
     event_dispatch_phase_trace: Vec<&'static str>,
+    #[cfg(test)]
+    event_total_order_trace: Option<(&'static str, &'static str, Rc<RefCell<Vec<&'static str>>>)>,
     audio_event_seam: Rc<dyn AudioEventSeam>,
     audio_event_selection_count: usize,
     audio_event_last_occurrence: Option<AudioEventOccurrence>,
@@ -2160,6 +2167,7 @@ impl Clone for StateMachineInstance {
             reporting_events: self.reporting_events.clone(),
             bubbled_event_reports: self.bubbled_event_reports.clone(),
             bubbled_event_report_index: self.bubbled_event_report_index,
+            deferred_owner_audio_occurrences: self.deferred_owner_audio_occurrences.clone(),
             nested_event_dispatch_scratch: Vec::new(),
             event_bubble_owner_attached: self.event_bubble_owner_attached,
             notifying_event_listeners: false,
@@ -2181,6 +2189,8 @@ impl Clone for StateMachineInstance {
             bind_phase_trace: self.bind_phase_trace.clone(),
             #[cfg(test)]
             event_dispatch_phase_trace: self.event_dispatch_phase_trace.clone(),
+            #[cfg(test)]
+            event_total_order_trace: self.event_total_order_trace.clone(),
             audio_event_seam: self.audio_event_seam.clone(),
             audio_event_selection_count: self.audio_event_selection_count,
             audio_event_last_occurrence: self.audio_event_last_occurrence,
@@ -2565,7 +2575,16 @@ impl StateMachineInstance {
 
     fn record_event_dispatch_phase(&mut self, phase: &'static str) {
         #[cfg(test)]
-        self.event_dispatch_phase_trace.push(phase);
+        {
+            self.event_dispatch_phase_trace.push(phase);
+            if let Some((local, audio, total_order)) = &self.event_total_order_trace {
+                match phase {
+                    "local-dispatch" => total_order.borrow_mut().push(local),
+                    "recorded-audio-seam" => total_order.borrow_mut().push(audio),
+                    _ => {}
+                }
+            }
+        }
         #[cfg(not(test))]
         let _ = phase;
     }
@@ -2985,6 +3004,7 @@ impl StateMachineInstance {
             reporting_events: Vec::new(),
             bubbled_event_reports: Vec::new(),
             bubbled_event_report_index: 0,
+            deferred_owner_audio_occurrences: Vec::new(),
             nested_event_dispatch_scratch: Vec::new(),
             // Capture the mounted-owner boundary once, while the occurrence
             // is constructed. `frame_origin` is later reused as mutable draw
@@ -3004,6 +3024,8 @@ impl StateMachineInstance {
             bind_phase_trace: Vec::new(),
             #[cfg(test)]
             event_dispatch_phase_trace: Vec::new(),
+            #[cfg(test)]
+            event_total_order_trace: None,
             audio_event_seam: Rc::new(RecordingAudioEventSeam),
             audio_event_selection_count: 0,
             audio_event_last_occurrence: None,
@@ -7263,15 +7285,18 @@ impl StateMachineInstance {
             }
         }
         self.notifying_event_listeners = false;
-        self.bubble_events_to_owner_seam(events);
-        self.reach_recorded_audio_event_seam(events);
+        if self.bubble_events_to_owner_seam(events) {
+            self.defer_recorded_audio_event_seam(events);
+        } else {
+            self.reach_recorded_audio_event_seam(events);
+        }
         Ok(changed)
     }
 
     /// C++ immediately forwards a nested report to the owning artboard after
     /// local listeners. Rust's owner-safe adaptation exposes that batch from
     /// this dispatch seam without retaining a raw parent pointer.
-    fn bubble_events_to_owner_seam(&mut self, events: &[StateMachineReportedEvent]) {
+    fn bubble_events_to_owner_seam(&mut self, events: &[StateMachineReportedEvent]) -> bool {
         if self.event_bubble_owner_attached && !events.is_empty() {
             if self.bubbled_event_report_index != 0 {
                 self.bubbled_event_reports
@@ -7280,6 +7305,9 @@ impl StateMachineInstance {
             }
             self.bubbled_event_reports.extend_from_slice(events);
             self.record_event_dispatch_phase("bubble-to-owner");
+            true
+        } else {
+            false
         }
     }
 
@@ -7304,16 +7332,42 @@ impl StateMachineInstance {
     /// (`state_machine_instance.cpp:3155-3169`).
     fn reach_recorded_audio_event_seam(&mut self, events: &[StateMachineReportedEvent]) {
         for event in events.iter().filter(|event| event.is_audio_event()) {
-            self.record_event_dispatch_phase("recorded-audio-seam");
             let occurrence = AudioEventOccurrence {
                 event_local_index: event.event_local_index(),
                 event_core_type: event.event_core_type(),
             };
-            self.audio_event_seam.selected(
-                occurrence,
-                &mut self.audio_event_selection_count,
-                &mut self.audio_event_last_occurrence,
-            );
+            self.deliver_recorded_audio_occurrence(occurrence);
+        }
+    }
+
+    fn defer_recorded_audio_event_seam(&mut self, events: &[StateMachineReportedEvent]) {
+        self.deferred_owner_audio_occurrences.extend(
+            events
+                .iter()
+                .filter(|event| event.is_audio_event())
+                .map(|event| AudioEventOccurrence {
+                    event_local_index: event.event_local_index(),
+                    event_core_type: event.event_core_type(),
+                }),
+        );
+    }
+
+    fn deliver_recorded_audio_occurrence(&mut self, occurrence: AudioEventOccurrence) {
+        self.record_event_dispatch_phase("recorded-audio-seam");
+        self.audio_event_seam.selected(
+            occurrence,
+            &mut self.audio_event_selection_count,
+            &mut self.audio_event_last_occurrence,
+        );
+    }
+
+    /// Complete the audio tail after the owner-mediated ancestor dispatch.
+    /// The owning Artboard invokes this in ancestor-to-descendant order, which
+    /// is the unwind order of C++'s synchronous recursive call.
+    pub(crate) fn flush_deferred_owner_audio_events(&mut self) {
+        let deferred = std::mem::take(&mut self.deferred_owner_audio_occurrences);
+        for occurrence in deferred {
+            self.deliver_recorded_audio_occurrence(occurrence);
         }
     }
 
@@ -12431,6 +12485,7 @@ impl StateMachineInstance {
         let mut notified = false;
         for (host_local, events) in nested_events.drain(..) {
             notified |= state_machine.notify_events(artboard, Some(host_local), &events);
+            artboard.flush_nested_deferred_owner_audio_events(host_local);
         }
         state_machine.nested_event_dispatch_scratch = nested_events;
         Ok(notified)
@@ -12498,10 +12553,13 @@ impl StateMachineInstance {
 
         let (artboard_changed, nested_events) = advance_artboard(artboard, elapsed_seconds)?;
         changed |= artboard_changed;
-        for state_machine in state_machines.iter_mut() {
-            let mut notified = false;
-            for (host_local, events) in &nested_events {
-                notified |= match owned_context.as_deref_mut() {
+        let mut notified_state_machines = vec![false; state_machines.len()];
+        for (host_local, events) in &nested_events {
+            for (state_machine, notified) in state_machines
+                .iter_mut()
+                .zip(notified_state_machines.iter_mut())
+            {
+                *notified |= match owned_context.as_deref_mut() {
                     Some(context) => state_machine.notify_events_with_owned_view_model_context(
                         artboard,
                         Some(*host_local),
@@ -12511,6 +12569,9 @@ impl StateMachineInstance {
                     None => state_machine.notify_events(artboard, Some(*host_local), events),
                 };
             }
+            artboard.flush_nested_deferred_owner_audio_events(*host_local);
+        }
+        for (state_machine, notified) in state_machines.iter_mut().zip(notified_state_machines) {
             if notified {
                 changed |= state_machine.advance_on_artboard(
                     artboard,
@@ -17417,6 +17478,47 @@ mod scripted_listener_action_tests {
         }
     }
 
+    fn fl_c5_test_audio_event(local_index: usize) -> (StateMachineReportedEvent, u32) {
+        let audio_file = RuntimeFile::from_authoring_records(vec![
+            AuthoringRecord {
+                type_key: nuxie_schema::definition_by_name("Backboard")
+                    .expect("Backboard schema definition")
+                    .type_key
+                    .int,
+                properties: Vec::new(),
+            },
+            AuthoringRecord {
+                type_key: nuxie_schema::definition_by_name("Artboard")
+                    .expect("Artboard schema definition")
+                    .type_key
+                    .int,
+                properties: Vec::new(),
+            },
+            AuthoringRecord {
+                type_key: nuxie_schema::definition_by_name("AudioEvent")
+                    .expect("AudioEvent schema definition")
+                    .type_key
+                    .int,
+                properties: vec![AuthoringProperty {
+                    key: crate::properties::property_key_for_name("AudioEvent", "parentId")
+                        .expect("AudioEvent.parentId"),
+                    value: AuthoringValue::Uint(0),
+                }],
+            },
+        ])
+        .expect("import live AudioEvent fixture");
+        let audio_object = audio_file
+            .objects
+            .iter()
+            .flatten()
+            .find(|object| object.type_name == "AudioEvent")
+            .expect("live AudioEvent-typed object");
+        (
+            StateMachineReportedEvent::from_runtime_event(local_index, audio_object),
+            u32::from(audio_object.type_key),
+        )
+    }
+
     #[test]
     fn fl_c5_event_mid_callback_visibility_excludes_the_reporting_snapshot() {
         let (_artboard, mut machine) = scripted_listener_artboard_and_machine();
@@ -17526,44 +17628,15 @@ mod scripted_listener_action_tests {
         let (mut leaf_artboard, mut leaf) = scripted_listener_artboard_and_machine();
         let (mut parent_artboard, mut parent) = scripted_listener_artboard_and_machine();
         let (mut root_artboard, mut root) = scripted_listener_artboard_and_machine();
+        let total_order = Rc::new(RefCell::new(Vec::new()));
+        leaf.event_total_order_trace = Some(("leaf-local", "leaf-audio", Rc::clone(&total_order)));
+        parent.event_total_order_trace =
+            Some(("parent-local", "parent-audio", Rc::clone(&total_order)));
+        root.event_total_order_trace = Some(("root-local", "root-audio", Rc::clone(&total_order)));
         leaf.attach_event_bubble_owner();
         parent.attach_event_bubble_owner();
         let ordinary_event = fl_c5_test_reported_event(6);
-        let audio_file = RuntimeFile::from_authoring_records(vec![
-            AuthoringRecord {
-                type_key: nuxie_schema::definition_by_name("Backboard")
-                    .expect("Backboard schema definition")
-                    .type_key
-                    .int,
-                properties: Vec::new(),
-            },
-            AuthoringRecord {
-                type_key: nuxie_schema::definition_by_name("Artboard")
-                    .expect("Artboard schema definition")
-                    .type_key
-                    .int,
-                properties: Vec::new(),
-            },
-            AuthoringRecord {
-                type_key: nuxie_schema::definition_by_name("AudioEvent")
-                    .expect("AudioEvent schema definition")
-                    .type_key
-                    .int,
-                properties: vec![AuthoringProperty {
-                    key: crate::properties::property_key_for_name("AudioEvent", "parentId")
-                        .expect("AudioEvent.parentId"),
-                    value: AuthoringValue::Uint(0),
-                }],
-            },
-        ])
-        .expect("import live AudioEvent fixture");
-        let audio_object = audio_file
-            .objects
-            .iter()
-            .flatten()
-            .find(|object| object.type_name == "AudioEvent")
-            .expect("live AudioEvent-typed object");
-        let audio_event = StateMachineReportedEvent::from_runtime_event(7, audio_object);
+        let (audio_event, audio_event_core_type) = fl_c5_test_audio_event(7);
         let event = [ordinary_event, audio_event];
         let calls = Rc::new(RefCell::new(Vec::new()));
         let mut mismatch = scripted_test_listener(
@@ -17612,6 +17685,8 @@ mod scripted_listener_action_tests {
                 kind: RuntimeNestedEventNotifierKind::StateMachine,
             });
 
+        root_artboard.set_frame_origin(false);
+        let _ = root_artboard.advance_state_machine_instance(&mut root, 0.0);
         leaf.notify_events(&mut leaf_artboard, None, &event);
         let parent_events = leaf.take_bubbled_event_reports();
         assert_eq!(
@@ -17631,9 +17706,21 @@ mod scripted_listener_action_tests {
                 .collect::<Vec<_>>(),
             [6, 7]
         );
-        root_artboard.set_frame_origin(false);
-        let _ = root_artboard.advance_state_machine_instance(&mut root, 0.0);
         root.notify_events(&mut root_artboard, Some(8), &root_events);
+        parent.flush_deferred_owner_audio_events();
+        leaf.flush_deferred_owner_audio_events();
+        assert_eq!(
+            *total_order.borrow(),
+            [
+                "leaf-local",
+                "parent-local",
+                "root-local",
+                "root-audio",
+                "parent-audio",
+                "leaf-audio",
+            ],
+            "nested bubbling is synchronous depth-first and audio tails unwind root-first"
+        );
         assert!(
             root.take_bubbled_event_reports().is_empty(),
             "root draw state and a post-update probe do not invent an outgoing parent edge"
@@ -17654,7 +17741,7 @@ mod scripted_listener_action_tests {
             );
             assert_eq!(
                 machine.audio_event_seam_receipt(),
-                (1, Some((7, u32::from(audio_object.type_key)))),
+                (1, Some((7, audio_event_core_type))),
                 "only the imported AudioEvent occurrence reaches the production handoff"
             );
         }
@@ -17664,7 +17751,7 @@ mod scripted_listener_action_tests {
         );
         assert_eq!(
             root.audio_event_seam_receipt(),
-            (1, Some((7, u32::from(audio_object.type_key))))
+            (1, Some((7, audio_event_core_type)))
         );
 
         root.event_dispatch_phase_trace.clear();
@@ -17683,6 +17770,36 @@ mod scripted_listener_action_tests {
             leaf.bubbled_event_reports.len(),
             2,
             "the next bubble batch reclaims the production cursor's consumed prefix"
+        );
+    }
+
+    #[test]
+    fn fl_c5_event_bubbling_cross_instance_total_order_through_one_ancestor() {
+        let (mut leaf_artboard, mut leaf) = scripted_listener_artboard_and_machine();
+        let (mut parent_artboard, mut parent) = scripted_listener_artboard_and_machine();
+        let total_order = Rc::new(RefCell::new(Vec::new()));
+        leaf.event_total_order_trace = Some(("leaf-local", "leaf-audio", Rc::clone(&total_order)));
+        parent.event_total_order_trace =
+            Some(("parent-local", "parent-audio", Rc::clone(&total_order)));
+        leaf.attach_event_bubble_owner();
+        parent
+            .nested_event_registrations
+            .push(RuntimeNestedEventRegistration {
+                source_local_id: 7,
+                notifier_local_id: 70,
+                kind: RuntimeNestedEventNotifierKind::StateMachine,
+            });
+        let (audio_event, _) = fl_c5_test_audio_event(7);
+
+        leaf.notify_events(&mut leaf_artboard, None, &[audio_event]);
+        let events = leaf.take_bubbled_event_reports();
+        parent.notify_events(&mut parent_artboard, Some(7), &events);
+        leaf.flush_deferred_owner_audio_events();
+
+        assert_eq!(
+            *total_order.borrow(),
+            ["leaf-local", "parent-local", "parent-audio", "leaf-audio"],
+            "the two-level owner seam uses the same depth-first unwind policy"
         );
     }
 

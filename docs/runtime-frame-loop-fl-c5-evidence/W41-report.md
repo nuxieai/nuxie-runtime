@@ -28,7 +28,9 @@ every publication artifact, trace hash, and final floor.
 - The five-pass persistent-dirt differential drives the real
   `advance_and_apply` facade and a genuinely scheduled component fixture.
 
-Both required round-two rereviews completed with no findings.
+Both INTERNAL round-two closeout reviews completed with no findings. They
+were not independent acceptance reviews; the independent W39/W40 and
+W45/W46/W47 verdicts are tracked separately in this evidence directory.
 
 ## Final in-sandbox floors on `edddf491`
 
@@ -54,8 +56,9 @@ Both required round-two rereviews completed with no findings.
 
 ## External floors on `edddf491`
 
-- Apple: 87 green checks across `floor2-apple.log` and
-  `floor2-xcframework.log`; XCFramework checksum
+- Apple: the product checks in `floor2-apple.log` passed, then its attempt-1
+  packaging step correctly refused a dirty tree with Error 4. The separate
+  clean-tree attempt-2 in `floor2-xcframework.log` passed; XCFramework checksum
   `def916bee255bb3915d23ff898bb23dcd82d6c7351b10e118e8439670e5ccb7e`.
 - Browser: every WebGPU-only invariant passes.
 - Same-runner pixels: exact=1,468, byte-exact=1,370, diverges=0.

@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+tools = []
+
 [dependencies]
 anyhow = "1"
 harfrust = "0.12"
@@ -25,6 +28,11 @@ nuxie-schema = { path = "../nuxie-schema" }
 
 [dev-dependencies]
 png = "0.18"
+
+[[test]]
+name = "cpp_probe"
+path = "tests/cpp_probe.rs"
+required-features = ["tools"]
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 libc = "0.2"

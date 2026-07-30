@@ -604,6 +604,60 @@ fn synthetic_two_animation_loop_values(file_id: u64) -> Vec<u8> {
     })
 }
 
+fn synthetic_cross_artboard_animation_definition_owners(file_id: u64) -> Vec<u8> {
+    synthetic_runtime_file(file_id, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_string_property(bytes, "Artboard", "name", "retained-owner-a");
+        });
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 20);
+            push_f32_property(bytes, "LinearAnimation", "speed", 1.0);
+            push_uint_property(bytes, "LinearAnimation", "loopValue", 1);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 2.0, 1);
+        push_keyframe_double(bytes, 10, 12.0, 0);
+
+        push_object_with_properties(bytes, "Artboard", |bytes| {
+            push_string_property(bytes, "Artboard", "name", "caller-target-b");
+        });
+        push_transform_node(bytes, 0, 100.0, 3.0, 1.0, 1.0, 1.0);
+        push_object_with_properties(bytes, "LinearAnimation", |bytes| {
+            push_uint_property(bytes, "LinearAnimation", "fps", 10);
+            push_uint_property(bytes, "LinearAnimation", "duration", 10);
+            push_f32_property(bytes, "LinearAnimation", "speed", 2.0);
+            push_uint_property(bytes, "LinearAnimation", "loopValue", 0);
+        });
+        push_object_with_properties(bytes, "KeyedObject", |bytes| {
+            push_uint_property(bytes, "KeyedObject", "objectId", 1);
+        });
+        push_object_with_properties(bytes, "KeyedProperty", |bytes| {
+            push_uint_property(
+                bytes,
+                "KeyedProperty",
+                "propertyKey",
+                u64::from(property_key_for_name("Node", "x")),
+            );
+        });
+        push_keyframe_double(bytes, 0, 100.0, 1);
+        push_keyframe_double(bytes, 10, 200.0, 0);
+    })
+}
+
 fn synthetic_negative_speed_nested_remap(file_id: u64) -> Vec<u8> {
     synthetic_runtime_file(file_id, |bytes| {
         push_object_with_properties(bytes, "Backboard", |_| {});
@@ -19729,6 +19783,77 @@ fn linear_animation_loop_value_uses_retained_definition_like_cpp_probe() {
     assert_eq!(cpp_override_value, 2);
     animation.set_loop_value(2);
     assert_eq!(i64::from(animation.loop_value()), cpp_override_value);
+}
+
+#[test]
+fn linear_animation_instance_from_artboard_a_uses_a_definition_when_called_through_artboard_b_like_cpp_probe()
+ {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    let label = "synthetic/runtime_cross_artboard_animation_definition_owner_cpp.riv";
+    let bytes = synthetic_cross_artboard_animation_definition_owners(8231);
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        label,
+        &bytes,
+        &[
+            "--runtime-advance-animation".to_owned(),
+            "0".to_owned(),
+            "0.5".to_owned(),
+            "1".to_owned(),
+        ],
+    );
+    let cpp_a = cpp.artboards[0]
+        .runtime_animation_advances
+        .first()
+        .expect("C++ artboard A animation report");
+    let cpp_b = cpp.artboards[1]
+        .runtime_animation_advances
+        .first()
+        .expect("C++ artboard B animation report");
+    assert_eq!(cpp_a.loop_value, 1);
+    assert_eq!(cpp_b.loop_value, 0);
+    assert_close(cpp_a.time, 0.5, "C++ retained artboard A time");
+    assert_close(cpp_b.time, 1.0, "C++ distinct artboard B time");
+    assert!(cpp_a.keep_going);
+    assert!(!cpp_b.keep_going);
+
+    let runtime = read_runtime_file(&bytes).expect("Rust imports cross-artboard fixture");
+    let graph = GraphFile::from_runtime_file(&runtime).expect("Rust graphs cross-artboard fixture");
+    let artboard_a =
+        ArtboardInstance::from_graph(&runtime, &graph.artboards[0]).expect("Rust artboard A");
+    let mut artboard_b =
+        ArtboardInstance::from_graph(&runtime, &graph.artboards[1]).expect("Rust artboard B");
+    let mut animation = artboard_a
+        .linear_animation_instance(0)
+        .expect("animation instance retained from artboard A");
+
+    let advanced = artboard_b.advance_linear_animation_instance(&mut animation, 0.5);
+    let applied = artboard_b.apply_linear_animation_instance(&animation, 1.0);
+    let keep_going = artboard_b.linear_animation_instance_keep_going(&animation);
+
+    assert_eq!(advanced, cpp_a.advanced);
+    assert_eq!(keep_going, cpp_a.keep_going);
+    assert_eq!(i64::from(animation.loop_value()), cpp_a.loop_value);
+    assert_close(
+        animation.time(),
+        cpp_a.time,
+        "Rust retained artboard A time",
+    );
+    assert!(applied);
+    assert_close(
+        transform_x(&artboard_b, 1),
+        7.0,
+        "the retained A definition applies to caller target B",
+    );
+    assert_close(
+        transform_x(&artboard_a, 1),
+        2.0,
+        "the Rust caller artboard remains the application target",
+    );
 }
 
 #[test]

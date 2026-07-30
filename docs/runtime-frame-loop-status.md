@@ -4,12 +4,12 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: joint FL-B/FL-C5 publication. FL-C5 round-two fixes landed as
-  `ea38d33b`; FL-B round-two corrections landed on top as immutable combined
-  production candidate
-  `edddf4916e0ff0b7f55e41686704d5d988fae9f4`. FL-B remains pending
-  round-three reacceptance, and FL-C5 remains pending round-three review; no
-  additional file/member row is promoted by this publication step.
+- Phase: joint FL-B/FL-C5 round-four corrective. The evidence publication
+  commit `ff94a5f264f461a54ee81328e687f3d5ae0bed21` is already landed; independent
+  reviews W45/W46/W47 rejected it with the findings archived under
+  `docs/runtime-frame-loop-fl-c5-evidence/`. The current uncommitted corrective
+  is the production-P3 handoff and does not promote an additional file/member
+  row.
 - Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
   on that provisional implementation without claiming FL-B verification.
   FL-C's corrected 56-file/eight-member lane map is
@@ -829,8 +829,11 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Land the evidence-only publication commit on immutable production
-   candidate `edddf491`.
-2. Run the three round-three reviews against that publication commit: FL-B
-   reacceptance, FL-C5 oracle review, and FL-C5 standards review. FL-B and
-   FL-C5 remain pending until those reviews accept them.
+1. Review this uncommitted round-four handoff, then commit the production
+   subset as P3 without including the evidence/documentation subset.
+2. Rerun every required in-sandbox and external floor on P3. Copy each raw
+   receipt through `tools/runtime-frame-loop-port/stamp_floor_receipt.py` so
+   the P3 SHA is inside the receipt.
+3. Run the final evidence pass, name P3 in the corrective report and all
+   receipts, and land that evidence-only packet as E2 before requesting the
+   next independent reviews.

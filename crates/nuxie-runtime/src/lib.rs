@@ -45,9 +45,11 @@ pub use animation::{
     RuntimeKeyedObject, RuntimeKeyedProperty, RuntimeKeyedPropertyTarget, RuntimeLinearAnimation,
     RuntimeLinearAnimationHandle,
 };
+#[cfg(feature = "tools")]
+pub use artboard::RuntimeNestedRemapAnimationReport;
 pub use artboard::{
     ArtboardInstance, ExternalFontAssetError, RuntimeArtboardOccurrenceSegment, RuntimeComponents,
-    RuntimeEventProperty, RuntimeEventPropertyValue, RuntimeNestedRemapAnimationReport,
+    RuntimeEventProperty, RuntimeEventPropertyValue,
 };
 pub use components::{
     ComponentDirt, Mat2D, RuntimeComponent, RuntimeComponentCapabilities, TransformProperty,

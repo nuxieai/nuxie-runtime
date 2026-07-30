@@ -9,6 +9,16 @@ provisional_runtime_base = "95eb04b7cfb847f24ba77872bd8a0ee43da1af41"
 provisional_fl_b_tip = "0b08970fccc42ff3677534d4dcece0f05f69a0bc"
 fl_b_verification = "pending-reacceptance"
 
+[expected_trace_artifacts]
+cpp_binary_sha256 = "02d96a2c400f44455c010743663404f45b475b91755c46eda237346b766c4c86"
+cpp_coverage_sha256 = "ec2d86ca80e0c1be8ce83f94581fa618c9ddf469e9c0423b65f53bb2912e7802"
+cpp_mechanism_coverage_sha256 = "9e1222f631b1fc7802378b599b1e9fde2f08fb9f6c780d8ef94089df9fe9729d"
+cpp_steady_coverage_sha256 = "62952a171d2a0f3995e51f2345c9a2e12ec6946b3710e189b699c6549e9afe00"
+rust_binary_sha256 = "3a6d2850d0f27d5056809e40f40f432447fd0dc89f8eab7d02480609e88cd143"
+rust_coverage_sha256 = "34e6ba933f777e355c3b3c168c6b7ed4106f4baad3396f44c202ea885d604469"
+rust_mechanism_coverage_sha256 = "14eb65af79a89cb44d047d7a529428b13452831b354242c0fb8f1644c950da80"
+rust_steady_coverage_sha256 = "636d512927f95b3ce61a16b1536e04442f6bdce97ab15021e3ee785a792e84d0"
+
 [active_owner_family]
 id = "FL-C5-state-machine-instance"
 checklist = "docs/runtime-frame-loop-fl-c5-closure.md"

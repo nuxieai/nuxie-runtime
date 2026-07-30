@@ -2122,13 +2122,18 @@ impl LinearAnimationInstance {
         }
     }
 
+    /// Apply the retained definition to the caller's mutable Artboard.
+    ///
+    /// C++ retains both `m_animation` and `m_artboard`. Rust cannot retain a
+    /// mutable Artboard borrow for the occurrence lifetime, so the caller
+    /// supplies only the application target. Definition lookup must still use
+    /// this instance's retained immutable arena.
     pub(crate) fn apply(&self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
-        let Some(index) = self.animation.definition_index() else {
+        if self.animation.definition_index().is_none() {
             // C++'s shared empty animation owns no KeyedObjects.
             return false;
-        };
-        let definitions = Arc::clone(&artboard.linear_animations);
-        let Some(definition) = definitions.get(index) else {
+        }
+        let Some(definition) = self.retained_definition() else {
             return false;
         };
         definition.apply_with_key_frame_values(
@@ -2183,15 +2188,11 @@ impl LinearAnimationInstance {
         self.spilled_time = 0.0;
     }
 
-    fn retained_definition(&self) -> &RuntimeLinearAnimation {
-        self.animation
-            .resolve(
-                &self.animation_definitions,
-                &self.empty_animation_definition,
-            )
-            .expect(
-                "constructor validated the retained definition handle against an immutable arena",
-            )
+    pub(crate) fn retained_definition(&self) -> Option<&RuntimeLinearAnimation> {
+        self.animation.resolve(
+            &self.animation_definitions,
+            &self.empty_animation_definition,
+        )
     }
 
     fn loop_value_for_definition(&self, definition: &RuntimeLinearAnimation) -> i32 {
@@ -2206,11 +2207,16 @@ impl LinearAnimationInstance {
     /// delegates through the retained animation handle, while every other
     /// signed value is returned unchanged.
     pub fn loop_value(&self) -> i32 {
-        self.loop_value_for_definition(self.retained_definition())
+        self.retained_definition()
+            .map(|definition| self.loop_value_for_definition(definition))
+            .unwrap_or(self.loop_value_override)
     }
 
     pub fn set_loop_value(&mut self, value: i32) {
-        let definition_loop_value = self.retained_definition().loop_value as i32;
+        let definition_loop_value = self
+            .retained_definition()
+            .map(|definition| definition.loop_value as i32)
+            .unwrap_or(-1);
         if self.loop_value_override == value
             || (self.loop_value_override == -1 && definition_loop_value == value)
         {
@@ -2251,39 +2257,35 @@ impl LinearAnimationInstance {
         })
     }
 
-    pub(crate) fn keep_going(&self, animation: &RuntimeLinearAnimation) -> bool {
+    pub(crate) fn keep_going(&self) -> bool {
+        let Some(animation) = self.retained_definition() else {
+            return false;
+        };
         self.resolved_loop_kind(animation) != AnimationLoop::OneShot
             || (self.directed_speed(animation) > 0.0 && self.time < animation.end_seconds())
             || (self.directed_speed(animation) < 0.0 && self.time > animation.start_seconds())
     }
 
-    pub(crate) fn keep_going_with_speed_multiplier(
-        &self,
-        animation: &RuntimeLinearAnimation,
-        speed_multiplier: f32,
-    ) -> bool {
-        self.resolved_loop_kind(animation) != AnimationLoop::OneShot
-            || (self.directed_speed(animation) * speed_multiplier > 0.0
-                && self.time < animation.end_seconds())
-            || (self.directed_speed(animation) * speed_multiplier < 0.0
-                && self.time > animation.start_seconds())
-    }
-
-    pub(crate) fn advance(
-        &mut self,
-        animation: &RuntimeLinearAnimation,
-        elapsed_seconds: f32,
-    ) -> bool {
+    pub(crate) fn advance(&mut self, elapsed_seconds: f32) -> bool {
+        let definitions = Arc::clone(&self.animation_definitions);
+        let empty_definition = Arc::clone(&self.empty_animation_definition);
+        let Some(animation) = self.animation.resolve(&definitions, &empty_definition) else {
+            return false;
+        };
         self.advance_and_report(animation, elapsed_seconds, None, None)
     }
 
     pub(crate) fn advance_with_events(
         &mut self,
-        animation: &RuntimeLinearAnimation,
         elapsed_seconds: f32,
         reported_events: &mut Vec<StateMachineReportedEvent>,
         keyed_callbacks: &mut Vec<RuntimeKeyedCallback>,
     ) -> bool {
+        let definitions = Arc::clone(&self.animation_definitions);
+        let empty_definition = Arc::clone(&self.empty_animation_definition);
+        let Some(animation) = self.animation.resolve(&definitions, &empty_definition) else {
+            return false;
+        };
         self.advance_and_report(
             animation,
             elapsed_seconds,
@@ -2308,7 +2310,8 @@ impl LinearAnimationInstance {
 
         self.last_total_time = self.total_time;
         self.total_time += delta_seconds.abs();
-        let kill_spilled_time = !self.keep_going_with_speed_multiplier(animation, elapsed_seconds);
+        let kill_spilled_time =
+            !self.keep_going_with_speed_multiplier_for_definition(animation, elapsed_seconds);
 
         let mut last_time = self.time;
         self.time += delta_seconds;
@@ -2436,7 +2439,19 @@ impl LinearAnimationInstance {
             self.spilled_time = 0.0;
         }
         self.did_loop = did_loop;
-        self.keep_going_with_speed_multiplier(animation, elapsed_seconds)
+        self.keep_going_with_speed_multiplier_for_definition(animation, elapsed_seconds)
+    }
+
+    fn keep_going_with_speed_multiplier_for_definition(
+        &self,
+        animation: &RuntimeLinearAnimation,
+        speed_multiplier: f32,
+    ) -> bool {
+        self.resolved_loop_kind(animation) != AnimationLoop::OneShot
+            || (self.directed_speed(animation) * speed_multiplier > 0.0
+                && self.time < animation.end_seconds())
+            || (self.directed_speed(animation) * speed_multiplier < 0.0
+                && self.time > animation.start_seconds())
     }
 }
 
@@ -2865,9 +2880,9 @@ mod tests {
         // Binding adaptation: pinned C++ leaves m_didLoop indeterminate until
         // advance; safe Rust exposes a deterministic false.
         assert!(!instance.did_loop());
-        assert!(instance.advance(&animation, 2.0));
+        assert!(instance.advance(2.0));
         assert!(instance.did_loop());
-        assert!(!instance.advance(&animation, 0.0));
+        assert!(!instance.advance(0.0));
         assert!(!instance.did_loop());
     }
 

@@ -82,6 +82,31 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         self.gaps = self.repo / "docs/gaps.toml"
         self.manifest = self.repo / "file-correspondence-manifest.toml"
         self.write_files()
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"],
+            cwd=self.repo,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=self.repo,
+            check=True,
+        )
+        subprocess.run(["git", "add", "."], cwd=self.repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-qm", "fixture"], cwd=self.repo, check=True
+        )
+        rust_ref = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=self.repo,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+        trace_path = self.repo / "docs/trace.json"
+        trace = json.loads(trace_path.read_text())
+        trace["rust_ref"] = rust_ref
+        trace_path.write_text(json.dumps(trace))
 
     def write_files(self, *, file_status: str = "pending") -> None:
         rule = '\nrule = "AF-1"' if file_status == "adapted" else ""
@@ -107,11 +132,23 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 """
             ).lstrip()
         )
-        (self.repo / "docs/trace.json").write_text(
-            json.dumps(
-                {
+        trace_path = self.repo / "docs/trace.json"
+        existing_rust_ref = None
+        if trace_path.is_file():
+            existing_rust_ref = json.loads(trace_path.read_text()).get("rust_ref")
+        trace = {
                     "schema": "nuxie-runtime-frame-loop-trace/v2",
                     "upstream_ref": self.ref,
+                    "artifacts": {
+                        "cpp_binary_sha256": "1" * 64,
+                        "cpp_coverage_sha256": "2" * 64,
+                        "cpp_mechanism_coverage_sha256": "3" * 64,
+                        "cpp_steady_coverage_sha256": "4" * 64,
+                        "rust_binary_sha256": "5" * 64,
+                        "rust_coverage_sha256": "6" * 64,
+                        "rust_mechanism_coverage_sha256": "7" * 64,
+                        "rust_steady_coverage_sha256": "8" * 64,
+                    },
                     "corpus": [
                         "advance_blend_mode",
                         "ai_assitant",
@@ -140,8 +177,9 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                         "rust": {"crates/runtime/src/animation.rs": []},
                     },
                 }
-            )
-        )
+        if existing_rust_ref is not None:
+            trace["rust_ref"] = existing_rust_ref
+        trace_path.write_text(json.dumps(trace))
         pending = 1 if file_status == "pending" else 0
         adapted = 1 if file_status == "adapted" else 0
         self.ledger.write_text(
@@ -152,6 +190,15 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 porting_rules_file = "docs/PORTING.md"
                 trace_evidence_file = "docs/trace.json"
                 import_ledger = []
+                [expected_trace_artifacts]
+                cpp_binary_sha256 = "{"1" * 64}"
+                cpp_coverage_sha256 = "{"2" * 64}"
+                cpp_mechanism_coverage_sha256 = "{"3" * 64}"
+                cpp_steady_coverage_sha256 = "{"4" * 64}"
+                rust_binary_sha256 = "{"5" * 64}"
+                rust_coverage_sha256 = "{"6" * 64}"
+                rust_mechanism_coverage_sha256 = "{"7" * 64}"
+                rust_steady_coverage_sha256 = "{"8" * 64}"
                 [active_owner_family]
                 id = "fixture-animation"
                 checklist = "docs/owner-family-closure.md"
@@ -237,6 +284,26 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         if closed:
             command.append("--require-closed")
         return subprocess.run(command, text=True, capture_output=True, check=False)
+
+    def assert_rust_compile_fails(self, source: str, expected: str) -> None:
+        source_path = self.repo / "compile_fail_negative.rs"
+        output_path = self.repo / "compile_fail_negative.rlib"
+        source_path.write_text(textwrap.dedent(source))
+        result = subprocess.run(
+            [
+                "rustc",
+                "--edition=2024",
+                "--crate-type=lib",
+                str(source_path),
+                "-o",
+                str(output_path),
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertIn(expected, result.stderr)
 
     def install_production_ratchet(self, ratchet_id: str) -> dict[str, object]:
         with PRODUCTION_GAPS.open("rb") as source:
@@ -450,6 +517,28 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
             "Rust runner provenance is missing or stale", result.stderr
+        )
+
+    def test_mutated_rust_ref_fails(self) -> None:
+        trace_path = self.repo / "docs/trace.json"
+        trace = json.loads(trace_path.read_text())
+        trace["rust_ref"] = "f" * 40
+        trace_path.write_text(json.dumps(trace))
+
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("trace evidence Rust ref", result.stderr)
+
+    def test_mutated_artifact_hash_fails(self) -> None:
+        trace_path = self.repo / "docs/trace.json"
+        trace = json.loads(trace_path.read_text())
+        trace["artifacts"]["rust_coverage_sha256"] = "0" * 64
+        trace_path.write_text(json.dumps(trace))
+
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "trace evidence artifact hashes do not match", result.stderr
         )
 
     def test_closed_mode_rejects_pending_file_and_member(self) -> None:
@@ -1923,6 +2012,127 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                         "pub use owner::Item;\n",
                     )
 
+    def test_fl_c5_exact_inventory_compile_fail_negatives(self) -> None:
+        self.assert_rust_compile_fails(
+            """
+            use std::ops::Deref;
+
+            struct Wrapper(u32);
+            impl Deref for Wrapper {
+                type Target = u32;
+                fn deref(&self) -> &Self::Target { &self.0 }
+            }
+            struct Machine { global_id: Wrapper }
+
+            fn exact_field_move(machine: Machine) -> u32 {
+                machine.global_id
+            }
+            """,
+            "mismatched types",
+        )
+        self.assert_rust_compile_fails(
+            """
+            use std::cell::Cell;
+            use std::rc::Rc;
+
+            struct ExactFnOnceToken<'a> {
+                borrowed: &'a mut (),
+                not_send_or_sync: Rc<Cell<()>>,
+            }
+
+            fn narrowed_to_fn<F>(callback: F)
+            where
+                F: Fn(&()),
+            {
+                callback(&());
+            }
+
+            fn downstream_inventory() {
+                let mut marker = ();
+                let token = ExactFnOnceToken {
+                    borrowed: &mut marker,
+                    not_send_or_sync: Rc::new(Cell::new(())),
+                };
+                narrowed_to_fn(move |_| {
+                    let _ = (&token.borrowed, &token.not_send_or_sync);
+                    drop(token);
+                });
+            }
+            """,
+            "FnOnce",
+        )
+
+    def test_fl_c5_tools_probe_surface_gating_negative_controls(self) -> None:
+        required_cases = [
+            (
+                "runtime_nested_remap_probe_feature_required",
+                "crates/nuxie-runtime/Cargo.toml",
+                """
+                [features]
+                tools = []
+
+                [[test]]
+                name = "cpp_probe"
+                path = "tests/cpp_probe.rs"
+                required-features = ["tools"]
+                """,
+                """
+                [features]
+                tools = []
+
+                [[test]]
+                name = "cpp_probe"
+                path = "tests/cpp_probe.rs"
+                """,
+            ),
+            (
+                "runtime_nested_remap_probe_items_gated",
+                "crates/nuxie-runtime/src/artboard.rs",
+                """
+                #[cfg(feature = "tools")]
+                pub struct RuntimeNestedRemapAnimationReport;
+                #[cfg(feature = "tools")]
+                pub fn runtime_nested_remap_animation_reports() {}
+                """,
+                """
+                pub struct RuntimeNestedRemapAnimationReport;
+                #[cfg(feature = "tools")]
+                pub fn runtime_nested_remap_animation_reports() {}
+                """,
+            ),
+            (
+                "runtime_nested_remap_probe_reexport_gated",
+                "crates/nuxie-runtime/src/lib.rs",
+                """
+                #[cfg(feature = "tools")]
+                pub use artboard::RuntimeNestedRemapAnimationReport;
+                """,
+                """
+                pub use artboard::RuntimeNestedRemapAnimationReport;
+                """,
+            ),
+            (
+                "runtime_cpp_probe_tools_feature_command",
+                "Makefile",
+                """
+                cpp-runtime-compare:
+                cargo test -p nuxie-runtime --features tools --test cpp_probe
+                """,
+                """
+                cpp-runtime-compare:
+                cargo test -p nuxie-runtime --test cpp_probe
+                """,
+            ),
+        ]
+        for ratchet_id, source, required, missing in required_cases:
+            with self.subTest(ratchet=ratchet_id):
+                self.assert_required_production_ratchet_case(
+                    ratchet_id,
+                    source,
+                    textwrap.dedent(required),
+                    textwrap.dedent(missing),
+                )
+
     def test_fl_c5_instance_lifecycle_live_ratchets_reject_forbidden_shapes(
         self,
     ) -> None:
@@ -2682,17 +2892,30 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 fn notify_events_with_context_and_script_host() {
                     self.record_event_dispatch_phase("local-dispatch");
                     dispatch();
-                    self.bubble_events_to_owner_seam(events);
-                    self.reach_recorded_audio_event_seam(events)
-                }
-                fn reach_recorded_audio_event_seam() {
-                    for event in events.iter().filter(|event| event.is_audio_event()) {
-                        self.audio_event_seam.selected(
-                            occurrence,
-                            &mut self.audio_event_selection_count,
-                            &mut self.audio_event_last_occurrence,
-                        );
+                    if self.bubble_events_to_owner_seam(events) {
+                        self.defer_recorded_audio_event_seam(events);
+                    } else {
+                        self.reach_recorded_audio_event_seam(events);
                     }
+                }
+                fn defer_recorded_audio_event_seam() {
+                    self.deferred_owner_audio_occurrences.extend(
+                        events.iter().filter(|event| event.is_audio_event())
+                    );
+                }
+                fn flush_deferred_owner_audio_events() {
+                    let deferred =
+                        std::mem::take(&mut self.deferred_owner_audio_occurrences);
+                    for occurrence in deferred {
+                        self.deliver_recorded_audio_occurrence(occurrence);
+                    }
+                }
+                fn deliver_recorded_audio_occurrence() {
+                    self.audio_event_seam.selected(
+                        occurrence,
+                        &mut self.audio_event_selection_count,
+                        &mut self.audio_event_last_occurrence,
+                    );
                 }
                 trait AudioEventSeam {
                     fn selected();
@@ -2711,13 +2934,77 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 fn notify_events_with_context_and_script_host() {
                     self.record_event_dispatch_phase("local-dispatch");
                     dispatch();
-                    self.bubble_events_to_owner_seam(events);
-                    self.reach_recorded_audio_event_seam(events)
+                    if self.bubble_events_to_owner_seam(events) {
+                        self.reach_recorded_audio_event_seam(events);
+                    }
                 }
                 fn reach_recorded_audio_event_seam() {
                     for event in events {
                         record(event);
                     }
+                }
+                """,
+            ),
+            (
+                "state_machine_event_recursive_owner_total_order_required",
+                """
+                fn dispatch_collected_nested_events_with() {
+                    state_machine.notify_events(artboard, Some(host_local), &events);
+                    artboard.flush_nested_deferred_owner_audio_events(host_local);
+                }
+                fn advance_artboard_frame_components_with() {
+                    for (host_local, events) in &nested_events {
+                        notify_all_root_state_machines(events);
+                        artboard.flush_nested_deferred_owner_audio_events(*host_local);
+                    }
+                }
+                fn fl_c5_event_bubbling_precedes_the_recorded_audio_seam_through_two_ancestors() {
+                    assert_eq!([
+                        "leaf-local",
+                        "parent-local",
+                        "root-local",
+                        "root-audio",
+                        "parent-audio",
+                        "leaf-audio",
+                    ]);
+                }
+                fn fl_c5_event_bubbling_cross_instance_total_order_through_one_ancestor() {
+                    assert_eq!([
+                        "leaf-local",
+                        "parent-local",
+                        "parent-audio",
+                        "leaf-audio",
+                    ]);
+                }
+                """,
+                """
+                fn dispatch_collected_nested_events_with() {
+                    state_machine.notify_events(artboard, Some(host_local), &events);
+                    artboard.flush_nested_deferred_owner_audio_events(host_local);
+                }
+                fn advance_artboard_frame_components_with() {
+                    for (host_local, events) in &nested_events {
+                        notify_all_root_state_machines(events);
+                        artboard.flush_nested_deferred_owner_audio_events(*host_local);
+                    }
+                }
+                fn fl_c5_event_bubbling_precedes_the_recorded_audio_seam_through_two_ancestors() {
+                    assert_eq!([
+                        "leaf-local",
+                        "leaf-audio",
+                        "parent-local",
+                        "parent-audio",
+                        "root-local",
+                        "root-audio",
+                    ]);
+                }
+                fn fl_c5_event_bubbling_cross_instance_total_order_through_one_ancestor() {
+                    assert_eq!([
+                        "leaf-local",
+                        "leaf-audio",
+                        "parent-local",
+                        "parent-audio",
+                    ]);
                 }
                 """,
             ),
@@ -3933,7 +4220,25 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             instance_source,
             textwrap.dedent(
                 """
-                fn internal_semantic_node_id() {}
+                trait SemanticNodeResolver {
+                    fn semantic_data_local_id(&self, node: u32) -> Option<usize>;
+                }
+                fn relabeled_data_slot(
+                    components: &[Component],
+                    requested: u32,
+                ) -> Option<usize> {
+                    let mut matching_order = 0;
+                    for (slot, component) in components.iter().enumerate() {
+                        if component.type_name() != "SemanticData" {
+                            continue;
+                        }
+                        if matching_order == requested {
+                            return Some(slot);
+                        }
+                        matching_order += 1;
+                    }
+                    None
+                }
                 """
             ),
             textwrap.dedent(

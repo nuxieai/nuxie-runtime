@@ -1,3 +1,6 @@
+FLOOR_RECEIPT_TREE_SHA=edddf4916e0ff0b7f55e41686704d5d988fae9f4
+FLOOR_RECEIPT_ATTEMPT_1=product checks passed; packaging then refused the dirty runtime tree and exited with Error 4
+FLOOR_RECEIPT_RERUN=the clean-tree XCFramework rerun is recorded in floor2-xcframework.log and passed with checksum def916bee255bb3915d23ff898bb23dcd82d6c7351b10e118e8439670e5ccb7e
 cargo build --locked -p nux-apple-runtime --features apple-product
    Compiling syn v2.0.118
 warning: unexpected `cfg` condition value: `luau_assert`

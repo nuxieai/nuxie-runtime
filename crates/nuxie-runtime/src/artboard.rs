@@ -1013,6 +1013,7 @@ pub enum RuntimeArtboardOccurrenceSegment {
 }
 
 /// Probe-facing snapshot of one mounted nested remap animation occurrence.
+#[cfg(feature = "tools")]
 #[doc(hidden)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RuntimeNestedRemapAnimationReport {
@@ -4458,13 +4459,7 @@ impl ArtboardInstance {
         instance: &mut LinearAnimationInstance,
         elapsed_seconds: f32,
     ) -> bool {
-        let Some(animation) = instance
-            .animation_handle()
-            .resolve(&self.linear_animations, &self.empty_linear_animation)
-        else {
-            return false;
-        };
-        instance.advance(animation, elapsed_seconds)
+        instance.advance(elapsed_seconds)
     }
 
     pub fn advance_linear_animation_instance_with_events(
@@ -4474,18 +4469,14 @@ impl ArtboardInstance {
         reported_events: &mut Vec<StateMachineReportedEvent>,
     ) -> bool {
         let (mut changed, keyed_callbacks) = {
-            let Some(animation) = instance
-                .animation_handle()
-                .resolve(&self.linear_animations, &self.empty_linear_animation)
-            else {
+            let Some(animation) = instance.retained_definition() else {
                 return false;
             };
             if !animation.has_keyed_callbacks {
-                return instance.advance(animation, elapsed_seconds);
+                return instance.advance(elapsed_seconds);
             }
             let mut keyed_callbacks = Vec::new();
             let changed = instance.advance_with_events(
-                animation,
                 elapsed_seconds,
                 reported_events,
                 &mut keyed_callbacks,
@@ -4507,13 +4498,7 @@ impl ArtboardInstance {
     }
 
     pub fn linear_animation_instance_keep_going(&self, instance: &LinearAnimationInstance) -> bool {
-        let Some(animation) = instance
-            .animation_handle()
-            .resolve(&self.linear_animations, &self.empty_linear_animation)
-        else {
-            return false;
-        };
-        instance.keep_going(animation)
+        instance.keep_going()
     }
 
     pub(crate) fn linear_animation_instance_definition(
@@ -4523,13 +4508,6 @@ impl ArtboardInstance {
         instance
             .animation_handle()
             .resolve(&self.linear_animations, &self.empty_linear_animation)
-    }
-
-    pub(crate) fn linear_animation_definition(
-        &self,
-        handle: RuntimeLinearAnimationHandle,
-    ) -> Option<&RuntimeLinearAnimation> {
-        handle.resolve(&self.linear_animations, &self.empty_linear_animation)
     }
 
     pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
@@ -5521,6 +5499,18 @@ impl ArtboardInstance {
         self.advance_nested_artboards_collect_events(elapsed_seconds, None)
     }
 
+    pub(crate) fn flush_nested_deferred_owner_audio_events(&mut self, host_local: usize) {
+        if let Some(nested) = self.nested_artboards.get_mut(&host_local) {
+            nested.flush_deferred_owner_audio_events();
+        }
+    }
+
+    fn flush_all_nested_deferred_owner_audio_events(&mut self) {
+        for nested in self.nested_artboards.values_mut() {
+            nested.flush_deferred_owner_audio_events();
+        }
+    }
+
     /// Report imported nested-state-machine occurrence ownership and empty
     /// forwarding behavior for pinned-C++ differentials.
     #[doc(hidden)]
@@ -5543,6 +5533,7 @@ impl ArtboardInstance {
     }
 
     /// Report mounted remap occurrence time for pinned-C++ differentials.
+    #[cfg(feature = "tools")]
     #[doc(hidden)]
     pub fn runtime_nested_remap_animation_reports(&self) -> Vec<RuntimeNestedRemapAnimationReport> {
         self.nested_artboards
@@ -10141,6 +10132,7 @@ impl RuntimeNestedArtboardInstance {
             return Ok(true);
         }
 
+        let has_outer_owner = reported_events.is_some();
         let mut changed = false;
         for animation in &mut self.animations {
             changed |= animation.advance(
@@ -10160,19 +10152,45 @@ impl RuntimeNestedArtboardInstance {
         // machine observe a reverse write one pass earlier than C++ (the
         // db_health_tracker blend consumed the pulled value on the first
         // frame where C++ still blends the pre-pull value).
+        let mut child_nested_events = Vec::new();
         changed |= self
             .child
             .advance_retained_components_collect_events_with_scripts(
                 local_elapsed_seconds,
                 true,
                 script_mode,
-                None,
+                Some(&mut child_nested_events),
             )?;
+        for (host_local, events) in child_nested_events {
+            for animation in &mut self.animations {
+                let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation else {
+                    continue;
+                };
+                changed |= occurrence.notify_nested_events_and_collect(
+                    &mut self.child,
+                    host_local,
+                    &events,
+                    reported_events.as_deref_mut(),
+                );
+            }
+        }
         // Mirrors C++ src/nested_artboard.cpp NestedArtboard::updateDataBinds.
         changed |= self
             .child
             .advance_artboard_data_binds_with_elapsed(local_elapsed_seconds);
+        if !has_outer_owner {
+            self.flush_deferred_owner_audio_events();
+        }
         Ok(changed)
+    }
+
+    fn flush_deferred_owner_audio_events(&mut self) {
+        for animation in &mut self.animations {
+            if let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation {
+                occurrence.flush_deferred_owner_audio_events();
+            }
+        }
+        self.child.flush_all_nested_deferred_owner_audio_events();
     }
 
     fn reset_outer_state_machine_changed_state_counts(&mut self) {

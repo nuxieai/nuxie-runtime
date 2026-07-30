@@ -958,10 +958,10 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_public_api_inventory_required"
 globs = ["crates/nuxie-runtime/tests/public_api_fl_c5.rs"]
-pattern = "\\A(?=[\\s\\S]*macro_rules!\\s+exact_public_signature\\s*\\{[\\s\\S]{0,240}let\\s+_\\s*:\\s*\\$signature\\s*=\\s*\\$method\\s*;)(?=[\\s\\S]*BEGIN exhaustive W4 exact signatures[\\s\\S]{0,1200}let\\s+_:\\s*&u32\\s*=\\s*&machine\\.global_id[\\s\\S]{0,300}let\\s+_:\\s*&Option<Arc<str>>\\s*=\\s*&machine\\.name[\\s\\S]{0,300}let\\s+_:\\s*&Arc<Vec<Option<RuntimeStateMachineInput>>>\\s*=\\s*&machine\\.inputs[\\s\\S]{0,300}let\\s+_:\\s*&Arc<Vec<RuntimeStateMachineLayer>>\\s*=\\s*&machine\\.layers)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}try_pointer_down_with_timestamp_and_script_host)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}scripted_listener_data_converter_occurrences)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}bind_owned_view_model_context_handle)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}bindable_view_model_instance_index_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}default_view_model_symbol_list_index_source_handle_by_property_name_path)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}set_imported_view_model_context_list_source_item_count_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}set_owned_view_model_context_view_model_source_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}view_model_trigger_property_id)(?=[\\s\\S]*fn\\s+hydration_methods_accept_fn_once\\b[\\s\\S]{0,7000}move\\s*\\|_\\|[\\s\\S]{0,300}drop\\(token\\)[\\s\\S]{0,5000}END exhaustive W4 exact signatures)"
+pattern = "\\A(?=[\\s\\S]*macro_rules!\\s+exact_public_signature\\s*\\{[\\s\\S]{0,240}let\\s+_\\s*:\\s*\\$signature\\s*=\\s*\\$method\\s*;)(?=[\\s\\S]*BEGIN exhaustive W4 exact signatures[\\s\\S]*fn\\s+definition_global_id_is_exact\\s*\\([^)]*RuntimeStateMachine[^)]*\\)\\s*->\\s*u32\\s*\\{\\s*machine\\.global_id\\s*\\}[\\s\\S]*fn\\s+definition_name_is_exact\\s*\\([^)]*RuntimeStateMachine[^)]*\\)\\s*->\\s*Option<Arc<str>>\\s*\\{\\s*machine\\.name\\s*\\}[\\s\\S]*fn\\s+definition_inputs_are_exact\\b[\\s\\S]*->\\s*Arc<Vec<Option<RuntimeStateMachineInput>>>\\s*\\{\\s*machine\\.inputs\\s*\\}[\\s\\S]*fn\\s+definition_layers_are_exact\\b[\\s\\S]*->\\s*Arc<Vec<RuntimeStateMachineLayer>>\\s*\\{\\s*machine\\.layers\\s*\\})(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}try_pointer_down_with_timestamp_and_script_host)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}scripted_listener_data_converter_occurrences)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}bind_owned_view_model_context_handle)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}bindable_view_model_instance_index_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}default_view_model_symbol_list_index_source_handle_by_property_name_path)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}set_imported_view_model_context_list_source_item_count_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}set_owned_view_model_context_view_model_source_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}view_model_trigger_property_id)(?=[\\s\\S]*struct\\s+ExactFnOnceToken<'a>\\s*\\{[\\s\\S]{0,300}borrowed:\\s*&'a\\s+mut\\s*\\(\\)[\\s\\S]{0,300}not_send_or_sync:\\s*Rc<Cell<\\(\\)>>)(?=[\\s\\S]*fn\\s+hydration_methods_accept_fn_once\\b[\\s\\S]*exact_fn_once_token\\([\\s\\S]*move\\s*\\|_\\|[\\s\\S]{0,300}drop\\(token\\)[\\s\\S]*END exhaustive W4 exact signatures)"
 content_begin = "// BEGIN exhaustive W4 exact signatures"
 content_end = "// END exhaustive W4 exact signatures"
-content_sha256 = "cb189189cdd04ac2dbda7aa25b722824a3906994ad507021b8ebbbbe66216e3e"
+content_sha256 = "fcb7bc0b16fe2824ff3c2fb0bfe02a3ae8e295476d079f1321d259ae0d178312"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -971,6 +971,34 @@ globs = ["crates/nuxie-runtime/tests/public_api_fl_c5.rs"]
 pattern = "exact_public_signature!\\s*\\("
 min_occurrences = 328
 max_occurrences = 328
+
+[[ratchet]]
+id = "runtime_nested_remap_probe_feature_required"
+globs = ["crates/nuxie-runtime/Cargo.toml"]
+pattern = "\\[features\\][\\s\\S]{0,300}tools\\s*=\\s*\\[\\][\\s\\S]{0,1000}\\[\\[test\\]\\][\\s\\S]{0,300}name\\s*=\\s*\"cpp_probe\"[\\s\\S]{0,300}required-features\\s*=\\s*\\[\\s*\"tools\"\\s*\\]"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "runtime_nested_remap_probe_items_gated"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "#\\[cfg\\(feature\\s*=\\s*\"tools\"\\)\\][\\s\\S]{0,160}?(?:pub\\s+struct\\s+RuntimeNestedRemapAnimationReport|pub\\s+fn\\s+runtime_nested_remap_animation_reports)"
+min_occurrences = 2
+max_occurrences = 2
+
+[[ratchet]]
+id = "runtime_nested_remap_probe_reexport_gated"
+globs = ["crates/nuxie-runtime/src/lib.rs"]
+pattern = "#\\[cfg\\(feature\\s*=\\s*\"tools\"\\)\\]\\s*pub\\s+use\\s+artboard::RuntimeNestedRemapAnimationReport\\s*;"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "runtime_cpp_probe_tools_feature_command"
+globs = ["Makefile"]
+pattern = "cargo\\s+test\\s+-p\\s+nuxie-runtime\\s+--features\\s+tools\\s+--test\\s+cpp_probe"
+min_occurrences = 1
+max_occurrences = 1
 
 [[ratchet]]
 id = "state_machine_instance_constructor_phase_reorder"
@@ -1209,7 +1237,14 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_event_local_bubble_audio_order_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "\\A(?=[\\s\\S]*trait\\s+AudioEventSeam\\b[\\s\\S]{0,500}fn\\s+selected\\b)(?=[\\s\\S]*impl\\s+AudioEventSeam\\s+for\\s+RecordingAudioEventSeam[\\s\\S]{0,700}\\*selection_count\\s*=\\s*selection_count\\.saturating_add\\(1\\)[\\s\\S]{0,180}\\*last_occurrence\\s*=\\s*Some\\(occurrence\\))(?=[\\s\\S]*audio_event_selection_count:\\s*usize)(?=[\\s\\S]*audio_event_last_occurrence:\\s*Option<AudioEventOccurrence>)(?=[\\s\\S]*audio_event_seam:\\s*Rc::new\\(RecordingAudioEventSeam\\))(?=[\\s\\S]*fn\\s+notify_events_with_context_and_script_host\\b[\\s\\S]{0,4800}record_event_dispatch_phase\\(\"local-dispatch\"\\)[\\s\\S]{0,4000}bubble_events_to_owner_seam\\(events\\);\\s*self\\.reach_recorded_audio_event_seam\\(events\\))(?=[\\s\\S]*fn\\s+reach_recorded_audio_event_seam\\b[\\s\\S]{0,500}events\\.iter\\(\\)\\.filter\\(\\|event\\|\\s*event\\.is_audio_event\\(\\)\\)[\\s\\S]{0,700}self\\.audio_event_seam\\.selected\\()"
+pattern = "\\A(?=[\\s\\S]*trait\\s+AudioEventSeam\\b[\\s\\S]{0,500}fn\\s+selected\\b)(?=[\\s\\S]*impl\\s+AudioEventSeam\\s+for\\s+RecordingAudioEventSeam[\\s\\S]{0,700}\\*selection_count\\s*=\\s*selection_count\\.saturating_add\\(1\\)[\\s\\S]{0,180}\\*last_occurrence\\s*=\\s*Some\\(occurrence\\))(?=[\\s\\S]*audio_event_selection_count:\\s*usize)(?=[\\s\\S]*audio_event_last_occurrence:\\s*Option<AudioEventOccurrence>)(?=[\\s\\S]*audio_event_seam:\\s*Rc::new\\(RecordingAudioEventSeam\\))(?=[\\s\\S]*fn\\s+notify_events_with_context_and_script_host\\b[\\s\\S]{0,1800}record_event_dispatch_phase\\(\"local-dispatch\"\\)[\\s\\S]{0,5200}if\\s+self\\.bubble_events_to_owner_seam\\(events\\)[\\s\\S]{0,220}defer_recorded_audio_event_seam\\(events\\)[\\s\\S]{0,160}else\\s*\\{[\\s\\S]{0,160}reach_recorded_audio_event_seam\\(events\\))(?=[\\s\\S]*fn\\s+defer_recorded_audio_event_seam\\b[\\s\\S]{0,700}deferred_owner_audio_occurrences\\.extend\\([\\s\\S]{0,300}events[\\s\\S]{0,300}filter\\(\\|event\\|\\s*event\\.is_audio_event\\(\\)\\))(?=[\\s\\S]*fn\\s+flush_deferred_owner_audio_events\\b[\\s\\S]{0,500}take\\(&mut\\s+self\\.deferred_owner_audio_occurrences\\)[\\s\\S]{0,300}deliver_recorded_audio_occurrence\\(occurrence\\))(?=[\\s\\S]*fn\\s+deliver_recorded_audio_occurrence\\b[\\s\\S]{0,700}self\\.audio_event_seam\\.selected\\()"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_recursive_owner_total_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+dispatch_collected_nested_events_with\\b[\\s\\S]{0,1800}state_machine\\.notify_events\\(artboard,\\s*Some\\(host_local\\),\\s*&events\\)[\\s\\S]{0,300}artboard\\.flush_nested_deferred_owner_audio_events\\(host_local\\))(?=[\\s\\S]*fn\\s+advance_artboard_frame_components_with\\b[\\s\\S]{0,5000}for\\s+\\(host_local,\\s*events\\)\\s+in\\s+&nested_events[\\s\\S]{0,1800}artboard\\.flush_nested_deferred_owner_audio_events\\(\\*host_local\\))(?=[\\s\\S]*fn\\s+fl_c5_event_bubbling_precedes_the_recorded_audio_seam_through_two_ancestors\\b[\\s\\S]{0,9000}\"leaf-local\"[\\s\\S]{0,100}\"parent-local\"[\\s\\S]{0,100}\"root-local\"[\\s\\S]{0,100}\"root-audio\"[\\s\\S]{0,100}\"parent-audio\"[\\s\\S]{0,100}\"leaf-audio\")(?=[\\s\\S]*fn\\s+fl_c5_event_bubbling_cross_instance_total_order_through_one_ancestor\\b[\\s\\S]{0,5000}\"leaf-local\"[\\s\\S]{0,100}\"parent-local\"[\\s\\S]{0,100}\"parent-audio\"[\\s\\S]{0,100}\"leaf-audio\")"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1532,7 +1567,7 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_semantic_ordinal_projection"
 globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
-pattern = "(?:fn\\s+internal_semantic_node_id\\b|group\\.semantic_node_id\\b|semantic_node_id:\\s*u32,\\s*semantic_data_local_id)"
+pattern = "\"SemanticData\"[\\s\\S]{0,800}(?:\\.nth\\s*\\(|\\+=\\s*1|saturating_add\\s*\\(\\s*1\\s*\\))"
 max_occurrences = 0
 
 [[ratchet]]

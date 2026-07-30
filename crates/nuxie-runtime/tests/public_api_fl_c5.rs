@@ -11,6 +11,8 @@ use nuxie_runtime::{
     StateMachineEventStringProperty, StateMachineInputInstance, StateMachineInstance,
     StateMachineReportedEvent,
 };
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 macro_rules! public_methods_are_reachable {
@@ -32,13 +34,28 @@ fn fl_c5_public_reexports_are_downstream_visible_after_file_split() {
     // parameter, return, receiver, and ownership changes must break this
     // downstream test.
     // BEGIN exhaustive W4 exact signatures
-    fn definition_fields_are_public(machine: &RuntimeStateMachine) {
-        let _: &u32 = &machine.global_id;
-        let _: &Option<Arc<str>> = &machine.name;
-        let _: &Arc<Vec<Option<RuntimeStateMachineInput>>> = &machine.inputs;
-        let _: &Arc<Vec<RuntimeStateMachineLayer>> = &machine.layers;
+    fn definition_global_id_is_exact(machine: RuntimeStateMachine) -> u32 {
+        machine.global_id
     }
-    let _ = definition_fields_are_public as fn(&RuntimeStateMachine);
+    fn definition_name_is_exact(machine: RuntimeStateMachine) -> Option<Arc<str>> {
+        machine.name
+    }
+    fn definition_inputs_are_exact(
+        machine: RuntimeStateMachine,
+    ) -> Arc<Vec<Option<RuntimeStateMachineInput>>> {
+        machine.inputs
+    }
+    fn definition_layers_are_exact(
+        machine: RuntimeStateMachine,
+    ) -> Arc<Vec<RuntimeStateMachineLayer>> {
+        machine.layers
+    }
+    let _ = definition_global_id_is_exact as fn(RuntimeStateMachine) -> u32;
+    let _ = definition_name_is_exact as fn(RuntimeStateMachine) -> Option<Arc<str>>;
+    let _ = definition_inputs_are_exact
+        as fn(RuntimeStateMachine) -> Arc<Vec<Option<RuntimeStateMachineInput>>>;
+    let _ = definition_layers_are_exact
+        as fn(RuntimeStateMachine) -> Arc<Vec<RuntimeStateMachineLayer>>;
     fn is_clone<T: Clone>() {}
     is_clone::<StateMachineInstance>();
     let focus = FocusState::default();
@@ -855,11 +872,25 @@ fn fl_c5_public_reexports_are_downstream_visible_after_file_split() {
             ) -> Result<bool, ScriptError>
     );
 
-    // Each closure consumes its captured token, so it implements `FnOnce` but
-    // not `Fn`. Narrowing any public hydration bound to `Fn` must therefore
+    struct ExactFnOnceToken<'a> {
+        borrowed: &'a mut (),
+        not_send_or_sync: Rc<Cell<()>>,
+    }
+
+    fn exact_fn_once_token(marker: &mut ()) -> ExactFnOnceToken<'_> {
+        ExactFnOnceToken {
+            borrowed: marker,
+            not_send_or_sync: Rc::new(Cell::new(())),
+        }
+    }
+
+    // Every closure consumes a captured token that is non-Clone, non-Send,
+    // non-Sync, and tied to a local borrow. It is therefore FnOnce-only and
+    // non-'static. Narrowing to Fn or adding any of those extra bounds must
     // make this downstream inventory fail to compile.
     fn hydration_methods_accept_fn_once(machine: &mut StateMachineInstance) {
-        let token = String::from("data-converter");
+        let mut marker = ();
+        let token = exact_fn_once_token(&mut marker);
         let _ = machine.hydrate_and_initialize_scripted_data_converter_instance(
             0,
             &[],
@@ -867,12 +898,14 @@ fn fl_c5_public_reexports_are_downstream_visible_after_file_split() {
             false,
             None,
             move |_| {
+                let _ = (&token.borrowed, &token.not_send_or_sync);
                 drop(token);
                 Ok(ScriptListenerActionHydration::new(None, Vec::new()))
             },
         );
 
-        let token = String::from("listener-data-converter");
+        let mut marker = ();
+        let token = exact_fn_once_token(&mut marker);
         let _ = machine.hydrate_and_initialize_scripted_listener_data_converter_instance(
             0,
             0,
@@ -881,41 +914,48 @@ fn fl_c5_public_reexports_are_downstream_visible_after_file_split() {
             false,
             None,
             move |_| {
+                let _ = (&token.borrowed, &token.not_send_or_sync);
                 drop(token);
                 Ok(ScriptListenerActionHydration::new(None, Vec::new()))
             },
         );
 
-        let token = String::from("listener-action");
+        let mut marker = ();
+        let token = exact_fn_once_token(&mut marker);
         let _ = machine.hydrate_and_initialize_scripted_listener_action_instance(
             0,
             ScriptListenerActionHydration::new(None, Vec::new()),
             false,
             None,
             move |_| {
+                let _ = (&token.borrowed, &token.not_send_or_sync);
                 drop(token);
                 Ok(ScriptListenerActionHydration::new(None, Vec::new()))
             },
         );
 
-        let token = String::from("scripted-object");
+        let mut marker = ();
+        let token = exact_fn_once_token(&mut marker);
         let _ = machine.hydrate_and_initialize_scripted_object_instance(
             0,
             ScriptListenerActionHydration::new(None, Vec::new()),
             false,
             None,
             move |_| {
+                let _ = (&token.borrowed, &token.not_send_or_sync);
                 drop(token);
                 Ok(ScriptListenerActionHydration::new(None, Vec::new()))
             },
         );
 
-        let token = String::from("scripted-object-after-context");
+        let mut marker = ();
+        let token = exact_fn_once_token(&mut marker);
         let _ = machine.hydrate_and_initialize_scripted_object_instance_after_context_install(
             0,
             false,
             None,
             move |_| {
+                let _ = (&token.borrowed, &token.not_send_or_sync);
                 drop(token);
                 Ok(ScriptListenerActionHydration::new(None, Vec::new()))
             },

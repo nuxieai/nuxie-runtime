@@ -1,3 +1,4 @@
+FLOOR_RECEIPT_TREE_SHA=edddf4916e0ff0b7f55e41686704d5d988fae9f4
 tools/browser-renderer-smoke/run.sh
 warning: unexpected `cfg` condition value: `luau_assert`
  --> vendor/luaur-common-0.1.8/src/macros/luau_assertenabled.rs:2:65

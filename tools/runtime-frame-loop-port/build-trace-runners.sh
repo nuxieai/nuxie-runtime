@@ -32,7 +32,13 @@ if [[ ! -f "$trace_provenance" ]] ||
     [[ "$(cat "$trace_provenance")" != "$expected_trace_provenance" ]]; then
     # This archive is isolated from ordinary golden builds. Removing only its
     # provenance stamp makes the existing helper rebuild with the trace flags.
-    rm -f "$runtime_provenance" "$trace_provenance"
+    python3 - "$runtime_provenance" "$trace_provenance" <<'PY'
+import pathlib
+import sys
+
+for value in sys.argv[1:]:
+    pathlib.Path(value).unlink(missing_ok=True)
+PY
 fi
 
 env \
@@ -65,7 +71,12 @@ rust_provenance_before="$(
         --evidence-path "$trace_evidence" \
         --runner-provenance
 )"
-rm -f "$rust_trace_provenance"
+python3 - "$rust_trace_provenance" <<'PY'
+import pathlib
+import sys
+
+pathlib.Path(sys.argv[1]).unlink(missing_ok=True)
+PY
 
 env \
     CARGO_TARGET_DIR="$repo_root/target/frame-loop-coverage" \

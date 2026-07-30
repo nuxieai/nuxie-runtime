@@ -4,25 +4,30 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: E6 evidence publication for immutable main-integrated production
-  candidate `99ef770002cb1e04847229aeb69fb79f2116282f`. E5 evidence landed as
-  `3bef19da`; independent round-seven verdicts W71/W72/W73 rejected its
-  invented Blend1D compensation, incomplete failing-owner bubble/audio tail,
-  and structurally evadable ownership detector. Round-eight corrective
-  `99ef7700` reverts that compensation with a symmetric differential,
-  completes the failing-owner chain, and installs a syn-AST ownership detector
-  with a fail-closed tripwire; the orchestrator's novel module-re-export
-  evasion is detected. W74 records runtime 725/725, tools differentials
-  823/823, supplemental `nuxie --lib` 147/147, and both golden corpora at
-  317/317 entries plus 647/647 exact segments with zero divergences.
+- Phase: E7 evidence publication for immutable main-integrated production
+  candidate `afcb705806e0f8d0d21196064cc9456daeb237b9`. E6 evidence landed as
+  `499d86b8`; independent round-eight verdicts W76/W77/W78 rejected its
+  incomplete cfg/resolution/tripwire rigor, self-service allow suppression,
+  non-reproducible detector packaging, early error observability, weakened
+  BlendDirect proof, and trace fingerprint generated from uncommitted
+  Cargo-lock churn. Round-nine corrective `afcb7058` installs exact cfg and
+  module/associated-type resolution, fail-closed macro/attribute scanning, a
+  checker-validated per-site registry allowlist, and a committed standalone
+  detector `Cargo.lock`; withholds the terminal error until the full
+  bubble/audio chain completes; restores an honest BlendDirect clone/remount
+  proof; and records the FL-G03 disposition. W79 records runtime 726/726,
+  tools differentials 823/823, supplemental `nuxie --lib` 147/147, checker
+  71/71, and both golden corpora at 317/317 entries plus 647/647 exact
+  segments with zero divergences.
   Coordinator directive from Levi dated 2026-07-30 binds interim correction
   rounds to that fast battery. The complete pixel/browser/size floor runs once
   on the final independently accepted candidate before promotion; six
   consecutive identical P2–P7 cycles provided zero information for the later
   delivery-semantics corrections. The four `171b5703`-stamped floor7 receipts
-  remain the standing complete-floor reference. The E6 trace is regenerated
-  fingerprint-last and the full checker is green on this exact evidence tree.
-  No post-acceptance rebase remains.
+  remain the standing complete-floor reference. The E7 trace is regenerated
+  only after a staged-evidence porcelain gate confirms no unstaged or
+  untracked churn, including no Cargo-lock churn; the full checker is green
+  on this exact evidence tree. No post-acceptance rebase remains.
 - Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
   on that provisional implementation without claiming FL-B verification.
   FL-C's corrected 56-file/eight-member lane map is
@@ -836,12 +841,11 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. The independent round-eight reviews (FL-C5 oracle, FL-C5 standards,
+1. The independent round-nine reviews (FL-C5 oracle, FL-C5 standards,
    FL-B reacceptance) evaluate this publication against immutable
-   candidate `99ef770002cb1e04847229aeb69fb79f2116282f`.
-2. On triple acceptance: promotion bookkeeping (FL-B 45 files/8 members,
-   FL-C5 2 files/2 members), then the single complete floor on the
-   accepted candidate per the 2026-07-30 coordinator floor policy, then
-   the PR to main (the candidate is already main-integrated).
+   candidate `afcb705806e0f8d0d21196064cc9456daeb237b9`.
+2. On triple acceptance: promotion bookkeeping, then the single
+   complete floor on the accepted candidate per the 2026-07-30
+   coordinator floor policy (per-leg parallel), then the PR to main.
 3. On any finding: one scoped corrective, fast-suite validation, and a
    scoped re-review.

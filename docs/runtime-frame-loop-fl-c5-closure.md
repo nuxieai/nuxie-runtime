@@ -860,7 +860,7 @@ The structural checker and injected negatives must permanently reject:
 Candidate identity:
 
 - immutable combined-family production candidate:
-  `e729dd745db1850d0fda60b4631929e40ffbfba7`. FL-C5 round-two production
+  `14b187659a1eafadd3e425d75f516b7080c3b021`. FL-C5 round-two production
   landed as `ea38d33b`, FL-B round-two corrections as `edddf491`,
   round-four corrective production as `2e2d3c6d`, and `95333c41` completed
   the tools-enabled probe target. E2 evidence was published as `eaf8a6f6`;
@@ -907,19 +907,29 @@ Candidate identity:
   binds registry rows to exact enclosing-item and guarded-name anchors with
   bidirectional drift rejection, activates candidate checklist enforcement,
   and completes the FL-G03 and publication citations.
+  E8 evidence was published as `4ecce48a`. Independent round-ten verdicts
+  W86/W87/W88 unanimously held the behavioral axis clean while rejecting
+  reverse-order macro fragments, owner-origin aliases and wrappers, exhaustive
+  guarded-enum catch-all selection, and registry sites forgeable through local
+  anchors or relocation within the same anchor. Round-eleven corrective
+  `14b18765` makes fragment composition order-insensitive, export-audits owner
+  modules and propagates every guarded alias, binds each blessed registry site
+  to its full nesting path and normalized-statement `site_hash`, detects
+  catch-all selection, and corrects the thirteen-row and canonical publication
+  prose.
   This immutable candidate remains main-integrated; no post-acceptance rebase
-  remains. The E8 trace names the full `e729dd74` candidate and is generated
+  remains. The E9 trace names the full `14b18765` candidate and is generated
   only after the intended evidence set is staged and a porcelain gate confirms
-  no unstaged, untracked, Cargo-lock, or other tracked-file churn. W84 records
-  the candidate-mode fast-suite run over the exact round-ten production later
-  frozen at that commit. The floor7 receipts on `171b5703` remain the standing
-  complete-floor reference under the dated coordinator policy below;
+  no unstaged, untracked, Cargo-lock, or other tracked-file churn. W89 records
+  the candidate-mode fast-suite run over the exact round-eleven production
+  later frozen at that commit. The floor7 receipts on `171b5703` remain the
+  standing complete-floor reference under the dated coordinator policy below;
 - pinned C++:
   `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
 - trace source fingerprint and Rust runner provenance:
   `docs/runtime-frame-loop-trace.json`; `make
   runtime-frame-loop-port-check` confirms both are current for this final
-  E8 evidence tree in candidate mode.
+  E9 evidence tree in candidate mode.
 
 Coordinator floor-policy directive (Levi, 2026-07-30): interim correction
 rounds bind only the fast behavioral battery—runtime library, tools-enabled
@@ -930,7 +940,7 @@ before promotion, not once per correction round. Six consecutive identical
 complete-floor cycles, P2 through P7, provided zero new information for the
 delivery-semantics corrections. The floor7 receipts on `171b5703` therefore
 remain the standing full-floor reference; they are not relabeled as
-candidate-specific `e729dd74` receipts.
+candidate-specific `14b18765` receipts.
 
 The four nested-event ownership ratchets now use a syn-based resolver across
 every non-owner Rust source. It resolves use declarations and aliases, glob
@@ -947,8 +957,9 @@ row. Inline comments and string literals have no suppression power, and the
 checker rejects an unregistered hit, a missing registered anchor, duplicate
 substitution, same-anchor relocation, stale site hash, or drift in either
 direction. Permanent negatives retain every
-W66/W68/W71/W72/W73/W81/W82/W83 spelling and fully-qualified controls; exotic
-future spellings containing a guarded type or member trip the token rule.
+W66/W68/W71/W72/W73/W81/W82/W83/W86/W87/W88 spelling and fully-qualified
+controls; exotic future spellings containing a guarded type or member trip the
+token rule.
 
 Gate receipts:
 
@@ -969,17 +980,19 @@ Gate receipts:
 | W79 round-nine corrective | `docs/runtime-frame-loop-fl-c5-evidence/W79-report.md` maps every W76/W77/W78 blocker to exact cfg and resolution logic, fail-closed token scanning, the checker-validated registry, committed standalone detector lockfile, full-chain error withholding, restored BlendDirect proof, and the FL-G03 disposition. It records runtime 726/726, tools differentials 823/823, supplemental `nuxie --lib` 147/147, checker 71/71, and both golden corpora at 317/317 entries plus 647/647 exact segments with zero divergences. Trace fingerprint and artifact provenance remained intentionally owned by E7. |
 | W81/W82/W83 round-nine verdicts | `docs/runtime-frame-loop-fl-c5-evidence/W81-oracle-round9.md`, `W82-standards-round9.md`, and `W83-flb-round9.md` preserve the three independent E7 rejection verdicts and the exact round-ten negative forms. |
 | W84 round-ten corrective | `docs/runtime-frame-loop-fl-c5-evidence/W84-report.md` maps the W81/W82/W83 blockers to fail-closed guarded tails and fragment composition, exact anchor/name registry matching, candidate checklist enforcement, FL-G03 citations, and corrected publication pointers. It records runtime 726/726, tools differentials 823/823, supplemental `nuxie --lib` 147/147, candidate-mode checker tests 77/77, both golden corpora 317/317 entries plus 647/647 exact segments with zero divergences, and a clean-target `--locked` detector build. Trace fingerprint and artifact provenance remained intentionally owned by E8. |
+| W86/W87/W88 round-ten verdicts | `docs/runtime-frame-loop-fl-c5-evidence/W86-oracle-round10.md`, `W87-standards-round10.md`, and `W88-flb-round10.md` preserve the three independent E8 rejection verdicts. All three hold the behavioral axis clean and reject only reverse-order token fragments, owner-origin aliases/wrappers, exhaustive guarded-enum catch-all selection, and forgeable or same-anchor-relocatable registry sites. |
+| W89 round-eleven corrective | `docs/runtime-frame-loop-fl-c5-evidence/round-specs/W89-round11-spec.md` preserves the binding corrective design. `docs/runtime-frame-loop-fl-c5-evidence/W89-report.md` maps every W86/W87/W88 blocker to order-insensitive composition, owner export-audit propagation, full nesting paths, normalized-statement site hashes, catch-all selection detection, and corrected packet prose. It records runtime 726/726, tools differentials 823/823, supplemental `nuxie --lib` 147/147, candidate-mode checker tests 83/83, both golden corpora 317/317 entries plus 647/647 exact segments, and a clean-target `--locked` detector build. Trace fingerprint and artifact provenance remained intentionally owned by E9. |
 | Seven reopened member behaviors | This W31 run executes one passing test for each named receipt: `state_machine_generic_layer_state_occurrence_matches_cpp_probe` (`currentState`, `stateChangedByIndex`), `state_machine_viewmodel_trigger_conditions_match_cpp_probe` (`advance(seconds,newFrame)`), `flow_pointer_callbacks_receive_event_time_and_the_prior_delivered_position` (`pointerDown`), both `synchronous_*` event-cycle tests (`applyEvents`), `first_factory_pointer_prepares_and_applies_fixed_bindings_before_callback` (`internalDataContext`), and `listener_missing_context_hydration_keeps_the_table_until_context_arrives` (`pointerDown`, `internalDataContext`, `initScriptedObjects`). |
 | Focused and broad behavioral floor | `docs/runtime-frame-loop-fl-c5-evidence/W30-report.md`: C++ probes 804/804, `nuxie --lib` 146/146, runtime library 713/713, scripting library 205/205, and `sound` 1/1 exact. W31 reruns the complete runtime library and C++ probe gates below. |
-| Structural checker and provenance | Final `make runtime-frame-loop-port-check`: 77/77 candidate-mode checker tests, including recursive tracked-receipt stamps, exact inventory/gating/repository-wide semantic and syn-AST seam-owner negatives, fail-closed resolution and fragment composition, exact anchored registry validation, clean-cache locked detector packaging, candidate checklist enforcement, and mutated-ref/artifact negatives, followed by the live checker accepting E8 `rust_ref`, candidate fingerprint, manifest, Rust runner provenance, and all eight artifact hashes. |
+| Structural checker and provenance | Final `make runtime-frame-loop-port-check`: 83/83 candidate-mode checker tests, including recursive tracked-receipt stamps, exact inventory/gating/repository-wide semantic and syn-AST seam-owner negatives, order-insensitive fragment composition, owner export auditing and alias propagation, guarded-enum catch-all selection, full-anchor/site-hash registry validation, clean-cache locked detector packaging, candidate checklist enforcement, and mutated-ref/artifact negatives, followed by the live checker accepting E9 `rust_ref`, candidate fingerprint, manifest, Rust runner provenance, and all eight artifact hashes. |
 | Standing public/downstream API reference | The E5 sandbox run passed 14/14 code/API cases; only `public_api_exposes_the_default_rust_renderer` could not construct an adapter because that sandbox reported `metal found no adapters`. The historical external `floor-public-api.log` remains the 15/15 adapter-capable receipt. No test was skipped or weakened. |
-| E8 ordinary and scripted golden corpora | W84 records both fast-suite comparisons at 317/317 exact entries and 647/647 exact segments, with zero divergences, unsupported features, or not-yet cases. |
+| E9 ordinary and scripted golden corpora | W89 records both fast-suite comparisons at 317/317 exact entries and 647/647 exact segments, with zero divergences, unsupported features, or not-yet cases. |
 | Standing static-reference renderer corpus | `docs/runtime-frame-loop-fl-c5-evidence/floor7-pixel-static.log`: `171b5703`-stamped standing full-floor reference, exact=1,468, byte-exact=837, diverges=0, gated=0. |
 | Standing same-runner pixel corpus | `docs/runtime-frame-loop-fl-c5-evidence/floor7-pixel-same.log`: `171b5703`-stamped standing full-floor reference, exact=1,468, byte-exact=1,370, diverges=0, gated=0. |
 | Standing browser/WebGPU corpus | `docs/runtime-frame-loop-fl-c5-evidence/floor7-browser.log`: `171b5703`-stamped standing full-floor reference; browser and GPU smoke pass; prohibited surface and CPU presentation are zero; typed readback is one; error-scope, uniform-limit, alpha, and bounded-recovery invariants hold. |
 | Standing link-closure size | `docs/runtime-frame-loop-fl-c5-evidence/floor7-size.log`: `171b5703`-stamped standing full-floor reference; scripting off=8,218,120 bytes and scripting on=9,318,856 bytes, both below the 9 MiB (9,437,184-byte) budget. |
 | Apple boundary | Upstream boundary commit `afe71e30` on 2026-07-30 removed `nux-apple-runtime` and Apple packaging. Apple/XCFramework/ABI/header packaging is no longer an acceptance leg. All historical Apple receipts remain under `docs/runtime-frame-loop-fl-c5-evidence/superseded/`; the size floor remains operative. |
-| E8 fast-suite and publication commands | On `e729dd74`: runtime library 726/726; live tools-enabled C++ differential suite 823/823; supplemental `nuxie --lib` 147/147; both golden comparisons 317/317 and 647/647; `make runtime-frame-loop-port-check` green in candidate mode with 77/77 tests and live provenance; `cargo fmt --all -- --check` green; the pre-trace porcelain gate contains only the intended staged evidence set with no unstaged/untracked, Cargo-lock, or other tracked-file churn; and working-tree/staged evidence/docs `git diff --check` is green. The complete pixel/browser/size floor is deferred exactly as the coordinator policy requires. Earlier historical counts remain preserved in their reports rather than silently rewritten. |
+| E9 fast-suite and publication commands | On `14b18765`: runtime library 726/726; live tools-enabled C++ differential suite 823/823; supplemental `nuxie --lib` 147/147; both golden comparisons 317/317 and 647/647; `make runtime-frame-loop-port-check` green in candidate mode with 83/83 tests and live provenance; `cargo fmt --all -- --check` green; the pre-trace porcelain gate contains only the intended staged evidence set with no unstaged/untracked, Cargo-lock, or other tracked-file churn; and working-tree/staged evidence/docs `git diff --check` is green. The complete pixel/browser/size floor is deferred exactly as the coordinator policy requires. Earlier historical counts remain preserved in their reports rather than silently rewritten. |
 
 Remaining out-of-scope work is unchanged and explicitly `RECORDED`: pending
 rows `B6-0259` (`listener_group.cpp`), `B6-0083`
@@ -1010,7 +1023,7 @@ Closure checklist:
   (`make runtime-frame-loop-port-test`: use the live count reported by the
   gate receipt);
 - [x] focused Rust tests and pinned-C++ differentials are green;
-- [x] the E8 interim fast behavioral floor and structural/provenance gates
+- [x] the E9 interim fast behavioral floor and structural/provenance gates
   required by the 2026-07-30 coordinator policy are green; floor7 remains the
   standing complete-floor reference, and the next complete pixel/browser/size
   run is reserved for the final independently accepted candidate before

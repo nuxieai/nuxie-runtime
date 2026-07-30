@@ -60,17 +60,22 @@ id = "FL-G03"
 status = "open"
 counters = [
   "component_add_dirt",
+  "event_apply_batch",
+  "state_machine_advance",
   "state_machine_transition_search",
   "component_dirt_consumptions",
 ]
-mechanism = "The complete listener/action family now dispatches ListenerAlignTarget through the retained target Node with the pinned transform/world-transform dirt writes. The remaining gap is the whole StateMachine/StateMachineInstance owner: definition and occurrence collections, transition search, advance/applyEvents, and name/id lookup still require end-to-end comparison against C++ retained vectors and pointers before the transition-search counter can close."
+mechanism = "The complete listener/action family now dispatches ListenerAlignTarget through the retained target Node with the pinned transform/world-transform dirt writes. The merged E5 trace reaches exact transition-search and component-dirt-consumption counts, while its exact ordinary and scripted golden streams expose a remaining call-topology difference: pinned C++ enters StateMachineInstance::advance/applyEvents 30 times and Rust enters advance_with_report_mode/apply_local_event_listeners 11 times. Rust performs report-time nested bubbling and owner-mediated batch settlement through its retained safe facade rather than a raw parent-pointer recursion. The two coverage counters remain explicitly open through the independent round-seven reviews; output equality alone does not close this mechanism-level difference."
 citations = [
+  "cpp:src/animation/state_machine_instance.cpp:2320-2342",
+  "cpp:src/animation/state_machine_instance.cpp:2548-2575",
   "cpp:src/animation/state_machine_instance.cpp:2583",
   "cpp:src/animation/listener_align_target.cpp:9",
   "rust:crates/nuxie-runtime/src/state_machine/listener_align_target.rs:15-112",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:11982-12290",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7672-7721",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12613-12663",
 ]
-closure = "FL-C4 closes ListenerAlignTarget and its component-dirt branch. FL-C5 must close the complete StateMachine/StateMachineInstance collection and transition-search owner, reach parity for transition searches, and delete any displaced lookup path before this gap closes."
+closure = "FL-C4 closes ListenerAlignTarget and its component-dirt branch. FL-C5 closes transition-search count parity and displaced lookup paths. Independent round-seven FL-C5 oracle, standards, and FL-B reacceptance must classify the 30-to-11 advance/applyEvents call-topology difference as a cited safe owner-boundary adaptation or require exact call parity before these final two counters close."
 
 [[gap]]
 id = "FL-G04"

@@ -4,16 +4,17 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: pre-E5 round-seven corrective work. This tree is not an operative
-  publication, and its trace/fingerprint publication steps remain pending
-  E5. The operative publication is still E4 commit
-  `76ab8d86`, whose immutable production candidate is
-  `9434b39cd1e888ac5f3300a9f6708b303516da2d`. Its five SHA-stamped floor5
-  receipts and trace remain the operative evidence until E5. Round-seven work
-  moves nested report bubbling to the `applyEvents` phase, narrows recursive
-  notify settlement, and strengthens the differential and ownership
-  ratchets; it must not be described as checker-green publication evidence
-  before E5 regenerates the fingerprint, runner provenance, and trace.
+- Phase: E5 evidence publication for immutable main-integrated production
+  candidate `171b57033845cd5ce20222dd24604c8c2b27d120`. It contains round-seven
+  corrective `f4f013dd`, pre-freeze scout corrective `192cbbbe`, and the
+  merge of origin/main boundary `afe71e30`. The scout corrective moves nested
+  report bubbling to report time, narrows recursive settlement, and makes the
+  ownership ratchets alias-resistant. The boundary commit, dated 2026-07-30,
+  removes `nux-apple-runtime` and Apple packaging for a pure engine boundary;
+  historical Apple receipts are superseded and the size floor remains.
+  Four SHA-stamped floor7 receipts are operative. The final trace is
+  regenerated fingerprint-last and the full checker is green on this exact
+  tree. No post-acceptance rebase remains.
 - Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
   on that provisional implementation without claiming FL-B verification.
   FL-C's corrected 56-file/eight-member lane map is
@@ -827,10 +828,8 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Request the independent round-seven FL-C5 oracle, standards, and FL-B
-   reacceptance reviews against this pre-E5 corrective tree, explicitly not
-   against a new publication.
-2. Resolve every orchestrator-upheld review finding before promotion.
-3. Publish E5 and make it operative only after all three independent
-   round-seven reviews accept and the trace/fingerprint evidence is
-   regenerated on the accepted candidate.
+1. Publish the staged E5 evidence/docs packet without changing immutable
+   main-integrated candidate `171b57033845cd5ce20222dd24604c8c2b27d120`.
+2. Request the independent round-seven FL-B reacceptance review against E5.
+3. Request the independent round-seven FL-C5 oracle review against E5.
+4. Request the independent round-seven FL-C5 standards review against E5.

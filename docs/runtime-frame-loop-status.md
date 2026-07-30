@@ -149,9 +149,6 @@ FL-0 clean committed-tree floor, run from detached worktrees carrying only
 - `make renderer-golden`: 1,468 / 1,468 entries accepted; 0 divergences and
   0 gated failures (837 byte-exact), Apple M5 Max.
 - `make capi-smoke`: passed (`draw_paths=2`, `objects=4`).
-- `make apple-runtime-check`: passed, including the release panic firewall,
-  66 product tests, 15 artifact-validator tests, header smoke, and deny
-  clippy surface.
 - `make lint-gate`: passed.
 - `cargo fmt --all -- --check`: passed.
 - `git diff --check`: passed.
@@ -183,9 +180,6 @@ FL-1 clean committed-tree floor at `bb9ad75d`:
 - `make renderer-golden`: 1,468 / 1,468 entries accepted, 837 byte-exact,
   0 divergences, and 0 gated failures on Apple M5 Max.
 - `make capi-smoke`: passed (`draw_paths=2`, `objects=4`).
-- `make apple-runtime-check`: passed, including product tests, artifact
-  validation, generated-header smoke, deny clippy, and the release panic
-  firewall.
 - `make lint-gate`, `cargo fmt --all -- --check`, and `git diff --check`:
   passed.
 - `make size-report`: scripting off 8,267,336 bytes (7.88 MiB), SHA-256

@@ -949,25 +949,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nux-apple-runtime"
-version = "0.2.0"
-dependencies = [
- "base64",
- "cbindgen",
- "ed25519-dalek",
- "nux-container",
- "nuxie",
- "nuxie-schema",
- "objc2",
- "objc2-core-foundation",
- "objc2-metal",
- "objc2-quartz-core",
- "png",
- "serde_json",
- "sha2",
-]
-
-[[package]]
 name = "nux-capi"
 version = "0.1.0"
 dependencies = [

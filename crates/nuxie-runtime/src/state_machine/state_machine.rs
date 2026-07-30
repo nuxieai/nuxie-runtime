@@ -2004,6 +2004,72 @@ mod tests {
     }
 
     #[test]
+    fn blend_direct_retained_definition_handles_survive_rust_clone_and_remount() {
+        let file = read_runtime_file(
+            &std::fs::read(rive_runtime_fixture("animation_reset_cases.riv"))
+                .expect("read animation fixture"),
+        )
+        .expect("import animation fixture");
+        let graph = GraphFile::from_runtime_file(&file).expect("build animation graph");
+        let artboard = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            graph.artboards.first().expect("fixture artboard"),
+            &graph.artboards,
+        )
+        .expect("instantiate animation artboard");
+        let blend_state = RuntimeBlendStateDirect {
+            animations: vec![
+                RuntimeBlendAnimationDirect {
+                    animation: RuntimeLinearAnimationHandle::new(0),
+                    source: RuntimeDirectBlendSource::MixValue { value: 25.0 },
+                },
+                RuntimeBlendAnimationDirect {
+                    animation: RuntimeLinearAnimationHandle::empty(),
+                    source: RuntimeDirectBlendSource::MixValue { value: 75.0 },
+                },
+            ],
+        };
+        let mut occurrence = BlendStateDirectInstance::new(
+            &blend_state,
+            &artboard.linear_animations,
+            &artboard.empty_linear_animation,
+        );
+        occurrence.advance(&blend_state, &artboard, &[], &[], 0.0);
+        let retained_definitions = occurrence
+            .animations
+            .iter()
+            .map(|animation| animation.definition)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            retained_definitions,
+            [
+                RuntimeBlendAnimationHandle::new(0),
+                RuntimeBlendAnimationHandle::new(1),
+            ],
+            "each direct-blend occurrence retains its exact definition handle",
+        );
+
+        let mut cloned = occurrence.clone();
+        let remounted = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            graph.artboards.first().expect("fixture artboard"),
+            &graph.artboards,
+        )
+        .expect("remount animation artboard");
+        cloned.advance(&blend_state, &remounted, &[], &[], 0.0);
+
+        assert_eq!(
+            cloned
+                .animations
+                .iter()
+                .map(|animation| animation.definition)
+                .collect::<Vec<_>>(),
+            retained_definitions,
+            "Rust-only clone/remount preserves BlendDirect arena identity",
+        );
+    }
+
+    #[test]
     fn reported_event_metadata_preserves_open_url_values_and_ordinary_absence() {
         assert_eq!(open_url_target(0), "_blank");
         assert_eq!(open_url_target(1), "_parent");

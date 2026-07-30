@@ -119,3 +119,15 @@ differentials 823/823, supplemental `nuxie --lib` 147/147, candidate-mode
 checker tests 83/83, both golden corpora at 317/317 entries plus 647/647 exact
 segments, and a clean-cache `--locked` detector build. As a corrective report,
 W89 is not an independent acceptance verdict.
+
+## Final review round
+
+| Round | Independent verdicts | Outcome |
+| --- | --- | --- |
+| 10 | `W86-oracle-round10.md`, `W87-standards-round10.md`, `W88-flb-round10.md` | Triple rejection on detector/registry mechanics; behavioral axis unanimously clean. |
+| 11 (final) | `W91-oracle-round11.md`, `W92-standards-round11.md`, `W93-flb-round11.md` | Coordinator acceptance of joint candidate `14b18765` on 2026-07-30 with the five findings recorded in the closure packet's residual-risk register. |
+
+Round 11 is final. There is no round 12. The ownership detector is classified
+as a drift lint for the documented ownership convention, validated by the
+fixed permanent-negative corpus; the packet makes no
+adversarial-soundness claim.

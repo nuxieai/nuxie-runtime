@@ -39,8 +39,27 @@ what is idiomatic Rust.
 
 ## 0. Owner-Family Closure Workflow
 
-A review candidate is one complete C++ owner family, not the next failing test
-or the next hot method. This is a binding pre-publication sequence:
+> **Process reset (coordinator directive, 2026-07-30, binding for FL-D
+> onward).** Tests are the acceptance. A family is DONE when: (1) the port
+> lands file-to-file per the manifest; (2) the family's upstream unit tests
+> are ported per the W65 triage (fixture differentials or literal Rust
+> ports; C++-container-mechanics cases documented as skipped); (3) the
+> existing differential suites and goldens are green; (4) the orchestrator
+> spot-checks the family's trickiest behaviors against the pinned C++; (5)
+> one PR to main flips the family's manifest rows. Nothing else is
+> required: no candidate/evidence commit pairs, no trace-fingerprint
+> rounds, no promotion commits, no review-until-zero-findings, and no
+> adversarial charters against enforcement tooling (the ownership detector
+> is a frozen drift lint validated by its fixed negative corpus). At most
+> one time-boxed behavioral review may be used where differentials
+> structurally cannot observe the surface. The numbered workflow below
+> remains sound guidance for HOW to port a family (read whole family
+> first, checklist the members, port coherently, keep differentials
+> honest); its publication/acceptance machinery is superseded by this
+> paragraph. Rationale: rounds 10-12 of the FL-B/FL-C5 campaign produced
+> zero behavioral findings while consuming days on tooling review; the
+> upstream test estate (1,320 TEST_CASEs, 238 silvers) is a stricter and
+> cheaper oracle than review rounds.
 
 1. **Read the whole family first.** Read every mapped implementation and header,
    plus the importer and concrete subclasses that establish its lifecycle.

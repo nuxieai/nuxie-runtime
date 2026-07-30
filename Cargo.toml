@@ -21,6 +21,7 @@ members = [
     "tools/browser-renderer-smoke",
     "tools/nuxie-codegen",
     "tools/rust-golden-runner",
+    "tools/silver-corpus",
 ]
 exclude = [
     "vendor/luaur-common-0.1.8",

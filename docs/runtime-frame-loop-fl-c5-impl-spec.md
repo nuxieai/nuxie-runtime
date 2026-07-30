@@ -599,9 +599,17 @@ cargo fmt --all -- --check
 
 Run the repository’s current complete correctness/structure publication floor
 required by the family procedure: probe-armed workspace, ordinary and scripted
-goldens, pixel referee, C API, native Apple/XCFramework/ABI/header checks,
-browser WebGPU-only checks, lint/format/diff checks, committed-tree size gate,
-and source-bound trace/provenance validation.
+goldens, pixel referee, C API, browser WebGPU-only checks,
+lint/format/diff checks, committed-tree size gate, and source-bound
+trace/provenance validation.
+
+Boundary amendment (2026-07-30): upstream commit `afe71e30` removed
+`nux-apple-runtime` and Apple packaging to establish a pure engine boundary.
+Native Apple/XCFramework/ABI/header packaging is therefore not an acceptance
+leg for candidates containing that boundary commit. Historical Apple receipts
+remain archived under
+`docs/runtime-frame-loop-fl-c5-evidence/superseded/`; the committed-tree size
+floor remains required.
 
 Do not run a performance target. FL-C5 acceptance cannot use timing to select,
 reject, or reorder implementation work.

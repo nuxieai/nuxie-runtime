@@ -1007,12 +1007,11 @@ milestone; the current subplan status selects its exact wave/lane; executable
 ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
-**Canonical NEXT:** complete the round-11 corrective for candidate
-`e729dd745db1850d0fda60b4631929e40ffbfba7` under independent review, then
-publish its immutable E9 candidate fingerprint and runner provenance. The E8
-trace remains historical and must not be relabeled for the corrective
-worktree. Do not run performance work or the deferred complete
-pixel/browser/size floor before independent acceptance.
+**Canonical NEXT:** run the single complete floor on accepted joint FL-B/FL-C5
+candidate `14b187659a1eafadd3e425d75f516b7080c3b021`, with browser, size,
+pixel-same, and pixel-static legs in parallel under the 2026-07-30 coordinator
+floor policy and no Apple leg; then open the joint PR to main; then execute
+FL-D as dependency-ordered per-family PRs.
 
 The complete listener/action/event/focus-dispatch family (FL-C4) is accepted.
 Production source is
@@ -1041,11 +1040,13 @@ The FL-C1 input/listener-definition family is independently accepted at
 `state_machine.inputs` member row are promoted. Recorded gap
 `flc5-vm-listener-firing-boundary` remains owned by FL-C5 WP6.
 
-Accepted program counts are now 105 / 341 files and 53 / 75 members, with
-7 / 10 mechanism gaps open. The align-target half of FL-G03 is closed, but
-the gap remains open for FL-C5's StateMachineInstance collection and
-transition-search owner. FL-B remains the only outstanding prior acceptance.
-Active branch is `levi/fl-c`; there is no PR.
+The coordinator accepted joint FL-B/FL-C5 candidate `14b18765` on 2026-07-30
+after eleven review rounds. FL-B's 45 files and eight members and FL-C5's two
+files and two members are promoted; FL-C is closed at 56 / 56 files.
+Accepted program counts are now 152 / 342 files and 63 / 75 members, with
+7 / 10 mechanism gaps open. FL-G03 remains open only for its explicitly
+tracked aggregate trace counters, not for an unaccepted FL-C5 owner. Active
+branch is `levi/fl-c`; there is no PR.
 
 ## Next queue (top = next; orchestrator maintains)
 
@@ -1056,15 +1057,14 @@ Active branch is `levi/fl-c`; there is no PR.
    dual translations are adjudicated into FLR-1..FLR-16;
    source shaping found the existing owner-family module seams sufficient.
    FL-A Component ownership is independently accepted and promoted. FL-B1
-   through FL-B4 are translated on a provisional tip and remain pending
-   reacceptance. Coordinator direction authorizes FL-C to proceed without
-   falsely promoting FL-B. Execute FL-C1 through FL-C5 from the frozen
-   corrected 56-file/eight-member spec
-   `docs/runtime-frame-loop-fl-c-spec.md`, followed
-   by dependency-ordered Artboard/DataBind and live-draw owner waves. Run the
-   canonical whole-corpus measurement only after every mapped FL-A-through-FL-E
-   code row is ported and the complete correctness/structure floor is green.
-   The sorted slow-scene list is no longer the implementation queue.
+   through FL-B4 are reaccepted and promoted with FL-C5 at `14b18765`; FL-C
+   is closed at 56 / 56 files. Run the one accepted-candidate complete floor,
+   open the joint PR to main, then execute dependency-ordered FL-D
+   Artboard/DataBind owners as per-family PRs, followed by the live-draw owner
+   waves. Run the canonical whole-corpus measurement only after every mapped
+   FL-A-through-FL-E code row is ported and the complete
+   correctness/structure floor is green. The sorted slow-scene list is no
+   longer the implementation queue.
 2. Independent orchestrator verification may promote completed #RD-1
    correspondence rows from `pending-verification`. #B-6 is complete; the
    next ordinary closeout-spine implementation item after the frame-loop port

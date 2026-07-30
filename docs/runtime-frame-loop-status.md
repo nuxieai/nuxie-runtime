@@ -4,20 +4,20 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: E9 evidence publication for immutable main-integrated production
-  candidate `14b187659a1eafadd3e425d75f516b7080c3b021`. E8 evidence landed as
-  `4ecce48a`; independent round-ten reviews W86/W87/W88 unanimously held the
-  behavioral axis clean but rejected reverse-order macro fragments,
-  owner-origin aliases/wrappers, exhaustive catch-all selection, and
-  forgeable or same-anchor-relocatable registry sites. Round-eleven corrective
-  `14b18765` makes token-fragment composition order-insensitive, export-audits
-  owner modules and propagates every guarded alias, binds registry rows to the
-  full nesting path plus normalized-statement `site_hash`, detects guarded-enum
-  catch-all selection, and corrects the thirteen-row and canonical publication
-  prose. W89 records runtime 726/726, tools differentials 823/823,
-  supplemental `nuxie --lib` 147/147, candidate-mode checker tests 83/83, a
-  clean-cache locked detector build, and both golden corpora at 317/317
-  entries plus 647/647 exact segments with zero divergences.
+- Phase: FL-B reacceptance and FL-C5 acceptance promotion bookkeeping for
+  immutable main-integrated joint candidate
+  `14b187659a1eafadd3e425d75f516b7080c3b021`. The coordinator accepted the
+  candidate on 2026-07-30 after eleven review rounds. W91/W92/W93 document
+  five accepted residual risks in the ownership drift lint and evidence
+  packet; they do not identify a behavioral divergence. The behavioral axis
+  remained clean through rounds 8–11, FL-B behavior remained clear for six
+  consecutive rounds, and W91's regenerated registry audit matched all 38
+  committed rows exactly. The drift lint's fixed permanent-negative corpus
+  remains binding, without an adversarial-soundness claim. There is no round
+  12. W89 records runtime 726/726, tools differentials 823/823, supplemental
+  `nuxie --lib` 147/147, candidate-mode checker tests 83/83, a clean-cache
+  locked detector build, and both golden corpora at 317/317 entries plus
+  647/647 exact segments with zero divergences.
   Coordinator directive from Levi dated 2026-07-30 binds interim correction
   rounds to that fast battery. The complete pixel/browser/size floor runs once
   on the final independently accepted candidate before promotion; six
@@ -79,7 +79,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `f86d5ba0146697abc996310c62fa45e1f053144b`; exact main
   `e72323c808b91d706ba3b745396beaca7accd69a` was consumed without overlap at
   FL-B boundary merge `b5d5bc8afeaa0369cbc248b85366111649cb9010`.
-  FL-B remains pending reacceptance. FL-C1 is independently accepted at
+  FL-B is reaccepted with joint candidate `14b18765`; all 45 exact file rows
+  and eight member rows are promoted. FL-C1 is independently accepted at
   `efd87746` and its exact mapped rows are promoted. The complete FL-C4
   listener/action family is independently accepted at
   `0eb48976755d759c078f1f1a032bd88590e223f7` and its exact mapped rows are
@@ -93,17 +94,20 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `src/animation/scripted_listener_action.cpp` remains deliberately assigned
   to FL-C; it is not a substitute FL-B row. The checker pins the exact
   45-file FL-B membership so either omission or reassignment fails.
-- File closure: 105 / 342. The accepted FL-C1 family adds 12 exact
-  input/listener owners; 237 later-wave rows remain pending.
-- Member closure: 53 / 75 owner/member rows. FL-C1 adds
-  `state_machine.inputs`; 22 later-wave rows remain.
+- File closure: 152 / 342. Joint acceptance promotes FL-B's 45 exact owners
+  and FL-C5's two exact owners; 190 later-wave rows remain pending. FL-C is
+  closed at 56 / 56 files.
+- Member closure: 63 / 75 owner/member rows. Joint acceptance promotes
+  FL-B's eight members plus `state_machine.collections` and
+  `state_machine.advance`; 12 later-wave rows remain.
 - Open mechanism gaps: 7 / 10. FL-G02 and FL-G06 remain closed; FL-G10 records
   the user-approved D2 saturation choice for AnimationReset's otherwise
   undefined float-to-int edge.
-- Current dependency wave: FL-C. FL-B's frozen 45-file/eight-member mini-map
-  remains implemented but pending reacceptance. FL-C consumes that
-  implementation provisionally under the coordinator override. FL-C2 is
-  independently closed. The complete five-file layer/state family (FL-C3) is
+- Current dependency wave: FL-C is closed 56 / 56. FL-B's frozen
+  45-file/eight-member mini-map is reaccepted and promoted with FL-C5 at
+  `14b18765`. After the accepted-candidate complete floor and the PR to main,
+  work advances through FL-D as per-family PRs. FL-C2 is independently
+  closed. The complete five-file layer/state family (FL-C3) is
   translated at semantic commit
   `78be55ef845eb8e841d9d9ef99ba8e5732120f68` against
   `docs/runtime-frame-loop-fl-c3-closure.md`. C++'s ordered state-definition
@@ -190,8 +194,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   Independent Standards and Spec/oracle reviews both passed exact
   `0eb48976755d759c078f1f1a032bd88590e223f7` with no findings. The exact 25
   file owners and two member rows are promoted. Together with accepted FL-C1,
-  closure is now 105 / 341 files and 53 / 75 members, with 7 / 10 mechanism
-  gaps open.
+  that checkpoint reached 105 / 341 files and 53 / 75 members, with 7 / 10
+  mechanism gaps open; the current promoted totals are recorded above.
 - FL-C1 input ownership is now source-corresponding: `state_machine_input.rs`
   owns the authored definition and `state_machine_input_instance.rs` owns the
   mutable occurrence. Each occurrence retains a handle into the one authored
@@ -841,15 +845,9 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. The independent round-eleven reviews (FL-C5 oracle, FL-C5 standards,
-   FL-B reacceptance) evaluate this publication against immutable
-   candidate `14b187659a1eafadd3e425d75f516b7080c3b021`, scoped to the
-   five round-ten closures (order-insensitive fragment composition,
-   owner export-audit propagation, site-hash-bound registry, guarded-enum
-   catch-all marking, prose corrections) plus verification that all 38
-   blessed registry rows map onto the unchanged production tree.
-2. On triple acceptance: promotion bookkeeping, then the single
-   complete floor on the accepted candidate (per-leg parallel, per the
-   2026-07-30 coordinator floor policy), then the PR to main.
-3. On any finding: one scoped corrective, fast-suite validation, and a
-   scoped re-review.
+1. Run the single complete floor on accepted candidate
+   `14b187659a1eafadd3e425d75f516b7080c3b021`, with browser, size,
+   pixel-same, and pixel-static legs in parallel under the 2026-07-30
+   coordinator floor policy. There is no Apple leg.
+2. Open the joint FL-B/FL-C5 PR to main.
+3. Execute FL-D as dependency-ordered per-family PRs.

@@ -8,6 +8,16 @@ This report records the uncommitted W34 repair delta. No commit was created.
 The two family reviews that caused the round remain preserved beside this
 report as `W32-oracle-review.md` and `W33-standards-review.md`.
 
+## Correction to the diff-check receipt
+
+Correction recorded 2026-07-29: the W34 `git diff --check` receipt covered
+only the then-current working-tree repair delta. It did not inspect or prove
+the complete historical range cited by W33, and it must not be read as a
+range-level diff-clean or ownership-clean claim. W33's range observation
+therefore remains factual; the closure distinguishes ancestry from the
+scoped FL-C5 production changes instead of using the W34 whitespace check to
+reject that observation.
+
 ## Oracle findings
 
 | Finding | Repair | Pinned source | Strengthened proof |

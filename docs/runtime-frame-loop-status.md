@@ -4,11 +4,12 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: FL-C provisional implementation. FL-B1 through FL-B4 are translated
-  on provisional tip
-  `0b08970fccc42ff3677534d4dcece0f05f69a0bc`, but rejected candidate
-  `3ef06dd5ae07c16c5dc2aa29984412b926ae5426` remains unpromoted and every
-  FL-B file/member row remains pending until reacceptance.
+- Phase: joint FL-B/FL-C5 publication. FL-C5 round-two fixes landed as
+  `ea38d33b`; FL-B round-two corrections landed on top as immutable combined
+  production candidate
+  `edddf4916e0ff0b7f55e41686704d5d988fae9f4`. FL-B remains pending
+  round-three reacceptance, and FL-C5 remains pending round-three review; no
+  additional file/member row is promoted by this publication step.
 - Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
   on that provisional implementation without claiming FL-B verification.
   FL-C's corrected 56-file/eight-member lane map is
@@ -828,17 +829,8 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Implement FL-C5 per the committed family map: the binding checklist is
-   `runtime-frame-loop-fl-c5-closure.md`, the dependency-ordered writer
-   packages are `runtime-frame-loop-fl-c5-impl-spec.md` (WP0 file split
-   first), and the complete source-walk evidence is
-   `runtime-frame-loop-fl-c5-walk/`. One production writer; no semantic edit
-   outside the packages.
-2. FL-C1 is independently accepted at `efd87746`. Recorded gap
-   `flc5-vm-listener-firing-boundary` is CLOSED by FL-C5 WP6: the
-   nested-relative ViewModel-listener report now becomes pending only after
-   the current frame's `applyEvents`, matching C++'s later DataBind
-   occurrence update, and all four claimed-path differentials hold strict
-   per-step equality with the explicit divergence pin removed. FL-B remains
-   the only outstanding prior acceptance. Performance remains deferred until
-   all mapped FL-A-through-FL-E code is ported.
+1. Land the evidence-only publication commit on immutable production
+   candidate `edddf491`.
+2. Run the three round-three reviews against that publication commit: FL-B
+   reacceptance, FL-C5 oracle review, and FL-C5 standards review. FL-B and
+   FL-C5 remain pending until those reviews accept them.

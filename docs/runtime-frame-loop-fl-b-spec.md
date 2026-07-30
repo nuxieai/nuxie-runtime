@@ -48,6 +48,15 @@ FLR-16 extractions of the touched reset-factory and direct-blend-instance
 owners; their surrounding FL-B families remain coordinated by
 `state_machine.rs`.
 
+Orchestrator authorization (2026-07-30): the round-two retained-arena
+correction changed the `LinearAnimationInstance` constructor signature, so
+its constructor call sites outside this closure — including the accepted
+FL-C3 owner `crates/nuxie-runtime/src/state_machine/state_instance.rs` —
+carry the minimal mechanical hookup for that API migration and nothing
+else. Any such touched accepted row must be re-verified behaviorally by the
+FL-B reacceptance review (the wrong-artboard and state-construction
+differentials are the designated proofs).
+
 Tests, the frame-loop ledger/checker, and evidence documents may change with
 the owner family. Renderer backend code and later FL-C/FL-D/FL-E production
 owners do not.

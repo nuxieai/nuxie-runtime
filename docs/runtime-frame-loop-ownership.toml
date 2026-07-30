@@ -22,7 +22,7 @@ rust_steady_coverage_sha256 = "9e92c2f0e6217fc80337cca2630fe1fb7c4ddd4b84aad07a8
 [active_owner_family]
 id = "FL-C5-state-machine-instance"
 checklist = "docs/runtime-frame-loop-fl-c5-closure.md"
-checklist_state = "planning"
+checklist_state = "candidate"
 cpp_files = [
   "src/animation/state_machine.cpp",
   "src/animation/state_machine_instance.cpp",

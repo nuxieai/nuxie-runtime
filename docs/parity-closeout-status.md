@@ -1007,11 +1007,12 @@ milestone; the current subplan status selects its exact wave/lane; executable
 ledgers prove row state; maps define scope/order; static executor queue text is
 historical unless it agrees with these sources.
 
-**Canonical NEXT:** begin the complete StateMachine/StateMachineInstance owner
-family (FL-C5) by reading both pinned headers and both complete C++ sources,
-then commit its exhaustive closure checklist before any semantic Rust edit.
-Do not run performance work. Stop at this boundary until the next execution
-session.
+**Canonical NEXT:** publish the immutable E8 candidate fingerprint and runner
+provenance for the completed W84 corrective worktree, then begin the independent
+round-ten FL-C5 oracle, FL-C5 standards, and FL-B re-reviews. The E7 trace
+remains historical and must not be relabeled for the corrective worktree. Do
+not run performance work or the deferred complete pixel/browser/size floor
+before independent acceptance.
 
 The complete listener/action/event/focus-dispatch family (FL-C4) is accepted.
 Production source is

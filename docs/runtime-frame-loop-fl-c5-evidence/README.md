@@ -28,7 +28,7 @@ the final independently accepted candidate immediately before promotion, not
 once per correction round. Six consecutive identical complete-floor cycles,
 P2 through P7, provided zero new information for the delivery-semantics
 corrections. The floor7 files therefore remain the standing full-floor
-reference during E6; they are not `99ef7700` receipts and must not be
+reference during E7; they are not `afcb7058` receipts and must not be
 represented as such.
 
 Upstream boundary commit `afe71e30` on 2026-07-30 removed
@@ -88,3 +88,15 @@ uncommitted Cargo-lock churn. `W79-report.md` is the round-nine corrective
 handoff mapping those findings to immutable candidate `afcb7058`, its
 committed standalone detector lockfile, and its fast-suite receipts. As a
 corrective report, W79 is not an independent acceptance verdict.
+
+`.flc5/out/W81-oracle-round9.md`, `.flc5/out/W82-standards-round9.md`, and
+`.flc5/out/W83-flb-round9.md` preserve the three independent E7 rejection verdicts:
+unresolved guarded tails across qualified/module/cross-file re-exports,
+fragment-composed macro names, fungible file/kind registry quotas, the
+planning-state checklist, incomplete FL-G03 citations, and stale publication
+pointers. The round-ten corrective keeps the E7 trace immutable and explicitly
+defers the new candidate fingerprint and runner provenance to E8. Its fast
+acceptance is green at runtime 726/726, tools differentials 823/823,
+supplemental `nuxie --lib` 147/147, checker tests 77/77, and both golden
+corpora at 317/317 entries plus 647/647 exact segments with zero divergences;
+the standalone detector also builds from a clean target with `--locked`.

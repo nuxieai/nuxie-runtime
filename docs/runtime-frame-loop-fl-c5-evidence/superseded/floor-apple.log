@@ -1349,7 +1349,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 23 -             (((n >> s) | (n << (64 - s))) as i64)
-23 +             ((n >> s) | (n << (64 - s))) as i64 
+23 +             ((n >> s) | (n << (64 - s))) as i64
    |
 
 warning: unused import: `crate::enums::lua_type::lua_Type`
@@ -1631,7 +1631,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 25 -             (*b.offset(0))
-25 +             *b.offset(0) 
+25 +             *b.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1643,7 +1643,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 27 -             (*a.offset(0))
-27 +             *a.offset(0) 
+27 +             *a.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1655,7 +1655,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 30 -             (*b.offset(1))
-30 +             *b.offset(1) 
+30 +             *b.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1667,7 +1667,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 32 -             (*a.offset(1))
-32 +             *a.offset(1) 
+32 +             *a.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1679,7 +1679,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 35 -             (*b.offset(2))
-35 +             *b.offset(2) 
+35 +             *b.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1691,7 +1691,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 37 -             (*a.offset(2))
-37 +             *a.offset(2) 
+37 +             *a.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1703,7 +1703,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 42 -                 (*b.offset(3))
-42 +                 *b.offset(3) 
+42 +                 *b.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1715,7 +1715,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 44 -                 (*a.offset(3))
-44 +                 *a.offset(3) 
+44 +                 *a.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1727,7 +1727,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 58 -                 (*c.offset(0))
-58 +                 *c.offset(0) 
+58 +                 *c.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1739,7 +1739,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 63 -                 (*c.offset(1))
-63 +                 *c.offset(1) 
+63 +                 *c.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1751,7 +1751,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 68 -                 (*c.offset(2))
-68 +                 *c.offset(2) 
+68 +                 *c.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1763,7 +1763,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 74 -                     (*c.offset(3))
-74 +                     *c.offset(3) 
+74 +                     *c.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1775,7 +1775,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 25 -             (*b.offset(0))
-25 +             *b.offset(0) 
+25 +             *b.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1787,7 +1787,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 27 -             (*a.offset(0))
-27 +             *a.offset(0) 
+27 +             *a.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1799,7 +1799,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 30 -             (*b.offset(1))
-30 +             *b.offset(1) 
+30 +             *b.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1811,7 +1811,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 32 -             (*a.offset(1))
-32 +             *a.offset(1) 
+32 +             *a.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1823,7 +1823,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 35 -             (*b.offset(2))
-35 +             *b.offset(2) 
+35 +             *b.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1835,7 +1835,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 37 -             (*a.offset(2))
-37 +             *a.offset(2) 
+37 +             *a.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1847,7 +1847,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 42 -                 (*b.offset(3))
-42 +                 *b.offset(3) 
+42 +                 *b.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1859,7 +1859,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 44 -                 (*a.offset(3))
-44 +                 *a.offset(3) 
+44 +                 *a.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1871,7 +1871,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 58 -                 (*c.offset(0))
-58 +                 *c.offset(0) 
+58 +                 *c.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1883,7 +1883,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 63 -                 (*c.offset(1))
-63 +                 *c.offset(1) 
+63 +                 *c.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1895,7 +1895,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 68 -                 (*c.offset(2))
-68 +                 *c.offset(2) 
+68 +                 *c.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -1907,7 +1907,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 74 -                     (*c.offset(3))
-74 +                     *c.offset(3) 
+74 +                     *c.offset(3)
    |
 
 warning: unused import: `crate::enums::lua_type::lua_Type`
@@ -19739,7 +19739,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 23 -             (((n >> s) | (n << (64 - s))) as i64)
-23 +             ((n >> s) | (n << (64 - s))) as i64 
+23 +             ((n >> s) | (n << (64 - s))) as i64
    |
 
 warning: unused import: `crate::enums::lua_type::lua_Type`
@@ -20021,7 +20021,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 25 -             (*b.offset(0))
-25 +             *b.offset(0) 
+25 +             *b.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20033,7 +20033,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 27 -             (*a.offset(0))
-27 +             *a.offset(0) 
+27 +             *a.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20045,7 +20045,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 30 -             (*b.offset(1))
-30 +             *b.offset(1) 
+30 +             *b.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20057,7 +20057,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 32 -             (*a.offset(1))
-32 +             *a.offset(1) 
+32 +             *a.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20069,7 +20069,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 35 -             (*b.offset(2))
-35 +             *b.offset(2) 
+35 +             *b.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20081,7 +20081,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 37 -             (*a.offset(2))
-37 +             *a.offset(2) 
+37 +             *a.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20093,7 +20093,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 42 -                 (*b.offset(3))
-42 +                 *b.offset(3) 
+42 +                 *b.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20105,7 +20105,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 44 -                 (*a.offset(3))
-44 +                 *a.offset(3) 
+44 +                 *a.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20117,7 +20117,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 58 -                 (*c.offset(0))
-58 +                 *c.offset(0) 
+58 +                 *c.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20129,7 +20129,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 63 -                 (*c.offset(1))
-63 +                 *c.offset(1) 
+63 +                 *c.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20141,7 +20141,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 68 -                 (*c.offset(2))
-68 +                 *c.offset(2) 
+68 +                 *c.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20153,7 +20153,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 74 -                     (*c.offset(3))
-74 +                     *c.offset(3) 
+74 +                     *c.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20165,7 +20165,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 25 -             (*b.offset(0))
-25 +             *b.offset(0) 
+25 +             *b.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20177,7 +20177,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 27 -             (*a.offset(0))
-27 +             *a.offset(0) 
+27 +             *a.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20189,7 +20189,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 30 -             (*b.offset(1))
-30 +             *b.offset(1) 
+30 +             *b.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20201,7 +20201,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 32 -             (*a.offset(1))
-32 +             *a.offset(1) 
+32 +             *a.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20213,7 +20213,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 35 -             (*b.offset(2))
-35 +             *b.offset(2) 
+35 +             *b.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20225,7 +20225,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 37 -             (*a.offset(2))
-37 +             *a.offset(2) 
+37 +             *a.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20237,7 +20237,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 42 -                 (*b.offset(3))
-42 +                 *b.offset(3) 
+42 +                 *b.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20249,7 +20249,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 44 -                 (*a.offset(3))
-44 +                 *a.offset(3) 
+44 +                 *a.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20261,7 +20261,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 58 -                 (*c.offset(0))
-58 +                 *c.offset(0) 
+58 +                 *c.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20273,7 +20273,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 63 -                 (*c.offset(1))
-63 +                 *c.offset(1) 
+63 +                 *c.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20285,7 +20285,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 68 -                 (*c.offset(2))
-68 +                 *c.offset(2) 
+68 +                 *c.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -20297,7 +20297,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 74 -                     (*c.offset(3))
-74 +                     *c.offset(3) 
+74 +                     *c.offset(3)
    |
 
 warning: unused import: `crate::enums::lua_type::lua_Type`
@@ -38141,7 +38141,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 23 -             (((n >> s) | (n << (64 - s))) as i64)
-23 +             ((n >> s) | (n << (64 - s))) as i64 
+23 +             ((n >> s) | (n << (64 - s))) as i64
    |
 
 warning: unused import: `crate::enums::lua_type::lua_Type`
@@ -38423,7 +38423,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 25 -             (*b.offset(0))
-25 +             *b.offset(0) 
+25 +             *b.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38435,7 +38435,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 27 -             (*a.offset(0))
-27 +             *a.offset(0) 
+27 +             *a.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38447,7 +38447,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 30 -             (*b.offset(1))
-30 +             *b.offset(1) 
+30 +             *b.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38459,7 +38459,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 32 -             (*a.offset(1))
-32 +             *a.offset(1) 
+32 +             *a.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38471,7 +38471,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 35 -             (*b.offset(2))
-35 +             *b.offset(2) 
+35 +             *b.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38483,7 +38483,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 37 -             (*a.offset(2))
-37 +             *a.offset(2) 
+37 +             *a.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38495,7 +38495,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 42 -                 (*b.offset(3))
-42 +                 *b.offset(3) 
+42 +                 *b.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38507,7 +38507,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 44 -                 (*a.offset(3))
-44 +                 *a.offset(3) 
+44 +                 *a.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38519,7 +38519,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 58 -                 (*c.offset(0))
-58 +                 *c.offset(0) 
+58 +                 *c.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38531,7 +38531,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 63 -                 (*c.offset(1))
-63 +                 *c.offset(1) 
+63 +                 *c.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38543,7 +38543,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 68 -                 (*c.offset(2))
-68 +                 *c.offset(2) 
+68 +                 *c.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38555,7 +38555,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 74 -                     (*c.offset(3))
-74 +                     *c.offset(3) 
+74 +                     *c.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38567,7 +38567,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 25 -             (*b.offset(0))
-25 +             *b.offset(0) 
+25 +             *b.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38579,7 +38579,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 27 -             (*a.offset(0))
-27 +             *a.offset(0) 
+27 +             *a.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38591,7 +38591,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 30 -             (*b.offset(1))
-30 +             *b.offset(1) 
+30 +             *b.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38603,7 +38603,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 32 -             (*a.offset(1))
-32 +             *a.offset(1) 
+32 +             *a.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38615,7 +38615,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 35 -             (*b.offset(2))
-35 +             *b.offset(2) 
+35 +             *b.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38627,7 +38627,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 37 -             (*a.offset(2))
-37 +             *a.offset(2) 
+37 +             *a.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38639,7 +38639,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 42 -                 (*b.offset(3))
-42 +                 *b.offset(3) 
+42 +                 *b.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38651,7 +38651,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 44 -                 (*a.offset(3))
-44 +                 *a.offset(3) 
+44 +                 *a.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38663,7 +38663,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 58 -                 (*c.offset(0))
-58 +                 *c.offset(0) 
+58 +                 *c.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38675,7 +38675,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 63 -                 (*c.offset(1))
-63 +                 *c.offset(1) 
+63 +                 *c.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38687,7 +38687,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 68 -                 (*c.offset(2))
-68 +                 *c.offset(2) 
+68 +                 *c.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -38699,7 +38699,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 74 -                     (*c.offset(3))
-74 +                     *c.offset(3) 
+74 +                     *c.offset(3)
    |
 
 warning: unused import: `crate::enums::lua_type::lua_Type`
@@ -56625,7 +56625,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 23 -             (((n >> s) | (n << (64 - s))) as i64)
-23 +             ((n >> s) | (n << (64 - s))) as i64 
+23 +             ((n >> s) | (n << (64 - s))) as i64
    |
 
 warning: unused import: `crate::enums::lua_type::lua_Type`
@@ -56907,7 +56907,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 25 -             (*b.offset(0))
-25 +             *b.offset(0) 
+25 +             *b.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -56919,7 +56919,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 27 -             (*a.offset(0))
-27 +             *a.offset(0) 
+27 +             *a.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -56931,7 +56931,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 30 -             (*b.offset(1))
-30 +             *b.offset(1) 
+30 +             *b.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -56943,7 +56943,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 32 -             (*a.offset(1))
-32 +             *a.offset(1) 
+32 +             *a.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -56955,7 +56955,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 35 -             (*b.offset(2))
-35 +             *b.offset(2) 
+35 +             *b.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -56967,7 +56967,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 37 -             (*a.offset(2))
-37 +             *a.offset(2) 
+37 +             *a.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -56979,7 +56979,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 42 -                 (*b.offset(3))
-42 +                 *b.offset(3) 
+42 +                 *b.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -56991,7 +56991,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 44 -                 (*a.offset(3))
-44 +                 *a.offset(3) 
+44 +                 *a.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57003,7 +57003,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 58 -                 (*c.offset(0))
-58 +                 *c.offset(0) 
+58 +                 *c.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57015,7 +57015,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 63 -                 (*c.offset(1))
-63 +                 *c.offset(1) 
+63 +                 *c.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57027,7 +57027,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 68 -                 (*c.offset(2))
-68 +                 *c.offset(2) 
+68 +                 *c.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57039,7 +57039,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 74 -                     (*c.offset(3))
-74 +                     *c.offset(3) 
+74 +                     *c.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57051,7 +57051,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 25 -             (*b.offset(0))
-25 +             *b.offset(0) 
+25 +             *b.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57063,7 +57063,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 27 -             (*a.offset(0))
-27 +             *a.offset(0) 
+27 +             *a.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57075,7 +57075,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 30 -             (*b.offset(1))
-30 +             *b.offset(1) 
+30 +             *b.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57087,7 +57087,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 32 -             (*a.offset(1))
-32 +             *a.offset(1) 
+32 +             *a.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57099,7 +57099,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 35 -             (*b.offset(2))
-35 +             *b.offset(2) 
+35 +             *b.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57111,7 +57111,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 37 -             (*a.offset(2))
-37 +             *a.offset(2) 
+37 +             *a.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57123,7 +57123,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 42 -                 (*b.offset(3))
-42 +                 *b.offset(3) 
+42 +                 *b.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57135,7 +57135,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 44 -                 (*a.offset(3))
-44 +                 *a.offset(3) 
+44 +                 *a.offset(3)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57147,7 +57147,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 58 -                 (*c.offset(0))
-58 +                 *c.offset(0) 
+58 +                 *c.offset(0)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57159,7 +57159,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 63 -                 (*c.offset(1))
-63 +                 *c.offset(1) 
+63 +                 *c.offset(1)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57171,7 +57171,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 68 -                 (*c.offset(2))
-68 +                 *c.offset(2) 
+68 +                 *c.offset(2)
    |
 
 warning: unnecessary parentheses around block return value
@@ -57183,7 +57183,7 @@ warning: unnecessary parentheses around block return value
 help: remove these parentheses
    |
 74 -                     (*c.offset(3))
-74 +                     *c.offset(3) 
+74 +                     *c.offset(3)
    |
 
 warning: unused import: `crate::enums::lua_type::lua_Type`

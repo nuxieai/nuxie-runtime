@@ -9,11 +9,11 @@
       "spotify_kids_demo": 3216
     },
     "rust": {
-      "advance_blend_mode": 701,
-      "ai_assitant": 225206,
-      "align_target": 6548,
+      "advance_blend_mode": 702,
+      "ai_assitant": 225207,
+      "align_target": 6549,
       "animated_clipping": 2893,
-      "animation_reset_cases": 3191,
+      "animation_reset_cases": 3214,
       "spotify_kids_demo": 25254
     }
   },
@@ -22,10 +22,10 @@
     "cpp_coverage_sha256": "ec2d86ca80e0c1be8ce83f94581fa618c9ddf469e9c0423b65f53bb2912e7802",
     "cpp_mechanism_coverage_sha256": "9e1222f631b1fc7802378b599b1e9fde2f08fb9f6c780d8ef94089df9fe9729d",
     "cpp_steady_coverage_sha256": "62952a171d2a0f3995e51f2345c9a2e12ec6946b3710e189b699c6549e9afe00",
-    "rust_binary_sha256": "b2f803ba8682dd389220319274222dc7cf90a12b99e605bea39aaf985fcea2db",
-    "rust_coverage_sha256": "2230eea0a283df89efc42bb6d5ef010455d15664b318b0ec895b157b21807b96",
-    "rust_mechanism_coverage_sha256": "143b1752e845d7cffece472d1d2da74bb5af4dd25bcf7bdd1bbd5d3b1d8a9203",
-    "rust_steady_coverage_sha256": "b3bc258d371d42e261728dcaf2de60ded6c27acc1cebf1eccf12d90b4f059b28"
+    "rust_binary_sha256": "d500d7960a27abcc8bb52055a683b2903b5cced401fc8594ecf6e65b66b59dd5",
+    "rust_coverage_sha256": "7dc8db16249e67b0ca65f25fe6c03d2c7f85b7b697efd640729eb804bd5f1e6f",
+    "rust_mechanism_coverage_sha256": "31a5a0a5ba5a95d48618dbfa4a67414f9d87fd3d4ecfbfe8ea7eb9027215ab80",
+    "rust_steady_coverage_sha256": "705275bb64561f5d570cf3e0904032853d3614a429d912040e503233139a5907"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -2181,7 +2181,7 @@
           "name": "<nuxie_runtime::animation::LinearAnimationInstance>::resolved_loop_kind"
         },
         {
-          "count": 62,
+          "count": 72,
           "name": "<nuxie_runtime::animation::LinearAnimationInstance>::retained_definition"
         },
         {
@@ -2313,7 +2313,7 @@
           "name": "<nuxie_runtime::animation::RuntimeLinearAnimationHandle>::index"
         },
         {
-          "count": 127,
+          "count": 137,
           "name": "<nuxie_runtime::animation::RuntimeLinearAnimationHandle>::resolve"
         },
         {
@@ -2391,16 +2391,8 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::advance_nested_artboard_entry::{closure#1}"
         },
         {
-          "count": 19,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::advance_nested_artboard_entry::{closure#2}"
-        },
-        {
-          "count": 19,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::advance_nested_artboard_entry::{closure#3}"
-        },
-        {
           "count": 38,
-          "name": "<nuxie_runtime::artboard::ArtboardInstance>::advance_nested_artboard_entry::{closure#5}"
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::advance_nested_artboard_entry::{closure#2}"
         },
         {
           "count": 30,
@@ -2427,11 +2419,11 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::advance_retained_components_collect_events_with_scripts::{closure#2}"
         },
         {
-          "count": 30,
+          "count": 11,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::advance_state_machine_instance"
         },
         {
-          "count": 30,
+          "count": 11,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::advance_state_machine_instance_with_context"
         },
         {
@@ -2539,7 +2531,7 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::color_property"
         },
         {
-          "count": 17920,
+          "count": 17930,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::component"
         },
         {
@@ -2659,15 +2651,19 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::deform_runtime_vertex_weight::{closure#9}"
         },
         {
-          "count": 24225,
+          "count": 19,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::detach_active_nested_state_machines"
+        },
+        {
+          "count": 24230,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::double_property"
         },
         {
-          "count": 24225,
+          "count": 24230,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::double_property::{closure#2}"
         },
         {
-          "count": 24225,
+          "count": 24230,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::double_property::{closure#3}"
         },
         {
@@ -2701,6 +2697,10 @@
         {
           "count": 29,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::initialize_clone_backend_if_pending"
+        },
+        {
+          "count": 5,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::instance_identity"
         },
         {
           "count": 5,
@@ -2823,6 +2823,10 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::resolved_image_asset_global::{closure#0}"
         },
         {
+          "count": 19,
+          "name": "<nuxie_runtime::artboard::ArtboardInstance>::restore_active_nested_state_machines"
+        },
+        {
           "count": 24,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::runtime_file"
         },
@@ -2927,7 +2931,7 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::shape_paint_is_visible"
         },
         {
-          "count": 38837,
+          "count": 38842,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::slot"
         },
         {
@@ -2971,11 +2975,11 @@
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::text_style_font_override"
         },
         {
-          "count": 7284,
+          "count": 7289,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::transform_property"
         },
         {
-          "count": 5832,
+          "count": 5837,
           "name": "<nuxie_runtime::artboard::ArtboardInstance>::transform_property_with_key"
         },
         {
@@ -3147,16 +3151,24 @@
           "name": "<nuxie_runtime::artboard::RuntimeNestedArtboardInstance>::set_root_opacity"
         },
         {
-          "count": 2067,
+          "count": 2048,
           "name": "<nuxie_runtime::artboard::RuntimeNestedArtboards>::get"
         },
         {
-          "count": 1323,
+          "count": 1228,
           "name": "<nuxie_runtime::artboard::RuntimeNestedArtboards>::get_mut"
         },
         {
           "count": 19,
-          "name": "<nuxie_runtime::artboard::RuntimeNestedArtboards>::keys"
+          "name": "<nuxie_runtime::artboard::RuntimeNestedArtboards>::insert"
+        },
+        {
+          "count": 38,
+          "name": "<nuxie_runtime::artboard::RuntimeNestedArtboards>::rebuild_state_machine_index"
+        },
+        {
+          "count": 19,
+          "name": "<nuxie_runtime::artboard::RuntimeNestedArtboards>::remove"
         },
         {
           "count": 240,
@@ -3471,7 +3483,7 @@
           "name": "<nuxie_runtime::components::ComponentDirt>::is_empty"
         },
         {
-          "count": 65835,
+          "count": 65845,
           "name": "<nuxie_runtime::components::ComponentHandle>::index"
         },
         {
@@ -3523,7 +3535,7 @@
           "name": "<nuxie_runtime::components::RuntimeComponent>::is_collapsed"
         },
         {
-          "count": 6216,
+          "count": 6221,
           "name": "<nuxie_runtime::components::RuntimeComponent>::transform_property_key"
         },
         {
@@ -3571,11 +3583,11 @@
           "name": "<nuxie_runtime::components::TransformProperty>::property_key_for_type"
         },
         {
-          "count": 6216,
+          "count": 6221,
           "name": "<nuxie_runtime::components::TransformPropertyKeys>::is_for_type"
         },
         {
-          "count": 6216,
+          "count": 6221,
           "name": "<nuxie_runtime::components::TransformPropertyKeys>::key"
         },
         {
@@ -3705,15 +3717,15 @@
           "name": "nuxie_runtime::constraints::retained_constraint_uint"
         },
         {
-          "count": 24225,
+          "count": 24230,
           "name": "nuxie_runtime::constraints::runtime_scroll_double_property"
         },
         {
-          "count": 24364,
+          "count": 24369,
           "name": "nuxie_runtime::constraints::runtime_scroll_property"
         },
         {
-          "count": 24364,
+          "count": 24369,
           "name": "nuxie_runtime::constraints::runtime_scroll_property_keys"
         },
         {
@@ -5855,7 +5867,7 @@
       ],
       "crates/nuxie-runtime/src/objects.rs": [
         {
-          "count": 64934,
+          "count": 64944,
           "name": "<nuxie_runtime::objects::ComponentAddress>::object"
         },
         {
@@ -5879,11 +5891,11 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::color_property::{closure#0}"
         },
         {
-          "count": 51815,
+          "count": 51825,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::component"
         },
         {
-          "count": 17920,
+          "count": 17930,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::component_for_local"
         },
         {
@@ -5919,11 +5931,11 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::dependency_order"
         },
         {
-          "count": 24697,
+          "count": 24702,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::double_property"
         },
         {
-          "count": 24697,
+          "count": 24702,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::double_property::{closure#0}"
         },
         {
@@ -5935,7 +5947,7 @@
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::graph_order"
         },
         {
-          "count": 58049,
+          "count": 58054,
           "name": "<nuxie_runtime::objects::InstanceObjectArena>::object"
         },
         {
@@ -6019,7 +6031,7 @@
           "name": "<nuxie_runtime::objects::InstanceString>::bytes"
         },
         {
-          "count": 65226,
+          "count": 65236,
           "name": "<nuxie_runtime::objects::ObjectHandle>::local_id"
         },
         {
@@ -6215,6 +6227,18 @@
           "name": "<nuxie_runtime::state_machine::animation_reset_factory::AnimationReset>::apply"
         },
         {
+          "count": 5,
+          "name": "<nuxie_runtime::state_machine::animation_reset_factory::AnimationResetFactory>::from_animation_instances::<core::iter::adapters::map::Map<core::slice::iter::Iter<nuxie_runtime::state_machine::state_machine::BlendAnimation1DInstance>, <nuxie_runtime::state_machine::state_machine::BlendState1DInstance>::apply::{closure#2}>>"
+        },
+        {
+          "count": 5,
+          "name": "<nuxie_runtime::state_machine::animation_reset_factory::AnimationResetFactory>::from_animation_instances::<core::iter::adapters::map::Map<core::slice::iter::Iter<nuxie_runtime::state_machine::state_machine::BlendAnimation1DInstance>, <nuxie_runtime::state_machine::state_machine::BlendState1DInstance>::apply::{closure#2}>>::{closure#1}"
+        },
+        {
+          "count": 5,
+          "name": "<nuxie_runtime::state_machine::animation_reset_factory::AnimationResetFactory>::from_animation_instances::<core::iter::adapters::map::Map<core::slice::iter::Iter<nuxie_runtime::state_machine::state_machine::BlendAnimation1DInstance>, <nuxie_runtime::state_machine::state_machine::BlendState1DInstance>::apply::{closure#2}>>::{closure#2}"
+        },
+        {
           "count": 1,
           "name": "<nuxie_runtime::state_machine::animation_reset_factory::AnimationResetFactory>::from_animation_instances::<core::iter::adapters::map::Map<core::slice::iter::Iter<nuxie_runtime::state_machine::state_machine::BlendAnimation1DInstance>, <nuxie_runtime::state_machine::state_machine::BlendState1DInstance>::new::{closure#1}>>"
         },
@@ -6227,20 +6251,24 @@
           "name": "<nuxie_runtime::state_machine::animation_reset_factory::AnimationResetFactory>::from_animation_instances::<core::iter::adapters::map::Map<core::slice::iter::Iter<nuxie_runtime::state_machine::state_machine::BlendAnimation1DInstance>, <nuxie_runtime::state_machine::state_machine::BlendState1DInstance>::new::{closure#1}>>::{closure#2}"
         },
         {
-          "count": 1,
+          "count": 6,
           "name": "<nuxie_runtime::state_machine::animation_reset_factory::AnimationResetObjectData>::new"
         },
         {
-          "count": 1,
+          "count": 6,
           "name": "<nuxie_runtime::state_machine::animation_reset_factory::AnimationResetStorage as core::ops::drop::Drop>::drop"
         },
         {
-          "count": 2,
+          "count": 12,
           "name": "nuxie_runtime::state_machine::animation_reset_factory::animation_reset_pool"
         },
         {
           "count": 1,
           "name": "nuxie_runtime::state_machine::animation_reset_factory::animation_reset_pool::{closure#0}"
+        },
+        {
+          "count": 5,
+          "name": "nuxie_runtime::state_machine::animation_reset_factory::current_animation_reset_double_value"
         }
       ],
       "crates/nuxie-runtime/src/state_machine/bindables.rs": [
@@ -6341,16 +6369,20 @@
       ],
       "crates/nuxie-runtime/src/state_machine/nested_state_machine.rs": [
         {
-          "count": 19,
-          "name": "<nuxie_runtime::state_machine::nested_state_machine::RuntimeNestedStateMachineInstance>::advance"
-        },
-        {
-          "count": 19,
+          "count": 556,
           "name": "<nuxie_runtime::state_machine::nested_state_machine::RuntimeNestedStateMachineInstance>::local_id"
         },
         {
-          "count": 76,
+          "count": 19,
+          "name": "<nuxie_runtime::state_machine::nested_state_machine::RuntimeNestedStateMachineInstance>::restore_state_machine"
+        },
+        {
+          "count": 19,
           "name": "<nuxie_runtime::state_machine::nested_state_machine::RuntimeNestedStateMachineInstance>::state_machine_mut"
+        },
+        {
+          "count": 19,
+          "name": "<nuxie_runtime::state_machine::nested_state_machine::RuntimeNestedStateMachineInstance>::take_state_machine"
         }
       ],
       "crates/nuxie-runtime/src/state_machine/state_instance.rs": [
@@ -6481,6 +6513,10 @@
           "name": "<nuxie_runtime::state_machine::state_machine::BlendState1DInstance>::apply"
         },
         {
+          "count": 4,
+          "name": "<nuxie_runtime::state_machine::state_machine::BlendState1DInstance>::apply::{closure#0}"
+        },
+        {
           "count": 1,
           "name": "<nuxie_runtime::state_machine::state_machine::BlendState1DInstance>::for_each_animation_instance_mut::<<nuxie_runtime::animation::LinearAnimationInstance>::remove_key_frame_data_binds>"
         },
@@ -6567,7 +6603,7 @@
           "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance as core::ops::drop::Drop>::drop"
         },
         {
-          "count": 30,
+          "count": 11,
           "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::advance"
         },
         {
@@ -6576,27 +6612,39 @@
         },
         {
           "count": 19,
-          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::advance_nested_animation_owner"
-        },
-        {
-          "count": 19,
           "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::advance_nested_animation_owner_with"
         },
         {
           "count": 19,
-          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::advance_nested_descendant_event_sources_with::<<nuxie_runtime::artboard::ArtboardInstance>::advance_nested_artboard_entry::{closure#3}>"
+          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::advance_nested_animation_owner_with::{closure#3}"
         },
         {
-          "count": 30,
+          "count": 19,
+          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::advance_nested_animation_owner_with::{closure#5}"
+        },
+        {
+          "count": 19,
+          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::advance_nested_animation_owner_with::{closure#9}"
+        },
+        {
+          "count": 11,
           "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::advance_on_artboard"
         },
         {
-          "count": 30,
+          "count": 11,
           "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::advance_with_report_mode"
         },
         {
-          "count": 30,
+          "count": 11,
           "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::apply_local_event_listeners"
+        },
+        {
+          "count": 19,
+          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::begin_nested_apply_events"
+        },
+        {
+          "count": 19,
+          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::begin_nested_apply_events_batch"
         },
         {
           "count": 90,
@@ -6632,23 +6680,15 @@
         },
         {
           "count": 30,
+          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::finish_advance_after_apply_events"
+        },
+        {
+          "count": 30,
           "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::finish_listener_view_model_firing_boundary"
         },
         {
-          "count": 38,
-          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::flush_deferred_owner_audio_events"
-        },
-        {
           "count": 19,
-          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::flush_nested_animation_owner_audio"
-        },
-        {
-          "count": 19,
-          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::flush_nested_animation_owner_audio_at"
-        },
-        {
-          "count": 19,
-          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::flush_nested_source_audio"
+          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::finish_nested_advance_after_apply_events"
         },
         {
           "count": 11,
@@ -6659,8 +6699,12 @@
           "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::key_frame_data_bind_occurrence_ids"
         },
         {
-          "count": 79,
+          "count": 60,
           "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::next_unapplied_reported_event_index"
+        },
+        {
+          "count": 30,
+          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::prepare_advance_event_phase"
         },
         {
           "count": 60,
@@ -6689,10 +6733,6 @@
         {
           "count": 99,
           "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::record_drop_phase"
-        },
-        {
-          "count": 19,
-          "name": "<nuxie_runtime::state_machine::state_machine_instance::StateMachineInstance>::reported_event_count"
         },
         {
           "count": 11,
@@ -7668,7 +7708,7 @@
     },
     "event_apply_batch": {
       "cpp": 30,
-      "rust": 30
+      "rust": 11
     },
     "internal_owner_rediscovery": {
       "cpp": 0,
@@ -7688,11 +7728,11 @@
     },
     "per_frame_allocations": {
       "cpp": 7008,
-      "rust": 263793
+      "rust": 263819
     },
     "state_machine_advance": {
       "cpp": 30,
-      "rust": 30
+      "rust": 11
     },
     "state_machine_layer_advance": {
       "cpp": 31,
@@ -7716,7 +7756,7 @@
       "component_list_follow_path": 610,
       "component_list_virtualized": 445,
       "scroll_intent": 60478,
-      "scroll_test": 1314
+      "scroll_test": 1315
     }
   },
   "mechanism_construction_landmarks": {
@@ -7807,7 +7847,7 @@
     },
     "per_frame_allocations": {
       "cpp": 4218,
-      "rust": 63148
+      "rust": 63149
     },
     "resetting_dispatches": {
       "cpp": 6,
@@ -7831,19 +7871,17 @@
     }
   },
   "mode": "frame-only counters reset after construction and before samples",
-  "evidence_status": "Operative E4 trace for publication 76ab8d86; pre-E5 round-seven work is not represented until E5 regeneration.",
-  "operative_publication_ref": "76ab8d86",
   "rust_candidate_source": {
-    "file_count": 7303,
+    "file_count": 7295,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "f3d8a0ef5e28739a2b30ffacfe7c008e5096d8eb69f0a9398dd2b9b3e91e7f7c"
+    "sha256": "92a2588f30172feb1f86f1bba18be2f8d3d6fe3e89597af465562cee4e96678f"
   },
-  "rust_ref": "9434b39cd1e888ac5f3300a9f6708b303516da2d",
+  "rust_ref": "171b57033845cd5ce20222dd24604c8c2b27d120",
   "rust_runner_provenance": {
     "candidate_source": {
-      "file_count": 7303,
+      "file_count": 7295,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "f3d8a0ef5e28739a2b30ffacfe7c008e5096d8eb69f0a9398dd2b9b3e91e7f7c"
+      "sha256": "92a2588f30172feb1f86f1bba18be2f8d3d6fe3e89597af465562cee4e96678f"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [
@@ -7868,7 +7906,7 @@
     },
     "dynamic_cpp_functions": 461,
     "dynamic_rust_files": 35,
-    "dynamic_rust_functions": 1354,
+    "dynamic_rust_functions": 1364,
     "static_cpp_files": 342
   },
   "steady_allocation_counts": {

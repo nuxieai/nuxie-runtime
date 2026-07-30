@@ -582,7 +582,28 @@ Depends on WP0–WP9. No new semantic design belongs here.
 5. Fill the closure packet with exact test/checker counts, source citations,
    trace receipt, and immutable candidate identity only after all gates pass.
 
-### Focused acceptance
+### Interim correction-round fast floor
+
+Coordinator floor-policy directive (Levi, 2026-07-30): interim correction
+rounds bind only the fast behavioral battery:
+
+```sh
+cargo test -p nuxie-runtime --lib
+cargo test -p nuxie-runtime --features tools --test cpp_probe
+# ordinary golden corpus
+# scripted golden corpus
+```
+
+The complete external floor—pixel same-runner, pixel static-reference,
+browser/WebGPU, and committed-tree size—runs once on the final independently
+accepted candidate immediately before promotion, not once per correction
+round. Six consecutive identical complete-floor cycles, P2 through P7,
+provided zero new information for the delivery-semantics corrections that
+followed them. `cargo test -p nuxie --lib` may remain as a supplemental fast
+receipt, and trace/checker provenance remains mandatory for an evidence
+publication; neither expands the binding interim behavioral battery.
+
+### Final-candidate focused acceptance
 
 ```sh
 cargo test -p nuxie-runtime --lib
@@ -598,10 +619,13 @@ cargo fmt --all -- --check
 ### Whole-family non-performance floor
 
 Run the repository’s current complete correctness/structure publication floor
-required by the family procedure: probe-armed workspace, ordinary and scripted
-goldens, pixel referee, C API, browser WebGPU-only checks,
+required by the family procedure once, on the final independently accepted
+candidate immediately before promotion: probe-armed workspace, ordinary and
+scripted goldens, pixel referee, C API, browser WebGPU-only checks,
 lint/format/diff checks, committed-tree size gate, and source-bound
-trace/provenance validation.
+trace/provenance validation. Interim correction rounds use only the dated fast
+floor above. The SHA-stamped floor7 receipts on `171b5703` remain the standing
+complete-floor reference until the final accepted candidate replaces them.
 
 Boundary amendment (2026-07-30): upstream commit `afe71e30` removed
 `nux-apple-runtime` and Apple packaging to establish a pure engine boundary.

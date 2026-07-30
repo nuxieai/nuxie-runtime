@@ -7,7 +7,7 @@ its first line:
 FLOOR_RECEIPT_TREE_SHA=<40-character production commit SHA>
 ```
 
-The operative E5 receipt set is:
+The standing complete-floor reference is the E5 receipt set:
 
 - `floor7-browser.log`
 - `floor7-pixel-same.log`
@@ -19,6 +19,17 @@ Each names immutable combined production candidate
 the `floor5-*` files as publication evidence. The complete floor5 set is
 preserved under `superseded/`; it is historical E4 evidence and must not be
 cited for the E5 candidate. All earlier floor generations are historical.
+
+Coordinator floor-policy directive (Levi, 2026-07-30): interim correction
+rounds bind only the runtime-library, tools-differential, ordinary-golden, and
+scripted-golden fast battery. The complete pixel same-runner, pixel
+static-reference, browser/WebGPU, and committed-tree size floor runs once on
+the final independently accepted candidate immediately before promotion, not
+once per correction round. Six consecutive identical complete-floor cycles,
+P2 through P7, provided zero new information for the delivery-semantics
+corrections. The floor7 files therefore remain the standing full-floor
+reference during E6; they are not `99ef7700` receipts and must not be
+represented as such.
 
 Upstream boundary commit `afe71e30` on 2026-07-30 removed
 `nux-apple-runtime` and Apple packaging to establish a pure engine boundary.
@@ -34,8 +45,8 @@ and stamp it with:
 python3 tools/runtime-frame-loop-port/stamp_floor_receipt.py \
   --repo-root "$PWD" \
   --source /path/to/raw-floor.log \
-  --destination docs/runtime-frame-loop-fl-c5-evidence/floor7-name.log \
-  --tree-sha <E5-production-full-SHA>
+  --destination docs/runtime-frame-loop-fl-c5-evidence/floor-final-name.log \
+  --tree-sha <final-production-full-SHA>
 ```
 
 The wrapper validates the SHA and atomically installs the stamped copy.
@@ -60,3 +71,10 @@ verdicts. `W67-report.md` records the round-seven corrective, and
 `W69-report.md` records the final alias-resistant ratchet correction. These
 scout reports explain the path to the merged E5 candidate; they are not
 post-publication independent acceptance verdicts.
+
+`W71-oracle-round7.md`, `W72-standards-round7.md`, and
+`W73-flb-round7.md` preserve the three independent round-seven rejection
+verdicts. `W74-report.md` is the round-eight corrective handoff that maps
+their Blend1D, failing-owner-chain, and structural-detector findings to
+production and the fast-suite receipts. As a corrective report, W74 is not
+an independent acceptance verdict.

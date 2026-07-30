@@ -429,7 +429,7 @@ cpp-graph-compare: cpp-probe
 	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nuxie-graph --test cpp_probe -- --nocapture
 
 cpp-runtime-compare: cpp-probe
-	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nuxie-runtime --test cpp_probe -- --nocapture
+	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nuxie-runtime --features tools --test cpp_probe -- --nocapture
 
 cpp-compare: cpp-binary-compare cpp-graph-compare cpp-runtime-compare
 

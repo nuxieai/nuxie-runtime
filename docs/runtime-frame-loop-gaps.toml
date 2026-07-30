@@ -65,7 +65,7 @@ counters = [
   "state_machine_transition_search",
   "component_dirt_consumptions",
 ]
-mechanism = "The complete listener/action family now dispatches ListenerAlignTarget through the retained target Node with the pinned transform/world-transform dirt writes. The merged E5 trace reaches exact transition-search and component-dirt-consumption counts, while its exact ordinary and scripted golden streams expose a remaining call-topology difference: pinned C++ enters StateMachineInstance::advance/applyEvents 30 times and Rust enters advance_with_report_mode/apply_local_event_listeners 11 times. Rust performs report-time nested bubbling and owner-mediated batch settlement through its retained safe facade rather than a raw parent-pointer recursion. The two coverage counters remain explicitly open through the independent round-seven reviews; output equality alone does not close this mechanism-level difference."
+mechanism = "The complete listener/action family now dispatches ListenerAlignTarget through the retained target Node with the pinned transform/world-transform dirt writes. The merged E5 trace reaches exact transition-search and component-dirt-consumption counts, while its exact ordinary and scripted golden streams expose a remaining call-topology difference: pinned C++ enters StateMachineInstance::advance/applyEvents 30 times and Rust enters advance_with_report_mode/apply_local_event_listeners 11 times. Rust performs report-time nested bubbling and owner-mediated batch settlement through its retained safe facade rather than a raw parent-pointer recursion. The two coverage counters remain explicitly open for the independent round-nine reviews; output equality alone does not close this mechanism-level difference."
 citations = [
   "cpp:src/animation/state_machine_instance.cpp:2320-2342",
   "cpp:src/animation/state_machine_instance.cpp:2548-2575",
@@ -75,7 +75,7 @@ citations = [
   "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7672-7721",
   "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12613-12663",
 ]
-closure = "FL-C4 closes ListenerAlignTarget and its component-dirt branch. FL-C5 closes transition-search count parity and displaced lookup paths. Independent round-seven FL-C5 oracle, standards, and FL-B reacceptance must classify the 30-to-11 advance/applyEvents call-topology difference as a cited safe owner-boundary adaptation or require exact call parity before these final two counters close."
+closure = "FL-C4 closes ListenerAlignTarget and its component-dirt branch. FL-C5 closes transition-search count parity and displaced lookup paths. Independent round-nine FL-C5 oracle, standards, and FL-B reacceptance must classify the 30-to-11 advance/applyEvents call-topology difference as a cited safe owner-boundary adaptation or require exact call parity before these final two counters close."
 
 [[gap]]
 id = "FL-G04"
@@ -1249,7 +1249,7 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_event_recursive_owner_total_order_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "\\A(?=[\\s\\S]*fn\\s+advance_nested_animation_owner_with\\b[\\s\\S]{0,9000}begin_nested_apply_events_batch\\([\\s\\S]{0,1800}complete_nested_report_batch\\([\\s\\S]{0,1800}finish_nested_apply_events_batch\\([\\s\\S]{0,1800}finish_nested_advance_after_apply_events\\()(?=[\\s\\S]*fn\\s+finish_nested_apply_events_batch\\b[\\s\\S]{0,1200}for\\s+event\\s+in\\s+&batch\\.bubbled_events[\\s\\S]{0,500}flush_deferred_owner_audio_event\\(event\\)[\\s\\S]{0,800}finish_local_event_listener_batch\\()(?=[\\s\\S]*fn\\s+complete_nested_report_batch\\b[\\s\\S]{0,1800}deliver_to_ancestor\\(parent_artboard,\\s*host_local,\\s*events\\)[\\s\\S]{0,700}RuntimeNestedEventChainPhase::AncestorDispatch)(?=[\\s\\S]*fn\\s+dispatch_nested_events_to_animation_owners\\b[\\s\\S]{0,3200}notify_events\\(child,\\s*Some\\(source_local_id\\),\\s*events\\)[\\s\\S]{0,1000}drain_bubbled_event_reports\\(\\)[\\s\\S]{0,1200}complete_nested_report_batch\\([\\s\\S]{0,1400}flush_deferred_owner_audio_event\\(event\\)[\\s\\S]{0,1400}update_data_binds_false\\()"
+pattern = "\\A(?=[\\s\\S]*fn\\s+advance_nested_animation_owner_with\\b[\\s\\S]{0,9000}begin_nested_apply_events_batch\\([\\s\\S]{0,1800}complete_nested_report_batch\\([\\s\\S]{0,1800}finish_nested_apply_events_batch\\([\\s\\S]{0,1800}finish_nested_advance_after_apply_events\\()(?=[\\s\\S]*fn\\s+finish_nested_apply_events_batch\\b[\\s\\S]{0,1200}for\\s+event\\s+in\\s+&batch\\.bubbled_events[\\s\\S]{0,500}flush_deferred_owner_audio_event\\(event\\)[\\s\\S]{0,800}finish_local_event_listener_batch\\()(?=[\\s\\S]*fn\\s+complete_nested_report_batch\\b[\\s\\S]{0,1800}deliver_to_ancestor\\(parent_artboard,\\s*host_local,\\s*events\\)[\\s\\S]{0,700}RuntimeNestedEventChainPhase::AncestorDispatch)(?=[\\s\\S]*fn\\s+dispatch_nested_events_to_animation_owners\\b[\\s\\S]{0,3600}try_notify_events_with_script_host\\(\\s*child,\\s*Some\\(source_local_id\\),\\s*events[\\s\\S]{0,1600}drain_bubbled_event_reports\\(\\)[\\s\\S]{0,1400}complete_nested_report_batch\\([\\s\\S]{0,1800}flush_deferred_owner_audio_event\\(event\\)[\\s\\S]{0,1000}pending_error[\\s\\S]{0,700}retain_script_result\\(Err\\(error\\)\\)[\\s\\S]{0,1400}update_data_binds_false\\()"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1388,7 +1388,7 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_nested_event_source_policy_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "\\A(?=[\\s\\S]*fn\\s+advance_nested_animation_owner_with\\b[\\s\\S]{0,5000}advance_linear_animation_instance_with_callback_sink[\\s\\S]{0,5000}begin_nested_apply_events\\([\\s\\S]{0,2600}begin_nested_apply_events_batch\\([\\s\\S]{0,1800}complete_nested_report_batch\\([\\s\\S]{0,1800}finish_nested_apply_events_batch\\([\\s\\S]{0,2600}finish_nested_advance_after_apply_events\\()(?=[\\s\\S]*fn\\s+dispatch_nested_events_to_animation_owners\\b[\\s\\S]{0,2600}notify_events\\([\\s\\S]{0,1200}complete_nested_report_batch\\([\\s\\S]{0,1800}flush_deferred_owner_audio_event\\([\\s\\S]{0,1400}update_data_binds_false\\()"
+pattern = "\\A(?=[\\s\\S]*fn\\s+advance_nested_animation_owner_with\\b[\\s\\S]{0,5000}advance_linear_animation_instance_with_callback_sink[\\s\\S]{0,5000}begin_nested_apply_events\\([\\s\\S]{0,2600}begin_nested_apply_events_batch\\([\\s\\S]{0,1800}complete_nested_report_batch\\([\\s\\S]{0,1800}finish_nested_apply_events_batch\\([\\s\\S]{0,2600}finish_nested_advance_after_apply_events\\()(?=[\\s\\S]*fn\\s+dispatch_nested_events_to_animation_owners\\b[\\s\\S]{0,3600}try_notify_events_with_script_host\\([\\s\\S]{0,1800}complete_nested_report_batch\\([\\s\\S]{0,2200}flush_deferred_owner_audio_event\\([\\s\\S]{0,1200}pending_error[\\s\\S]{0,700}retain_script_result\\(Err\\(error\\)\\)[\\s\\S]{0,1400}update_data_binds_false\\()"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1421,6 +1421,11 @@ id = "state_machine_nested_audio_unwind_outside_instance_policy"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 detector = "rust_nested_event_owner_boundary"
 max_occurrences = 0
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+expected_occurrences = 1
 
 [[ratchet]]
 id = "state_machine_persistent_dirt_component_schedule_required"

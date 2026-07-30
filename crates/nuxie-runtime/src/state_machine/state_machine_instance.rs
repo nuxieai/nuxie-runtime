@@ -13145,7 +13145,7 @@ impl StateMachineInstance {
                 continue;
             };
             let notifier_local = occurrence.local_id();
-            let (accepts_source, bubbled_events) = {
+            let (accepts_source, bubbled_events, pending_error) = {
                 let state_machine = parent_artboard
                     .active_nested_state_machines
                     .get_mut(&notifier_local)
@@ -13156,9 +13156,22 @@ impl StateMachineInstance {
                 let accepts_source = !events.is_empty()
                     && state_machine.script_error.is_none()
                     && state_machine.nested_event_source_registered(source_local_id);
-                let notified = state_machine.notify_events(child, Some(source_local_id), events);
+                let notification = state_machine.try_notify_events_with_script_host(
+                    child,
+                    Some(source_local_id),
+                    events,
+                    &mut NoopScriptHost,
+                );
+                let (notified, pending_error) = match notification {
+                    Ok(notified) => (notified, None),
+                    Err(error) => (false, Some(error)),
+                };
                 changed |= notified;
-                (accepts_source, state_machine.drain_bubbled_event_reports())
+                (
+                    accepts_source,
+                    state_machine.drain_bubbled_event_reports(),
+                    pending_error,
+                )
             };
             if !bubbled_events.is_empty() {
                 changed |= Self::complete_nested_report_batch(
@@ -13182,6 +13195,14 @@ impl StateMachineInstance {
                         );
                     }
                 }
+            }
+            if let Some(error) = pending_error
+                && let Some(state_machine) = parent_artboard
+                    .active_nested_state_machines
+                    .get_mut(&notifier_local)
+                    .or_else(|| occurrence.state_machine_mut())
+            {
+                let _: bool = state_machine.retain_script_result(Err(error));
             }
             if accepts_source
                 && let Some(state_machine) = parent_artboard
@@ -18544,7 +18565,7 @@ mod scripted_listener_action_tests {
 
     #[test]
     fn fl_c5_failing_reporting_owner_completes_deep_bubble_and_audio_before_error_propagation() {
-        let (mut parent_artboard, mut parent) = scripted_listener_artboard_and_machine();
+        let (mut child_artboard, mut parent) = scripted_listener_artboard_and_machine();
         let (mut root_artboard, mut root) = scripted_listener_artboard_and_machine();
         let total_order = Rc::new(RefCell::new(Vec::new()));
         parent.event_total_order_trace =
@@ -18557,6 +18578,13 @@ mod scripted_listener_action_tests {
                 notifier_local_id: 80,
                 kind: RuntimeNestedEventNotifierKind::StateMachine,
             });
+        parent
+            .nested_event_registrations
+            .push(RuntimeNestedEventRegistration {
+                source_local_id: 7,
+                notifier_local_id: 70,
+                kind: RuntimeNestedEventNotifierKind::StateMachine,
+            });
 
         let calls = Rc::new(RefCell::new(Vec::new()));
         let mut failing_listener = scripted_test_listener(
@@ -18567,26 +18595,63 @@ mod scripted_listener_action_tests {
             vec![RuntimeListenerType::Event],
             &calls,
         );
-        failing_listener.target_local_id = 0;
+        failing_listener.target_local_id = 7;
         failing_listener.event_local_indices = vec![7];
         parent.listener_definitions = Arc::new(vec![failing_listener]);
         let (audio_event, audio_event_core_type) = fl_c5_test_audio_event(7);
+        let notifier_local = 80;
+        let (_, fallback_machine) = scripted_listener_artboard_and_machine();
+        let mut animations = vec![
+            crate::artboard::RuntimeNestedAnimationInstance::StateMachine(
+                RuntimeNestedStateMachineInstance::new(
+                    notifier_local,
+                    fallback_machine,
+                    Vec::new(),
+                ),
+            ),
+        ];
+        let mut parent_artboard = scripted_listener_artboard_and_machine().0;
+        parent_artboard
+            .active_nested_state_machines
+            .insert(notifier_local, parent);
+        let mid_chain_error_was_none = Rc::new(RefCell::new(None));
+        let observed_mid_chain = Rc::clone(&mid_chain_error_was_none);
+        let mut ancestor_dispatch =
+            |artboard: &mut ArtboardInstance,
+             _source_local: usize,
+             events: &[StateMachineReportedEvent]| {
+                *observed_mid_chain.borrow_mut() = Some(
+                    artboard
+                        .active_nested_state_machines
+                        .get(&notifier_local)
+                        .expect("the failing owner remains mounted")
+                        .script_error()
+                        .is_none(),
+                );
+                root.notify_events(&mut root_artboard, Some(8), events)
+            };
 
         assert!(
-            !parent.notify_events(&mut parent_artboard, None, &[audio_event]),
-            "the reporting owner's listener failure is retained"
+            !StateMachineInstance::dispatch_nested_events_to_animation_owners(
+                &mut parent_artboard,
+                8,
+                &mut animations,
+                &mut child_artboard,
+                7,
+                &[audio_event],
+                None,
+                Some(&mut ancestor_dispatch),
+            )
         );
-        let root_events = parent.take_bubbled_event_reports();
         assert_eq!(
-            root_events
-                .iter()
-                .map(StateMachineReportedEvent::event_local_index)
-                .collect::<Vec<_>>(),
-            [7],
-            "the failing reporting owner still bubbles its own report"
+            *mid_chain_error_was_none.borrow(),
+            Some(true),
+            "the terminal ScriptError is withheld during ancestor dispatch"
         );
-        root.notify_events(&mut root_artboard, Some(8), &root_events);
-        parent.flush_deferred_owner_audio_events();
+        let parent = parent_artboard
+            .active_nested_state_machines
+            .get(&notifier_local)
+            .expect("the failing owner remains mounted");
 
         assert_eq!(
             total_order.borrow().as_slice(),

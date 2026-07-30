@@ -2997,10 +2997,18 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     RuntimeNestedEventChainPhase::AncestorDispatch;
                 }
                 fn dispatch_nested_events_to_animation_owners() {
-                    state_machine.notify_events(child, Some(source_local_id), events);
+                    let notification = state_machine.try_notify_events_with_script_host(
+                        child,
+                        Some(source_local_id),
+                        events,
+                    );
+                    let pending_error = notification.err();
                     state_machine.drain_bubbled_event_reports();
                     complete_nested_report_batch();
                     state_machine.flush_deferred_owner_audio_event(event);
+                    if let Some(error) = pending_error {
+                        state_machine.retain_script_result(Err(error));
+                    }
                     state_machine.update_data_binds_false();
                 }
                 """,
@@ -3401,9 +3409,12 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     state_machine.finish_nested_advance_after_apply_events();
                 }
                 fn dispatch_nested_events_to_animation_owners() {
-                    machine.notify_events();
+                    machine.try_notify_events_with_script_host();
                     complete_nested_report_batch();
                     machine.flush_deferred_owner_audio_event();
+                    if let Some(error) = pending_error {
+                        machine.retain_script_result(Err(error));
+                    }
                     machine.update_data_binds_false();
                 }
                 """
@@ -4086,8 +4097,10 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 """,
                 """
                 fn macro_composed_report_sender() {
-                    let send = member!(StateMachineInstance, notify_events); // flc5-owner-ratchet-allow: dispatch
-                    send(owner, child, Some(host), &batch);
+                    StateMachineInstance::
+                        dispatch_nested_events_to_animation_owners(
+                            owners, child, host, reports, None,
+                        );
                 }
                 """,
                 "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
@@ -4290,6 +4303,268 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(
                 f"ratchet {ratchet_id} increased to 1 > 0",
+                result.stderr,
+            )
+        finally:
+            self.gaps.write_text(base_gaps)
+
+    def test_fl_c5_owner_detector_evaluates_cfg_predicates(self) -> None:
+        ratchet_id = (
+            "state_machine_nested_event_dispatch_outside_instance_policy"
+        )
+        safe = textwrap.dedent(
+            """
+            #[cfg(test)]
+            fn test_only_sender() {
+                StateMachineInstance::notify_events(
+                    owner, child, Some(host), &batch,
+                );
+            }
+
+            #[cfg(all(feature = "tools", test))]
+            fn conjunctive_test_only_sender() {
+                StateMachineInstance::notify_events(
+                    owner, child, Some(host), &batch,
+                );
+            }
+            """
+        )
+        for production_cfg in [
+            "#[cfg(not(test))]",
+            '#[cfg(any(test, feature = "tools"))]',
+            '#[cfg(feature = "tools")]',
+        ]:
+            with self.subTest(cfg=production_cfg):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+                    textwrap.dedent(
+                        f"""
+                        {production_cfg}
+                        fn production_sender() {{
+                            StateMachineInstance::notify_events(
+                                owner, child, Some(host), &batch,
+                            );
+                        }}
+                        """
+                    ),
+                    safe,
+                )
+
+    def test_fl_c5_owner_detector_resolves_module_and_associated_aliases(
+        self,
+    ) -> None:
+        ratchet_id = (
+            "state_machine_nested_animation_selection_outside_instance_policy"
+        )
+        safe = textwrap.dedent(
+            """
+            fn owner_policy_selects_nested_animation() {
+                StateMachineInstance::advance_nested_animation_owner_with(
+                    self, host, animation_index, elapsed, None, None,
+                );
+            }
+            """
+        )
+        forbidden_cases = [
+            textwrap.dedent(
+                """
+                mod bridge {
+                    pub use RuntimeNestedAnimationInstance as Anim;
+                }
+
+                fn qualified_reexport_selects_owner() {
+                    if let bridge::Anim::StateMachine(owner) = animation {
+                        displace(owner);
+                    }
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                trait Carrier {
+                    type Anim;
+                }
+                struct Host;
+                impl Carrier for Host {
+                    type Anim = RuntimeNestedAnimationInstance;
+                }
+                type Anim = <Host as Carrier>::Anim;
+
+                fn associated_alias_selects_owner() {
+                    if let Anim::StateMachine(owner) = animation {
+                        displace(owner);
+                    }
+                }
+                """
+            ),
+            textwrap.dedent(
+                """
+                trait Carrier {
+                    type Anim;
+                }
+                struct Host;
+                type Anim = <Host as Carrier>::Anim;
+
+                fn unresolved_associated_alias_selects_owner() {
+                    if let Anim::StateMachine(owner) = animation {
+                        displace(owner);
+                    }
+                }
+                """
+            ),
+        ]
+        for forbidden in forbidden_cases:
+            with self.subTest(source=forbidden):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+                    forbidden,
+                    safe,
+                )
+
+    def test_fl_c5_owner_detector_macro_and_attribute_tokens_fail_closed(
+        self,
+    ) -> None:
+        ratchet_id = (
+            "state_machine_nested_event_dispatch_outside_instance_policy"
+        )
+        safe = textwrap.dedent(
+            """
+            fn owner_policy_dispatches_reports() {
+                StateMachineInstance::dispatch_nested_events_to_animation_owners(
+                    owners, child, host, reports, None,
+                );
+            }
+            """
+        )
+        forbidden_cases = [
+            textwrap.dedent(
+                """
+                #[delegate(StateMachineInstance, notify_events)]
+                fn attribute_composed_sender() {}
+                """
+            ),
+            textwrap.dedent(
+                """
+                fn pasted_sender() {
+                    paste! {
+                        StateMachineInstance::[<notify_ events>](
+                            owner, child, Some(host), &batch,
+                        );
+                    }
+                }
+                """
+            ),
+        ]
+        for forbidden in forbidden_cases:
+            with self.subTest(source=forbidden):
+                self.assert_production_ratchet_case(
+                    ratchet_id,
+                    "crates/nuxie-runtime/src/state_machine/scout_probe.rs",
+                    forbidden,
+                    safe,
+                )
+
+    def test_fl_c5_owner_detector_registry_is_exact_and_nonlexical(
+        self,
+    ) -> None:
+        ratchet_id = (
+            "state_machine_nested_event_dispatch_outside_instance_policy"
+        )
+        relative_source = (
+            "crates/nuxie-runtime/src/state_machine/scout_probe.rs"
+        )
+        base_gaps = self.gaps.read_text()
+        try:
+            self.install_production_ratchet(ratchet_id)
+            scout = self.repo / relative_source
+            scout.parent.mkdir(parents=True, exist_ok=True)
+
+            for lexical_bypass in [
+                (
+                    'let _ = "flc5-owner-ratchet-allow: dispatch";\n'
+                    "    StateMachineInstance::notify_events("
+                    "owner, child, Some(host), &batch);"
+                ),
+                (
+                    "StateMachineInstance::notify_events("
+                    "owner, child, Some(host), &batch); "
+                    "// flc5-owner-ratchet-allow: dispatching"
+                ),
+            ]:
+                with self.subTest(lexical_bypass=lexical_bypass):
+                    scout.write_text(
+                        "fn lexical_bypass() {\n"
+                        f"    {lexical_bypass}\n"
+                        "}\n"
+                    )
+                    result = self.run_check()
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(
+                        f"ratchet {ratchet_id} increased to 1 > 0",
+                        result.stderr,
+                    )
+
+            registry = textwrap.dedent(
+                f"""
+
+                [[owner_boundary_allow]]
+                file = {json.dumps(relative_source)}
+                kind = "dispatch"
+                expected_occurrences = 1
+                """
+            )
+            self.gaps.write_text(self.gaps.read_text() + registry)
+            scout.write_text(
+                "fn registered_sender() {\n"
+                "    StateMachineInstance::notify_events("
+                "owner, child, Some(host), &batch);\n"
+                "}\n"
+            )
+            result = self.run_check()
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            scout.write_text(
+                "fn first_registered_sender() {\n"
+                "    StateMachineInstance::notify_events("
+                "owner, child, Some(host), &batch);\n"
+                "}\n"
+                "fn second_registered_sender() {\n"
+                "    StateMachineInstance::notify_events("
+                "owner, child, Some(host), &batch);\n"
+                "}\n"
+            )
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "owner boundary registry "
+                f"{relative_source} dispatch expected 1, found 2",
+                result.stderr,
+            )
+
+            scout.write_text(
+                "fn registered_sender_with_site_drift() {\n"
+                "    StateMachineInstance::notify_events("
+                "owner, child, Some(host), &batch);\n"
+                "    StateMachineInstance::notify_events("
+                "owner, child, Some(host), &batch);\n"
+                "}\n"
+            )
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "owner boundary registry "
+                f"{relative_source} dispatch expected 1, found 2",
+                result.stderr,
+            )
+
+            scout.write_text("fn registered_sender() {}\n")
+            result = self.run_check()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "owner boundary registry "
+                f"{relative_source} dispatch expected 1, found 0",
                 result.stderr,
             )
         finally:

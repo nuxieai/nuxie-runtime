@@ -22,10 +22,10 @@
     "cpp_coverage_sha256": "ec2d86ca80e0c1be8ce83f94581fa618c9ddf469e9c0423b65f53bb2912e7802",
     "cpp_mechanism_coverage_sha256": "9e1222f631b1fc7802378b599b1e9fde2f08fb9f6c780d8ef94089df9fe9729d",
     "cpp_steady_coverage_sha256": "62952a171d2a0f3995e51f2345c9a2e12ec6946b3710e189b699c6549e9afe00",
-    "rust_binary_sha256": "908549589cc50e491f911b8e86359c6dce16deb3e39d60f564c00c1022a9dc9f",
-    "rust_coverage_sha256": "a193e4b5db15e4e73f26e1932f063fb38f6de85c70ec67e551cf2070f042e6ae",
-    "rust_mechanism_coverage_sha256": "03d3d286f3fa1e970efad240386bcb0d01130f06bcf30837c03f9ed920a5d624",
-    "rust_steady_coverage_sha256": "4a21cbaf5957d1b3312f6e2c0d94f6a11ed8cfc691da443fff139693344d8928"
+    "rust_binary_sha256": "748277ed2de12ae9763e919ffa839445beb4ecad54b89f265a12c2a1387b776e",
+    "rust_coverage_sha256": "237b24c7f2ba764597c24681aace196d768a96efd040d839dcbcf3feed0495b2",
+    "rust_mechanism_coverage_sha256": "ed4d3b3efa59e246d1785b4ece8c27cc0c2ebc166ecbc07efc4497f7af017d85",
+    "rust_steady_coverage_sha256": "9e92c2f0e6217fc80337cca2630fe1fb7c4ddd4b84aad07a8371715440ebf3f3"
   },
   "construction_landmarks": {
     "artboard_instance": {
@@ -7848,16 +7848,16 @@
   },
   "mode": "frame-only counters reset after construction and before samples",
   "rust_candidate_source": {
-    "file_count": 7301,
+    "file_count": 7306,
     "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-    "sha256": "26aeffef37fa4be1a7d32fbc9ae73b10f8459972ed4ee3e165ee8371d3490aa8"
+    "sha256": "802b384ebde991bf4178be71ee56a2842ef75e6918cc302160746456d828ef59"
   },
-  "rust_ref": "99ef770002cb1e04847229aeb69fb79f2116282f",
+  "rust_ref": "afcb705806e0f8d0d21196064cc9456daeb237b9",
   "rust_runner_provenance": {
     "candidate_source": {
-      "file_count": 7301,
+      "file_count": 7306,
       "schema": "nuxie-runtime-frame-loop-rust-source/v1",
-      "sha256": "26aeffef37fa4be1a7d32fbc9ae73b10f8459972ed4ee3e165ee8371d3490aa8"
+      "sha256": "802b384ebde991bf4178be71ee56a2842ef75e6918cc302160746456d828ef59"
     },
     "cargo_target_dir": "target/frame-loop-coverage",
     "features": [

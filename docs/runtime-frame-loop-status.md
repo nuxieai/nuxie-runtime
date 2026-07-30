@@ -4,17 +4,25 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: E5 evidence publication for immutable main-integrated production
-  candidate `171b57033845cd5ce20222dd24604c8c2b27d120`. It contains round-seven
-  corrective `f4f013dd`, pre-freeze scout corrective `192cbbbe`, and the
-  merge of origin/main boundary `afe71e30`. The scout corrective moves nested
-  report bubbling to report time, narrows recursive settlement, and makes the
-  ownership ratchets alias-resistant. The boundary commit, dated 2026-07-30,
-  removes `nux-apple-runtime` and Apple packaging for a pure engine boundary;
-  historical Apple receipts are superseded and the size floor remains.
-  Four SHA-stamped floor7 receipts are operative. The final trace is
-  regenerated fingerprint-last and the full checker is green on this exact
-  tree. No post-acceptance rebase remains.
+- Phase: E6 evidence publication for immutable main-integrated production
+  candidate `99ef770002cb1e04847229aeb69fb79f2116282f`. E5 evidence landed as
+  `3bef19da`; independent round-seven verdicts W71/W72/W73 rejected its
+  invented Blend1D compensation, incomplete failing-owner bubble/audio tail,
+  and structurally evadable ownership detector. Round-eight corrective
+  `99ef7700` reverts that compensation with a symmetric differential,
+  completes the failing-owner chain, and installs a syn-AST ownership detector
+  with a fail-closed tripwire; the orchestrator's novel module-re-export
+  evasion is detected. W74 records runtime 725/725, tools differentials
+  823/823, supplemental `nuxie --lib` 147/147, and both golden corpora at
+  317/317 entries plus 647/647 exact segments with zero divergences.
+  Coordinator directive from Levi dated 2026-07-30 binds interim correction
+  rounds to that fast battery. The complete pixel/browser/size floor runs once
+  on the final independently accepted candidate before promotion; six
+  consecutive identical P2–P7 cycles provided zero information for the later
+  delivery-semantics corrections. The four `171b5703`-stamped floor7 receipts
+  remain the standing complete-floor reference. The E6 trace is regenerated
+  fingerprint-last and the full checker is green on this exact evidence tree.
+  No post-acceptance rebase remains.
 - Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
   on that provisional implementation without claiming FL-B verification.
   FL-C's corrected 56-file/eight-member lane map is
@@ -828,8 +836,12 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Publish the staged E5 evidence/docs packet without changing immutable
-   main-integrated candidate `171b57033845cd5ce20222dd24604c8c2b27d120`.
-2. Request the independent round-seven FL-B reacceptance review against E5.
-3. Request the independent round-seven FL-C5 oracle review against E5.
-4. Request the independent round-seven FL-C5 standards review against E5.
+1. The independent round-eight reviews (FL-C5 oracle, FL-C5 standards,
+   FL-B reacceptance) evaluate this publication against immutable
+   candidate `99ef770002cb1e04847229aeb69fb79f2116282f`.
+2. On triple acceptance: promotion bookkeeping (FL-B 45 files/8 members,
+   FL-C5 2 files/2 members), then the single complete floor on the
+   accepted candidate per the 2026-07-30 coordinator floor policy, then
+   the PR to main (the candidate is already main-integrated).
+3. On any finding: one scoped corrective, fast-suite validation, and a
+   scoped re-review.

@@ -860,7 +860,7 @@ The structural checker and injected negatives must permanently reject:
 Candidate identity:
 
 - immutable combined-family production candidate:
-  `171b57033845cd5ce20222dd24604c8c2b27d120`. FL-C5 round-two production
+  `99ef770002cb1e04847229aeb69fb79f2116282f`. FL-C5 round-two production
   landed as `ea38d33b`, FL-B round-two corrections as `edddf491`,
   round-four corrective production as `2e2d3c6d`, and `95333c41` completed
   the tools-enabled probe target. E2 evidence was published as `eaf8a6f6`;
@@ -877,14 +877,35 @@ Candidate identity:
   narrowed settlement, and made ownership ratchets alias-resistant. Merge
   commit `171b5703` then integrated origin/main boundary `afe71e30`, which
   removed `nux-apple-runtime` and Apple packaging for a pure engine boundary.
-  This candidate is main-integrated; no post-acceptance rebase remains. All
-  operative E5 artifacts and floors name the full `171b5703` candidate;
+  E5 evidence was published as `3bef19da`. Independent round-seven verdicts
+  W71/W72/W73 rejected the invented Blend1D compensation, incomplete
+  failing-owner bubble/audio tail, and evadable ownership detector.
+  Round-eight corrective `99ef7700` reverted the compensation with a
+  symmetric differential, completed the failing-owner chain, and replaced
+  the detector with a syn-AST ownership resolver plus a fail-closed
+  tripwire. The orchestrator's novel module-re-export evasion was detected.
+  This immutable candidate remains main-integrated; no post-acceptance rebase
+  remains. The E6 trace names the full `99ef7700` candidate; W74 records the
+  fast-suite run over the exact round-eight production later frozen at that
+  commit. The floor7 receipts on `171b5703` remain the standing complete-floor
+  reference under the dated coordinator policy below;
 - pinned C++:
   `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
 - trace source fingerprint and Rust runner provenance:
   `docs/runtime-frame-loop-trace.json`; `make
   runtime-frame-loop-port-check` confirms both are current for this final
   evidence tree.
+
+Coordinator floor-policy directive (Levi, 2026-07-30): interim correction
+rounds bind only the fast behavioral battery—runtime library, tools-enabled
+C++ differentials, and both ordinary and scripted golden corpora. The complete
+pixel same-runner, pixel static-reference, browser/WebGPU, and committed-tree
+size floor runs once on the final independently accepted candidate immediately
+before promotion, not once per correction round. Six consecutive identical
+complete-floor cycles, P2 through P7, provided zero new information for the
+delivery-semantics corrections. The floor7 receipts on `171b5703` therefore
+remain the standing full-floor reference; they are not relabeled as
+candidate-specific `99ef7700` receipts.
 
 The four nested-event ownership ratchets now use a syn-based resolver across
 every non-owner Rust source. It resolves use declarations and aliases, glob
@@ -909,17 +930,19 @@ Gate receipts:
 | W58 round-six corrective | `docs/runtime-frame-loop-fl-c5-evidence/W58-report.md` maps every W55/W56/W57 blocker to round-six production, four named live differentials, restored teardown/reset order, strengthened structural negatives, and pre-E4 green floors. It records that trace fingerprint and runner provenance remained intentionally owned by this final evidence pass. |
 | W66/W68 pre-freeze scout verdicts | `docs/runtime-frame-loop-fl-c5-evidence/W66-prereview.md` preserves the scout’s report-time bubbling, settlement, differential, singleton-batch, ownership-ratchet, and packet findings. `W68-reclear.md` preserves the follow-up UFCS and guarded-enum-alias findings after the first corrective. |
 | W67/W69 corrective reports | `docs/runtime-frame-loop-fl-c5-evidence/W67-report.md` records the round-seven report-time/singleton corrective and its complete acceptance battery. `W69-report.md` records the final angle-bracket UFCS and enum-alias checker corrections and 67/67 structural receipt. |
+| W71/W72/W73 round-seven verdicts | `docs/runtime-frame-loop-fl-c5-evidence/W71-oracle-round7.md`, `W72-standards-round7.md`, and `W73-flb-round7.md` preserve the three independent rejection verdicts: Blend1D's non-C++ compensation and asymmetric proof, incomplete failing-owner chain completion, plain/glob/type/macro ownership-detector evasions, and the stale publication pointer. |
+| W74 round-eight corrective | `docs/runtime-frame-loop-fl-c5-evidence/W74-report.md` maps the W71/W72/W73 blockers to the symmetric Blend1D differential, failing-owner bubble/audio-tail completion, syn-AST resolver and fail-closed token tripwire, the orchestrator-probed module-re-export evasion, and the pre-E6 fast-suite receipts. It records runtime 725/725, tools differentials 823/823, supplemental `nuxie --lib` 147/147, and both golden corpora at 317/317 entries plus 647/647 exact segments with zero divergences. Trace fingerprint and artifact provenance remained intentionally owned by E6. |
 | Seven reopened member behaviors | This W31 run executes one passing test for each named receipt: `state_machine_generic_layer_state_occurrence_matches_cpp_probe` (`currentState`, `stateChangedByIndex`), `state_machine_viewmodel_trigger_conditions_match_cpp_probe` (`advance(seconds,newFrame)`), `flow_pointer_callbacks_receive_event_time_and_the_prior_delivered_position` (`pointerDown`), both `synchronous_*` event-cycle tests (`applyEvents`), `first_factory_pointer_prepares_and_applies_fixed_bindings_before_callback` (`internalDataContext`), and `listener_missing_context_hydration_keeps_the_table_until_context_arrives` (`pointerDown`, `internalDataContext`, `initScriptedObjects`). |
 | Focused and broad behavioral floor | `docs/runtime-frame-loop-fl-c5-evidence/W30-report.md`: C++ probes 804/804, `nuxie --lib` 146/146, runtime library 713/713, scripting library 205/205, and `sound` 1/1 exact. W31 reruns the complete runtime library and C++ probe gates below. |
-| Structural checker and provenance | Final `make runtime-frame-loop-port-check`: 67/67 checker tests, including recursive tracked-receipt stamps, exact inventory/gating/repository-wide semantic and alias-resistant seam-owner negatives, and mutated-ref/artifact negatives, followed by the live checker accepting E5 `rust_ref`, candidate fingerprint, manifest, Rust runner provenance, and all eight artifact hashes. |
-| Public/downstream API | The final sandbox run passes 14/14 code/API cases; only `public_api_exposes_the_default_rust_renderer` cannot construct an adapter because this sandbox reports `metal found no adapters`. The historical external `floor-public-api.log` remains the 15/15 adapter-capable receipt. No test was skipped or weakened. |
-| Ordinary and scripted golden corpora | Both final direct comparisons against the pinned C++ runners are 317/317 exact entries and 647/647 exact segments, with zero divergences, unsupported features, or not-yet cases. |
-| Static-reference renderer corpus | Operative `docs/runtime-frame-loop-fl-c5-evidence/floor7-pixel-static.log`: E5-stamped, exact=1,468, byte-exact=837, diverges=0, gated=0. |
-| Same-runner pixel corpus | Operative `docs/runtime-frame-loop-fl-c5-evidence/floor7-pixel-same.log`: E5-stamped, exact=1,468, byte-exact=1,370, diverges=0, gated=0. |
-| Browser/WebGPU | Operative `docs/runtime-frame-loop-fl-c5-evidence/floor7-browser.log`: E5-stamped; browser and GPU smoke pass; prohibited surface and CPU presentation are zero; typed readback is one; error-scope, uniform-limit, alpha, and bounded-recovery invariants hold. |
-| Link-closure size | Operative `docs/runtime-frame-loop-fl-c5-evidence/floor7-size.log`: E5-stamped; scripting off=8,218,120 bytes and scripting on=9,318,856 bytes, both below the 9 MiB (9,437,184-byte) budget. |
+| Structural checker and provenance | Final `make runtime-frame-loop-port-check`: 67/67 checker tests, including recursive tracked-receipt stamps, exact inventory/gating/repository-wide semantic and syn-AST seam-owner negatives, the fail-closed tripwire, and mutated-ref/artifact negatives, followed by the live checker accepting E6 `rust_ref`, candidate fingerprint, manifest, Rust runner provenance, and all eight artifact hashes. |
+| Standing public/downstream API reference | The E5 sandbox run passed 14/14 code/API cases; only `public_api_exposes_the_default_rust_renderer` could not construct an adapter because that sandbox reported `metal found no adapters`. The historical external `floor-public-api.log` remains the 15/15 adapter-capable receipt. No test was skipped or weakened. |
+| E6 ordinary and scripted golden corpora | W74 records both fast-suite comparisons at 317/317 exact entries and 647/647 exact segments, with zero divergences, unsupported features, or not-yet cases. |
+| Standing static-reference renderer corpus | `docs/runtime-frame-loop-fl-c5-evidence/floor7-pixel-static.log`: `171b5703`-stamped standing full-floor reference, exact=1,468, byte-exact=837, diverges=0, gated=0. |
+| Standing same-runner pixel corpus | `docs/runtime-frame-loop-fl-c5-evidence/floor7-pixel-same.log`: `171b5703`-stamped standing full-floor reference, exact=1,468, byte-exact=1,370, diverges=0, gated=0. |
+| Standing browser/WebGPU corpus | `docs/runtime-frame-loop-fl-c5-evidence/floor7-browser.log`: `171b5703`-stamped standing full-floor reference; browser and GPU smoke pass; prohibited surface and CPU presentation are zero; typed readback is one; error-scope, uniform-limit, alpha, and bounded-recovery invariants hold. |
+| Standing link-closure size | `docs/runtime-frame-loop-fl-c5-evidence/floor7-size.log`: `171b5703`-stamped standing full-floor reference; scripting off=8,218,120 bytes and scripting on=9,318,856 bytes, both below the 9 MiB (9,437,184-byte) budget. |
 | Apple boundary | Upstream boundary commit `afe71e30` on 2026-07-30 removed `nux-apple-runtime` and Apple packaging. Apple/XCFramework/ABI/header packaging is no longer an acceptance leg. All historical Apple receipts remain under `docs/runtime-frame-loop-fl-c5-evidence/superseded/`; the size floor remains operative. |
-| Final named commands | On `171b5703`: runtime library 723/723; live tools-enabled C++ differential suite 823/823; `nuxie --lib` 147/147; exhaustive FL-C5 public inventory 1/1; C API 3 library + 16 integration tests; both golden comparisons 317/317 and 647/647; `make runtime-frame-loop-port-check` green with 67/67 tests and live provenance; `cargo fmt --all -- --check` green; working-tree and staged `git diff --check` green. Earlier historical counts remain preserved in their reports rather than silently rewritten. |
+| E6 fast-suite and publication commands | On `99ef7700`: runtime library 725/725; live tools-enabled C++ differential suite 823/823; supplemental `nuxie --lib` 147/147; both golden comparisons 317/317 and 647/647; `make runtime-frame-loop-port-check` green with 67/67 tests and live provenance; `cargo fmt --all -- --check` green; working-tree and staged evidence/docs `git diff --check` green. The complete pixel/browser/size floor is deferred exactly as the coordinator policy requires. Earlier historical counts remain preserved in their reports rather than silently rewritten. |
 
 Remaining out-of-scope work is unchanged and explicitly `RECORDED`: pending
 rows `B6-0259` (`listener_group.cpp`), `B6-0083`
@@ -950,10 +973,11 @@ Closure checklist:
   (`make runtime-frame-loop-port-test`: use the live count reported by the
   gate receipt);
 - [x] focused Rust tests and pinned-C++ differentials are green;
-- [x] the complete non-performance correctness floor, public/downstream API
-  floor, structural checker, format/lint, C API, browser, pixel, size, and
-  provenance gates required by the post-`afe71e30` family procedure are
-  green;
+- [x] the E6 interim fast behavioral floor and structural/provenance gates
+  required by the 2026-07-30 coordinator policy are green; floor7 remains the
+  standing complete-floor reference, and the next complete pixel/browser/size
+  run is reserved for the final independently accepted candidate before
+  promotion;
 - [x] exact source citations, test names, checker counts, gate counts, trace
   receipt, and immutable candidate identity are recorded here and in the
   mechanical status layers; and

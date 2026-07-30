@@ -48,6 +48,10 @@ pub struct ArtboardGraph {
     pub dependency_nodes: Vec<DependencyNode>,
     pub dependency_edges: Vec<DependencyEdge>,
     pub dependency_node_edges: Vec<DependencyNodeEdge>,
+    /// Construction-only C++ callback insertion order. Runtime occurrences
+    /// consume this once to build their retained dependency graph; the sorted
+    /// `dependency_node_edges` projection remains diagnostic evidence.
+    pub dependency_node_edges_in_insertion_order: Vec<DependencyNodeEdge>,
     pub dependency_cycles: Vec<DependencyCycle>,
     pub dependency_node_cycles: Vec<DependencyNodeCycle>,
     pub draw_targets: Vec<DrawTargetNode>,
@@ -286,6 +290,7 @@ impl ArtboardGraph {
             dependency_nodes,
             dependency_edges,
             dependency_node_edges,
+            dependency_node_edges_in_insertion_order,
             dependency_cycles: dependency_order.cycles,
             dependency_node_cycles: dependency_order.node_cycles,
             draw_targets,
@@ -1445,6 +1450,7 @@ fn state_machines(file: &RuntimeFile, artboard_index: usize) -> Vec<StateMachine
             inputs: state_machine
                 .inputs
                 .into_iter()
+                .flatten()
                 .map(|input| StateMachineInputNode {
                     global_id: input.id,
                     type_name: input.type_name,

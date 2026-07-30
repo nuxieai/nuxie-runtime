@@ -14,6 +14,21 @@ newer). Resume state lives ONLY in files, never in memory:
 - `docs/b6-audit/` — structural audit results, TRIAGE.md, spec.
 - `docs/parity-gap-register.md` — gap register incl. D-rows.
 
+## Canonical program precedence
+
+The static queue below is historical closeout context, not the live NEXT
+pointer. The authoritative program federation and sole NEXT pointer live in
+`docs/parity-closeout-status.md`; the active dependency-wave state lives in
+`docs/runtime-frame-loop-status.md`; executable row truth lives in
+`docs/runtime-frame-loop-ownership.toml` and
+`file-correspondence-manifest.toml`. When these sources differ, follow that
+precedence and update this file rather than reviving a stale queue item.
+
+The live frame-loop program defers all performance measurement until every
+mapped FL-A-through-FL-E code row is ported and the complete correctness and
+structural floors are green. Historical RD checkpoints below are retained only
+as history; they are not authority to run a family- or wave-level benchmark.
+
 ## Session start ritual (every session, no exceptions)
 
 1. `git -C /Users/levi/dev/oss/rive-runtime rev-parse HEAD` MUST print
@@ -51,7 +66,7 @@ Commit with ticket tags (`[RB-1]`, `[RD-1]`, `[B-5]`...), push to main
 after gates; `git pull --rebase` first (a teammate lands editor work on
 main — their changes are audited by the same gates, not trusted).
 
-## The queue (work top to bottom; details in the status file)
+## Historical closeout queue (do not use as the live NEXT pointer)
 
 1. **#RB-1 e5** (three parts, separate commits — full brief is in the
    status file's mini-queue and the dispatched lane prompt):
@@ -122,10 +137,15 @@ main — their changes are audited by the same gates, not trusted).
 ## Working style (calibrated for you)
 
 - Work inline on the spine in SMALL slices; run the fast gates (lib +
-  probe) after every substantive change, the full battery before every
-  push. Dispatch lanes only for the well-templated shapes (a fixture
-  batch, an audit batch) using the briefs in docs/ as templates.
-- use as many sub agents as you need when the work is parallelizable
+  probe) during implementation, then run the full applicable battery once for
+  each dependency-complete owner-family candidate. Publish one whole-family
+  proof packet and wait for its independent verdict before the next production
+  family.
+- Keep one production writer. During long gates/review, parallelize only
+  read-only pinned-source mapping, oracle design, and independent review.
+- Freeze the base within an owner family, rebase only at declared boundaries,
+  and reuse provenance-matching Cargo/C++ artifacts instead of rebuilding
+  identical inputs.
 - Port code, not behaviors: every fix cites the C++ file:line it mirrors.
   If you cannot cite it, stop — that is a design question for the user.
 - STRUCTURE-PRESERVING BY DEFAULT (map "Porting methodology" section,

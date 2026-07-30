@@ -27,6 +27,7 @@ nuxie-graph = { path = "../nuxie-graph" }
 nuxie-render-api = { path = "../nuxie-render-api" }
 nuxie-renderer = { path = "../nuxie-renderer", optional = true }
 nuxie-runtime = { path = "../nuxie-runtime" }
+nuxie-schema = { path = "../nuxie-schema" }
 nuxie-scripting = { path = "../nuxie-scripting", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }

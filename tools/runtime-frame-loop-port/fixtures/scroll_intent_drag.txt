@@ -1,0 +1,6 @@
+# Root-artboard ScrollConstraint drag/release. The post-release samples force
+# the retained ScrollPhysics owner through its advancing-component slot.
+0.100 pointerDown 250 250
+0.116 pointerMove 250 200
+0.132 pointerMove 250 150
+0.148 pointerUp 250 150

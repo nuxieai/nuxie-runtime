@@ -530,7 +530,7 @@ pub unsafe extern "C" fn nux_artboard_instance_draw(
 /// artboard. Free with `nux_state_machine_instance_free`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_state_machine_instance_new(
-    instance: *const NuxArtboardInstance,
+    instance: *mut NuxArtboardInstance,
     state_machine_index: usize,
     out_state_machine: *mut *mut NuxStateMachineInstance,
 ) -> NuxStatus {
@@ -541,7 +541,7 @@ pub unsafe extern "C" fn nux_state_machine_instance_new(
         unsafe {
             *out_state_machine = ptr::null_mut();
         }
-        let Some(instance) = (unsafe { instance.as_ref() }) else {
+        let Some(instance) = (unsafe { instance.as_mut() }) else {
             return NuxStatus::NullArgument;
         };
         let Some(state_machine) = instance
@@ -564,7 +564,7 @@ pub unsafe extern "C" fn nux_state_machine_instance_new(
 /// `NUX_STATUS_NOT_FOUND` when the artboard has no state machines.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_state_machine_instance_new_default(
-    instance: *const NuxArtboardInstance,
+    instance: *mut NuxArtboardInstance,
     out_state_machine: *mut *mut NuxStateMachineInstance,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
@@ -574,7 +574,7 @@ pub unsafe extern "C" fn nux_state_machine_instance_new_default(
         unsafe {
             *out_state_machine = ptr::null_mut();
         }
-        let Some(instance) = (unsafe { instance.as_ref() }) else {
+        let Some(instance) = (unsafe { instance.as_mut() }) else {
             return NuxStatus::NullArgument;
         };
         let Some(state_machine) = instance.instance.default_state_machine_instance() else {
@@ -709,7 +709,7 @@ pub unsafe extern "C" fn nux_state_machine_instance_advance(
 /// reports whether the event landed on a listener.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_state_machine_instance_pointer_down(
-    instance: *const NuxArtboardInstance,
+    instance: *mut NuxArtboardInstance,
     state_machine: *mut NuxStateMachineInstance,
     x: f32,
     y: f32,
@@ -721,7 +721,7 @@ pub unsafe extern "C" fn nux_state_machine_instance_pointer_down(
             state_machine,
             out_hit,
             |state_machine, artboard| {
-                state_machine.pointer_down(artboard.instance.raw(), x, y, DEFAULT_POINTER_ID)
+                state_machine.pointer_down(artboard.instance.raw_mut(), x, y, DEFAULT_POINTER_ID)
             },
         )
     })
@@ -732,7 +732,7 @@ pub unsafe extern "C" fn nux_state_machine_instance_pointer_down(
 /// reports whether the event landed on a listener.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_state_machine_instance_pointer_move(
-    instance: *const NuxArtboardInstance,
+    instance: *mut NuxArtboardInstance,
     state_machine: *mut NuxStateMachineInstance,
     x: f32,
     y: f32,
@@ -744,7 +744,13 @@ pub unsafe extern "C" fn nux_state_machine_instance_pointer_move(
             state_machine,
             out_hit,
             |state_machine, artboard| {
-                state_machine.pointer_move(artboard.instance.raw(), x, y, 0.0, DEFAULT_POINTER_ID)
+                state_machine.pointer_move(
+                    artboard.instance.raw_mut(),
+                    x,
+                    y,
+                    0.0,
+                    DEFAULT_POINTER_ID,
+                )
             },
         )
     })
@@ -755,7 +761,7 @@ pub unsafe extern "C" fn nux_state_machine_instance_pointer_move(
 /// reports whether the event landed on a listener.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_state_machine_instance_pointer_up(
-    instance: *const NuxArtboardInstance,
+    instance: *mut NuxArtboardInstance,
     state_machine: *mut NuxStateMachineInstance,
     x: f32,
     y: f32,
@@ -767,22 +773,22 @@ pub unsafe extern "C" fn nux_state_machine_instance_pointer_up(
             state_machine,
             out_hit,
             |state_machine, artboard| {
-                state_machine.pointer_up(artboard.instance.raw(), x, y, DEFAULT_POINTER_ID)
+                state_machine.pointer_up(artboard.instance.raw_mut(), x, y, DEFAULT_POINTER_ID)
             },
         )
     })
 }
 
 fn state_machine_pointer_event(
-    instance: *const NuxArtboardInstance,
+    instance: *mut NuxArtboardInstance,
     state_machine: *mut NuxStateMachineInstance,
     out_hit: *mut bool,
-    dispatch: impl FnOnce(&mut StateMachineInstance, &NuxArtboardInstance) -> bool,
+    dispatch: impl FnOnce(&mut StateMachineInstance, &mut NuxArtboardInstance) -> bool,
 ) -> NuxStatus {
     if let Some(out_hit) = unsafe { out_hit.as_mut() } {
         *out_hit = false;
     }
-    let Some(instance) = (unsafe { instance.as_ref() }) else {
+    let Some(instance) = (unsafe { instance.as_mut() }) else {
         return NuxStatus::NullArgument;
     };
     let Some(state_machine) = (unsafe { state_machine.as_mut() }) else {

@@ -5,11 +5,11 @@
 Pin the direct artboard `updateDataBinds(true)` boundary for exact
 `ArtboardComponentList` list-consumer data binds.
 
-After binding the default artboard view-model context, C++ direct
-`Artboard::updateDataBinds(true)` keeps the target list count at the same empty
-value observed immediately after `Artboard::bindViewModelInstance(...)`.
-The target count changes only at the separate public post-bind
-`Artboard::advance(0.0f)` boundary.
+After binding the default artboard view-model context, provenance-bound
+pinned-C++ `d788e8ec` direct `Artboard::updateDataBinds(true)` applies the
+bound list and updates the target list count. Rust must execute its
+corresponding direct bind-container delegate before comparing that state;
+context binding alone is the pre-update boundary.
 
 ## In Scope
 
@@ -21,12 +21,12 @@ The target count changes only at the separate public post-bind
   `ArtboardComponentList`.
 - Direct `ViewModelInstanceList` sources and direct
   `DataConverterNumberToList` sources.
-- C++ parity for preserving the immediate-bind target local, empty target-list
-  size, source list/number facts, and reset flag.
+- C++ parity for updating the immediate-bind target local, target-list size,
+  source list/number facts, and reset flag.
 
 ## Out Of Scope
 
-- The post-bind advance target-count behavior, covered by
+- The full post-bind artboard-advance behavior, covered by
   `data-binding-graph-artboard-list-advance-target-count-runtime-contract.md`.
 - Child artboard instancing, item identity reuse/disposal, map-rule-driven
   child creation, layout, virtualization, rendering, and hit testing.
@@ -36,8 +36,9 @@ The target count changes only at the separate public post-bind
 ## Completion Checks
 
 - Direct list-source fixture matches C++ after bind plus direct
-  `updateDataBinds(true)` with an empty target list.
+  `updateDataBinds(true)` with the applied target-list count.
 - Direct `DataConverterNumberToList` fixture matches C++ after bind plus direct
-  `updateDataBinds(true)` with an empty target list and preserved reset flag.
-- The post-bind advance tests continue to prove the target count changes only
-  through the admitted advance boundary.
+  `updateDataBinds(true)` with the applied target-list count and preserved
+  reset flag.
+- The post-bind advance tests continue to prove the full artboard boundary
+  reaches the same list-consumer state.

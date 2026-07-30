@@ -78,3 +78,13 @@ verdicts. `W74-report.md` is the round-eight corrective handoff that maps
 their Blend1D, failing-owner-chain, and structural-detector findings to
 production and the fast-suite receipts. As a corrective report, W74 is not
 an independent acceptance verdict.
+
+`W76-oracle-round8.md`, `W77-standards-round8.md`, and
+`W78-flb-round8.md` preserve the three independent round-eight rejection
+verdicts. They record the cfg/resolution/tripwire and allow-suppression
+bypasses, non-reproducible detector packaging, premature terminal-error
+visibility, weakened BlendDirect proof, and the E6 fingerprint generated from
+uncommitted Cargo-lock churn. `W79-report.md` is the round-nine corrective
+handoff mapping those findings to immutable candidate `afcb7058`, its
+committed standalone detector lockfile, and its fast-suite receipts. As a
+corrective report, W79 is not an independent acceptance verdict.

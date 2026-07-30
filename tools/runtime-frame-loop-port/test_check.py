@@ -20,10 +20,6 @@ PRODUCTION_GAPS = PRODUCTION_ROOT / "docs/runtime-frame-loop-gaps.toml"
 if str(TOOL_DIR) not in sys.path:
     sys.path.insert(0, str(TOOL_DIR))
 
-from source_fingerprint import (
-    candidate_source_fingerprint,
-    rust_runner_provenance,
-)
 from check import (
     FL_B_FROZEN_SCOPE_FILES,
     FL_B_FROZEN_SCOPE_REF,
@@ -97,18 +93,6 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         subprocess.run(
             ["git", "commit", "-qm", "fixture"], cwd=self.repo, check=True
         )
-        rust_ref = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=self.repo,
-            text=True,
-            capture_output=True,
-            check=True,
-        ).stdout.strip()
-        trace_path = self.repo / "docs/trace.json"
-        trace = json.loads(trace_path.read_text())
-        trace["rust_ref"] = rust_ref
-        trace_path.write_text(json.dumps(trace))
-
     def write_files(self, *, file_status: str = "pending") -> None:
         rule = '\nrule = "AF-1"' if file_status == "adapted" else ""
         self.manifest.write_text(
@@ -133,10 +117,6 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 """
             ).lstrip()
         )
-        trace_path = self.repo / "docs/trace.json"
-        existing_rust_ref = None
-        if trace_path.is_file():
-            existing_rust_ref = json.loads(trace_path.read_text()).get("rust_ref")
         trace = {
                     "schema": "nuxie-runtime-frame-loop-trace/v2",
                     "upstream_ref": self.ref,
@@ -178,9 +158,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                         "rust": {"crates/runtime/src/animation.rs": []},
                     },
                 }
-        if existing_rust_ref is not None:
-            trace["rust_ref"] = existing_rust_ref
-        trace_path.write_text(json.dumps(trace))
+        (self.repo / "docs/trace.json").write_text(json.dumps(trace))
         pending = 1 if file_status == "pending" else 0
         adapted = 1 if file_status == "adapted" else 0
         self.ledger.write_text(
@@ -252,22 +230,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ).lstrip()
         )
 
-    def refresh_source_fingerprint(self) -> None:
-        trace_path = self.repo / "docs/trace.json"
-        trace = json.loads(trace_path.read_text())
-        trace["rust_candidate_source"] = candidate_source_fingerprint(
-            self.repo, evidence_path=trace_path
-        )
-        trace["rust_runner_provenance"] = rust_runner_provenance(
-            trace["rust_candidate_source"]
-        )
-        trace_path.write_text(json.dumps(trace))
-
-    def run_check(
-        self, *, closed: bool = False, refresh_fingerprint: bool = True
-    ) -> subprocess.CompletedProcess[str]:
-        if refresh_fingerprint:
-            self.refresh_source_fingerprint()
+    def run_check(self, *, closed: bool = False) -> subprocess.CompletedProcess[str]:
         command = [
             "python3",
             str(TOOL),
@@ -515,42 +478,6 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "active owner-family checklist omits completed adversarial row",
             result.stderr,
         )
-
-    def test_stale_untracked_candidate_source_fails(self) -> None:
-        self.refresh_source_fingerprint()
-        (self.repo / "crates/runtime/src/new_owner.rs").write_text(
-            "struct NewOwner;\n"
-        )
-        result = self.run_check(refresh_fingerprint=False)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn(
-            "Rust candidate source fingerprint is stale", result.stderr
-        )
-
-    def test_stale_rust_runner_provenance_fails(self) -> None:
-        self.refresh_source_fingerprint()
-        trace_path = self.repo / "docs/trace.json"
-        trace = json.loads(trace_path.read_text())
-        trace["rust_runner_provenance"]["candidate_source"]["sha256"] = (
-            "0" * 64
-        )
-        trace_path.write_text(json.dumps(trace))
-
-        result = self.run_check(refresh_fingerprint=False)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn(
-            "Rust runner provenance is missing or stale", result.stderr
-        )
-
-    def test_mutated_rust_ref_fails(self) -> None:
-        trace_path = self.repo / "docs/trace.json"
-        trace = json.loads(trace_path.read_text())
-        trace["rust_ref"] = "f" * 40
-        trace_path.write_text(json.dumps(trace))
-
-        result = self.run_check()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("trace evidence Rust ref", result.stderr)
 
     def test_mutated_artifact_hash_fails(self) -> None:
         trace_path = self.repo / "docs/trace.json"

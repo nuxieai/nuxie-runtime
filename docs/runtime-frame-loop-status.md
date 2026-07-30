@@ -4,45 +4,31 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
-- Phase: round-ten W84 corrective after independent E7 rejection of immutable
-  main-integrated candidate `afcb705806e0f8d0d21196064cc9456daeb237b9`.
-  E6 evidence landed as
-  `499d86b8`; independent round-eight verdicts W76/W77/W78 rejected its
-  incomplete cfg/resolution/tripwire rigor, self-service allow suppression,
-  non-reproducible detector packaging, early error observability, weakened
-  BlendDirect proof, and trace fingerprint generated from uncommitted
-  Cargo-lock churn. Round-nine corrective `afcb7058` installs exact cfg and
-  module/associated-type resolution, fail-closed macro/attribute scanning, a
-  checker-validated per-site registry allowlist, and a committed standalone
-  detector `Cargo.lock`; withholds the terminal error until the full
-  bubble/audio chain completes; restores an honest BlendDirect clone/remount
-  proof; and records the FL-G03 disposition. W79 records runtime 726/726,
-  tools differentials 823/823, supplemental `nuxie --lib` 147/147, checker
-  71/71, and both golden corpora at 317/317 entries plus 647/647 exact
-  segments with zero divergences. Independent round-nine reviews W81/W82/W83
-  rejected unresolved guarded tails, fragment-composed identifiers,
-  cross-file re-exports, the fungible registry quota, planning checklist
-  state, incomplete FL-G03 citations, and stale publication pointers. W84
-  makes guarded final segments and normalized macro fragments fail closed,
-  binds registry rows to exact enclosing-item anchors and guarded names, and
-  enables candidate checklist enforcement. The E7 trace remains immutable;
-  the corrective candidate fingerprint and runner provenance are pending E8
-  after the final production identity exists. W84 fast acceptance is green:
-  runtime 726/726, tools differentials 823/823, supplemental `nuxie --lib`
-  147/147, checker tests 77/77, clean-cache locked detector build, and both
-  golden corpora at 317/317 entries plus 647/647 exact segments with zero
+- Phase: E8 evidence publication for immutable main-integrated production
+  candidate `e729dd745db1850d0fda60b4631929e40ffbfba7`. E7 evidence landed as
+  `e62803df`; independent round-nine reviews W81/W82/W83 rejected unresolved
+  guarded tails, fragment-composed identifiers, qualified/module/cross-file
+  re-exports, the fungible registry quota, planning checklist state,
+  incomplete FL-G03 citations, and stale publication pointers. Round-ten
+  corrective `e729dd74` makes every guarded final segment fail closed unless
+  it fully resolves to a known non-guarded item, normalizes macro/attribute
+  identifier fragments, binds registry rows to exact enclosing-item and
+  guarded-name anchors with bidirectional drift rejection, and enables
+  candidate checklist enforcement. W84 records runtime 726/726, tools
+  differentials 823/823, supplemental `nuxie --lib` 147/147, candidate-mode
+  checker tests 77/77, a clean-cache locked detector build, and both golden
+  corpora at 317/317 entries plus 647/647 exact segments with zero
   divergences.
   Coordinator directive from Levi dated 2026-07-30 binds interim correction
   rounds to that fast battery. The complete pixel/browser/size floor runs once
   on the final independently accepted candidate before promotion; six
   consecutive identical P2–P7 cycles provided zero information for the later
   delivery-semantics corrections. The four `171b5703`-stamped floor7 receipts
-  remain the standing complete-floor reference. The historical E7 trace was
-  generated only after its staged-evidence porcelain gate confirmed no
-  unstaged or untracked churn, including no Cargo-lock churn. It does not
-  attest the W84 corrective tree: the W84 candidate fingerprint, runner
-  provenance, and resulting full-checker receipt remain explicitly pending
-  E8. No post-acceptance rebase remains.
+  remain the standing complete-floor reference. The E8 trace is regenerated
+  only after the intended evidence set is staged and a porcelain gate confirms
+  no unstaged, untracked, Cargo-lock, or other tracked-file churn. The full
+  candidate-mode checker is green on that exact fingerprint and runner
+  provenance. No post-acceptance rebase remains.
 - Coordinator direction on 2026-07-26 authorizes dependency-ordered FL-C work
   on that provisional implementation without claiming FL-B verification.
   FL-C's corrected 56-file/eight-member lane map is
@@ -856,11 +842,11 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Publish the immutable E8 candidate fingerprint and runner provenance, then
-   run independent round-ten FL-C5 oracle, FL-C5 standards, and FL-B
-   reacceptance reviews.
+1. The independent round-ten reviews (FL-C5 oracle, FL-C5 standards,
+   FL-B reacceptance) evaluate this publication against immutable
+   candidate `e729dd745db1850d0fda60b4631929e40ffbfba7`.
 2. On triple acceptance: promotion bookkeeping, then the single
-   complete floor on the accepted candidate per the 2026-07-30
-   coordinator floor policy (per-leg parallel), then the PR to main.
+   complete floor on the accepted candidate (per-leg parallel, per the
+   2026-07-30 coordinator floor policy), then the PR to main.
 3. On any finding: one scoped corrective, fast-suite validation, and a
    scoped re-review.

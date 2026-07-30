@@ -823,8 +823,6 @@ pub(crate) struct BlendState1DInstance {
     from: Option<RuntimeBlendAnimationHandle>,
     to: Option<RuntimeBlendAnimationHandle>,
     animation_reset: Option<AnimationReset>,
-    last_applied_artboard_identity: Option<u64>,
-    last_applied_values: Option<AnimationReset>,
 }
 
 impl BlendState1DInstance {
@@ -867,8 +865,6 @@ impl BlendState1DInstance {
             from: None,
             to: None,
             animation_reset,
-            last_applied_artboard_identity: None,
-            last_applied_values: None,
         }
     }
 
@@ -1046,16 +1042,6 @@ impl BlendState1DInstance {
 
     pub(crate) fn apply(&mut self, artboard: &mut ArtboardInstance, mix: f32) -> bool {
         let mut changed = false;
-        let artboard_identity = artboard.instance_identity();
-        if self
-            .last_applied_artboard_identity
-            .is_some_and(|identity| identity != artboard_identity)
-        {
-            changed |= self
-                .last_applied_values
-                .as_ref()
-                .is_some_and(|reset| reset.apply(artboard));
-        }
         if let Some(reset) = self.animation_reset.as_ref() {
             changed |= reset.apply(artboard);
         }
@@ -1066,12 +1052,6 @@ impl BlendState1DInstance {
             }
             changed |= animation.animation.apply(artboard, animation_mix);
         }
-        self.last_applied_artboard_identity = Some(artboard_identity);
-        self.last_applied_values = Some(AnimationResetFactory::from_animation_instances(
-            artboard,
-            self.animations.iter().map(|animation| &animation.animation),
-            false,
-        ));
         changed
     }
 }
@@ -1939,6 +1919,87 @@ mod tests {
                 .map(StateMachineReportedEvent::event_local_index)
                 .collect::<Vec<_>>(),
             [1, 2]
+        );
+    }
+
+    #[test]
+    fn blend_1d_retained_arena_identities_survive_rust_clone_and_remount() {
+        let file = read_runtime_file(
+            &std::fs::read(rive_runtime_fixture("animation_reset_cases.riv"))
+                .expect("read animation fixture"),
+        )
+        .expect("import animation fixture");
+        let graph = GraphFile::from_runtime_file(&file).expect("build animation graph");
+        let artboard = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            graph.artboards.first().expect("fixture artboard"),
+            &graph.artboards,
+        )
+        .expect("instantiate animation artboard");
+        let blend_state = RuntimeBlendState1D {
+            source: RuntimeBlendState1DSource::Input {
+                input_index: Some(0),
+            },
+            animations: vec![
+                RuntimeBlendAnimation1D {
+                    animation: RuntimeLinearAnimationHandle::new(0),
+                    value: 0.0,
+                },
+                RuntimeBlendAnimation1D {
+                    animation: RuntimeLinearAnimationHandle::empty(),
+                    value: 100.0,
+                },
+            ],
+        };
+        let input_definitions = Arc::new(vec![Some(RuntimeStateMachineInput::new_number(
+            1,
+            Some("blend".to_owned()),
+            25.0,
+        ))]);
+        let inputs = vec![StateMachineInputInstance::new(0, input_definitions)];
+        let mut occurrence = BlendState1DInstance::new(
+            &blend_state,
+            &artboard,
+            &artboard.linear_animations,
+            &artboard.empty_linear_animation,
+            false,
+        );
+        occurrence.advance(&blend_state, &artboard, &inputs, &[], 0.0);
+        let retained_from = occurrence.from;
+        let retained_to = occurrence.to;
+        assert!(retained_from.is_some(), "the lower occurrence is selected");
+        assert!(retained_to.is_some(), "the upper occurrence is selected");
+        assert_ne!(
+            retained_from, retained_to,
+            "the retained blend endpoints are distinct arena handles",
+        );
+        let retained_definitions = occurrence
+            .animations
+            .iter()
+            .map(|animation| animation.definition)
+            .collect::<Vec<_>>();
+
+        let mut cloned = occurrence.clone();
+        let remounted = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            graph.artboards.first().expect("fixture artboard"),
+            &graph.artboards,
+        )
+        .expect("remount animation artboard");
+        cloned.advance(&blend_state, &remounted, &inputs, &[], 0.0);
+
+        // FL-B4 requires `from`/`to` to remain handles into the retained
+        // occurrence arena. Clone/remount must preserve those identities
+        // without reset replay or any other behavioral compensation.
+        assert_eq!(cloned.from, retained_from);
+        assert_eq!(cloned.to, retained_to);
+        assert_eq!(
+            cloned
+                .animations
+                .iter()
+                .map(|animation| animation.definition)
+                .collect::<Vec<_>>(),
+            retained_definitions,
         );
     }
 

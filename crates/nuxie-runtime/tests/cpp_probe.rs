@@ -20268,22 +20268,19 @@ fn state_machine_from_artboard_a_uses_a_timing_exit_and_reset_definitions_when_a
 }
 
 #[test]
-fn blend_states_from_artboard_a_use_a_definitions_through_wrong_artboard_and_clone_remount_like_cpp_probe()
- {
+fn blend_states_retain_from_to_occurrences_across_same_owner_advances_like_cpp_probe() {
     let probe = probe_path().expect("the blend wrong-artboard differential requires cpp_probe");
 
-    for (case, kind, input, clone_remount) in [
+    for (case, kind, input) in [
         (
-            "blend-1d-clone-remount",
+            "blend-1d-same-owner",
             SyntheticCrossArtboardBlendKind::Blend1D,
             0.5,
-            true,
         ),
         (
-            "blend-direct-clone-remount",
+            "blend-direct-same-owner",
             SyntheticCrossArtboardBlendKind::BlendDirect,
             50.0,
-            true,
         ),
     ] {
         let label = format!("synthetic/runtime_cross_artboard_{case}_definition_owner_cpp.riv");
@@ -20291,11 +20288,6 @@ fn blend_states_from_artboard_a_use_a_definitions_through_wrong_artboard_and_clo
             82_834,
             kind,
             [(2.0, 12.0), (20.0, 30.0)],
-        );
-        let caller_bytes = synthetic_cross_artboard_blend_definition_owner(
-            82_835,
-            kind,
-            [(100.0, 200.0), (300.0, 400.0)],
         );
         let args = [
             "--runtime-set-state-machine-number".to_owned(),
@@ -20312,22 +20304,15 @@ fn blend_states_from_artboard_a_use_a_definitions_through_wrong_artboard_and_clo
         ];
         let cpp = read_cpp_probe_bytes_with_args(&probe, &label, &owner_bytes, &args);
         let (_, mut owner_artboard) = read_rust_instance_from_bytes(&owner_bytes, &label);
-        let (_, mut caller_artboard) = read_rust_instance_from_bytes(&caller_bytes, &label);
         let mut state_machine = owner_artboard
             .state_machine_instance(0)
             .unwrap_or_else(|| panic!("missing retained owner state machine for {case}"));
         assert!(state_machine.set_number(0, input));
 
         let mut rust_reports = Vec::new();
-        let advanced = caller_artboard.advance_state_machine_instance(&mut state_machine, 0.0);
+        let advanced = owner_artboard.advance_state_machine_instance(&mut state_machine, 0.0);
         rust_reports.push((advanced, state_machine.clone()));
-
-        if clone_remount {
-            state_machine = state_machine.clone();
-            let (_, remounted_caller) = read_rust_instance_from_bytes(&caller_bytes, &label);
-            caller_artboard = remounted_caller;
-        }
-        let advanced = caller_artboard.advance_state_machine_instance(&mut state_machine, 1.0);
+        let advanced = owner_artboard.advance_state_machine_instance(&mut state_machine, 1.0);
         rust_reports.push((advanced, state_machine.clone()));
 
         let cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
@@ -20342,8 +20327,8 @@ fn blend_states_from_artboard_a_use_a_definitions_through_wrong_artboard_and_clo
                 &format!("{label} wrong-artboard step {step}"),
             );
         }
-        let update = caller_artboard.update_components();
-        compare_cpp_runtime_update(&cpp, &caller_artboard, &update, &label);
+        let update = owner_artboard.update_components();
+        compare_cpp_runtime_update(&cpp, &owner_artboard, &update, &label);
     }
 }
 
@@ -84782,6 +84767,9 @@ fn fl_c5_deep_nested_owner_reports_complete_to_root_before_subtree_and_error() {
     );
     fl_c5_run_rust_unit_probe(
         "production_deep_nested_owner_chain_survives_later_subtree_script_error",
+    );
+    fl_c5_run_rust_unit_probe(
+        "fl_c5_failing_reporting_owner_completes_deep_bubble_and_audio_before_error_propagation",
     );
 
     let probe = probe_path().expect("the deep nested-event differential requires cpp_probe");

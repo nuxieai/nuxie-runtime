@@ -7424,7 +7424,8 @@ impl StateMachineInstance {
         self.record_event_dispatch_phase("local-dispatch");
         let listener_definitions = Arc::clone(&self.listener_definitions);
         let mut changed = false;
-        for listener in listener_definitions.iter() {
+        let mut listener_error = None;
+        'listeners: for listener in listener_definitions.iter() {
             if !listener.has_listener(RuntimeListenerType::Event) {
                 continue;
             }
@@ -7470,8 +7471,8 @@ impl StateMachineInstance {
                 match action_changed {
                     Ok(action_changed) => changed |= action_changed,
                     Err(error) => {
-                        self.notifying_event_listeners = false;
-                        return Err(error);
+                        listener_error = Some(error);
+                        break 'listeners;
                     }
                 }
                 if listener.is_single {
@@ -7480,7 +7481,9 @@ impl StateMachineInstance {
             }
         }
         #[cfg(test)]
-        if let Some(event) = self.nested_event_forward_test.clone() {
+        if listener_error.is_none()
+            && let Some(event) = self.nested_event_forward_test.clone()
+        {
             self.reported_events.push(event);
         }
         self.notifying_event_listeners = false;
@@ -7489,7 +7492,7 @@ impl StateMachineInstance {
         } else {
             self.reach_recorded_audio_event_seam(events);
         }
-        Ok(changed)
+        listener_error.map_or(Ok(changed), Err)
     }
 
     /// C++ immediately forwards a nested report to the owning artboard after
@@ -18536,6 +18539,64 @@ mod scripted_listener_action_tests {
             *total_order.borrow(),
             ["leaf-local", "parent-local", "parent-audio", "leaf-audio"],
             "the two-level owner seam uses the same depth-first unwind policy"
+        );
+    }
+
+    #[test]
+    fn fl_c5_failing_reporting_owner_completes_deep_bubble_and_audio_before_error_propagation() {
+        let (mut parent_artboard, mut parent) = scripted_listener_artboard_and_machine();
+        let (mut root_artboard, mut root) = scripted_listener_artboard_and_machine();
+        let total_order = Rc::new(RefCell::new(Vec::new()));
+        parent.event_total_order_trace =
+            Some(("parent-local", "parent-audio", Rc::clone(&total_order)));
+        root.event_total_order_trace = Some(("root-local", "root-audio", Rc::clone(&total_order)));
+        parent.attach_event_bubble_owner();
+        root.nested_event_registrations
+            .push(RuntimeNestedEventRegistration {
+                source_local_id: 8,
+                notifier_local_id: 80,
+                kind: RuntimeNestedEventNotifierKind::StateMachine,
+            });
+
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let mut failing_listener = scripted_test_listener(
+            &mut parent,
+            985,
+            "reporting-owner",
+            ListenerFailure::Terminal("script.resource.reporting_owner"),
+            vec![RuntimeListenerType::Event],
+            &calls,
+        );
+        failing_listener.target_local_id = 0;
+        failing_listener.event_local_indices = vec![7];
+        parent.listener_definitions = Arc::new(vec![failing_listener]);
+        let (audio_event, audio_event_core_type) = fl_c5_test_audio_event(7);
+
+        assert!(
+            !parent.notify_events(&mut parent_artboard, None, &[audio_event]),
+            "the reporting owner's listener failure is retained"
+        );
+        let root_events = parent.take_bubbled_event_reports();
+        assert_eq!(
+            root_events
+                .iter()
+                .map(StateMachineReportedEvent::event_local_index)
+                .collect::<Vec<_>>(),
+            [7],
+            "the failing reporting owner still bubbles its own report"
+        );
+        root.notify_events(&mut root_artboard, Some(8), &root_events);
+        parent.flush_deferred_owner_audio_events();
+
+        assert_eq!(
+            total_order.borrow().as_slice(),
+            ["parent-local", "root-local", "root-audio", "parent-audio",],
+            "W63 item 3: the failing reporting owner's full-height bubble and audio tail complete before its ScriptError propagates",
+        );
+        assert!(parent.script_error().is_some());
+        assert_eq!(
+            parent.audio_event_seam_receipt(),
+            (1, Some((7, audio_event_core_type))),
         );
     }
 

@@ -226,13 +226,154 @@ closure = "A pinned-C++ probe locks 0x011d1d1d to 0x011d1d1c through the real An
 id = "legacy_image_layout_scale"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\bRuntimeLegacyImageLayoutScale(?:Key|State)\\b"
-max_occurrences = 13
+max_occurrences = 0
 
 [[ratchet]]
 id = "path_epoch_compensation"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\bpath_epoch\\b"
-max_occurrences = 72
+max_occurrences = 71
+
+[[ratchet]]
+id = "e2_consolidated_mesh_vertex_dirt"
+globs = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
+pattern = "Some\\(\"MeshVertex\"\\)(?:(?!Some\\().){0,1200}(?:concrete\\.skinnable|ComponentDirt::VERTICES)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "e2_consolidated_image_layout_fit"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "\\bfn\\s+runtime_apply_image_layout_fit\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "e2_consolidated_slice_triangulation"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "\\bfn\\s+runtime_slice_mesh_push_triangulation\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "e2_consolidated_image_asset_reservation_math"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "retained_decoded_bytes\\s*\\.checked_sub"
+max_occurrences = 0
+
+[[ratchet]]
+id = "e2_nsliced_recursive_dirt_owner"
+globs = ["crates/nuxie-runtime/src/layout/n_sliced_node.rs"]
+pattern = "add_dirt\\(local_id,\\s*ComponentDirt::N_SLICER,\\s*true\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "e2_direct_owner_types_not_consolidated_in_draw"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "(?:struct|enum)\\s+Runtime(?:ImageAssetOwner|ImageOwner|ImageList|ImageMeshOwner|ImageLayoutInputKey|MeshOwner|MeshList|SliceMeshOwner|NSlicedNodeContext)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "e2_direct_owner_functions_not_consolidated_in_draw"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "fn\\s+runtime_(?:draw_(?:live_image|image_with_owner|mesh_image|slice_mesh_image)|image_(?:layout_)?world_transform|realize_mesh_(?:owner|shared_buffers)|slice_mesh_(?:geometry|update|vertex_stops|tile_repeat)|nsliced_node_context_for_shape|prepare_slice_meshes)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "e2_image_layout_epoch_cache_deleted"
+globs = [
+  "crates/nuxie-runtime/src/**/*.rs",
+]
+pattern = "\\b(?:RuntimeImageLayoutTransformCacheKey|RuntimeImageLayoutInputKey|image_layout_transforms|runtime_image_layout_input_key|RuntimeLegacyImageLayoutScale(?:Key|State))\\b|fn\\s+settle_layout\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "e2_image_asset_import_not_consolidated_in_draw"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "(?:struct\\s+RuntimeImageAssetCatalog|fn\\s+predecode_render_image(?:_with_loader)?)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "e2_mesh_asset_callback_not_consolidated_in_draw"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "fn\\s+(?:preallocate_file_source_mesh_owners|runtime_source_mesh_image)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "e2_image_asset_referencer_callback_required"
+globs = ["crates/nuxie-runtime/src/assets/image_asset.rs"]
+pattern = "fn\\s+settle_runtime_image_asset_updates\\b[\\s\\S]{0,2200}ComponentDirt::WORLD_TRANSFORM"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "e2_image_asset_referencer_publish_required"
+globs = ["crates/nuxie-runtime/src/assets/image_asset.rs"]
+pattern = "fn\\s+insert_reserved\\b[\\s\\S]{0,1800}referencer\\.publish\\(global_id,\\s*width,\\s*height\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "e2_image_asset_revision_polling_deleted"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\b(?:runtime_image_asset_revision|asset_revision|owner_revision)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "e2_image_asset_inline_publish_required"
+globs = ["crates/nuxie-runtime/src/assets/image_asset.rs"]
+pattern = "fn\\s+publish\\b[\\s\\S]{0,1000}asset_updated\\(global_id,\\s*width,\\s*height\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "e2_image_asset_inline_owner_settlement_required"
+globs = ["crates/nuxie-runtime/src/shapes/image.rs"]
+pattern = "fn\\s+asset_updated\\b[\\s\\S]{0,500}update_image_scale_from_members"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "e2_direct_child_registration_callbacks_required"
+globs = [
+  "crates/nuxie-runtime/src/layout/axis_x.rs",
+  "crates/nuxie-runtime/src/layout/axis_y.rs",
+  "crates/nuxie-runtime/src/layout/n_slicer.rs",
+  "crates/nuxie-runtime/src/layout/n_slicer_tile_mode.rs",
+  "crates/nuxie-runtime/src/shapes/mesh.rs",
+  "crates/nuxie-runtime/src/shapes/mesh_vertex.rs",
+]
+pattern = "fn\\s+on_added_dirty\\b"
+min_occurrences = 6
+max_occurrences = 6
+
+[[ratchet]]
+id = "e2_image_mesh_projection_compensation_deleted"
+globs = [
+  "crates/nuxie-runtime/src/draw.rs",
+  "crates/nuxie-runtime/src/shapes/image.rs",
+]
+pattern = "fn\\s+runtime_image_mesh_owner\\b|RuntimeDrawable[\\s\\S]{0,1800}image_mesh\\s*:"
+min_occurrences = 0
+max_occurrences = 0
+
+[[ratchet]]
+id = "e2_image_set_mesh_owner_callback_required"
+globs = ["crates/nuxie-runtime/src/shapes/image.rs"]
+pattern = "fn\\s+set_mesh\\b[\\s\\S]{0,500}update_image_scale_from_members"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "e2_nsliced_layout_owner_callback_required"
+globs = ["crates/nuxie-runtime/src/layout/n_sliced_node.rs"]
+pattern = "fn\\s+mark_path_dirty_recursive\\b[\\s\\S]{0,1400}component\\.type_name\\s*==\\s*\"LayoutComponent\"[\\s\\S]{0,300}mark_layout_node_changed"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "e2_nsliced_broad_layout_style_invalidation_deleted"
+globs = ["crates/nuxie-runtime/src/layout/n_sliced_node.rs"]
+pattern = "ComponentDirt::LAYOUT_STYLE"
+max_occurrences = 0
 
 [[ratchet]]
 id = "nested_render_cache_key"

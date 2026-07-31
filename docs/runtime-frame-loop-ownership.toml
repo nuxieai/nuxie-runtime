@@ -143,10 +143,10 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 152
+faithful = 175
 adapted = 0
 divergent-by-decision = 0
-pending = 190
+pending = 167
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
@@ -2879,25 +2879,25 @@ status = "faithful"
 upstream = "src/viewmodel/data_enum.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/data_enum.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/data_enum_value.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/data_enum_value.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/property_symbol_dependent.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/property_symbol_dependent.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/runtime/viewmodel_instance_artboard_runtime.cpp"
@@ -3015,161 +3015,161 @@ status = "pending"
 upstream = "src/viewmodel/viewmodel.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_artboard.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_artboard.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_asset.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_asset.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_asset_font.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_asset_font.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_asset_image.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_asset_image.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_boolean.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_boolean.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_color.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_color.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_enum.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_enum.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_list.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_list.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_list_item.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_list_item.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_number.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_number.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_string.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_string.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_symbol_list_index.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_symbol_list_index.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_trigger.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_trigger.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_value.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_value.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_viewmodel.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_instance_viewmodel.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_property.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_property.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_property_enum.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_property_enum.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_property_enum_system.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/viewmodel/viewmodel_property_enum_system.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/virtualizing_component.cpp"
@@ -3635,7 +3635,7 @@ cpp_files = [
   "src/viewmodel/viewmodel_instance.cpp",
   "src/viewmodel/runtime/viewmodel_instance_runtime.cpp",
 ]
-rust_file = "crates/nuxie-runtime/src/view_model.rs"
+rust_file = "crates/nuxie-runtime/src/viewmodel/viewmodel_instance.rs"
 rust_anchor = "pub struct RuntimeOwnedViewModelInstance"
 status = "pending"
 

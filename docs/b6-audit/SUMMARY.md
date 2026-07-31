@@ -1,21 +1,24 @@
 # B-6 structural fidelity audit summary
 
 Audit source: pinned C++ `/Users/levi/dev/oss/rive-runtime` at
-`d788e8ec6e8b598526607d6a1e8818e8b637b60c`. All 447 manifest rows have an
+`d788e8ec6e8b598526607d6a1e8818e8b637b60c`. All 448 manifest rows have an
 on-disk record. The initial sweep records live under `results/`; the
 post-RB-1/RD-1 closure decisions are in [SECOND_PASS.md](SECOND_PASS.md).
+Row B6-0448 (`src/core/field_types/core_uint64_type.cpp`) was added on
+2026-07-31 to repair the B-2 inventory omission at the pin; its record is a
+post-audit amendment in [binary-core](results/binary-core.md).
 
 ## Final verdict totals
 
 | Verdict | Rows |
 |---|---:|
 | ISOMORPHIC | 19 |
-| ADAPTED | 192 |
+| ADAPTED | 193 |
 | DIVERGENT | 157 |
 | TRACKED-GAP | 30 |
 | UNKNOWN | 0 |
 | N/A | 49 |
-| **Total** | **447** |
+| **Total** | **448** |
 
 `TRACKED-GAP` means the comparable C++ lifecycle is absent or incomplete in
 Rust and an existing F/A/C/RB register item owns it. It closes the audit
@@ -36,12 +39,12 @@ owner in `docs/parity-gap-register.md`.
 | [bones-math-components](results/bones-math-components.md) | 21 | 6 | 6 | 7 | 1 | 1 |
 | [constraints](results/constraints.md) | 18 | 0 | 3 | 11 | 4 | 0 |
 | [lua-scripting](results/lua-scripting.md) | 14 | 0 | 9 | 2 | 3 | 0 |
-| [binary-core](results/binary-core.md) | 7 | 1 | 6 | 0 | 0 | 0 |
+| [binary-core](results/binary-core.md) | 8 | 1 | 7 | 0 | 0 | 0 |
 | [scripted](results/scripted.md) | 6 | 0 | 1 | 3 | 2 | 0 |
 | [focus-input](results/focus-input.md) | 3 | 0 | 0 | 3 | 0 | 0 |
 | [artboard](results/artboard.md) | 2 | 0 | 0 | 2 | 0 | 0 |
 | [state-machine](results/state-machine.md) | 1 | 0 | 1 | 0 | 0 | 0 |
-| **Total** | **447** | **19** | **192** | **157** | **30** | **49** |
+| **Total** | **448** | **19** | **193** | **157** | **30** | **49** |
 
 ## Disposition closure
 

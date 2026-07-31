@@ -221,3 +221,46 @@ idiom_rules_invoked: ["AF-5 import-time devirtualization"]
 confidence: high
 notes: "Rust replaces the C++ Core field-type dispatch family with a generated, immutable schema discriminant read by one FieldKind match. It is not mutated during decode/update/bind. Family grep cleared the decode path."
 ~~~
+
+## B6-0448
+
+Post-audit amendment (2026-07-31): this row repairs the B-2 inventory
+omission of `src/core/field_types/core_uint64_type.cpp`. The file exists in
+the pinned C++ at `d788e8ec` (it is removed later, at candidate `b73bc675`,
+by the static-library-linking commit — see
+`docs/sync/triage-2026-07-20-b73bc675.md` S3-3) but was absent from the
+seeded 447-row inventory, so the original B-6 sweep never assigned it a row.
+Audited now against the same pin with the same axes as its B6-0150..0155
+siblings. Line anchors cite the current Rust tree, not the tree the original
+sweep cited.
+
+~~~yaml
+row_id: B6-0448
+cpp_files: ["src/core/field_types/core_uint64_type.cpp"]
+rust_module: "crates/nuxie-binary/src/lib.rs"
+subsystem_cluster: binary-core
+sibling_files_swept:
+  - "src/core/binary_reader.cpp"
+  - "src/core/field_types/core_bool_type.cpp"
+  - "src/core/field_types/core_bytes_type.cpp"
+  - "src/core/field_types/core_color_type.cpp"
+  - "src/core/field_types/core_double_type.cpp"
+  - "src/core/field_types/core_string_type.cpp"
+  - "src/core/field_types/core_uint_type.cpp"
+  - "crates/nuxie-schema/src/lib.rs"
+  - "crates/nuxie-binary/src/lib.rs"
+verdict: ADAPTED
+axes:
+  retained_identity: {status: isomorphic, evidence: ["src/core/field_types/core_uint64_type.cpp:6-9", "crates/nuxie-binary/src/lib.rs:14518-14532"]}
+  push_vs_poll: {status: isomorphic, cpp_pushes: false, evidence: ["src/core/field_types/core_uint64_type.cpp:6-9", "crates/nuxie-binary/src/lib.rs:14518-14532"]}
+  update_ordering: {status: isomorphic, phases_cpp: ["dispatch CoreUint64Type", "readVarUint64 BinaryReader value", "return"], phases_rust: ["match static UintStorage::Uint64", "read_var_uint BinaryReader value", "construct FieldValue"]}
+  ownership: {status: isomorphic, evidence: ["src/core/field_types/core_uint64_type.cpp:6-9", "crates/nuxie-binary/src/lib.rs:14518-14532"], note: "scalar integer by value"}
+  compensation:
+    status: adapted
+    mechanisms: []
+    import_time_constants:
+      - {name: "Property.uint_storage", idiom_rule: "AF-5 import-time devirtualization", evidence: ["crates/nuxie-schema/src/lib.rs:33-53", "crates/nuxie-schema/src/lib.rs:139", "crates/nuxie-binary/src/lib.rs:14518-14532"]}
+idiom_rules_invoked: ["AF-5 import-time devirtualization"]
+confidence: high
+notes: "C++ CoreUint64Type::deserialize is one readVarUint64 call. Rust replaces the field-type dispatch subclass with the generated UintStorage::Uint64 schema discriminant: read_known_uint_field matches Uint64 and calls BinaryReader::read_var_uint, the same full-range varuint64 wire read, unclamped. The WITH_RIVE_TOOLS deserializeRev delegates to deserialize and is outside the read-only runtime contract. Family grep cleared the decode path."
+~~~

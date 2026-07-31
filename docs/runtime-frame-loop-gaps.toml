@@ -232,7 +232,7 @@ max_occurrences = 0
 id = "path_epoch_compensation"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\bpath_epoch\\b"
-max_occurrences = 71
+max_occurrences = 67
 
 [[ratchet]]
 id = "e2_consolidated_mesh_vertex_dirt"

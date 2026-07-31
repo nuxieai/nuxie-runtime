@@ -112,6 +112,7 @@ mod script_input_viewmodel_property;
 mod scripted_data_converter;
 mod scripted_object;
 mod scripting;
+mod shapes;
 mod state_machine;
 mod text;
 mod text_input;

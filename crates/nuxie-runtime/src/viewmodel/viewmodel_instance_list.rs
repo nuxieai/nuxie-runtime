@@ -44,7 +44,6 @@ impl RuntimeOwnedViewModelListHandle {
             .collect()
     }
 
-    #[cfg(test)]
     pub(crate) fn item_entries(&self) -> Vec<RuntimeOwnedViewModelListItemEntry> {
         self.value
             .borrow()
@@ -172,6 +171,23 @@ impl RuntimeOwnedViewModelListValue {
         let mut item = RuntimeOwnedViewModelListItem::new(instance);
         self.attach_item(&mut item);
         self.items.insert(index.min(self.items.len()), item);
+        self.item_count = self.items.len();
+    }
+
+    fn insert_runtime_instance(
+        &mut self,
+        index: usize,
+        instance: Rc<RefCell<RuntimeOwnedViewModelInstance>>,
+    ) {
+        // The pinned runtime facade calls `addItemAt` while its list item is
+        // still empty, then assigns the instance. Consequently this path does
+        // not register the inserted instance as a structural parent child.
+        // Keep that observable lifetime/propagation asymmetry separate from
+        // the authored-list insertion API above.
+        self.items.insert(
+            index.min(self.items.len()),
+            RuntimeOwnedViewModelListItem::new(instance),
+        );
         self.item_count = self.items.len();
     }
 

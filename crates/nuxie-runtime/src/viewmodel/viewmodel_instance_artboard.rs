@@ -2,9 +2,43 @@
 // Artboard-valued cell identity, sentinel value, import, and clone behavior.
 
 #[derive(Debug)]
+struct RuntimeBindableArtboardInner {
+    name: String,
+}
+
+/// Retained safe-Rust analogue of one runtime `BindableArtboard`.
+#[derive(Debug, Clone)]
+pub struct RuntimeBindableArtboard {
+    inner: Rc<RuntimeBindableArtboardInner>,
+}
+
+impl RuntimeBindableArtboard {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            inner: Rc::new(RuntimeBindableArtboardInner { name: name.into() }),
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.inner.name
+    }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct RuntimeOwnedViewModelArtboardState {
+    pub(crate) bindable_artboard: Option<RuntimeBindableArtboard>,
+    pub(crate) bound_view_model_instance: Option<RuntimeOwnedViewModelHandle>,
+}
+
+#[derive(Debug)]
 struct RuntimeOwnedViewModelArtboard {
     property_index: usize,
     cell: RuntimeViewModelCell,
+    runtime_state: Rc<RefCell<RuntimeOwnedViewModelArtboardState>>,
 }
 
 impl RuntimeOwnedViewModelArtboard {
@@ -14,6 +48,7 @@ impl RuntimeOwnedViewModelArtboard {
             cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::Artboard(
                 owned_scalar_u32_payload(value),
             )),
+            runtime_state: Rc::new(RefCell::new(RuntimeOwnedViewModelArtboardState::default())),
         }
     }
 
@@ -28,10 +63,15 @@ impl RuntimeOwnedViewModelArtboard {
         if self.value() == value {
             return false;
         }
+        self.runtime_state.borrow_mut().bindable_artboard = None;
         self.cell.set_value(RuntimeViewModelCellValue::Artboard(
             owned_scalar_u32_payload(value),
         ));
         true
+    }
+
+    fn runtime_state(&self) -> Rc<RefCell<RuntimeOwnedViewModelArtboardState>> {
+        Rc::clone(&self.runtime_state)
     }
 }
 

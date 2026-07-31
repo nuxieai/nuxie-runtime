@@ -47,6 +47,7 @@ pub(crate) struct RuntimeOwnedViewModelViewModel {
     imported_triggers: BTreeMap<u32, Vec<RuntimeOwnedViewModelTrigger>>,
     value_order: Vec<RuntimeOwnedViewModelValueOccurrence>,
     imported_value_order: BTreeMap<u32, Vec<RuntimeOwnedViewModelValueOccurrence>>,
+    imported_instance_names: BTreeMap<u32, String>,
     view_model_instance_ids: Vec<u32>,
     children: Vec<RuntimeOwnedViewModelViewModel>,
     imported_children: BTreeMap<u32, Vec<RuntimeOwnedViewModelViewModel>>,
@@ -644,9 +645,18 @@ impl RuntimeOwnedViewModelViewModel {
             _ => Vec::new(),
         };
         let value_order = self.active_value_order().to_vec();
+        let name = match self.endpoint.value() {
+            RuntimeViewModelPointer::Imported { object_id } => self
+                .imported_instance_names
+                .get(&object_id)
+                .cloned()
+                .unwrap_or_default(),
+            _ => String::new(),
+        };
         let item_index_symbol_slot = symbol_list_indices.len().checked_sub(1);
         let mut instance = RuntimeOwnedViewModelInstance {
             view_model_index,
+            name,
             instance_identity: RuntimeOwnedViewModelInstance::next_instance_identity(),
             allocation_identity: RuntimeOwnedViewModelInstance::next_allocation_identity(),
             parent_relay,
@@ -1988,6 +1998,25 @@ fn runtime_owned_view_model_property_children(
                                         view_model_index,
                                         Some(instance.object),
                                     ),
+                                )
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                imported_instance_names: referenced_view_model_index
+                    .and_then(|view_model_index| file.view_model(view_model_index))
+                    .map(|view_model| {
+                        view_model
+                            .instances
+                            .into_iter()
+                            .map(|instance| {
+                                (
+                                    instance.object.id,
+                                    instance
+                                        .object
+                                        .string_property("name")
+                                        .unwrap_or_default()
+                                        .to_owned(),
                                 )
                             })
                             .collect()

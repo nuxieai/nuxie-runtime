@@ -10893,6 +10893,7 @@ impl TaffyRuntimeLayoutEngine {
                         "ArtboardListMapRule"
                             | "ArtboardComponentListOverride"
                             | "ListFollowPathConstraint"
+                            | "ClippingShape"
                     )
                 })
         }))
@@ -29694,6 +29695,47 @@ mod tests {
     fn push_color(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: u32) {
         push_var_uint(bytes, schema_property_key(type_name, property_name));
         bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
+    #[test]
+    fn component_list_layout_guard_accepts_clipping_shape_but_rejects_shape() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9660);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "ArtboardComponentList", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "ClippingShape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_uint(bytes, "ClippingShape", "sourceId", 0);
+        });
+        push_object(&mut bytes, "ArtboardListMapRule", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+        });
+        push_object(&mut bytes, "ArtboardComponentList", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 4);
+        });
+
+        let file = read_runtime_file(&bytes).expect("component-list guard fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("component-list guard graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+
+        assert_eq!(
+            TaffyRuntimeLayoutEngine.zero_sized_component_list_supported(graph, 1),
+            Some(true),
+        );
+        assert_eq!(
+            TaffyRuntimeLayoutEngine.zero_sized_component_list_supported(graph, 4),
+            Some(false),
+        );
     }
 
     fn assert_mat2d_near(actual: [f32; 6], expected: [f32; 6]) {

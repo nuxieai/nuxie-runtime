@@ -2493,13 +2493,35 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             (
                 "state_machine_hit_exit_release_required",
                 """
-                fn update() {
+                fn release_event(&mut self, index: usize) {
+                    let data = self.pointer_data.remove(index);
+                    self.pointer_data_pool.push(data);
+                }
+                """,
+                """
+                fn release_event(&mut self, index: usize) {
+                    self.pointer_data.remove(index);
+                }
+                """,
+            ),
+            (
+                "state_machine_hit_exit_release_wiring_required",
+                """
+                fn exit() {
                     if hit_type == RuntimeListenerType::Exit {
-                        self.release_pointer_input(pointer_id);
+                        for group in &mut self.listener_groups {
+                            group.release_event(pointer_id);
+                        }
                     }
                 }
                 """,
-                "fn update() { self.release_pointer_input(pointer_id); }\n",
+                """
+                fn exit() {
+                    if hit_type == RuntimeListenerType::Exit {
+                        self.release_draggable_pointer(pointer_id);
+                    }
+                }
+                """,
             ),
             (
                 "state_machine_hit_enable_disable_walks_required",
@@ -2521,9 +2543,14 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         ]
         for ratchet_id, required, missing in cases:
             with self.subTest(ratchet=ratchet_id):
+                case_source = (
+                    "crates/nuxie-runtime/src/listener_group.rs"
+                    if ratchet_id == "state_machine_hit_exit_release_required"
+                    else source
+                )
                 self.assert_required_production_ratchet_case(
                     ratchet_id,
-                    source,
+                    case_source,
                     textwrap.dedent(required),
                     textwrap.dedent(missing),
                 )

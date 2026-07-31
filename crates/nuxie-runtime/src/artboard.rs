@@ -396,6 +396,8 @@ pub struct ArtboardInstance {
     pub(crate) advancing_components: Vec<RuntimeAdvancingComponent>,
     #[cfg(test)]
     persistent_dirt_component_fixture: Option<PersistentDirtComponentFixture>,
+    #[cfg(test)]
+    update_pass_data_bind_call_count: usize,
     /// C++ `Artboard::m_Resettables`, retained in authored object order.
     pub(crate) resetting_components: Vec<RuntimeResettingComponent>,
     /// C++ `Artboard::m_ComponentLists`, retained in authored object order.
@@ -403,6 +405,7 @@ pub struct ArtboardInstance {
     /// paths never rescan Components to rediscover this family
     /// (`src/artboard.cpp:330-395`).
     component_lists: Vec<ComponentHandle>,
+    component_list_resource_pools: RuntimeComponentListResourcePools,
     pub(crate) joysticks_apply_before_update: bool,
     pub(crate) linear_animations: Arc<Vec<RuntimeLinearAnimation>>,
     /// C++ uses one process-global empty LinearAnimation for unresolved
@@ -542,8 +545,11 @@ impl Clone for ArtboardInstance {
             advancing_components: self.advancing_components.clone(),
             #[cfg(test)]
             persistent_dirt_component_fixture: self.persistent_dirt_component_fixture.clone(),
+            #[cfg(test)]
+            update_pass_data_bind_call_count: 0,
             resetting_components: self.resetting_components.clone(),
             component_lists: self.component_lists.clone(),
+            component_list_resource_pools: RuntimeComponentListResourcePools::default(),
             joysticks_apply_before_update: self.joysticks_apply_before_update,
             linear_animations: self.linear_animations.clone(),
             empty_linear_animation: self.empty_linear_animation.clone(),
@@ -688,318 +694,46 @@ pub struct RuntimeEventProperty {
     pub value: RuntimeEventPropertyValue,
 }
 
-#[derive(Debug)]
-pub(crate) struct RuntimeNestedArtboardInstance {
-    // Rust drops fields in declaration order. C++ releases nested animations
-    // (including StateMachineInstances that can reference m_Instance) before
-    // destroying m_Instance (`nested_artboard.cpp:48-64`).
-    pub(crate) animations: Vec<RuntimeNestedAnimationInstance>,
-    pub(crate) child: Box<ArtboardInstance>,
-    pub(crate) render_cache_revision: u64,
-    /// C++ child objects own their backend members. This sidecar follows the
-    /// mounted occurrence through replacement/drop and is rebuilt on clone.
-    pub(crate) render_resources: RefCell<crate::draw::RuntimeOccurrenceRenderResources>,
-    /// C++ configures an intermediate shader on the one mounted child before
-    /// `NestedArtboardLayout::takeLayoutData()` permanently transfers layout
-    /// ownership. Retain only that narrow initial paint state until the paint
-    /// cache consumes it; animation, scripts, view models, and geometry remain
-    /// exclusively owned by `child`.
-    pub(crate) initial_layout_paint_frame: RefCell<Option<RuntimeInitialNestedLayoutPaintFrame>>,
-    pub(crate) layout_data_transferred: bool,
-    /// Parent solve that last refreshed the constraint space transferred to
-    /// this mounted child. Child-local layout writes must not refresh that
-    /// space during the same transfer; only a new parent solve (or assigned
-    /// bounds) corresponds to Yoga's `hasNewLayout` lifecycle.
-    layout_data_transfer_key: Option<RuntimeNestedLayoutDataTransferKey>,
-    pub(crate) data_bind_path_ids: Option<Vec<u32>>,
-    pub(crate) data_bind_path_is_relative: bool,
-    pub(crate) stateful_view_model_instance_local: Option<usize>,
-    pub(crate) stateful_view_model_instance_locals_by_id: BTreeMap<u32, usize>,
-    pub(crate) stateful_view_model_context: Option<RuntimeOwnedViewModelInstance>,
-    pub(crate) stateful_global_view_model_contexts: BTreeMap<usize, RuntimeOwnedViewModelInstance>,
-    pub(crate) data_bind_property_source_locals: Vec<Option<usize>>,
-    pub(crate) data_bind_image_source_locals: Vec<Option<usize>>,
-    pub(crate) data_bind_context_source_locals_by_path: BTreeMap<Vec<u32>, usize>,
-    is_paused: bool,
-    speed: f32,
-    quantize: f32,
-    cumulated_seconds: f32,
+/// The player selected by pinned C++ `Artboard::defaultScene`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeArtboardDefaultScene {
+    StateMachine(usize),
+    LinearAnimation(usize),
 }
 
-impl Clone for RuntimeNestedArtboardInstance {
-    fn clone(&self) -> Self {
-        // A normal artboard clone is a new occurrence. C++ gives that mounted
-        // child a fresh `takeLayoutData()` lifecycle, so it must produce its
-        // own one-time initial paint frame rather than inherit a consumed (or
-        // pending) frame from the source occurrence.
-        let mut child = self.child.as_ref().clone();
-        child.reset_layout_constraint_bounds_for_new_occurrence();
-        let animations = self
-            .animations
-            .iter()
-            .map(|animation| match animation {
-                RuntimeNestedAnimationInstance::StateMachine(occurrence) => {
-                    RuntimeNestedAnimationInstance::StateMachine(occurrence.cold_clone(&mut child))
-                }
-                // The separate NestedSimpleAnimation and NestedRemap clone
-                // families remain outside FL-C3. Preserve their established
-                // behavior here; only the touched NestedStateMachine owner is
-                // reconstructed cold in this slice.
-                animation => animation.clone(),
-            })
-            .collect();
-        Self {
-            child: Box::new(child),
-            render_cache_revision: self.render_cache_revision,
-            render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
-            initial_layout_paint_frame: RefCell::new(None),
-            layout_data_transferred: false,
-            layout_data_transfer_key: None,
-            data_bind_path_ids: self.data_bind_path_ids.clone(),
-            data_bind_path_is_relative: self.data_bind_path_is_relative,
-            stateful_view_model_instance_local: self.stateful_view_model_instance_local,
-            stateful_view_model_instance_locals_by_id: self
-                .stateful_view_model_instance_locals_by_id
-                .clone(),
-            stateful_view_model_context: self.stateful_view_model_context.clone(),
-            stateful_global_view_model_contexts: self.stateful_global_view_model_contexts.clone(),
-            data_bind_property_source_locals: self.data_bind_property_source_locals.clone(),
-            data_bind_image_source_locals: self.data_bind_image_source_locals.clone(),
-            data_bind_context_source_locals_by_path: self
-                .data_bind_context_source_locals_by_path
-                .clone(),
-            animations,
-            is_paused: self.is_paused,
-            speed: self.speed,
-            quantize: self.quantize,
-            cumulated_seconds: self.cumulated_seconds,
-        }
-    }
+fn select_default_state_machine(
+    authored_index: Option<u64>,
+    state_machine_count: usize,
+) -> Option<usize> {
+    authored_index
+        .and_then(|index| usize::try_from(index).ok())
+        .filter(|index| *index < state_machine_count)
 }
 
-/// Mounted nested-artboard occurrences, retained contiguously like C++
-/// `Artboard::m_NestedArtboards` while keeping local-id lookup constant-time.
-///
-/// Local ids index the small side table only; iteration walks the compact,
-/// sorted entries and never scans gaps in the artboard's object-id space.
-#[derive(Debug, Clone, Default)]
-pub(crate) struct RuntimeNestedArtboards {
-    entries: Vec<(usize, RuntimeNestedArtboardInstance)>,
-    entry_by_local: Vec<Option<usize>>,
-    state_machine_owner_by_local: Vec<Option<(usize, usize)>>,
+fn select_default_scene(
+    authored_index: Option<u64>,
+    state_machine_count: usize,
+    animation_count: usize,
+) -> Option<RuntimeArtboardDefaultScene> {
+    select_default_state_machine(authored_index, state_machine_count)
+        .map(RuntimeArtboardDefaultScene::StateMachine)
+        .or_else(|| {
+            (state_machine_count != 0).then_some(RuntimeArtboardDefaultScene::StateMachine(0))
+        })
+        .or_else(|| {
+            (animation_count != 0).then_some(RuntimeArtboardDefaultScene::LinearAnimation(0))
+        })
 }
 
-impl RuntimeNestedArtboards {
-    pub(crate) fn get(&self, local_id: &usize) -> Option<&RuntimeNestedArtboardInstance> {
-        let entry = self.entry_by_local.get(*local_id).copied().flatten()?;
-        self.entries.get(entry).map(|(_, nested)| nested)
-    }
+include!("nested_artboard.rs");
 
-    pub(crate) fn get_mut(
-        &mut self,
-        local_id: &usize,
-    ) -> Option<&mut RuntimeNestedArtboardInstance> {
-        let entry = self.entry_by_local.get(*local_id).copied().flatten()?;
-        self.entries.get_mut(entry).map(|(_, nested)| nested)
-    }
-
-    fn contains_key(&self, local_id: &usize) -> bool {
-        self.entry_by_local
-            .get(*local_id)
-            .is_some_and(Option::is_some)
-    }
-
-    fn insert(
-        &mut self,
-        local_id: usize,
-        nested: RuntimeNestedArtboardInstance,
-    ) -> Option<RuntimeNestedArtboardInstance> {
-        if self.entry_by_local.len() <= local_id {
-            self.entry_by_local.resize(local_id.saturating_add(1), None);
-        }
-        if let Some(entry) = self.entry_by_local[local_id] {
-            let previous = std::mem::replace(&mut self.entries[entry].1, nested);
-            self.rebuild_state_machine_index();
-            return Some(previous);
-        }
-
-        let entry = self
-            .entries
-            .binary_search_by_key(&local_id, |(candidate, _)| *candidate)
-            .unwrap_or_else(|entry| entry);
-        self.entries.insert(entry, (local_id, nested));
-        for (entry, (local_id, _)) in self.entries.iter().enumerate().skip(entry) {
-            self.entry_by_local[*local_id] = Some(entry);
-        }
-        self.rebuild_state_machine_index();
-        None
-    }
-
-    fn remove(&mut self, local_id: &usize) -> Option<RuntimeNestedArtboardInstance> {
-        let entry = self.entry_by_local.get_mut(*local_id)?.take()?;
-        let (_, nested) = self.entries.remove(entry);
-        for (entry, (local_id, _)) in self.entries.iter().enumerate().skip(entry) {
-            self.entry_by_local[*local_id] = Some(entry);
-        }
-        self.rebuild_state_machine_index();
-        Some(nested)
-    }
-
-    pub(crate) fn keys(&self) -> impl Iterator<Item = &usize> {
-        self.entries.iter().map(|(local_id, _)| local_id)
-    }
-
-    fn iter(&self) -> impl Iterator<Item = (&usize, &RuntimeNestedArtboardInstance)> {
-        self.entries
-            .iter()
-            .map(|(local_id, nested)| (local_id, nested))
-    }
-
-    pub(crate) fn values(&self) -> impl Iterator<Item = &RuntimeNestedArtboardInstance> {
-        self.entries.iter().map(|(_, nested)| nested)
-    }
-
-    pub(crate) fn values_mut(
-        &mut self,
-    ) -> impl Iterator<Item = &mut RuntimeNestedArtboardInstance> {
-        self.entries.iter_mut().map(|(_, nested)| nested)
-    }
-
-    pub(crate) fn state_machine(
-        &self,
-        local_id: usize,
-    ) -> Option<&RuntimeNestedStateMachineInstance> {
-        let (host_entry, animation_index) = self
-            .state_machine_owner_by_local
-            .get(local_id)
-            .copied()
-            .flatten()?;
-        match self
-            .entries
-            .get(host_entry)?
-            .1
-            .animations
-            .get(animation_index)?
-        {
-            RuntimeNestedAnimationInstance::StateMachine(occurrence)
-                if occurrence.local_id() == local_id =>
-            {
-                Some(occurrence)
-            }
-            _ => None,
-        }
-    }
-
-    pub(crate) fn state_machine_mut(
-        &mut self,
-        local_id: usize,
-    ) -> Option<&mut RuntimeNestedStateMachineInstance> {
-        let (host_entry, animation_index) = self
-            .state_machine_owner_by_local
-            .get(local_id)
-            .copied()
-            .flatten()?;
-        match self
-            .entries
-            .get_mut(host_entry)?
-            .1
-            .animations
-            .get_mut(animation_index)?
-        {
-            RuntimeNestedAnimationInstance::StateMachine(occurrence)
-                if occurrence.local_id() == local_id =>
-            {
-                Some(occurrence)
-            }
-            _ => None,
-        }
-    }
-
-    fn rebuild_state_machine_index(&mut self) {
-        self.state_machine_owner_by_local.clear();
-        for (host_entry, (_, nested)) in self.entries.iter().enumerate() {
-            for (animation_index, animation) in nested.animations.iter().enumerate() {
-                let RuntimeNestedAnimationInstance::StateMachine(occurrence) = animation else {
-                    continue;
-                };
-                let local_id = occurrence.local_id();
-                if self.state_machine_owner_by_local.len() <= local_id {
-                    self.state_machine_owner_by_local
-                        .resize(local_id.saturating_add(1), None);
-                }
-                self.state_machine_owner_by_local[local_id] = Some((host_entry, animation_index));
-            }
-        }
-    }
-}
-
-impl std::ops::Index<&usize> for RuntimeNestedArtboards {
-    type Output = RuntimeNestedArtboardInstance;
-
-    fn index(&self, local_id: &usize) -> &Self::Output {
-        self.get(local_id)
-            .unwrap_or_else(|| panic!("no nested artboard mounted at local id {local_id}"))
-    }
-}
-
-/// Ported from C++ `src/artboard_component_list.cpp`: one persistent child
-/// artboard and its selected state machines for an owned view-model list item.
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeComponentListItemInstance {
-    // C++ erases row state machines before row ArtboardInstances so listener
-    // groups cannot observe destroyed FocusData
-    // (`artboard_component_list.cpp:1582-1586`).
-    pub(crate) state_machines: Vec<StateMachineInstance>,
-    pub(crate) child: Box<ArtboardInstance>,
-    /// Backend members for this one mounted row occurrence.
-    pub(crate) render_resources: RefCell<crate::draw::RuntimeOccurrenceRenderResources>,
-    pub(crate) context: RuntimeOwnedViewModelHandle,
-    /// Pushed C++ `ViewModelInstance::m_dependents` relink channel. Scalar
-    /// cells notify the mounted child's binds directly; ViewModel-reference
-    /// replacement dirties this sink (`viewmodel_instance.cpp:118-188,346-415`).
-    pub(crate) context_rebind_sink: crate::view_model_cell::RuntimeCellDirtSink,
-    /// C++ `ArtboardListDrawIndexDependent`: scalar writes invalidate the
-    /// retained paint-order indices without polling the ViewModel graph.
-    pub(crate) draw_index_sink: Option<crate::view_model_cell::RuntimeCellDirtSink>,
-    pub(crate) occurrence_identity: u64,
-    pub(crate) logical_index: usize,
-    /// Last parent-assigned layout size observed while preparing this mounted
-    /// occurrence. C++ writes `Artboard::layoutBounds()` back into the full
-    /// logical `m_artboardSizes` topology after layout; the next list sync
-    /// consumes this value before selecting its virtual window.
-    pub(crate) settled_layout_size: Cell<Option<(f32, f32)>>,
-    pub(crate) transform: Mat2D,
-    pub(crate) render_cache_revision: u64,
-}
-
-impl RuntimeComponentListItemInstance {
-    fn context_is_current(&self, context: &RuntimeOwnedViewModelHandle) -> bool {
-        self.context.ptr_eq(context)
-            && !self
-                .context_rebind_sink
-                .peek_dirt()
-                .contains(crate::view_model_cell::RuntimeCellDirt::BINDINGS)
-    }
-
-    fn consume_context_rebind_dirt(&self) {
-        self.context_rebind_sink.take_dirt();
-    }
-}
-
-fn component_list_draw_index_sink(
-    file: &RuntimeFile,
-    context: &RuntimeOwnedViewModelHandle,
-) -> Option<crate::view_model_cell::RuntimeCellDirtSink> {
-    let property_name = file
-        .view_model_property_for_symbol(context.borrow().view_model_index(), 16)?
-        .string_property("name")?;
-    let cell = context
-        .borrow()
-        .number_cell_by_property_name(property_name)?;
-    let sink = crate::view_model_cell::RuntimeCellDirtSink::new();
-    cell.add_dependent(&sink);
-    Some(sink)
-}
+include!("artboard_component_list.rs");
+include!("artboard_list_map_rule.rs");
+include!("artboard_referencer.rs");
+include!("bindable_artboard.rs");
+include!("nested_artboard_layout.rs");
+include!("nested_artboard_leaf.rs");
+include!("nested_artboard_origin.rs");
 
 /// One exact descent edge from a retained root artboard to a nested occurrence.
 ///
@@ -1028,28 +762,6 @@ pub struct RuntimeNestedRemapAnimationReport {
     pub host_local_id: usize,
     pub local_id: usize,
     pub animation_time: f32,
-}
-
-/// Full logical topology retained independently from the mounted artboards,
-/// matching C++ `m_listItems` and `m_artboardSizes`.
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeComponentListLogicalItem {
-    pub(crate) occurrence_identity: u64,
-    pub(crate) context: RuntimeOwnedViewModelHandle,
-    pub(crate) size: (f32, f32),
-    pub(crate) mapped_artboard_global: Option<u32>,
-}
-
-#[cfg(test)]
-fn component_list_contexts_retain_same_handles(
-    existing: &[RuntimeComponentListItemInstance],
-    incoming: &[RuntimeOwnedViewModelHandle],
-) -> bool {
-    existing.len() == incoming.len()
-        && existing
-            .iter()
-            .zip(incoming)
-            .all(|(item, context)| item.context.ptr_eq(context))
 }
 
 #[derive(Debug, Clone)]
@@ -1113,25 +825,6 @@ fn build_text_affecting_locals(slots: &[InstanceSlot], objects: &InstanceObjectA
         }
     }
     result
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct RuntimeNestedLayoutBoundsCacheKey {
-    graph_global_id: u32,
-    layout_epoch: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct RuntimeNestedLayoutDataTransferKey {
-    parent_layout: RuntimeNestedLayoutBoundsCacheKey,
-    assigned_bounds: RuntimeLayoutBounds,
-    child_layout_epoch: u64,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimeNestedLayoutBoundsFrame {
-    key: RuntimeNestedLayoutBoundsCacheKey,
-    bounds: Arc<Option<BTreeMap<usize, RuntimeLayoutBounds>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -2508,8 +2201,11 @@ impl ArtboardInstance {
             advancing_components,
             #[cfg(test)]
             persistent_dirt_component_fixture: None,
+            #[cfg(test)]
+            update_pass_data_bind_call_count: 0,
             resetting_components,
             component_lists,
+            component_list_resource_pools: RuntimeComponentListResourcePools::default(),
             joysticks_apply_before_update: graph.joysticks_apply_before_update,
             linear_animations: Arc::new(linear_animations),
             empty_linear_animation: Arc::new(RuntimeLinearAnimation::empty()),
@@ -3793,6 +3489,33 @@ impl ArtboardInstance {
         self.state_machines.as_slice()
     }
 
+    /// Pinned C++ `defaultStateMachineIndex`: an explicit authored ordinal is
+    /// valid only while it addresses this Artboard's state-machine table.
+    pub fn default_state_machine_index(&self) -> Option<usize> {
+        select_default_state_machine(
+            property_key_for_name("Artboard", "defaultStateMachineId")
+                .and_then(|key| self.uint_property(0, key)),
+            self.state_machines.len(),
+        )
+    }
+
+    /// Pinned C++ `defaultStateMachine`: unlike `defaultScene`, this never
+    /// falls back to state machine zero.
+    pub fn default_state_machine(&self) -> Option<&RuntimeStateMachine> {
+        self.state_machine(self.default_state_machine_index()?)
+    }
+
+    /// Pinned C++ selection order: explicit default state machine, state
+    /// machine zero, linear animation zero, then null.
+    pub fn default_scene(&self) -> Option<RuntimeArtboardDefaultScene> {
+        select_default_scene(
+            property_key_for_name("Artboard", "defaultStateMachineId")
+                .and_then(|key| self.uint_property(0, key)),
+            self.state_machines.len(),
+            self.linear_animations.len(),
+        )
+    }
+
     pub fn set_artboard_dimensions(&mut self, width: f32, height: f32) -> bool {
         if self.width == width && self.height == height {
             return false;
@@ -4503,6 +4226,14 @@ impl ArtboardInstance {
         };
         for callback in keyed_callbacks {
             changed |= self.apply_keyed_callback(callback);
+            if let Some(report) = crate::event::trigger_event(
+                self,
+                callback.target_local_id,
+                callback.seconds_delay,
+                None,
+            ) {
+                reported_events.push(report);
+            }
         }
         changed
     }
@@ -4525,8 +4256,14 @@ impl ArtboardInstance {
 
         let mut changed = false;
         let mut apply_and_deliver =
-            |callback: RuntimeKeyedCallback, event: Option<StateMachineReportedEvent>| {
+            |callback: RuntimeKeyedCallback, _event: Option<StateMachineReportedEvent>| {
                 changed |= self.apply_keyed_callback(callback);
+                let event = crate::event::trigger_event(
+                    self,
+                    callback.target_local_id,
+                    callback.seconds_delay,
+                    None,
+                );
                 changed |= callback_sink(self, event);
             };
         let keep_going =
@@ -4777,17 +4514,11 @@ impl ArtboardInstance {
                     })
                     .collect()
             });
-        let resolve_map_rule = |context: &RuntimeOwnedViewModelInstance| {
-            let view_model_index = context.view_model_index();
-            component_list
-                .map_rules
-                .iter()
-                .find(|rule| rule.view_model_id == view_model_index as i64)
-        };
         let resolve_child_graph = |context: &RuntimeOwnedViewModelInstance| {
             let view_model_index = context.view_model_index();
             let mapped_index =
-                resolve_map_rule(context).and_then(|rule| usize::try_from(rule.artboard_id).ok());
+                artboard_list_map_rule_for_view_model(&component_list.map_rules, view_model_index)
+                    .and_then(|rule| usize::try_from(rule.artboard_id).ok());
             mapped_index
                 .and_then(|index| build_context.artboards.get(index))
                 .or_else(|| {
@@ -4988,9 +4719,9 @@ impl ArtboardInstance {
     ///
     /// The FL-A adapter deliberately calls this one index at a time, matching
     /// `ScrollVirtualizer::virtualize` → `VirtualizingComponent::addVirtualizable`
-    /// (`scroll_virtualizer.cpp:244-293`). Artboard/state-machine pooling and
-    /// recorder restoration remain owned by the later
-    /// `src/artboard_component_list.cpp` FL-D row.
+    /// (`scroll_virtualizer.cpp:244-293`). The direct
+    /// `src/artboard_component_list.cpp` owner now supplies the FL-D pool and
+    /// fresh-state restoration used by this mount path.
     fn create_component_list_item_instance(
         &mut self,
         file: &RuntimeFile,
@@ -5034,21 +4765,21 @@ impl ArtboardInstance {
         child.artboard_owned_view_model_context = Some(
             RuntimeOwnedViewModelContext::from_main_handle(context.clone()),
         );
-        let selected_machine_indices = component_list
-            .map_rules
-            .iter()
-            .find(|rule| rule.view_model_id == context.borrow().view_model_index() as i64)
-            .filter(|rule| !rule.state_machine_ids.is_empty())
-            .map(|rule| rule.state_machine_ids.clone())
-            .unwrap_or_else(|| {
-                let default_state_machine_index = file
-                    .object(child_graph.global_id as usize)
-                    .and_then(|artboard| artboard.uint_property("defaultStateMachineId"));
-                vec![component_list_default_state_machine_index(
-                    default_state_machine_index,
-                    child.state_machines.len(),
-                )]
-            });
+        let selected_machine_indices = artboard_list_map_rule_for_view_model(
+            &component_list.map_rules,
+            context.borrow().view_model_index(),
+        )
+        .filter(|rule| !rule.state_machine_ids.is_empty())
+        .map(|rule| rule.state_machine_ids.clone())
+        .unwrap_or_else(|| {
+            let default_state_machine_index = file
+                .object(child_graph.global_id as usize)
+                .and_then(|artboard| artboard.uint_property("defaultStateMachineId"));
+            vec![component_list_default_state_machine_index(
+                default_state_machine_index,
+                child.state_machines.len(),
+            )]
+        });
         let mut state_machines = Vec::with_capacity(selected_machine_indices.len());
         for state_machine_index in selected_machine_indices {
             let Some(mut state_machine) = child.state_machine_instance(state_machine_index) else {
@@ -5123,10 +4854,22 @@ impl ArtboardInstance {
         else {
             return false;
         };
-        let Some(item) =
+        let Some(source_global_id) = logical.mapped_artboard_global else {
+            return false;
+        };
+        let mut pooled = self
+            .component_list_resource_pools
+            .take(list_local_id, source_global_id);
+        let Some(fresh) =
             self.create_component_list_item_instance(file, list_local_id, logical_index, logical)
         else {
             return false;
+        };
+        let item = if let Some(mut item) = pooled.take() {
+            item.restore_from_fresh(fresh);
+            item
+        } else {
+            fresh
         };
         let transform = item.transform;
         let Some(list) = self.component_list_state_mut(list_local_id) else {
@@ -5146,24 +4889,25 @@ impl ArtboardInstance {
         list_local_id: usize,
         logical_index: usize,
     ) -> bool {
-        let Some(list) = self.component_list_state_mut(list_local_id) else {
-            return false;
+        let item = {
+            let Some(list) = self.component_list_state_mut(list_local_id) else {
+                return false;
+            };
+            let Some(index) = list
+                .items
+                .iter()
+                .position(|item| item.logical_index == logical_index)
+            else {
+                return false;
+            };
+            let item = list.items.remove(index);
+            if index < list.item_transforms.len() {
+                list.item_transforms.remove(index);
+            }
+            *list.order_cache.borrow_mut() = Default::default();
+            item
         };
-        let Some(index) = list
-            .items
-            .iter()
-            .position(|item| item.logical_index == logical_index)
-        else {
-            return false;
-        };
-        // State machines precede the child Artboard in the item struct, so
-        // dropping the mounted item preserves the C++ teardown order. FL-D
-        // replaces this drop with the C++ resource pools.
-        list.items.remove(index);
-        if index < list.item_transforms.len() {
-            list.item_transforms.remove(index);
-        }
-        *list.order_cache.borrow_mut() = Default::default();
+        self.component_list_resource_pools.put(list_local_id, item);
         self.mark_nested_structure_changed();
         self.mark_layout_changed();
         self.mark_prepared_changed();
@@ -5740,6 +5484,17 @@ impl ArtboardInstance {
             None,
             None,
         )
+    }
+
+    /// Root C++ `Artboard::advance` settlement boundary.
+    ///
+    /// C++ polls retained decoder promises immediately before this call.
+    /// Rust decoders are synchronously resolved by the owning host/File seam,
+    /// so this occurrence has no additional async queue to poll.
+    pub fn advance(&mut self, elapsed_seconds: f32) -> Result<bool, ScriptError> {
+        let mut changed = self.advance_frame_components(elapsed_seconds)?;
+        changed |= self.update_pass_with_script_errors()?;
+        Ok(changed || self.has_dirt(ComponentDirt::COMPONENTS))
     }
 
     /// Factory-aware form of [`Self::advance_frame_components`].
@@ -6458,10 +6213,11 @@ impl ArtboardInstance {
     fn compute_runtime_nested_artboard_layout_bounds(
         &self,
     ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
-        if !self.nested_artboard_locals.iter().any(|local_id| {
-            self.component(*local_id)
-                .is_some_and(|component| component.type_name == "NestedArtboardLayout")
-        }) {
+        if !self
+            .nested_artboard_locals
+            .iter()
+            .any(|local_id| is_nested_artboard_layout(self.component(*local_id)))
+        {
             return None;
         }
         let context = self.build_context.as_ref()?;
@@ -6480,10 +6236,7 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         mut paint_evaluation: ArtboardInstance,
     ) {
-        if !self
-            .component(host_local_id)
-            .is_some_and(|component| component.type_name == "NestedArtboardLayout")
-        {
+        if !is_nested_artboard_layout(self.component(host_local_id)) {
             return;
         }
         let Some(bounds) = layout_bounds.and_then(|bounds| bounds.get(&host_local_id).copied())
@@ -6518,10 +6271,11 @@ impl ArtboardInstance {
     }
 
     fn apply_nested_artboard_layout_bounds_after_parent_solve(&mut self) -> bool {
-        if !self.nested_artboard_locals.iter().any(|host_local_id| {
-            self.component(*host_local_id)
-                .is_some_and(|component| component.type_name == "NestedArtboardLayout")
-        }) {
+        if !self
+            .nested_artboard_locals
+            .iter()
+            .any(|host_local_id| is_nested_artboard_layout(self.component(*host_local_id)))
+        {
             return false;
         }
         let layout_frame = self.runtime_nested_artboard_layout_bounds_frame();
@@ -6549,10 +6303,7 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         parent_layout: RuntimeNestedLayoutBoundsCacheKey,
     ) -> bool {
-        if !self
-            .component(host_local_id)
-            .is_some_and(|component| component.type_name == "NestedArtboardLayout")
-        {
+        if !is_nested_artboard_layout(self.component(host_local_id)) {
             return false;
         }
         let Some(bounds) = layout_bounds.and_then(|bounds| bounds.get(&host_local_id).copied())
@@ -7526,6 +7277,15 @@ impl ArtboardInstance {
         self.update_pass_with_script_mode(&mut script_mode, Mat2D::IDENTITY)
     }
 
+    fn update_data_binds_for_update_pass(&mut self, root_transform: Mat2D) {
+        #[cfg(test)]
+        {
+            self.update_pass_data_bind_call_count += 1;
+        }
+        self.update_nested_artboard_data_binds_from_hosts(root_transform);
+        self.advance_artboard_data_binds_with_root_transform(root_transform, 0.0);
+    }
+
     fn update_pass_with_script_mode(
         &mut self,
         script_mode: &mut RuntimeScriptUpdateMode<'_>,
@@ -7533,8 +7293,7 @@ impl ArtboardInstance {
     ) -> bool {
         // Mirrors C++ src/artboard.cpp Artboard::updatePass: data binds run
         // before components, with artboard-host children publishing first.
-        self.update_nested_artboard_data_binds_from_hosts(root_transform);
-        self.advance_artboard_data_binds_with_root_transform(root_transform, 0.0);
+        self.update_data_binds_for_update_pass(root_transform);
         // C++ transfers a NestedArtboardLayout's Yoga node after the first
         // child-recursive data-bind pass, then reuses that node whenever the
         // parent Yoga graph reports a new layout. The transfer key keeps later
@@ -7582,6 +7341,9 @@ impl ArtboardInstance {
             let joystick_count = self.joysticks.len();
             for joystick_index in 0..joystick_count {
                 let mut nested_did_update = false;
+                if !self.joysticks[joystick_index].can_apply_before_update {
+                    self.update_data_binds_for_update_pass(root_transform);
+                }
                 if !self.joysticks[joystick_index].can_apply_before_update
                     && self
                         .update_components_with_hook_recording(
@@ -7612,6 +7374,7 @@ impl ArtboardInstance {
                 did_update |= nested_did_update;
                 did_update |= self.apply_joystick_at(joystick_index);
             }
+            self.update_data_binds_for_update_pass(root_transform);
             let mut nested_did_update = false;
             if self
                 .update_components_with_hook_recording(
@@ -7657,8 +7420,7 @@ impl ArtboardInstance {
             {
                 self.mark_artboard_data_bind_work_dirty();
             }
-            self.update_nested_artboard_data_binds_from_hosts(root_transform);
-            self.advance_artboard_data_binds_with_root_transform(root_transform, 0.0);
+            self.update_data_binds_for_update_pass(root_transform);
         }
         if did_update
             || self.component_list_locals().into_iter().any(|local_id| {
@@ -9648,14 +9410,13 @@ impl ArtboardInstance {
         let Some(mut nested) = self.runtime_nested_artboard_instance_for_id(local_id, value) else {
             return false;
         };
-        if !force
-            && self
-                .nested_artboards
+        if !bindable_artboard_requires_replacement(
+            self.nested_artboards
                 .get(&local_id)
-                .is_some_and(|existing| {
-                    existing.child.graph_global_id == nested.child.graph_global_id
-                })
-        {
+                .map(|existing| existing.child.graph_global_id),
+            nested.child.graph_global_id,
+            force,
+        ) {
             return false;
         }
         if let Some(existing) = self.nested_artboards.get(&local_id) {
@@ -9704,26 +9465,11 @@ impl ArtboardInstance {
             .artboards
             .iter()
             .find(|artboard| artboard.global_id == self.graph_global_id)?;
-        let data_bind_path = self
+        let (data_bind_path_ids, data_bind_path_is_relative) = self
             .slot(host_local_id)
             .and_then(|host| context.file.object(host.source_global_id as usize))
-            .and_then(|host_object| {
-                context
-                    .file
-                    .data_bind_path_for_referencer_object(host_object)
-            });
-        let data_bind_path_is_relative = data_bind_path
-            .as_ref()
-            .and_then(|path| path.object)
-            .and_then(|path| path.bool_property("isRelative"))
-            .unwrap_or(false);
-        let data_bind_path_ids = data_bind_path.map(|path| {
-            if data_bind_path_is_relative {
-                path.path_ids
-            } else {
-                path.resolved_path_ids
-            }
-        });
+            .map(|host_object| referencer_data_bind_path(&context.file, host_object))
+            .unwrap_or((None, false));
         let mut visiting = BTreeSet::new();
         visiting.insert(self.graph_global_id);
         let nested = build_runtime_nested_artboard_instance(
@@ -10203,20 +9949,6 @@ fn reset_component_list_instances(
     }
 }
 
-// Ported from C++ Artboard::defaultStateMachineIndex and
-// ArtboardComponentList::createStateMachineInstance. The serialized property
-// is an index, despite its historical `Id` name. Missing and out-of-range
-// values fall back to the first state machine for component-list children.
-fn component_list_default_state_machine_index(
-    default_state_machine_id: Option<u64>,
-    state_machine_count: usize,
-) -> usize {
-    default_state_machine_id
-        .and_then(|index| usize::try_from(index).ok())
-        .filter(|&index| index < state_machine_count)
-        .unwrap_or(0)
-}
-
 impl RuntimeNestedArtboardInstance {
     fn install_external_focus_domain(&mut self, parent_focus: &crate::focus::RuntimeFocusTree) {
         let child_identity = self.child.instance_identity();
@@ -10594,35 +10326,17 @@ fn build_runtime_nested_artboard_instances(
 
     let mut nested_artboards = RuntimeNestedArtboards::default();
     for host in &graph.nested_artboards {
-        if !matches!(
-            host.type_name,
-            "NestedArtboard" | "NestedArtboardLayout" | "NestedArtboardLeaf"
-        ) {
+        if !is_nested_artboard_occurrence_type(host.type_name) {
             continue;
         }
 
         let Some(host_object) = file.object(host.global_id as usize) else {
             continue;
         };
-        let Some(referenced) = file.resolved_artboard_for_referencer_object(host_object) else {
-            continue;
-        };
-        let data_bind_path = file.data_bind_path_for_referencer_object(host_object);
-        let data_bind_path_is_relative = data_bind_path
-            .as_ref()
-            .and_then(|path| path.object)
-            .and_then(|path| path.bool_property("isRelative"))
-            .unwrap_or(false);
-        let data_bind_path_ids = data_bind_path.map(|path| {
-            if data_bind_path_is_relative {
-                path.path_ids
-            } else {
-                path.resolved_path_ids
-            }
-        });
-        let Some(child_graph) = artboards
-            .iter()
-            .find(|artboard| artboard.global_id == referenced.id)
+        let (data_bind_path_ids, data_bind_path_is_relative) =
+            referencer_data_bind_path(file, host_object);
+        let Some(child_graph) =
+            resolved_artboard_graph_for_referencer(file, artboards, host_object)
         else {
             continue;
         };
@@ -10773,44 +10487,6 @@ fn build_runtime_nested_artboard_instance(
         quantize,
         cumulated_seconds: 0.0,
     })
-}
-
-fn apply_nested_artboard_origin_override(
-    parent_objects: &InstanceObjectArena,
-    host_local_id: usize,
-    child: &mut ArtboardInstance,
-) -> bool {
-    let Some(host) = parent_objects.component_handle(host_local_id) else {
-        return false;
-    };
-    let origin_local = (0..parent_objects.child_len(host))
-        .filter_map(|index| parent_objects.child_at(host, index))
-        .filter_map(|child| parent_objects.component(child))
-        .find(|component| component.type_name == "NestedArtboardOrigin")
-        .map(|component| component.local_id);
-    let Some(origin_local) = origin_local else {
-        return false;
-    };
-    let Some(origin_x) = property_key_for_name("NestedArtboardOrigin", "originX")
-        .and_then(|key| parent_objects.double_property(origin_local, key))
-    else {
-        return false;
-    };
-    let Some(origin_y) = property_key_for_name("NestedArtboardOrigin", "originY")
-        .and_then(|key| parent_objects.double_property(origin_local, key))
-    else {
-        return false;
-    };
-    let Some(origin_x_key) = property_key_for_name("Artboard", "originX") else {
-        return false;
-    };
-    let Some(origin_y_key) = property_key_for_name("Artboard", "originY") else {
-        return false;
-    };
-
-    let mut changed = child.set_double_property(0, origin_x_key, origin_x);
-    changed |= child.set_double_property(0, origin_y_key, origin_y);
-    changed
 }
 
 fn child_has_state_machine_data_binds(file: &RuntimeFile, graph: &ArtboardGraph) -> bool {
@@ -11643,8 +11319,11 @@ mod tests {
             advancing_components,
             #[cfg(test)]
             persistent_dirt_component_fixture: None,
+            #[cfg(test)]
+            update_pass_data_bind_call_count: 0,
             resetting_components,
             component_lists,
+            component_list_resource_pools: RuntimeComponentListResourcePools::default(),
             joysticks_apply_before_update: true,
             linear_animations: Arc::new(Vec::new()),
             empty_linear_animation: Arc::new(RuntimeLinearAnimation::empty()),
@@ -14469,7 +14148,9 @@ mod tests {
                 keyed_properties: vec![RuntimeKeyedProperty {
                     global_id: 2 + index as u32 * 3,
                     property_key: 0,
-                    target: RuntimeKeyedPropertyTarget::Callback { event: Some(event) },
+                    target: RuntimeKeyedPropertyTarget::Callback {
+                        event_local_index: Some(event.event_local_index()),
+                    },
                     key_frames: vec![RuntimeKeyFrame::Callback(RuntimeKeyFrameCallback {
                         global_id: 3 + index as u32 * 3,
                         frame: 1,
@@ -14541,7 +14222,7 @@ mod tests {
                 .int,
         );
         let event = StateMachineReportedEvent {
-            event_local_index: 8,
+            event_local_index: 2,
             event_core_type,
             name: Some("timeline-event".to_owned()),
             url: None,
@@ -14551,13 +14232,15 @@ mod tests {
             context: None,
             seconds_delay: 0.0,
         };
-        let (audio, audio_core_type) = nested_audio_event(9);
+        let (audio, audio_core_type) = nested_audio_event(3);
         let mut child = synthetic_instance(
             vec![
                 synthetic_component_for_type(0, "Artboard"),
                 synthetic_component_for_type(1, "Node"),
+                synthetic_component_for_type(2, "Event"),
+                synthetic_component_for_type(3, "AudioEvent"),
             ],
-            vec![0, 1],
+            vec![0, 1, 2, 3],
         );
         let mut timeline = callback_route_animation_with_events(vec![event, audio]);
         add_nested_simple_transform_curve(&mut timeline);
@@ -14650,7 +14333,7 @@ mod tests {
             target_local_id: 1,
             is_single: true,
             listener_types: vec![RuntimeListenerType::Event],
-            event_local_indices: vec![8],
+            event_local_indices: vec![2],
             view_model_path: None,
             view_model_input_types: Vec::new(),
             gamepad_input_types: Vec::new(),
@@ -14701,7 +14384,7 @@ mod tests {
         );
         assert_eq!(
             root_machine.audio_event_seam_receipt(),
-            (1, Some((9, audio_core_type))),
+            (1, Some((3, audio_core_type))),
             "the parent audio seam receives exactly the nested simple timeline AudioEvent",
         );
         assert_eq!(
@@ -14746,7 +14429,8 @@ mod tests {
     #[test]
     fn animation_advance_routes_only_callback_definitions_through_event_reporting() {
         for (has_keyed_callbacks, expected_events) in [(false, 0), (true, 1)] {
-            let mut artboard = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);
+            let mut artboard =
+                synthetic_instance(vec![synthetic_component_for_type(0, "Event")], vec![0]);
             artboard.linear_animations =
                 Arc::new(vec![callback_route_animation(has_keyed_callbacks)]);
             let mut animation = artboard
@@ -14762,6 +14446,93 @@ mod tests {
             assert_eq!(animation.time(), 1.0);
             assert_eq!(events.len(), expected_events);
         }
+    }
+
+    #[test]
+    fn keyed_event_callback_projects_the_live_event_occurrence() {
+        let mut artboard =
+            synthetic_instance(vec![synthetic_component_for_type(0, "Event")], vec![0]);
+        let name_key = property_key_for_name("Event", "name").expect("Event.name");
+        assert!(artboard.set_string_property(0, name_key, b"live-after-import".to_vec()));
+        artboard.linear_animations = Arc::new(vec![callback_route_animation(true)]);
+        let mut animation = artboard.linear_animation_instance(0).expect("animation");
+        let mut events = Vec::new();
+
+        assert!(artboard.advance_linear_animation_instance_with_events(
+            &mut animation,
+            1.0,
+            &mut events,
+        ));
+        assert_eq!(events[0].name(), Some("live-after-import"));
+    }
+
+    #[test]
+    fn update_pass_repolls_data_binds_before_each_late_joystick_and_final_components() {
+        let mut artboard = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);
+        artboard.joysticks_apply_before_update = false;
+        artboard.joysticks = vec![
+            RuntimeJoystick {
+                local_id: 0,
+                can_apply_before_update: false,
+                x_animation_index: None,
+                y_animation_index: None,
+                nested_remap_dependents: Vec::new(),
+            },
+            RuntimeJoystick {
+                local_id: 0,
+                can_apply_before_update: true,
+                x_animation_index: None,
+                y_animation_index: None,
+                nested_remap_dependents: Vec::new(),
+            },
+            RuntimeJoystick {
+                local_id: 0,
+                can_apply_before_update: false,
+                x_animation_index: None,
+                y_animation_index: None,
+                nested_remap_dependents: Vec::new(),
+            },
+        ];
+
+        artboard.update_pass();
+        assert_eq!(
+            artboard.update_pass_data_bind_call_count, 5,
+            "initial, two late-joystick, final component, and did-update source passes each poll DataBinds"
+        );
+    }
+
+    #[test]
+    fn root_advance_settles_components_and_reports_retained_component_dirt() {
+        let mut artboard =
+            synthetic_instance(vec![synthetic_component_for_type(0, "Artboard")], vec![0]);
+        artboard.install_persistent_dirt_component_fixture();
+
+        assert!(artboard.advance(0.25).expect("root advance"));
+        assert_eq!(
+            artboard.persistent_dirt_component_fixture_receipt(),
+            (1, 1, false),
+            "advanceInternal precedes updatePass; root advance returns the union of work and any dirt retained after settlement"
+        );
+    }
+
+    #[test]
+    fn default_scene_selection_covers_explicit_fallback_and_null_branches() {
+        assert_eq!(select_default_state_machine(Some(1), 2), Some(1));
+        assert_eq!(select_default_state_machine(None, 2), None);
+        assert_eq!(select_default_state_machine(Some(2), 2), None);
+        assert_eq!(
+            select_default_scene(Some(1), 2, 1),
+            Some(RuntimeArtboardDefaultScene::StateMachine(1))
+        );
+        assert_eq!(
+            select_default_scene(Some(9), 2, 1),
+            Some(RuntimeArtboardDefaultScene::StateMachine(0))
+        );
+        assert_eq!(
+            select_default_scene(None, 0, 1),
+            Some(RuntimeArtboardDefaultScene::LinearAnimation(0))
+        );
+        assert_eq!(select_default_scene(None, 0, 0), None);
     }
 
     #[test]
@@ -20558,5 +20329,34 @@ mod tests {
             .first()
             .expect("row default state machine");
         assert_eq!(advanced.changed_state_count(), 1);
+
+        let pooled_identity = parent.component_list_items(list_local_id).unwrap()[0]
+            .child
+            .instance_identity();
+        let source_global_id = parent.component_list_items(list_local_id).unwrap()[0]
+            .child
+            .graph_global_id;
+        assert!(parent.remove_component_list_virtualizable(list_local_id, 0));
+        assert_eq!(
+            parent
+                .component_list_resource_pools
+                .count(list_local_id, source_global_id),
+            1
+        );
+        assert!(parent.add_component_list_virtualizable(&file, list_local_id, 0));
+        let remounted = &parent.component_list_items(list_local_id).unwrap()[0];
+        assert_eq!(remounted.child.instance_identity(), pooled_identity);
+        assert_eq!(
+            remounted.state_machines[0].changed_state_count(),
+            0,
+            "safe recorder restoration resets pooled mutable state before rebinding"
+        );
+        assert!(remounted.context.ptr_eq(&row_context));
+        assert_eq!(
+            parent
+                .component_list_resource_pools
+                .count(list_local_id, source_global_id),
+            0
+        );
     }
 }

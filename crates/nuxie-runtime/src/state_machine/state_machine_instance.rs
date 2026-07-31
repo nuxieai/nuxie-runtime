@@ -18,6 +18,7 @@ use crate::data_bind_graph::{
 };
 use crate::data_context::RuntimeStateMachineDataContext;
 use crate::focus::RuntimeFocusTree;
+use crate::listener_group::{ListenerGroup, ListenerGroupKind, select_listener_action};
 use crate::properties::property_key_for_name;
 use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelAdvanceContext};
@@ -311,73 +312,6 @@ impl HitResult {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ListenerGroupKind {
-    Authored { listener_index: usize },
-    Draggable { proxy_index: usize },
-}
-
-/// ListenerGroup-shaped seam for FL-C5. The C++ group internals remain FL-D:
-/// this value owns only group-level routing state and delegates pointer
-/// history/capture to the existing Rust vectors on `StateMachineInstance`.
-#[derive(Debug, Clone)]
-struct ListenerGroup {
-    kind: ListenerGroupKind,
-    is_consumed: bool,
-    prepared_hovered: bool,
-    disabled_pointers: Vec<i32>,
-}
-
-impl ListenerGroup {
-    fn authored(listener_index: usize) -> Self {
-        Self {
-            kind: ListenerGroupKind::Authored { listener_index },
-            is_consumed: false,
-            prepared_hovered: false,
-            disabled_pointers: Vec::new(),
-        }
-    }
-
-    fn draggable(proxy_index: usize) -> Self {
-        Self {
-            kind: ListenerGroupKind::Draggable { proxy_index },
-            is_consumed: false,
-            prepared_hovered: false,
-            disabled_pointers: Vec::new(),
-        }
-    }
-
-    fn reset(&mut self, instance: &mut StateMachineInstance, pointer_id: i32) {
-        self.prepared_hovered = false;
-        if !self.disabled_pointers.contains(&pointer_id) {
-            self.is_consumed = false;
-        }
-        if let ListenerGroupKind::Authored { listener_index } = self.kind {
-            instance.ensure_pointer_listener_state(listener_index, pointer_id);
-        }
-    }
-
-    fn hover(&mut self) {
-        self.prepared_hovered = true;
-    }
-
-    fn enable(&mut self, pointer_id: i32) {
-        self.disabled_pointers
-            .retain(|disabled| *disabled != pointer_id);
-    }
-
-    fn disable(&mut self, pointer_id: i32) {
-        if !self.disabled_pointers.contains(&pointer_id) {
-            self.disabled_pointers.push(pointer_id);
-        }
-        self.is_consumed = true;
-    }
-
-    fn disabled(&self, pointer_id: i32) -> bool {
-        self.disabled_pointers.contains(&pointer_id)
-    }
-}
-
 trait HitComponent: std::fmt::Debug {
     fn clone_box(&self) -> Box<dyn HitComponent>;
     fn component(&self) -> Option<ComponentHandle>;
@@ -484,6 +418,7 @@ impl HitDrawable {
         groups: &mut [ListenerGroup],
         position: (f32, f32),
         hit_type: RuntimeListenerType,
+        pointer_id: i32,
         hit_test: impl FnOnce(&ArtboardInstance, (f32, f32)) -> bool,
     ) {
         if !self.event_is_required(hit_type) {
@@ -493,7 +428,7 @@ impl HitDrawable {
         if self.is_hovered {
             for &group_index in &self.listeners {
                 if let Some(group) = groups.get_mut(group_index) {
-                    group.hover();
+                    group.hover(pointer_id);
                 }
             }
         }
@@ -657,9 +592,11 @@ impl HitComponent for HitDrawable {
         groups: &mut [ListenerGroup],
         position: (f32, f32),
         hit_type: RuntimeListenerType,
-        _pointer_id: i32,
+        pointer_id: i32,
     ) {
-        self.prepare_with(artboard, groups, position, hit_type, |_, _| false);
+        self.prepare_with(artboard, groups, position, hit_type, pointer_id, |_, _| {
+            false
+        });
     }
 
     fn process_event(
@@ -737,7 +674,7 @@ impl HitComponent for HitExpandable {
         groups: &mut [ListenerGroup],
         position: (f32, f32),
         hit_type: RuntimeListenerType,
-        _pointer_id: i32,
+        pointer_id: i32,
     ) {
         let component = self.drawable.component;
         self.drawable.prepare_with(
@@ -745,6 +682,7 @@ impl HitComponent for HitExpandable {
             groups,
             position,
             hit_type,
+            pointer_id,
             |artboard, position| {
                 component.is_some_and(|component| {
                     StateMachineInstance::hit_expandable(artboard, component, position)
@@ -908,7 +846,7 @@ impl HitComponent for HitLayout {
         groups: &mut [ListenerGroup],
         position: (f32, f32),
         hit_type: RuntimeListenerType,
-        _pointer_id: i32,
+        pointer_id: i32,
     ) {
         let component = self.drawable.component;
         self.drawable.prepare_with(
@@ -916,6 +854,7 @@ impl HitComponent for HitLayout {
             groups,
             position,
             hit_type,
+            pointer_id,
             |artboard, position| {
                 component.is_some_and(|component| {
                     artboard.component_hit_test_point(component, position, false, true)
@@ -1519,9 +1458,6 @@ pub struct StateMachineInstance {
     /// ViewModel replacement dirties this sink so the retained DataContext is
     /// relinked without polling a root mutation generation every frame.
     pub(super) owned_view_model_rebind_sink: RuntimeCellDirtSink,
-    pointer_down_listener_hits: Vec<RuntimePointerDownListenerHit>,
-    pointer_listener_states: Vec<RuntimePointerListenerState>,
-    pointer_positions: Vec<RuntimePointerPosition>,
     /// Fresh component-provided listener/proxy owners constructed for this
     /// StateMachineInstance (`state_machine_instance.cpp:1969-2013`).
     draggable_proxies: Vec<RuntimeDraggableProxy>,
@@ -1607,29 +1543,6 @@ enum RuntimeStateMachineDataBindOccurrence {
         action_binding_index: usize,
         input_index: usize,
     },
-}
-
-#[derive(Debug, Clone)]
-struct RuntimePointerDownListenerHit {
-    pointer_id: i32,
-    listener_index: usize,
-    drag_phase: Option<RuntimePointerDragPhase>,
-    event_context: Option<StateMachineEventContext>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RuntimePointerDragPhase {
-    Armed,
-    Dragging,
-}
-
-#[derive(Debug, Clone)]
-struct RuntimePointerListenerState {
-    pointer_id: i32,
-    listener_index: usize,
-    is_hovered: bool,
-    previous_x: f32,
-    previous_y: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2154,9 +2067,6 @@ impl Clone for StateMachineInstance {
             #[cfg(test)]
             bind_advance_test_report: self.bind_advance_test_report.clone(),
             owned_view_model_rebind_sink: RuntimeCellDirtSink::new(),
-            pointer_down_listener_hits: self.pointer_down_listener_hits.clone(),
-            pointer_listener_states: self.pointer_listener_states.clone(),
-            pointer_positions: self.pointer_positions.clone(),
             draggable_proxies: self
                 .draggable_proxies
                 .iter()
@@ -2316,13 +2226,6 @@ fn validate_pointer_timestamp(timestamp_seconds: f32) -> Result<(), ScriptError>
             "pointer timestamp must be finite and nonnegative",
         ))
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct RuntimePointerPosition {
-    pointer_id: i32,
-    x: f32,
-    y: f32,
 }
 
 #[derive(Debug)]
@@ -2992,9 +2895,6 @@ impl StateMachineInstance {
             #[cfg(test)]
             bind_advance_test_report: None,
             owned_view_model_rebind_sink: RuntimeCellDirtSink::new(),
-            pointer_down_listener_hits: Vec::new(),
-            pointer_listener_states: Vec::new(),
-            pointer_positions: Vec::new(),
             draggable_proxies: Vec::new(),
             hit_components: Vec::new(),
             listener_groups: Vec::new(),
@@ -5797,24 +5697,6 @@ impl StateMachineInstance {
         false
     }
 
-    fn ensure_pointer_listener_state(&mut self, listener_index: usize, pointer_id: i32) {
-        if self
-            .pointer_listener_states
-            .iter()
-            .any(|state| state.pointer_id == pointer_id && state.listener_index == listener_index)
-        {
-            return;
-        }
-        self.pointer_listener_states
-            .push(RuntimePointerListenerState {
-                pointer_id,
-                listener_index,
-                is_hovered: false,
-                previous_x: 0.0,
-                previous_y: 0.0,
-            });
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn process_listener_group_event(
         &mut self,
@@ -5834,10 +5716,17 @@ impl StateMachineInstance {
         }
         match group.kind {
             ListenerGroupKind::Draggable { proxy_index } => {
+                let pointer_state = group.process(
+                    pointer_id,
+                    position,
+                    can_hit,
+                    hit_type == RuntimeListenerType::Down,
+                    hit_type == RuntimeListenerType::Up,
+                );
                 let Some(proxy) = self.draggable_proxies.get_mut(proxy_index) else {
                     return Ok(false);
                 };
-                let hovered = group.prepared_hovered && can_hit;
+                let hovered = pointer_state.current_hovered;
                 let mut blocking = false;
                 match hit_type {
                     RuntimeListenerType::Down if hovered => {
@@ -5855,6 +5744,7 @@ impl StateMachineInstance {
                             timestamp_seconds,
                         ) {
                             proxy.has_scrolled = true;
+                            group.mark_dragged();
                             blocking = true;
                             group.is_consumed = true;
                         }
@@ -5883,52 +5773,84 @@ impl StateMachineInstance {
                 let Some(listener) = self.listener_definitions.get(listener_index).cloned() else {
                     return Ok(false);
                 };
-                let is_hovered = group.prepared_hovered && can_hit;
-                let (hover_action, pointer) = self.update_pointer_listener_hover(
-                    listener_index,
-                    &listener,
-                    is_hovered,
+                let pointer_state = group.process(
                     pointer_id,
-                    position.0,
-                    position.1,
-                    timestamp_seconds,
+                    position,
+                    can_hit,
+                    hit_type == RuntimeListenerType::Down,
+                    hit_type == RuntimeListenerType::Up,
                 );
-                let capture = self.pointer_down_listener_hits.iter().find(|capture| {
-                    capture.pointer_id == pointer_id && capture.listener_index == listener_index
-                });
+                let is_hovered = pointer_state.current_hovered;
+                let hover_action = match (
+                    pointer_state.previous_hovered,
+                    pointer_state.current_hovered,
+                ) {
+                    (false, true) if listener.has_listener(RuntimeListenerType::Enter) => {
+                        Some(RuntimeListenerType::Enter)
+                    }
+                    (true, false) if listener.has_listener(RuntimeListenerType::Exit) => {
+                        Some(RuntimeListenerType::Exit)
+                    }
+                    _ => None,
+                };
+                let pointer = RuntimePointerInput {
+                    x: position.0,
+                    y: position.1,
+                    previous_x: pointer_state.previous_position.0,
+                    previous_y: pointer_state.previous_position.1,
+                    timestamp_seconds,
+                    id: pointer_id,
+                };
                 let captured_drag = hit_type == RuntimeListenerType::Move
                     && listener.has_listener(RuntimeListenerType::Drag)
-                    && capture.is_some_and(|capture| {
-                        capture.drag_phase == Some(RuntimePointerDragPhase::Dragging)
-                    });
-                let click_matched = hit_type == RuntimeListenerType::Up
-                    && listener.has_listener(RuntimeListenerType::Click)
-                    && capture.is_some();
-                let direct_action = is_hovered && listener.has_listener(hit_type);
-                let action_type = hover_action
-                    .or_else(|| click_matched.then_some(RuntimeListenerType::Click))
-                    .or_else(|| captured_drag.then_some(RuntimeListenerType::Drag))
-                    .or_else(|| direct_action.then_some(hit_type));
+                    && pointer_state.phase_is_down;
+                let drag_started = captured_drag && !group.has_dragged();
+                if captured_drag {
+                    group.mark_dragged();
+                }
+                let click_matched =
+                    pointer_state.clicked && listener.has_listener(RuntimeListenerType::Click);
                 if hit_type == RuntimeListenerType::Down && is_hovered {
-                    let drag = listener.has_listener(RuntimeListenerType::Drag);
-                    if listener.has_listener(RuntimeListenerType::Click) || drag {
-                        self.pointer_down_listener_hits
-                            .push(RuntimePointerDownListenerHit {
-                                pointer_id,
-                                listener_index,
-                                drag_phase: drag.then_some(RuntimePointerDragPhase::Armed),
-                                event_context: event_context.cloned(),
-                            });
+                    if listener.has_listener(RuntimeListenerType::Click)
+                        || listener.has_listener(RuntimeListenerType::Drag)
+                    {
+                        group.begin_capture(pointer_id, event_context);
                     }
                 }
-                let captured_event_context = self
-                    .pointer_down_listener_hits
-                    .iter()
-                    .find(|capture| {
-                        capture.pointer_id == pointer_id && capture.listener_index == listener_index
-                    })
-                    .and_then(|capture| capture.event_context.clone())
+                let captured_event_context = group
+                    .captured_event_context(pointer_id)
+                    .cloned()
                     .or_else(|| event_context.cloned());
+                if drag_started {
+                    self.dispatch_pointer_listener_type_for_target(
+                        artboard,
+                        listener.target_local_id,
+                        pointer,
+                        RuntimeListenerType::DragStart,
+                        owned_context.as_deref_mut(),
+                        host,
+                        captured_event_context.as_ref(),
+                    )?;
+                }
+                if pointer_state.drag_ended {
+                    self.dispatch_pointer_listener_type_for_target(
+                        artboard,
+                        listener.target_local_id,
+                        pointer,
+                        RuntimeListenerType::DragEnd,
+                        owned_context.as_deref_mut(),
+                        host,
+                        captured_event_context.as_ref(),
+                    )?;
+                }
+                let direct_action =
+                    (is_hovered && listener.has_listener(hit_type)).then_some(hit_type);
+                let action_type = select_listener_action(
+                    hover_action,
+                    click_matched,
+                    direct_action,
+                    captured_drag,
+                );
                 if let Some(action_type) = action_type {
                     let _ = self.perform_listener_actions_with_event_context(
                         artboard,
@@ -5941,8 +5863,8 @@ impl StateMachineInstance {
                     self.needs_advance = true;
                     group.is_consumed = true;
                 }
-                self.record_pointer_input_for_listener(listener_index, pointer);
-                Ok(false)
+                group.record_position(pointer_id, position);
+                Ok(captured_drag || pointer_state.drag_ended)
             }
         }
     }
@@ -5969,13 +5891,9 @@ impl StateMachineInstance {
             self.focus.sync(artboard);
         }
         let position = Self::normalized_hit_position(artboard, x, y);
-        if hit_type == RuntimeListenerType::Down {
-            self.pointer_down_listener_hits
-                .retain(|hit| hit.pointer_id != pointer_id);
-        }
         let mut groups = std::mem::take(&mut self.listener_groups);
         for group in &mut groups {
-            group.reset(self, pointer_id);
+            group.reset(pointer_id);
         }
         let mut hit_components = std::mem::take(&mut self.hit_components);
         for hit in &mut hit_components {
@@ -5983,59 +5901,13 @@ impl StateMachineInstance {
         }
 
         let mut result = HitResult::None;
-        if hit_type == RuntimeListenerType::Move {
-            let mut started_drag = false;
-            for capture in self
-                .pointer_down_listener_hits
-                .iter_mut()
-                .filter(|capture| capture.pointer_id == pointer_id)
-            {
-                if capture.drag_phase == Some(RuntimePointerDragPhase::Armed) {
-                    capture.drag_phase = Some(RuntimePointerDragPhase::Dragging);
-                    started_drag = true;
-                }
-            }
-            if started_drag
-                && self.dispatch_captured_pointer_listener_type(
-                    artboard,
-                    pointer_id,
-                    RuntimeListenerType::DragStart,
-                    position.0,
-                    position.1,
-                    timestamp_seconds,
-                    owned_context.as_deref_mut(),
-                    host,
-                )?
-            {
-                result = result.strongest(HitResult::Hit);
-            }
-            // The armed pointer keeps driving drag actions for its captured
-            // listeners even outside the hit target, and that capture counts
-            // as a hit for the caller.
-            if self.pointer_down_listener_hits.iter().any(|capture| {
-                capture.pointer_id == pointer_id
-                    && capture.drag_phase == Some(RuntimePointerDragPhase::Dragging)
-            }) {
-                result = result.strongest(HitResult::Hit);
-            }
-        }
-        if hit_type == RuntimeListenerType::Up
-            && self.pointer_down_listener_hits.iter().any(|capture| {
-                capture.pointer_id == pointer_id
-                    && capture.drag_phase == Some(RuntimePointerDragPhase::Dragging)
+        if hit_type == RuntimeListenerType::Move
+            && groups.iter().any(|group| {
+                matches!(group.kind, ListenerGroupKind::Authored { .. })
+                    && group.phase_is_down(pointer_id)
             })
-            && self.dispatch_captured_pointer_listener_type(
-                artboard,
-                pointer_id,
-                RuntimeListenerType::DragEnd,
-                position.0,
-                position.1,
-                timestamp_seconds,
-                owned_context.as_deref_mut(),
-                host,
-            )?
         {
-            result = result.strongest(HitResult::Hit);
+            result = HitResult::Hit;
         }
 
         for hit in &mut hit_components {
@@ -6056,23 +5928,9 @@ impl StateMachineInstance {
         }
         self.hit_components = hit_components;
         self.listener_groups = groups;
-        self.remember_pointer_position(pointer_id, position.0, position.1);
-        if hit_type == RuntimeListenerType::Up {
-            self.pointer_down_listener_hits
-                .retain(|hit| hit.pointer_id != pointer_id);
-        }
         if hit_type == RuntimeListenerType::Exit {
-            self.release_pointer_input(pointer_id);
-            self.pointer_down_listener_hits
-                .retain(|capture| capture.pointer_id != pointer_id);
-            self.pointer_positions
-                .retain(|position| position.pointer_id != pointer_id);
             for group in &mut self.listener_groups {
-                group
-                    .disabled_pointers
-                    .retain(|disabled| *disabled != pointer_id);
-                group.prepared_hovered = false;
-                group.is_consumed = false;
+                group.release_event(pointer_id);
             }
             self.release_draggable_pointer(pointer_id);
         }
@@ -6408,77 +6266,6 @@ impl StateMachineInstance {
             }
         }
         result
-    }
-
-    fn pointer_input_for_listener(
-        &mut self,
-        listener_index: usize,
-        x: f32,
-        y: f32,
-        pointer_id: i32,
-        timestamp_seconds: f32,
-        is_hovered: bool,
-    ) -> (RuntimePointerInput, bool) {
-        let state_index = self.pointer_listener_states.iter().position(|state| {
-            state.pointer_id == pointer_id && state.listener_index == listener_index
-        });
-        let (previous_x, previous_y, was_hovered) = match state_index {
-            Some(index) => {
-                let state = &mut self.pointer_listener_states[index];
-                let was_hovered = state.is_hovered;
-                if !was_hovered && is_hovered {
-                    // Rive resets a listener group's prior position when the
-                    // pointer enters it so the first callback cannot jump from
-                    // an outside point.
-                    state.previous_x = x;
-                    state.previous_y = y;
-                }
-                state.is_hovered = is_hovered;
-                (state.previous_x, state.previous_y, was_hovered)
-            }
-            None => {
-                self.pointer_listener_states
-                    .push(RuntimePointerListenerState {
-                        pointer_id,
-                        listener_index,
-                        is_hovered,
-                        previous_x: x,
-                        previous_y: y,
-                    });
-                (x, y, false)
-            }
-        };
-        (
-            RuntimePointerInput {
-                x,
-                y,
-                previous_x,
-                previous_y,
-                timestamp_seconds,
-                id: pointer_id,
-            },
-            was_hovered,
-        )
-    }
-
-    fn record_pointer_input_for_listener(
-        &mut self,
-        listener_index: usize,
-        pointer: RuntimePointerInput,
-    ) {
-        if let Some(state) = self
-            .pointer_listener_states
-            .iter_mut()
-            .find(|state| state.pointer_id == pointer.id && state.listener_index == listener_index)
-        {
-            state.previous_x = pointer.x;
-            state.previous_y = pointer.y;
-        }
-    }
-
-    fn release_pointer_input(&mut self, pointer_id: i32) {
-        self.pointer_listener_states
-            .retain(|state| state.pointer_id != pointer_id);
     }
 
     fn release_draggable_pointer(&mut self, pointer_id: i32) {
@@ -7016,61 +6803,25 @@ impl StateMachineInstance {
         )
     }
 
-    fn dispatch_captured_pointer_listener_type(
+    fn dispatch_pointer_listener_type_for_target(
         &mut self,
         artboard: &mut ArtboardInstance,
-        pointer_id: i32,
+        target_local_id: usize,
+        pointer: RuntimePointerInput,
         listener_type: RuntimeListenerType,
-        x: f32,
-        y: f32,
-        timestamp_seconds: f32,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
         host: &mut dyn ScriptHost,
+        event_context: Option<&StateMachineEventContext>,
     ) -> Result<bool, ScriptError> {
         let listener_definitions = Arc::clone(&self.listener_definitions);
-        let mut captured_targets = Vec::new();
-        for capture in self.pointer_down_listener_hits.iter().filter(|capture| {
-            capture.pointer_id == pointer_id
-                && capture.drag_phase == Some(RuntimePointerDragPhase::Dragging)
-        }) {
-            let Some(target_local_id) = listener_definitions
-                .get(capture.listener_index)
-                .map(|listener| listener.target_local_id)
-            else {
-                continue;
-            };
-            if !captured_targets
-                .iter()
-                .any(|(captured, _)| *captured == target_local_id)
-            {
-                captured_targets.push((target_local_id, capture.event_context.clone()));
-            }
-        }
-
-        let (previous_x, previous_y) = self
-            .pointer_positions
-            .iter()
-            .find(|position| position.pointer_id == pointer_id)
-            .map_or((x, y), |position| (position.x, position.y));
-        let pointer = RuntimePointerInput {
-            x,
-            y,
-            previous_x,
-            previous_y,
-            timestamp_seconds,
-            id: pointer_id,
-        };
         let mut hit = false;
         for listener in listener_definitions.iter() {
             if listener_uses_report_queue(listener) {
                 continue;
             }
-            let Some((_, event_context)) = captured_targets
-                .iter()
-                .find(|(target, _)| *target == listener.target_local_id)
-            else {
+            if listener.target_local_id != target_local_id {
                 continue;
-            };
+            }
             if !listener.has_listener(listener_type) {
                 continue;
             }
@@ -7081,7 +6832,7 @@ impl StateMachineInstance {
                 owned_context.as_deref_mut(),
                 &script_pointer_invocation(pointer, listener_type),
                 host,
-                event_context.as_ref(),
+                event_context,
             )?;
             self.needs_advance = true;
         }
@@ -7790,36 +7541,6 @@ impl StateMachineInstance {
         self.queue_semantic_event(listener_index, action_type);
     }
 
-    fn update_pointer_listener_hover(
-        &mut self,
-        listener_index: usize,
-        listener: &RuntimeStateMachineListener,
-        is_hovered: bool,
-        pointer_id: i32,
-        x: f32,
-        y: f32,
-        timestamp_seconds: f32,
-    ) -> (Option<RuntimeListenerType>, RuntimePointerInput) {
-        let (pointer, was_hovered) = self.pointer_input_for_listener(
-            listener_index,
-            x,
-            y,
-            pointer_id,
-            timestamp_seconds,
-            is_hovered,
-        );
-        let action = match (was_hovered, is_hovered) {
-            (false, true) if listener.has_listener(RuntimeListenerType::Enter) => {
-                Some(RuntimeListenerType::Enter)
-            }
-            (true, false) if listener.has_listener(RuntimeListenerType::Exit) => {
-                Some(RuntimeListenerType::Exit)
-            }
-            _ => None,
-        };
-        (action, pointer)
-    }
-
     pub(super) fn perform_listener_actions(
         &mut self,
         artboard: &mut ArtboardInstance,
@@ -7996,20 +7717,6 @@ impl StateMachineInstance {
         // queued listener actions still run at the next-frame batch boundary.
         self.capture_focus_callbacks();
         Ok(changed)
-    }
-
-    fn remember_pointer_position(&mut self, pointer_id: i32, x: f32, y: f32) {
-        if let Some(position) = self
-            .pointer_positions
-            .iter_mut()
-            .find(|position| position.pointer_id == pointer_id)
-        {
-            position.x = x;
-            position.y = y;
-        } else {
-            self.pointer_positions
-                .push(RuntimePointerPosition { pointer_id, x, y });
-        }
     }
 
     fn perform_listener_view_model_change(
@@ -14834,24 +14541,14 @@ mod scripted_listener_action_tests {
     #[test]
     fn fl_c5_pointer_exit_releases_group_history_and_drag_state() {
         let (mut artboard, mut machine) = scripted_listener_artboard_and_machine();
-        machine
-            .pointer_listener_states
-            .push(RuntimePointerListenerState {
-                pointer_id: -7,
-                listener_index: 0,
-                is_hovered: true,
-                previous_x: 1.0,
-                previous_y: 2.0,
-            });
-        machine
-            .pointer_down_listener_hits
-            .push(RuntimePointerDownListenerHit {
-                pointer_id: -7,
-                listener_index: 0,
-                drag_phase: Some(RuntimePointerDragPhase::Dragging),
-                event_context: None,
-            });
         for group in &mut machine.listener_groups {
+            group.reset(-7);
+            group.hover(-7);
+            group.process(-7, (1.0, 2.0), true, true, false);
+            group.record_position(-7, (1.0, 2.0));
+        }
+        for group in &mut machine.listener_groups {
+            group.mark_dragged();
             group.disable(-7);
         }
 
@@ -14859,15 +14556,9 @@ mod scripted_listener_action_tests {
 
         assert!(
             machine
-                .pointer_listener_states
+                .listener_groups
                 .iter()
-                .all(|state| state.pointer_id != -7)
-        );
-        assert!(
-            machine
-                .pointer_down_listener_hits
-                .iter()
-                .all(|capture| capture.pointer_id != -7)
+                .all(|group| group.previous_position(-7).is_none())
         );
         assert!(
             machine
@@ -14899,13 +14590,32 @@ mod scripted_listener_action_tests {
                 )
                 .expect("C++-corresponding path forwards every f32 value");
         }
-        let position = machine
-            .pointer_positions
+        let group_index = machine
+            .listener_groups
             .iter()
-            .find(|position| position.pointer_id == 77)
-            .expect("forwarded pointer position");
-        assert_eq!(position.x.to_bits(), 0.0_f32.to_bits());
-        assert!(position.y.is_nan());
+            .position(|group| matches!(group.kind, ListenerGroupKind::Authored { .. }))
+            .expect("fixture authored listener group");
+        let mut group = machine.listener_groups.remove(group_index);
+        group.reset(77);
+        group.hover(77);
+        machine
+            .process_listener_group_event(
+                &mut group,
+                &mut artboard,
+                (0.0, f32::NAN),
+                RuntimeListenerType::Move,
+                true,
+                -42.0,
+                77,
+                None,
+                None,
+                &mut NoopScriptHost,
+            )
+            .expect("StateMachine-to-ListenerGroup integration retains non-finite values");
+        let position = group.previous_position(77).expect("group pointer history");
+        assert_eq!(position.0.to_bits(), 0.0_f32.to_bits());
+        assert!(position.1.is_nan());
+        machine.listener_groups.insert(group_index, group);
     }
 
     #[test]
@@ -16809,25 +16519,24 @@ mod scripted_listener_action_tests {
         assert!(machine.gamepad_listener_groups.is_empty());
         assert!(machine.semantic_listener_groups.is_empty());
 
-        machine
-            .pointer_down_listener_hits
-            .push(RuntimePointerDownListenerHit {
-                pointer_id: 7,
-                listener_index: 0,
-                drag_phase: Some(RuntimePointerDragPhase::Dragging),
-                event_context: None,
-            });
+        let pointer = RuntimePointerInput {
+            x: 12.0,
+            y: 34.0,
+            previous_x: 12.0,
+            previous_y: 34.0,
+            timestamp_seconds: 0.0,
+            id: 7,
+        };
         assert!(
             !machine
-                .dispatch_captured_pointer_listener_type(
+                .dispatch_pointer_listener_type_for_target(
                     &mut artboard,
-                    7,
+                    1,
+                    pointer,
                     RuntimeListenerType::DragEnd,
-                    12.0,
-                    34.0,
-                    0.0,
                     None,
                     &mut NoopScriptHost,
+                    None,
                 )
                 .expect("mixed report listener dispatch")
         );
@@ -19053,50 +18762,50 @@ mod scripted_listener_action_tests {
 
     #[test]
     fn pointer_history_is_listener_scoped_and_resets_on_first_entry_and_reentry() {
-        let mut machine = scripted_listener_machine();
+        let mut first = ListenerGroup::authored(0);
+        let mut second = ListenerGroup::authored(1);
 
-        let (first_entry, was_hovered) =
-            machine.pointer_input_for_listener(0, 10.0, 20.0, 7, 1.0, true);
-        assert!(!was_hovered);
-        assert_eq!(
-            (first_entry.previous_x, first_entry.previous_y),
-            (10.0, 20.0)
-        );
-        machine.record_pointer_input_for_listener(0, first_entry);
+        first.reset(7);
+        first.hover(7);
+        let first_entry = first.process(7, (10.0, 20.0), true, false, false);
+        assert!(!first_entry.previous_hovered);
+        assert_eq!(first_entry.previous_position, (10.0, 20.0));
+        first.record_position(7, (10.0, 20.0));
 
-        let (overlapping_entry, was_hovered) =
-            machine.pointer_input_for_listener(1, 100.0, 200.0, 7, 1.1, true);
-        assert!(!was_hovered);
+        second.reset(7);
+        second.hover(7);
+        let overlapping_entry = second.process(7, (100.0, 200.0), true, false, false);
+        assert!(!overlapping_entry.previous_hovered);
         assert_eq!(
-            (overlapping_entry.previous_x, overlapping_entry.previous_y),
+            overlapping_entry.previous_position,
             (100.0, 200.0),
             "a second listener group must not inherit the first group's history"
         );
-        machine.record_pointer_input_for_listener(1, overlapping_entry);
+        second.record_position(7, (100.0, 200.0));
 
-        let (move_inside, was_hovered) =
-            machine.pointer_input_for_listener(0, 15.0, 25.0, 7, 1.2, true);
-        assert!(was_hovered);
+        first.reset(7);
+        first.hover(7);
+        let move_inside = first.process(7, (15.0, 25.0), true, false, false);
+        assert!(move_inside.previous_hovered);
+        assert_eq!(move_inside.previous_position, (10.0, 20.0));
+        first.record_position(7, (15.0, 25.0));
+
+        first.reset(7);
+        let exit = first.process(7, (30.0, 40.0), true, false, false);
+        assert!(exit.previous_hovered);
+        assert_eq!(exit.previous_position, (15.0, 25.0));
+        first.record_position(7, (30.0, 40.0));
+
+        first.reset(7);
+        let outside = first.process(7, (50.0, 60.0), true, false, false);
+        assert!(!outside.previous_hovered);
+        first.record_position(7, (50.0, 60.0));
+        first.reset(7);
+        first.hover(7);
+        let reentry = first.process(7, (70.0, 80.0), true, false, false);
+        assert!(!reentry.previous_hovered);
         assert_eq!(
-            (move_inside.previous_x, move_inside.previous_y),
-            (10.0, 20.0)
-        );
-        machine.record_pointer_input_for_listener(0, move_inside);
-
-        let (exit, was_hovered) = machine.pointer_input_for_listener(0, 30.0, 40.0, 7, 1.3, false);
-        assert!(was_hovered);
-        assert_eq!((exit.previous_x, exit.previous_y), (15.0, 25.0));
-        machine.record_pointer_input_for_listener(0, exit);
-
-        let (outside, was_hovered) =
-            machine.pointer_input_for_listener(0, 50.0, 60.0, 7, 1.4, false);
-        assert!(!was_hovered);
-        machine.record_pointer_input_for_listener(0, outside);
-        let (reentry, was_hovered) =
-            machine.pointer_input_for_listener(0, 70.0, 80.0, 7, 1.5, true);
-        assert!(!was_hovered);
-        assert_eq!(
-            (reentry.previous_x, reentry.previous_y),
+            reentry.previous_position,
             (70.0, 80.0),
             "reentry resets the prior outside position before dispatch"
         );
@@ -19104,25 +18813,30 @@ mod scripted_listener_action_tests {
 
     #[test]
     fn pointer_up_position_is_retained_for_exit_then_released() {
-        let mut machine = scripted_listener_machine();
+        let mut group = ListenerGroup::authored(0);
+        group.reset(9);
+        group.hover(9);
+        group.process(9, (10.0, 20.0), true, true, false);
+        group.record_position(9, (10.0, 20.0));
+        group.reset(9);
+        group.hover(9);
+        let up = group.process(9, (15.0, 25.0), true, false, true);
+        assert!(up.previous_hovered);
+        assert_eq!(up.previous_position, (10.0, 20.0));
+        group.record_position(9, (15.0, 25.0));
 
-        let (down, _) = machine.pointer_input_for_listener(0, 10.0, 20.0, 9, 2.0, true);
-        machine.record_pointer_input_for_listener(0, down);
-        let (up, was_hovered) = machine.pointer_input_for_listener(0, 15.0, 25.0, 9, 2.1, true);
-        assert!(was_hovered);
-        assert_eq!((up.previous_x, up.previous_y), (10.0, 20.0));
-        machine.record_pointer_input_for_listener(0, up);
+        group.reset(9);
+        let exit = group.process(9, (30.0, 40.0), true, false, false);
+        assert!(exit.previous_hovered);
+        assert_eq!(exit.previous_position, (15.0, 25.0));
+        group.record_position(9, (30.0, 40.0));
+        group.release_event(9);
 
-        let (exit, was_hovered) = machine.pointer_input_for_listener(0, 30.0, 40.0, 9, 2.2, false);
-        assert!(was_hovered);
-        assert_eq!((exit.previous_x, exit.previous_y), (15.0, 25.0));
-        machine.record_pointer_input_for_listener(0, exit);
-        machine.release_pointer_input(9);
-
-        let (next_entry, was_hovered) =
-            machine.pointer_input_for_listener(0, 50.0, 60.0, 9, 3.0, true);
-        assert!(!was_hovered);
-        assert_eq!((next_entry.previous_x, next_entry.previous_y), (50.0, 60.0));
+        group.reset(9);
+        group.hover(9);
+        let next_entry = group.process(9, (50.0, 60.0), true, false, false);
+        assert!(!next_entry.previous_hovered);
+        assert_eq!(next_entry.previous_position, (50.0, 60.0));
     }
 
     #[test]
@@ -19273,28 +18987,16 @@ mod scripted_listener_action_tests {
             listener_index: Some(4),
             action_type: 2,
         }];
-        original.pointer_positions.push(RuntimePointerPosition {
-            pointer_id: 5,
-            x: 1.0,
-            y: 2.0,
-        });
-        original
-            .pointer_listener_states
-            .push(RuntimePointerListenerState {
-                pointer_id: 5,
-                listener_index: 2,
-                is_hovered: true,
-                previous_x: -1.0,
-                previous_y: -2.0,
-            });
-        original
-            .pointer_down_listener_hits
-            .push(RuntimePointerDownListenerHit {
-                pointer_id: 5,
-                listener_index: 2,
-                drag_phase: Some(RuntimePointerDragPhase::Armed),
-                event_context: None,
-            });
+        original.listener_groups.push(ListenerGroup::authored(2));
+        let pointer_group = original
+            .listener_groups
+            .last_mut()
+            .expect("pointer listener group");
+        pointer_group.reset(5);
+        pointer_group.hover(5);
+        pointer_group.process(5, (-1.0, -2.0), true, true, false);
+        pointer_group.begin_capture(5, None);
+        pointer_group.record_position(5, (-1.0, -2.0));
         original
             .nested_event_registrations
             .push(RuntimeNestedEventRegistration {
@@ -19395,19 +19097,28 @@ mod scripted_listener_action_tests {
             "pending semantic values are copied into distinct Vec storage"
         );
         assert_ne!(
-            cloned.pointer_positions.as_ptr(),
-            original.pointer_positions.as_ptr(),
-            "pointer positions are copied into distinct Vec storage"
+            cloned.listener_groups.as_ptr(),
+            original.listener_groups.as_ptr(),
+            "listener groups and their pointer records use distinct Vec storage"
         );
-        assert_ne!(
-            cloned.pointer_listener_states.as_ptr(),
-            original.pointer_listener_states.as_ptr(),
-            "pointer listener state is copied into distinct Vec storage"
+        let cloned_pointer_group = cloned
+            .listener_groups
+            .iter_mut()
+            .find(|group| group.kind == (ListenerGroupKind::Authored { listener_index: 2 }))
+            .expect("cloned pointer group");
+        assert_eq!(
+            cloned_pointer_group.previous_position(5),
+            Some((-1.0, -2.0))
         );
-        assert_ne!(
-            cloned.pointer_down_listener_hits.as_ptr(),
-            original.pointer_down_listener_hits.as_ptr(),
-            "pointer captures are copied into distinct Vec storage"
+        cloned_pointer_group.record_position(5, (9.0, 9.0));
+        assert_eq!(
+            original
+                .listener_groups
+                .iter()
+                .find(|group| group.kind == (ListenerGroupKind::Authored { listener_index: 2 }))
+                .and_then(|group| group.previous_position(5)),
+            Some((-1.0, -2.0)),
+            "snapshot pointer records cannot mutate the source group"
         );
         assert_eq!(
             cloned.nested_event_registrations, original.nested_event_registrations,
@@ -19487,9 +19198,10 @@ mod scripted_listener_action_tests {
         assert!(
             cold_remount.queued_focus_events.is_empty()
                 && cold_remount.queued_semantic_events.is_empty()
-                && cold_remount.pointer_positions.is_empty()
-                && cold_remount.pointer_listener_states.is_empty()
-                && cold_remount.pointer_down_listener_hits.is_empty(),
+                && cold_remount
+                    .listener_groups
+                    .iter()
+                    .all(|group| group.previous_position(5).is_none()),
             "a cold remount starts without the snapshot's pending owned values"
         );
         assert!(

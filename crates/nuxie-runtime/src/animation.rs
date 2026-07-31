@@ -287,7 +287,7 @@ fn callback_event_for_keyed_property(
     target_local_id: usize,
     target: &RuntimeObject,
     property_key: u16,
-) -> Option<StateMachineReportedEvent> {
+) -> Option<usize> {
     if !is_callback_property_key(property_key) {
         return None;
     }
@@ -300,10 +300,7 @@ fn callback_event_for_keyed_property(
         return None;
     }
 
-    Some(StateMachineReportedEvent::from_runtime_event(
-        target_local_id,
-        target,
-    ))
+    Some(target_local_id)
 }
 
 fn keyed_property_target(
@@ -313,7 +310,11 @@ fn keyed_property_target(
 ) -> Option<RuntimeKeyedPropertyTarget> {
     if is_callback_property_key(property_key) {
         return Some(RuntimeKeyedPropertyTarget::Callback {
-            event: callback_event_for_keyed_property(target_local_id, target, property_key),
+            event_local_index: callback_event_for_keyed_property(
+                target_local_id,
+                target,
+                property_key,
+            ),
         });
     }
 
@@ -1171,7 +1172,7 @@ pub enum RuntimeKeyedPropertyTarget {
     Uint,
     String,
     Callback {
-        event: Option<StateMachineReportedEvent>,
+        event_local_index: Option<usize>,
     },
 }
 
@@ -1186,7 +1187,7 @@ impl RuntimeKeyedPropertyTarget {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct RuntimeKeyedCallback {
     pub(crate) target_local_id: usize,
     pub(crate) property_key: u16,
@@ -1445,15 +1446,7 @@ impl RuntimeKeyedProperty {
                 property_key: self.property_key,
                 seconds_delay,
             };
-            let reported_event =
-                if let RuntimeKeyedPropertyTarget::Callback { event: Some(event) } = &self.target {
-                    let mut reported_event = event.clone();
-                    reported_event.seconds_delay = seconds_delay;
-                    Some(reported_event)
-                } else {
-                    None
-                };
-            callback_sink(callback, reported_event);
+            callback_sink(callback, None);
             index += 1;
         }
     }

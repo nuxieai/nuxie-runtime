@@ -4,10 +4,9 @@ upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 porting_rules_file = "docs/PORTING.md"
 file_correspondence_manifest = "file-correspondence-manifest.toml"
 trace_evidence_file = "docs/runtime-frame-loop-trace.json"
-phase = "fl-c-provisional"
-# FL-C is accepted and ledger-promoted, but the program remains on its
-# provisional branch until the accepted-candidate complete floor and PR to
-# main. check.py does not constrain phase vocabulary.
+phase = "fl-d-closed"
+# FL-D is ledger-promoted by the final D5-D7 landing. FL-E remains the next
+# dependent wave; check.py does not constrain phase vocabulary.
 provisional_runtime_base = "95eb04b7cfb847f24ba77872bd8a0ee43da1af41"
 provisional_fl_b_tip = "0b08970fccc42ff3677534d4dcece0f05f69a0bc"
 fl_b_verification = "reaccepted"
@@ -143,19 +142,19 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 234
+faithful = 246
 adapted = 0
 divergent-by-decision = 0
-pending = 108
+pending = 96
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
 # are the state-bearing frame-loop owners still requiring member-level proof.
 [expected_member_status_counts]
-faithful = 28
+faithful = 32
 adapted = 40
 divergent-by-decision = 0
-pending = 7
+pending = 3
 compensation = 0
 
 [[wave]]
@@ -382,9 +381,20 @@ exclude = []
 rust_modules = [
   "crates/nuxie-runtime/src/lib.rs",
   "crates/nuxie-runtime/src/artboard.rs",
+  "crates/nuxie-runtime/src/artboard_component_list.rs",
   "crates/nuxie-runtime/src/artboard_component_list_order.rs",
+  "crates/nuxie-runtime/src/artboard_list_map_rule.rs",
+  "crates/nuxie-runtime/src/artboard_referencer.rs",
   "crates/nuxie-runtime/src/artboard_data_bind.rs",
+  "crates/nuxie-runtime/src/bindable_artboard.rs",
   "crates/nuxie-runtime/src/data_bind_graph.rs",
+  "crates/nuxie-runtime/src/event.rs",
+  "crates/nuxie-runtime/src/listener_group.rs",
+  "crates/nuxie-runtime/src/nested_artboard.rs",
+  "crates/nuxie-runtime/src/nested_artboard_layout.rs",
+  "crates/nuxie-runtime/src/nested_artboard_leaf.rs",
+  "crates/nuxie-runtime/src/nested_artboard_origin.rs",
+  "crates/nuxie-runtime/src/script_input_artboard.rs",
   "crates/nuxie-runtime/src/retained_data_bind.rs",
   "crates/nuxie-runtime/src/view_model.rs",
   "crates/nuxie-runtime/src/state_machine.rs",
@@ -1199,31 +1209,31 @@ source_set = "databind-artboard-settlement"
 wave = "FL-D"
 rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/artboard_component_list.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/artboard_component_list_order.rs", "crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard_component_list.rs", "crates/nuxie-runtime/src/artboard_component_list_order.rs", "crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/artboard_list_map_rule.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard_list_map_rule.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/artboard_referencer.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard_referencer.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/assets/image_asset.cpp"
@@ -1237,9 +1247,9 @@ status = "pending"
 upstream = "src/bindable_artboard.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+rust_modules = ["crates/nuxie-runtime/src/bindable_artboard.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/bones/bone.cpp"
@@ -1880,9 +1890,9 @@ status = "faithful"
 upstream = "src/event.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+rust_modules = ["crates/nuxie-runtime/src/event.rs", "crates/nuxie-runtime/src/state_machine/event_report.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/foreground_layout_drawable.cpp"
@@ -2032,9 +2042,9 @@ status = "pending"
 upstream = "src/listener_group.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/state_machine.rs"]
+rust_modules = ["crates/nuxie-runtime/src/listener_group.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/aabb.cpp"
@@ -2156,33 +2166,33 @@ status = "faithful"
 upstream = "src/nested_artboard.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/nested_artboard.rs", "crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/nested_artboard_layout.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/nested_artboard_layout.rs", "crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/nested_artboard_leaf.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/nested_artboard_leaf.rs", "crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/nested_artboard_origin.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+rust_modules = ["crates/nuxie-runtime/src/nested_artboard_origin.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/node.cpp"
@@ -2214,7 +2224,7 @@ source_set = "databind-artboard-settlement"
 wave = "FL-D"
 rust_modules = ["crates/nuxie-runtime/src/script_input_artboard.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/script_input_boolean.cpp"
@@ -3686,8 +3696,17 @@ id = "artboard.advance"
 wave = "FL-D"
 cpp_files = ["src/artboard.cpp", "src/nested_artboard.cpp"]
 rust_file = "crates/nuxie-runtime/src/artboard.rs"
-rust_anchor = "settle_state_machine_update_passes_after_main_advance"
-status = "pending"
+rust_anchor = "pub fn advance(&mut self, elapsed_seconds"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/artboard.cpp:264-840", "rust:crates/nuxie-runtime/src/artboard.rs:377-650"]
+retain = ["cpp:src/artboard.cpp:330-395", "rust:crates/nuxie-runtime/src/artboard.rs:377-500"]
+dirty = ["cpp:src/artboard.cpp:1204-1242", "rust:crates/nuxie-runtime/src/artboard.rs:6613-6750"]
+update = ["cpp:src/artboard.cpp:1417-1460", "rust:crates/nuxie-runtime/src/artboard.rs:7280-7440"]
+advance = ["cpp:src/artboard.cpp:1468-1508", "rust:crates/nuxie-runtime/src/artboard.rs:5442-5475"]
+draw = ["cpp:src/artboard.cpp:1606-1698", "rust:crates/nuxie-runtime/src/draw.rs:16800-17100"]
+clone = ["cpp:src/artboard.cpp:1038-1057", "rust:crates/nuxie-runtime/src/artboard.rs:500-675"]
+drop = ["cpp:src/artboard.cpp:79-140", "rust:crates/nuxie-runtime/src/artboard.rs:377-500"]
 
 [[member]]
 id = "artboard.update_pass"
@@ -3695,23 +3714,50 @@ wave = "FL-D"
 cpp_files = ["src/artboard.cpp"]
 rust_file = "crates/nuxie-runtime/src/artboard.rs"
 rust_anchor = "pub fn update_pass("
-status = "pending"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/artboard.cpp:846-1151", "rust:crates/nuxie-runtime/src/artboard.rs:1180-3400"]
+retain = ["cpp:src/artboard.cpp:264-395", "rust:crates/nuxie-runtime/src/artboard.rs:377-500"]
+dirty = ["cpp:src/artboard.cpp:1204-1242", "rust:crates/nuxie-runtime/src/artboard.rs:7480-7680"]
+update = ["cpp:src/artboard.cpp:1417-1460", "rust:crates/nuxie-runtime/src/artboard.rs:7280-7440"]
+advance = ["cpp:src/artboard.cpp:1468-1508", "rust:crates/nuxie-runtime/src/artboard.rs:5442-5475"]
+draw = ["cpp:src/artboard.cpp:1606-1698", "rust:crates/nuxie-runtime/src/draw.rs:16800-17100"]
+clone = ["cpp:src/artboard.cpp:1038-1057", "rust:crates/nuxie-runtime/src/artboard.rs:500-675"]
+drop = ["cpp:src/artboard.cpp:79-140", "rust:crates/nuxie-runtime/src/artboard.rs:377-500"]
 
 [[member]]
 id = "nested_artboard.advance"
 wave = "FL-D"
 cpp_files = ["src/nested_artboard.cpp", "src/nested_artboard_layout.cpp"]
-rust_file = "crates/nuxie-runtime/src/artboard.rs"
+rust_file = "crates/nuxie-runtime/src/nested_artboard.rs"
 rust_anchor = "pub(crate) struct RuntimeNestedArtboardInstance"
-status = "pending"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/nested_artboard.cpp:264-419", "rust:crates/nuxie-runtime/src/artboard.rs:10150-10480"]
+retain = ["cpp:src/nested_artboard.cpp:419-617", "rust:crates/nuxie-runtime/src/nested_artboard.rs:8-37"]
+dirty = ["cpp:src/nested_artboard.cpp:687-812", "rust:crates/nuxie-runtime/src/artboard.rs:7750-8120"]
+update = ["cpp:src/nested_artboard.cpp:812-965", "rust:crates/nuxie-runtime/src/artboard.rs:7750-8120"]
+advance = ["cpp:src/nested_artboard.cpp:965-1058", "rust:crates/nuxie-runtime/src/artboard.rs:5500-6400"]
+draw = ["cpp:src/nested_artboard.cpp:617-687", "rust:crates/nuxie-runtime/src/draw.rs:16800-17100"]
+clone = ["cpp:src/nested_artboard.cpp:64-123", "rust:crates/nuxie-runtime/src/nested_artboard.rs:39-84"]
+drop = ["cpp:src/nested_artboard.cpp:48-64", "rust:crates/nuxie-runtime/src/nested_artboard.rs:8-37"]
 
 [[member]]
 id = "event.reporting"
 wave = "FL-D"
 cpp_files = ["src/event.cpp", "src/animation/state_machine_instance.cpp"]
-rust_file = "crates/nuxie-runtime/src/state_machine/event_report.rs"
-rust_anchor = "pub struct StateMachineReportedEvent"
-status = "pending"
+rust_file = "crates/nuxie-runtime/src/event.rs"
+rust_anchor = "pub(crate) fn trigger_event("
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/event.cpp:8-11", "rust:crates/nuxie-runtime/src/event.rs:9-22"]
+retain = ["cpp:src/animation/state_machine_instance.cpp:2583-2604", "rust:crates/nuxie-runtime/src/state_machine/event_report.rs:25-46"]
+dirty = ["cpp:src/event.cpp:8-11", "rust:crates/nuxie-runtime/src/event.rs:9-22"]
+update = ["cpp:src/animation/state_machine_instance.cpp:2548-2575", "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7040-7350"]
+advance = ["cpp:src/animation/state_machine_instance.cpp:2320-2342", "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12000-13100"]
+draw = ["cpp:src/event.cpp:8-11", "rust:crates/nuxie-runtime/src/state_machine/event_report.rs:95-173"]
+clone = ["cpp:src/animation/state_machine_instance.cpp:2583-2604", "rust:crates/nuxie-runtime/src/state_machine/event_report.rs:25-46"]
+drop = ["cpp:src/animation/state_machine_instance.cpp:2169-2198", "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:1380-1600"]
 
 [[member]]
 id = "scripting.render_context"

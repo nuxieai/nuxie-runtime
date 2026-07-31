@@ -4,6 +4,17 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
+- FL-D closes with this landing. FL-D5 moves all nine mounted
+  nested-artboard/ArtboardComponentList owners to filename-corresponding Rust
+  files, FL-D6 moves per-pointer ListenerGroup state and `Event::trigger` to
+  their direct owners while retaining `event_report.rs` as the safe host
+  projection, and FL-D7 closes root Artboard DataBind/update/advance
+  settlement. The W35 addendum is included: `default_state_machine_index`,
+  `default_state_machine`, and `default_scene` now follow pinned C++ selection
+  semantics (explicit valid default, then state machine zero, then animation
+  zero for `defaultScene`). The exact file and member rows are promoted below;
+  verification and silver-corpus movement are recorded in the FL-D5–D7 test
+  ledger.
 - Phase: FL-B reacceptance and FL-C5 acceptance promotion bookkeeping for
   immutable main-integrated joint candidate
   `14b187659a1eafadd3e425d75f516b7080c3b021`. The coordinator accepted the
@@ -94,16 +105,16 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `src/animation/scripted_listener_action.cpp` remains deliberately assigned
   to FL-C; it is not a substitute FL-B row. The checker pins the exact
   45-file FL-B membership so either omission or reassignment fails.
-- File closure: 152 / 342. Joint acceptance promotes FL-B's 45 exact owners
-  and FL-C5's two exact owners; 190 later-wave rows remain pending. FL-C is
-  closed at 56 / 56 files.
-- Member closure: 63 / 75 owner/member rows. Joint acceptance promotes
-  FL-B's eight members plus `state_machine.collections` and
-  `state_machine.advance`; 12 later-wave rows remain.
-- Open mechanism gaps: 7 / 10. FL-G02 and FL-G06 remain closed; FL-G10 records
+- File closure: 246 / 342. FL-D is closed by the dependency-ordered D1–D7
+  landings; 96 FL-E/later rows remain pending.
+- Member closure: 72 / 75 owner/member rows (32 faithful plus 40 accepted
+  adaptations); three FL-E rows remain pending.
+- Open mechanism gaps: 5 / 10. FL-G02, FL-G05, and FL-G06 remain closed;
+  FL-G10 records
   the user-approved D2 saturation choice for AnimationReset's otherwise
   undefined float-to-int edge.
-- Current dependency wave: FL-C is closed 56 / 56. FL-B's frozen
+- Current dependency wave: FL-D is closed; FL-E is next. FL-C is closed
+  56 / 56. FL-B's frozen
   45-file/eight-member mini-map is reaccepted and promoted with FL-C5 at
   `14b18765`. After the accepted-candidate complete floor and the PR to main,
   work advances through FL-D as per-family PRs. FL-C2 is independently

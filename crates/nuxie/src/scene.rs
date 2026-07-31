@@ -14,10 +14,10 @@ use nuxie_render_api::{Factory, ImageDecodeError, Renderer, Vec2D};
 use nuxie_runtime::{
     ArtboardInstance as RuntimeArtboardInstance, RuntimeArtboardOccurrenceSegment,
     RuntimeImageDimensionConflict, RuntimeOwnedViewModelBooleanSourceHandle,
-    RuntimeOwnedViewModelInstance, RuntimeOwnedViewModelListStringMatchBooleanHandle,
-    RuntimeOwnedViewModelNumberSourceHandle, RuntimeOwnedViewModelStringSourceHandle,
-    StateMachineEventContext, StateMachineInputKind, StateMachineInstance,
-    StateMachineReportedEvent, embedded_font_is_parseable,
+    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+    RuntimeOwnedViewModelListStringMatchBooleanHandle, RuntimeOwnedViewModelNumberSourceHandle,
+    RuntimeOwnedViewModelStringSourceHandle, StateMachineEventContext, StateMachineInputKind,
+    StateMachineInstance, StateMachineReportedEvent, embedded_font_is_parseable,
 };
 
 use crate::{File, OwnedArtboardInstance, RuntimeOwnedViewModelContext, ViewModelInstance};
@@ -869,7 +869,7 @@ impl<T> Clone for Cursor<T> {
     }
 }
 
-/// A direct numeric slot in the view-model context owned by one live instance.
+/// A direct numeric slot in a Scene-retained authored view-model handle.
 ///
 /// The cursor is resolved once from durable authored identities. Hot writes do
 /// not repeat name or schema lookups, and are fenced by scene, structure epoch,
@@ -897,8 +897,8 @@ impl<T> Clone for VmCursor<T> {
     }
 }
 
-/// A direct typed boolean property in the view-model context owned by one live
-/// instance.
+/// A direct typed boolean property in a Scene-retained authored view-model
+/// handle.
 ///
 /// The cursor is resolved once from durable authored identities. Hot writes do
 /// not expose a Rive property key or repeat schema-name lookup, and are fenced
@@ -924,8 +924,8 @@ impl Clone for VmBooleanCursor {
     }
 }
 
-/// A direct typed string property in the view-model context owned by one live
-/// instance.
+/// A direct typed string property in a Scene-retained authored view-model
+/// handle.
 ///
 /// The cursor is resolved once from durable authored identities. Runtime
 /// property ordinals remain private, and every read or write is fenced by the
@@ -4952,22 +4952,14 @@ struct MaterializedArtboard {
 
 struct MaterializedViewModelDefault {
     authored_instance: ViewModelInstanceId,
+    model_index: usize,
+    instance_index: usize,
     numbers: BTreeMap<ViewModelNumberId, MaterializedViewModelNumber>,
     strings: BTreeMap<ViewModelStringId, MaterializedViewModelString>,
     booleans: BTreeMap<ViewModelBooleanId, MaterializedViewModelBoolean>,
-    authored_numbers: Vec<(String, f32)>,
-    authored_strings: Vec<(String, Vec<u8>)>,
-    authored_booleans: Vec<(String, bool)>,
-    authored_colors: Vec<(String, u32)>,
-    authored_images: Vec<(String, u64)>,
-    authored_enums: Vec<(String, u32)>,
-    authored_triggers: Vec<(String, u32)>,
-    authored_list_indices: Vec<(String, u32)>,
-    authored_lists: Vec<(String, Vec<(usize, usize)>)>,
 }
 
 struct MaterializedViewModelNumber {
-    name: String,
     property_index: usize,
 }
 
@@ -5018,21 +5010,18 @@ struct RetainedViewModelInstance {
 
 struct RetainedViewModelNumber {
     id: ViewModelNumberId,
-    overridden: bool,
 }
 
 struct RetainedViewModelString {
     id: ViewModelStringId,
     name: String,
     property_index: usize,
-    overridden: bool,
 }
 
 struct RetainedViewModelBoolean {
     id: ViewModelBooleanId,
     name: String,
     property_index: usize,
-    overridden: bool,
 }
 
 struct RetainedNestedViewModelNumber {
@@ -5040,14 +5029,12 @@ struct RetainedNestedViewModelNumber {
     id: ViewModelNumberId,
     source: RuntimeOwnedViewModelNumberSourceHandle,
     value: f32,
-    overridden: bool,
 }
 
 struct RetainedNestedViewModelString {
     authored_instance: ViewModelInstanceId,
     id: ViewModelStringId,
     source: RuntimeOwnedViewModelStringSourceHandle,
-    overridden: bool,
 }
 
 struct RetainedNestedViewModelBoolean {
@@ -5055,7 +5042,6 @@ struct RetainedNestedViewModelBoolean {
     id: ViewModelBooleanId,
     source: RuntimeOwnedViewModelBooleanSourceHandle,
     value: bool,
-    overridden: bool,
 }
 
 struct RetainedViewModelListStringMatchBoolean {
@@ -5195,138 +5181,6 @@ fn authored_child_path_names(
     Some(names)
 }
 
-#[derive(Default)]
-struct AuthoredScalarDefaults {
-    numbers: Vec<(String, f32)>,
-    strings: Vec<(String, Vec<u8>)>,
-    booleans: Vec<(String, bool)>,
-    colors: Vec<(String, u32)>,
-    images: Vec<(String, ImageAssetId)>,
-    enums: Vec<(String, u32)>,
-    triggers: Vec<(String, u32)>,
-    list_indices: Vec<(String, u32)>,
-    lists: Vec<(String, Vec<ViewModelInstanceId>)>,
-}
-
-fn collect_authored_scalar_defaults(
-    definitions: &Definitions,
-    instance: ViewModelInstanceId,
-    prefix: &mut Vec<String>,
-    visiting: &mut BTreeSet<ViewModelInstanceId>,
-    defaults: &mut AuthoredScalarDefaults,
-) -> Option<()> {
-    if !visiting.insert(instance) {
-        return None;
-    }
-    let (model_index, instance_index) =
-        authored_view_model_instance_location(definitions, instance)?;
-    let model = definitions.view_models.get(model_index)?;
-    let instance = model.instances.get(instance_index)?;
-    for (number, value) in &instance.numbers {
-        let property = model
-            .numbers
-            .iter()
-            .find(|property| property.id == *number)?;
-        let mut path = prefix.clone();
-        path.push(property.spec.name.clone());
-        defaults.numbers.push((path.join("/"), *value));
-    }
-    for (string, value) in &instance.strings {
-        let property = model
-            .strings
-            .iter()
-            .find(|property| property.id == *string)?;
-        let mut path = prefix.clone();
-        path.push(property.spec.name.clone());
-        defaults
-            .strings
-            .push((path.join("/"), value.as_bytes().to_vec()));
-    }
-    for (boolean, value) in &instance.booleans {
-        let property = model
-            .booleans
-            .iter()
-            .find(|property| property.id == *boolean)?;
-        let mut path = prefix.clone();
-        path.push(property.spec.name.clone());
-        defaults.booleans.push((path.join("/"), *value));
-    }
-    for (color, value) in &instance.colors {
-        let property = model.colors.iter().find(|property| property.id == *color)?;
-        let mut path = prefix.clone();
-        path.push(property.spec.name.clone());
-        defaults.colors.push((path.join("/"), *value));
-    }
-    for (image, value) in &instance.images {
-        let property = model.images.iter().find(|property| property.id == *image)?;
-        let mut path = prefix.clone();
-        path.push(property.spec.name.clone());
-        defaults.images.push((path.join("/"), *value));
-    }
-    for (enum_property, value) in &instance.enums {
-        let property = model
-            .enums
-            .iter()
-            .find(|property| property.id == *enum_property)?;
-        let mut path = prefix.clone();
-        path.push(property.spec.name.clone());
-        defaults.enums.push((path.join("/"), *value));
-    }
-    for (trigger, value) in &instance.triggers {
-        let property = model
-            .triggers
-            .iter()
-            .find(|property| property.id == *trigger)?;
-        let mut path = prefix.clone();
-        path.push(property.spec.name.clone());
-        defaults.triggers.push((path.join("/"), *value));
-    }
-    for (list_index, value) in &instance.list_indices {
-        let property = model
-            .list_indices
-            .iter()
-            .find(|property| property.id == *list_index)?;
-        let mut path = prefix.clone();
-        path.push(property.spec.name.clone());
-        defaults.list_indices.push((path.join("/"), *value));
-    }
-    for (list, items) in &instance.lists {
-        let property = model.lists.iter().find(|property| property.id == *list)?;
-        let mut path = prefix.clone();
-        path.push(property.spec.name.clone());
-        defaults.lists.push((path.join("/"), items.clone()));
-    }
-    for (child, child_instance) in &instance.children {
-        let property = model
-            .children
-            .iter()
-            .find(|property| property.id == *child)?;
-        let (child_model_index, _) =
-            authored_view_model_instance_location(definitions, *child_instance)?;
-        if definitions
-            .view_models
-            .get(child_model_index)
-            .map(|child_model| child_model.id)
-            != Some(property.spec.view_model)
-        {
-            return None;
-        }
-        prefix.push(property.spec.name.clone());
-        collect_authored_scalar_defaults(definitions, *child_instance, prefix, visiting, defaults)?;
-        prefix.pop();
-    }
-    visiting.remove(&instance.id);
-    Some(())
-}
-
-#[derive(Default)]
-struct ViewModelCarry {
-    authored_instance: Option<ViewModelInstanceId>,
-    numbers: BTreeMap<String, f32>,
-    strings: BTreeMap<String, Vec<u8>>,
-    booleans: BTreeMap<String, bool>,
-}
-
 struct RetainedMachineInstances {
     ids: Vec<MachineId>,
     values: Vec<StateMachineInstance>,
@@ -5352,23 +5206,67 @@ impl RetainedMachineInstances {
     }
 }
 
-fn instantiate_runtime_mount(
+fn retain_authored_view_model(
     materialized: &MaterializedArtboard,
-) -> std::result::Result<
-    (
-        OwnedArtboardInstance,
-        RetainedMachineInstances,
-        Option<RetainedViewModelInstance>,
-        Option<RuntimeOwnedViewModelContext>,
-    ),
-    (),
-> {
-    instantiate_runtime_mount_with_carry(materialized, None)
+    retained: &mut BTreeMap<ViewModelInstanceId, ViewModelInstance>,
+) -> std::result::Result<Option<ViewModelInstance>, ()> {
+    let Some(default) = materialized.view_model_default.as_ref() else {
+        return Ok(None);
+    };
+    if let Some(value) = retained.get(&default.authored_instance) {
+        return Ok(Some(value.clone()));
+    }
+    let value = ViewModelInstance {
+        raw: RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(
+                materialized.file.runtime(),
+                default.model_index,
+                default.instance_index,
+            )
+            .ok_or(())?,
+        ),
+    };
+    retained.insert(default.authored_instance, value.clone());
+    Ok(Some(value))
 }
 
-fn instantiate_runtime_mount_with_carry(
+fn retain_authored_global_view_models(
+    definitions: &Definitions,
     materialized: &MaterializedArtboard,
-    carry: Option<&ViewModelCarry>,
+    retained: &mut BTreeMap<ViewModelInstanceId, ViewModelInstance>,
+) -> std::result::Result<BTreeMap<usize, ViewModelInstance>, ()> {
+    definitions
+        .view_models
+        .iter()
+        .enumerate()
+        .filter(|(_, model)| model.spec.scope == ViewModelScope::Global)
+        .map(|(model_index, model)| {
+            let authored = model.instances.first().ok_or(())?.id;
+            let value = if let Some(value) = retained.get(&authored) {
+                value.clone()
+            } else {
+                let value = ViewModelInstance {
+                    raw: RuntimeOwnedViewModelHandle::new(
+                        RuntimeOwnedViewModelInstance::from_instance(
+                            materialized.file.runtime(),
+                            model_index,
+                            0,
+                        )
+                        .ok_or(())?,
+                    ),
+                };
+                retained.insert(authored, value.clone());
+                value
+            };
+            Ok((model_index, value))
+        })
+        .collect()
+}
+
+fn instantiate_runtime_mount(
+    materialized: &MaterializedArtboard,
+    authored_view_model: Option<&ViewModelInstance>,
+    authored_global_view_models: &BTreeMap<usize, ViewModelInstance>,
 ) -> std::result::Result<
     (
         OwnedArtboardInstance,
@@ -5405,131 +5303,31 @@ fn instantiate_runtime_mount_with_carry(
         .view_model_default
         .as_ref()
         .map(|default| {
-            // A generated owned context is required for mutable nested paths.
-            // Replay the exact authored default instance (including child
-            // instances) into it once; imported child pointers are immutable.
-            let value = runtime.instantiate_view_model().ok_or(())?;
-            for (path, authored_items) in &default.authored_lists {
-                let source = value
-                    .raw()
-                    .list_source_handle_by_property_name_path(path)
-                    .ok_or(())?;
-                let items = authored_items
-                    .iter()
-                    .map(|(model_index, instance_index)| {
-                        RuntimeOwnedViewModelInstance::from_instance(
-                            materialized.file.runtime(),
-                            *model_index,
-                            *instance_index,
-                        )
-                        .ok_or(())
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                value
-                    .raw_mut()
-                    .replace_list_items_by_source_handle(&source, items)
-                    .ok_or(())?;
-            }
-            for (path, authored) in &default.authored_numbers {
-                let source = value
-                    .raw()
-                    .number_source_handle_by_property_name_path(path)
-                    .ok_or(())?;
-                let _ = value
-                    .raw_mut()
-                    .set_number_by_source_handle(&source, *authored);
-            }
-            for (path, authored) in &default.authored_strings {
-                let source = value
-                    .raw()
-                    .string_source_handle_by_property_name_path(path)
-                    .ok_or(())?;
-                let _ = value
-                    .raw_mut()
-                    .set_string_by_source_handle(&source, authored);
-            }
-            for (path, authored) in &default.authored_booleans {
-                let source = value
-                    .raw()
-                    .boolean_source_handle_by_property_name_path(path)
-                    .ok_or(())?;
-                let _ = value
-                    .raw_mut()
-                    .set_boolean_by_source_handle(&source, *authored);
-            }
-            for (path, authored) in &default.authored_colors {
-                let _ = value
-                    .raw_mut()
-                    .set_color_by_property_name_path(path, *authored);
-            }
-            for (path, authored) in &default.authored_images {
-                let _ = value
-                    .raw_mut()
-                    .set_asset_by_property_name_path(path, *authored);
-            }
-            for (path, authored) in &default.authored_enums {
-                let _ = value
-                    .raw_mut()
-                    .set_enum_by_property_name_path(path, u64::from(*authored));
-            }
-            for (path, authored) in &default.authored_triggers {
-                let _ = value
-                    .raw_mut()
-                    .set_trigger_by_property_name_path(path, u64::from(*authored));
-            }
-            for (path, authored) in &default.authored_list_indices {
-                let _ = value
-                    .raw_mut()
-                    .set_symbol_list_index_by_property_name_path(path, u64::from(*authored));
-            }
+            let value = authored_view_model.cloned().ok_or(())?;
             let mut slots = Vec::with_capacity(default.numbers.len());
             for (number, metadata) in &default.numbers {
                 let number_slot = value
                     .raw()
                     .number_slot_by_property_index(metadata.property_index)
                     .ok_or(())?;
-                let carried = carry
-                    .filter(|carry| carry.authored_instance == Some(default.authored_instance))
-                    .and_then(|carry| carry.numbers.get(metadata.name.as_str()))
-                    .copied();
-                if let Some(carried) = carried {
-                    if !carried.is_finite() {
-                        return Err(());
-                    }
-                    let _ = value.raw_mut().set_number_by_slot(number_slot, carried);
-                }
-                slots.push((number_slot, *number, carried.is_some()));
+                slots.push((number_slot, *number));
             }
-            slots.sort_by_key(|(slot, _, _)| *slot);
+            slots.sort_by_key(|(slot, _)| *slot);
             let mut numbers = Vec::with_capacity(slots.len());
-            for (expected_slot, (slot, number, overridden)) in slots.into_iter().enumerate() {
+            for (expected_slot, (slot, number)) in slots.into_iter().enumerate() {
                 if slot != expected_slot {
                     return Err(());
                 }
-                numbers.push(RetainedViewModelNumber {
-                    id: number,
-                    overridden,
-                });
+                numbers.push(RetainedViewModelNumber { id: number });
             }
 
             let mut strings = default
                 .strings
                 .iter()
-                .map(|(string, metadata)| {
-                    let carried = carry
-                        .filter(|carry| carry.authored_instance == Some(default.authored_instance))
-                        .and_then(|carry| carry.strings.get(metadata.name.as_str()));
-                    if let Some(carried) = carried {
-                        let _ = value
-                            .raw_mut()
-                            .set_string_by_property_index(metadata.property_index, carried);
-                    }
-                    RetainedViewModelString {
-                        id: *string,
-                        name: metadata.name.clone(),
-                        property_index: metadata.property_index,
-                        overridden: carried.is_some(),
-                    }
+                .map(|(string, metadata)| RetainedViewModelString {
+                    id: *string,
+                    name: metadata.name.clone(),
+                    property_index: metadata.property_index,
                 })
                 .collect::<Vec<_>>();
             strings.sort_by_key(|string| string.property_index);
@@ -5537,22 +5335,10 @@ fn instantiate_runtime_mount_with_carry(
             let mut booleans = default
                 .booleans
                 .iter()
-                .map(|(boolean, metadata)| {
-                    let carried = carry
-                        .filter(|carry| carry.authored_instance == Some(default.authored_instance))
-                        .and_then(|carry| carry.booleans.get(metadata.name.as_str()))
-                        .copied();
-                    if let Some(carried) = carried {
-                        let _ = value
-                            .raw_mut()
-                            .set_boolean_by_property_index(metadata.property_index, carried);
-                    }
-                    RetainedViewModelBoolean {
-                        id: *boolean,
-                        name: metadata.name.clone(),
-                        property_index: metadata.property_index,
-                        overridden: carried.is_some(),
-                    }
+                .map(|(boolean, metadata)| RetainedViewModelBoolean {
+                    id: *boolean,
+                    name: metadata.name.clone(),
+                    property_index: metadata.property_index,
                 })
                 .collect::<Vec<_>>();
             booleans.sort_by_key(|boolean| boolean.property_index);
@@ -5567,6 +5353,15 @@ fn instantiate_runtime_mount_with_carry(
                 &materialized.file.runtime,
                 Some(value.raw().view_model_index()),
             );
+            for (&model_index, global) in authored_global_view_models {
+                if !context.set_global_slot_handle(
+                    &materialized.file.runtime,
+                    model_index,
+                    global.handle().clone(),
+                ) {
+                    return Err(());
+                }
+            }
             let _ = runtime
                 .raw_mut()
                 .bind_owned_view_model_artboard_contexts(&materialized.file.runtime, &context);
@@ -5589,7 +5384,17 @@ fn instantiate_runtime_mount_with_carry(
         .transpose()?;
     let global_only_view_model_context = if view_model.is_none() {
         let mut context = RuntimeOwnedViewModelContext::new();
-        context.complete(&materialized.file.runtime, None).then(|| {
+        let _ = context.complete(&materialized.file.runtime, None);
+        for (&model_index, global) in authored_global_view_models {
+            if !context.set_global_slot_handle(
+                &materialized.file.runtime,
+                model_index,
+                global.handle().clone(),
+            ) {
+                return Err(());
+            }
+        }
+        (!context.is_empty()).then(|| {
             let _ = runtime
                 .raw_mut()
                 .bind_owned_view_model_artboard_contexts(&materialized.file.runtime, &context);
@@ -5607,82 +5412,6 @@ fn instantiate_runtime_mount_with_carry(
         view_model,
         global_only_view_model_context,
     ))
-}
-
-fn capture_view_model_carry(
-    materialized: &MaterializedArtboard,
-    live: &LiveInstance,
-) -> ViewModelCarry {
-    let mut carry = ViewModelCarry::default();
-    let (Some(default), Some(retained)) = (
-        materialized.view_model_default.as_ref(),
-        live.view_model.as_ref(),
-    ) else {
-        return carry;
-    };
-    if default.authored_instance != retained.authored_instance {
-        return carry;
-    }
-    carry.authored_instance = Some(retained.authored_instance);
-    for (number, metadata) in &default.numbers {
-        let Some(number_slot) = retained
-            .numbers
-            .iter()
-            .position(|candidate| candidate.id == *number)
-        else {
-            continue;
-        };
-        if !retained
-            .numbers
-            .get(number_slot)
-            .is_some_and(|number| number.overridden)
-        {
-            continue;
-        }
-        let Some(value) = retained.value.raw().number_value_by_slot(number_slot) else {
-            continue;
-        };
-        carry.numbers.insert(metadata.name.clone(), value);
-    }
-    for (boolean, metadata) in &default.booleans {
-        let Some(retained_boolean) = retained
-            .booleans
-            .iter()
-            .find(|candidate| candidate.id == *boolean)
-        else {
-            continue;
-        };
-        if !retained_boolean.overridden {
-            continue;
-        }
-        let Some(value) = retained
-            .value
-            .raw()
-            .boolean_value_by_property_name(&retained_boolean.name)
-        else {
-            continue;
-        };
-        carry.booleans.insert(metadata.name.clone(), value);
-    }
-    for (string, metadata) in &default.strings {
-        let Some(retained_string) = retained
-            .strings
-            .iter()
-            .find(|candidate| candidate.id == *string)
-        else {
-            continue;
-        };
-        if !retained_string.overridden {
-            continue;
-        }
-        let retained_value = retained.value.raw();
-        let Some(value) = retained_value.string_value_by_property_name(&retained_string.name)
-        else {
-            continue;
-        };
-        carry.strings.insert(metadata.name.clone(), value.to_vec());
-    }
-    carry
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -6875,6 +6604,7 @@ pub struct Scene {
     identity: Arc<SceneIdentity>,
     definitions: Definitions,
     materialized: BTreeMap<ArtboardId, MaterializedArtboard>,
+    authored_view_models: BTreeMap<ViewModelInstanceId, ViewModelInstance>,
     instances: Vec<Option<LiveInstance>>,
     epoch: StructureEpoch,
     next_mount_id: u64,
@@ -6899,6 +6629,7 @@ impl Scene {
             }),
             definitions: Definitions::default(),
             materialized: BTreeMap::new(),
+            authored_view_models: BTreeMap::new(),
             instances: Vec::new(),
             epoch: StructureEpoch::INITIAL,
             next_mount_id: 0,
@@ -7058,6 +6789,7 @@ impl Scene {
         })?;
 
         let mut next_mount_id = self.next_mount_id;
+        let mut authored_view_models = self.authored_view_models.clone();
         let mut remounted = Vec::new();
         for (instance_slot, instance) in self.instances.iter().enumerate() {
             let Some(instance) = instance.as_ref() else {
@@ -7084,17 +6816,35 @@ impl Scene {
                     EditReason::InternalInvariant,
                 )));
             };
-            let previous_materialized =
-                self.materialized.get(&instance.artboard).ok_or_else(|| {
-                    EditError::commit(EditDiagnostic::new(
-                        touched_operation_index,
-                        involved_ids.clone(),
-                        EditReason::InternalInvariant,
-                    ))
-                })?;
-            let carry = capture_view_model_carry(previous_materialized, instance);
+            let authored_view_model =
+                retain_authored_view_model(materialized, &mut authored_view_models).map_err(
+                    |_| {
+                        EditError::commit(EditDiagnostic::new(
+                            touched_operation_index,
+                            involved_ids.clone(),
+                            EditReason::InternalInvariant,
+                        ))
+                    },
+                )?;
+            let authored_global_view_models = retain_authored_global_view_models(
+                &definitions,
+                materialized,
+                &mut authored_view_models,
+            )
+            .map_err(|_| {
+                EditError::commit(EditDiagnostic::new(
+                    touched_operation_index,
+                    involved_ids.clone(),
+                    EditReason::InternalInvariant,
+                ))
+            })?;
             let (runtime, machines, view_model, global_only_view_model_context) =
-                instantiate_runtime_mount_with_carry(materialized, Some(&carry)).map_err(|_| {
+                instantiate_runtime_mount(
+                    materialized,
+                    authored_view_model.as_ref(),
+                    &authored_global_view_models,
+                )
+                .map_err(|_| {
                     EditError::commit(EditDiagnostic::new(
                         touched_operation_index,
                         involved_ids.clone(),
@@ -7147,6 +6897,7 @@ impl Scene {
         for (artboard, materialized) in candidates {
             self.materialized.insert(artboard, materialized);
         }
+        self.authored_view_models = authored_view_models;
         self.instances = instances;
         self.next_mount_id = next_mount_id;
         self.epoch = epoch;
@@ -7167,8 +6918,23 @@ impl Scene {
             .materialized
             .get(&artboard)
             .ok_or(InstanceError::UnknownArtboard)?;
+        let mut authored_view_models = self.authored_view_models.clone();
+        let authored_view_model =
+            retain_authored_view_model(materialized, &mut authored_view_models)
+                .map_err(|_| InstanceError::RuntimeRejected)?;
+        let authored_global_view_models = retain_authored_global_view_models(
+            &self.definitions,
+            materialized,
+            &mut authored_view_models,
+        )
+        .map_err(|_| InstanceError::RuntimeRejected)?;
         let (runtime, machines, view_model, global_only_view_model_context) =
-            instantiate_runtime_mount(materialized).map_err(|_| InstanceError::RuntimeRejected)?;
+            instantiate_runtime_mount(
+                materialized,
+                authored_view_model.as_ref(),
+                &authored_global_view_models,
+            )
+            .map_err(|_| InstanceError::RuntimeRejected)?;
         let id = InstanceId(
             allocate_global_identity(&NEXT_INSTANCE_ID).ok_or(InstanceError::IdentityExhausted)?,
         );
@@ -7184,6 +6950,7 @@ impl Scene {
             view_model,
             global_only_view_model_context,
         };
+        self.authored_view_models = authored_view_models;
         if let Some(vacant) = self.instances.iter_mut().find(|slot| slot.is_none()) {
             *vacant = Some(live);
         } else {
@@ -7432,7 +7199,6 @@ impl Scene {
                 id: number,
                 source,
                 value: initial_value,
-                overridden: false,
             });
             slot
         };
@@ -7566,7 +7332,6 @@ impl Scene {
                 authored_instance,
                 id: string,
                 source,
-                overridden: false,
             });
             slot
         };
@@ -7890,7 +7655,6 @@ impl Scene {
                     id: boolean,
                     source,
                     value: initial_value,
-                    overridden: false,
                 });
             slot
         };
@@ -7956,7 +7720,8 @@ impl Scene {
 
     /// Write one packed RGBA value through typed authored ViewModel identity.
     /// Runtime property ordinals and owned-context handles remain private to
-    /// the scene; the write changes only this live instance.
+    /// the scene; every artboard mounted from the same authored source observes
+    /// the write through the shared retained handle.
     pub fn set_vm_color(
         &mut self,
         instance: InstanceId,
@@ -10654,9 +10419,8 @@ impl VmTx<'_> {
     /// Rename one numeric property while retaining its durable identity.
     ///
     /// A committed rename is a schema edit and therefore structurally remounts
-    /// every artboard using the file-global catalog. Live carry is intentionally
-    /// name-and-type based, so the renamed field starts from its authored
-    /// instance default after the remount.
+    /// every artboard using the file-global catalog. An existing authored
+    /// ViewModel handle remains live across that rematerialization.
     pub fn set_number_name(
         &mut self,
         number: ViewModelNumberId,
@@ -15399,13 +15163,10 @@ impl Frame<'_> {
 
     /// Write one finite number through a pre-resolved live view-model slot.
     ///
-    /// The write mutates only the retained context for this live instance. It
-    /// neither changes authored records nor advances the structure epoch. The
-    /// context is rebound once, immediately before this instance next advances.
-    /// A finite write also becomes the live override carried through later
-    /// remounts of the same authored instance and property name, even when the
-    /// value was already equal. Untouched slots continue to follow authored
-    /// default edits.
+    /// The write mutates the Scene-owned handle for this authored source, so
+    /// every artboard mounted from that source observes it. It neither changes
+    /// authored records nor advances the structure epoch, and the same handle
+    /// remains bound through later remounts.
     pub fn set_vm(
         &mut self,
         cursor: VmCursor<f32>,
@@ -15459,7 +15220,6 @@ impl Frame<'_> {
                 .raw_mut()
                 .set_number_by_source_handle(&number.source, value);
             number.value = value;
-            number.overridden = true;
             return Ok(changed);
         }
         if !retained
@@ -15469,23 +15229,21 @@ impl Frame<'_> {
         {
             return Err(StaleCursor);
         }
-        let number = retained
+        retained
             .numbers
-            .get_mut(cursor.number_slot)
+            .get(cursor.number_slot)
             .ok_or(StaleCursor)?;
         let changed = retained
             .value
             .raw_mut()
             .set_number_by_slot(cursor.number_slot, value);
-        number.overridden = true;
         Ok(changed)
     }
 
     /// Write one UTF-8 string through a pre-resolved live view-model cursor.
     ///
-    /// The write mutates only this live instance, never authored records or
-    /// the structure epoch. An explicit no-op remains an override for a later
-    /// same-schema remount.
+    /// The write mutates the shared authored handle, never authored records or
+    /// the structure epoch. The handle remains live through remounts.
     pub fn set_vm_string(
         &mut self,
         cursor: VmStringCursor,
@@ -15519,7 +15277,6 @@ impl Frame<'_> {
             let changed = retained_value
                 .raw_mut()
                 .set_string_by_source_handle(&string.source, value.as_bytes());
-            string.overridden = true;
             return Ok(changed);
         }
         if !retained
@@ -15537,7 +15294,6 @@ impl Frame<'_> {
             .value
             .raw_mut()
             .set_string_by_property_index(string.property_index, value.as_bytes());
-        string.overridden = true;
         Ok(changed)
     }
 
@@ -15571,11 +15327,9 @@ impl Frame<'_> {
 
         enum SelectedStringTarget {
             Nested {
-                slot: usize,
                 source: RuntimeOwnedViewModelStringSourceHandle,
             },
             Direct {
-                slot: usize,
                 property_index: usize,
             },
         }
@@ -15590,7 +15344,6 @@ impl Frame<'_> {
                 })
                 .ok_or(StaleCursor)?;
             SelectedStringTarget::Nested {
-                slot: nested_slot,
                 source: string.source.clone(),
             }
         } else {
@@ -15600,15 +15353,14 @@ impl Frame<'_> {
                 .filter(|string| string.id == cursor.selected.string)
                 .ok_or(StaleCursor)?;
             SelectedStringTarget::Direct {
-                slot: cursor.selected.string_slot,
                 property_index: string.property_index,
             }
         };
         let selected_source_is_current = match &selected_target {
-            SelectedStringTarget::Nested { source, .. } => {
+            SelectedStringTarget::Nested { source } => {
                 retained.value.raw().can_set_string_by_source_handle(source)
             }
-            SelectedStringTarget::Direct { property_index, .. } => retained
+            SelectedStringTarget::Direct { property_index } => retained
                 .value
                 .raw()
                 .can_set_string_by_property_index(*property_index),
@@ -15643,38 +15395,22 @@ impl Frame<'_> {
             .apply_list_string_match_boolean(&relation, value.as_bytes())
             .ok_or(StaleCursor)?;
         let selected_changed = match selected_target {
-            SelectedStringTarget::Nested { slot, source } => {
-                let changed = retained
-                    .value
-                    .raw_mut()
-                    .set_string_by_source_handle(&source, value.as_bytes());
-                if let Some(string) = retained.nested_strings.get_mut(slot) {
-                    string.overridden = true;
-                }
-                changed
-            }
-            SelectedStringTarget::Direct {
-                slot,
-                property_index,
-            } => {
-                let changed = retained
-                    .value
-                    .raw_mut()
-                    .set_string_by_property_index(property_index, value.as_bytes());
-                if let Some(string) = retained.strings.get_mut(slot) {
-                    string.overridden = true;
-                }
-                changed
-            }
+            SelectedStringTarget::Nested { source } => retained
+                .value
+                .raw_mut()
+                .set_string_by_source_handle(&source, value.as_bytes()),
+            SelectedStringTarget::Direct { property_index } => retained
+                .value
+                .raw_mut()
+                .set_string_by_property_index(property_index, value.as_bytes()),
         };
         Ok(selected_changed || relation_changed)
     }
 
     /// Write one boolean through a pre-resolved live view-model cursor.
     ///
-    /// The write mutates only this live instance, never authored records or
-    /// the structure epoch. An explicit no-op is still retained as an override
-    /// for same-schema remounts, matching numeric ViewModel write semantics.
+    /// The write mutates the shared authored handle, never authored records or
+    /// the structure epoch. The handle remains live through remounts.
     pub fn set_vm_boolean(
         &mut self,
         cursor: VmBooleanCursor,
@@ -15709,7 +15445,6 @@ impl Frame<'_> {
                 .raw_mut()
                 .set_boolean_by_source_handle(&boolean.source, value);
             boolean.value = value;
-            boolean.overridden = true;
             return Ok(changed);
         }
         if !retained
@@ -15727,7 +15462,6 @@ impl Frame<'_> {
             .value
             .raw_mut()
             .set_boolean_by_property_index(boolean.property_index, value);
-        boolean.overridden = true;
         Ok(changed)
     }
 
@@ -16625,7 +16359,6 @@ impl MaterializedArtboard {
             definitions,
             root_definition,
             &view_models,
-            &referenced_assets,
             touched_operation_index,
         )?;
         let mut root_objects = None;
@@ -16757,7 +16490,6 @@ fn materialize_view_model_default(
     definitions: &Definitions,
     artboard: &ArtboardDefinition,
     lowered: &LoweredViewModelCatalog,
-    file_assets: &LoweredFileAssets,
     operation_index: usize,
 ) -> std::result::Result<Option<MaterializedViewModelDefault>, EditDiagnostic> {
     let Some(authored_instance) = artboard.view_model_default else {
@@ -16839,7 +16571,6 @@ fn materialize_view_model_default(
         numbers.insert(
             number.id,
             MaterializedViewModelNumber {
-                name: number.spec.name.clone(),
                 property_index,
             },
         );
@@ -16920,73 +16651,13 @@ fn materialize_view_model_default(
             },
         );
     }
-    let mut authored = AuthoredScalarDefaults::default();
-    collect_authored_scalar_defaults(
-        definitions,
-        authored_instance,
-        &mut Vec::new(),
-        &mut BTreeSet::new(),
-        &mut authored,
-    )
-    .ok_or_else(|| {
-        EditDiagnostic::new(
-            operation_index,
-            vec![EditId::Object(authored_instance.object_id())],
-            EditReason::InternalInvariant,
-        )
-    })?;
-    let authored_lists = authored
-        .lists
-        .into_iter()
-        .map(|(path, items)| {
-            let items = items
-                .into_iter()
-                .map(|item| {
-                    lowered.instance_indices.get(&item).copied().ok_or_else(|| {
-                        EditDiagnostic::new(
-                            operation_index,
-                            vec![EditId::Object(item.object_id())],
-                            EditReason::UnknownObject,
-                        )
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok((path, items))
-        })
-        .collect::<Result<Vec<_>, EditDiagnostic>>()?;
-    let authored_images = authored
-        .images
-        .into_iter()
-        .map(|(path, image)| {
-            file_assets
-                .image_indices
-                .get(&image)
-                .copied()
-                .map(u64::from)
-                .map(|asset| (path, asset))
-                .ok_or_else(|| {
-                    EditDiagnostic::new(
-                        operation_index,
-                        vec![EditId::ImageAsset(image)],
-                        EditReason::UnknownImageAsset,
-                    )
-                })
-        })
-        .collect::<Result<Vec<_>, EditDiagnostic>>()?;
     Ok(Some(MaterializedViewModelDefault {
         authored_instance,
+        model_index,
+        instance_index,
         numbers,
         strings,
         booleans,
-        authored_numbers: authored.numbers,
-        authored_strings: authored.strings,
-        authored_booleans: authored.booleans,
-        authored_colors: authored.colors,
-        authored_images,
-        authored_enums: authored.enums,
-        authored_triggers: authored.triggers,
-        authored_list_indices: authored.list_indices,
-        authored_lists,
     }))
 }
 
@@ -24816,6 +24487,270 @@ mod tests {
 
     fn script_factory() -> ScriptFactory {
         PersistentFactory::new(RecordingFactory::new())
+    }
+
+    #[test]
+    fn authored_view_model_handle_is_shared_across_artboards() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((first_artboard, second_artboard, defaults, number), _) = scene.edit(|tx| {
+            let first_artboard = tx.create_artboard(ArtboardSpec {
+                name: "First".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let second_artboard = tx.create_artboard(ArtboardSpec {
+                name: "Second".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let mut view_models = tx.view_models();
+            let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Shared".into(),
+            })?;
+            let number = view_models.create_number(
+                model,
+                ViewModelNumberSpec {
+                    name: "number".into(),
+                },
+            )?;
+            let defaults =
+                view_models.create_instance(model, ViewModelInstanceSpec { name: None })?;
+            view_models.set_number(defaults, number, 1.0)?;
+            view_models.set_artboard_default(first_artboard, defaults)?;
+            view_models.set_artboard_default(second_artboard, defaults)?;
+            Ok((first_artboard, second_artboard, defaults, number))
+        })?;
+
+        let first = scene.instantiate(first_artboard)?;
+        let second = scene.instantiate(second_artboard)?;
+        let first_cursor = scene.vm_cursor(first, defaults, number)?;
+        let second_cursor = scene.vm_cursor(second, defaults, number)?;
+        assert!(scene.frame().set_vm(first_cursor, 42.0)?);
+        assert_eq!(scene.frame().get_vm(second_cursor)?, 42.0);
+
+        let first_handle = scene
+            .instances
+            .iter()
+            .flatten()
+            .find(|live| live.id == first)
+            .and_then(|live| live.view_model.as_ref())
+            .map(|view_model| view_model.value.handle())
+            .context("first ViewModel handle")?;
+        let second_handle = scene
+            .instances
+            .iter()
+            .flatten()
+            .find(|live| live.id == second)
+            .and_then(|live| live.view_model.as_ref())
+            .map(|view_model| view_model.value.handle())
+            .context("second ViewModel handle")?;
+        assert!(first_handle.ptr_eq(second_handle));
+        Ok(())
+    }
+
+    #[test]
+    fn authored_global_view_model_handle_is_shared_across_artboards() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((first_artboard, second_artboard, defaults, number), _) = scene.edit(|tx| {
+            let first_artboard = tx.create_artboard(ArtboardSpec {
+                name: "First".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let second_artboard = tx.create_artboard(ArtboardSpec {
+                name: "Second".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let mut view_models = tx.view_models();
+            let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Global,
+                name: "Shared global".into(),
+            })?;
+            let number = view_models.create_number(
+                model,
+                ViewModelNumberSpec {
+                    name: "number".into(),
+                },
+            )?;
+            let defaults =
+                view_models.create_instance(model, ViewModelInstanceSpec { name: None })?;
+            view_models.set_number(defaults, number, 1.0)?;
+            Ok((first_artboard, second_artboard, defaults, number))
+        })?;
+
+        let first = scene.instantiate(first_artboard)?;
+        let second = scene.instantiate(second_artboard)?;
+        let first_cursor = scene.vm_cursor(first, defaults, number)?;
+        let second_cursor = scene.vm_cursor(second, defaults, number)?;
+        assert!(scene.frame().set_vm(first_cursor, 42.0)?);
+        assert_eq!(scene.frame().get_vm(second_cursor)?, 42.0);
+
+        let first_handle = scene
+            .instances
+            .iter()
+            .flatten()
+            .find(|live| live.id == first)
+            .and_then(LiveInstance::owned_view_model_context)
+            .and_then(|context| context.global_slot_handle(0))
+            .cloned()
+            .context("first global ViewModel handle")?;
+        let second_handle = scene
+            .instances
+            .iter()
+            .flatten()
+            .find(|live| live.id == second)
+            .and_then(LiveInstance::owned_view_model_context)
+            .and_then(|context| context.global_slot_handle(0))
+            .cloned()
+            .context("second global ViewModel handle")?;
+        assert!(first_handle.ptr_eq(&second_handle));
+
+        scene.edit(|tx| {
+            tx.set_artboard(
+                first_artboard,
+                ArtboardSpec {
+                    name: "First rematerialized".into(),
+                    width: 120.0,
+                    height: 80.0,
+                },
+            )
+        })?;
+        let rematerialized = scene
+            .instances
+            .iter()
+            .flatten()
+            .find(|live| live.id == first)
+            .and_then(LiveInstance::owned_view_model_context)
+            .and_then(|context| context.global_slot_handle(0))
+            .context("rematerialized global ViewModel handle")?;
+        assert!(rematerialized.ptr_eq(&first_handle));
+        let rematerialized_cursor = scene.vm_cursor(first, defaults, number)?;
+        assert_eq!(scene.frame().get_vm(rematerialized_cursor)?, 42.0);
+        Ok(())
+    }
+
+    #[test]
+    fn authored_view_model_graph_survives_artboard_rematerialization() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((artboard, defaults), _) = scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Before".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let mut view_models = tx.view_models();
+            let root = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Root".into(),
+            })?;
+            let item = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Item".into(),
+            })?;
+            let trigger = view_models.create_trigger(
+                root,
+                ViewModelTriggerSpec {
+                    name: "fire".into(),
+                },
+            )?;
+            let items = view_models.create_list(
+                root,
+                ViewModelListSpec {
+                    name: "items".into(),
+                },
+            )?;
+            let value = view_models.create_number(
+                item,
+                ViewModelNumberSpec {
+                    name: "value".into(),
+                },
+            )?;
+            let defaults =
+                view_models.create_instance(root, ViewModelInstanceSpec { name: None })?;
+            let item_defaults =
+                view_models.create_instance(item, ViewModelInstanceSpec { name: None })?;
+            view_models.set_trigger(defaults, trigger, 0)?;
+            view_models.set_number(item_defaults, value, 1.0)?;
+            view_models.set_list_items(defaults, items, &[item_defaults])?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            Ok((artboard, defaults))
+        })?;
+
+        let instance = scene.instantiate(artboard)?;
+        let live = scene
+            .instances
+            .iter()
+            .flatten()
+            .find(|live| live.id == instance)
+            .context("initial live instance")?;
+        let old_mount = live.mount;
+        let root = live
+            .view_model
+            .as_ref()
+            .context("initial ViewModel")?
+            .value
+            .handle()
+            .clone();
+        let child = root
+            .list_items_by_property_name_path("items")
+            .and_then(|items| items.into_iter().next())
+            .context("initial retained list child")?;
+        assert!(root
+            .borrow_mut()
+            .set_trigger_by_property_name_path("fire", 3));
+        assert!(child
+            .borrow_mut()
+            .set_number_by_property_name_path("value", 7.0));
+
+        scene.edit(|tx| {
+            tx.set_artboard(
+                artboard,
+                ArtboardSpec {
+                    name: "After".into(),
+                    width: 120.0,
+                    height: 80.0,
+                },
+            )
+        })?;
+
+        let rematerialized = scene
+            .instances
+            .iter()
+            .flatten()
+            .find(|live| live.id == instance)
+            .context("rematerialized live instance")?;
+        assert_ne!(rematerialized.mount, old_mount);
+        let rematerialized_root = rematerialized
+            .view_model
+            .as_ref()
+            .context("rematerialized ViewModel")?
+            .value
+            .handle();
+        assert!(rematerialized_root.ptr_eq(&root));
+        assert_eq!(
+            rematerialized_root
+                .borrow()
+                .trigger_value_by_property_name_path("fire"),
+            Some(3)
+        );
+        let rematerialized_child = rematerialized_root
+            .list_items_by_property_name_path("items")
+            .and_then(|items| items.into_iter().next())
+            .context("rematerialized retained list child")?;
+        assert!(rematerialized_child.ptr_eq(&child));
+        assert_eq!(
+            rematerialized_child
+                .borrow()
+                .number_value_by_property_name("value"),
+            Some(7.0)
+        );
+        assert!(scene
+            .authored_view_models
+            .get(&defaults)
+            .is_some_and(|retained| retained.handle().ptr_eq(&root)));
+        Ok(())
     }
 
     #[test]

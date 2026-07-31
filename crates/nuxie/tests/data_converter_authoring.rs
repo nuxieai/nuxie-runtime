@@ -502,8 +502,10 @@ fn converter_aware_bind_uses_typed_source_and_stable_converter_identity() -> Res
 
     let second_cold = scene.instantiate(artboard)?;
     let second_opacity = scene.cursor(second_cold, shape, nuxie::props::WORLD_OPACITY)?;
+    let second_source = scene.vm_cursor(second_cold, defaults, source_opacity)?;
     scene.frame().advance(second_cold, 0.0, &mut events);
-    assert_eq!(scene.frame().get(second_opacity)?, 0.5);
+    assert_eq!(scene.frame().get_vm(second_source)?, 0.0);
+    assert_eq!(scene.frame().get(second_opacity)?, 0.25);
     Ok(())
 }
 

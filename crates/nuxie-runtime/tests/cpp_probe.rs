@@ -88387,3 +88387,155 @@ fn fl_d4_cycle_three_artboard_levels_share_each_authored_write() {
         );
     }
 }
+
+fn synthetic_fl_e4_custom_handle_joystick() -> Vec<u8> {
+    synthetic_runtime_file(8_704, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "x", 10.0);
+            push_f32_property(bytes, "Node", "y", 20.0);
+        });
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "x", 65.0);
+            push_f32_property(bytes, "Node", "y", 75.0);
+        });
+        push_object_with_properties(bytes, "Joystick", |bytes| {
+            push_uint_property(bytes, "Joystick", "parentId", 1);
+            push_uint_property(bytes, "Joystick", "handleSourceId", 2);
+            push_f32_property(bytes, "Joystick", "posX", 5.0);
+            push_f32_property(bytes, "Joystick", "posY", 5.0);
+            push_f32_property(bytes, "Joystick", "width", 100.0);
+            push_f32_property(bytes, "Joystick", "height", 100.0);
+        });
+    })
+}
+
+#[test]
+fn fl_e4_custom_handle_joystick_derives_axes_from_occurrence_transforms() {
+    let label = "synthetic/fl_e4_custom_handle_joystick.riv";
+    let bytes = synthetic_fl_e4_custom_handle_joystick();
+    let (_, mut artboard) = read_rust_instance_from_bytes(&bytes, label);
+
+    artboard.update_components();
+
+    assert_eq!(
+        artboard.double_property(3, property_key_for_name("Joystick", "x")),
+        Some(1.0),
+        "the source's world translation maps through the joystick occurrence inverse"
+    );
+    assert_eq!(
+        artboard.double_property(3, property_key_for_name("Joystick", "y")),
+        Some(1.0),
+        "both axes use the authored joystick bounds"
+    );
+}
+
+#[test]
+fn fl_e4_joystick_clone_rebuilds_occurrence_state() {
+    let label = "synthetic/fl_e4_custom_handle_joystick_clone.riv";
+    let bytes = synthetic_fl_e4_custom_handle_joystick();
+    let (_, mut source) = read_rust_instance_from_bytes(&bytes, label);
+    let mut cloned = source.clone();
+    source.update_components();
+    cloned.update_components();
+
+    assert!(source.set_transform_property(2, TransformProperty::X, 15.0));
+    source.update_components();
+
+    let x_key = property_key_for_name("Joystick", "x");
+    assert_eq!(source.double_property(3, x_key), Some(0.0));
+    assert_eq!(cloned.double_property(3, x_key), Some(1.0));
+}
+
+#[test]
+fn upstream_joystick_flags_fixture_actions_are_ported() {
+    const INVERT_X: u64 = 1 << 0;
+    const INVERT_Y: u64 = 1 << 1;
+    const WORLD_SPACE: u64 = 1 << 2;
+
+    let label = "joystick_flag_test.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read {label}: {error}"));
+    let (runtime, graph, mut artboard) = read_rust_graph_instance_from_bytes(&bytes, label);
+    let artboard_graph = graph.artboards.first().expect("joystick flag artboard");
+    let local = |name: &str, type_name: &str| {
+        artboard_graph
+            .local_objects
+            .iter()
+            .find(|object| {
+                object.name.as_deref() == Some(name) && object.type_name == Some(type_name)
+            })
+            .unwrap_or_else(|| panic!("missing {type_name} named {name}"))
+            .local_id
+    };
+    let invert_x = local("Invert X Joystick", "Joystick");
+    let invert_y = local("Invert Y Joystick", "Joystick");
+    let world = local("World Joystick", "Joystick");
+    let normal = local("Normal Joystick", "Joystick");
+    assert_eq!(artboard.debug_joystick_flags(invert_x), Some(INVERT_X));
+    assert_eq!(artboard.debug_joystick_flags(invert_y), Some(INVERT_Y));
+    assert_eq!(artboard.debug_joystick_flags(world), Some(WORLD_SPACE));
+    assert_eq!(artboard.debug_joystick_flags(normal), Some(0));
+
+    for (axis, expected_x) in [(0.0, 350.0), (1.0, 300.0), (-1.0, 400.0)] {
+        artboard.set_double_property(invert_x, property_key_for_name("Joystick", "x"), axis);
+        artboard.update_pass();
+        assert_eq!(
+            transform_x(&artboard, local("invert_x_rect", "Shape")),
+            expected_x
+        );
+    }
+    for (axis, expected_x) in [(0.0, 425.0), (1.0, 400.0), (-1.0, 450.0)] {
+        artboard.set_double_property(invert_y, property_key_for_name("Joystick", "y"), axis);
+        artboard.update_pass();
+        assert_eq!(
+            transform_x(&artboard, local("invert_y_ellipse", "Shape")),
+            expected_x
+        );
+    }
+
+    // Keep the imported file live through the whole owner/action test.
+    drop(runtime);
+}
+
+#[test]
+fn upstream_layout_intrinsic_measure_fixture_is_ported() {
+    let label = "layout/measure_tests.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read {label}: {error}"));
+    let runtime = read_runtime_file(&bytes)
+        .unwrap_or_else(|error| panic!("failed to import {label}: {error:#}"));
+    let graph = GraphFile::from_runtime_file(&runtime)
+        .unwrap_or_else(|error| panic!("failed to graph {label}: {error:#}"));
+    let artboard_graph = graph
+        .artboards
+        .iter()
+        .find(|artboard| artboard.name.as_deref() == Some("hi"))
+        .expect("measure fixture artboard named hi");
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
+            .unwrap_or_else(|error| panic!("failed to instantiate {label}: {error:#}"));
+    artboard.update_pass();
+    assert!(
+        artboard_graph
+            .components
+            .iter()
+            .any(|component| component.name.as_deref() == Some("TextLayout"))
+    );
+    let text_local = artboard_graph
+        .components
+        .iter()
+        .find(|component| component.name.as_deref() == Some("HiText"))
+        .expect("HiText component")
+        .local_id;
+    let bounds = artboard
+        .debug_text_local_bounds(&runtime, artboard_graph, text_local)
+        .expect("HiText local bounds");
+    assert_eq!(bounds.0, 0.0);
+    assert_eq!(bounds.1, 0.0);
+    assert_eq!(bounds.2, 62.48047);
+    assert_eq!(bounds.3, 72.62695);
+}

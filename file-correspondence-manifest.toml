@@ -2962,27 +2962,27 @@ note = "Direct filename correspondence implemented in FL-C1; independently accep
 
 [[file]]
 upstream = "src/intrinsically_sizeable.cpp"
-status = "pending"
-verification = "pending-verification"
-rust_module = ""
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/intrinsically_sizeable.rs"
 legacy_port_status = "not-applicable"
 b6_row_id = "B6-0245"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F14: intrinsic-size helper is represented by consolidated layout code."
+note = "FL-E4 direct file owner ports the exact TransformComponent-first/Joystick-second dispatch and routes layout measurement/control through concrete occurrence owners; W65 measure_tests.riv is literal fixture evidence."
 
 [[file]]
 upstream = "src/joystick.cpp"
-status = "pending"
-verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/animation.rs"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/joystick.rs"
 legacy_port_status = "partial"
 b6_row_id = "B6-0246"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "F9: joystick apply is ported, but handle-source world-space settlement and its parity fixture remain."
+note = "FL-E4 direct file owner retains clone-local component/source handles, immutable animation handles, ordered nested-remap handles, world/inverse matrices, exact update/apply/controlSize and Components callbacks; joystick_flag_test.riv plus synthetic source/clone tests cover the class."
 
 [[file]]
 upstream = "src/layout.cpp"

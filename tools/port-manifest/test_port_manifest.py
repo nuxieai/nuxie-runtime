@@ -259,7 +259,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/semantic/semantic_manager.cpp": ("absent", "F6"),
             "src/lua/lua_promise.cpp": ("absent", "F7"),
             "src/lua/renderer/lua_gpu.cpp": ("absent", "F8"),
-            "src/joystick.cpp": ("partial", "F9"),
+            "src/joystick.cpp": ("ported", "FL-E4"),
             "src/shapes/list_path.cpp": ("partial", "F10"),
             "src/async/work_pool.cpp": ("absent", "F12"),
             "src/listener_group.cpp": ("partial", "F13"),
@@ -447,7 +447,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/lua/renderer/lua_gradient.cpp": ("absent", "F7"),
             "src/lua/renderer/lua_image.cpp": ("absent", "F7"),
             "src/lua/renderer/lua_mesh.cpp": ("absent", "F7"),
-            "src/joystick.cpp": ("partial", "F9"),
+            "src/joystick.cpp": ("ported", "FL-E4"),
             "src/shapes/list_path.cpp": ("partial", "F10"),
             "src/async/work_pool.cpp": ("absent", "F12"),
             "src/profiler/profiler.cpp": ("absent", "F12"),
@@ -460,7 +460,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/core/binary_data_reader.cpp": ("not-applicable", "F14"),
             "src/static_scene.cpp": ("not-applicable", "F14"),
             "src/hittest_command_path.cpp": ("not-applicable", "F14"),
-            "src/intrinsically_sizeable.cpp": ("not-applicable", "F14"),
+            "src/intrinsically_sizeable.cpp": ("ported", "FL-E4"),
         }
         self.write_upstream(*expected)
         output = self.repo / "generated.toml"

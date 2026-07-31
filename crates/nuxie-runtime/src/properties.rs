@@ -255,24 +255,6 @@ pub(crate) fn layout_computed_property_for_key(
     })
 }
 
-pub(crate) const JOYSTICK_FLAG_INVERT_X: u64 = 1 << 0;
-pub(crate) const JOYSTICK_FLAG_INVERT_Y: u64 = 1 << 1;
-
-pub(crate) fn joystick_x_property_key() -> Option<u16> {
-    static KEY: OnceLock<Option<u16>> = OnceLock::new();
-    cached_property_key_for_name(&KEY, "Joystick", "x")
-}
-
-pub(crate) fn joystick_y_property_key() -> Option<u16> {
-    static KEY: OnceLock<Option<u16>> = OnceLock::new();
-    cached_property_key_for_name(&KEY, "Joystick", "y")
-}
-
-pub(crate) fn joystick_flags_property_key() -> Option<u16> {
-    static KEY: OnceLock<Option<u16>> = OnceLock::new();
-    cached_property_key_for_name(&KEY, "Joystick", "joystickFlags")
-}
-
 pub(crate) fn property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {
     let definition = definition_by_name(type_name)?;
     if let Some(property) = definition

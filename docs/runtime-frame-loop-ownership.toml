@@ -142,10 +142,10 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 297
+faithful = 299
 adapted = 0
 divergent-by-decision = 0
-pending = 45
+pending = 43
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
@@ -1907,9 +1907,9 @@ status = "pending"
 upstream = "src/intrinsically_sizeable.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/intrinsically_sizeable.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/inputs/gamepad_input.cpp"
@@ -1939,9 +1939,9 @@ status = "faithful"
 upstream = "src/joystick.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/joystick.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/layout.cpp"

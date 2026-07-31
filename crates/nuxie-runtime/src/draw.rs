@@ -6387,6 +6387,26 @@ impl ArtboardInstance {
         )
     }
 
+    /// Test-only parity surface for C++ `Text::localBounds()` after layout.
+    #[doc(hidden)]
+    pub fn debug_text_local_bounds(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        text_local: usize,
+    ) -> Option<(f32, f32, f32, f32)> {
+        if self.component(text_local)?.type_name != "Text" {
+            return None;
+        }
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
+        match self.runtime_text_layout_constraint(text_local, layout_bounds.as_ref()) {
+            Some(constraint) => {
+                static_text_controlled_layout_bounds(runtime, graph, self, text_local, constraint)
+            }
+            None => static_text_constraint_bounds(runtime, graph, self, text_local),
+        }
+    }
+
     fn runtime_text_layout_constraint(
         &self,
         text_local: usize,
@@ -11635,8 +11655,11 @@ impl TaffyRuntimeLayoutEngine {
                 .iter()
                 .find(|component| component.local_id == *child_local)
                 .map(|child| child.type_name);
-            let measured_child =
-                runtime.is_some() && matches!(child_type, Some("Shape" | "Text" | "TextInput"));
+            let measured_child = runtime.is_some()
+                && matches!(
+                    child_type,
+                    Some("Shape" | "Text" | "TextInput" | "Joystick")
+                );
             let zero_sized_component_list = matches!(child_type, Some("ArtboardComponentList"))
                 && self
                     .zero_sized_component_list_supported(graph, *child_local)
@@ -11686,7 +11709,7 @@ impl TaffyRuntimeLayoutEngine {
                 .iter()
                 .find(|component| component.local_id == *child_local)
                 .is_some_and(|child| {
-                    matches!(child.type_name, "Shape" | "Text" | "TextInput")
+                    matches!(child.type_name, "Shape" | "Text" | "TextInput" | "Joystick")
                         || (child.type_name == "ArtboardComponentList"
                             && instance
                                 .component_list_items(*child_local)
@@ -11739,6 +11762,17 @@ impl TaffyRuntimeLayoutEngine {
             else {
                 continue;
             };
+            let Some(child_handle) = instance.component_handle(child.local_id) else {
+                continue;
+            };
+            if crate::intrinsically_sizeable::RuntimeIntrinsicallySizeable::from_component(
+                instance,
+                child_handle,
+            )
+            .is_none()
+            {
+                continue;
+            }
             match child.type_name {
                 "Shape" => {
                     let Some((width, height)) = self.measure_shape_layout_child(
@@ -11825,6 +11859,26 @@ impl TaffyRuntimeLayoutEngine {
                         instance,
                         layout_local,
                         child.local_id,
+                    ) else {
+                        continue;
+                    };
+                    measured.width = measured.width.max(width);
+                    measured.height = measured.height.max(height);
+                }
+                "Joystick" => {
+                    let maximum_width = known_dimensions
+                        .width
+                        .or_else(|| definite_available_space(available_space.width))
+                        .unwrap_or(f32::MAX);
+                    let maximum_height = known_dimensions
+                        .height
+                        .or_else(|| definite_available_space(available_space.height))
+                        .unwrap_or(f32::MAX);
+                    let Some((width, height)) = crate::joystick::measure_joystick_layout(
+                        instance,
+                        child_handle,
+                        maximum_width,
+                        maximum_height,
                     ) else {
                         continue;
                     };

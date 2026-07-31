@@ -25,7 +25,8 @@ use crate::draw::{
     RuntimeLayoutBounds, RuntimePathMeasure, RuntimeTextPaintPoolSpec, RuntimeTextPaintPoolUse,
     runtime_path_geometry_commands, runtime_shape_paint_command,
 };
-use crate::properties::{joystick_x_property_key, joystick_y_property_key, property_key_for_name};
+use crate::joystick::{joystick_x_property_key, joystick_y_property_key};
+use crate::properties::property_key_for_name;
 use crate::view_model::RuntimeFontAssetValue;
 use crate::{ArtboardInstance, Mat2D, RuntimePathCommand};
 use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind};

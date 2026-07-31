@@ -19,9 +19,12 @@ what is idiomatic Rust.
 
 **Ground rules that shape every idiom (from `docs/porting-map-v2.md`):**
 
-- Port *code, not behaviors*: one C++ class/file, translated coarsely in one
-  sitting, with a comment naming its C++ source. Goldens judge correctness, not
-  you; mark uncertain lines `// TODO(golden):` rather than researching each one.
+- Port *code, not benchmark symptoms*: select one dependency-complete C++ owner
+  family, read that whole family before editing, and keep one direct Rust file
+  per meaningful C++ file. A family is not publishable while any import,
+  ownership, ordering, cloning, lifecycle, floating-point, or dispatch row is
+  still uncertain. `// TODO(golden):` may mark an internal work-in-progress,
+  but never substitutes for closure evidence for the family.
 - During Phase R's mechanical renderer translation, `nuxie-schema` and
   `nuxie-binary` are frozen — do not touch them. A Phase S upstream-sync cycle
   may regenerate schema artifacts and update the binary decoder when the
@@ -31,6 +34,75 @@ what is idiomatic Rust.
   performance unless it mirrors an audited C++ gate. The golden harness only
   samples corpus timelines; invented invalidation breaks the timelines it does
   not sample.
+
+---
+
+## 0. Owner-Family Closure Workflow
+
+> **Process reset (coordinator directive, 2026-07-30, binding for FL-D
+> onward).** Tests are the acceptance. A family is DONE when: (1) the port
+> lands file-to-file per the manifest; (2) the family's upstream unit tests
+> are ported per the W65 triage (fixture differentials or literal Rust
+> ports; C++-container-mechanics cases documented as skipped); (3) the
+> existing differential suites and goldens are green; (4) the orchestrator
+> spot-checks the family's trickiest behaviors against the pinned C++; (5)
+> one PR to main flips the family's manifest rows. Nothing else is
+> required: no candidate/evidence commit pairs, no trace-fingerprint
+> rounds, no promotion commits, no review-until-zero-findings, and no
+> adversarial charters against enforcement tooling (the ownership detector
+> is a frozen drift lint validated by its fixed negative corpus). At most
+> one time-boxed behavioral review may be used where differentials
+> structurally cannot observe the surface. The numbered workflow below
+> remains sound guidance for HOW to port a family (read whole family
+> first, checklist the members, port coherently, keep differentials
+> honest); its publication/acceptance machinery is superseded by this
+> paragraph. Rationale: rounds 10-12 of the FL-B/FL-C5 campaign produced
+> zero behavioral findings while consuming days on tooling review; the
+> upstream test estate (1,320 TEST_CASEs, 238 silvers) is a stricter and
+> cheaper oracle than review rounds. In PR #89, the retired staleness gates
+> also forced five fingerprint-rebind commits in a single day as the source
+> changed.
+
+1. **Read the whole family first.** Read every mapped implementation and header,
+   plus the importer and concrete subclasses that establish its lifecycle.
+   Record import validation, retained ownership, authored ordering, cloning,
+   construction/destruction, float edge behavior, and virtual dispatch.
+2. **Write a closure checklist.** Before production edits, map every relevant
+   C++ file/member to its direct Rust file, its live C++ differential or
+   source-cited structural proof, and its permanent checker rule. Missing
+   evidence is an open implementation row, not a review follow-up.
+3. **Port the family coherently.** Preserve one writer and a frozen base.
+   File-to-file moves stay behavior-preserving where practical; semantic edits
+   then port the complete family without Editor-specific or benchmark-driven
+   compensation.
+4. **Adversarially review the checklist.** At minimum probe wrong types, bad
+   indices, duplicate authored occurrences, failed candidates, zero values,
+   nested paths, same-frame timing, clone isolation, and malformed import
+   behavior wherever the family admits them.
+5. **Close the checklist before flipping manifest rows.** Every row must have a
+   live pinned-C++ differential or a source-cited structural proof. Turn each
+   behavioral gap into a permanent differential or checker negative control
+   before completing the family.
+
+Focused tests run continuously while the family is being translated. Run the
+expensive full battery once after the checklist is closed, then land the family
+in one PR that flips its manifest rows. Large waves such as DataBind/Artboard
+and Text/Layout must be partitioned into dependency-complete owner-family
+checklists before their first production edit; a wave-sized file count is not
+itself a family.
+
+Keep one production writer. Parallel work is limited to read-only source
+mapping, oracle-probe design, and independent review. Rebase only at declared
+family boundaries. Reuse Cargo and C++ artifacts when their provenance keys
+(source SHA, compiler, configuration, feature defines, and archive hash) still
+match; clean-tree validation proves source identity and must not force an
+otherwise identical rebuild.
+
+Performance validates the completed FL-A-through-FL-E structural port. Do not
+run family- or wave-level timing gates while mapped FL production rows remain
+pending, and never use individual benchmark entries as implementation slices.
+After all FL code is ported and the correctness/structure floors are green,
+run the canonical performance acceptance once against the complete port.
 
 ---
 
@@ -372,6 +444,15 @@ deliberately. When you port a float→int cast, know that Rust will not reproduc
 C++ UB — usually a feature, occasionally a divergence to guard (e.g. add a
 `duration == 0.0` guard). Byte-clamp sites round-then-saturate on purpose:
 `(255.0 * opacity.clamp(0.0, 1.0)).round() as u8` (`draw.rs:11938`).
+
+`AnimationReset` is another constructible site. Pinned C++ reinterprets each
+color as signed `int`, serializes it through `float`, and converts the decoded
+float back to `int`. Rust must preserve that signed-float round-trip wherever
+the result is representable; for the narrow positive range that rounds to
+2^31, project decision D2 binds Rust's saturating conversion instead of
+attempting to emulate C++ undefined behavior
+(`src/animation/animation_reset_factory.cpp:126-168`;
+`src/animation/animation_reset.cpp:30-35,54-67`).
 
 ### 3.4 Integer overflow policy
 
@@ -748,6 +829,18 @@ rules exist so a reviewer can cite the violated rule behind every finding.
   (`crates/nuxie-runtime/src/artboard_data_bind.rs:2561-2572`). Candidate-vector
   precedence, slot-key path rewriting, or stopping at a partial same-model
   match is architecture drift even when a sampled value happens to agree.
+- **AF-10 Foreign platform nullability is resolved at the binding boundary.**
+  When a platform API has no pinned-C++ equivalent, its normative interface
+  contract is the authority only for the narrow foreign binding. Nullable
+  WebIDL results must recognize every absence representation the platform can
+  actually fulfill before converting a present typed value. The translation
+  stays at the existing platform adapter, preserves the surrounding success,
+  concrete-error, and rejected-promise control flow, and must not invent
+  product behavior, a fallback backend, or a second lifecycle. For WebGPU,
+  `GPUDevice.popErrorScope()` returns `Promise<GPUError?>`; therefore a
+  fulfilled JavaScript `null` is `None`, while a non-null `GpuError` continues
+  through the typed error conversion. This is a local platform-binding
+  translation, not evidence of a corresponding C++ renderer mechanism.
 
 ---
 
@@ -1071,6 +1164,18 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   while runtime state-machine instances reference the completed definition
   (`include/rive/animation/linear_animation_instance.hpp:38-39,140-182`;
   `include/rive/animation/state_machine.hpp:19-29`).
+  C++'s process-global empty `LinearAnimation` fallback is immutable and has no
+  cross-Artboard observable identity. Rust's full animation definition type
+  can retain single-threaded scripting handles and therefore cannot inhabit a
+  safe process-global `Sync` static. Retain one `Arc`-owned empty definition
+  per Artboard arena, share it across every unresolved AnimationState and
+  BlendAnimation occurrence (and across Artboard snapshots), and preserve the
+  generated C++ defaults exactly. This is owner-scoped storage adaptation, not
+  permission to synthesize a fresh empty definition per occurrence or to drop
+  an unresolved authored BlendAnimation
+  (`src/animation/animation_state_instance.cpp:7-23`;
+  `src/animation/blend_animation.cpp:9-38`;
+  `include/rive/animation/blend_animation.hpp:9-18`).
 - **FLR-2 A non-owning owner back-pointer may become explicit owner
   mediation, never hidden ownership.** A raw C++ pointer to the containing
   Artboard may be represented either by a stable typed id or by requiring the
@@ -1095,6 +1200,13 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   the project safety/API decision
   (`include/rive/animation/linear_animation_instance.hpp:97-100,150`;
   `src/animation/linear_animation_instance.cpp:17-30,193-198,356`).
+  The project made that specific decision on 2026-07-25: safe Rust keeps the
+  existing boolean API and initializes `LinearAnimationInstance::did_loop` to
+  `false` before first advance. Record that one pre-advance value as an FLR-3
+  binding adaptation, not as C++ behavior; every advance path remains a
+  literal C++ translation. Do not generalize this decision to other unset
+  fields, emulate indeterminate memory, or introduce a breaking `Option<bool>`
+  API merely to model the C++ defect.
 - **FLR-4 Publish accumulated dirt before any callback and recurse last.**
   Preserve the duplicate-bit early return, install the complete accumulated
   dirt value, invoke the object's `onDirty`, notify the dependency root, and
@@ -1196,3 +1308,83 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   structured error; never panic on imported data. Do not move parenting,
   registration, or callbacks into validation merely to make the type
   convenient (`src/component.cpp:13-30`; §3.1).
+- **FLR-16 Preserve source-file correspondence as part of ownership.** Each
+  meaningful pinned C++ implementation file maps to a similarly named Rust
+  file that owns the same class or narrowly coupled responsibility. A large
+  parent module may declare modules, expose shared types, coordinate complete
+  owner families, and re-export stable public APIs; it may not accumulate the
+  bodies of unrelated C++ classes. When a port touches an owner currently
+  buried in `artboard.rs`, `animation.rs`, `draw.rs`, or `state_machine.rs`,
+  move that owner into its corresponding file before or alongside the semantic
+  translation. Prefer a separate behavior-preserving move commit when it makes
+  review clearer. Update both mechanical correspondence ledgers with the exact
+  Rust path. Tiny generated helpers or code that the pinned C++ source itself
+  keeps inseparable may remain shared, but the mapping must explain the
+  exception in plain language. This rule is incremental: do not launch a
+  whole-runtime file shuffle or delay the dependency-ready owner family.
+- **FLR-17 Move shared-definition scratch to the occurrence, preserving its
+  exact shape and read/write order.** Pinned C++ sometimes stores temporary
+  evaluation state on an authored definition even though multiple runtime
+  instances can share it. Safe Rust may move that scratch to the owning
+  occurrence to remove the data race, but it must retain the exact serialized
+  width, authored index order, reset/write sites, and second-pass read order;
+  it may not allocate a replacement candidate collection on every call or
+  change selection semantics. `StateTransition::evaluatedRandomWeight` is
+  therefore one reusable `Vec<u32>` on `StateMachineLayerInstance`, indexed
+  exactly like the retained transition vector
+  (`src/animation/state_machine_instance.cpp:412-468`;
+  `include/rive/animation/state_transition.hpp:38-43`).
+- **FLR-18 Serialize process-global C runtime state instead of localizing it.**
+  When pinned C++ deliberately uses one process-global C facility, safe Rust
+  retains that global identity and call order behind synchronization; it does
+  not create one generator per occurrence. `RandomProvider` remains one
+  process-global `rand`/`srand` provider. On C-runtime targets
+  `math/random/native.rs` calls platform `rand`/`srand` directly and seeds it
+  from the platform standard library's actual `high_resolution_clock`
+  source: Apple libc++ uses `CLOCK_MONOTONIC_RAW`; pinned Rive's default
+  Linux clang build uses libstdc++, where `high_resolution_clock` aliases
+  `system_clock`, so Linux uses `CLOCK_REALTIME`; Android/WASI and other
+  Unix libc++ targets use `CLOCK_MONOTONIC`; and Windows mirrors libc++'s
+  `QueryPerformanceCounter` integer conversion. Rust `SystemTime` and manual
+  Unix-epoch arithmetic are forbidden because they silently select a
+  different implementation on Apple. Supported operating systems guarantee
+  those clocks; if the platform API nevertheless fails,
+  Rust uses deterministic seed `1` instead of unwinding through an
+  embedder/FFI boundary. `panic!`, `unwrap`, and `expect` are forbidden in the
+  native adapter. The browser Rust
+  target is `wasm32-unknown-unknown` and has no libc `rand` exports, while the
+  pinned C++ build selects Emscripten 3.1.61. Therefore
+  `math/random/wasm.rs` reproduces that pinned toolchain's process-global musl
+  generator exactly (`seed = s - 1` at C `unsigned` width before widening,
+  wrapping multiplier `6364136223846793005`, result `seed >> 33`, and
+  `RAND_MAX = 0x7fffffff`) rather than substituting a JavaScript or Rust
+  generator. Its ordinary seed mirrors Emscripten's
+  `high_resolution_clock` path: `performance.now()` milliseconds multiplied
+  by `1000` twice in the same left-associated order, rounded to nanoseconds,
+  and narrowed to C++ `unsigned int`. The process-global
+  deterministic-mode switch selects seed `1`; ordinary mode narrows a current
+  nanosecond clock to C++'s `unsigned int` width. A mutex removes C++'s data
+  races while retaining one serialized production stream and the same
+  per-layer reseed boundary. C++ oracle processes are isolated, whereas Rust
+  integration cases share one parallel test process, so the counted TESTING
+  FIFO is a scoped, serialized, installing-thread harness adaptation: each
+  differential retains the exact FIFO/call-count/exhausted-zero behavior, and
+  dropping its guard cannot poison a later or concurrent test
+  (`include/rive/math/random.hpp:13-51`; `src/math/random.cpp:8-15`;
+  `src/animation/state_machine_instance.cpp:150-167,376,412-468`;
+  `build/build_rive.sh:277-287`;
+  [Emscripten 3.1.61 `rand.c`](https://github.com/emscripten-core/emscripten/blob/3.1.61/system/lib/libc/musl/src/prng/rand.c);
+  [Emscripten 3.1.61 clock shim](https://github.com/emscripten-core/emscripten/blob/3.1.61/src/library_wasi.js#L145-L165)).
+- **FLR-19 Determinize only order that C++ leaves unspecified.** When a C++
+  lifecycle pass visits an `unordered_map`, Rust may use a stable order, but
+  that order is an adaptation rather than authored-order behavior. Preserve
+  the exact key identity, membership, one visit per key, and every phase
+  barrier around the pass; never write a behavioral differential whose result
+  depends on the C++ map's relative key order. State-machine ScriptedObjects
+  are cloned from the authored vector, then stored by source-pointer identity.
+  The live-context pass reaches every retained wrapper before the init pass
+  starts, while relative order within each unordered-map pass is unspecified.
+  Rust uses the authored-first unique definition order for deterministic
+  visitation and keeps the context-install and init passes separate
+  (`include/rive/animation/state_machine_instance.hpp:399-402`;
+  `src/animation/state_machine_instance.cpp:2072-2082,2886-2913`).

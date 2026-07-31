@@ -5295,10 +5295,10 @@ follow-up `#12` slices.
 
 Current #12 update: artboard-owned list-consumer binding now has an explicit
 direct-update boundary. After binding the default artboard view-model context,
-direct `Artboard::updateDataBinds(true)` preserves the immediate empty
-`ArtboardComponentList` target-list report for direct list sources and direct
-`DataConverterNumberToList` sources; it does not perform the post-bind
-target-count mutation. The contract is
+provenance-bound pinned-C++ `d788e8ec` direct
+`Artboard::updateDataBinds(true)` applies the `ArtboardComponentList`
+target-list count for direct list sources and direct
+`DataConverterNumberToList` sources. The contract is
 `docs/prototypes/data-binding-graph-artboard-list-direct-update-boundary-runtime-contract.md`.
 
 Current #12 update: artboard-owned list-consumer binding now also covers the
@@ -5307,8 +5307,8 @@ view-model context, a zero-second public `Artboard::advance(0.0f)` updates the
 exact `ArtboardComponentList` target list count for direct list sources and
 direct `DataConverterNumberToList` sources. Rust mirrors that through
 `ArtboardInstance::advance_artboard_data_binds()`, while direct
-`Artboard::updateDataBinds(true)` is covered separately as a no-target-count
-boundary. The contract is
+`Artboard::updateDataBinds(true)` is covered separately at the same applied
+target-count boundary. The contract is
 `docs/prototypes/data-binding-graph-artboard-list-advance-target-count-runtime-contract.md`.
 Child artboard clone surfaces, item identity reuse/disposal, map-rule-driven
 child creation, list layout/virtualization, target-to-source list behavior,

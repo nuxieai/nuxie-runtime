@@ -1601,11 +1601,14 @@ mod tests {
         let two_draws = work(&[&left, &right]);
         let third_slot = work(&[&left]);
         let reused_slot = work(&[&left]);
-        // The second path needs one more tessellation pass, but reuses the
-        // flush-wide borrowed and main CWA passes. Coverage is retained on its
-        // own frame slot. Upload counters report the actual aligned staging
-        // copy commands rather than aggregate destination-page occupancy.
-        assert_eq!((one_draw.render_passes, two_draws.render_passes), (4, 5));
+        // C++ RenderContextWebGPUImpl never reaches its clockwiseAtomic
+        // interlock mode, so ClockwiseAtomic frames route through the generic
+        // atomic architecture. The second path shares the frame's tessellation
+        // and atomic passes and packs into the same staging pages: no new
+        // render passes or upload commands, only more uploaded bytes. Upload
+        // counters report the actual aligned staging copy commands rather than
+        // aggregate destination-page occupancy.
+        assert_eq!((one_draw.render_passes, two_draws.render_passes), (3, 3));
         assert_eq!(
             [
                 one_draw.buffer_upload_calls,
@@ -1613,7 +1616,7 @@ mod tests {
                 third_slot.buffer_upload_calls,
                 reused_slot.buffer_upload_calls,
             ],
-            [5, 6, 5, 5]
+            [5; 4]
         );
         assert_eq!(
             [
@@ -1622,10 +1625,11 @@ mod tests {
                 third_slot.buffer_upload_bytes,
                 reused_slot.buffer_upload_bytes,
             ],
-            [1_504, 2_368, 1_504, 1_504]
+            [1_504, 2_176, 1_504, 1_504]
         );
-        // The first traversal allocates and clears all three ring slots. The
-        // fourth frame reuses slot zero with a new prefix and no physical clear.
+        // The retained CWA coverage ring and its generation-wrap clears are
+        // unreachable alongside the interlock mode; the generic atomic route
+        // records no buffer clear commands on any frame.
         assert_eq!(
             [
                 one_draw.buffer_clear_calls,
@@ -1633,7 +1637,7 @@ mod tests {
                 third_slot.buffer_clear_calls,
                 reused_slot.buffer_clear_calls,
             ],
-            [1, 1, 1, 0]
+            [0; 4]
         );
         assert_eq!(
             [
@@ -1642,7 +1646,7 @@ mod tests {
                 third_slot.buffer_clear_bytes,
                 reused_slot.buffer_clear_bytes,
             ],
-            [655_360, 1_310_720, 655_360, 0]
+            [0; 4]
         );
         assert_eq!(
             [

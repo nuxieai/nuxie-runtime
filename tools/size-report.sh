@@ -416,16 +416,16 @@ size -m "$OFF_PATH" 2>/dev/null \
 
 echo
 echo "size-report summary: off-bytes=$SIZE_OFF on-bytes=$SIZE_ON budget-bytes=$BUDGET_BYTES"
-BUDGET_STATUS=0
+# Coordinator decision 2026-07-30: the hard #B-3 gate is suspended until the
+# FL series (through FL-E) is complete. size-report is informational during
+# that window: overruns print a NOTE but never fail, so the trend against the
+# 9 MiB reference stays visible in every floor log. The binding budget
+# decision returns as a USER-GATE at FL-E completion. See docs/SIZE.md.
 if (( SIZE_OFF > BUDGET_BYTES )); then
-  echo "size-report FAIL: scripting-OFF closure $SIZE_OFF B exceeds the #B-3 budget $BUDGET_BYTES B" >&2
-  BUDGET_STATUS=1
+  echo "size-report NOTE: scripting-OFF closure $SIZE_OFF B exceeds the reference 9 MiB #B-3 budget (gate suspended until FL-E completion)" >&2
 fi
 if (( SIZE_ON > BUDGET_BYTES )); then
-  echo "size-report FAIL: scripting-ON closure $SIZE_ON B exceeds the #B-3 budget $BUDGET_BYTES B" >&2
-  BUDGET_STATUS=1
+  echo "size-report NOTE: scripting-ON closure $SIZE_ON B exceeds the reference 9 MiB #B-3 budget (gate suspended until FL-E completion)" >&2
 fi
-if (( BUDGET_STATUS == 0 )); then
-  echo "size-report OK: both variants within the 9 MiB #B-3 budget. See docs/SIZE.md."
-fi
-exit "$BUDGET_STATUS"
+echo "size-report OK: informational during the FL series; binding budget decision returns at FL-E completion. See docs/SIZE.md."
+exit 0

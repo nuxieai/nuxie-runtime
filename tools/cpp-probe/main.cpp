@@ -28,9 +28,12 @@ void addRandomProviderValue(float value);
 size_t randomProviderTotalCalls();
 } // namespace rive_probe
 
+#define private public
 #define protected public
 #include "rive/component.hpp"
 #undef protected
+#undef private
+#include "rive/advancing_component.hpp"
 #define protected public
 #include "rive/drawable.hpp"
 #undef protected
@@ -54,9 +57,11 @@ size_t randomProviderTotalCalls();
 #define private public
 #include "rive/artboard_component_list.hpp"
 #undef private
+#define private public
 #define protected public
 #include "rive/artboard.hpp"
 #undef protected
+#undef private
 #include "rive/container_component.hpp"
 #include "rive/animation/blend_animation.hpp"
 #include "rive/animation/blend_state.hpp"
@@ -67,12 +72,19 @@ size_t randomProviderTotalCalls();
 #include "rive/animation/keyed_callback_reporter.hpp"
 #include "rive/animation/keyed_property.hpp"
 #include "rive/animation/keyframe.hpp"
+#define private public
+#include "rive/animation/animation_reset.hpp"
+#undef private
 #include "rive/animation/animation_state.hpp"
 #include "rive/animation/layer_state.hpp"
 #include "rive/animation/linear_animation.hpp"
 #include "rive/animation/linear_animation_instance.hpp"
 #include "rive/animation/listener_action.hpp"
 #include "rive/animation/listener_fire_event.hpp"
+#include "rive/animation/nested_input.hpp"
+#include "rive/animation/nested_remap_animation.hpp"
+#include "rive/animation/nested_simple_animation.hpp"
+#include "rive/animation/nested_state_machine.hpp"
 #include "rive/animation/listener_types/listener_input_type.hpp"
 #include "rive/animation/listener_types/listener_input_type_viewmodel.hpp"
 #include "rive/animation/scripted_listener_action.hpp"
@@ -82,15 +94,23 @@ size_t randomProviderTotalCalls();
 #include "rive/animation/state_machine_fire_event.hpp"
 #include "rive/animation/state_machine_layer_component.hpp"
 #include "rive/animation/state_machine_component.hpp"
+#include "rive/animation/state_machine_bool.hpp"
 #include "rive/animation/state_machine_input.hpp"
 #include "rive/animation/state_machine_input_instance.hpp"
 #include "rive/animation/state_machine_layer.hpp"
 #include "rive/animation/state_machine_listener.hpp"
 #include "rive/animation/state_machine_listener_single.hpp"
+#include "rive/animation/state_machine_number.hpp"
 #include "rive/animation/state_machine.hpp"
 #include "rive/animation/state_machine_instance.hpp"
+#include "rive/animation/state_machine_trigger.hpp"
 #include "rive/animation/state_transition.hpp"
 #include "rive/animation/transition_condition.hpp"
+#define private public
+#define protected public
+#include "rive/animation/transition_viewmodel_condition.hpp"
+#undef protected
+#undef private
 #include "rive/assets/file_asset.hpp"
 #include "rive/assets/library_asset.hpp"
 #include "rive/bones/skin.hpp"
@@ -108,6 +128,7 @@ size_t randomProviderTotalCalls();
 #include "rive/generated/data_bind/converters/data_converter_formula_base.hpp"
 #include "rive/data_bind/data_values/data_value_number.hpp"
 #include "rive/viewmodel/viewmodel_instance_value.hpp"
+#include "rive/viewmodel/viewmodel_instance_viewmodel.hpp"
 #include "rive/viewmodel/viewmodel_value_dependent.hpp"
 #include "rive/viewmodel/symbol_type.hpp"
 #define protected public
@@ -147,6 +168,8 @@ size_t randomProviderTotalCalls();
 #include "rive/data_bind/converters/data_converter_trigger.hpp"
 #include "rive/data_bind/data_bind.hpp"
 #include "rive/data_bind_flags.hpp"
+#include "rive/importers/state_machine_importer.hpp"
+#include "rive/node.hpp"
 #include "rive/data_bind/bindable_property_list.hpp"
 #include "rive/data_bind/data_bind_list_item_consumer.hpp"
 #include "rive/data_bind/bindable_property_artboard.hpp"
@@ -197,6 +220,13 @@ size_t randomProviderTotalCalls();
 #include "rive/scripted/scripted_object.hpp"
 #include "rive/scripted/scripted_data_converter.hpp"
 #include "rive/scripted/scripted_path_effect.hpp"
+#include "rive/script_input_artboard.hpp"
+#include "rive/script_input_boolean.hpp"
+#include "rive/script_input_color.hpp"
+#include "rive/script_input_number.hpp"
+#include "rive/script_input_string.hpp"
+#include "rive/script_input_trigger.hpp"
+#include "rive/script_input_viewmodel_property.hpp"
 #include "rive/bones/weight.hpp"
 #include "rive/shapes/clipping_shape.hpp"
 #include "rive/shapes/mesh.hpp"
@@ -254,14 +284,33 @@ size_t randomProviderTotalCalls();
 #include "rive/viewmodel/viewmodel_property_enum.hpp"
 #include "rive/viewmodel/viewmodel_property.hpp"
 #include "rive/viewmodel/viewmodel_property_viewmodel.hpp"
-#include "rive/script_input_viewmodel_property.hpp"
 #include "rive/transform_component.hpp"
 #include "rive/world_transform_component.hpp"
+#ifdef WITH_RIVE_SCRIPTING
+#include "rive/lua/rive_lua_libs.hpp"
+#endif
 #include "utils/no_op_factory.hpp"
 
 namespace
 {
 using LocalIds = std::unordered_map<const rive::Core*, size_t>;
+
+class PersistentDirtProbeComponent final : public rive::Component,
+                                           public rive::AdvancingComponent
+{
+public:
+    size_t advanceCount = 0;
+    size_t updateCount = 0;
+
+    void update(rive::ComponentDirt) override { ++updateCount; }
+
+    bool advanceComponent(float, rive::AdvanceFlags) override
+    {
+        ++advanceCount;
+        addDirt(rive::ComponentDirt::WorldTransform);
+        return true;
+    }
+};
 
 struct RuntimeDoubleMutation
 {
@@ -296,6 +345,12 @@ struct RuntimeAnimationAdvance
     float mix;
 };
 
+struct RuntimeAnimationLoopValueMutation
+{
+    size_t animationIndex;
+    int value;
+};
+
 struct RuntimeStateMachineReportedEventReport
 {
     bool hasEvent;
@@ -304,6 +359,92 @@ struct RuntimeStateMachineReportedEventReport
     int coreType;
     std::string name;
     float secondsDelay;
+};
+
+bool firstNodeX(rive::ArtboardInstance* artboard, float* value)
+{
+    if (artboard == nullptr || value == nullptr)
+    {
+        return false;
+    }
+    for (auto object : artboard->objects())
+    {
+        if (object != nullptr && object->coreType() == rive::Node::typeKey)
+        {
+            *value = object->as<rive::Node>()->x();
+            return true;
+        }
+    }
+    for (auto nested : artboard->nestedArtboards())
+    {
+        if (nested != nullptr &&
+            firstNodeX(nested->artboardInstance(), value))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool firstNestedNodeX(rive::NestedArtboard* nestedArtboard, float* value)
+{
+    if (nestedArtboard == nullptr)
+    {
+        return false;
+    }
+    return firstNodeX(nestedArtboard->artboardInstance(), value);
+}
+
+class RuntimeNestedEventRecorder final : public rive::NestedEventListener
+{
+public:
+    void notify(const std::vector<rive::EventReport>& events,
+                rive::NestedArtboard* nestedArtboard) override
+    {
+        float preMixNodeX = 0.0f;
+        if (firstNestedNodeX(nestedArtboard, &preMixNodeX))
+        {
+            m_preMixNodeXs.push_back(preMixNodeX);
+        }
+        std::vector<RuntimeStateMachineReportedEventReport> batch;
+        for (const auto& eventReport : events)
+        {
+            auto event = eventReport.event();
+            RuntimeStateMachineReportedEventReport reportedEvent;
+            reportedEvent.hasEvent = event != nullptr;
+            reportedEvent.hasEventLocal = false;
+            reportedEvent.eventLocal = 0;
+            reportedEvent.coreType = event == nullptr ? 0 : event->coreType();
+            reportedEvent.name = event == nullptr ? "" : event->name();
+            reportedEvent.secondsDelay = eventReport.secondsDelay();
+            batch.push_back(reportedEvent);
+            m_reportedEvents.push_back(std::move(reportedEvent));
+        }
+        m_notifyBatches.push_back(std::move(batch));
+    }
+
+    const std::vector<RuntimeStateMachineReportedEventReport>& reportedEvents()
+        const
+    {
+        return m_reportedEvents;
+    }
+
+    const std::vector<std::vector<RuntimeStateMachineReportedEventReport>>&
+    notifyBatches() const
+    {
+        return m_notifyBatches;
+    }
+
+    const std::vector<float>& preMixNodeXs() const
+    {
+        return m_preMixNodeXs;
+    }
+
+private:
+    std::vector<RuntimeStateMachineReportedEventReport> m_reportedEvents;
+    std::vector<std::vector<RuntimeStateMachineReportedEventReport>>
+        m_notifyBatches;
+    std::vector<float> m_preMixNodeXs;
 };
 
 struct RuntimeAnimationAdvanceReport
@@ -327,12 +468,19 @@ struct RuntimeAnimationAdvanceReport
 enum class RuntimeStateMachineActionKind
 {
     Advance,
+    AdvanceAndApply,
+    AdvanceAndApplyPersistentDirt,
+    SnapshotNamedInputs,
+    SnapshotStateMachineScripts,
+    UpdateArtboardPass,
+    ResetArtboard,
     PointerDown,
     PointerUp,
     AdvanceDataContext,
     UpdateDataBindsApplyTargetToSource,
     SetBool,
     SetNumber,
+    SetObjectString,
     SetBindableNumber,
     SetBindableInteger,
     SetBindableColor,
@@ -367,6 +515,7 @@ enum class RuntimeStateMachineActionKind
     SetViewModelInstanceSourceNumber,
     SetViewModelInstanceSourceNumberByName,
     SetOwnedViewModelSourceNumber,
+    AdvanceThenSetOwnedViewModelSourceNumberByName,
     SetOwnedViewModelSourceBoolean,
     SetViewModelInstanceSourceBoolean,
     SetViewModelInstanceSourceBooleanByName,
@@ -401,7 +550,13 @@ enum class RuntimeStateMachineActionKind
     RelinkViewModelInstanceSourceViewModelByNamePath,
     BindEmptyContext,
     BindDefaultViewModelContext,
+    BindCreatedDefaultViewModelContext,
     BindViewModelInstanceContext,
+    BindNullViewModelInstanceContext,
+    SetViewModelInstanceContext,
+    InheritViewModelInstanceContext,
+    SetGlobalViewModelInstanceContext,
+    CompleteViewModelInstances,
     BindOwnedViewModelNumberContext,
     BindOwnedViewModelNumberNamePathContext,
     BindOwnedViewModelImportedIntermediateNumberNamePathContext,
@@ -427,6 +582,7 @@ enum class RuntimeStateMachineActionKind
     BindOwnedViewModelArtboardNamePathContext,
     BindOwnedViewModelImportedIntermediateArtboardNamePathContext,
     BindOwnedViewModelViewModelDefaultContext,
+    BindOwnedViewModelNullViewModelContext,
     BindOwnedViewModelViewModelContext,
     BindOwnedViewModelNestedViewModelContext,
     BindOwnedViewModelDeepViewModelContext,
@@ -437,6 +593,8 @@ enum class RuntimeStateMachineActionKind
     BindOwnedViewModelImportedIntermediateTriggerNamePathContext,
     BindOwnedViewModelListNamePathContext,
     BindOwnedViewModelImportedIntermediateListNamePathContext,
+    SetOwnedViewModelSourceBooleanByName,
+    FireOwnedViewModelTriggerByName,
     FireTrigger,
 };
 
@@ -481,6 +639,14 @@ struct RuntimeStateMachineViewModelBindingReport
     bool hasTarget;
     size_t targetViewModelIndex;
     size_t targetInstanceIndex;
+};
+
+struct RuntimeStateMachineGlobalSlotReport
+{
+    size_t slotViewModelIndex;
+    bool hasInstance;
+    size_t instanceViewModelIndex;
+    size_t instanceIndex;
 };
 
 struct RuntimeStateMachineNumberBindingReport
@@ -575,18 +741,184 @@ struct RuntimeStateMachineListBindingReport
     uint32_t targetValue;
 };
 
+struct RuntimeScriptedInputReport
+{
+    size_t index = 0;
+    uint16_t sourceCoreType = 0;
+    std::string sourceName;
+    bool occurrencePresent = false;
+    uint16_t occurrenceCoreType = 0;
+    std::string occurrenceName;
+    bool distinctClone = false;
+    bool hasSourceInputOrdinal = false;
+    size_t sourceInputOrdinal = 0;
+    bool hasOccurrenceInputOrdinal = false;
+    size_t occurrenceInputOrdinal = 0;
+    bool backpointerMatchesOccurrence = false;
+    bool sourceBindPresent = false;
+    bool bindPresent = false;
+    bool hasBindCollectionIndex = false;
+    size_t bindCollectionIndex = 0;
+    bool bindDistinctFromSource = false;
+    bool hasSourceBindOrdinal = false;
+    size_t sourceBindOrdinal = 0;
+    bool hasOccurrenceBindOrdinal = false;
+    size_t occurrenceBindOrdinal = 0;
+    uint32_t bindFlags = 0;
+    bool bindTargetIsClone = false;
+    bool hasFinalBindIndex = false;
+    size_t finalBindIndex = 0;
+    std::string valueKind;
+    bool hasBooleanValue = false;
+    bool booleanValue = false;
+    bool hasNumberValue = false;
+    float numberValue = 0.0f;
+    bool hasStringValue = false;
+    std::string stringValue;
+    bool hasColorValue = false;
+    uint32_t colorValue = 0;
+    bool hasTriggerValue = false;
+    uint32_t triggerValue = 0;
+    bool hasArtboardId = false;
+    uint32_t artboardId = 0;
+    bool hasReferencedArtboardId = false;
+    int referencedArtboardId = 0;
+    std::vector<uint32_t> viewModelPathIds;
+    std::vector<uint32_t> viewModelResolvedPathIds;
+    bool hasViewModelPathIsRelative = false;
+    bool viewModelPathIsRelative = false;
+    bool hasBoundViewModelInstanceOrdinal = false;
+    size_t boundViewModelInstanceOrdinal = 0;
+};
+
+struct RuntimeScriptedDataBindReport
+{
+    size_t index = 0;
+    bool sourcePresent = false;
+    bool occurrencePresent = false;
+    uint16_t sourceCoreType = 0;
+    uint16_t occurrenceCoreType = 0;
+    uint16_t coreType = 0;
+    uint32_t sourceFlags = 0;
+    uint32_t flags = 0;
+    uint32_t sourcePropertyKey = 0;
+    uint32_t propertyKey = 0;
+    uint32_t sourceConverterId = 0;
+    uint32_t converterId = 0;
+    std::vector<uint32_t> sourcePathIds;
+    std::vector<uint32_t> occurrencePathIds;
+    bool distinctClone = false;
+    bool hasSourceBindOrdinal = false;
+    size_t sourceBindOrdinal = 0;
+    bool hasOccurrenceBindOrdinal = false;
+    size_t occurrenceBindOrdinal = 0;
+    bool hasTargetInputIndex = false;
+    size_t targetInputIndex = 0;
+    bool targetIsOccurrenceInput = false;
+    bool isFinalForTarget = false;
+};
+
+struct RuntimeStateMachineScriptedObjectReport
+{
+    size_t sourceIndex = 0;
+    uint16_t sourceCoreType = 0;
+    bool occurrencePresent = false;
+    bool occurrenceDistinctFromSource = false;
+    bool hasOccurrenceOrdinal = false;
+    size_t occurrenceOrdinal = 0;
+    bool hasSourceTableOrdinal = false;
+    size_t sourceTableOrdinal = 0;
+    bool hasOccurrenceTableOrdinal = false;
+    size_t occurrenceTableOrdinal = 0;
+    bool hasDataContext = false;
+    bool dataContextMatchesStateMachine = false;
+    bool userLuaInitDone = false;
+    bool hasScriptAsset = false;
+    uint32_t assetSerializedImplementedMethods = 0;
+    int definitionImplementedMethods = 0;
+    int occurrenceImplementedMethods = 0;
+    size_t definitionInputCount = 0;
+    size_t occurrenceInputCount = 0;
+    bool hasProbeTrace = false;
+    std::vector<std::string> probeTrace;
+    std::vector<RuntimeScriptedInputReport> inputs;
+};
+
+struct RuntimeStateMachineScriptedConverterReport
+{
+    size_t parentBindIndex = 0;
+    std::vector<size_t> converterPath;
+    uint32_t converterId = 0;
+    bool definitionPresent = false;
+    bool occurrencePresent = false;
+    uint16_t definitionCoreType = 0;
+    uint16_t occurrenceCoreType = 0;
+    bool hasOccurrenceOrdinal = false;
+    size_t occurrenceOrdinal = 0;
+    bool occurrenceDistinctFromDefinition = false;
+    bool hasDefinitionTableOrdinal = false;
+    size_t definitionTableOrdinal = 0;
+    bool hasOccurrenceTableOrdinal = false;
+    size_t occurrenceTableOrdinal = 0;
+    bool hasDataContext = false;
+    bool dataContextMatchesStateMachine = false;
+    bool userLuaInitDone = false;
+    bool hasScriptAsset = false;
+    uint32_t assetSerializedImplementedMethods = 0;
+    int definitionImplementedMethods = 0;
+    int occurrenceImplementedMethods = 0;
+    size_t definitionInputCount = 0;
+    size_t occurrenceInputCount = 0;
+    size_t definitionDataBindCount = 0;
+    size_t occurrenceDataBindCount = 0;
+    bool hasProbeTrace = false;
+    std::vector<std::string> probeTrace;
+    std::vector<RuntimeScriptedInputReport> inputs;
+    std::vector<RuntimeScriptedDataBindReport> dataBinds;
+};
+
 struct RuntimeStateMachineAdvanceReport
 {
     size_t stateMachineIndex;
     float seconds;
+    bool needsAdvanceBefore;
     bool advanced;
+    bool persistentDirtProbe = false;
+    size_t persistentDirtAdvanceCount = 0;
+    size_t persistentDirtUpdateCount = 0;
+    bool persistentDirtRemaining = false;
+    bool namedInputProbe = false;
+    int namedBoolInputIndex = -1;
+    int namedNumberInputIndex = -1;
+    int namedTriggerInputIndex = -1;
+    bool pointerInputProbe = false;
+    int pointerHitResult = -1;
     size_t currentAnimationCount;
     size_t changedStateCount;
+    std::vector<uint16_t> changedStateCoreTypes;
     size_t randomTotalCalls;
+    std::vector<std::pair<size_t, bool>> boolInputs;
     std::vector<RuntimeStateMachineCurrentAnimationReport> currentAnimations;
     std::vector<RuntimeStateMachineReportedEventReport> reportedEvents;
+    struct NestedReportedEvents
+    {
+        size_t localId;
+        std::vector<RuntimeStateMachineReportedEventReport> reportedEvents;
+        std::vector<std::vector<RuntimeStateMachineReportedEventReport>>
+            notifyBatches;
+        std::vector<float> preMixNodeXs;
+        bool hasMixedNodeX;
+        float mixedNodeX;
+    };
+    std::vector<NestedReportedEvents> nestedReportedEvents;
     std::vector<RuntimeStateMachineViewModelTriggerReport> viewModelTriggers;
     std::vector<RuntimeStateMachineViewModelBindingReport> viewModelBindings;
+    bool hasDataContext = false;
+    bool hasMainViewModelInstance = false;
+    size_t mainViewModelIndex = 0;
+    size_t mainViewModelInstanceIndex = 0;
+    std::vector<size_t> inheritedDataContextDependentCounts;
+    std::vector<RuntimeStateMachineGlobalSlotReport> globalViewModelSlots;
     std::vector<RuntimeStateMachineNumberBindingReport> numberBindings;
     std::vector<RuntimeStateMachineBooleanBindingReport> booleanBindings;
     std::vector<RuntimeStateMachineStringBindingReport> stringBindings;
@@ -598,6 +930,11 @@ struct RuntimeStateMachineAdvanceReport
     std::vector<RuntimeStateMachineArtboardBindingReport> artboardBindings;
     std::vector<RuntimeStateMachineTriggerBindingReport> triggerBindings;
     std::vector<RuntimeStateMachineListBindingReport> listBindings;
+    std::vector<RuntimeStateMachineScriptedObjectReport> scriptedObjects;
+    std::vector<RuntimeStateMachineScriptedObjectReport>
+        artboardScriptedObjects;
+    std::vector<RuntimeStateMachineScriptedConverterReport>
+        scriptedConverters;
 };
 
 struct RuntimeViewModelInstanceStringMutation
@@ -676,6 +1013,8 @@ struct ProbeOptions
     std::vector<RuntimeCollapseMutation> runtimeCollapseMutations;
     std::vector<RuntimeArtboardSizeMutation> runtimeArtboardSizeMutations;
     std::vector<RuntimeAnimationApplication> runtimeAnimationApplications;
+    std::vector<RuntimeAnimationLoopValueMutation>
+        runtimeAnimationLoopValueMutations;
     std::vector<RuntimeAnimationAdvance> runtimeAnimationAdvances;
     std::vector<RuntimeStateMachineAction> runtimeStateMachineActions;
     std::vector<RuntimeViewModelInstanceStringMutation>
@@ -717,7 +1056,17 @@ rive::rcp<rive::File> open_file(const char* path, rive::ImportResult* result)
 {
     std::vector<uint8_t> bytes = read_bytes(path);
     static rive::NoOpFactory factory;
+#ifdef WITH_RIVE_SCRIPTING
+    auto scripting_context =
+        std::make_unique<rive::CPPRuntimeScriptingContext>(&factory);
+    scripting_context->setRenderContext(&factory);
+    auto scripting_vm =
+        rive::make_rcp<rive::ScriptingVM>(std::move(scripting_context));
+    return rive::File::import(
+        bytes, &factory, result, nullptr, scripting_vm.get());
+#else
     return rive::File::import(bytes, &factory, result);
+#endif
 }
 
 void write_json_string(std::ostream& out, const std::string& value)
@@ -822,7 +1171,6 @@ void write_component_fields(std::ostream& out,
     out << ",\"parentId\":" << component->parentId();
     out << ",\"parentLocal\":";
     write_local_id_or_null(out, localIds, component->parent());
-    out << ",\"graphOrder\":" << component->graphOrder();
     out << ",\"childrenLocal\":[";
     if (component->is<rive::ContainerComponent>())
     {
@@ -899,7 +1247,8 @@ void write_component_fields(std::ostream& out,
 
 void write_runtime_update_component(std::ostream& out,
                                     const LocalIds& localIds,
-                                    const rive::Component* component)
+                                    const rive::Component* component,
+                                    bool scheduled)
 {
     auto itr = localIds.find(component);
     if (itr == localIds.end())
@@ -910,7 +1259,16 @@ void write_runtime_update_component(std::ostream& out,
 
     out << "{\"localId\":" << itr->second;
     out << ",\"coreType\":" << component->coreType();
-    out << ",\"graphOrder\":" << component->graphOrder();
+    out << ",\"graphOrder\":";
+    if (scheduled)
+    {
+        out << component->graphOrder();
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"scheduled\":" << (scheduled ? "true" : "false");
     out << ",\"dirt\":" << static_cast<unsigned int>(component->m_Dirt);
     out << ",\"collapsed\":"
         << (component->isCollapsed() ? "true" : "false");
@@ -945,6 +1303,98 @@ void write_runtime_update_component(std::ostream& out,
     out << '}';
 }
 
+void write_nested_state_machine(std::ostream& out,
+                                size_t localId,
+                                rive::NestedStateMachine* nested)
+{
+    const bool hasInstance = nested->stateMachineInstance() != nullptr;
+    out << "{\"localId\":" << localId;
+    out << ",\"animationId\":" << nested->animationId();
+    out << ",\"hasInstance\":" << (hasInstance ? "true" : "false");
+    out << ",\"inputCount\":" << nested->inputCount();
+    out << ",\"inputs\":[";
+    for (size_t i = 0; i < nested->inputCount(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        auto input = nested->input(i);
+        out << "{\"index\":" << i;
+        out << ",\"inputId\":";
+        if (input == nullptr)
+        {
+            out << "null";
+        }
+        else
+        {
+            out << input->inputId();
+        }
+        out << ",\"name\":";
+        if (input == nullptr)
+        {
+            out << "null";
+        }
+        else
+        {
+            write_json_string(out, input->name());
+        }
+        out << '}';
+    }
+    out << ']';
+    if (!hasInstance)
+    {
+        const rive::Vec2D point(0.0f, 0.0f);
+        out << ",\"emptyAdvance\":"
+            << (nested->advance(0.0f, true) ? "true" : "false");
+        out << ",\"emptyHitTest\":"
+            << (nested->hitTest(point) ? "true" : "false");
+        out << ",\"emptyPointerDown\":"
+            << (nested->pointerDown(point) == rive::HitResult::none ? "true"
+                                                                    : "false");
+        out << ",\"emptyPointerMove\":"
+            << (nested->pointerMove(point) == rive::HitResult::none ? "true"
+                                                                    : "false");
+        out << ",\"emptyPointerUp\":"
+            << (nested->pointerUp(point) == rive::HitResult::none ? "true"
+                                                                  : "false");
+        out << ",\"emptyPointerExit\":"
+            << (nested->pointerExit(point) == rive::HitResult::none ? "true"
+                                                                    : "false");
+        out << ",\"emptyDragStart\":"
+            << (nested->dragStart(point) == rive::HitResult::none ? "true"
+                                                                  : "false");
+        out << ",\"emptyDragEnd\":"
+            << (nested->dragEnd(point) == rive::HitResult::none ? "true"
+                                                                : "false");
+        out << ",\"emptyTryChangeState\":"
+            << (nested->tryChangeState() ? "true" : "false");
+        nested->bindViewModelInstance(nullptr);
+        nested->dataContext(nullptr);
+        nested->clearDataContext();
+        out << ",\"emptyContextForwardingCompleted\":true";
+    }
+    out << '}';
+}
+
+void write_nested_remap_animation(std::ostream& out,
+                                  size_t localId,
+                                  rive::NestedRemapAnimation* nested)
+{
+    auto animation = nested->animationInstance();
+    out << "{\"localId\":" << localId;
+    out << ",\"animationTime\":";
+    if (animation == nullptr)
+    {
+        out << "null";
+    }
+    else
+    {
+        out << animation->time();
+    }
+    out << '}';
+}
+
 void write_runtime_update(std::ostream& out,
                           const LocalIds& localIds,
                           const std::vector<rive::Core*>& objects,
@@ -968,8 +1418,12 @@ void write_runtime_update(std::ostream& out,
             out << ',';
         }
         first = false;
-        write_runtime_update_component(
-            out, localIds, object->as<rive::Component>());
+        auto* component = object->as<rive::Component>();
+        const bool scheduled =
+            std::find(artboard->m_DependencyOrder.begin(),
+                      artboard->m_DependencyOrder.end(),
+                      component) != artboard->m_DependencyOrder.end();
+        write_runtime_update_component(out, localIds, component, scheduled);
     }
     out << "]}";
 }
@@ -1164,6 +1618,14 @@ std::vector<RuntimeAnimationAdvanceReport> apply_runtime_animation_advances(
         if (animation == nullptr)
         {
             continue;
+        }
+        for (const auto& mutation :
+             options.runtimeAnimationLoopValueMutations)
+        {
+            if (mutation.animationIndex == advance.animationIndex)
+            {
+                animation->loopValue(mutation.value);
+            }
         }
         RuntimeAnimationEventReporter reporter(objects);
         bool advanced = animation->advance(advance.seconds, &reporter);
@@ -2224,6 +2686,755 @@ collect_list_binding_reports(rive::StateMachineInstance* stateMachine)
     return reports;
 }
 
+struct RuntimeScriptSnapshotOrdinals
+{
+    std::unordered_map<const rive::ScriptedObject*, size_t>
+        scriptedObjectOrdinals;
+    std::unordered_map<const void*, size_t> tableOrdinals;
+    std::unordered_map<const rive::CustomProperty*, size_t> inputOrdinals;
+    std::unordered_map<const rive::DataBind*, size_t> dataBindOrdinals;
+    std::unordered_map<const rive::ViewModelInstance*, size_t>
+        viewModelInstanceOrdinals;
+
+    size_t scriptedObjectOrdinal(const rive::ScriptedObject* object)
+    {
+        auto inserted = scriptedObjectOrdinals.emplace(
+            object, scriptedObjectOrdinals.size());
+        return inserted.first->second;
+    }
+
+    bool tableOrdinal(rive::ScriptedObject* object, size_t* ordinal)
+    {
+#ifdef WITH_RIVE_SCRIPTING
+        if (object == nullptr || object->self() == 0 ||
+            object->state() == nullptr)
+        {
+            return false;
+        }
+        auto state = object->state();
+        rive::rive_lua_pushRef(state, object->self());
+        const void* table = lua_topointer(state, -1);
+        rive::rive_lua_pop(state, 1);
+        if (table == nullptr)
+        {
+            return false;
+        }
+        auto inserted = tableOrdinals.emplace(table, tableOrdinals.size());
+        *ordinal = inserted.first->second;
+        return true;
+#else
+        (void)object;
+        (void)ordinal;
+        return false;
+#endif
+    }
+
+    bool inputOrdinal(const rive::CustomProperty* input, size_t* ordinal)
+    {
+        if (input == nullptr)
+        {
+            return false;
+        }
+        auto inserted = inputOrdinals.emplace(input, inputOrdinals.size());
+        *ordinal = inserted.first->second;
+        return true;
+    }
+
+    bool dataBindOrdinal(const rive::DataBind* dataBind, size_t* ordinal)
+    {
+        if (dataBind == nullptr)
+        {
+            return false;
+        }
+        auto inserted =
+            dataBindOrdinals.emplace(dataBind, dataBindOrdinals.size());
+        *ordinal = inserted.first->second;
+        return true;
+    }
+
+    bool boundViewModelInstanceOrdinal(rive::ScriptedObject* object,
+                                       const std::string& inputName,
+                                       size_t* ordinal)
+    {
+#ifdef WITH_RIVE_SCRIPTING
+        if (object == nullptr || object->self() == 0 ||
+            object->state() == nullptr)
+        {
+            return false;
+        }
+        auto state = object->state();
+        rive::rive_lua_pushRef(state, object->self());
+        lua_getfield(state, -1, inputName.c_str());
+        auto scriptedViewModel = static_cast<rive::ScriptedViewModel*>(
+            lua_touserdatatagged(
+                state, -1, rive::ScriptedViewModel::luaTag));
+        auto viewModelInstance =
+            scriptedViewModel == nullptr
+                ? nullptr
+                : scriptedViewModel->viewModelInstance().get();
+        rive::rive_lua_pop(state, 2);
+        if (viewModelInstance == nullptr)
+        {
+            return false;
+        }
+        auto inserted = viewModelInstanceOrdinals.emplace(
+            viewModelInstance, viewModelInstanceOrdinals.size());
+        *ordinal = inserted.first->second;
+        return true;
+#else
+        (void)object;
+        (void)inputName;
+        (void)ordinal;
+        return false;
+#endif
+    }
+};
+
+size_t find_data_bind_index(const std::vector<rive::DataBind*>& dataBinds,
+                            const rive::DataBind* needle,
+                            bool* found)
+{
+    for (size_t i = 0; i < dataBinds.size(); ++i)
+    {
+        if (dataBinds[i] == needle)
+        {
+            *found = true;
+            return i;
+        }
+    }
+    *found = false;
+    return 0;
+}
+
+bool find_final_data_bind_for_target(
+    const std::vector<rive::DataBind*>& dataBinds,
+    const rive::Core* target,
+    size_t* index)
+{
+    bool found = false;
+    for (size_t i = 0; i < dataBinds.size(); ++i)
+    {
+        if (dataBinds[i] != nullptr && dataBinds[i]->target() == target)
+        {
+            found = true;
+            *index = i;
+        }
+    }
+    return found;
+}
+
+RuntimeScriptedInputReport collect_scripted_input_report(
+    size_t index,
+    rive::CustomProperty* sourceProperty,
+    rive::CustomProperty* occurrenceProperty,
+    rive::ScriptedObject* occurrenceOwner,
+    const std::vector<rive::DataBind*>& occurrenceDataBinds,
+    RuntimeScriptSnapshotOrdinals* ordinals)
+{
+    RuntimeScriptedInputReport report;
+    report.index = index;
+    report.sourceCoreType =
+        sourceProperty == nullptr ? 0 : sourceProperty->coreType();
+    report.sourceName =
+        sourceProperty == nullptr ? "" : sourceProperty->name();
+    report.occurrencePresent = occurrenceProperty != nullptr;
+    report.occurrenceCoreType =
+        occurrenceProperty == nullptr ? 0 : occurrenceProperty->coreType();
+    report.occurrenceName =
+        occurrenceProperty == nullptr ? "" : occurrenceProperty->name();
+    report.distinctClone =
+        sourceProperty != nullptr && occurrenceProperty != nullptr &&
+        sourceProperty != occurrenceProperty;
+    report.hasSourceInputOrdinal =
+        ordinals->inputOrdinal(sourceProperty, &report.sourceInputOrdinal);
+    report.hasOccurrenceInputOrdinal = ordinals->inputOrdinal(
+        occurrenceProperty, &report.occurrenceInputOrdinal);
+
+    auto sourceInput = sourceProperty == nullptr
+                           ? nullptr
+                           : rive::ScriptInput::from(sourceProperty);
+    auto occurrenceInput = occurrenceProperty == nullptr
+                               ? nullptr
+                               : rive::ScriptInput::from(occurrenceProperty);
+    report.backpointerMatchesOccurrence =
+        occurrenceInput != nullptr &&
+        occurrenceInput->scriptedObject() == occurrenceOwner;
+    auto sourceBind =
+        sourceInput == nullptr ? nullptr : sourceInput->dataBind();
+    auto occurrenceBind =
+        occurrenceInput == nullptr ? nullptr : occurrenceInput->dataBind();
+    report.sourceBindPresent = sourceBind != nullptr;
+    report.bindPresent = occurrenceBind != nullptr;
+    report.bindDistinctFromSource =
+        sourceBind != nullptr && occurrenceBind != nullptr &&
+        sourceBind != occurrenceBind;
+    report.hasSourceBindOrdinal =
+        ordinals->dataBindOrdinal(sourceBind, &report.sourceBindOrdinal);
+    report.hasOccurrenceBindOrdinal = ordinals->dataBindOrdinal(
+        occurrenceBind, &report.occurrenceBindOrdinal);
+    if (occurrenceBind != nullptr)
+    {
+        report.bindFlags = occurrenceBind->flags();
+        report.bindTargetIsClone =
+            occurrenceBind->target() == occurrenceProperty;
+        report.bindCollectionIndex = find_data_bind_index(
+            occurrenceDataBinds,
+            occurrenceBind,
+            &report.hasBindCollectionIndex);
+    }
+    size_t finalBindIndex = 0;
+    report.hasFinalBindIndex = occurrenceProperty != nullptr &&
+                               find_final_data_bind_for_target(
+                                   occurrenceDataBinds,
+                                   occurrenceProperty,
+                                   &finalBindIndex);
+    report.finalBindIndex = finalBindIndex;
+
+    if (occurrenceProperty == nullptr)
+    {
+        return report;
+    }
+    if (occurrenceProperty->is<rive::ScriptInputBoolean>())
+    {
+        report.valueKind = "boolean";
+        report.hasBooleanValue = true;
+        report.booleanValue =
+            occurrenceProperty->as<rive::ScriptInputBoolean>()
+                ->propertyValue();
+    }
+    else if (occurrenceProperty->is<rive::ScriptInputNumber>())
+    {
+        report.valueKind = "number";
+        report.hasNumberValue = true;
+        report.numberValue =
+            occurrenceProperty->as<rive::ScriptInputNumber>()
+                ->propertyValue();
+    }
+    else if (occurrenceProperty->is<rive::ScriptInputString>())
+    {
+        report.valueKind = "string";
+        report.hasStringValue = true;
+        report.stringValue =
+            occurrenceProperty->as<rive::ScriptInputString>()
+                ->propertyValue();
+    }
+    else if (occurrenceProperty->is<rive::ScriptInputColor>())
+    {
+        report.valueKind = "color";
+        report.hasColorValue = true;
+        report.colorValue = static_cast<uint32_t>(
+            occurrenceProperty->as<rive::ScriptInputColor>()
+                ->propertyValue());
+    }
+    else if (occurrenceProperty->is<rive::ScriptInputTrigger>())
+    {
+        report.valueKind = "trigger";
+        report.hasTriggerValue = true;
+        report.triggerValue = occurrenceProperty->as<rive::ScriptInputTrigger>()
+                                  ->propertyValue();
+    }
+    else if (occurrenceProperty->is<rive::ScriptInputArtboard>())
+    {
+        auto artboardInput =
+            occurrenceProperty->as<rive::ScriptInputArtboard>();
+        report.valueKind = "artboard";
+        report.hasArtboardId = true;
+        report.artboardId = artboardInput->artboardId();
+        report.hasReferencedArtboardId = true;
+        report.referencedArtboardId = artboardInput->referencedArtboardId();
+    }
+    else if (occurrenceProperty
+                 ->is<rive::ScriptInputViewModelProperty>())
+    {
+        auto viewModelInput =
+            occurrenceProperty->as<rive::ScriptInputViewModelProperty>();
+        report.valueKind = "viewModelProperty";
+        auto path = viewModelInput->dataBindPath();
+        if (path != nullptr)
+        {
+            report.viewModelPathIds = path->path();
+            report.viewModelResolvedPathIds = path->resolvedPath();
+            report.hasViewModelPathIsRelative = true;
+            report.viewModelPathIsRelative = path->isRelative();
+        }
+        report.hasBoundViewModelInstanceOrdinal =
+            ordinals->boundViewModelInstanceOrdinal(
+                occurrenceOwner,
+                occurrenceProperty->name(),
+                &report.boundViewModelInstanceOrdinal);
+    }
+    else
+    {
+        report.valueKind = "unknown";
+    }
+    return report;
+}
+
+rive::Core* scripted_object_core(rive::ScriptedObject* object)
+{
+    if (object == nullptr)
+    {
+        return nullptr;
+    }
+    switch (object->scriptProtocol())
+    {
+        case rive::ScriptProtocol::listenerAction:
+            return static_cast<rive::ScriptedListenerAction*>(object);
+        case rive::ScriptProtocol::transitionCondition:
+            return static_cast<rive::ScriptedTransitionCondition*>(object);
+        case rive::ScriptProtocol::converter:
+            return static_cast<rive::ScriptedDataConverter*>(object);
+        default:
+            return object->component();
+    }
+}
+
+RuntimeStateMachineScriptedObjectReport collect_scripted_object_report(
+    size_t sourceIndex,
+    rive::ScriptedObject* source,
+    rive::ScriptedObject* occurrence,
+    const std::vector<rive::DataBind*>& occurrenceDataBinds,
+    const rive::DataContext* expectedDataContext,
+    RuntimeScriptSnapshotOrdinals* ordinals)
+{
+    auto sourceCore = scripted_object_core(source);
+    RuntimeStateMachineScriptedObjectReport report;
+    report.sourceIndex = sourceIndex;
+    report.sourceCoreType =
+        sourceCore == nullptr ? 0 : sourceCore->coreType();
+    if (source != nullptr)
+    {
+        report.definitionImplementedMethods =
+            source->implementedMethods();
+        auto scriptAsset = source->scriptAsset();
+        report.hasScriptAsset = scriptAsset != nullptr;
+        report.assetSerializedImplementedMethods =
+            scriptAsset == nullptr
+                ? 0
+                : scriptAsset->serializedImplementedMethods();
+        report.hasSourceTableOrdinal =
+            ordinals->tableOrdinal(source,
+                                   &report.sourceTableOrdinal);
+    }
+    report.occurrencePresent = occurrence != nullptr;
+    report.occurrenceDistinctFromSource =
+        source != nullptr && occurrence != nullptr && source != occurrence;
+    if (occurrence != nullptr)
+    {
+        report.hasOccurrenceOrdinal = true;
+        report.occurrenceOrdinal =
+            ordinals->scriptedObjectOrdinal(occurrence);
+        report.hasOccurrenceTableOrdinal =
+            ordinals->tableOrdinal(occurrence,
+                                   &report.occurrenceTableOrdinal);
+        report.hasDataContext = occurrence->dataContext() != nullptr;
+        report.dataContextMatchesStateMachine =
+            report.hasDataContext &&
+            occurrence->dataContext().get() == expectedDataContext;
+        report.userLuaInitDone = occurrence->userLuaInitDone();
+        report.occurrenceImplementedMethods =
+            occurrence->implementedMethods();
+    }
+    const auto sourceProperties =
+        source == nullptr
+            ? std::vector<rive::CustomProperty*>()
+            : source->customProperties();
+    const auto occurrenceProperties =
+        occurrence == nullptr
+            ? std::vector<rive::CustomProperty*>()
+            : occurrence->customProperties();
+    report.definitionInputCount = sourceProperties.size();
+    report.occurrenceInputCount = occurrenceProperties.size();
+    const auto inputCount =
+        std::max(sourceProperties.size(), occurrenceProperties.size());
+    for (size_t inputIndex = 0; inputIndex < inputCount; ++inputIndex)
+    {
+        report.inputs.push_back(collect_scripted_input_report(
+            inputIndex,
+            inputIndex < sourceProperties.size()
+                ? sourceProperties[inputIndex]
+                : nullptr,
+            inputIndex < occurrenceProperties.size()
+                ? occurrenceProperties[inputIndex]
+                : nullptr,
+            occurrence,
+            occurrenceDataBinds,
+            ordinals));
+    }
+    return report;
+}
+
+std::vector<RuntimeStateMachineScriptedObjectReport>
+collect_scripted_object_reports(rive::StateMachineInstance* stateMachine,
+                                RuntimeScriptSnapshotOrdinals* ordinals)
+{
+    std::vector<RuntimeStateMachineScriptedObjectReport> reports;
+    if (stateMachine == nullptr || stateMachine->stateMachine() == nullptr)
+    {
+        return reports;
+    }
+    const auto occurrenceDataBinds = stateMachine->dataBinds();
+    auto dataContext = stateMachine->dataContext();
+    auto scriptedObjects = stateMachine->stateMachine()->scriptedObjects();
+    for (size_t sourceIndex = 0; sourceIndex < scriptedObjects.size();
+         ++sourceIndex)
+    {
+        auto source = scriptedObjects[sourceIndex];
+        reports.push_back(collect_scripted_object_report(
+            sourceIndex,
+            source,
+            stateMachine->scriptedObject(source),
+            occurrenceDataBinds,
+            dataContext.get(),
+            ordinals));
+    }
+    return reports;
+}
+
+std::vector<RuntimeStateMachineScriptedObjectReport>
+collect_artboard_scripted_object_reports(
+    rive::ArtboardInstance* instance,
+    RuntimeScriptSnapshotOrdinals* ordinals)
+{
+    std::vector<RuntimeStateMachineScriptedObjectReport> reports;
+    if (instance == nullptr || instance->artboardSource() == nullptr)
+    {
+        return reports;
+    }
+    const auto& sourceObjects = instance->artboardSource()->objects();
+    const auto& occurrenceObjects = instance->objects();
+    const auto occurrenceDataBinds = instance->dataBinds();
+    auto dataContext = instance->dataContext();
+    const auto objectCount =
+        std::max(sourceObjects.size(), occurrenceObjects.size());
+    for (size_t sourceIndex = 0; sourceIndex < objectCount; ++sourceIndex)
+    {
+        auto source =
+            sourceIndex < sourceObjects.size()
+                ? rive::ScriptedObject::from(sourceObjects[sourceIndex])
+                : nullptr;
+        auto occurrence =
+            sourceIndex < occurrenceObjects.size()
+                ? rive::ScriptedObject::from(occurrenceObjects[sourceIndex])
+                : nullptr;
+        if (source == nullptr && occurrence == nullptr)
+        {
+            continue;
+        }
+        reports.push_back(collect_scripted_object_report(
+            sourceIndex,
+            source,
+            occurrence,
+            occurrenceDataBinds,
+            dataContext.get(),
+            ordinals));
+    }
+    return reports;
+}
+
+size_t input_index_for_target(
+    const std::vector<rive::CustomProperty*>& inputs,
+    const rive::Core* target,
+    bool* found)
+{
+    for (size_t i = 0; i < inputs.size(); ++i)
+    {
+        if (inputs[i] == target)
+        {
+            *found = true;
+            return i;
+        }
+    }
+    *found = false;
+    return 0;
+}
+
+void collect_scripted_converter_tree_reports(
+    size_t parentBindIndex,
+    uint32_t converterId,
+    const std::vector<size_t>& converterPath,
+    rive::DataConverter* definition,
+    rive::DataConverter* occurrence,
+    rive::StateMachineInstance* stateMachine,
+    RuntimeScriptSnapshotOrdinals* ordinals,
+    std::vector<RuntimeStateMachineScriptedConverterReport>* reports)
+{
+    if (definition == nullptr)
+    {
+        return;
+    }
+    if (definition->is<rive::ScriptedDataConverter>())
+    {
+        auto definitionScripted =
+            definition->as<rive::ScriptedDataConverter>();
+        auto occurrenceScripted =
+            occurrence != nullptr &&
+                    occurrence->is<rive::ScriptedDataConverter>()
+                ? occurrence->as<rive::ScriptedDataConverter>()
+                : nullptr;
+        RuntimeStateMachineScriptedConverterReport report;
+        report.parentBindIndex = parentBindIndex;
+        report.converterPath = converterPath;
+        report.converterId = converterId;
+        report.definitionPresent = true;
+        report.occurrencePresent = occurrenceScripted != nullptr;
+        report.definitionCoreType = definitionScripted->coreType();
+        report.occurrenceCoreType =
+            occurrenceScripted == nullptr ? 0
+                                          : occurrenceScripted->coreType();
+        report.occurrenceDistinctFromDefinition =
+            occurrenceScripted != nullptr &&
+            occurrenceScripted != definitionScripted;
+        report.hasDefinitionTableOrdinal =
+            ordinals->tableOrdinal(definitionScripted,
+                                   &report.definitionTableOrdinal);
+        report.definitionImplementedMethods =
+            definitionScripted->implementedMethods();
+        auto scriptAsset = definitionScripted->scriptAsset();
+        report.hasScriptAsset = scriptAsset != nullptr;
+        report.assetSerializedImplementedMethods =
+            scriptAsset == nullptr
+                ? 0
+                : scriptAsset->serializedImplementedMethods();
+        if (occurrenceScripted != nullptr)
+        {
+            report.hasOccurrenceOrdinal = true;
+            report.occurrenceOrdinal =
+                ordinals->scriptedObjectOrdinal(occurrenceScripted);
+            report.hasOccurrenceTableOrdinal =
+                ordinals->tableOrdinal(occurrenceScripted,
+                                       &report.occurrenceTableOrdinal);
+            report.hasDataContext =
+                occurrenceScripted->dataContext() != nullptr;
+            report.dataContextMatchesStateMachine =
+                report.hasDataContext &&
+                occurrenceScripted->dataContext().get() ==
+                stateMachine->dataContext().get();
+            report.userLuaInitDone =
+                occurrenceScripted->userLuaInitDone();
+            report.occurrenceImplementedMethods =
+                occurrenceScripted->implementedMethods();
+        }
+
+        const auto definitionInputs =
+            definitionScripted->customProperties();
+        const auto occurrenceInputs =
+            occurrenceScripted == nullptr
+                ? std::vector<rive::CustomProperty*>()
+                : occurrenceScripted->customProperties();
+        const auto definitionDataBinds =
+            definitionScripted->dataBinds();
+        const auto occurrenceDataBinds =
+            occurrenceScripted == nullptr
+                ? std::vector<rive::DataBind*>()
+                : occurrenceScripted->dataBinds();
+        report.definitionInputCount = definitionInputs.size();
+        report.occurrenceInputCount = occurrenceInputs.size();
+        report.definitionDataBindCount = definitionDataBinds.size();
+        report.occurrenceDataBindCount = occurrenceDataBinds.size();
+        const auto inputCount =
+            std::max(definitionInputs.size(), occurrenceInputs.size());
+        for (size_t inputIndex = 0; inputIndex < inputCount; ++inputIndex)
+        {
+            report.inputs.push_back(collect_scripted_input_report(
+                inputIndex,
+                inputIndex < definitionInputs.size()
+                    ? definitionInputs[inputIndex]
+                    : nullptr,
+                inputIndex < occurrenceInputs.size()
+                    ? occurrenceInputs[inputIndex]
+                    : nullptr,
+                occurrenceScripted,
+                occurrenceDataBinds,
+                ordinals));
+        }
+        const auto dataBindCount =
+            std::max(definitionDataBinds.size(),
+                     occurrenceDataBinds.size());
+        for (size_t dataBindIndex = 0; dataBindIndex < dataBindCount;
+             ++dataBindIndex)
+        {
+            auto sourceDataBind =
+                dataBindIndex < definitionDataBinds.size()
+                    ? definitionDataBinds[dataBindIndex]
+                    : nullptr;
+            auto occurrenceDataBind =
+                dataBindIndex < occurrenceDataBinds.size()
+                    ? occurrenceDataBinds[dataBindIndex]
+                    : nullptr;
+            RuntimeScriptedDataBindReport dataBindReport;
+            dataBindReport.index = dataBindIndex;
+            dataBindReport.sourcePresent = sourceDataBind != nullptr;
+            dataBindReport.occurrencePresent =
+                occurrenceDataBind != nullptr;
+            dataBindReport.sourceCoreType =
+                sourceDataBind == nullptr ? 0 : sourceDataBind->coreType();
+            dataBindReport.occurrenceCoreType =
+                occurrenceDataBind == nullptr
+                    ? 0
+                    : occurrenceDataBind->coreType();
+            dataBindReport.coreType =
+                occurrenceDataBind != nullptr
+                    ? occurrenceDataBind->coreType()
+                    : dataBindReport.sourceCoreType;
+            dataBindReport.sourceFlags =
+                sourceDataBind == nullptr ? 0 : sourceDataBind->flags();
+            dataBindReport.flags =
+                occurrenceDataBind == nullptr ? 0
+                                              : occurrenceDataBind->flags();
+            dataBindReport.sourcePropertyKey =
+                sourceDataBind == nullptr ? 0
+                                          : sourceDataBind->propertyKey();
+            dataBindReport.propertyKey =
+                occurrenceDataBind == nullptr
+                    ? 0
+                    : occurrenceDataBind->propertyKey();
+            dataBindReport.sourceConverterId =
+                sourceDataBind == nullptr ? 0
+                                          : sourceDataBind->converterId();
+            dataBindReport.converterId =
+                occurrenceDataBind == nullptr
+                    ? 0
+                    : occurrenceDataBind->converterId();
+            if (sourceDataBind != nullptr &&
+                sourceDataBind->is<rive::DataBindContext>())
+            {
+                dataBindReport.sourcePathIds =
+                    sourceDataBind->as<rive::DataBindContext>()
+                        ->sourcePathIds();
+            }
+            if (occurrenceDataBind != nullptr &&
+                occurrenceDataBind->is<rive::DataBindContext>())
+            {
+                dataBindReport.occurrencePathIds =
+                    occurrenceDataBind->as<rive::DataBindContext>()
+                        ->sourcePathIds();
+            }
+            dataBindReport.distinctClone =
+                sourceDataBind != nullptr && occurrenceDataBind != nullptr &&
+                sourceDataBind != occurrenceDataBind;
+            dataBindReport.hasSourceBindOrdinal =
+                ordinals->dataBindOrdinal(
+                    sourceDataBind, &dataBindReport.sourceBindOrdinal);
+            dataBindReport.hasOccurrenceBindOrdinal =
+                ordinals->dataBindOrdinal(
+                    occurrenceDataBind,
+                    &dataBindReport.occurrenceBindOrdinal);
+            if (occurrenceDataBind != nullptr)
+            {
+                dataBindReport.targetInputIndex = input_index_for_target(
+                    occurrenceInputs,
+                    occurrenceDataBind->target(),
+                    &dataBindReport.hasTargetInputIndex);
+                dataBindReport.targetIsOccurrenceInput =
+                    dataBindReport.hasTargetInputIndex;
+                if (dataBindReport.hasTargetInputIndex)
+                {
+                    auto targetInput = rive::ScriptInput::from(
+                        occurrenceInputs[dataBindReport.targetInputIndex]);
+                    dataBindReport.isFinalForTarget =
+                        targetInput != nullptr &&
+                        targetInput->dataBind() == occurrenceDataBind;
+                }
+            }
+            report.dataBinds.push_back(dataBindReport);
+        }
+        reports->push_back(std::move(report));
+        return;
+    }
+
+    if (!definition->is<rive::DataConverterGroup>())
+    {
+        return;
+    }
+    auto definitionItems =
+        definition->as<rive::DataConverterGroup>()->items();
+    auto occurrenceItems =
+        occurrence != nullptr &&
+                occurrence->is<rive::DataConverterGroup>()
+            ? occurrence->as<rive::DataConverterGroup>()->items()
+            : std::vector<rive::DataConverterGroupItem*>();
+    size_t occurrenceItemIndex = 0;
+    for (size_t definitionItemIndex = 0;
+         definitionItemIndex < definitionItems.size();
+         ++definitionItemIndex)
+    {
+        auto definitionItem = definitionItems[definitionItemIndex];
+        auto definitionChild =
+            definitionItem == nullptr ? nullptr : definitionItem->converter();
+        if (definitionChild == nullptr)
+        {
+            // DataConverterGroup::clone omits invalid/null children, so both
+            // the live C++ occurrence and Rust use this compressed path.
+            continue;
+        }
+        auto nextPath = converterPath;
+        nextPath.push_back(occurrenceItemIndex);
+        collect_scripted_converter_tree_reports(
+            parentBindIndex,
+            definitionItem->converterId(),
+            nextPath,
+            definitionChild,
+            occurrenceItemIndex < occurrenceItems.size() &&
+                    occurrenceItems[occurrenceItemIndex] != nullptr
+                ? occurrenceItems[occurrenceItemIndex]->converter()
+                : nullptr,
+            stateMachine,
+            ordinals,
+            reports);
+        ++occurrenceItemIndex;
+    }
+}
+
+std::vector<RuntimeStateMachineScriptedConverterReport>
+collect_scripted_converter_reports(rive::StateMachineInstance* stateMachine,
+                                   RuntimeScriptSnapshotOrdinals* ordinals)
+{
+    std::vector<RuntimeStateMachineScriptedConverterReport> reports;
+    if (stateMachine == nullptr || stateMachine->stateMachine() == nullptr)
+    {
+        return reports;
+    }
+    const auto liveDataBinds = stateMachine->dataBinds();
+    size_t liveDataBindIndex = 0;
+    auto sourceStateMachine = stateMachine->stateMachine();
+    for (size_t dataBindIndex = 0;
+         dataBindIndex < sourceStateMachine->dataBindCount();
+         ++dataBindIndex)
+    {
+        auto sourceDataBind = sourceStateMachine->dataBind(dataBindIndex);
+        // StateMachineInstance clones every authored DataBind with a non-null
+        // target into m_dataBinds in this exact source order. Transition
+        // bindings deliberately rewrite both target and propertyKey after the
+        // clone, so shape-matching those fields would lose a valid occurrence
+        // (`state_machine_instance.cpp:1754-1823`).
+        rive::DataBind* occurrenceDataBind = nullptr;
+        if (sourceDataBind != nullptr && sourceDataBind->target() != nullptr &&
+            liveDataBindIndex < liveDataBinds.size())
+        {
+            occurrenceDataBind = liveDataBinds[liveDataBindIndex++];
+        }
+        auto sourceConverter =
+            sourceDataBind == nullptr ? nullptr : sourceDataBind->converter();
+        if (sourceConverter == nullptr)
+        {
+            continue;
+        }
+        collect_scripted_converter_tree_reports(
+            dataBindIndex,
+            sourceDataBind->converterId(),
+            {},
+            sourceConverter,
+            occurrenceDataBind == nullptr
+                ? nullptr
+                : occurrenceDataBind->converter(),
+            stateMachine,
+            ordinals,
+            &reports);
+    }
+    return reports;
+}
+
 std::vector<RuntimeStateMachineAdvanceReport>
 apply_runtime_state_machine_advances(rive::File* file,
                                      rive::ArtboardInstance* instance,
@@ -2238,8 +3449,12 @@ apply_runtime_state_machine_advances(rive::File* file,
 
     std::vector<std::unique_ptr<rive::StateMachineInstance>> instances(
         instance->stateMachineCount());
+    std::vector<RuntimeScriptSnapshotOrdinals> scriptOrdinals(
+        instance->stateMachineCount());
     std::vector<rive::rcp<rive::ViewModelInstance>> activeOwnedViewModelInstances(
         instance->stateMachineCount());
+    std::vector<std::vector<rive::rcp<rive::DataContext>>>
+        inheritedDataContexts(instance->stateMachineCount());
     for (const auto& action : options.runtimeStateMachineActions)
     {
         if (action.stateMachineIndex >= instances.size())
@@ -2255,6 +3470,7 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             continue;
         }
+        const bool needsAdvanceBefore = stateMachine->needsAdvance();
 
         if (action.kind == RuntimeStateMachineActionKind::SetBool)
         {
@@ -2273,6 +3489,28 @@ apply_runtime_state_machine_advances(rive::File* file,
                 static_cast<rive::SMINumber*>(input)->value(action.numberValue);
             }
             continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::SetObjectString)
+        {
+            rive::Core* object = nullptr;
+            for (const auto& localId : localIds)
+            {
+                if (localId.second == action.inputIndex)
+                {
+                    object = const_cast<rive::Core*>(localId.first);
+                    break;
+                }
+            }
+            if (object != nullptr &&
+                rive::CoreRegistry::objectSupportsProperty(
+                    object, action.dataBindIndex) &&
+                rive::CoreRegistry::propertyFieldId(
+                    static_cast<int>(action.dataBindIndex)) ==
+                    rive::CoreStringType::id)
+            {
+                rive::CoreRegistry::setString(
+                    object, action.dataBindIndex, action.stringValue);
+            }
         }
         if (action.kind == RuntimeStateMachineActionKind::SetBindableNumber)
         {
@@ -2749,6 +3987,22 @@ apply_runtime_state_machine_advances(rive::File* file,
                 {
                     source->as<rive::ViewModelInstanceBoolean>()
                         ->propertyValue(action.boolValue);
+                }
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::
+                               SetOwnedViewModelSourceBooleanByName)
+        {
+            auto viewModelInstance =
+                activeOwnedViewModelInstances[action.stateMachineIndex];
+            if (viewModelInstance != nullptr)
+            {
+                rive::ViewModelInstanceRuntime runtime(viewModelInstance);
+                auto source = runtime.propertyBoolean(action.stringValue);
+                if (source != nullptr)
+                {
+                    source->value(action.boolValue);
                 }
             }
             continue;
@@ -4703,6 +5957,21 @@ apply_runtime_state_machine_advances(rive::File* file,
             }
             continue;
         }
+        if (action.kind == RuntimeStateMachineActionKind::
+                               BindCreatedDefaultViewModelContext)
+        {
+            auto viewModelInstance =
+                file != nullptr
+                    ? file->createViewModelInstance(instance)
+                    : nullptr;
+            if (viewModelInstance != nullptr)
+            {
+                stateMachine->bindViewModelInstance(viewModelInstance);
+                activeOwnedViewModelInstances[action.stateMachineIndex] =
+                    viewModelInstance;
+            }
+            continue;
+        }
         if (action.kind ==
             RuntimeStateMachineActionKind::BindViewModelInstanceContext)
         {
@@ -4722,6 +5991,86 @@ apply_runtime_state_machine_advances(rive::File* file,
                 activeOwnedViewModelInstances[action.stateMachineIndex] =
                     nullptr;
             }
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::BindNullViewModelInstanceContext)
+        {
+            stateMachine->bindViewModelInstance(nullptr);
+            activeOwnedViewModelInstances[action.stateMachineIndex] = nullptr;
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::SetViewModelInstanceContext)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr &&
+                        action.viewModelInstanceIndex <
+                            viewModel->instanceCount()
+                    ? viewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            stateMachine->setViewModelInstance(
+                viewModelInstance == nullptr
+                    ? nullptr
+                    : rive::ref_rcp(viewModelInstance));
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::InheritViewModelInstanceContext)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                viewModel != nullptr &&
+                        action.viewModelInstanceIndex <
+                            viewModel->instanceCount()
+                    ? viewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            if (viewModelInstance != nullptr)
+            {
+                auto dataContext = rive::make_rcp<rive::DataContext>(
+                    rive::ref_rcp(viewModelInstance));
+                stateMachine->inheritDataContext(dataContext);
+                inheritedDataContexts[action.stateMachineIndex].push_back(
+                    dataContext);
+            }
+            continue;
+        }
+        if (action.kind == RuntimeStateMachineActionKind::
+                               SetGlobalViewModelInstanceContext)
+        {
+            auto slotViewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto occupantViewModel =
+                file != nullptr &&
+                        action.leafPropertyIndex < file->viewModelCount()
+                    ? file->viewModel(action.leafPropertyIndex)
+                    : nullptr;
+            auto occupant =
+                occupantViewModel != nullptr &&
+                        action.viewModelInstanceIndex <
+                            occupantViewModel->instanceCount()
+                    ? occupantViewModel->instance(action.viewModelInstanceIndex)
+                    : nullptr;
+            if (slotViewModel != nullptr && occupant != nullptr)
+            {
+                stateMachine->setGlobalViewModelInstance(
+                    slotViewModel->name(), rive::ref_rcp(occupant));
+            }
+            continue;
+        }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::CompleteViewModelInstances)
+        {
+            stateMachine->completeViewModelInstances();
             continue;
         }
         if (action.kind ==
@@ -4772,6 +6121,8 @@ apply_runtime_state_machine_advances(rive::File* file,
                     number->value(action.numberValue);
                 }
                 stateMachine->bindViewModelInstance(viewModelInstance);
+                activeOwnedViewModelInstances[action.stateMachineIndex] =
+                    viewModelInstance;
             }
             continue;
         }
@@ -5665,6 +7016,35 @@ apply_runtime_state_machine_advances(rive::File* file,
             continue;
         }
         if (action.kind ==
+            RuntimeStateMachineActionKind::BindOwnedViewModelNullViewModelContext)
+        {
+            auto viewModel =
+                file != nullptr && action.viewModelIndex < file->viewModelCount()
+                    ? file->viewModel(action.viewModelIndex)
+                    : nullptr;
+            auto viewModelInstance =
+                file != nullptr && viewModel != nullptr
+                    ? file->createViewModelInstance(viewModel)
+                    : nullptr;
+            auto property =
+                viewModel != nullptr ? viewModel->property(action.dataBindIndex)
+                                     : nullptr;
+            auto value =
+                viewModelInstance != nullptr && property != nullptr
+                    ? viewModelInstance->propertyValue(property->name())
+                    : nullptr;
+            if (value != nullptr &&
+                value->is<rive::ViewModelInstanceViewModel>())
+            {
+                value->as<rive::ViewModelInstanceViewModel>()
+                    ->referenceViewModelInstance(nullptr);
+                stateMachine->bindViewModelInstance(viewModelInstance);
+                activeOwnedViewModelInstances[action.stateMachineIndex] =
+                    viewModelInstance;
+            }
+            continue;
+        }
+        if (action.kind ==
             RuntimeStateMachineActionKind::BindOwnedViewModelViewModelContext)
         {
             auto viewModel =
@@ -6257,11 +7637,92 @@ apply_runtime_state_machine_advances(rive::File* file,
             }
             continue;
         }
+        if (action.kind ==
+            RuntimeStateMachineActionKind::FireOwnedViewModelTriggerByName)
+        {
+            auto viewModelInstance =
+                activeOwnedViewModelInstances[action.stateMachineIndex];
+            auto source =
+                viewModelInstance == nullptr
+                    ? nullptr
+                    : viewModelInstance->propertyValue(action.stringValue);
+            if (source != nullptr &&
+                source->is<rive::ViewModelInstanceTrigger>())
+            {
+                source->as<rive::ViewModelInstanceTrigger>()->trigger();
+            }
+            continue;
+        }
 
         bool advanced = false;
-        if (action.kind == RuntimeStateMachineActionKind::PointerDown)
+        bool pointerInputProbe = false;
+        int pointerHitResult = -1;
+        const auto& occurrenceObjects = instance->objects();
+        std::vector<std::pair<
+            size_t,
+            std::unique_ptr<RuntimeNestedEventRecorder>>>
+            nestedSimpleRecorders;
+        std::vector<std::pair<
+            size_t,
+            std::unique_ptr<RuntimeNestedEventRecorder>>>
+            nestedStateMachineRecorders;
+        for (size_t localId = 0; localId < occurrenceObjects.size(); ++localId)
         {
-            stateMachine->pointerDown(rive::Vec2D(action.x, action.y));
+            auto object = occurrenceObjects[localId];
+            if (object == nullptr)
+            {
+                continue;
+            }
+            if (object->is<rive::NestedSimpleAnimation>())
+            {
+                auto animation = object->as<rive::NestedSimpleAnimation>()
+                                     ->animationInstance();
+                if (animation == nullptr)
+                {
+                    continue;
+                }
+                auto recorder = std::make_unique<RuntimeNestedEventRecorder>();
+                animation->addNestedEventListener(recorder.get());
+                nestedSimpleRecorders.push_back(
+                    {localId, std::move(recorder)});
+            }
+            else if (object->is<rive::NestedStateMachine>())
+            {
+                auto stateMachine = object->as<rive::NestedStateMachine>()
+                                        ->stateMachineInstance();
+                if (stateMachine == nullptr)
+                {
+                    continue;
+                }
+                auto recorder = std::make_unique<RuntimeNestedEventRecorder>();
+                stateMachine->addNestedEventListener(recorder.get());
+                nestedStateMachineRecorders.push_back(
+                    {localId, std::move(recorder)});
+            }
+        }
+        std::unique_ptr<PersistentDirtProbeComponent> persistentDirtProbe;
+        if (action.kind ==
+            RuntimeStateMachineActionKind::AdvanceAndApplyPersistentDirt)
+        {
+            persistentDirtProbe =
+                std::make_unique<PersistentDirtProbeComponent>();
+            persistentDirtProbe->m_Artboard = instance;
+            persistentDirtProbe->m_Parent = instance;
+            persistentDirtProbe->m_Dirt = rive::ComponentDirt::None;
+            instance->m_DependencyOrder.push_back(persistentDirtProbe.get());
+            instance->m_advancingComponents.push_back(
+                persistentDirtProbe.get());
+        }
+        if (action.kind == RuntimeStateMachineActionKind::SetObjectString)
+        {
+            // Mutation-only report: preserve the pending EventReport and
+            // project its retained Event pointer without advancing.
+        }
+        else if (action.kind == RuntimeStateMachineActionKind::PointerDown)
+        {
+            pointerInputProbe = true;
+            pointerHitResult = static_cast<int>(
+                stateMachine->pointerDown(rive::Vec2D(action.x, action.y)));
         }
         else if (action.kind == RuntimeStateMachineActionKind::PointerUp)
         {
@@ -6276,17 +7737,207 @@ apply_runtime_state_machine_advances(rive::File* file,
         {
             stateMachine->updateDataBinds(true);
         }
+        else if (action.kind ==
+                     RuntimeStateMachineActionKind::SnapshotStateMachineScripts ||
+                 action.kind ==
+                     RuntimeStateMachineActionKind::SnapshotNamedInputs)
+        {
+            // Construction/lifecycle snapshot only. In particular, do not
+            // turn this probe operation into an ordinary zero-second advance.
+        }
+        else if (action.kind == RuntimeStateMachineActionKind::
+                                    AdvanceThenSetOwnedViewModelSourceNumberByName)
+        {
+            // Cross the new-frame applyEvents boundary first, then perform a
+            // real external ViewModel mutation. Its listener report is left
+            // pending for the next probe advance, matching an external write
+            // that lands immediately after the C++ frame call.
+            advanced = stateMachine->advance(action.seconds);
+            auto viewModelInstance =
+                activeOwnedViewModelInstances[action.stateMachineIndex];
+            if (viewModelInstance != nullptr)
+            {
+                rive::ViewModelInstanceRuntime runtime(viewModelInstance);
+                auto source = runtime.propertyNumber(action.stringValue);
+                if (source != nullptr)
+                {
+                    source->value(action.numberValue);
+                }
+            }
+        }
+        else if (action.kind ==
+                 RuntimeStateMachineActionKind::UpdateArtboardPass)
+        {
+            advanced = instance->updatePass(true);
+        }
+        else if (action.kind ==
+                 RuntimeStateMachineActionKind::ResetArtboard)
+        {
+            instance->reset();
+        }
+        else if (action.kind ==
+                     RuntimeStateMachineActionKind::AdvanceAndApply ||
+                 action.kind == RuntimeStateMachineActionKind::
+                                    AdvanceAndApplyPersistentDirt)
+        {
+            advanced = stateMachine->advanceAndApply(action.seconds);
+        }
         else
         {
             advanced = stateMachine->advance(action.seconds);
         }
+        for (const auto& [localId, recorder] : nestedSimpleRecorders)
+        {
+            occurrenceObjects[localId]
+                ->as<rive::NestedSimpleAnimation>()
+                ->animationInstance()
+                ->removeNestedEventListener(recorder.get());
+        }
+        for (const auto& [localId, recorder] : nestedStateMachineRecorders)
+        {
+            occurrenceObjects[localId]
+                ->as<rive::NestedStateMachine>()
+                ->stateMachineInstance()
+                ->removeNestedEventListener(recorder.get());
+        }
         RuntimeStateMachineAdvanceReport report;
         report.stateMachineIndex = action.stateMachineIndex;
         report.seconds = action.seconds;
+        report.needsAdvanceBefore = needsAdvanceBefore;
         report.advanced = advanced;
+        report.pointerInputProbe = pointerInputProbe;
+        report.pointerHitResult = pointerHitResult;
+        if (persistentDirtProbe != nullptr)
+        {
+            report.persistentDirtProbe = true;
+            report.persistentDirtAdvanceCount =
+                persistentDirtProbe->advanceCount;
+            report.persistentDirtUpdateCount = persistentDirtProbe->updateCount;
+            report.persistentDirtRemaining =
+                instance->hasDirt(rive::ComponentDirt::Components);
+        }
         report.currentAnimationCount = stateMachine->currentAnimationCount();
         report.changedStateCount = stateMachine->stateChangedCount();
+        if (action.kind == RuntimeStateMachineActionKind::SnapshotNamedInputs)
+        {
+            report.namedInputProbe = true;
+            auto inputIndex = [stateMachine =
+                                   stateMachine.get()](rive::SMIInput* needle) {
+                if (needle == nullptr)
+                {
+                    return -1;
+                }
+                for (size_t index = 0; index < stateMachine->inputCount();
+                     ++index)
+                {
+                    if (stateMachine->input(index) == needle)
+                    {
+                        return static_cast<int>(index);
+                    }
+                }
+                return -1;
+            };
+            report.namedBoolInputIndex =
+                inputIndex(stateMachine->getBool(action.stringValue));
+            report.namedNumberInputIndex =
+                inputIndex(stateMachine->getNumber(action.stringValue));
+            report.namedTriggerInputIndex =
+                inputIndex(stateMachine->getTrigger(action.stringValue));
+        }
+        for (size_t i = 0; i < report.changedStateCount; ++i)
+        {
+            auto state = stateMachine->stateChangedByIndex(i);
+            report.changedStateCoreTypes.push_back(state == nullptr
+                                                       ? 0
+                                                       : state->coreType());
+        }
         report.randomTotalCalls = rive_probe::randomProviderTotalCalls();
+        auto resolveViewModelInstanceIdentity =
+            [file](rive::ViewModelInstance* candidate,
+                   size_t* viewModelIndex,
+                   size_t* instanceIndex) -> bool {
+            if (file == nullptr || candidate == nullptr)
+            {
+                return false;
+            }
+            for (size_t vmIndex = 0; vmIndex < file->viewModelCount();
+                 ++vmIndex)
+            {
+                auto viewModel = file->viewModel(vmIndex);
+                if (viewModel == nullptr)
+                {
+                    continue;
+                }
+                for (size_t vmInstanceIndex = 0;
+                     vmInstanceIndex < viewModel->instanceCount();
+                     ++vmInstanceIndex)
+                {
+                    if (viewModel->instance(vmInstanceIndex) == candidate)
+                    {
+                        *viewModelIndex = vmIndex;
+                        *instanceIndex = vmInstanceIndex;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        auto dataContext = stateMachine->dataContext();
+        report.hasDataContext = dataContext != nullptr;
+        auto mainViewModelInstance =
+            dataContext == nullptr ? nullptr
+                                   : dataContext->mainViewModelInstance().get();
+        report.hasMainViewModelInstance =
+            resolveViewModelInstanceIdentity(
+                mainViewModelInstance,
+                &report.mainViewModelIndex,
+                &report.mainViewModelInstanceIndex);
+        for (const auto& inherited :
+             inheritedDataContexts[action.stateMachineIndex])
+        {
+            report.inheritedDataContextDependentCounts.push_back(
+                inherited->m_dependentContainers.size());
+        }
+        if (file != nullptr && dataContext != nullptr)
+        {
+            for (auto* slotViewModel : file->globalViewModels())
+            {
+                RuntimeStateMachineGlobalSlotReport slotReport;
+                slotReport.slotViewModelIndex = 0;
+                slotReport.hasInstance = false;
+                slotReport.instanceViewModelIndex = 0;
+                slotReport.instanceIndex = 0;
+                for (size_t vmIndex = 0; vmIndex < file->viewModelCount();
+                     ++vmIndex)
+                {
+                    if (file->viewModel(vmIndex) == slotViewModel)
+                    {
+                        slotReport.slotViewModelIndex = vmIndex;
+                        break;
+                    }
+                }
+                auto occupant = dataContext
+                                    ->instanceForSlot(file->viewModelId(
+                                        slotViewModel->name()))
+                                    .get();
+                slotReport.hasInstance = occupant != nullptr;
+                resolveViewModelInstanceIdentity(
+                    occupant,
+                    &slotReport.instanceViewModelIndex,
+                    &slotReport.instanceIndex);
+                report.globalViewModelSlots.push_back(slotReport);
+            }
+        }
+        for (size_t i = 0; i < stateMachine->inputCount(); ++i)
+        {
+            auto input = stateMachine->input(i);
+            if (input != nullptr && input->input() != nullptr &&
+                input->input()->is<rive::StateMachineBool>())
+            {
+                report.boolInputs.push_back(
+                    {i, static_cast<rive::SMIBool*>(input)->value()});
+            }
+        }
         for (size_t i = 0; i < report.currentAnimationCount; ++i)
         {
             auto animation = stateMachine->currentAnimationByIndex(i);
@@ -6322,6 +7973,74 @@ apply_runtime_state_machine_advances(rive::File* file,
             }
             report.reportedEvents.push_back(reportedEvent);
         }
+        for (size_t localId = 0; localId < occurrenceObjects.size(); ++localId)
+        {
+            auto object = occurrenceObjects[localId];
+            if (object == nullptr || !object->is<rive::NestedStateMachine>())
+            {
+                continue;
+            }
+            auto nested = object->as<rive::NestedStateMachine>();
+            auto nestedStateMachine = nested->stateMachineInstance();
+            if (nestedStateMachine == nullptr)
+            {
+                continue;
+            }
+            std::vector<RuntimeStateMachineReportedEventReport> nestedEvents;
+            for (size_t i = 0; i < nestedStateMachine->reportedEventCount(); ++i)
+            {
+                auto eventReport = nestedStateMachine->reportedEventAt(i);
+                auto event = eventReport.event();
+                RuntimeStateMachineReportedEventReport reportedEvent;
+                reportedEvent.hasEvent = event != nullptr;
+                reportedEvent.hasEventLocal = false;
+                reportedEvent.eventLocal = 0;
+                reportedEvent.coreType =
+                    event == nullptr ? 0 : event->coreType();
+                reportedEvent.name = event == nullptr ? "" : event->name();
+                reportedEvent.secondsDelay = eventReport.secondsDelay();
+                nestedEvents.push_back(reportedEvent);
+            }
+            auto recorder = std::find_if(
+                nestedStateMachineRecorders.begin(),
+                nestedStateMachineRecorders.end(),
+                [localId](const auto& entry) {
+                    return entry.first == localId;
+                });
+            float mixedNodeX = 0.0f;
+            const bool hasMixedNodeX =
+                firstNestedNodeX(nested->parent()->as<rive::NestedArtboard>(),
+                                 &mixedNodeX);
+            report.nestedReportedEvents.push_back(
+                {localId,
+                 recorder == nestedStateMachineRecorders.end()
+                     ? std::move(nestedEvents)
+                     : recorder->second->reportedEvents(),
+                 recorder == nestedStateMachineRecorders.end()
+                     ? std::vector<
+                           std::vector<RuntimeStateMachineReportedEventReport>>{}
+                     : recorder->second->notifyBatches(),
+                 recorder == nestedStateMachineRecorders.end()
+                     ? std::vector<float>{}
+                     : recorder->second->preMixNodeXs(),
+                 hasMixedNodeX,
+                 mixedNodeX});
+        }
+        for (const auto& [localId, recorder] : nestedSimpleRecorders)
+        {
+            auto nestedSimple =
+                occurrenceObjects[localId]->as<rive::NestedSimpleAnimation>();
+            float mixedNodeX = 0.0f;
+            const bool hasMixedNodeX = firstNestedNodeX(
+                nestedSimple->animationInstance()->nestedArtboard(),
+                &mixedNodeX);
+            report.nestedReportedEvents.push_back({localId,
+                                                   recorder->reportedEvents(),
+                                                   recorder->notifyBatches(),
+                                                   recorder->preMixNodeXs(),
+                                                   hasMixedNodeX,
+                                                   mixedNodeX});
+        }
         report.viewModelTriggers =
             collect_default_view_model_trigger_reports(file);
         report.viewModelBindings =
@@ -6345,9 +8064,477 @@ apply_runtime_state_machine_advances(rive::File* file,
             collect_trigger_binding_reports(stateMachine.get());
         report.listBindings =
             collect_list_binding_reports(stateMachine.get());
+        if (action.kind ==
+            RuntimeStateMachineActionKind::SnapshotStateMachineScripts)
+        {
+            report.scriptedObjects = collect_scripted_object_reports(
+                stateMachine.get(),
+                &scriptOrdinals[action.stateMachineIndex]);
+            report.artboardScriptedObjects =
+                collect_artboard_scripted_object_reports(
+                    instance,
+                    &scriptOrdinals[action.stateMachineIndex]);
+            report.scriptedConverters =
+                collect_scripted_converter_reports(
+                    stateMachine.get(),
+                    &scriptOrdinals[action.stateMachineIndex]);
+        }
+        if (persistentDirtProbe != nullptr)
+        {
+            instance->m_DependencyOrder.erase(
+                std::remove(instance->m_DependencyOrder.begin(),
+                            instance->m_DependencyOrder.end(),
+                            persistentDirtProbe.get()),
+                instance->m_DependencyOrder.end());
+            instance->m_advancingComponents.erase(
+                std::remove(instance->m_advancingComponents.begin(),
+                            instance->m_advancingComponents.end(),
+                            persistentDirtProbe.get()),
+                instance->m_advancingComponents.end());
+        }
         reports.push_back(report);
     }
     return reports;
+}
+
+void write_size_vector(std::ostream& out,
+                       const std::vector<size_t>& values)
+{
+    out << '[';
+    for (size_t i = 0; i < values.size(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        out << values[i];
+    }
+    out << ']';
+}
+
+void write_u32_vector(std::ostream& out,
+                      const std::vector<uint32_t>& values)
+{
+    out << '[';
+    for (size_t i = 0; i < values.size(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        out << values[i];
+    }
+    out << ']';
+}
+
+void write_string_vector(std::ostream& out,
+                         const std::vector<std::string>& values)
+{
+    out << '[';
+    for (size_t i = 0; i < values.size(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        write_json_string(out, values[i]);
+    }
+    out << ']';
+}
+
+void write_runtime_scripted_input_report(
+    std::ostream& out,
+    const RuntimeScriptedInputReport& report)
+{
+    out << "{\"index\":" << report.index;
+    out << ",\"sourceCoreType\":" << report.sourceCoreType;
+    out << ",\"sourceName\":";
+    write_json_string(out, report.sourceName);
+    out << ",\"occurrencePresent\":"
+        << (report.occurrencePresent ? "true" : "false");
+    out << ",\"occurrenceCoreType\":" << report.occurrenceCoreType;
+    out << ",\"occurrenceName\":";
+    write_json_string(out, report.occurrenceName);
+    out << ",\"distinctClone\":"
+        << (report.distinctClone ? "true" : "false");
+    out << ",\"sourceInputOrdinal\":";
+    if (report.hasSourceInputOrdinal)
+    {
+        out << report.sourceInputOrdinal;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"occurrenceInputOrdinal\":";
+    if (report.hasOccurrenceInputOrdinal)
+    {
+        out << report.occurrenceInputOrdinal;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"backpointerMatchesOccurrence\":"
+        << (report.backpointerMatchesOccurrence ? "true" : "false");
+    out << ",\"sourceBindPresent\":"
+        << (report.sourceBindPresent ? "true" : "false");
+    out << ",\"bindPresent\":"
+        << (report.bindPresent ? "true" : "false");
+    out << ",\"bindCollectionIndex\":";
+    if (report.hasBindCollectionIndex)
+    {
+        out << report.bindCollectionIndex;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"bindDistinctFromSource\":"
+        << (report.bindDistinctFromSource ? "true" : "false");
+    out << ",\"sourceBindOrdinal\":";
+    if (report.hasSourceBindOrdinal)
+    {
+        out << report.sourceBindOrdinal;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"occurrenceBindOrdinal\":";
+    if (report.hasOccurrenceBindOrdinal)
+    {
+        out << report.occurrenceBindOrdinal;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"bindFlags\":" << report.bindFlags;
+    out << ",\"bindTargetIsClone\":"
+        << (report.bindTargetIsClone ? "true" : "false");
+    out << ",\"finalBindIndex\":";
+    if (report.hasFinalBindIndex)
+    {
+        out << report.finalBindIndex;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"valueKind\":";
+    write_json_string(out, report.valueKind);
+    out << ",\"booleanValue\":";
+    if (report.hasBooleanValue)
+    {
+        out << (report.booleanValue ? "true" : "false");
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"numberValue\":";
+    if (report.hasNumberValue)
+    {
+        out << report.numberValue;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"stringValue\":";
+    if (report.hasStringValue)
+    {
+        write_json_string(out, report.stringValue);
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"colorValue\":";
+    if (report.hasColorValue)
+    {
+        out << report.colorValue;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"triggerValue\":";
+    if (report.hasTriggerValue)
+    {
+        out << report.triggerValue;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"artboardId\":";
+    if (report.hasArtboardId)
+    {
+        out << report.artboardId;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"referencedArtboardId\":";
+    if (report.hasReferencedArtboardId)
+    {
+        out << report.referencedArtboardId;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"viewModelPathIds\":";
+    write_u32_vector(out, report.viewModelPathIds);
+    out << ",\"viewModelResolvedPathIds\":";
+    write_u32_vector(out, report.viewModelResolvedPathIds);
+    out << ",\"viewModelPathIsRelative\":";
+    if (report.hasViewModelPathIsRelative)
+    {
+        out << (report.viewModelPathIsRelative ? "true" : "false");
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"boundViewModelInstanceOrdinal\":";
+    if (report.hasBoundViewModelInstanceOrdinal)
+    {
+        out << report.boundViewModelInstanceOrdinal;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << '}';
+}
+
+void write_runtime_scripted_object_report(
+    std::ostream& out,
+    const RuntimeStateMachineScriptedObjectReport& report)
+{
+    out << "{\"sourceIndex\":" << report.sourceIndex;
+    out << ",\"sourceCoreType\":" << report.sourceCoreType;
+    out << ",\"occurrencePresent\":"
+        << (report.occurrencePresent ? "true" : "false");
+    out << ",\"occurrenceDistinctFromSource\":"
+        << (report.occurrenceDistinctFromSource ? "true" : "false");
+    out << ",\"occurrenceOrdinal\":";
+    if (report.hasOccurrenceOrdinal)
+    {
+        out << report.occurrenceOrdinal;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"sourceTableOrdinal\":";
+    if (report.hasSourceTableOrdinal)
+    {
+        out << report.sourceTableOrdinal;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"occurrenceTableOrdinal\":";
+    if (report.hasOccurrenceTableOrdinal)
+    {
+        out << report.occurrenceTableOrdinal;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"hasDataContext\":"
+        << (report.hasDataContext ? "true" : "false");
+    out << ",\"dataContextMatchesStateMachine\":"
+        << (report.dataContextMatchesStateMachine ? "true" : "false");
+    out << ",\"userLuaInitDone\":"
+        << (report.userLuaInitDone ? "true" : "false");
+    out << ",\"hasScriptAsset\":"
+        << (report.hasScriptAsset ? "true" : "false");
+    out << ",\"assetSerializedImplementedMethods\":"
+        << report.assetSerializedImplementedMethods;
+    out << ",\"definitionImplementedMethods\":"
+        << report.definitionImplementedMethods;
+    out << ",\"occurrenceImplementedMethods\":"
+        << report.occurrenceImplementedMethods;
+    out << ",\"definitionInputCount\":"
+        << report.definitionInputCount;
+    out << ",\"occurrenceInputCount\":"
+        << report.occurrenceInputCount;
+    out << ",\"probeTrace\":";
+    if (report.hasProbeTrace)
+    {
+        write_string_vector(out, report.probeTrace);
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"inputs\":[";
+    for (size_t i = 0; i < report.inputs.size(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        write_runtime_scripted_input_report(out, report.inputs[i]);
+    }
+    out << "]}";
+}
+
+void write_runtime_scripted_converter_report(
+    std::ostream& out,
+    const RuntimeStateMachineScriptedConverterReport& report)
+{
+    out << "{\"parentBindIndex\":" << report.parentBindIndex;
+    out << ",\"converterPath\":";
+    write_size_vector(out, report.converterPath);
+    out << ",\"converterId\":" << report.converterId;
+    out << ",\"definitionPresent\":"
+        << (report.definitionPresent ? "true" : "false");
+    out << ",\"occurrencePresent\":"
+        << (report.occurrencePresent ? "true" : "false");
+    out << ",\"definitionCoreType\":" << report.definitionCoreType;
+    out << ",\"occurrenceCoreType\":" << report.occurrenceCoreType;
+    out << ",\"occurrenceOrdinal\":";
+    if (report.hasOccurrenceOrdinal)
+    {
+        out << report.occurrenceOrdinal;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"occurrenceDistinctFromDefinition\":"
+        << (report.occurrenceDistinctFromDefinition ? "true" : "false");
+    out << ",\"definitionTableOrdinal\":";
+    if (report.hasDefinitionTableOrdinal)
+    {
+        out << report.definitionTableOrdinal;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"occurrenceTableOrdinal\":";
+    if (report.hasOccurrenceTableOrdinal)
+    {
+        out << report.occurrenceTableOrdinal;
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"hasDataContext\":"
+        << (report.hasDataContext ? "true" : "false");
+    out << ",\"dataContextMatchesStateMachine\":"
+        << (report.dataContextMatchesStateMachine ? "true" : "false");
+    out << ",\"userLuaInitDone\":"
+        << (report.userLuaInitDone ? "true" : "false");
+    out << ",\"hasScriptAsset\":"
+        << (report.hasScriptAsset ? "true" : "false");
+    out << ",\"assetSerializedImplementedMethods\":"
+        << report.assetSerializedImplementedMethods;
+    out << ",\"definitionImplementedMethods\":"
+        << report.definitionImplementedMethods;
+    out << ",\"occurrenceImplementedMethods\":"
+        << report.occurrenceImplementedMethods;
+    out << ",\"definitionInputCount\":"
+        << report.definitionInputCount;
+    out << ",\"occurrenceInputCount\":"
+        << report.occurrenceInputCount;
+    out << ",\"definitionDataBindCount\":"
+        << report.definitionDataBindCount;
+    out << ",\"occurrenceDataBindCount\":"
+        << report.occurrenceDataBindCount;
+    out << ",\"probeTrace\":";
+    if (report.hasProbeTrace)
+    {
+        write_string_vector(out, report.probeTrace);
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"inputs\":[";
+    for (size_t i = 0; i < report.inputs.size(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        write_runtime_scripted_input_report(out, report.inputs[i]);
+    }
+    out << "],\"dataBinds\":[";
+    for (size_t i = 0; i < report.dataBinds.size(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        const auto& dataBind = report.dataBinds[i];
+        out << "{\"index\":" << dataBind.index;
+        out << ",\"sourcePresent\":"
+            << (dataBind.sourcePresent ? "true" : "false");
+        out << ",\"occurrencePresent\":"
+            << (dataBind.occurrencePresent ? "true" : "false");
+        out << ",\"sourceCoreType\":" << dataBind.sourceCoreType;
+        out << ",\"occurrenceCoreType\":" << dataBind.occurrenceCoreType;
+        out << ",\"coreType\":" << dataBind.coreType;
+        out << ",\"sourceFlags\":" << dataBind.sourceFlags;
+        out << ",\"flags\":" << dataBind.flags;
+        out << ",\"sourcePropertyKey\":"
+            << dataBind.sourcePropertyKey;
+        out << ",\"propertyKey\":" << dataBind.propertyKey;
+        out << ",\"sourceConverterId\":"
+            << dataBind.sourceConverterId;
+        out << ",\"converterId\":" << dataBind.converterId;
+        out << ",\"sourcePathIds\":";
+        write_u32_vector(out, dataBind.sourcePathIds);
+        out << ",\"occurrencePathIds\":";
+        write_u32_vector(out, dataBind.occurrencePathIds);
+        out << ",\"distinctClone\":"
+            << (dataBind.distinctClone ? "true" : "false");
+        out << ",\"sourceBindOrdinal\":";
+        if (dataBind.hasSourceBindOrdinal)
+        {
+            out << dataBind.sourceBindOrdinal;
+        }
+        else
+        {
+            out << "null";
+        }
+        out << ",\"occurrenceBindOrdinal\":";
+        if (dataBind.hasOccurrenceBindOrdinal)
+        {
+            out << dataBind.occurrenceBindOrdinal;
+        }
+        else
+        {
+            out << "null";
+        }
+        out << ",\"targetInputIndex\":";
+        if (dataBind.hasTargetInputIndex)
+        {
+            out << dataBind.targetInputIndex;
+        }
+        else
+        {
+            out << "null";
+        }
+        out << ",\"targetIsOccurrenceInput\":"
+            << (dataBind.targetIsOccurrenceInput ? "true" : "false");
+        out << ",\"isFinalForTarget\":"
+            << (dataBind.isFinalForTarget ? "true" : "false");
+        out << '}';
+    }
+    out << "]}";
 }
 
 void write_runtime_state_machine_advance_reports(
@@ -6364,13 +8551,90 @@ void write_runtime_state_machine_advance_reports(
         const auto& report = reports[i];
         out << "{\"stateMachineIndex\":" << report.stateMachineIndex;
         out << ",\"seconds\":" << report.seconds;
+        out << ",\"needsAdvanceBefore\":"
+            << (report.needsAdvanceBefore ? "true" : "false");
         out << ",\"advanced\":" << (report.advanced ? "true" : "false");
+        out << ",\"persistentDirtProbe\":"
+            << (report.persistentDirtProbe ? "true" : "false");
+        out << ",\"persistentDirtAdvanceCount\":"
+            << report.persistentDirtAdvanceCount;
+        out << ",\"persistentDirtUpdateCount\":"
+            << report.persistentDirtUpdateCount;
+        out << ",\"persistentDirtRemaining\":"
+            << (report.persistentDirtRemaining ? "true" : "false");
+        out << ",\"namedInputProbe\":"
+            << (report.namedInputProbe ? "true" : "false");
+        out << ",\"namedBoolInputIndex\":" << report.namedBoolInputIndex;
+        out << ",\"namedNumberInputIndex\":"
+            << report.namedNumberInputIndex;
+        out << ",\"namedTriggerInputIndex\":"
+            << report.namedTriggerInputIndex;
+        out << ",\"pointerInputProbe\":"
+            << (report.pointerInputProbe ? "true" : "false");
+        out << ",\"pointerHitResult\":" << report.pointerHitResult;
         out << ",\"currentAnimationCount\":"
             << report.currentAnimationCount;
         out << ",\"changedStateCount\":" << report.changedStateCount;
+        out << ",\"changedStateCoreTypes\":[";
+        for (size_t j = 0; j < report.changedStateCoreTypes.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            out << report.changedStateCoreTypes[j];
+        }
+        out << ']';
         out << ",\"randomTotalCalls\":" << report.randomTotalCalls;
+        out << ",\"hasDataContext\":"
+            << (report.hasDataContext ? "true" : "false");
+        out << ",\"hasMainViewModelInstance\":"
+            << (report.hasMainViewModelInstance ? "true" : "false");
+        out << ",\"mainViewModelIndex\":" << report.mainViewModelIndex;
+        out << ",\"mainViewModelInstanceIndex\":"
+            << report.mainViewModelInstanceIndex;
+        out << ",\"inheritedDataContextDependentCounts\":[";
+        for (size_t j = 0;
+             j < report.inheritedDataContextDependentCounts.size();
+             ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            out << report.inheritedDataContextDependentCounts[j];
+        }
+        out << "],\"globalViewModelSlots\":[";
+        for (size_t j = 0; j < report.globalViewModelSlots.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            const auto& slot = report.globalViewModelSlots[j];
+            out << "{\"slotViewModelIndex\":" << slot.slotViewModelIndex;
+            out << ",\"hasInstance\":"
+                << (slot.hasInstance ? "true" : "false");
+            out << ",\"instanceViewModelIndex\":"
+                << slot.instanceViewModelIndex;
+            out << ",\"instanceIndex\":" << slot.instanceIndex;
+            out << '}';
+        }
+        out << ']';
         out << ",\"reportedEventCount\":" << report.reportedEvents.size();
-        out << ",\"currentAnimations\":[";
+        out << ",\"boolInputs\":[";
+        for (size_t j = 0; j < report.boolInputs.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            const auto& input = report.boolInputs[j];
+            out << "{\"index\":" << input.first;
+            out << ",\"value\":" << (input.second ? "true" : "false");
+            out << '}';
+        }
+        out << "],\"currentAnimations\":[";
         for (size_t j = 0; j < report.currentAnimations.size(); ++j)
         {
             if (j != 0)
@@ -6385,6 +8649,43 @@ void write_runtime_state_machine_advance_reports(
         }
         out << "],\"reportedEvents\":";
         write_runtime_reported_events(out, report.reportedEvents);
+        out << ",\"nestedReportedEvents\":[";
+        for (size_t j = 0; j < report.nestedReportedEvents.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            const auto& nested = report.nestedReportedEvents[j];
+            out << "{\"localId\":" << nested.localId;
+            out << ",\"reportedEvents\":";
+            write_runtime_reported_events(out, nested.reportedEvents);
+            out << ",\"notifyBatches\":[";
+            for (size_t k = 0; k < nested.notifyBatches.size(); ++k)
+            {
+                if (k != 0)
+                {
+                    out << ',';
+                }
+                write_runtime_reported_events(out, nested.notifyBatches[k]);
+            }
+            out << ']';
+            out << ",\"preMixNodeXs\":[";
+            for (size_t k = 0; k < nested.preMixNodeXs.size(); ++k)
+            {
+                if (k != 0)
+                {
+                    out << ',';
+                }
+                out << nested.preMixNodeXs[k];
+            }
+            out << ']';
+            out << ",\"hasMixedNodeX\":"
+                << (nested.hasMixedNodeX ? "true" : "false");
+            out << ",\"mixedNodeX\":" << nested.mixedNodeX;
+            out << '}';
+        }
+        out << ']';
         out << ",\"viewModelTriggers\":[";
         for (size_t j = 0; j < report.viewModelTriggers.size(); ++j)
         {
@@ -6744,6 +9045,36 @@ void write_runtime_state_machine_advance_reports(
                 out << "null";
             }
             out << '}';
+        }
+        out << "],\"scriptedObjects\":[";
+        for (size_t j = 0; j < report.scriptedObjects.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            write_runtime_scripted_object_report(
+                out, report.scriptedObjects[j]);
+        }
+        out << "],\"artboardScriptedObjects\":[";
+        for (size_t j = 0; j < report.artboardScriptedObjects.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            write_runtime_scripted_object_report(
+                out, report.artboardScriptedObjects[j]);
+        }
+        out << "],\"scriptedConverters\":[";
+        for (size_t j = 0; j < report.scriptedConverters.size(); ++j)
+        {
+            if (j != 0)
+            {
+                out << ',';
+            }
+            write_runtime_scripted_converter_report(
+                out, report.scriptedConverters[j]);
         }
         out << "]}";
     }
@@ -8168,6 +10499,16 @@ void write_keyed_property(std::ostream& out,
     }
     out << ",\"firstKeyFrame\":";
     write_key_frame_or_null(out, keyedProperty->first(), options);
+    out << ",\"keyFrames\":[";
+    for (size_t i = 0; i < keyedProperty->numKeyFrames(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        write_key_frame_or_null(out, keyedProperty->getKeyFrame(i), options);
+    }
+    out << ']';
     out << '}';
 }
 
@@ -8578,15 +10919,16 @@ void write_blend_animation(std::ostream& out,
         return;
     }
 
+    auto resolvedAnimation = animation->animation();
     size_t animationIndex = 0;
-    bool hasAnimation =
-        artboard_animation_index(artboard, animation->animation(), animationIndex);
+    bool hasArtboardAnimation =
+        artboard_animation_index(artboard, resolvedAnimation, animationIndex);
 
     out << "{\"index\":" << index;
     out << ",\"coreType\":" << animation->coreType();
     out << ",\"animationId\":" << animation->animationId();
     out << ",\"animationIndex\":";
-    if (hasAnimation)
+    if (hasArtboardAnimation)
     {
         out << animationIndex;
     }
@@ -8595,9 +10937,18 @@ void write_blend_animation(std::ostream& out,
         out << "null";
     }
     out << ",\"animationCoreType\":";
-    if (hasAnimation)
+    if (resolvedAnimation != nullptr)
     {
-        out << animation->animation()->coreType();
+        out << resolvedAnimation->coreType();
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"animationName\":";
+    if (resolvedAnimation != nullptr)
+    {
+        write_json_string(out, resolvedAnimation->name());
     }
     else
     {
@@ -8626,19 +10977,30 @@ void write_layer_state(std::ostream& out,
     out << "{\"index\":" << index;
     out << ",\"coreType\":" << state->coreType();
     out << ",\"animationId\":";
+    const rive::LinearAnimation* resolvedAnimation = nullptr;
     if (state->is<rive::AnimationState>())
     {
-        out << state->as<rive::AnimationState>()->animationId();
+        auto animationState = state->as<rive::AnimationState>();
+        out << animationState->animationId();
+        resolvedAnimation = animationState->animation();
     }
     else
     {
         out << "null";
     }
     out << ",\"animationCoreType\":";
-    if (state->is<rive::AnimationState>() &&
-        state->as<rive::AnimationState>()->animation() != nullptr)
+    if (resolvedAnimation != nullptr)
     {
-        out << state->as<rive::AnimationState>()->animation()->coreType();
+        out << resolvedAnimation->coreType();
+    }
+    else
+    {
+        out << "null";
+    }
+    out << ",\"animationName\":";
+    if (resolvedAnimation != nullptr)
+    {
+        write_json_string(out, resolvedAnimation->name());
     }
     else
     {
@@ -11557,6 +13919,45 @@ void write_artboard(std::ostream& out,
     }
     out << ']';
 
+    out << ",\"nestedStateMachines\":[";
+    first = true;
+    for (size_t i = 0; i < objects.size(); ++i)
+    {
+        rive::Core* object = objects[i];
+        if (object == nullptr || !object->is<rive::NestedStateMachine>())
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        write_nested_state_machine(
+            out, i, object->as<rive::NestedStateMachine>());
+    }
+    out << ']';
+
+    out << ",\"nestedRemapAnimations\":[";
+    first = true;
+    for (size_t i = 0; i < objects.size(); ++i)
+    {
+        rive::Core* object = objects[i];
+        if (object == nullptr ||
+            !object->is<rive::NestedRemapAnimation>())
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        write_nested_remap_animation(
+            out, i, object->as<rive::NestedRemapAnimation>());
+    }
+    out << ']';
+
     out << ",\"artboardComponentLists\":[";
     first = true;
     for (size_t i = 0; i < objects.size(); ++i)
@@ -12943,6 +15344,144 @@ bool parse_bool_arg(const char* arg)
     return arg != nullptr &&
            (std::strcmp(arg, "true") == 0 || std::strcmp(arg, "1") == 0);
 }
+
+void write_animation_reset_color_roundtrip(std::ostream& out,
+                                           uint32_t colorBits)
+{
+    rive::AnimationReset reset;
+    reset.writeObjectId(0);
+    reset.writeTotalProperties(1);
+    reset.writePropertyKey(0);
+    reset.writePropertyValue(
+        static_cast<float>(static_cast<int32_t>(colorBits)));
+    reset.complete();
+
+    reset.m_binaryReader.reset(&reset.m_WriteBuffer.front());
+    (void)reset.m_binaryReader.readVarUint32();
+    (void)reset.m_binaryReader.readVarUint32();
+    (void)reset.m_binaryReader.readVarUint32();
+    const float stored = reset.m_binaryReader.readFloat32();
+    const int restored = static_cast<int>(stored);
+    uint32_t storedBits = 0;
+    static_assert(sizeof(storedBits) == sizeof(stored));
+    std::memcpy(&storedBits, &stored, sizeof(storedBits));
+
+    out << "{\"input\":" << colorBits;
+    out << ",\"storedFloatBits\":" << storedBits;
+    out << ",\"output\":" << static_cast<uint32_t>(restored) << "}\n";
+}
+
+void write_transition_integer_comparison_samples(std::ostream& out)
+{
+    constexpr uint32_t left = 0x01000001u;
+    constexpr uint32_t right = 0x01000000u;
+    rive::ConditionOperationEqual equal;
+    rive::ConditionOperationNotEqual notEqual;
+    rive::ConditionOperationLessThan lessThan;
+    rive::ConditionOperationGreaterThan greaterThan;
+
+    out << "{\"left\":" << left;
+    out << ",\"right\":" << right;
+    out << ",\"equal\":" << (equal.compareUints32(left, right) ? "true" : "false");
+    out << ",\"notEqual\":"
+        << (notEqual.compareUints32(left, right) ? "true" : "false");
+    out << ",\"lessThan\":"
+        << (lessThan.compareUints32(left, right) ? "true" : "false");
+    out << ",\"greaterThan\":"
+        << (greaterThan.compareUints32(left, right) ? "true" : "false");
+    out << "}\n";
+}
+
+void write_state_machine_definition_null_hole_sample(std::ostream& out)
+{
+    rive::StateMachine stateMachine;
+    rive::StateMachineImporter importer(&stateMachine);
+
+    auto number = std::make_unique<rive::StateMachineNumber>();
+    number->name("x");
+    importer.addInput(std::move(number));
+    importer.readNullObject();
+    auto boolean = std::make_unique<rive::StateMachineBool>();
+    boolean->name("x");
+    importer.addInput(std::move(boolean));
+    auto trigger = std::make_unique<rive::StateMachineTrigger>();
+    trigger->name("x");
+    importer.addInput(std::move(trigger));
+
+    for (const char* name : {"duplicate", "duplicate", "Case"})
+    {
+        auto layer = std::make_unique<rive::StateMachineLayer>();
+        layer->name(name);
+        importer.addLayer(std::move(layer));
+    }
+
+    importer.addListener(std::make_unique<rive::StateMachineListener>());
+    auto concreteListener =
+        std::make_unique<rive::StateMachineListenerSingle>();
+    concreteListener->targetId(0);
+    importer.addListener(std::move(concreteListener));
+
+    for (size_t i = 0; i < 2; ++i)
+    {
+        auto dataBind = std::make_unique<rive::DataBind>();
+        dataBind->propertyKey(586);
+        importer.addDataBind(std::move(dataBind));
+    }
+
+    out << "{\"inputCount\":" << stateMachine.inputCount();
+    out << ",\"inputs\":[";
+    for (size_t i = 0; i < stateMachine.inputCount(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        auto input = stateMachine.input(i);
+        if (input == nullptr)
+        {
+            out << "null";
+            continue;
+        }
+        out << "{\"index\":" << i;
+        out << ",\"coreType\":" << input->coreType();
+        out << ",\"name\":";
+        write_json_string(out, input->name());
+        out << '}';
+    }
+    out << "],\"layers\":[";
+    for (size_t i = 0; i < stateMachine.layerCount(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        auto layer = stateMachine.layer(i);
+        out << "{\"index\":" << i << ",\"name\":";
+        write_json_string(out, layer->name());
+        out << '}';
+    }
+    out << "],\"listeners\":[";
+    for (size_t i = 0; i < stateMachine.listenerCount(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        auto listener = stateMachine.listener(i);
+        out << "{\"index\":" << i;
+        out << ",\"targetId\":" << listener->targetId() << '}';
+    }
+    out << "],\"dataBindPropertyKeys\":[";
+    for (size_t i = 0; i < stateMachine.dataBindCount(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        out << stateMachine.dataBind(i)->propertyKey();
+    }
+    out << "]}\n";
+}
 } // namespace
 
 int main(int argc, const char* argv[])
@@ -12951,6 +15490,10 @@ int main(int argc, const char* argv[])
     ProbeOptions options;
     bool converterSamples = false;
     bool numberToListSamples = false;
+    bool animationResetColorRoundtrip = false;
+    bool transitionIntegerComparisonSamples = false;
+    bool stateMachineDefinitionNullHoleSample = false;
+    uint32_t animationResetColor = 0;
 
     for (int i = 1; i < argc; ++i)
     {
@@ -12963,6 +15506,32 @@ int main(int argc, const char* argv[])
         if (is_arg(argv[i], "--number-to-list-samples"))
         {
             numberToListSamples = true;
+            continue;
+        }
+
+        if (is_arg(argv[i], "--animation-reset-color-roundtrip"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr
+                    << "--animation-reset-color-roundtrip requires colorBits\n";
+                return 2;
+            }
+            animationResetColorRoundtrip = true;
+            animationResetColor =
+                static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 0));
+            continue;
+        }
+
+        if (is_arg(argv[i], "--transition-integer-comparison-samples"))
+        {
+            transitionIntegerComparisonSamples = true;
+            continue;
+        }
+
+        if (is_arg(argv[i], "--state-machine-definition-null-hole-sample"))
+        {
+            stateMachineDefinitionNullHoleSample = true;
             continue;
         }
 
@@ -13145,6 +15714,104 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-set-animation-loop-value"))
+        {
+            if (i + 2 >= argc)
+            {
+                std::cerr << "--runtime-set-animation-loop-value requires animationIndex value\n";
+                return 2;
+            }
+            RuntimeAnimationLoopValueMutation mutation;
+            mutation.animationIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            mutation.value =
+                static_cast<int>(std::strtol(argv[++i], nullptr, 10));
+            options.runtimeAnimationLoopValueMutations.push_back(mutation);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-snapshot-state-machine-scripts"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-snapshot-state-machine-scripts requires stateMachineIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::SnapshotStateMachineScripts;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-snapshot-named-inputs"))
+        {
+            if (i + 2 >= argc)
+            {
+                std::cerr << "--runtime-snapshot-named-inputs requires stateMachineIndex name\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::SnapshotNamedInputs;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.stringValue = argv[++i];
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-update-artboard-pass"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-update-artboard-pass requires stateMachineIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::UpdateArtboardPass;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-reset-artboard"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-reset-artboard requires stateMachineIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::ResetArtboard;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-advance-state-machine"))
         {
             if (i + 2 >= argc)
@@ -13154,6 +15821,49 @@ int main(int argc, const char* argv[])
             }
             RuntimeStateMachineAction action;
             action.kind = RuntimeStateMachineActionKind::Advance;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = std::strtof(argv[++i], nullptr);
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i],
+                   "--runtime-advance-and-apply-state-machine"))
+        {
+            if (i + 2 >= argc)
+            {
+                std::cerr << "--runtime-advance-and-apply-state-machine requires stateMachineIndex seconds\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::AdvanceAndApply;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = std::strtof(argv[++i], nullptr);
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i],
+                   "--runtime-advance-and-apply-persistent-dirt"))
+        {
+            if (i + 2 >= argc)
+            {
+                std::cerr << "--runtime-advance-and-apply-persistent-dirt requires stateMachineIndex seconds\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::AdvanceAndApplyPersistentDirt;
             action.stateMachineIndex =
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
             action.inputIndex = 0;
@@ -13244,6 +15954,29 @@ int main(int argc, const char* argv[])
             action.seconds = 0.0f;
             action.boolValue = false;
             action.numberValue = std::strtof(argv[++i], nullptr);
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-set-object-string"))
+        {
+            if (i + 4 >= argc)
+            {
+                std::cerr << "--runtime-set-object-string requires stateMachineIndex localId propertyKey value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::SetObjectString;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.dataBindIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.stringValue = argv[++i];
             options.runtimeStateMachineActions.push_back(action);
             continue;
         }
@@ -14029,7 +16762,31 @@ int main(int argc, const char* argv[])
             options.runtimeStateMachineActions.push_back(action);
             continue;
         }
-
+        if (is_arg(
+                argv[i],
+                "--runtime-advance-then-set-owned-view-model-source-number-by-name"))
+        {
+            if (i + 4 >= argc)
+            {
+                std::cerr << "--runtime-advance-then-set-owned-view-model-source-number-by-name requires stateMachineIndex propertyName seconds value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                AdvanceThenSetOwnedViewModelSourceNumberByName;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex = 0;
+            action.viewModelInstanceIndex = 0;
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.stringValue = argv[++i];
+            action.seconds = std::strtof(argv[++i], nullptr);
+            action.boolValue = false;
+            action.numberValue = std::strtof(argv[++i], nullptr);
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
         if (is_arg(argv[i], "--runtime-set-owned-view-model-source-bool"))
         {
             if (i + 3 >= argc)
@@ -14048,6 +16805,29 @@ int main(int argc, const char* argv[])
             action.dataBindIndex =
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
             action.seconds = 0.0f;
+            action.boolValue = parse_bool_arg(argv[++i]);
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+        if (is_arg(
+                argv[i],
+                "--runtime-set-owned-view-model-source-bool-by-name"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-set-owned-view-model-source-bool-by-name requires stateMachineIndex propertyName value\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                SetOwnedViewModelSourceBooleanByName;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.stringValue = argv[++i];
             action.boolValue = parse_bool_arg(argv[++i]);
             action.numberValue = 0.0f;
             options.runtimeStateMachineActions.push_back(action);
@@ -14974,6 +17754,28 @@ int main(int argc, const char* argv[])
             options.runtimeStateMachineActions.push_back(action);
             continue;
         }
+        if (is_arg(
+                argv[i],
+                "--runtime-bind-created-default-view-model-state-machine-context"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-bind-created-default-view-model-state-machine-context requires stateMachineIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                BindCreatedDefaultViewModelContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
 
         if (is_arg(argv[i],
                    "--runtime-bind-view-model-instance-state-machine-context"))
@@ -14994,6 +17796,129 @@ int main(int argc, const char* argv[])
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
             action.viewModelInstanceIndex =
                 static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+        if (is_arg(
+                argv[i],
+                "--runtime-bind-null-view-model-instance-state-machine-context"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-bind-null-view-model-instance-state-machine-context requires stateMachineIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                BindNullViewModelInstanceContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+        if (is_arg(
+                argv[i],
+                "--runtime-set-view-model-instance-state-machine-context"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-set-view-model-instance-state-machine-context requires stateMachineIndex viewModelIndex instanceIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::SetViewModelInstanceContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+        if (is_arg(
+                argv[i],
+                "--runtime-inherit-view-model-instance-state-machine-context"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-inherit-view-model-instance-state-machine-context requires stateMachineIndex viewModelIndex instanceIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::InheritViewModelInstanceContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+        if (is_arg(
+                argv[i],
+                "--runtime-set-global-view-model-instance-state-machine-context"))
+        {
+            if (i + 4 >= argc)
+            {
+                std::cerr << "--runtime-set-global-view-model-instance-state-machine-context requires stateMachineIndex slotViewModelIndex occupantViewModelIndex occupantInstanceIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind = RuntimeStateMachineActionKind::
+                SetGlobalViewModelInstanceContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.leafPropertyIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+        if (is_arg(argv[i],
+                   "--runtime-complete-view-model-instances-state-machine-context"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-complete-view-model-instances-state-machine-context requires stateMachineIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::CompleteViewModelInstances;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
             action.seconds = 0.0f;
             action.boolValue = false;
             action.numberValue = 0.0f;
@@ -15871,6 +18796,33 @@ int main(int argc, const char* argv[])
         }
 
         if (is_arg(argv[i],
+                   "--runtime-bind-owned-view-model-null-viewmodel-state-machine-context"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--runtime-bind-owned-view-model-null-viewmodel-state-machine-context requires stateMachineIndex viewModelIndex propertyIndex\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::BindOwnedViewModelNullViewModelContext;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.viewModelIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.dataBindIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.viewModelInstanceIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.uintValue = 0;
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
+        if (is_arg(argv[i],
                    "--runtime-bind-owned-view-model-trigger-state-machine-context"))
         {
             if (i + 4 >= argc)
@@ -16039,6 +18991,29 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i],
+                   "--runtime-fire-owned-view-model-trigger-by-name"))
+        {
+            if (i + 2 >= argc)
+            {
+                std::cerr << "--runtime-fire-owned-view-model-trigger-by-name requires stateMachineIndex propertyName\n";
+                return 2;
+            }
+            RuntimeStateMachineAction action;
+            action.kind =
+                RuntimeStateMachineActionKind::FireOwnedViewModelTriggerByName;
+            action.stateMachineIndex =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            action.inputIndex = 0;
+            action.dataBindIndex = 0;
+            action.seconds = 0.0f;
+            action.boolValue = false;
+            action.numberValue = 0.0f;
+            action.stringValue = argv[++i];
+            options.runtimeStateMachineActions.push_back(action);
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-pointer-down-state-machine") ||
             is_arg(argv[i], "--runtime-pointer-up-state-machine"))
         {
@@ -16183,13 +19158,37 @@ int main(int argc, const char* argv[])
         return 0;
     }
 
+    if (animationResetColorRoundtrip)
+    {
+        write_animation_reset_color_roundtrip(
+            std::cout, animationResetColor);
+        return 0;
+    }
+
+    if (transitionIntegerComparisonSamples)
+    {
+        write_transition_integer_comparison_samples(std::cout);
+        return 0;
+    }
+
+    if (stateMachineDefinitionNullHoleSample)
+    {
+        write_state_machine_definition_null_hole_sample(std::cout);
+        return 0;
+    }
+
     if (filename == nullptr)
     {
         std::cerr << "usage: rive_cpp_probe [--converter-samples] [--number-to-list-samples] [--property-values] [--file-property-values] [--no-advance] [--runtime-update] [--runtime-layout-bounds] [--runtime-golden-scene-advance seconds] [--instance-artboards] [--runtime-bind-default-view-model-artboard-context] [--runtime-update-artboard-data-binds] [--runtime-advance-artboard-after-bind] [--runtime-set-double localId propertyKey value] [--runtime-collapse-component localId value] [--runtime-set-artboard-size width height] [--runtime-apply-animation animationIndex seconds mix] [--runtime-advance-animation animationIndex seconds mix] [--runtime-advance-state-machine stateMachineIndex seconds] [--runtime-advance-state-machine-data-context stateMachineIndex] [--runtime-update-state-machine-data-binds stateMachineIndex] [--runtime-set-state-machine-bool stateMachineIndex inputIndex value] [--runtime-set-state-machine-number stateMachineIndex inputIndex value] [--runtime-set-state-machine-bindable-number stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-bool stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-integer stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-color stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-string stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-enum stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-asset stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-artboard stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-list stateMachineIndex dataBindIndex value] [--runtime-set-state-machine-bindable-viewmodel stateMachineIndex dataBindIndex referencedInstanceIndex] [--runtime-set-default-view-model-source-number stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-bool stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-string stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-color stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-enum stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-asset stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-artboard stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-trigger stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-list stateMachineIndex dataBindIndex value] [--runtime-set-default-view-model-source-viewmodel stateMachineIndex dataBindIndex value] [--runtime-bind-empty-state-machine-context stateMachineIndex] [--runtime-bind-default-view-model-state-machine-context stateMachineIndex] [--runtime-bind-view-model-instance-state-machine-context stateMachineIndex viewModelIndex instanceIndex] [--runtime-bind-owned-view-model-number-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-bool-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-string-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-color-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-enum-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-asset-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-artboard-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-bind-owned-view-model-trigger-state-machine-context stateMachineIndex viewModelIndex propertyIndex value] [--runtime-fire-state-machine-trigger stateMachineIndex inputIndex] [--complete-view-model-properties] [--data-context-lookups] --file "
                      "path/to/file.riv\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-viewmodel-state-machine-context stateMachineIndex viewModelIndex propertyIndex value\n";
+        std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-null-viewmodel-state-machine-context stateMachineIndex viewModelIndex propertyIndex\n";
         std::cerr << "additional runtime flag: --runtime-pointer-down-state-machine stateMachineIndex x y\n";
         std::cerr << "additional runtime flag: --runtime-pointer-up-state-machine stateMachineIndex x y\n";
+        std::cerr << "additional runtime flag: --runtime-snapshot-state-machine-scripts stateMachineIndex\n";
+        std::cerr << "additional runtime flag: --runtime-update-artboard-pass stateMachineIndex\n";
+        std::cerr << "additional runtime flag: --runtime-reset-artboard stateMachineIndex\n";
+        std::cerr << "additional runtime flag: --runtime-advance-and-apply-state-machine stateMachineIndex seconds\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-viewmodel-default-state-machine-context stateMachineIndex viewModelIndex propertyIndex\n";
         std::cerr << "additional runtime flag: --runtime-set-default-view-model-source-symbol-list-index stateMachineIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-number-name-path-state-machine-context stateMachineIndex viewModelIndex propertyPath value\n";
@@ -16214,10 +19213,12 @@ int main(int argc, const char* argv[])
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-imported-intermediate-list-name-path-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex childInstanceIndex propertyPath itemCount\n";
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-symbol-list-index-state-machine-context stateMachineIndex viewModelIndex propertyIndex value\n";
         std::cerr << "additional runtime flag: --runtime-bind-default-view-model-artboard-context\n";
+        std::cerr << "additional runtime flag: --runtime-bind-created-default-view-model-state-machine-context stateMachineIndex\n";
         std::cerr << "additional runtime flag: --runtime-relink-default-view-model-source-viewmodel stateMachineIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-number stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-set-owned-view-model-source-number stateMachineIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-set-owned-view-model-source-bool stateMachineIndex dataBindIndex value\n";
+        std::cerr << "additional runtime flag: --runtime-set-owned-view-model-source-bool-by-name stateMachineIndex propertyName value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-number-by-name stateMachineIndex viewModelIndex instanceIndex propertyName value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-bool stateMachineIndex viewModelIndex instanceIndex dataBindIndex value\n";
         std::cerr << "additional runtime flag: --runtime-set-view-model-instance-source-bool-by-name stateMachineIndex viewModelIndex instanceIndex propertyName value\n";
@@ -16249,6 +19250,7 @@ int main(int argc, const char* argv[])
         std::cerr << "additional runtime flag: --runtime-bind-owned-view-model-deep-imported-intermediate-viewmodel-state-machine-context stateMachineIndex viewModelIndex rootPropertyIndex childInstanceIndex middlePropertyIndex leafPropertyIndex value\n";
         std::cerr << "additional runtime flag: --runtime-random-reset\n";
         std::cerr << "additional runtime flag: --runtime-random-value value\n";
+        std::cerr << "additional runtime flag: --runtime-fire-owned-view-model-trigger-by-name stateMachineIndex propertyName\n";
         return 2;
     }
 

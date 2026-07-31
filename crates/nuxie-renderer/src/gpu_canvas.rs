@@ -5,9 +5,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU64;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use nuxie_render_api::{GpuCanvasError, GpuCanvasPlan, GpuCanvasShader, RenderImage};
+use nuxie_render_api::{
+    GpuCanvasError, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderEntry,
+    GpuCanvasShaderEntrySelection, GpuCanvasShaderResourceKind, GpuCanvasShaderStage,
+    RenderGpuCanvasShader, RenderImage,
+};
 pub use nuxie_render_api::{
     GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
@@ -35,6 +40,7 @@ const MAX_IMPORTED_GPU_CANVAS_CACHE_BYTES: usize = MAX_VERTEX_BUFFERS * MAX_VERT
 // aggregate target budget.
 const MAX_RETAINED_GPU_CANVAS_TARGETS: usize = 16;
 const MAX_RETAINED_GPU_CANVAS_TARGET_BYTES: usize = 64 * 1024 * 1024;
+static NEXT_GPU_CANVAS_SHADER_OCCURRENCE_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Default)]
 pub(super) struct RetainedGpuCanvasTargetBudget {
@@ -166,316 +172,51 @@ pub struct GpuCanvasRenderPlan {
     pub vertex_buffers: Vec<GpuCanvasVertexBuffer>,
 }
 
-#[cfg(any(test, target_arch = "wasm32"))]
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct WebGl2UniformBlock {
-    group: u32,
-    binding: u32,
-    name: String,
-}
-
-#[cfg(any(test, target_arch = "wasm32"))]
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct WebGl2TranslatedStage {
-    source: String,
-    uniform_blocks: Vec<WebGl2UniformBlock>,
-}
-
-#[cfg(any(test, target_arch = "wasm32"))]
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct WebGl2TranslatedProgram {
-    vertex: WebGl2TranslatedStage,
-    fragment: WebGl2TranslatedStage,
-    vertex_attribute_formats: std::collections::BTreeMap<u32, String>,
-}
-
-/// Parse and validate once, then emit the exact GLSL ES 3.00 stages consumed
-/// by WebGL2. The typed draw plan intentionally has no texture, storage, or
-/// compute resource variants, so shaders that escape that closed contract fail
-/// before a browser allocation.
-#[cfg(any(test, target_arch = "wasm32"))]
-fn translate_gpu_canvas_wgsl_to_webgl2(
-    source: &str,
-) -> Result<WebGl2TranslatedProgram, RendererError> {
-    let invalid = |message: String| RendererError::InvalidGpuCanvas(message);
-    let module = naga::front::wgsl::parse_str(source)
-        .map_err(|error| invalid(error.emit_to_string(source)))?;
-    let info = naga::valid::Validator::new(
-        naga::valid::ValidationFlags::all(),
-        naga::valid::Capabilities::empty(),
-    )
-    .validate(&module)
-    .map_err(|error| invalid(error.emit_to_string(source)))?;
-
-    for (_, global) in module.global_variables.iter() {
-        match global.space {
-            naga::AddressSpace::Uniform => {
-                if global.binding.is_none() {
-                    return Err(invalid(
-                        "WebGL2 GPU-canvas uniform buffers require @group and @binding".into(),
-                    ));
-                }
-            }
-            naga::AddressSpace::Private => {}
-            _ => {
-                return Err(invalid(
-                    "WebGL2 GPU-canvas shaders support only private values and uniform buffers"
-                        .into(),
-                ));
-            }
-        }
-    }
-
-    let vertex_entry = module
-        .entry_points
-        .iter()
-        .find(|entry| entry.stage == naga::ShaderStage::Vertex && entry.name == "vs_main")
-        .ok_or_else(|| invalid("WGSL must define vs_main as a vertex entry point".into()))?;
-    let mut vertex_inputs = Vec::new();
-    let mut _vertex_builtin_inputs = 0;
-    for argument in &vertex_entry.function.arguments {
-        collect_io_locations(
-            &module,
-            argument.binding.as_ref(),
-            argument.ty,
-            &mut vertex_inputs,
-            &mut _vertex_builtin_inputs,
-        );
-    }
-    let mut vertex_attribute_formats = std::collections::BTreeMap::new();
-    for (location, ty) in vertex_inputs {
-        let format = naga_vertex_format(&module, ty)?;
-        if vertex_attribute_formats
-            .insert(location, format.into())
-            .is_some()
-        {
-            return Err(invalid(format!(
-                "vertex attribute location {location} is duplicated"
-            )));
-        }
-    }
-
-    let fragment_entry = module
-        .entry_points
-        .iter()
-        .find(|entry| entry.stage == naga::ShaderStage::Fragment && entry.name == "fs_main")
-        .ok_or_else(|| invalid("WGSL must define fs_main as a fragment entry point".into()))?;
-    let fragment_result = fragment_entry
-        .function
-        .result
-        .as_ref()
-        .ok_or_else(|| invalid("fs_main must return one RGBA value at location 0".into()))?;
-    let mut fragment_outputs = Vec::new();
-    let mut fragment_builtin_outputs = 0;
-    collect_io_locations(
-        &module,
-        fragment_result.binding.as_ref(),
-        fragment_result.ty,
-        &mut fragment_outputs,
-        &mut fragment_builtin_outputs,
-    );
-    if fragment_builtin_outputs != 0
-        || fragment_outputs.len() != 1
-        || fragment_outputs[0].0 != 0
-        || naga_vertex_format(&module, fragment_outputs[0].1)? != "float32x4"
-    {
-        return Err(invalid(
-            "fs_main must return exactly one vec4<f32> RGBA value at location 0".into(),
-        ));
-    }
-
-    Ok(WebGl2TranslatedProgram {
-        vertex: translate_naga_stage_to_webgl2(
-            &module,
-            &info,
-            naga::ShaderStage::Vertex,
-            "vs_main",
-        )?,
-        fragment: translate_naga_stage_to_webgl2(
-            &module,
-            &info,
-            naga::ShaderStage::Fragment,
-            "fs_main",
-        )?,
-        vertex_attribute_formats,
-    })
-}
-
-#[cfg(any(test, target_arch = "wasm32"))]
-fn translate_naga_stage_to_webgl2(
-    module: &naga::Module,
-    info: &naga::valid::ModuleInfo,
-    stage: naga::ShaderStage,
-    entry_point: &str,
-) -> Result<WebGl2TranslatedStage, RendererError> {
-    let invalid = |message: String| RendererError::InvalidGpuCanvas(message);
-    let options = naga::back::glsl::Options {
-        version: naga::back::glsl::Version::Embedded {
-            version: 300,
-            is_webgl: true,
-        },
-        writer_flags: naga::back::glsl::WriterFlags::ADJUST_COORDINATE_SPACE,
-        binding_map: naga::back::glsl::BindingMap::default(),
-        zero_initialize_workgroup_memory: true,
-    };
-    let pipeline_options = naga::back::glsl::PipelineOptions {
-        shader_stage: stage,
-        entry_point: entry_point.into(),
-        multiview: None,
-    };
-    let mut translated = String::new();
-    let mut writer = naga::back::glsl::Writer::new(
-        &mut translated,
-        module,
-        info,
-        &options,
-        &pipeline_options,
-        naga::proc::BoundsCheckPolicies::default(),
-    )
-    .map_err(|error| invalid(format!("WebGL2 {entry_point} translation failed: {error}")))?;
-    let reflection = writer
-        .write()
-        .map_err(|error| invalid(format!("WebGL2 {entry_point} emission failed: {error}")))?;
-    let mut uniform_blocks = reflection
-        .uniforms
-        .into_iter()
-        .filter_map(|(handle, name)| {
-            module.global_variables[handle]
-                .binding
-                .as_ref()
-                .map(|binding| WebGl2UniformBlock {
-                    group: binding.group,
-                    binding: binding.binding,
-                    name,
-                })
-        })
-        .collect::<Vec<_>>();
-    uniform_blocks.sort_by(|left, right| {
-        (left.group, left.binding, &left.name).cmp(&(right.group, right.binding, &right.name))
-    });
-    Ok(WebGl2TranslatedStage {
-        source: translated,
-        uniform_blocks,
-    })
-}
-
-#[cfg(any(test, target_arch = "wasm32"))]
-fn collect_io_locations(
-    module: &naga::Module,
-    binding: Option<&naga::Binding>,
-    ty: naga::Handle<naga::Type>,
-    locations: &mut Vec<(u32, naga::Handle<naga::Type>)>,
-    builtin_count: &mut usize,
-) {
-    match binding {
-        Some(naga::Binding::Location { location, .. }) => locations.push((*location, ty)),
-        Some(naga::Binding::BuiltIn(_)) => *builtin_count += 1,
-        None => {
-            if let naga::TypeInner::Struct { members, .. } = &module.types[ty].inner {
-                for member in members {
-                    collect_io_locations(
-                        module,
-                        member.binding.as_ref(),
-                        member.ty,
-                        locations,
-                        builtin_count,
-                    );
-                }
-            }
-        }
-    }
-}
-
-#[cfg(any(test, target_arch = "wasm32"))]
-fn naga_vertex_format(
-    module: &naga::Module,
-    ty: naga::Handle<naga::Type>,
-) -> Result<&'static str, RendererError> {
-    let scalar_format = |scalar: naga::Scalar, suffix: &'static str| {
-        if scalar.kind == naga::ScalarKind::Float && scalar.width == 4 {
-            Ok(suffix)
-        } else {
-            Err(RendererError::InvalidGpuCanvas(
-                "WebGL2 GPU-canvas vertex attributes and fragment output must use float32".into(),
-            ))
-        }
-    };
-    match module.types[ty].inner {
-        naga::TypeInner::Scalar(scalar) => scalar_format(scalar, "float32"),
-        naga::TypeInner::Vector { size, scalar } => scalar_format(
-            scalar,
-            match size {
-                naga::VectorSize::Bi => "float32x2",
-                naga::VectorSize::Tri => "float32x3",
-                naga::VectorSize::Quad => "float32x4",
-            },
-        ),
-        _ => Err(RendererError::InvalidGpuCanvas(
-            "WebGL2 GPU-canvas vertex attributes and fragment output must be float32 scalars or vectors"
-                .into(),
-        )),
-    }
-}
-
-#[cfg(any(test, target_arch = "wasm32"))]
-fn validate_webgl2_vertex_attributes(
-    expected: &std::collections::BTreeMap<u32, String>,
-    plan: &GpuCanvasRenderPlan,
-) -> Result<(), RendererError> {
-    let provided = plan
-        .vertex_layouts
-        .iter()
-        .flat_map(|layout| &layout.attributes)
-        .map(|attribute| (attribute.shader_location, attribute.format.as_str()))
-        .collect::<std::collections::BTreeMap<_, _>>();
-    for (location, format) in expected {
-        match provided.get(location) {
-            Some(provided_format) if *provided_format == format.as_str() => {}
-            Some(provided_format) => {
-                return Err(RendererError::InvalidGpuCanvas(format!(
-                    "vertex attribute location {location} requires {format}, but the draw plan supplies {provided_format}"
-                )));
-            }
-            None => {
-                return Err(RendererError::InvalidGpuCanvas(format!(
-                    "vertex attribute location {location} ({format}) is missing from the draw plan"
-                )));
-            }
-        }
-    }
-    Ok(())
-}
-
-struct CanonicalWgpuStage {
-    source: String,
-    module: naga::Module,
-    #[cfg(any(test, target_arch = "wasm32"))]
-    info: naga::valid::ModuleInfo,
-}
-
 struct PreparedImportedGpuCanvas {
-    vertex: CanonicalWgpuStage,
-    fragment: CanonicalWgpuStage,
+    vertex_entry_point: String,
+    fragment_entry_point: String,
     uniform_requirements: BTreeMap<(u32, u32), ImportedUniformRequirement>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone)]
 struct ImportedGpuCanvasPipelineKey {
-    shader: GpuCanvasShader,
+    vertex_occurrence_id: u64,
+    fragment_occurrence_id: u64,
+    vertex_entry: Option<GpuCanvasShaderEntrySelection>,
+    fragment_entry: Option<GpuCanvasShaderEntrySelection>,
     uniform_bindings: Vec<(u32, u32, usize)>,
     vertex_layouts: Vec<GpuCanvasVertexLayout>,
     vertex_buffers: Vec<(u32, usize)>,
 }
 
 impl ImportedGpuCanvasPipelineKey {
-    fn new(shader: &GpuCanvasShader, plan: &GpuCanvasPlan) -> Self {
+    fn new(
+        vertex_shader: &WgpuGpuCanvasShader,
+        fragment_shader: &WgpuGpuCanvasShader,
+        plan: &GpuCanvasPlan,
+    ) -> Self {
+        Self::from_occurrence_ids(
+            vertex_shader.occurrence_id,
+            fragment_shader.occurrence_id,
+            plan,
+        )
+    }
+
+    fn from_occurrence_ids(
+        vertex_occurrence_id: u64,
+        fragment_occurrence_id: u64,
+        plan: &GpuCanvasPlan,
+    ) -> Self {
         let uniform_bindings = plan
             .uniform_buffers
             .iter()
             .map(|buffer| (buffer.group, buffer.binding, buffer.bytes.len()))
             .collect::<Vec<_>>();
         Self {
-            shader: shader.clone(),
+            vertex_occurrence_id,
+            fragment_occurrence_id,
+            vertex_entry: plan.vertex_entry.clone(),
+            fragment_entry: plan.fragment_entry.clone(),
             uniform_bindings,
             vertex_layouts: plan.vertex_layouts.clone(),
             vertex_buffers: plan
@@ -492,6 +233,35 @@ impl ImportedGpuCanvasPipelineKey {
             .map(|(_, _, bytes)| *bytes)
             .chain(self.vertex_buffers.iter().map(|(_, bytes)| *bytes))
             .fold(0, usize::saturating_add)
+    }
+}
+
+impl PartialEq for ImportedGpuCanvasPipelineKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.vertex_occurrence_id == other.vertex_occurrence_id
+            && self.fragment_occurrence_id == other.fragment_occurrence_id
+            && self.vertex_entry == other.vertex_entry
+            && self.fragment_entry == other.fragment_entry
+            && self.uniform_bindings == other.uniform_bindings
+            && self.vertex_layouts == other.vertex_layouts
+            && self.vertex_buffers == other.vertex_buffers
+    }
+}
+
+impl Eq for ImportedGpuCanvasPipelineKey {}
+
+impl std::fmt::Debug for ImportedGpuCanvasPipelineKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ImportedGpuCanvasPipelineKey")
+            .field("vertex_occurrence_id", &self.vertex_occurrence_id)
+            .field("fragment_occurrence_id", &self.fragment_occurrence_id)
+            .field("vertex_entry", &self.vertex_entry)
+            .field("fragment_entry", &self.fragment_entry)
+            .field("uniform_bindings", &self.uniform_bindings)
+            .field("vertex_layouts", &self.vertex_layouts)
+            .field("vertex_buffers", &self.vertex_buffers)
+            .finish_non_exhaustive()
     }
 }
 
@@ -540,20 +310,59 @@ struct ImportedWgpuGpuCanvasPipeline {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ImportedUniformRequirement {
     required_size: u32,
-    vertex: bool,
-    fragment: bool,
+    stage_mask: u8,
 }
 
 impl ImportedUniformRequirement {
     fn visibility(self) -> wgpu::ShaderStages {
         let mut stages = wgpu::ShaderStages::empty();
-        if self.vertex {
+        if self.stage_mask & (1 << GpuCanvasShaderStage::Vertex as u8) != 0 {
             stages |= wgpu::ShaderStages::VERTEX;
         }
-        if self.fragment {
+        if self.stage_mask & (1 << GpuCanvasShaderStage::Fragment as u8) != 0 {
             stages |= wgpu::ShaderStages::FRAGMENT;
         }
+        if self.stage_mask & (1 << GpuCanvasShaderStage::Compute as u8) != 0 {
+            stages |= wgpu::ShaderStages::COMPUTE;
+        }
         stages
+    }
+}
+
+struct ParsedAuthoredWgsl {
+    module: naga::Module,
+    info: naga::valid::ModuleInfo,
+}
+
+struct WgpuGpuCanvasShader {
+    occurrence_id: u64,
+    owner: std::sync::Weak<super::Context>,
+    shader: GpuCanvasShader,
+    parsed: ParsedAuthoredWgsl,
+    uniform_requirements: BTreeMap<(u32, u32), ImportedUniformRequirement>,
+    module: wgpu::ShaderModule,
+}
+
+#[derive(Clone, Copy)]
+struct ImportedGpuCanvasShaderRef<'a> {
+    shader: &'a GpuCanvasShader,
+    parsed: &'a ParsedAuthoredWgsl,
+    uniform_requirements: &'a BTreeMap<(u32, u32), ImportedUniformRequirement>,
+}
+
+impl WgpuGpuCanvasShader {
+    fn imported(&self) -> ImportedGpuCanvasShaderRef<'_> {
+        ImportedGpuCanvasShaderRef {
+            shader: &self.shader,
+            parsed: &self.parsed,
+            uniform_requirements: &self.uniform_requirements,
+        }
+    }
+}
+
+impl RenderGpuCanvasShader for WgpuGpuCanvasShader {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -571,58 +380,116 @@ struct ImportedStageInterface {
 }
 
 fn prepare_imported_gpu_canvas(
-    shader: &GpuCanvasShader,
+    vertex_shader: &WgpuGpuCanvasShader,
+    fragment_shader: &WgpuGpuCanvasShader,
+    plan: &GpuCanvasPlan,
+) -> Result<PreparedImportedGpuCanvas, GpuCanvasError> {
+    prepare_imported_gpu_canvas_modules(vertex_shader.imported(), fragment_shader.imported(), plan)
+}
+
+fn prepare_imported_gpu_canvas_modules(
+    vertex_shader: ImportedGpuCanvasShaderRef<'_>,
+    fragment_shader: ImportedGpuCanvasShaderRef<'_>,
     plan: &GpuCanvasPlan,
 ) -> Result<PreparedImportedGpuCanvas, GpuCanvasError> {
     validate_imported_gpu_canvas_plan(plan)
         .map_err(|error| GpuCanvasError::new(error.to_string()))?;
-    let vertex = canonical_glsl_es300_to_wgsl(&shader.vertex.source, true)?;
-    let fragment = canonical_glsl_es300_to_wgsl(&shader.fragment.source, false)?;
-    let uniform_requirements =
-        validate_imported_interface(shader, plan, &vertex.module, &fragment.module)?;
+    let vertex_record = resolve_imported_entry(
+        vertex_shader.shader,
+        GpuCanvasShaderStage::Vertex,
+        plan.vertex_entry.as_ref(),
+        "vertex",
+    )?;
+    let fragment_record = resolve_imported_entry(
+        fragment_shader.shader,
+        GpuCanvasShaderStage::Fragment,
+        plan.fragment_entry.as_ref(),
+        "fragment",
+    )?;
+    let uniform_requirements = validate_imported_interface(
+        vertex_shader,
+        fragment_shader,
+        plan,
+        vertex_record,
+        fragment_record,
+    )?;
     Ok(PreparedImportedGpuCanvas {
-        vertex,
-        fragment,
+        vertex_entry_point: vertex_record.physical_entry_point.clone(),
+        fragment_entry_point: fragment_record.physical_entry_point.clone(),
         uniform_requirements,
     })
 }
 
+fn resolve_imported_entry<'a>(
+    shader: &'a GpuCanvasShader,
+    stage: GpuCanvasShaderStage,
+    selection: Option<&GpuCanvasShaderEntrySelection>,
+    stage_name: &str,
+) -> Result<&'a GpuCanvasShaderEntry, GpuCanvasError> {
+    let entry = match selection {
+        Some(selection) => shader.entries.iter().find(|entry| {
+            entry.stage == stage
+                && entry.logical_entry_point == selection.logical_entry_point
+                && entry.physical_entry_point == selection.physical_entry_point
+        }),
+        None => shader.entries.iter().find(|entry| entry.stage == stage),
+    };
+    entry.ok_or_else(|| {
+        let requested = selection
+            .map(|selection| {
+                format!(
+                    " logical '{}' / physical '{}'",
+                    selection.logical_entry_point, selection.physical_entry_point
+                )
+            })
+            .unwrap_or_default();
+        GpuCanvasError::new(format!(
+            "authored WGSL has no matching {stage_name}{requested} entry"
+        ))
+    })
+}
+
 fn validate_imported_interface(
-    shader: &GpuCanvasShader,
+    vertex_shader: ImportedGpuCanvasShaderRef<'_>,
+    fragment_shader: ImportedGpuCanvasShaderRef<'_>,
     plan: &GpuCanvasPlan,
-    vertex_module: &naga::Module,
-    fragment_module: &naga::Module,
+    vertex_record: &GpuCanvasShaderEntry,
+    fragment_record: &GpuCanvasShaderEntry,
 ) -> Result<BTreeMap<(u32, u32), ImportedUniformRequirement>, GpuCanvasError> {
     let invalid = |message: String| {
         GpuCanvasError::new(format!("invalid imported GPU-canvas interface: {message}"))
     };
     let vertex_entry = imported_entry_point(
-        vertex_module,
+        &vertex_shader.parsed.module,
         naga::ShaderStage::Vertex,
-        &shader.vertex.physical_entry_point,
+        &vertex_record.physical_entry_point,
     )
     .ok_or_else(|| {
         invalid(format!(
             "vertex stage has no physical entry point '{}'",
-            shader.vertex.physical_entry_point
+            vertex_record.physical_entry_point
         ))
     })?;
     let fragment_entry = imported_entry_point(
-        fragment_module,
+        &fragment_shader.parsed.module,
         naga::ShaderStage::Fragment,
-        &shader.fragment.physical_entry_point,
+        &fragment_record.physical_entry_point,
     )
     .ok_or_else(|| {
         invalid(format!(
             "fragment stage has no physical entry point '{}'",
-            shader.fragment.physical_entry_point
+            fragment_record.physical_entry_point
         ))
     })?;
 
-    let vertex_inputs = imported_function_inputs(vertex_module, &vertex_entry.function)?;
-    let vertex_outputs = imported_function_output(vertex_module, &vertex_entry.function)?;
-    let fragment_inputs = imported_function_inputs(fragment_module, &fragment_entry.function)?;
-    let fragment_outputs = imported_function_output(fragment_module, &fragment_entry.function)?;
+    let vertex_inputs =
+        imported_function_inputs(&vertex_shader.parsed.module, &vertex_entry.function)?;
+    let vertex_outputs =
+        imported_function_output(&vertex_shader.parsed.module, &vertex_entry.function)?;
+    let fragment_inputs =
+        imported_function_inputs(&fragment_shader.parsed.module, &fragment_entry.function)?;
+    let fragment_outputs =
+        imported_function_output(&fragment_shader.parsed.module, &fragment_entry.function)?;
 
     if vertex_inputs.builtins.iter().any(|builtin| {
         !matches!(
@@ -705,31 +572,33 @@ fn validate_imported_interface(
         }
     }
 
-    let mut required_uniforms = imported_uniform_requirements(vertex_module)?
-        .into_iter()
-        .map(|(binding, required_size)| {
-            (
-                binding,
-                ImportedUniformRequirement {
-                    required_size,
-                    vertex: true,
-                    fragment: false,
-                },
-            )
-        })
-        .collect::<BTreeMap<_, _>>();
-    for (binding, required_size) in imported_uniform_requirements(fragment_module)? {
-        required_uniforms
-            .entry(binding)
-            .and_modify(|requirement| {
-                requirement.required_size = requirement.required_size.max(required_size);
-                requirement.fragment = true;
-            })
-            .or_insert(ImportedUniformRequirement {
-                required_size,
-                vertex: false,
-                fragment: true,
-            });
+    // Preserve the pinned native stale assumption: whenever a vertex stage is
+    // present, pipeline auto-layout is built exclusively from that module's
+    // target-16 map. Do not union the fragment module's resources into it.
+    let mut required_uniforms = vertex_shader.uniform_requirements.clone();
+    let fragment_stage_mask = 1 << GpuCanvasShaderStage::Fragment as u8;
+    for (&binding, fragment_requirement) in fragment_shader
+        .uniform_requirements
+        .iter()
+        .filter(|(_, requirement)| requirement.stage_mask & fragment_stage_mask != 0)
+    {
+        let Some(vertex_requirement) = required_uniforms.get_mut(&binding) else {
+            return Err(invalid(format!(
+                "fragment resource group {} binding {} is absent from the vertex-authoritative target-16 map",
+                binding.0, binding.1
+            )));
+        };
+        if vertex_requirement.stage_mask & fragment_stage_mask == 0 {
+            return Err(invalid(format!(
+                "fragment resource group {} binding {} is not fragment-visible in the vertex-authoritative target-16 map",
+                binding.0, binding.1
+            )));
+        }
+        // Target 16 carries no uniform size. Keep its vertex-authored identity
+        // and visibility, but preflight enough bytes for either explicit WGSL.
+        vertex_requirement.required_size = vertex_requirement
+            .required_size
+            .max(fragment_requirement.required_size);
     }
     let planned_uniforms = plan
         .uniform_buffers
@@ -894,8 +763,10 @@ fn imported_format(value: &str) -> Result<&'static str, GpuCanvasError> {
 }
 
 fn imported_uniform_requirements(
+    shader: &GpuCanvasShader,
     module: &naga::Module,
-) -> Result<BTreeMap<(u32, u32), u32>, GpuCanvasError> {
+    info: &naga::valid::ModuleInfo,
+) -> Result<BTreeMap<(u32, u32), ImportedUniformRequirement>, GpuCanvasError> {
     let invalid = |message: String| {
         GpuCanvasError::new(format!("invalid imported GPU-canvas interface: {message}"))
     };
@@ -903,8 +774,9 @@ fn imported_uniform_requirements(
     layouter
         .update(module.to_ctx())
         .map_err(|error| invalid(format!("uniform layout failed: {error}")))?;
-    let mut uniforms = BTreeMap::new();
-    for (_, global) in module.global_variables.iter() {
+    let mut uniform_sizes = BTreeMap::new();
+    let mut uniform_stage_masks = BTreeMap::new();
+    for (handle, global) in module.global_variables.iter() {
         match global.space {
             naga::AddressSpace::Private => {}
             naga::AddressSpace::Uniform => {
@@ -913,12 +785,33 @@ fn imported_uniform_requirements(
                     .as_ref()
                     .ok_or_else(|| invalid("uniform global has no group and binding".into()))?;
                 let key = (binding.group, binding.binding);
-                if uniforms.insert(key, layouter[global.ty].size).is_some() {
+                if uniform_sizes
+                    .insert(key, layouter[global.ty].size)
+                    .is_some()
+                {
                     return Err(invalid(format!(
                         "uniform group {} binding {} appears more than once",
                         key.0, key.1
                     )));
                 }
+                let mut stage_mask = 0;
+                for (index, entry) in module.entry_points.iter().enumerate() {
+                    if info.get_entry_point(index)[handle].is_empty() {
+                        continue;
+                    }
+                    stage_mask |= match entry.stage {
+                        naga::ShaderStage::Vertex => 1 << GpuCanvasShaderStage::Vertex as u8,
+                        naga::ShaderStage::Fragment => 1 << GpuCanvasShaderStage::Fragment as u8,
+                        naga::ShaderStage::Compute => 1 << GpuCanvasShaderStage::Compute as u8,
+                        unsupported => {
+                            return Err(invalid(format!(
+                                "entry point '{}' uses unsupported shader stage {unsupported:?}",
+                                entry.name
+                            )));
+                        }
+                    };
+                }
+                uniform_stage_masks.insert(key, stage_mask);
             }
             ref unsupported => {
                 return Err(invalid(format!(
@@ -927,7 +820,69 @@ fn imported_uniform_requirements(
             }
         }
     }
-    Ok(uniforms)
+
+    let mut requirements = BTreeMap::new();
+    for binding in &shader.bindings {
+        if binding.kind != GpuCanvasShaderResourceKind::UniformBuffer {
+            return Err(invalid(format!(
+                "binding group {} binding {} has unsupported resource kind {:?}",
+                binding.group, binding.binding, binding.kind
+            )));
+        }
+        if binding.stage_mask & !0b111 != 0 {
+            return Err(invalid(format!(
+                "binding group {} binding {} has unknown stage mask {:#x}",
+                binding.group, binding.binding, binding.stage_mask
+            )));
+        }
+        let expected_slots = [
+            (binding.stage_mask & (1 << GpuCanvasShaderStage::Vertex as u8) != 0)
+                .then_some(u16::from(binding.binding)),
+            (binding.stage_mask & (1 << GpuCanvasShaderStage::Fragment as u8) != 0)
+                .then_some(u16::from(binding.binding)),
+            (binding.stage_mask & (1 << GpuCanvasShaderStage::Compute as u8) != 0)
+                .then_some(u16::from(binding.binding)),
+        ];
+        if binding.backend_space != binding.group || binding.backend_slots != expected_slots {
+            return Err(invalid(format!(
+                "binding group {} binding {} is not the WebGPU identity mapping",
+                binding.group, binding.binding
+            )));
+        }
+
+        let key = (u32::from(binding.group), u32::from(binding.binding));
+        let required_size = uniform_sizes.get(&key).copied().ok_or_else(|| {
+            invalid(format!(
+                "binding map contains group {} binding {} absent from authored WGSL",
+                binding.group, binding.binding
+            ))
+        })?;
+        let actual_stage_mask = uniform_stage_masks[&key];
+        if actual_stage_mask & !binding.stage_mask != 0 {
+            return Err(invalid(format!(
+                "binding group {} binding {} target-16 visibility {:#x} underdeclares authored WGSL usage {:#x}",
+                binding.group, binding.binding, binding.stage_mask, actual_stage_mask
+            )));
+        }
+        let requirement = ImportedUniformRequirement {
+            required_size,
+            stage_mask: binding.stage_mask,
+        };
+        if requirements.insert(key, requirement).is_some() {
+            return Err(invalid(format!(
+                "binding map contains duplicate group {} binding {}",
+                binding.group, binding.binding
+            )));
+        }
+    }
+    if requirements.keys().ne(uniform_sizes.keys()) {
+        return Err(invalid(format!(
+            "binding-map uniforms {:?} do not exactly match authored WGSL uniforms {:?}",
+            requirements.keys().collect::<Vec<_>>(),
+            uniform_sizes.keys().collect::<Vec<_>>()
+        )));
+    }
+    Ok(requirements)
 }
 
 fn validate_imported_wgpu_limits(
@@ -953,22 +908,16 @@ fn validate_imported_wgpu_limits(
         )));
     }
 
-    for (label, count) in [
-        (
-            "vertex",
-            uniform_requirements
-                .values()
-                .filter(|requirement| requirement.vertex)
-                .count(),
-        ),
-        (
-            "fragment",
-            uniform_requirements
-                .values()
-                .filter(|requirement| requirement.fragment)
-                .count(),
-        ),
+    for (label, stage) in [
+        ("vertex", GpuCanvasShaderStage::Vertex),
+        ("fragment", GpuCanvasShaderStage::Fragment),
+        ("compute", GpuCanvasShaderStage::Compute),
     ] {
+        let stage_bit = 1 << stage as u8;
+        let count = uniform_requirements
+            .values()
+            .filter(|requirement| requirement.stage_mask & stage_bit != 0)
+            .count();
         if count > limits.max_uniform_buffers_per_shader_stage as usize {
             return Err(invalid(format!(
                 "{label} stage requires {count} uniform buffers across bind groups but the device supports {} per stage",
@@ -993,27 +942,82 @@ fn validate_imported_wgpu_limits(
     Ok(())
 }
 
+fn imported_shader_for_context<'a>(
+    context: &Arc<super::Context>,
+    shader: &'a Arc<dyn RenderGpuCanvasShader>,
+    stage: &str,
+) -> Result<&'a WgpuGpuCanvasShader, GpuCanvasError> {
+    let shader = shader
+        .as_any()
+        .downcast_ref::<WgpuGpuCanvasShader>()
+        .ok_or_else(|| {
+            GpuCanvasError::new(format!(
+                "GPU-canvas {stage} shader belongs to a different backend domain"
+            ))
+        })?;
+    let owner = shader.owner.upgrade().ok_or_else(|| {
+        GpuCanvasError::new(format!(
+            "GPU-canvas {stage} shader's backend domain has expired"
+        ))
+    })?;
+    if !Arc::ptr_eq(&owner, context) {
+        return Err(GpuCanvasError::new(format!(
+            "GPU-canvas {stage} shader belongs to a different factory/device domain"
+        )));
+    }
+    Ok(shader)
+}
+
 impl WgpuFactory {
-    /// Execute canonical RSTB GLSL on the retained device and return the
+    pub(super) fn make_imported_gpu_canvas_shader(
+        &mut self,
+        shader: &GpuCanvasShader,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        let parsed = parse_authored_wgsl(&shader.source)?;
+        let uniform_requirements =
+            imported_uniform_requirements(shader, &parsed.module, &parsed.info)?;
+        let module = self
+            .context
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("nuxie-imported-gpu-canvas"),
+                source: wgpu::ShaderSource::Wgsl(shader.source.clone().into()),
+            });
+        Ok(Arc::new(WgpuGpuCanvasShader {
+            occurrence_id: NEXT_GPU_CANVAS_SHADER_OCCURRENCE_ID.fetch_add(1, Ordering::Relaxed),
+            owner: Arc::downgrade(&self.context),
+            shader: shader.clone(),
+            parsed,
+            uniform_requirements,
+            module,
+        }))
+    }
+
+    /// Execute authored RSTB WGSL on the retained device and return the
     /// offscreen texture as a normal image owned by this factory domain.
     pub(super) fn make_imported_gpu_canvas_image(
         &mut self,
-        shader: &GpuCanvasShader,
+        vertex_shader_handle: &Arc<dyn RenderGpuCanvasShader>,
+        fragment_shader_handle: &Arc<dyn RenderGpuCanvasShader>,
         plan: &GpuCanvasPlan,
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        let vertex_shader =
+            imported_shader_for_context(&self.context, vertex_shader_handle, "vertex")?;
+        let fragment_shader =
+            imported_shader_for_context(&self.context, fragment_shader_handle, "fragment")?;
         validate_imported_gpu_canvas_plan(plan)
             .map_err(|error| GpuCanvasError::new(error.to_string()))?;
         let target_lease = self.gpu_canvas_targets.acquire(plan.width, plan.height)?;
         let device = &self.context.device;
         let queue = &self.context.queue;
-        let key = ImportedGpuCanvasPipelineKey::new(shader, plan);
+        let key = ImportedGpuCanvasPipelineKey::new(vertex_shader, fragment_shader, plan);
         let pipeline_index = self
             .imported_gpu_canvas
             .pipelines
             .iter()
             .position(|pipeline| pipeline.key == key);
         let prepared_pipeline = if pipeline_index.is_none() {
-            let prepared = prepare_imported_gpu_canvas(shader, plan)?;
+            let prepared = prepare_imported_gpu_canvas(vertex_shader, fragment_shader, plan)?;
             validate_imported_wgpu_limits(plan, &prepared.uniform_requirements, &device.limits())?;
             let vertex_attributes = plan
                 .vertex_layouts
@@ -1047,14 +1051,6 @@ impl WgpuFactory {
         let validation_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
         let mut built_pipeline = None;
         if let Some((prepared, vertex_attributes)) = prepared_pipeline {
-            let vertex_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("nuxie-imported-gpu-canvas-vertex"),
-                source: wgpu::ShaderSource::Wgsl(prepared.vertex.source.into()),
-            });
-            let fragment_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("nuxie-imported-gpu-canvas-fragment"),
-                source: wgpu::ShaderSource::Wgsl(prepared.fragment.source.into()),
-            });
             let mut bind_group_layouts = Vec::new();
             if let Some(max_group) = plan.uniform_buffers.iter().map(|buffer| buffer.group).max() {
                 for group in 0..=max_group {
@@ -1105,8 +1101,8 @@ impl WgpuFactory {
                 label: Some("nuxie-imported-gpu-canvas-pipeline"),
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
-                    module: &vertex_shader,
-                    entry_point: Some(&shader.vertex.physical_entry_point),
+                    module: &vertex_shader.module,
+                    entry_point: Some(&prepared.vertex_entry_point),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     buffers: &vertex_layouts,
                 },
@@ -1114,8 +1110,8 @@ impl WgpuFactory {
                 depth_stencil: None,
                 multisample: wgpu::MultisampleState::default(),
                 fragment: Some(wgpu::FragmentState {
-                    module: &fragment_shader,
-                    entry_point: Some(&shader.fragment.physical_entry_point),
+                    module: &fragment_shader.module,
+                    entry_point: Some(&prepared.fragment_entry_point),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: wgpu::TextureFormat::Rgba8Unorm,
@@ -1247,7 +1243,7 @@ impl WgpuFactory {
         {
             if let Some(error) = pollster::block_on(validation_scope.pop()) {
                 return Err(GpuCanvasError::new(format!(
-                    "wgpu rejected imported GPU-canvas GLSL: {error}"
+                    "wgpu rejected imported GPU-canvas WGSL: {error}"
                 )));
             }
         }
@@ -1506,979 +1502,22 @@ impl WgpuFactory {
     }
 }
 
-/// Retained WebGL2 context isolated from femtovg's renderer state.
-///
-/// One instance belongs to one [`WebGl2Factory`](super::WebGl2Factory) and is
-/// reused for every imported GPU-canvas image update. Shader programs and draw
-/// resources remain retained between updates alongside the scarce browser
-/// context/device.
-#[cfg(any(test, target_arch = "wasm32"))]
-fn prepare_imported_gpu_canvas_webgl2(
-    shader: &GpuCanvasShader,
-    plan: &GpuCanvasPlan,
-) -> Result<WebGl2TranslatedProgram, GpuCanvasError> {
-    let prepared = prepare_imported_gpu_canvas(shader, plan)?;
-    let translate = |stage: &CanonicalWgpuStage, shader_stage, entry_point: &str| {
-        translate_naga_stage_to_webgl2(&stage.module, &stage.info, shader_stage, entry_point)
-            .map_err(|error| GpuCanvasError::new(error.to_string()))
-    };
-    let vertex_attribute_formats = plan
-        .vertex_layouts
-        .iter()
-        .flat_map(|layout| &layout.attributes)
-        .map(|attribute| (attribute.shader_location, attribute.format.clone()))
-        .collect();
-    Ok(WebGl2TranslatedProgram {
-        vertex: translate(
-            &prepared.vertex,
-            naga::ShaderStage::Vertex,
-            &shader.vertex.physical_entry_point,
-        )?,
-        fragment: translate(
-            &prepared.fragment,
-            naga::ShaderStage::Fragment,
-            &shader.fragment.physical_entry_point,
-        )?,
-        vertex_attribute_formats,
-    })
-}
-
-#[cfg(target_arch = "wasm32")]
-pub(super) struct ImportedWebGl2GpuCanvasRenderer {
-    element: web_sys::HtmlCanvasElement,
-    gl: web_sys::WebGl2RenderingContext,
-    pipelines: Vec<ImportedWebGl2GpuCanvasPipeline>,
-    buffer_bytes: usize,
-}
-
-#[cfg(target_arch = "wasm32")]
-impl ImportedWebGl2GpuCanvasRenderer {
-    pub(super) fn new(owner: &web_sys::HtmlCanvasElement) -> Result<Self, GpuCanvasError> {
-        use wasm_bindgen::JsCast as _;
-
-        let document = owner
-            .owner_document()
-            .ok_or_else(|| GpuCanvasError::new("browser canvas has no owner document"))?;
-        let element = document
-            .create_element("canvas")
-            .map_err(|error| {
-                GpuCanvasError::new(webgl2_js_error("offscreen canvas", error).to_string())
-            })?
-            .dyn_into::<web_sys::HtmlCanvasElement>()
-            .map_err(|_| GpuCanvasError::new("browser created a non-canvas element"))?;
-        let attributes = js_sys::Object::new();
-        for (name, value) in [
-            ("alpha", wasm_bindgen::JsValue::TRUE),
-            ("antialias", wasm_bindgen::JsValue::FALSE),
-            ("depth", wasm_bindgen::JsValue::FALSE),
-            ("premultipliedAlpha", wasm_bindgen::JsValue::FALSE),
-            ("preserveDrawingBuffer", wasm_bindgen::JsValue::TRUE),
-            ("stencil", wasm_bindgen::JsValue::FALSE),
-        ] {
-            js_sys::Reflect::set(&attributes, &wasm_bindgen::JsValue::from_str(name), &value)
-                .map_err(|error| {
-                    GpuCanvasError::new(webgl2_js_error("context attributes", error).to_string())
-                })?;
-        }
-        let context = element
-            .get_context_with_context_options("webgl2", attributes.as_ref())
-            .map_err(|error| {
-                GpuCanvasError::new(webgl2_js_error("context creation", error).to_string())
-            })?
-            .ok_or_else(|| GpuCanvasError::new("WebGL2 is unavailable"))?;
-        let gl = context
-            .dyn_into::<web_sys::WebGl2RenderingContext>()
-            .map_err(|_| GpuCanvasError::new("browser returned a non-WebGL2 context"))?;
-        Ok(Self {
-            element,
-            gl,
-            pipelines: Vec::new(),
-            buffer_bytes: 0,
-        })
-    }
-
-    fn insert_pipeline(&mut self, pipeline: ImportedWebGl2GpuCanvasPipeline) -> usize {
-        let buffer_bytes = pipeline.key.buffer_bytes();
-        while !self.pipelines.is_empty()
-            && (self.pipelines.len() >= MAX_IMPORTED_GPU_CANVAS_CACHE_ENTRIES
-                || self.buffer_bytes.saturating_add(buffer_bytes)
-                    > MAX_IMPORTED_GPU_CANVAS_CACHE_BYTES)
-        {
-            let evicted = self.pipelines.remove(0);
-            self.buffer_bytes = self.buffer_bytes.saturating_sub(evicted.key.buffer_bytes());
-        }
-        self.buffer_bytes = self.buffer_bytes.saturating_add(buffer_bytes);
-        self.pipelines.push(pipeline);
-        self.pipelines.len() - 1
-    }
-
-    /// Execute one canonical RSTB draw and return top-left-origin RGBA for
-    /// upload into the factory's ordinary image domain. Shader translation,
-    /// program linkage, VAO setup, and buffer allocation are retained while
-    /// animated uniform/vertex bytes are updated in place.
-    pub(super) fn render(
-        &mut self,
-        shader: &GpuCanvasShader,
-        plan: &GpuCanvasPlan,
-    ) -> Result<Vec<u8>, GpuCanvasError> {
-        use web_sys::WebGl2RenderingContext as Gl;
-
-        let fail = |error: RendererError| GpuCanvasError::new(error.to_string());
-        validate_imported_gpu_canvas_plan(plan).map_err(fail)?;
-        let key = ImportedGpuCanvasPipelineKey::new(shader, plan);
-        let mut pipeline_index = self
-            .pipelines
-            .iter()
-            .position(|pipeline| pipeline.key == key);
-        if pipeline_index.is_none() {
-            let pipeline = build_imported_webgl2_pipeline(&self.gl, shader, plan, key)?;
-            pipeline_index = Some(self.insert_pipeline(pipeline));
-        }
-        if (self.element.width(), self.element.height()) != (plan.width, plan.height) {
-            self.element.set_width(plan.width);
-            self.element.set_height(plan.height);
-        }
-        let gl = &self.gl;
-        let pipeline = self
-            .pipelines
-            .get(pipeline_index.expect("imported WebGL2 pipeline index exists"))
-            .expect("imported WebGL2 pipeline was initialized");
-
-        for _ in 0..16 {
-            if gl.get_error() == Gl::NO_ERROR {
-                break;
-            }
-        }
-        gl.use_program(Some(&pipeline.program));
-        gl.viewport(0, 0, plan.width as i32, plan.height as i32);
-        gl.disable(Gl::BLEND);
-        gl.disable(Gl::CULL_FACE);
-        gl.disable(Gl::DEPTH_TEST);
-        gl.disable(Gl::SCISSOR_TEST);
-        gl.disable(Gl::STENCIL_TEST);
-        gl.color_mask(true, true, true, true);
-        gl.bind_vertex_array(Some(&pipeline.vertex_array));
-        for (binding_point, (buffer, gpu_buffer)) in plan
-            .uniform_buffers
-            .iter()
-            .zip(&pipeline.uniform_buffers)
-            .enumerate()
-        {
-            gl.bind_buffer(Gl::UNIFORM_BUFFER, Some(gpu_buffer));
-            gl.buffer_sub_data_with_i32_and_u8_array(Gl::UNIFORM_BUFFER, 0, &buffer.bytes);
-            gl.bind_buffer_base(Gl::UNIFORM_BUFFER, binding_point as u32, Some(gpu_buffer));
-        }
-        for (slot, gpu_buffer) in &pipeline.vertex_buffers {
-            let buffer = plan
-                .vertex_buffers
-                .iter()
-                .find(|buffer| buffer.slot == *slot)
-                .expect("validated imported GPU-canvas vertex slot remains present");
-            gl.bind_buffer(Gl::ARRAY_BUFFER, Some(gpu_buffer));
-            gl.buffer_sub_data_with_i32_and_u8_array(Gl::ARRAY_BUFFER, 0, &buffer.bytes);
-        }
-
-        if let Some(location) = gl.get_uniform_location(&pipeline.program, "naga_vs_first_instance")
-        {
-            gl.uniform1ui(Some(&location), plan.first_instance);
-        }
-
-        gl.clear_color(
-            plan.clear_color[0] as f32,
-            plan.clear_color[1] as f32,
-            plan.clear_color[2] as f32,
-            plan.clear_color[3] as f32,
-        );
-        gl.clear(Gl::COLOR_BUFFER_BIT);
-        gl.draw_arrays_instanced(
-            Gl::TRIANGLES,
-            plan.first_vertex as i32,
-            plan.vertex_count as i32,
-            plan.instance_count as i32,
-        );
-        check_webgl2_error(gl, "imported draw submission").map_err(fail)?;
-
-        let byte_len = usize::try_from(plan.width)
-            .ok()
-            .and_then(|width| {
-                usize::try_from(plan.height)
-                    .ok()
-                    .and_then(|height| width.checked_mul(height))
-            })
-            .and_then(|pixels| pixels.checked_mul(4))
-            .ok_or_else(|| GpuCanvasError::new("WebGL2 readback byte length overflow"))?;
-        let mut pixels = vec![0; byte_len];
-        gl.pixel_storei(Gl::PACK_ALIGNMENT, 1);
-        gl.finish();
-        gl.read_pixels_with_opt_u8_array(
-            0,
-            0,
-            plan.width as i32,
-            plan.height as i32,
-            Gl::RGBA,
-            Gl::UNSIGNED_BYTE,
-            Some(&mut pixels),
-        )
-        .map_err(|error| {
-            GpuCanvasError::new(webgl2_js_error("imported RGBA readback", error).to_string())
-        })?;
-        check_webgl2_error(gl, "imported RGBA readback").map_err(fail)?;
-        flip_rgba_rows(&mut pixels, plan.width, plan.height);
-        Ok(pixels)
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-struct ImportedWebGl2GpuCanvasPipeline {
-    gl: web_sys::WebGl2RenderingContext,
-    key: ImportedGpuCanvasPipelineKey,
-    program: web_sys::WebGlProgram,
-    vertex_array: web_sys::WebGlVertexArrayObject,
-    uniform_buffers: Vec<web_sys::WebGlBuffer>,
-    vertex_buffers: Vec<(u32, web_sys::WebGlBuffer)>,
-}
-
-#[cfg(target_arch = "wasm32")]
-impl Drop for ImportedWebGl2GpuCanvasPipeline {
-    fn drop(&mut self) {
-        self.gl.use_program(None);
-        self.gl.bind_vertex_array(None);
-        self.gl
-            .bind_buffer(web_sys::WebGl2RenderingContext::ARRAY_BUFFER, None);
-        self.gl
-            .bind_buffer(web_sys::WebGl2RenderingContext::UNIFORM_BUFFER, None);
-        for binding_point in 0..self.uniform_buffers.len() {
-            self.gl.bind_buffer_base(
-                web_sys::WebGl2RenderingContext::UNIFORM_BUFFER,
-                binding_point as u32,
-                None,
-            );
-        }
-        for buffer in &self.uniform_buffers {
-            self.gl.delete_buffer(Some(buffer));
-        }
-        for (_, buffer) in &self.vertex_buffers {
-            self.gl.delete_buffer(Some(buffer));
-        }
-        self.gl.delete_vertex_array(Some(&self.vertex_array));
-        self.gl.delete_program(Some(&self.program));
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-struct ImportedWebGl2BuildGuard {
-    gl: web_sys::WebGl2RenderingContext,
-    program: Option<web_sys::WebGlProgram>,
-    vertex_array: Option<web_sys::WebGlVertexArrayObject>,
-    uniform_buffers: Vec<web_sys::WebGlBuffer>,
-    vertex_buffers: Vec<(u32, web_sys::WebGlBuffer)>,
-}
-
-#[cfg(target_arch = "wasm32")]
-impl ImportedWebGl2BuildGuard {
-    fn new(gl: &web_sys::WebGl2RenderingContext) -> Self {
-        Self {
-            gl: gl.clone(),
-            program: None,
-            vertex_array: None,
-            uniform_buffers: Vec::new(),
-            vertex_buffers: Vec::new(),
-        }
-    }
-
-    fn finish(mut self, key: ImportedGpuCanvasPipelineKey) -> ImportedWebGl2GpuCanvasPipeline {
-        ImportedWebGl2GpuCanvasPipeline {
-            gl: self.gl.clone(),
-            key,
-            program: self
-                .program
-                .take()
-                .expect("linked imported WebGL2 program exists"),
-            vertex_array: self
-                .vertex_array
-                .take()
-                .expect("imported WebGL2 vertex array exists"),
-            uniform_buffers: std::mem::take(&mut self.uniform_buffers),
-            vertex_buffers: std::mem::take(&mut self.vertex_buffers),
-        }
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl Drop for ImportedWebGl2BuildGuard {
-    fn drop(&mut self) {
-        self.gl.use_program(None);
-        self.gl.bind_vertex_array(None);
-        self.gl
-            .bind_buffer(web_sys::WebGl2RenderingContext::ARRAY_BUFFER, None);
-        self.gl
-            .bind_buffer(web_sys::WebGl2RenderingContext::UNIFORM_BUFFER, None);
-        for binding_point in 0..self.uniform_buffers.len() {
-            self.gl.bind_buffer_base(
-                web_sys::WebGl2RenderingContext::UNIFORM_BUFFER,
-                binding_point as u32,
-                None,
-            );
-        }
-        for buffer in &self.uniform_buffers {
-            self.gl.delete_buffer(Some(buffer));
-        }
-        for (_, buffer) in &self.vertex_buffers {
-            self.gl.delete_buffer(Some(buffer));
-        }
-        if let Some(vertex_array) = self.vertex_array.as_ref() {
-            self.gl.delete_vertex_array(Some(vertex_array));
-        }
-        if let Some(program) = self.program.as_ref() {
-            self.gl.delete_program(Some(program));
-        }
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn build_imported_webgl2_pipeline(
-    gl: &web_sys::WebGl2RenderingContext,
-    shader: &GpuCanvasShader,
-    plan: &GpuCanvasPlan,
-    key: ImportedGpuCanvasPipelineKey,
-) -> Result<ImportedWebGl2GpuCanvasPipeline, GpuCanvasError> {
-    use web_sys::WebGl2RenderingContext as Gl;
-
-    let fail = |error: RendererError| GpuCanvasError::new(error.to_string());
-    let translated = prepare_imported_gpu_canvas_webgl2(shader, plan)?;
-    let max_uniform_bindings = webgl2_u32_parameter(
-        gl,
-        Gl::MAX_UNIFORM_BUFFER_BINDINGS,
-        "MAX_UNIFORM_BUFFER_BINDINGS",
-    )
-    .map_err(fail)?;
-    if plan.uniform_buffers.len() > max_uniform_bindings as usize {
-        return Err(GpuCanvasError::new(format!(
-            "draw requires {} uniform bindings but this WebGL2 context supports {max_uniform_bindings}",
-            plan.uniform_buffers.len()
-        )));
-    }
-    let max_uniform_block_size =
-        webgl2_u32_parameter(gl, Gl::MAX_UNIFORM_BLOCK_SIZE, "MAX_UNIFORM_BLOCK_SIZE")
-            .map_err(fail)? as usize;
-    if let Some(buffer) = plan
-        .uniform_buffers
-        .iter()
-        .find(|buffer| buffer.bytes.len() > max_uniform_block_size)
-    {
-        return Err(GpuCanvasError::new(format!(
-            "uniform binding {} in group {} contains {} bytes but this WebGL2 context supports {max_uniform_block_size}",
-            buffer.binding,
-            buffer.group,
-            buffer.bytes.len()
-        )));
-    }
-
-    let vertex = compile_webgl2_shader(
-        gl,
-        Gl::VERTEX_SHADER,
-        &translated.vertex.source,
-        "RSTB vertex",
-    )
-    .map_err(fail)?;
-    let fragment = match compile_webgl2_shader(
-        gl,
-        Gl::FRAGMENT_SHADER,
-        &translated.fragment.source,
-        "RSTB fragment",
-    ) {
-        Ok(fragment) => fragment,
-        Err(error) => {
-            gl.delete_shader(Some(&vertex));
-            return Err(fail(error));
-        }
-    };
-    let Some(program) = gl.create_program() else {
-        gl.delete_shader(Some(&vertex));
-        gl.delete_shader(Some(&fragment));
-        return Err(GpuCanvasError::new(
-            "failed to allocate RSTB shader program",
-        ));
-    };
-    gl.attach_shader(&program, &vertex);
-    gl.attach_shader(&program, &fragment);
-    gl.link_program(&program);
-    let linked = gl
-        .get_program_parameter(&program, Gl::LINK_STATUS)
-        .as_bool()
-        .unwrap_or(false);
-    let link_log = gl.get_program_info_log(&program).unwrap_or_default();
-    gl.detach_shader(&program, &vertex);
-    gl.detach_shader(&program, &fragment);
-    gl.delete_shader(Some(&vertex));
-    gl.delete_shader(Some(&fragment));
-    if !linked {
-        gl.delete_program(Some(&program));
-        return Err(GpuCanvasError::new(format!(
-            "RSTB shader program failed to link: {link_log}"
-        )));
-    }
-
-    let mut guard = ImportedWebGl2BuildGuard::new(gl);
-    guard.program = Some(program);
-    let program = guard
-        .program
-        .as_ref()
-        .expect("linked imported WebGL2 program exists");
-    gl.use_program(Some(program));
-    let vertex_array = gl
-        .create_vertex_array()
-        .ok_or_else(|| GpuCanvasError::new("failed to allocate vertex array"))?;
-    gl.bind_vertex_array(Some(&vertex_array));
-    guard.vertex_array = Some(vertex_array);
-
-    let binding_points = plan
-        .uniform_buffers
-        .iter()
-        .enumerate()
-        .map(|(index, buffer)| ((buffer.group, buffer.binding), index as u32))
-        .collect::<BTreeMap<_, _>>();
-    let mut uniform_blocks = translated.vertex.uniform_blocks;
-    uniform_blocks.extend(translated.fragment.uniform_blocks);
-    uniform_blocks.sort_by(|left, right| {
-        (left.group, left.binding, &left.name).cmp(&(right.group, right.binding, &right.name))
-    });
-    uniform_blocks.dedup();
-    for block in &uniform_blocks {
-        let binding_point = binding_points
-            .get(&(block.group, block.binding))
-            .ok_or_else(|| {
-                GpuCanvasError::new(format!(
-                    "shader uniform binding {} in group {} is not supplied by the draw plan",
-                    block.binding, block.group
-                ))
-            })?;
-        let block_index = gl.get_uniform_block_index(program, &block.name);
-        if block_index == Gl::INVALID_INDEX {
-            return Err(GpuCanvasError::new(format!(
-                "linked program omitted reflected uniform block '{}'",
-                block.name
-            )));
-        }
-        gl.uniform_block_binding(program, block_index, *binding_point);
-    }
-    for (binding_point, buffer) in plan.uniform_buffers.iter().enumerate() {
-        let gpu_buffer = gl
-            .create_buffer()
-            .ok_or_else(|| GpuCanvasError::new("failed to allocate uniform buffer"))?;
-        gl.bind_buffer(Gl::UNIFORM_BUFFER, Some(&gpu_buffer));
-        gl.buffer_data_with_u8_array(Gl::UNIFORM_BUFFER, &buffer.bytes, Gl::DYNAMIC_DRAW);
-        gl.bind_buffer_base(Gl::UNIFORM_BUFFER, binding_point as u32, Some(&gpu_buffer));
-        guard.uniform_buffers.push(gpu_buffer);
-    }
-    for (slot, layout) in plan.vertex_layouts.iter().enumerate() {
-        let buffer = plan
-            .vertex_buffers
-            .iter()
-            .find(|buffer| buffer.slot == slot as u32)
-            .ok_or_else(|| {
-                GpuCanvasError::new(format!("vertex buffer slot {slot} is not bound"))
-            })?;
-        let gpu_buffer = gl
-            .create_buffer()
-            .ok_or_else(|| GpuCanvasError::new("failed to allocate vertex buffer"))?;
-        gl.bind_buffer(Gl::ARRAY_BUFFER, Some(&gpu_buffer));
-        gl.buffer_data_with_u8_array(Gl::ARRAY_BUFFER, &buffer.bytes, Gl::DYNAMIC_DRAW);
-        for attribute in &layout.attributes {
-            let components = webgl2_vertex_component_count(&attribute.format).map_err(fail)?;
-            gl.enable_vertex_attrib_array(attribute.shader_location);
-            gl.vertex_attrib_pointer_with_i32(
-                attribute.shader_location,
-                components,
-                Gl::FLOAT,
-                false,
-                layout.stride as i32,
-                attribute.offset as i32,
-            );
-            gl.vertex_attrib_divisor(attribute.shader_location, 0);
-        }
-        guard.vertex_buffers.push((slot as u32, gpu_buffer));
-    }
-    check_webgl2_error(gl, "imported pipeline preparation").map_err(fail)?;
-    Ok(guard.finish(key))
-}
-
-/// RSTB target 1 contains the producer's canonical GLSL ES 3.00. Naga's
-/// native GLSL frontend accepts Vulkan-flavoured desktop GLSL, so the WGPU
-/// backend performs this narrow, generated-source normalization internally.
-/// No scripting/runtime layer sees a backend shader dialect.
-fn canonical_glsl_es300_to_wgsl(
-    source: &str,
-    vertex: bool,
-) -> Result<CanonicalWgpuStage, GpuCanvasError> {
-    let mut lines = source.lines();
-    let version = lines.next().unwrap_or_default().trim();
-    if version != "#version 300 es" {
-        return Err(GpuCanvasError::new(
-            "canonical RSTB GLSL must begin with '#version 300 es'",
-        ));
-    }
-    let mut normalized = String::from("#version 450 core\n");
-    for line in lines {
-        let trimmed = line.trim();
-        if trimmed.starts_with("precision ")
-            || (vertex
-                && trimmed
-                    == "gl_Position.yz = vec2(-gl_Position.y, gl_Position.z * 2.0 - gl_Position.w);")
-        {
-            continue;
-        }
-        normalized.push_str(line);
-        normalized.push('\n');
-    }
-    if vertex {
-        normalized = normalized
-            .replace("gl_VertexID", "int(gl_VertexIndex)")
-            .replace("gl_InstanceID", "int(gl_InstanceIndex)");
-    }
-    let stage = if vertex {
-        naga::ShaderStage::Vertex
-    } else {
-        naga::ShaderStage::Fragment
-    };
-    let mut frontend = naga::front::glsl::Frontend::default();
-    let module = frontend
-        .parse(&naga::front::glsl::Options::from(stage), &normalized)
-        .map_err(|error| GpuCanvasError::new(error.emit_to_string(&normalized)))?;
+/// Parse and validate the exact authored WGSL selected from RSTB target 0.
+/// Retain Naga's module analysis so target-16 visibility can be checked before
+/// any WebGPU object or error scope is needed.
+fn parse_authored_wgsl(source: &str) -> Result<ParsedAuthoredWgsl, GpuCanvasError> {
+    let module = naga::front::wgsl::parse_str(source)
+        .map_err(|error| GpuCanvasError::new(error.emit_to_string(source)))?;
     let info = naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::empty(),
     )
     .validate(&module)
-    .map_err(|error| GpuCanvasError::new(error.emit_to_string(&normalized)))?;
-    let source = naga::back::wgsl::write_string(
-        &module,
-        &info,
-        naga::back::wgsl::WriterFlags::EXPLICIT_TYPES,
-    )
-    .map_err(|error| GpuCanvasError::new(format!("RSTB GLSL to WGSL emission failed: {error}")))?;
-    let module = naga::front::wgsl::parse_str(&source)
-        .map_err(|error| GpuCanvasError::new(error.emit_to_string(&source)))?;
-    let info = naga::valid::Validator::new(
-        naga::valid::ValidationFlags::all(),
-        naga::valid::Capabilities::empty(),
-    )
-    .validate(&module)
-    .map_err(|error| GpuCanvasError::new(error.emit_to_string(&source)))?;
-    #[cfg(not(any(test, target_arch = "wasm32")))]
-    let _ = info;
-    Ok(CanonicalWgpuStage {
-        source,
-        module,
-        #[cfg(any(test, target_arch = "wasm32"))]
-        info,
-    })
+    .map_err(|error| GpuCanvasError::new(error.emit_to_string(source)))?;
+    Ok(ParsedAuthoredWgsl { module, info })
 }
 
-/// Retained arbitrary-WGSL renderer for browsers without WebGPU.
-///
-/// WGSL translation, reflection, resource uploads, draw submission, and
-/// readback all remain in Rust/Wasm. The HTML canvas is only the WebGL2 render
-/// target; JavaScript never compiles shaders or interprets the draw plan.
-#[cfg(target_arch = "wasm32")]
-pub struct WebGl2GpuCanvasRenderer {
-    element: web_sys::HtmlCanvasElement,
-    gl: web_sys::WebGl2RenderingContext,
-    program: web_sys::WebGlProgram,
-    shader_wgsl: String,
-    uniform_blocks: Vec<WebGl2UniformBlock>,
-    vertex_attribute_formats: std::collections::BTreeMap<u32, String>,
-}
-
-#[cfg(target_arch = "wasm32")]
-impl WebGl2GpuCanvasRenderer {
-    pub fn new(
-        element: &web_sys::HtmlCanvasElement,
-        shader_wgsl: &str,
-    ) -> Result<Self, RendererError> {
-        use wasm_bindgen::{JsCast as _, JsValue};
-
-        let translated = translate_gpu_canvas_wgsl_to_webgl2(shader_wgsl)?;
-        let attributes = js_sys::Object::new();
-        for (name, value) in [
-            ("alpha", JsValue::TRUE),
-            ("antialias", JsValue::FALSE),
-            ("depth", JsValue::FALSE),
-            ("premultipliedAlpha", JsValue::FALSE),
-            ("preserveDrawingBuffer", JsValue::TRUE),
-            ("stencil", JsValue::FALSE),
-        ] {
-            js_sys::Reflect::set(&attributes, &JsValue::from_str(name), &value)
-                .map_err(|error| webgl2_js_error("context attributes", error))?;
-        }
-        let context = element
-            .get_context_with_context_options("webgl2", attributes.as_ref())
-            .map_err(|error| webgl2_js_error("context creation", error))?
-            .ok_or_else(|| RendererError::WebGl2("WebGL2 is unavailable".into()))?;
-        let gl = context
-            .dyn_into::<web_sys::WebGl2RenderingContext>()
-            .map_err(|_| RendererError::WebGl2("browser returned a non-WebGL2 context".into()))?;
-
-        let vertex = compile_webgl2_shader(
-            &gl,
-            web_sys::WebGl2RenderingContext::VERTEX_SHADER,
-            &translated.vertex.source,
-            "vertex",
-        )?;
-        let fragment = match compile_webgl2_shader(
-            &gl,
-            web_sys::WebGl2RenderingContext::FRAGMENT_SHADER,
-            &translated.fragment.source,
-            "fragment",
-        ) {
-            Ok(fragment) => fragment,
-            Err(error) => {
-                gl.delete_shader(Some(&vertex));
-                return Err(error);
-            }
-        };
-        let program = gl
-            .create_program()
-            .ok_or_else(|| RendererError::WebGl2("failed to allocate shader program".into()))?;
-        gl.attach_shader(&program, &vertex);
-        gl.attach_shader(&program, &fragment);
-        gl.link_program(&program);
-        let linked = gl
-            .get_program_parameter(&program, web_sys::WebGl2RenderingContext::LINK_STATUS)
-            .as_bool()
-            .unwrap_or(false);
-        let link_log = gl.get_program_info_log(&program).unwrap_or_default();
-        gl.detach_shader(&program, &vertex);
-        gl.detach_shader(&program, &fragment);
-        gl.delete_shader(Some(&vertex));
-        gl.delete_shader(Some(&fragment));
-        if !linked {
-            gl.delete_program(Some(&program));
-            return Err(RendererError::WebGl2(format!(
-                "WGSL-translated shader program failed to link: {link_log}"
-            )));
-        }
-
-        let mut uniform_blocks = translated.vertex.uniform_blocks;
-        uniform_blocks.extend(translated.fragment.uniform_blocks);
-        uniform_blocks.sort_by(|left, right| {
-            (left.group, left.binding, &left.name).cmp(&(right.group, right.binding, &right.name))
-        });
-        Ok(Self {
-            element: element.clone(),
-            gl,
-            program,
-            shader_wgsl: shader_wgsl.into(),
-            uniform_blocks,
-            vertex_attribute_formats: translated.vertex_attribute_formats,
-        })
-    }
-
-    pub fn render_gpu_canvas(&self, plan: &GpuCanvasRenderPlan) -> Result<Vec<u8>, RendererError> {
-        use web_sys::WebGl2RenderingContext as Gl;
-
-        validate_gpu_canvas_plan(plan)?;
-        validate_webgl2_vertex_attributes(&self.vertex_attribute_formats, plan)?;
-        if plan.shader_wgsl != self.shader_wgsl {
-            return Err(RendererError::InvalidGpuCanvas(
-                "WebGL2 renderer cannot switch shader source after creation".into(),
-            ));
-        }
-        self.element.set_width(plan.width);
-        self.element.set_height(plan.height);
-        let gl = &self.gl;
-        for _ in 0..16 {
-            if gl.get_error() == Gl::NO_ERROR {
-                break;
-            }
-        }
-        gl.use_program(Some(&self.program));
-        gl.viewport(0, 0, plan.width as i32, plan.height as i32);
-        gl.disable(Gl::BLEND);
-        gl.disable(Gl::CULL_FACE);
-        gl.disable(Gl::DEPTH_TEST);
-        gl.disable(Gl::SCISSOR_TEST);
-        gl.disable(Gl::STENCIL_TEST);
-        gl.color_mask(true, true, true, true);
-
-        let max_uniform_bindings = webgl2_u32_parameter(
-            gl,
-            Gl::MAX_UNIFORM_BUFFER_BINDINGS,
-            "MAX_UNIFORM_BUFFER_BINDINGS",
-        )?;
-        if plan.uniform_buffers.len() > max_uniform_bindings as usize {
-            return Err(RendererError::WebGl2(format!(
-                "draw requires {} uniform bindings but this WebGL2 context supports {max_uniform_bindings}",
-                plan.uniform_buffers.len()
-            )));
-        }
-        let max_uniform_block_size =
-            webgl2_u32_parameter(gl, Gl::MAX_UNIFORM_BLOCK_SIZE, "MAX_UNIFORM_BLOCK_SIZE")?
-                as usize;
-        if let Some(buffer) = plan
-            .uniform_buffers
-            .iter()
-            .find(|buffer| buffer.bytes.len() > max_uniform_block_size)
-        {
-            return Err(RendererError::WebGl2(format!(
-                "uniform binding {} in group {} contains {} bytes but this WebGL2 context supports {max_uniform_block_size}",
-                buffer.binding,
-                buffer.group,
-                buffer.bytes.len()
-            )));
-        }
-
-        let mut resources = WebGl2GpuCanvasFrameResources::new(gl)?;
-        let binding_points = plan
-            .uniform_buffers
-            .iter()
-            .enumerate()
-            .map(|(index, buffer)| ((buffer.group, buffer.binding), index as u32))
-            .collect::<std::collections::BTreeMap<_, _>>();
-        for block in &self.uniform_blocks {
-            let binding_point = binding_points
-                .get(&(block.group, block.binding))
-                .ok_or_else(|| {
-                    RendererError::InvalidGpuCanvas(format!(
-                        "shader uniform binding {} in group {} is not supplied by the draw plan",
-                        block.binding, block.group
-                    ))
-                })?;
-            let block_index = gl.get_uniform_block_index(&self.program, &block.name);
-            if block_index == Gl::INVALID_INDEX {
-                return Err(RendererError::WebGl2(format!(
-                    "linked program omitted reflected uniform block '{}'",
-                    block.name
-                )));
-            }
-            gl.uniform_block_binding(&self.program, block_index, *binding_point);
-        }
-        for (binding_point, buffer) in plan.uniform_buffers.iter().enumerate() {
-            let gpu_buffer = gl
-                .create_buffer()
-                .ok_or_else(|| RendererError::WebGl2("failed to allocate uniform buffer".into()))?;
-            gl.bind_buffer(Gl::UNIFORM_BUFFER, Some(&gpu_buffer));
-            gl.buffer_data_with_u8_array(Gl::UNIFORM_BUFFER, &buffer.bytes, Gl::DYNAMIC_DRAW);
-            gl.bind_buffer_base(Gl::UNIFORM_BUFFER, binding_point as u32, Some(&gpu_buffer));
-            resources.uniform_binding_points.push(binding_point as u32);
-            resources.buffers.push(gpu_buffer);
-        }
-
-        gl.bind_vertex_array(Some(&resources.vertex_array));
-        for (slot, layout) in plan.vertex_layouts.iter().enumerate() {
-            let buffer = plan
-                .vertex_buffers
-                .iter()
-                .find(|buffer| buffer.slot == slot as u32)
-                .ok_or_else(|| {
-                    RendererError::InvalidGpuCanvas(format!(
-                        "vertex buffer slot {slot} is not bound"
-                    ))
-                })?;
-            let gpu_buffer = gl
-                .create_buffer()
-                .ok_or_else(|| RendererError::WebGl2("failed to allocate vertex buffer".into()))?;
-            gl.bind_buffer(Gl::ARRAY_BUFFER, Some(&gpu_buffer));
-            gl.buffer_data_with_u8_array(Gl::ARRAY_BUFFER, &buffer.bytes, Gl::STATIC_DRAW);
-            for attribute in &layout.attributes {
-                let component_count = webgl2_vertex_component_count(&attribute.format)?;
-                gl.enable_vertex_attrib_array(attribute.shader_location);
-                gl.vertex_attrib_pointer_with_i32(
-                    attribute.shader_location,
-                    component_count,
-                    Gl::FLOAT,
-                    false,
-                    layout.stride as i32,
-                    attribute.offset as i32,
-                );
-                gl.vertex_attrib_divisor(attribute.shader_location, 0);
-            }
-            resources.buffers.push(gpu_buffer);
-        }
-
-        if let Some(location) = gl.get_uniform_location(&self.program, "naga_vs_first_instance") {
-            gl.uniform1ui(Some(&location), plan.first_instance);
-        }
-
-        gl.clear_color(
-            plan.clear_color[0] as f32,
-            plan.clear_color[1] as f32,
-            plan.clear_color[2] as f32,
-            plan.clear_color[3] as f32,
-        );
-        gl.clear(Gl::COLOR_BUFFER_BIT);
-        gl.draw_arrays_instanced(
-            Gl::TRIANGLES,
-            plan.first_vertex as i32,
-            plan.vertex_count as i32,
-            plan.instance_count as i32,
-        );
-        check_webgl2_error(gl, "draw submission")?;
-
-        let pixel_bytes = usize::try_from(plan.width)
-            .ok()
-            .and_then(|width| {
-                usize::try_from(plan.height)
-                    .ok()
-                    .and_then(|height| width.checked_mul(height))
-            })
-            .and_then(|pixels| pixels.checked_mul(4))
-            .ok_or_else(|| RendererError::WebGl2("readback byte length overflow".into()))?;
-        let mut pixels = vec![0; pixel_bytes];
-        gl.pixel_storei(Gl::PACK_ALIGNMENT, 1);
-        gl.finish();
-        gl.read_pixels_with_opt_u8_array(
-            0,
-            0,
-            plan.width as i32,
-            plan.height as i32,
-            Gl::RGBA,
-            Gl::UNSIGNED_BYTE,
-            Some(&mut pixels),
-        )
-        .map_err(|error| webgl2_js_error("RGBA readback", error))?;
-        check_webgl2_error(gl, "RGBA readback")?;
-        flip_rgba_rows(&mut pixels, plan.width, plan.height);
-        Ok(pixels)
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl Drop for WebGl2GpuCanvasRenderer {
-    fn drop(&mut self) {
-        self.gl.delete_program(Some(&self.program));
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-struct WebGl2GpuCanvasFrameResources<'a> {
-    gl: &'a web_sys::WebGl2RenderingContext,
-    vertex_array: web_sys::WebGlVertexArrayObject,
-    buffers: Vec<web_sys::WebGlBuffer>,
-    uniform_binding_points: Vec<u32>,
-}
-
-#[cfg(target_arch = "wasm32")]
-impl<'a> WebGl2GpuCanvasFrameResources<'a> {
-    fn new(gl: &'a web_sys::WebGl2RenderingContext) -> Result<Self, RendererError> {
-        let vertex_array = gl
-            .create_vertex_array()
-            .ok_or_else(|| RendererError::WebGl2("failed to allocate vertex array".into()))?;
-        Ok(Self {
-            gl,
-            vertex_array,
-            buffers: Vec::new(),
-            uniform_binding_points: Vec::new(),
-        })
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl Drop for WebGl2GpuCanvasFrameResources<'_> {
-    fn drop(&mut self) {
-        use web_sys::WebGl2RenderingContext as Gl;
-        self.gl.bind_vertex_array(None);
-        self.gl.bind_buffer(Gl::ARRAY_BUFFER, None);
-        self.gl.bind_buffer(Gl::UNIFORM_BUFFER, None);
-        for binding_point in self.uniform_binding_points.drain(..) {
-            self.gl
-                .bind_buffer_base(Gl::UNIFORM_BUFFER, binding_point, None);
-        }
-        for buffer in self.buffers.drain(..) {
-            self.gl.delete_buffer(Some(&buffer));
-        }
-        self.gl.delete_vertex_array(Some(&self.vertex_array));
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn compile_webgl2_shader(
-    gl: &web_sys::WebGl2RenderingContext,
-    kind: u32,
-    source: &str,
-    label: &str,
-) -> Result<web_sys::WebGlShader, RendererError> {
-    let shader = gl
-        .create_shader(kind)
-        .ok_or_else(|| RendererError::WebGl2(format!("failed to allocate {label} shader")))?;
-    gl.shader_source(&shader, source);
-    gl.compile_shader(&shader);
-    let compiled = gl
-        .get_shader_parameter(&shader, web_sys::WebGl2RenderingContext::COMPILE_STATUS)
-        .as_bool()
-        .unwrap_or(false);
-    if compiled {
-        Ok(shader)
-    } else {
-        let log = gl.get_shader_info_log(&shader).unwrap_or_default();
-        gl.delete_shader(Some(&shader));
-        Err(RendererError::WebGl2(format!(
-            "WGSL-translated {label} shader failed to compile: {log}"
-        )))
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn webgl2_u32_parameter(
-    gl: &web_sys::WebGl2RenderingContext,
-    parameter: u32,
-    label: &str,
-) -> Result<u32, RendererError> {
-    let value = gl
-        .get_parameter(parameter)
-        .map_err(|error| webgl2_js_error(label, error))?
-        .as_f64()
-        .filter(|value| value.is_finite() && *value >= 0.0 && *value <= u32::MAX as f64)
-        .ok_or_else(|| RendererError::WebGl2(format!("{label} is not a finite u32")))?;
-    Ok(value as u32)
-}
-
-#[cfg(target_arch = "wasm32")]
-fn webgl2_vertex_component_count(format: &str) -> Result<i32, RendererError> {
-    match format {
-        "float32" => Ok(1),
-        "float32x2" => Ok(2),
-        "float32x3" => Ok(3),
-        "float32x4" => Ok(4),
-        _ => Err(RendererError::InvalidGpuCanvas(format!(
-            "unsupported WebGL2 vertex format '{format}'"
-        ))),
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn check_webgl2_error(
-    gl: &web_sys::WebGl2RenderingContext,
-    operation: &str,
-) -> Result<(), RendererError> {
-    let code = gl.get_error();
-    if code == web_sys::WebGl2RenderingContext::NO_ERROR {
-        Ok(())
-    } else {
-        Err(RendererError::WebGl2(format!(
-            "{operation} produced GL error 0x{code:04x}"
-        )))
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn webgl2_js_error(operation: &str, value: wasm_bindgen::JsValue) -> RendererError {
-    RendererError::WebGl2(format!(
-        "{operation} failed: {}",
-        value.as_string().unwrap_or_else(|| format!("{value:?}"))
-    ))
-}
-
-#[cfg(any(test, target_arch = "wasm32"))]
-fn flip_rgba_rows(pixels: &mut [u8], width: u32, height: u32) {
-    let row_bytes = width as usize * 4;
-    for row in 0..height as usize / 2 {
-        let opposite = height as usize - row - 1;
-        let (before, after) = pixels.split_at_mut(opposite * row_bytes);
-        before[row * row_bytes..(row + 1) * row_bytes].swap_with_slice(&mut after[..row_bytes]);
-    }
-}
-
+/// Shared borrowed view of either public GPU-canvas plan shape.
 struct GpuCanvasPlanRef<'a> {
     width: u32,
     height: u32,
@@ -2728,6 +1767,10 @@ fn vertex_format(name: &str) -> Result<wgpu::VertexFormat, RendererError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nuxie_render_api::{
+        GpuCanvasShaderBinding, GpuCanvasShaderEntry, GpuCanvasShaderTextureSampleType,
+        GpuCanvasShaderTextureViewDimension,
+    };
 
     #[test]
     fn multi_occurrence_retained_targets_share_budget_and_release_on_replacement() {
@@ -2792,41 +1835,86 @@ mod tests {
         }
     }
 
-    const IMPORTED_VERTEX: &str = r#"#version 300 es
-precision highp float;
-precision highp int;
-void main() {
-    uint index = uint(gl_VertexID);
-    float x = float(int(index) - 1);
-    float y = float(int(index & 1u) * 2 - 1);
-    gl_Position = vec4(x, y, 0.0, 1.0);
-    gl_Position.yz = vec2(-gl_Position.y, gl_Position.z * 2.0 - gl_Position.w);
+    const IMPORTED_WGSL: &str = r#"
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let x = f32(i32(index) - 1);
+    let y = f32(i32(index & 1u) * 2 - 1);
+    return vec4<f32>(x, y, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
 }
 "#;
 
-    const IMPORTED_FRAGMENT: &str = r#"#version 300 es
-precision highp float;
-layout(location = 0) out vec4 color;
-void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
-"#;
+    fn imported_shader(source: &str) -> GpuCanvasShader {
+        GpuCanvasShader {
+            source: source.into(),
+            entries: vec![
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Vertex,
+                    logical_entry_point: "vs_main".into(),
+                    physical_entry_point: "vs_main".into(),
+                },
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Fragment,
+                    logical_entry_point: "fs_main".into(),
+                    physical_entry_point: "fs_main".into(),
+                },
+            ],
+            bindings: Vec::new(),
+        }
+    }
 
-    fn imported_shader(vertex: &str, fragment: &str) -> GpuCanvasShader {
-        nuxie_render_api::GpuCanvasShader {
-            vertex: nuxie_render_api::GpuCanvasShaderStage {
-                source: vertex.into(),
-                logical_entry_point: "vs_main".into(),
-                physical_entry_point: "main".into(),
-            },
-            fragment: nuxie_render_api::GpuCanvasShaderStage {
-                source: fragment.into(),
-                logical_entry_point: "fs_main".into(),
-                physical_entry_point: "main".into(),
-            },
+    fn imported_uniform_shader(source: &str, stage_mask: u8) -> GpuCanvasShader {
+        let mut shader = imported_shader(source);
+        shader.bindings.push(GpuCanvasShaderBinding {
+            group: 0,
+            binding: 0,
+            kind: GpuCanvasShaderResourceKind::UniformBuffer,
+            stage_mask,
+            backend_space: 0,
+            backend_slots: [
+                (stage_mask & (1 << GpuCanvasShaderStage::Vertex as u8) != 0).then_some(0),
+                (stage_mask & (1 << GpuCanvasShaderStage::Fragment as u8) != 0).then_some(0),
+                (stage_mask & (1 << GpuCanvasShaderStage::Compute as u8) != 0).then_some(0),
+            ],
+            texture_view_dimension: GpuCanvasShaderTextureViewDimension::Undefined,
+            texture_sample_type: GpuCanvasShaderTextureSampleType::Undefined,
+            texture_multisampled: false,
+        });
+        shader
+    }
+
+    fn imported_shader_with_entries(
+        source: &str,
+        vertex_physical: &str,
+        fragment_physical: &str,
+    ) -> GpuCanvasShader {
+        GpuCanvasShader {
+            source: source.into(),
+            entries: vec![
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Vertex,
+                    logical_entry_point: "vs_main".into(),
+                    physical_entry_point: vertex_physical.into(),
+                },
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Fragment,
+                    logical_entry_point: "fs_main".into(),
+                    physical_entry_point: fragment_physical.into(),
+                },
+            ],
+            bindings: Vec::new(),
         }
     }
 
     fn imported_plan() -> GpuCanvasPlan {
         GpuCanvasPlan {
+            vertex_entry: None,
+            fragment_entry: None,
             width: 8,
             height: 8,
             clear_color: [0.0, 0.0, 0.0, 1.0],
@@ -2840,21 +1928,57 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
         }
     }
 
+    fn prepare_test_gpu_canvas(
+        shader: &GpuCanvasShader,
+        plan: &GpuCanvasPlan,
+    ) -> Result<PreparedImportedGpuCanvas, GpuCanvasError> {
+        prepare_test_gpu_canvas_stages(shader, shader, plan)
+    }
+
+    fn prepare_test_gpu_canvas_stages(
+        vertex_shader: &GpuCanvasShader,
+        fragment_shader: &GpuCanvasShader,
+        plan: &GpuCanvasPlan,
+    ) -> Result<PreparedImportedGpuCanvas, GpuCanvasError> {
+        let vertex_parsed = parse_authored_wgsl(&vertex_shader.source)?;
+        let vertex_requirements = imported_uniform_requirements(
+            vertex_shader,
+            &vertex_parsed.module,
+            &vertex_parsed.info,
+        )?;
+        let fragment_parsed = parse_authored_wgsl(&fragment_shader.source)?;
+        let fragment_requirements = imported_uniform_requirements(
+            fragment_shader,
+            &fragment_parsed.module,
+            &fragment_parsed.info,
+        )?;
+        prepare_imported_gpu_canvas_modules(
+            ImportedGpuCanvasShaderRef {
+                shader: vertex_shader,
+                parsed: &vertex_parsed,
+                uniform_requirements: &vertex_requirements,
+            },
+            ImportedGpuCanvasShaderRef {
+                shader: fragment_shader,
+                parsed: &fragment_parsed,
+                uniform_requirements: &fragment_requirements,
+            },
+            plan,
+        )
+    }
+
     #[test]
     fn imported_interface_preflight_accepts_only_the_exact_physical_stage_interface() {
-        let shader = imported_shader(IMPORTED_VERTEX, IMPORTED_FRAGMENT);
-        prepare_imported_gpu_canvas(&shader, &imported_plan()).unwrap();
+        let shader = imported_shader(IMPORTED_WGSL);
+        prepare_test_gpu_canvas(&shader, &imported_plan()).unwrap();
 
-        let vertex_with_input = IMPORTED_VERTEX.replace(
-            "void main() {",
-            "layout(location = 0) in vec2 position;\nvoid main() {",
+        let vertex_with_input = IMPORTED_WGSL.replace(
+            "fn vs_main(@builtin(vertex_index) index: u32)",
+            "fn vs_main(@builtin(vertex_index) index: u32, @location(0) position: vec2<f32>)",
         );
-        let error = prepare_imported_gpu_canvas(
-            &imported_shader(&vertex_with_input, IMPORTED_FRAGMENT),
-            &imported_plan(),
-        )
-        .err()
-        .expect("missing vertex plan must fail");
+        let error = prepare_test_gpu_canvas(&imported_shader(&vertex_with_input), &imported_plan())
+            .err()
+            .expect("missing vertex plan must fail");
         assert!(error.to_string().contains("vertex inputs"), "{error}");
 
         let mut matching_plan = imported_plan();
@@ -2870,36 +1994,31 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
             slot: 0,
             bytes: vec![0; 24],
         });
-        prepare_imported_gpu_canvas(
-            &imported_shader(&vertex_with_input, IMPORTED_FRAGMENT),
-            &matching_plan,
-        )
-        .unwrap();
+        prepare_test_gpu_canvas(&imported_shader(&vertex_with_input), &matching_plan).unwrap();
         matching_plan.vertex_layouts[0].attributes[0].format = "float32x3".into();
         matching_plan.vertex_layouts[0].stride = 12;
         matching_plan.vertex_buffers[0].bytes.resize(36, 0);
-        let error = prepare_imported_gpu_canvas(
-            &imported_shader(&vertex_with_input, IMPORTED_FRAGMENT),
-            &matching_plan,
-        )
-        .err()
-        .expect("wrong vertex format must fail");
+        let error = prepare_test_gpu_canvas(&imported_shader(&vertex_with_input), &matching_plan)
+            .err()
+            .expect("wrong vertex format must fail");
         assert!(error.to_string().contains("vertex inputs"), "{error}");
 
-        let fragment_vec3 = IMPORTED_FRAGMENT
-            .replace("out vec4 color", "out vec3 color")
-            .replace("vec4(1.0, 0.0, 0.0, 1.0)", "vec3(1.0, 0.0, 0.0)");
-        let error = prepare_imported_gpu_canvas(
-            &imported_shader(IMPORTED_VERTEX, &fragment_vec3),
-            &imported_plan(),
-        )
-        .err()
-        .expect("non-RGBA fragment output must fail");
+        let fragment_vec3 = IMPORTED_WGSL
+            .replace(
+                "fn fs_main() -> @location(0) vec4<f32>",
+                "fn fs_main() -> @location(0) vec3<f32>",
+            )
+            .replace(
+                "return vec4<f32>(1.0, 0.0, 0.0, 1.0);",
+                "return vec3<f32>(1.0, 0.0, 0.0);",
+            );
+        let error = prepare_test_gpu_canvas(&imported_shader(&fragment_vec3), &imported_plan())
+            .err()
+            .expect("non-RGBA fragment output must fail");
         assert!(error.to_string().contains("fragment output"), "{error}");
 
-        let mut wrong_entry = shader;
-        wrong_entry.vertex.physical_entry_point = "vs_main".into();
-        let error = prepare_imported_gpu_canvas(&wrong_entry, &imported_plan())
+        let wrong_entry = imported_shader_with_entries(IMPORTED_WGSL, "missing", "fs_main");
+        let error = prepare_test_gpu_canvas(&wrong_entry, &imported_plan())
             .err()
             .expect("missing physical entry point must fail");
         assert!(
@@ -2910,28 +2029,38 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
 
     #[test]
     fn imported_interface_preflight_validates_interstage_and_uniform_layouts() {
-        let varying_vertex = IMPORTED_VERTEX.replace(
-            "void main() {",
-            "layout(location = 0) out vec2 varying_value;\nvoid main() {\n    varying_value = vec2(1.0);",
-        );
-        let varying_fragment = IMPORTED_FRAGMENT.replace(
-            "void main() {",
-            "layout(location = 0) in vec3 varying_value;\nvoid main() {",
-        );
-        let error = prepare_imported_gpu_canvas(
-            &imported_shader(&varying_vertex, &varying_fragment),
-            &imported_plan(),
-        )
-        .err()
-        .expect("inter-stage type mismatch must fail");
+        let varying = r#"
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) varying_value: vec2<f32>,
+}
+
+@vertex
+fn vs_main() -> VertexOutput {
+    return VertexOutput(vec4<f32>(0.0), vec2<f32>(1.0));
+}
+
+@fragment
+fn fs_main(@location(0) varying_value: vec3<f32>) -> @location(0) vec4<f32> {
+    return vec4<f32>(varying_value, 1.0);
+}
+"#;
+        let error = prepare_test_gpu_canvas(&imported_shader(varying), &imported_plan())
+            .err()
+            .expect("inter-stage type mismatch must fail");
         assert!(error.to_string().contains("inter-stage"), "{error}");
 
-        let uniform_fragment = IMPORTED_FRAGMENT.replace(
-            "void main() {",
-            "layout(std140, binding = 0) uniform Tint { vec4 value; } tint;\nvoid main() {",
-        );
-        let error = prepare_imported_gpu_canvas(
-            &imported_shader(IMPORTED_VERTEX, &uniform_fragment),
+        let uniform_wgsl = IMPORTED_WGSL
+            .replace(
+                "@fragment",
+                "struct Tint { value: vec4<f32>, }\n@group(0) @binding(0) var<uniform> tint: Tint;\n\n@fragment",
+            )
+            .replace(
+                "return vec4<f32>(1.0, 0.0, 0.0, 1.0);",
+                "return tint.value;",
+            );
+        let error = prepare_test_gpu_canvas(
+            &imported_uniform_shader(&uniform_wgsl, 1 << GpuCanvasShaderStage::Fragment as u8),
             &imported_plan(),
         )
         .err()
@@ -2944,8 +2073,8 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
             binding: 0,
             bytes: vec![0; 8],
         });
-        let error = prepare_imported_gpu_canvas(
-            &imported_shader(IMPORTED_VERTEX, &uniform_fragment),
+        let error = prepare_test_gpu_canvas(
+            &imported_uniform_shader(&uniform_wgsl, 1 << GpuCanvasShaderStage::Fragment as u8),
             &undersized,
         )
         .err()
@@ -2958,61 +2087,282 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
             binding: 0,
             bytes: vec![0; 16],
         });
-        prepare_imported_gpu_canvas(&imported_shader(IMPORTED_VERTEX, &uniform_fragment), &exact)
-            .unwrap();
+        prepare_test_gpu_canvas(
+            &imported_uniform_shader(&uniform_wgsl, 1 << GpuCanvasShaderStage::Fragment as u8),
+            &exact,
+        )
+        .unwrap();
     }
 
     #[test]
-    fn imported_webgl2_translation_supports_uniforms_and_base_instance() {
-        let vertex = IMPORTED_VERTEX
+    fn binding_map_identity_and_stage_visibility_fail_closed() {
+        let uniform_wgsl = IMPORTED_WGSL
             .replace(
-                "uint index = uint(gl_VertexID);",
-                "uint index = uint(gl_VertexID);\n    uint instance = uint(gl_InstanceID);",
+                "@fragment",
+                "struct Tint { value: vec4<f32>, }\n@group(0) @binding(0) var<uniform> tint: Tint;\n\n@fragment",
             )
             .replace(
-                "float x = float(int(index) - 1);",
-                "float x = float(int(index) - 1) + float(instance) * 0.01;",
+                "return vec4<f32>(1.0, 0.0, 0.0, 1.0);",
+                "return tint.value;",
             );
-        let fragment = IMPORTED_FRAGMENT.replace(
-            "void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }",
-            "layout(std140, binding = 0) uniform Tint { vec4 value; } tint;\nvoid main() { color = tint.value; }",
-        );
+        let fragment_mask = 1 << GpuCanvasShaderStage::Fragment as u8;
         let mut plan = imported_plan();
-        plan.instance_count = 2;
-        plan.first_instance = 4;
         plan.uniform_buffers.push(GpuCanvasUniformBuffer {
             group: 0,
             binding: 0,
-            bytes: 1.0_f32
-                .to_le_bytes()
-                .into_iter()
-                .chain(0.0_f32.to_le_bytes())
-                .chain(0.0_f32.to_le_bytes())
-                .chain(1.0_f32.to_le_bytes())
-                .collect(),
+            bytes: vec![0; 16],
+        });
+        prepare_test_gpu_canvas(
+            &imported_uniform_shader(&uniform_wgsl, fragment_mask),
+            &plan,
+        )
+        .expect("canonical target-16 WebGPU identity metadata is valid");
+
+        let vertex_mask = 1 << GpuCanvasShaderStage::Vertex as u8;
+        let error =
+            prepare_test_gpu_canvas(&imported_uniform_shader(&uniform_wgsl, vertex_mask), &plan)
+                .err()
+                .expect("target-16 visibility may not omit a stage that actually uses the binding");
+        assert!(error.to_string().contains("underdeclares"), "{error}");
+
+        let broader_mask = fragment_mask | (1 << GpuCanvasShaderStage::Compute as u8);
+        prepare_test_gpu_canvas(&imported_uniform_shader(&uniform_wgsl, broader_mask), &plan)
+            .expect("C++ and WebGPU allow layout visibility broader than actual use");
+
+        let mut unknown_stage = imported_uniform_shader(&uniform_wgsl, fragment_mask);
+        unknown_stage.bindings[0].stage_mask |= 0x80;
+        let error = prepare_test_gpu_canvas(&unknown_stage, &plan)
+            .err()
+            .expect("unknown target-16 stage bits must fail closed");
+        assert!(error.to_string().contains("unknown stage mask"), "{error}");
+
+        let mut absent_visible_slot = imported_uniform_shader(&uniform_wgsl, fragment_mask);
+        absent_visible_slot.bindings[0].backend_slots[1] = None;
+        let error = prepare_test_gpu_canvas(&absent_visible_slot, &plan)
+            .err()
+            .expect("a visible stage must retain its target-16 native slot");
+        assert!(error.to_string().contains("identity mapping"), "{error}");
+
+        let mut populated_absent_slot = imported_uniform_shader(&uniform_wgsl, fragment_mask);
+        populated_absent_slot.bindings[0].backend_slots[0] = Some(0);
+        let error = prepare_test_gpu_canvas(&populated_absent_slot, &plan)
+            .err()
+            .expect("an invisible stage must preserve BindingMap::kAbsent");
+        assert!(error.to_string().contains("identity mapping"), "{error}");
+
+        let mut remapped_space = imported_uniform_shader(&uniform_wgsl, fragment_mask);
+        remapped_space.bindings[0].backend_space = 1;
+        let error = prepare_test_gpu_canvas(&remapped_space, &plan)
+            .err()
+            .expect("WebGPU consumes the authored group without cross-backend remapping");
+        assert!(error.to_string().contains("identity mapping"), "{error}");
+    }
+
+    #[test]
+    fn shared_authored_module_drives_both_entries_and_binding_visibility() {
+        let shared_wgsl = r#"
+struct Tint {
+    value: vec4<f32>,
+}
+@group(0) @binding(0) var<uniform> tint: Tint;
+
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    let x = f32(i32(index) - 1);
+    let y = f32(i32(index & 1u) * 2 - 1);
+    return vec4<f32>(x, y, tint.value.x * 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+    return tint.value;
+}
+"#;
+        let stage_mask =
+            (1 << GpuCanvasShaderStage::Vertex as u8) | (1 << GpuCanvasShaderStage::Fragment as u8);
+        let shader = imported_uniform_shader(shared_wgsl, stage_mask);
+        let mut plan = imported_plan();
+        plan.uniform_buffers.push(GpuCanvasUniformBuffer {
+            group: 0,
+            binding: 0,
+            bytes: vec![0; 16],
         });
 
-        let translated =
-            prepare_imported_gpu_canvas_webgl2(&imported_shader(&vertex, &fragment), &plan)
-                .expect("valid imported uniforms and base instance translate to WebGL2");
+        let prepared = prepare_test_gpu_canvas(&shader, &plan)
+            .expect("one authored module contains both physical entries");
+        assert_eq!(prepared.vertex_entry_point, "vs_main");
+        assert_eq!(prepared.fragment_entry_point, "fs_main");
+        assert_eq!(
+            prepared.uniform_requirements[&(0, 0)].visibility(),
+            wgpu::ShaderStages::VERTEX_FRAGMENT,
+        );
+    }
+
+    #[test]
+    fn distinct_stage_modules_do_not_union_fragment_resources_into_vertex_layout() {
+        let fragment_source = IMPORTED_WGSL
+            .replace(
+                "@fragment",
+                "struct Tint { value: vec4<f32>, }\n@group(0) @binding(0) var<uniform> tint: Tint;\n\n@fragment",
+            )
+            .replace(
+                "return vec4<f32>(1.0, 0.0, 0.0, 1.0);",
+                "return tint.value;",
+            );
+        let vertex_shader = imported_shader(IMPORTED_WGSL);
+        let fragment_shader =
+            imported_uniform_shader(&fragment_source, 1 << GpuCanvasShaderStage::Fragment as u8);
+        let mut plan = imported_plan();
+        plan.uniform_buffers.push(GpuCanvasUniformBuffer {
+            group: 0,
+            binding: 0,
+            bytes: vec![0; 16],
+        });
+
+        let error = prepare_test_gpu_canvas_stages(&vertex_shader, &fragment_shader, &plan)
+            .err()
+            .expect("fragment resources cannot deepen the vertex-authoritative layout");
 
         assert!(
-            translated.vertex.source.contains("naga_vs_first_instance"),
-            "Naga must preserve WebGPU firstInstance semantics through a WebGL2 base-instance uniform"
+            error.to_string().contains(
+                "fragment resource group 0 binding 0 is absent from the vertex-authoritative"
+            ),
+            "{error}"
         );
+    }
+
+    #[test]
+    fn explicit_fragment_uniform_size_deepens_vertex_authoritative_preflight() {
+        let vertex_source = IMPORTED_WGSL
+            .replace(
+                "@vertex",
+                "struct Params { value: vec4<f32>, }\n@group(0) @binding(0) var<uniform> params: Params;\n\n@vertex",
+            )
+            .replace(
+                "return vec4<f32>(x, y, 0.0, 1.0);",
+                "return vec4<f32>(x, y, params.value.x * 0.0, 1.0);",
+            );
+        let fragment_source = IMPORTED_WGSL
+            .replace(
+                "@fragment",
+                "struct Params { first: vec4<f32>, second: vec4<f32>, }\n@group(0) @binding(0) var<uniform> params: Params;\n\n@fragment",
+            )
+            .replace(
+                "return vec4<f32>(1.0, 0.0, 0.0, 1.0);",
+                "return params.second;",
+            );
+        let vertex_mask =
+            (1 << GpuCanvasShaderStage::Vertex as u8) | (1 << GpuCanvasShaderStage::Fragment as u8);
+        let fragment_mask = 1 << GpuCanvasShaderStage::Fragment as u8;
+        let vertex_shader = imported_uniform_shader(&vertex_source, vertex_mask);
+        let fragment_shader = imported_uniform_shader(&fragment_source, fragment_mask);
+
+        let mut max_sized = imported_plan();
+        max_sized.uniform_buffers.push(GpuCanvasUniformBuffer {
+            group: 0,
+            binding: 0,
+            bytes: vec![0; 32],
+        });
+        let prepared = prepare_test_gpu_canvas_stages(&vertex_shader, &fragment_shader, &max_sized)
+            .expect("the larger explicit fragment uniform determines the preflight size");
+        assert_eq!(
+            prepared.uniform_requirements[&(0, 0)],
+            ImportedUniformRequirement {
+                required_size: 32,
+                stage_mask: vertex_mask,
+            },
+            "layout identity and visibility remain vertex target-16 authoritative"
+        );
+
+        let mut too_small = max_sized;
+        too_small.uniform_buffers[0].bytes.truncate(16);
+        let error = prepare_test_gpu_canvas_stages(&vertex_shader, &fragment_shader, &too_small)
+            .err()
+            .expect("a buffer sized only for the vertex module must fail");
+        assert!(error.to_string().contains("requires 32"), "{error}");
+    }
+
+    #[test]
+    fn arbitrary_entries_use_declaration_order_defaults_and_exact_pipeline_selection() {
+        let source = r#"
+@vertex
+fn physical_vertex_0(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    return vec4<f32>(f32(i32(index) - 1), f32(i32(index & 1u) * 2 - 1), 0.0, 1.0);
+}
+
+@vertex
+fn physical_vertex_1(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    return vec4<f32>(f32(i32(index) - 1), f32(i32(index & 1u) * 2 - 1), 0.0, 1.0);
+}
+
+@fragment
+fn physical_fragment_0() -> @location(0) vec4<f32> {
+    return vec4<f32>(0.0, 1.0, 0.0, 1.0);
+}
+
+@fragment
+fn physical_fragment_1() -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+}
+"#;
+        let shader = GpuCanvasShader {
+            source: source.into(),
+            entries: vec![
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Vertex,
+                    logical_entry_point: "default_vertex".into(),
+                    physical_entry_point: "physical_vertex_0".into(),
+                },
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Vertex,
+                    logical_entry_point: "chosen_vertex".into(),
+                    physical_entry_point: "physical_vertex_1".into(),
+                },
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Fragment,
+                    logical_entry_point: "default_fragment".into(),
+                    physical_entry_point: "physical_fragment_0".into(),
+                },
+                GpuCanvasShaderEntry {
+                    stage: GpuCanvasShaderStage::Fragment,
+                    logical_entry_point: "chosen_fragment".into(),
+                    physical_entry_point: "physical_fragment_1".into(),
+                },
+            ],
+            bindings: Vec::new(),
+        };
+        let mut plan = imported_plan();
+
+        let prepared = prepare_test_gpu_canvas(&shader, &plan)
+            .expect("bare modules select the first declaration of each stage");
+        assert_eq!(prepared.vertex_entry_point, "physical_vertex_0");
+        assert_eq!(prepared.fragment_entry_point, "physical_fragment_0");
+
+        plan.vertex_entry = Some(GpuCanvasShaderEntrySelection {
+            logical_entry_point: "chosen_vertex".into(),
+            physical_entry_point: "physical_vertex_1".into(),
+        });
+        plan.fragment_entry = Some(GpuCanvasShaderEntrySelection {
+            logical_entry_point: "chosen_fragment".into(),
+            physical_entry_point: "physical_fragment_1".into(),
+        });
+        let prepared = prepare_test_gpu_canvas(&shader, &plan)
+            .expect("the pipeline carries its resolved logical/physical pair");
+        assert_eq!(prepared.vertex_entry_point, "physical_vertex_1");
+        assert_eq!(prepared.fragment_entry_point, "physical_fragment_1");
+
+        plan.fragment_entry.as_mut().unwrap().physical_entry_point = "physical_fragment_0".into();
+        let error = prepare_test_gpu_canvas(&shader, &plan)
+            .err()
+            .expect("a stale logical/physical pair fails before device allocation");
         assert!(
-            translated
-                .fragment
-                .uniform_blocks
-                .iter()
-                .any(|block| block.group == 0 && block.binding == 0),
-            "the imported uniform block remains reflected for WebGL2 binding"
+            error.to_string().contains("no matching fragment"),
+            "{error}"
         );
     }
 
     #[test]
     fn imported_pipeline_key_reuses_resources_for_animated_buffer_bytes() {
-        let shader = imported_shader(IMPORTED_VERTEX, IMPORTED_FRAGMENT);
         let mut first = imported_plan();
         first.uniform_buffers.push(GpuCanvasUniformBuffer {
             group: 0,
@@ -3023,16 +2373,87 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
         second.uniform_buffers[0].bytes.fill(0xff);
 
         assert_eq!(
-            ImportedGpuCanvasPipelineKey::new(&shader, &first),
-            ImportedGpuCanvasPipelineKey::new(&shader, &second),
-            "temporal byte updates must retain translated shaders, pipelines, and buffers"
+            ImportedGpuCanvasPipelineKey::from_occurrence_ids(7, 7, &first),
+            ImportedGpuCanvasPipelineKey::from_occurrence_ids(7, 7, &second),
+            "temporal byte updates must retain authored modules, pipelines, and buffers"
         );
 
         second.uniform_buffers[0].bytes.push(0);
         assert_ne!(
-            ImportedGpuCanvasPipelineKey::new(&shader, &first),
-            ImportedGpuCanvasPipelineKey::new(&shader, &second),
+            ImportedGpuCanvasPipelineKey::from_occurrence_ids(7, 7, &first),
+            ImportedGpuCanvasPipelineKey::from_occurrence_ids(7, 7, &second),
             "resource-size changes require a fresh backend allocation"
+        );
+    }
+
+    #[test]
+    fn imported_pipeline_key_orders_occurrences_and_distinguishes_entry_pairs() {
+        let mut first = imported_plan();
+        first.vertex_entry = Some(GpuCanvasShaderEntrySelection {
+            logical_entry_point: "first_vertex".into(),
+            physical_entry_point: "vs_first".into(),
+        });
+        first.fragment_entry = Some(GpuCanvasShaderEntrySelection {
+            logical_entry_point: "first_fragment".into(),
+            physical_entry_point: "fs_first".into(),
+        });
+        let mut second = first.clone();
+        second.vertex_entry.as_mut().unwrap().logical_entry_point = "second_vertex".into();
+        second.vertex_entry.as_mut().unwrap().physical_entry_point = "vs_second".into();
+
+        assert_ne!(
+            ImportedGpuCanvasPipelineKey::from_occurrence_ids(11, 29, &first),
+            ImportedGpuCanvasPipelineKey::from_occurrence_ids(29, 11, &first),
+            "vertex and fragment occurrence identity is ordered"
+        );
+        assert_ne!(
+            ImportedGpuCanvasPipelineKey::from_occurrence_ids(11, 29, &first),
+            ImportedGpuCanvasPipelineKey::from_occurrence_ids(11, 29, &second),
+            "one occurrence pair may materialize more than one pipeline key"
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn wgpu_occurrences_are_fresh_and_reject_another_device_domain() {
+        let Ok(mut first_factory) = WgpuFactory::new(8, 8) else {
+            eprintln!("GPU adapter unavailable; domain validation is covered by the pure seam");
+            return;
+        };
+        let Ok(mut second_factory) = WgpuFactory::new(8, 8) else {
+            eprintln!(
+                "second GPU adapter unavailable; domain validation is covered by the pure seam"
+            );
+            return;
+        };
+        let shader = imported_shader(IMPORTED_WGSL);
+        let first = first_factory
+            .make_imported_gpu_canvas_shader(&shader)
+            .expect("first lookup occurrence");
+        let second = first_factory
+            .make_imported_gpu_canvas_shader(&shader)
+            .expect("second same-source lookup occurrence");
+        let first_id = first
+            .as_any()
+            .downcast_ref::<WgpuGpuCanvasShader>()
+            .unwrap()
+            .occurrence_id;
+        let second_id = second
+            .as_any()
+            .downcast_ref::<WgpuGpuCanvasShader>()
+            .unwrap()
+            .occurrence_id;
+        assert_ne!(first_id, second_id);
+
+        let error = second_factory
+            .make_imported_gpu_canvas_image(&first, &first, &imported_plan())
+            .err()
+            .expect("a WGPU occurrence cannot be rehomed to another device");
+        assert!(
+            error
+                .to_string()
+                .contains("different factory/device domain"),
+            "{error}"
         );
     }
 
@@ -3054,8 +2475,7 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
                     (buffer.group, buffer.binding),
                     ImportedUniformRequirement {
                         required_size: 16,
-                        vertex: false,
-                        fragment: true,
+                        stage_mask: 1 << GpuCanvasShaderStage::Fragment as u8,
                     },
                 )
             })
@@ -3077,8 +2497,11 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
             .into_iter()
             .enumerate()
             .map(|(index, (binding, mut requirement))| {
-                requirement.vertex = index < 7;
-                requirement.fragment = index >= 7;
+                requirement.stage_mask = if index < 7 {
+                    1 << GpuCanvasShaderStage::Vertex as u8
+                } else {
+                    1 << GpuCanvasShaderStage::Fragment as u8
+                };
                 (binding, requirement)
             })
             .collect::<BTreeMap<_, _>>();
@@ -3172,160 +2595,6 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
         assert!(validate_gpu_canvas_plan(&plan).is_err());
     }
 
-    #[test]
-    fn webgl2_translation_reflects_cookbook_uniforms_for_both_stages() {
-        let shader = r#"
-            struct Uniforms { color: vec4<f32> };
-            @group(0) @binding(0) var<uniform> u: Uniforms;
-
-            @vertex
-            fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
-                let x = f32(i32(index) - 1);
-                let y = f32(i32(index & 1u) * 2 - 1);
-                return vec4<f32>(x, y, 0.0, 1.0);
-            }
-
-            @fragment
-            fn fs_main() -> @location(0) vec4<f32> {
-                return u.color;
-            }
-        "#;
-
-        let translated = translate_gpu_canvas_wgsl_to_webgl2(shader)
-            .expect("portable WGSL translates to WebGL2 GLSL ES 3.00");
-        assert!(translated.vertex.source.starts_with("#version 300 es"));
-        assert!(translated.fragment.source.starts_with("#version 300 es"));
-        assert!(translated.vertex_attribute_formats.is_empty());
-        assert!(translated.vertex.uniform_blocks.is_empty());
-        assert_eq!(
-            translated.fragment.uniform_blocks,
-            vec![WebGl2UniformBlock {
-                group: 0,
-                binding: 0,
-                name: translated.fragment.uniform_blocks[0].name.clone(),
-            }]
-        );
-        assert!(
-            translated
-                .fragment
-                .source
-                .contains(&translated.fragment.uniform_blocks[0].name),
-            "reflected block name must be the exact linked-program lookup key"
-        );
-    }
-
-    #[test]
-    fn webgl2_translation_preserves_mesh_vertex_attribute_locations() {
-        let shader = r#"
-            struct Uniforms { mvp: mat4x4<f32> };
-            @group(0) @binding(0) var<uniform> u: Uniforms;
-            struct VertexIn {
-                @location(0) position: vec3<f32>,
-                @location(1) color: vec4<f32>,
-            };
-            struct VertexOut {
-                @builtin(position) position: vec4<f32>,
-                @location(0) color: vec4<f32>,
-            };
-            @vertex fn vs_main(input: VertexIn) -> VertexOut {
-                var output: VertexOut;
-                output.position = u.mvp * vec4<f32>(input.position, 1.0);
-                output.color = input.color;
-                return output;
-            }
-            @fragment fn fs_main(input: VertexOut) -> @location(0) vec4<f32> {
-                return input.color;
-            }
-        "#;
-
-        let translated =
-            translate_gpu_canvas_wgsl_to_webgl2(shader).expect("mesh WGSL translates to WebGL2");
-        assert!(translated.vertex.source.contains("layout(location = 0)"));
-        assert!(translated.vertex.source.contains("layout(location = 1)"));
-        assert_eq!(translated.vertex.uniform_blocks.len(), 1);
-        assert_eq!(translated.vertex.uniform_blocks[0].group, 0);
-        assert_eq!(translated.vertex.uniform_blocks[0].binding, 0);
-        assert_eq!(
-            translated.vertex_attribute_formats,
-            std::collections::BTreeMap::from([(0, "float32x3".into()), (1, "float32x4".into()),])
-        );
-
-        let mut missing_color = valid_plan();
-        missing_color.vertex_layouts = vec![GpuCanvasVertexLayout {
-            stride: 12,
-            attributes: vec![GpuCanvasVertexAttribute {
-                shader_location: 0,
-                offset: 0,
-                format: "float32x3".into(),
-            }],
-        }];
-        assert!(validate_webgl2_vertex_attributes(
-            &translated.vertex_attribute_formats,
-            &missing_color,
-        )
-        .unwrap_err()
-        .to_string()
-        .contains("location 1"));
-    }
-
-    #[test]
-    fn webgl2_translation_rejects_resources_outside_the_closed_draw_plan() {
-        let shader = r#"
-            @group(0) @binding(0) var<storage, read> values: array<f32>;
-            @vertex fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
-                return vec4<f32>(f32(index), values[0], 0.0, 1.0);
-            }
-            @fragment fn fs_main() -> @location(0) vec4<f32> {
-                return vec4<f32>(1.0);
-            }
-        "#;
-
-        let error = translate_gpu_canvas_wgsl_to_webgl2(shader).unwrap_err();
-        assert!(error.to_string().contains("uniform buffers"), "{error}");
-    }
-
-    #[test]
-    fn webgl2_translation_rejects_shader_io_outside_the_rgba_float_plan() {
-        let integer_vertex = r#"
-            @vertex fn vs_main(@location(0) position: vec2<u32>) -> @builtin(position) vec4<f32> {
-                return vec4<f32>(vec2<f32>(position), 0.0, 1.0);
-            }
-            @fragment fn fs_main() -> @location(0) vec4<f32> {
-                return vec4<f32>(1.0);
-            }
-        "#;
-        let error = translate_gpu_canvas_wgsl_to_webgl2(integer_vertex).unwrap_err();
-        assert!(error.to_string().contains("float32"), "{error}");
-
-        let multiple_targets = r#"
-            @vertex fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
-                return vec4<f32>(f32(index), 0.0, 0.0, 1.0);
-            }
-            struct FragmentOut {
-                @location(0) color: vec4<f32>,
-                @location(1) glow: vec4<f32>,
-            };
-            @fragment fn fs_main() -> FragmentOut {
-                return FragmentOut(vec4<f32>(1.0), vec4<f32>(0.0));
-            }
-        "#;
-        let error = translate_gpu_canvas_wgsl_to_webgl2(multiple_targets).unwrap_err();
-        assert!(error.to_string().contains("exactly one"), "{error}");
-    }
-
-    #[test]
-    fn webgl2_readback_rows_are_normalized_to_webgpu_order() {
-        let mut pixels = vec![
-            1, 2, 3, 4, 5, 6, 7, 8, // WebGL bottom row
-            9, 10, 11, 12, 13, 14, 15, 16, // WebGL top row
-        ];
-        flip_rgba_rows(&mut pixels, 2, 2);
-        assert_eq!(
-            pixels,
-            vec![9, 10, 11, 12, 13, 14, 15, 16, 1, 2, 3, 4, 5, 6, 7, 8]
-        );
-    }
-
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn executes_validated_wgsl_and_reads_real_pixels() {
@@ -3373,34 +2642,27 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn cached_wgpu_imported_pipelines_update_bytes_and_retain_multiple_keys() {
-        use nuxie_render_api::{BlendMode, GpuCanvasShaderStage, ImageSampler, Renderer as _};
+        use nuxie_render_api::{BlendMode, ImageSampler, Renderer as _};
 
-        let shader = GpuCanvasShader {
-            vertex: GpuCanvasShaderStage {
-                source: r#"#version 300 es
-                    precision highp float;
-                    layout(location = 0) in vec2 position;
-                    void main() {
-                        gl_Position = vec4(position, 0.0, 1.0);
-                        gl_Position.yz = vec2(-gl_Position.y, gl_Position.z * 2.0 - gl_Position.w);
-                    }
-                "#
-                .into(),
-                logical_entry_point: "vs_main".into(),
-                physical_entry_point: "main".into(),
-            },
-            fragment: GpuCanvasShaderStage {
-                source: r#"#version 300 es
-                    precision highp float;
-                    layout(std140, binding = 0) uniform Tint { vec4 value; } tint;
-                    layout(location = 0) out vec4 color;
-                    void main() { color = tint.value; }
-                "#
-                .into(),
-                logical_entry_point: "fs_main".into(),
-                physical_entry_point: "main".into(),
-            },
-        };
+        let shader = imported_uniform_shader(
+            r#"
+struct Tint {
+    value: vec4<f32>,
+}
+@group(0) @binding(0) var<uniform> tint: Tint;
+
+@vertex
+fn vs_main(@location(0) position: vec2<f32>) -> @builtin(position) vec4<f32> {
+    return vec4<f32>(position, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4<f32> {
+    return tint.value;
+}
+"#,
+            1 << GpuCanvasShaderStage::Fragment as u8,
+        );
         let encode_f32s = |values: &[f32]| {
             values
                 .iter()
@@ -3408,6 +2670,8 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
                 .collect::<Vec<_>>()
         };
         let mut plan = GpuCanvasPlan {
+            vertex_entry: None,
+            fragment_entry: None,
             width: 32,
             height: 24,
             clear_color: [0.0, 0.0, 1.0, 1.0],
@@ -3441,13 +2705,16 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
                 );
                 return;
             };
+            let shader_handle = factory
+                .make_imported_gpu_canvas_shader(&shader)
+                .expect("lookup materializes one shader occurrence");
             let first = factory
-                .make_imported_gpu_canvas_image(&shader, &plan)
+                .make_imported_gpu_canvas_image(&shader_handle, &shader_handle, &plan)
                 .expect("first byte set creates the imported pipeline");
             plan.uniform_buffers[0].bytes = encode_f32s(&[0.0, 1.0, 0.0, 1.0]);
             plan.vertex_buffers[0].bytes = encode_f32s(&[-1.0, -1.0, 3.0, -1.0, -1.0, 3.0]);
             let green = factory
-                .make_imported_gpu_canvas_image(&shader, &plan)
+                .make_imported_gpu_canvas_image(&shader_handle, &shader_handle, &plan)
                 .expect("same pipeline accepts changed uniform and vertex bytes");
             assert_eq!(factory.imported_gpu_canvas.pipeline_builds, 1);
             drop(first);
@@ -3469,16 +2736,18 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
             );
 
             let mut alternate = shader.clone();
-            alternate.fragment.source = alternate
-                .fragment
+            alternate.source = alternate
                 .source
-                .replace("color = tint.value;", "color = tint.value.bgra;");
+                .replace("return tint.value;", "return tint.value.bgra;");
+            let alternate_handle = factory
+                .make_imported_gpu_canvas_shader(&alternate)
+                .expect("second lookup materializes a distinct occurrence");
             let alternate_image = factory
-                .make_imported_gpu_canvas_image(&alternate, &plan)
+                .make_imported_gpu_canvas_image(&alternate_handle, &alternate_handle, &plan)
                 .expect("a second shader key builds independently");
             plan.uniform_buffers[0].bytes = encode_f32s(&[1.0, 0.0, 0.0, 1.0]);
             let red = factory
-                .make_imported_gpu_canvas_image(&shader, &plan)
+                .make_imported_gpu_canvas_image(&shader_handle, &shader_handle, &plan)
                 .expect("returning to the first key reuses its retained pipeline");
             assert_eq!(
                 factory.imported_gpu_canvas.pipeline_builds, 2,
@@ -3506,38 +2775,13 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
 
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
-    fn canonical_rstb_glsl_becomes_a_composited_render_image() {
-        use nuxie_render_api::{BlendMode, GpuCanvasShaderStage, ImageSampler, Renderer as _};
+    fn canonical_rstb_wgsl_becomes_a_composited_render_image() {
+        use nuxie_render_api::{BlendMode, ImageSampler, Renderer as _};
 
-        let shader = GpuCanvasShader {
-            vertex: GpuCanvasShaderStage {
-                source: r#"#version 300 es
-                    precision highp float;
-                    precision highp int;
-                    void main() {
-                        uint index = uint(gl_VertexID);
-                        float x = float(int(index) - 1);
-                        float y = float(int(index & 1u) * 2 - 1);
-                        gl_Position = vec4(x, y, 0.0, 1.0);
-                        gl_Position.yz = vec2(-gl_Position.y, gl_Position.z * 2.0 - gl_Position.w);
-                    }
-                "#
-                .into(),
-                logical_entry_point: "vs_main".into(),
-                physical_entry_point: "main".into(),
-            },
-            fragment: GpuCanvasShaderStage {
-                source: r#"#version 300 es
-                    precision highp float;
-                    layout(location = 0) out vec4 color;
-                    void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
-                "#
-                .into(),
-                logical_entry_point: "fs_main".into(),
-                physical_entry_point: "main".into(),
-            },
-        };
+        let shader = imported_shader(IMPORTED_WGSL);
         let plan = GpuCanvasPlan {
+            vertex_entry: None,
+            fragment_entry: None,
             width: 255,
             height: 255,
             clear_color: [0.0, 0.0, 0.0, 1.0],
@@ -3556,15 +2800,18 @@ void main() { color = vec4(1.0, 0.0, 0.0, 1.0); }
                 );
                 return;
             };
+            let shader_handle = factory
+                .make_imported_gpu_canvas_shader(&shader)
+                .expect("lookup materializes the canonical shader occurrence");
             let first_image = factory
-                .make_imported_gpu_canvas_image(&shader, &plan)
-                .expect("canonical GLSL renders to a retained image");
+                .make_imported_gpu_canvas_image(&shader_handle, &shader_handle, &plan)
+                .expect("authored WGSL renders to a retained image");
             let image = factory
-                .make_imported_gpu_canvas_image(&shader, &plan)
+                .make_imported_gpu_canvas_image(&shader_handle, &shader_handle, &plan)
                 .expect("the retained imported pipeline renders a second image");
             assert_eq!(
                 factory.imported_gpu_canvas.pipeline_builds, 1,
-                "identical temporal frames must not retranslate shaders or rebuild the WGPU pipeline"
+                "identical temporal frames must not rebuild the shared WGPU shader pipeline"
             );
             drop(first_image);
             let mut frame = factory.begin_frame(0xff00_0000);

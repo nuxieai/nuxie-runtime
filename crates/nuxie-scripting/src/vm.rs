@@ -20,7 +20,7 @@ mod resource_limits;
 mod view_model;
 
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::CString;
 use std::rc::Rc;
 
@@ -34,16 +34,17 @@ use luaur_vm::functions::luau_load::luau_load;
 use mat4::install_mat4_global;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
-    ScriptArtboard, ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptInstance,
-    ScriptListenerActionMethod, ScriptListenerInvocation, ScriptMethod, ScriptValue,
-    ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
+    ScriptArtboard, ScriptCoreString, ScriptDataConverterMethod, ScriptDataConverterOptionalCall,
+    ScriptError, ScriptHost, ScriptInstance, ScriptListenerActionMethod, ScriptListenerInvocation,
+    ScriptMethod, ScriptValue, ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
 };
-use renderer::RendererBindings;
+pub(crate) use renderer::RendererBindings;
 use view_model::{ScriptViewModelFrameContext, ScriptedContext, create_scripted_view_model};
 
 use crate::envelope::SignedContent;
-use crate::gpu_canvas::ImportedGpuCanvasInstance;
-use crate::shader_asset::decode_shader_asset;
+use crate::gpu_canvas::{
+    ImportedGpuCanvasInstance, ImportedGpuCanvasShaderAssets, RegisteredGpuCanvasShaderAsset,
+};
 
 pub use host_commands::{HostCommand, HostCycleCheckpoint, HostEffectCheckpoint, HostValue};
 pub use luaur_rt::{Error, Result};
@@ -182,7 +183,7 @@ pub struct ScriptVm {
     script_safepoints: Rc<Cell<usize>>,
     host_cycle_active: Rc<Cell<bool>>,
     resource_limits: resource_limits::ResourceLimitTracker,
-    gpu_canvas_shaders: Rc<RefCell<BTreeMap<String, nuxie_render_api::GpuCanvasShader>>>,
+    gpu_canvas_shaders: ImportedGpuCanvasShaderAssets,
 }
 
 /// Cloneable handle for the detached view-model roots owned by one scripting
@@ -216,13 +217,21 @@ impl std::fmt::Debug for ScriptProgram {
 
 /// A luaur-backed scripted object instance table.
 pub struct LuaScriptInstance {
-    table: Table,
+    /// Rust's initialized equivalent of C++ `ScriptedObject::m_self`.
+    ///
+    /// `None` is the literal `m_self == 0` state after generator/init failure
+    /// or disposal. Keeping this optional is important: retaining a failed
+    /// table would keep all of its captured Lua values alive after pinned C++
+    /// has already `lua_unref`'d the occurrence.
+    table: Option<Table>,
     execution_budget: Option<ScriptExecutionBudget>,
     script_safepoints: Option<Rc<Cell<usize>>>,
     host_cycle_active: Option<Rc<Cell<bool>>>,
     renderer_bindings: RendererBindings,
     context_view_model: Rc<RefCell<Option<ScriptViewModel>>>,
+    context_present: Rc<Cell<bool>>,
     context: Option<AnyUserData>,
+    context_alive: Option<Rc<Cell<bool>>>,
     context_missing_requested_data: Rc<Cell<bool>>,
     context_view_model_is_resolved: bool,
     context_parent_view_models: Vec<ScriptViewModel>,
@@ -270,8 +279,18 @@ impl UserData for ScriptedDataValue {
                     ScriptValue::Number(value as f64)
                 }
                 (ScriptValue::Number(_), Value::Number(value)) => ScriptValue::Number(value),
-                (ScriptValue::String(_), Value::String(value)) => {
-                    ScriptValue::String(value.to_str()?)
+                (ScriptValue::String(_), Value::String(value)) => match value.to_str() {
+                    Ok(value) => ScriptValue::String(value),
+                    Err(_) => ScriptValue::CoreString(ScriptCoreString::from_bytes(
+                        value.as_bytes().to_vec(),
+                    )),
+                },
+                (ScriptValue::CoreString(_), Value::String(value)) => {
+                    ScriptValue::CoreString(ScriptCoreString::from_bytes(
+                        ScriptCoreString::from_bytes(value.as_bytes().to_vec())
+                            .as_c_str_bytes()
+                            .to_vec(),
+                    ))
                 }
                 (ScriptValue::Bool(_), Value::Boolean(value)) => ScriptValue::Bool(value),
                 (ScriptValue::Color(_), Value::Integer(value)) => ScriptValue::Color(value as u32),
@@ -299,7 +318,10 @@ impl UserData for ScriptedDataValue {
             Ok(matches!(this.value, ScriptValue::Number(_)))
         });
         methods.add_method("isString", |_, this, ()| {
-            Ok(matches!(this.value, ScriptValue::String(_)))
+            Ok(matches!(
+                this.value,
+                ScriptValue::String(_) | ScriptValue::CoreString(_)
+            ))
         });
         methods.add_method("isBoolean", |_, this, ()| {
             Ok(matches!(this.value, ScriptValue::Bool(_)))
@@ -314,13 +336,15 @@ impl LuaScriptInstance {
     pub fn new(table: Table) -> Self {
         let frame_context = ScriptViewModelFrameContext::for_lua(&table.lua());
         Self {
-            table,
+            table: Some(table),
             execution_budget: None,
             script_safepoints: None,
             host_cycle_active: None,
             renderer_bindings: RendererBindings::new(frame_context),
             context_view_model: Rc::new(RefCell::new(None)),
+            context_present: Rc::new(Cell::new(false)),
             context: None,
+            context_alive: None,
             context_missing_requested_data: Rc::new(Cell::new(false)),
             context_view_model_is_resolved: false,
             context_parent_view_models: Vec::new(),
@@ -337,7 +361,9 @@ impl LuaScriptInstance {
         table: Table,
         renderer_bindings: RendererBindings,
         context_view_model: Rc<RefCell<Option<ScriptViewModel>>>,
+        context_present: Rc<Cell<bool>>,
         context: Option<AnyUserData>,
+        context_alive: Option<Rc<Cell<bool>>>,
         context_missing_requested_data: Rc<Cell<bool>>,
         context_parent_view_models: Vec<ScriptViewModel>,
         generator: Option<Function>,
@@ -349,13 +375,15 @@ impl LuaScriptInstance {
         host_cycle_active: Option<Rc<Cell<bool>>>,
     ) -> Self {
         Self {
-            table,
+            table: Some(table),
             execution_budget,
             script_safepoints,
             host_cycle_active,
             renderer_bindings,
             context_view_model,
+            context_present,
             context,
+            context_alive,
             context_missing_requested_data,
             context_view_model_is_resolved: false,
             context_parent_view_models,
@@ -369,7 +397,15 @@ impl LuaScriptInstance {
     }
 
     pub fn table(&self) -> &Table {
-        &self.table
+        self.table
+            .as_ref()
+            .expect("LuaScriptInstance has no live C++ m_self table")
+    }
+
+    fn live_table(&self) -> std::result::Result<Table, ScriptError> {
+        self.table
+            .clone()
+            .ok_or_else(|| ScriptError::new("scripted object has no live Lua table"))
     }
 
     fn script_error(&self, error: Error) -> ScriptError {
@@ -406,8 +442,10 @@ impl LuaScriptInstance {
         method: ScriptMethod,
         args: &[ScriptValue],
     ) -> std::result::Result<Value, ScriptError> {
-        let value: Value = self
-            .table
+        let Some(table) = self.table.clone() else {
+            return Ok(Value::Nil);
+        };
+        let value: Value = table
             .get(method.as_str())
             .map_err(|error| self.script_error(error))?;
         let Value::Function(function) = value else {
@@ -421,9 +459,9 @@ impl LuaScriptInstance {
             };
         };
 
-        let lua = self.table.lua();
+        let lua = table.lua();
         let mut call_args = MultiValue::with_capacity(args.len() + 1);
-        call_args.push_back(Value::Table(self.table.clone()));
+        call_args.push_back(Value::Table(table));
         for arg in args {
             call_args.push_back(script_value_to_lua(&lua, arg));
         }
@@ -435,6 +473,177 @@ impl LuaScriptInstance {
         function
             .call(call_args)
             .map_err(|error| self.script_error(error))
+    }
+
+    fn dispose_script_lifetime(&mut self) {
+        // Pinned `tryLuaUserInit` drops `m_self` before disposing the Context
+        // (`scripted_object.cpp:277-303`). Taking the registry-backed Table
+        // here immediately releases the failed occurrence and its captures.
+        self.table.take();
+        if let Some(context_alive) = self.context_alive.take() {
+            context_alive.set(false);
+        }
+        self.context = None;
+    }
+
+    fn call_init_with_optional_factory(
+        &mut self,
+        factory: Option<&mut dyn RenderFactory>,
+    ) -> std::result::Result<bool, ScriptError> {
+        let bindings = self.renderer_bindings.clone();
+        let call_init = || {
+            let missing_before = self.context_missing_requested_data.replace(false);
+            self.reset_execution_budget();
+            let table = self.live_table()?;
+            let value: Value = table
+                .get(ScriptMethod::Init.as_str())
+                .map_err(|error| self.script_error(error))?;
+            let Value::Function(function) = value else {
+                // `tryLuaUserInit` treats a missing/non-function field as a
+                // completed initialization. Resolve the field only once:
+                // a metatable may return a different value on a second read
+                // (`scripted_object.cpp:259-278`).
+                self.context_missing_requested_data.set(false);
+                return Ok(true);
+            };
+            let mut args = MultiValue::with_capacity(2);
+            args.push_back(Value::Table(table));
+            if let Some(context) = self.context.as_ref() {
+                args.push_back(Value::UserData(context.clone()));
+            }
+            let value = function
+                .call(args)
+                .map_err(|error| self.script_error(error));
+            let missing_during = self.context_missing_requested_data.replace(false);
+            let value = value?;
+            let missing_requested_data = missing_before || missing_during;
+            Ok(!missing_requested_data && !matches!(value, Value::Nil | Value::Boolean(false)))
+        };
+        let result = match factory {
+            Some(factory) => bindings.with_factory_context(factory, call_init),
+            None => call_init(),
+        };
+        match result {
+            Ok(initialized) => {
+                self.user_init_done = initialized;
+                self.init_retry_requires_recreation = !initialized && self.generator.is_some();
+                if !initialized {
+                    self.dispose_script_lifetime();
+                }
+                Ok(initialized)
+            }
+            Err(error) => {
+                self.user_init_done = false;
+                self.init_retry_requires_recreation = self.generator.is_some();
+                self.dispose_script_lifetime();
+                Err(error)
+            }
+        }
+    }
+
+    fn prepare_init_retry_with_optional_factory(
+        &mut self,
+        factory: Option<&mut dyn RenderFactory>,
+    ) -> std::result::Result<(), ScriptError> {
+        if !self.init_retry_requires_recreation {
+            return Ok(());
+        }
+        let Some(generator) = self.generator.clone() else {
+            self.context_missing_requested_data.set(false);
+            self.init_retry_requires_recreation = false;
+            return Ok(());
+        };
+
+        let lua = generator.lua();
+        let context_view_model = Rc::clone(&self.context_view_model);
+        let context_present = Rc::clone(&self.context_present);
+        let context_parent_view_models = self.context_parent_view_models.clone();
+        let bindings = self.renderer_bindings.clone();
+        let context_alive = Rc::new(Cell::new(true));
+        let recreate = || {
+            let missing_requested_data = Rc::new(Cell::new(false));
+            let context = lua
+                .create_userdata(ScriptedContext::new_with_lifetime(
+                    context_view_model,
+                    context_present,
+                    context_parent_view_models,
+                    Rc::clone(&missing_requested_data),
+                    self.gpu_canvas_context.clone(),
+                    Rc::clone(&context_alive),
+                ))
+                .map_err(|error| self.script_error(error))?;
+            self.reset_execution_budget();
+            let table = generator
+                .call(context.clone())
+                .map_err(|error| self.script_error(error))?;
+            Ok((table, context, missing_requested_data))
+        };
+        let result = match factory {
+            Some(factory) => bindings.with_factory_context(factory, recreate),
+            None => recreate(),
+        };
+        let (table, context, missing_requested_data) = match result {
+            Ok(result) => result,
+            Err(error) => {
+                context_alive.set(false);
+                return Err(error);
+            }
+        };
+
+        self.table = Some(table);
+        self.context = Some(context);
+        self.context_alive = Some(context_alive);
+        self.context_missing_requested_data = missing_requested_data;
+        self.user_init_done = false;
+        self.init_retry_requires_recreation = false;
+        Ok(())
+    }
+
+    fn call_data_converter_once(
+        &mut self,
+        method: ScriptDataConverterMethod,
+        value: ScriptValue,
+    ) -> std::result::Result<Option<ScriptValue>, ScriptError> {
+        Ok(
+            match self.call_optional_data_converter_once(method, Some(value))? {
+                ScriptDataConverterOptionalCall::Missing
+                | ScriptDataConverterOptionalCall::UnsupportedInput => None,
+                ScriptDataConverterOptionalCall::Returned(value) => Some(value),
+            },
+        )
+    }
+
+    fn call_optional_data_converter_once(
+        &mut self,
+        method: ScriptDataConverterMethod,
+        value: Option<ScriptValue>,
+    ) -> std::result::Result<ScriptDataConverterOptionalCall, ScriptError> {
+        self.reset_execution_budget();
+        let Some(table) = self.table.clone() else {
+            return Ok(ScriptDataConverterOptionalCall::Missing);
+        };
+        let field: Value = table
+            .get(method.as_str())
+            .map_err(|error| self.script_error(error))?;
+        let Value::Function(function) = field else {
+            return Ok(ScriptDataConverterOptionalCall::Missing);
+        };
+        let Some(value) = value else {
+            return Ok(ScriptDataConverterOptionalCall::UnsupportedInput);
+        };
+        let lua = table.lua();
+        let input = lua
+            .create_userdata(ScriptedDataValue::new(value))
+            .map_err(|error| self.script_error(error))?;
+        let output: AnyUserData = function
+            .call((table, input))
+            .map_err(|error| self.script_error(error))?;
+        let output = output
+            .borrow::<ScriptedDataValue>()
+            .map_err(|error| self.script_error(error))?;
+        Ok(ScriptDataConverterOptionalCall::Returned(
+            output.value.clone(),
+        ))
     }
 }
 
@@ -552,23 +761,86 @@ impl ScriptVm {
     pub fn instantiate_registered_script_with_factory(
         &self,
         program: &ScriptProgram,
-        _host: &mut dyn ScriptHost,
+        host: &mut dyn ScriptHost,
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
+        self.instantiate_registered_script_with_factory_and_context(
+            program,
+            host,
+            factory,
+            self.default_context_view_model.clone(),
+            self.default_context_parent_view_models.clone(),
+        )
+    }
+
+    /// Invoke a registered protocol generator with the live occurrence
+    /// DataContext already installed.
+    ///
+    /// C++ assigns `ScriptedObject::m_dataContext` before
+    /// `ScriptedDataConverter::reinit`, so the generator itself (not only
+    /// later hydration/init) can resolve `context:viewModel()`
+    /// (`scripted_data_converter.cpp:170-176`;
+    /// `lua_scripted_context.cpp:125-185`).
+    pub fn instantiate_registered_script_with_factory_and_context(
+        &self,
+        program: &ScriptProgram,
+        _host: &mut dyn ScriptHost,
+        factory: &mut dyn RenderFactory,
+        context_view_model_value: Option<ScriptViewModel>,
+        context_parent_view_models: Vec<ScriptViewModel>,
+    ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
+        self.instantiate_registered_script_with_optional_factory_and_context(
+            program,
+            Some(factory),
+            context_view_model_value,
+            context_parent_view_models,
+        )
+    }
+
+    /// Invoke a registered protocol generator without installing a renderer
+    /// factory. Pinned C++ generator/init lifecycle is available from the
+    /// scripting VM itself; renderer resources remain unavailable unless the
+    /// caller explicitly supplies a factory.
+    pub fn instantiate_registered_script_with_context(
+        &self,
+        program: &ScriptProgram,
+        context_view_model_value: Option<ScriptViewModel>,
+        context_parent_view_models: Vec<ScriptViewModel>,
+    ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
+        self.instantiate_registered_script_with_optional_factory_and_context(
+            program,
+            None,
+            context_view_model_value,
+            context_parent_view_models,
+        )
+    }
+
+    fn instantiate_registered_script_with_optional_factory_and_context(
+        &self,
+        program: &ScriptProgram,
+        factory: Option<&mut dyn RenderFactory>,
+        context_view_model_value: Option<ScriptViewModel>,
+        context_parent_view_models: Vec<ScriptViewModel>,
+    ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
         let bindings = self.renderer_bindings.clone();
-        bindings.with_factory_context(factory, || {
-            let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
+        let context_alive = Rc::new(Cell::new(true));
+        let instantiate = || {
+            let context_present = Rc::new(Cell::new(context_view_model_value.is_some()));
+            let context_view_model = Rc::new(RefCell::new(context_view_model_value));
             let context_missing_requested_data = Rc::new(Cell::new(false));
-            let context_parent_view_models = self.default_context_parent_view_models.clone();
-            let (gpu_canvas, gpu_canvas_context) =
-                ImportedGpuCanvasInstance::new(Rc::clone(&self.gpu_canvas_shaders));
+            let (gpu_canvas, gpu_canvas_context) = ImportedGpuCanvasInstance::new(
+                Rc::clone(&self.gpu_canvas_shaders),
+                self.renderer_bindings.clone(),
+            );
             let context = self
                 .lua
-                .create_userdata(ScriptedContext::new(
+                .create_userdata(ScriptedContext::new_with_lifetime(
                     Rc::clone(&context_view_model),
+                    Rc::clone(&context_present),
                     context_parent_view_models.clone(),
                     Rc::clone(&context_missing_requested_data),
                     Some(gpu_canvas_context.clone()),
+                    Rc::clone(&context_alive),
                 ))
                 .map_err(|error| self.script_error(error))?;
             self.reset_execution_budget();
@@ -579,7 +851,9 @@ impl ScriptVm {
                 instance,
                 self.renderer_bindings.clone(),
                 context_view_model,
+                context_present,
                 Some(context),
+                Some(Rc::clone(&context_alive)),
                 context_missing_requested_data,
                 context_parent_view_models,
                 Some(program.generator.clone()),
@@ -590,7 +864,15 @@ impl ScriptVm {
                 Some(Rc::clone(&self.script_safepoints)),
                 Some(Rc::clone(&self.host_cycle_active)),
             )) as Box<dyn ScriptInstance>)
-        })
+        };
+        let result = match factory {
+            Some(factory) => bindings.with_factory_context(factory, instantiate),
+            None => instantiate(),
+        };
+        if result.is_err() {
+            context_alive.set(false);
+        }
+        result
     }
 
     /// Boot a VM with the Luau standard libraries open.
@@ -685,22 +967,49 @@ impl ScriptVm {
         }
     }
 
-    /// Decode and register one imported ShaderAsset before protocol generators
-    /// execute. Names are the exact `context:shader(name)` lookup keys.
+    /// Retain one imported ShaderAsset before protocol generators execute.
+    /// Neutral decoding/indexing is attempted once and an invalid state is
+    /// retained, matching the C++ file importer that ignores the decoder
+    /// boolean. Backend target selection is attempted only if this exact name
+    /// is requested; any lookup failure is exposed to Luau as nil.
     pub fn register_gpu_canvas_shader_asset(
         &self,
         name: &str,
         payload: &[u8],
     ) -> std::result::Result<(), ScriptError> {
-        let shader =
-            decode_shader_asset(name, payload).map_err(|error| self.script_error(error))?;
-        let mut shaders = self.gpu_canvas_shaders.borrow_mut();
-        if shaders.contains_key(name) {
-            return Err(ScriptError::new(format!(
-                "ShaderAsset name '{name}' is duplicated"
-            )));
+        self.register_gpu_canvas_shader_asset_aliases(&[name], payload)
+    }
+
+    /// Retain one imported ShaderAsset owner under all of its file lookup
+    /// aliases. Every alias is preflighted before the registry is changed.
+    pub fn register_gpu_canvas_shader_asset_aliases(
+        &self,
+        aliases: &[&str],
+        payload: &[u8],
+    ) -> std::result::Result<(), ScriptError> {
+        let Some(owner_name) = aliases.first().copied() else {
+            return Err(ScriptError::new(
+                "ShaderAsset registration requires at least one alias",
+            ));
+        };
+        let shaders = self.gpu_canvas_shaders.borrow();
+        let mut requested_aliases = BTreeSet::new();
+        for alias in aliases {
+            if !requested_aliases.insert(*alias) || shaders.contains_key(*alias) {
+                return Err(ScriptError::new(format!(
+                    "ShaderAsset name '{alias}' is duplicated"
+                )));
+            }
         }
-        shaders.insert(name.to_owned(), shader);
+        drop(shaders);
+
+        let owner = Rc::new(RefCell::new(RegisteredGpuCanvasShaderAsset::new(
+            owner_name, payload,
+        )));
+        let mut shaders = self.gpu_canvas_shaders.borrow_mut();
+        for alias in aliases {
+            shaders.insert((*alias).to_owned(), Rc::clone(&owner));
+        }
         Ok(())
     }
 
@@ -1209,6 +1518,8 @@ impl ScriptVm {
             table,
             self.renderer_bindings.clone(),
             Rc::new(RefCell::new(None)),
+            Rc::new(Cell::new(false)),
+            None,
             None,
             Rc::new(Cell::new(false)),
             Vec::new(),
@@ -1567,28 +1878,47 @@ impl RuntimeScriptingVm for ScriptVm {
             .execute_loaded_module(name, chunk)
             .map_err(|error| self.script_error(error))?;
         let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
+        let context_present = Rc::new(Cell::new(self.default_context_view_model.is_some()));
         let context_missing_requested_data = Rc::new(Cell::new(false));
+        let context_alive = Rc::new(Cell::new(true));
         let context_parent_view_models = self.default_context_parent_view_models.clone();
-        let (gpu_canvas, gpu_canvas_context) =
-            ImportedGpuCanvasInstance::new(Rc::clone(&self.gpu_canvas_shaders));
+        let (gpu_canvas, gpu_canvas_context) = ImportedGpuCanvasInstance::new(
+            Rc::clone(&self.gpu_canvas_shaders),
+            self.renderer_bindings.clone(),
+        );
         let context = self
             .lua
-            .create_userdata(ScriptedContext::new(
+            .create_userdata(ScriptedContext::new_with_lifetime(
                 Rc::clone(&context_view_model),
+                Rc::clone(&context_present),
                 context_parent_view_models.clone(),
                 Rc::clone(&context_missing_requested_data),
                 Some(gpu_canvas_context.clone()),
+                Rc::clone(&context_alive),
             ))
             .map_err(|error| self.script_error(error))?;
         self.reset_execution_budget();
-        let instance: Table = self
+        let instance: Table = match self
             .track_resource_result(generator.call(context.clone()))
-            .map_err(|error| self.script_error(error))?;
+            .map_err(|error| self.script_error(error))
+        {
+            Ok(instance) => instance,
+            Err(error) => {
+                // `ensureScriptInitialized` clears the freshly-created
+                // ScriptedContext on a generator error or non-table result,
+                // even when the generator captured that userdata globally
+                // (`scripted_object.cpp:361-388`).
+                context_alive.set(false);
+                return Err(error);
+            }
+        };
         Ok(Box::new(LuaScriptInstance::with_renderer_bindings(
             instance,
             self.renderer_bindings.clone(),
             context_view_model,
+            context_present,
             Some(context),
+            Some(context_alive),
             context_missing_requested_data,
             context_parent_view_models,
             Some(generator),
@@ -1606,32 +1936,60 @@ impl RuntimeScriptingVm for ScriptVm {
     }
 }
 
+impl Drop for LuaScriptInstance {
+    fn drop(&mut self) {
+        self.dispose_script_lifetime();
+    }
+}
+
 impl ScriptInstance for LuaScriptInstance {
     fn set_context_view_model(
         &mut self,
         view_model: Option<ScriptViewModel>,
     ) -> std::result::Result<(), ScriptError> {
         *self.context_view_model.borrow_mut() = view_model;
-        // An explicit hydration resolves the context even when the authored
-        // occurrence has no root view model. That absence is different from a
-        // drawable asking for data before its context has been attached, so a
-        // listener is allowed to observe `nil` during init without entering
-        // the cold-retry path.
+        // Attaching a DataContext and resolving its main ViewModel are
+        // separate states. If this value is None and init asks for it, the
+        // Context marks missingRequestedData and C++ rejects that lifetime
+        // (`lua_scripted_context.cpp:126-145`;
+        // `scripted_object.cpp:289-303`).
         self.context_view_model_is_resolved = true;
-        self.context_missing_requested_data.set(false);
+        self.context_present.set(true);
+        Ok(())
+    }
+
+    fn set_context_view_model_chain(
+        &mut self,
+        view_model: Option<ScriptViewModel>,
+        parents: Vec<ScriptViewModel>,
+    ) -> std::result::Result<(), ScriptError> {
+        *self.context_view_model.borrow_mut() = view_model;
+        self.context_parent_view_models = parents.clone();
+        if let Some(context) = self.context.as_ref() {
+            let mut context = context
+                .borrow_mut::<ScriptedContext>()
+                .map_err(|error| self.script_error(error))?;
+            context.set_parents(parents);
+        }
+        self.context_view_model_is_resolved = true;
+        self.context_present.set(true);
         Ok(())
     }
 
     fn clear_unresolved_context_view_model(&mut self) -> std::result::Result<(), ScriptError> {
         *self.context_view_model.borrow_mut() = None;
         self.context_view_model_is_resolved = false;
+        self.context_present.set(false);
         Ok(())
     }
 
     fn has_method(&self, method: ScriptMethod) -> std::result::Result<bool, ScriptError> {
         self.reset_execution_budget();
-        let value: Value = self
-            .table
+        if self.table.is_none() {
+            return Ok(false);
+        }
+        let table = self.live_table()?;
+        let value: Value = table
             .get(method.as_str())
             .map_err(|error| self.script_error(error))?;
         Ok(matches!(value, Value::Function(_)))
@@ -1645,6 +2003,27 @@ impl ScriptInstance for LuaScriptInstance {
     ) -> std::result::Result<ScriptValue, ScriptError> {
         let value = self.call_method_value(method, args)?;
         script_value_from_lua(value).map_err(|error| self.script_error(error))
+    }
+
+    fn call_advance_truthy(
+        &mut self,
+        elapsed_seconds: f32,
+        _host: &mut dyn ScriptHost,
+    ) -> std::result::Result<bool, ScriptError> {
+        self.reset_execution_budget();
+        let Some(table) = self.table.clone() else {
+            return Ok(false);
+        };
+        let value: Value = table
+            .get(ScriptMethod::Advance.as_str())
+            .map_err(|error| self.script_error(error))?;
+        let Value::Function(function) = value else {
+            return Ok(false);
+        };
+        let value: Value = function
+            .call((table, f64::from(elapsed_seconds)))
+            .map_err(|error| self.script_error(error))?;
+        Ok(!matches!(value, Value::Nil | Value::Boolean(false)))
     }
 
     fn call_method_with_factory(
@@ -1665,16 +2044,151 @@ impl ScriptInstance for LuaScriptInstance {
         _host: &mut dyn ScriptHost,
     ) -> std::result::Result<(), ScriptError> {
         self.reset_execution_budget();
-        let function: Function = self
-            .table
+        if self.table.is_none() {
+            return Ok(());
+        }
+        let table = self.live_table()?;
+        let function: Function = table
             .get(method.as_script_method().as_str())
             .map_err(|error| self.script_error(error))?;
-        let lua = self.table.lua();
+        let lua = table.lua();
         let invocation = listener_invocation::listener_action_argument(&lua, method, invocation)
             .map_err(|error| self.script_error(error))?;
         function
-            .call((self.table.clone(), invocation))
+            .call((table, invocation))
             .map_err(|error| self.script_error(error))
+    }
+
+    fn call_preferred_listener_action(
+        &mut self,
+        invocation: &ScriptListenerInvocation,
+        _host: &mut dyn ScriptHost,
+    ) -> std::result::Result<bool, ScriptError> {
+        self.reset_execution_budget();
+        let Some(table) = self.table.clone() else {
+            return Ok(false);
+        };
+        let perform_action: Value = table
+            .get(
+                ScriptListenerActionMethod::PerformAction
+                    .as_script_method()
+                    .as_str(),
+            )
+            .map_err(|error| self.script_error(error))?;
+        let (method, function) = match perform_action {
+            Value::Function(function) => (ScriptListenerActionMethod::PerformAction, function),
+            _ => {
+                let perform: Value = table
+                    .get(
+                        ScriptListenerActionMethod::Perform
+                            .as_script_method()
+                            .as_str(),
+                    )
+                    .map_err(|error| self.script_error(error))?;
+                let Value::Function(function) = perform else {
+                    return Ok(false);
+                };
+                (ScriptListenerActionMethod::Perform, function)
+            }
+        };
+        let lua = table.lua();
+        let invocation = listener_invocation::listener_action_argument(&lua, method, invocation)
+            .map_err(|error| self.script_error(error))?;
+        function
+            .call::<()>((table, invocation))
+            .map_err(|error| self.script_error(error))?;
+        Ok(true)
+    }
+
+    fn call_scripted_drawable_input(
+        &mut self,
+        invocation: &ScriptListenerInvocation,
+        _host: &mut dyn ScriptHost,
+    ) -> std::result::Result<nuxie_runtime::ScriptedDrawableInputResult, ScriptError> {
+        let (method, gamepad) = match invocation {
+            ScriptListenerInvocation::Keyboard { .. } => ("keyboardEvent", false),
+            ScriptListenerInvocation::TextInput { .. } => ("textEvent", false),
+            ScriptListenerInvocation::GamepadConnected { .. } => ("gamepadConnected", true),
+            ScriptListenerInvocation::GamepadEvent { .. } => ("gamepadEvent", true),
+            ScriptListenerInvocation::GamepadDisconnected { .. } => ("gamepadDisconnected", true),
+            ScriptListenerInvocation::Pointer { .. }
+            | ScriptListenerInvocation::Focus { .. }
+            | ScriptListenerInvocation::ReportedEvent { .. }
+            | ScriptListenerInvocation::ViewModelChange { .. }
+            | ScriptListenerInvocation::None
+            | ScriptListenerInvocation::Semantic { .. } => {
+                return Ok(nuxie_runtime::ScriptedDrawableInputResult::default());
+            }
+        };
+
+        self.reset_execution_budget();
+        if self.table.is_none() {
+            return Ok(nuxie_runtime::ScriptedDrawableInputResult::default());
+        }
+        let table = self.live_table()?;
+        let value: Value = table
+            .get(method)
+            .map_err(|error| self.script_error(error))?;
+        let Value::Function(function) = value else {
+            // C++ treats missing and non-function direct input methods as an
+            // unhandled no-op.
+            return Ok(nuxie_runtime::ScriptedDrawableInputResult::default());
+        };
+        let lua = table.lua();
+        let Some(argument) =
+            listener_invocation::scripted_drawable_input_argument(&lua, invocation)
+                .map_err(|error| self.script_error(error))?
+        else {
+            return Ok(nuxie_runtime::ScriptedDrawableInputResult::default());
+        };
+
+        if gamepad {
+            // `ScriptedDrawable::gamepadDispatch` consumes protected-call
+            // failures and reports the drawable as dispatched whenever the
+            // selected method exists.
+            return match function.call::<()>((table, argument)) {
+                Ok(()) => Ok(nuxie_runtime::ScriptedDrawableInputResult {
+                    invoked: true,
+                    handled: true,
+                }),
+                Err(error) => {
+                    let error = self.script_error(error);
+                    if error.resource_code().is_some() {
+                        Err(error)
+                    } else {
+                        Ok(nuxie_runtime::ScriptedDrawableInputResult {
+                            invoked: true,
+                            handled: true,
+                        })
+                    }
+                }
+            };
+        }
+
+        match function.call::<Value>((table, argument)) {
+            Ok(Value::Boolean(handled)) => Ok(nuxie_runtime::ScriptedDrawableInputResult {
+                invoked: true,
+                handled,
+            }),
+            Ok(_) => Ok(nuxie_runtime::ScriptedDrawableInputResult {
+                invoked: true,
+                handled: false,
+            }),
+            // Keyboard/text protected-call failures are consumed and return
+            // the default unhandled result. Rust's terminal resource fence
+            // remains fail-closed.
+            Err(error) => {
+                let error = self.script_error(error);
+                if error.resource_code().is_some() {
+                    Err(error)
+                } else {
+                    Ok(nuxie_runtime::ScriptedDrawableInputResult {
+                        invoked: true,
+                        handled: false,
+                    })
+                }
+            }
+        }
     }
 
     fn call_input_trigger(
@@ -1683,18 +2197,50 @@ impl ScriptInstance for LuaScriptInstance {
         host: &mut dyn ScriptHost,
     ) -> std::result::Result<(), ScriptError> {
         self.reset_execution_budget();
-        let value: Value = self
-            .table
-            .get(name)
-            .map_err(|error| self.script_error(error))?;
+        if self.table.is_none() {
+            return Ok(());
+        }
+        let table = self.live_table()?;
+        let value: Value = table.get(name).map_err(|error| self.script_error(error))?;
         let Value::Function(function) = value else {
             return Ok(());
         };
-        function
-            .call::<()>(self.table.clone())
-            .map_err(|error| self.script_error(error))?;
+        let result = function
+            .call::<()>(table)
+            .map_err(|error| self.script_error(error));
+        // Pinned `ScriptedObject::trigger` dirties after the protected call,
+        // regardless of its ordinary success/failure result
+        // (`scripted_object.cpp:158-176`). Missing/non-function fields still
+        // return above without dirt.
         host.mark_script_update();
-        Ok(())
+        result
+    }
+
+    fn call_input_trigger_core(
+        &mut self,
+        name: &ScriptCoreString,
+        host: &mut dyn ScriptHost,
+    ) -> std::result::Result<(), ScriptError> {
+        self.reset_execution_budget();
+        if self.table.is_none() {
+            return Ok(());
+        }
+        let table = self.live_table()?;
+        let lua = table.lua();
+        let key = lua.create_string(name.as_c_str_bytes());
+        let value: Value = table.get(key).map_err(|error| self.script_error(error))?;
+        let Value::Function(function) = value else {
+            return Ok(());
+        };
+        let result = function
+            .call::<()>(table)
+            .map_err(|error| self.script_error(error));
+        host.mark_script_update();
+        result
+    }
+
+    fn call_init(&mut self, _host: &mut dyn ScriptHost) -> std::result::Result<bool, ScriptError> {
+        self.call_init_with_optional_factory(None)
     }
 
     fn call_init_with_factory(
@@ -1702,88 +2248,44 @@ impl ScriptInstance for LuaScriptInstance {
         _host: &mut dyn ScriptHost,
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<bool, ScriptError> {
-        let bindings = self.renderer_bindings.clone();
-        let result = bindings.with_factory_context(factory, || {
-            let missing_before = self.context_missing_requested_data.replace(false);
-            let value = self.call_method_value(ScriptMethod::Init, &[]);
-            let missing_during = self.context_missing_requested_data.replace(false);
-            let value = value?;
-            let missing_requested_data =
-                !self.context_view_model_is_resolved && (missing_before || missing_during);
-            Ok(!missing_requested_data && !matches!(value, Value::Nil | Value::Boolean(false)))
-        });
-        match result {
-            Ok(initialized) => {
-                self.user_init_done = initialized;
-                self.init_retry_requires_recreation = !initialized && self.generator.is_some();
-                Ok(initialized)
-            }
-            Err(error) => {
-                self.user_init_done = false;
-                self.init_retry_requires_recreation = self.generator.is_some();
-                Err(error)
-            }
-        }
+        self.call_init_with_optional_factory(Some(factory))
     }
 
-    fn user_init_pending(&self) -> std::result::Result<bool, ScriptError> {
+    fn user_init_pending(&mut self) -> std::result::Result<bool, ScriptError> {
         if self.user_init_done {
             return Ok(false);
         }
-        self.reset_execution_budget();
-        let value: Value = self
-            .table
-            .get(ScriptMethod::Init.as_str())
-            .map_err(|error| self.script_error(error))?;
-        Ok(matches!(value, Value::Function(_)))
+        if self.table.is_none() {
+            // C++ has already set `m_self = 0`; the retained ScriptAsset
+            // generator makes this occurrence pending for recreation at the
+            // next explicit initialization boundary.
+            return Ok(self.init_retry_requires_recreation);
+        }
+        // This is only the occurrence's lifecycle bit. Looking up `init`
+        // here and again in `call_init` would observe a metatable twice,
+        // unlike pinned `tryLuaUserInit` (`scripted_object.cpp:259-278`).
+        Ok(true)
+    }
+
+    fn script_lifetime_valid(&self) -> bool {
+        self.table.is_some()
     }
 
     fn invalidate_for_init_retry(&mut self) {
         self.user_init_done = false;
         self.init_retry_requires_recreation = self.generator.is_some();
+        self.dispose_script_lifetime();
+    }
+
+    fn prepare_init_retry(&mut self) -> std::result::Result<(), ScriptError> {
+        self.prepare_init_retry_with_optional_factory(None)
     }
 
     fn prepare_init_retry_with_factory(
         &mut self,
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<(), ScriptError> {
-        if !self.init_retry_requires_recreation {
-            return Ok(());
-        }
-        let Some(generator) = self.generator.clone() else {
-            self.context_missing_requested_data.set(false);
-            self.init_retry_requires_recreation = false;
-            return Ok(());
-        };
-
-        let lua = self.table.lua();
-        let context_view_model = Rc::clone(&self.context_view_model);
-        let context_parent_view_models = self.context_parent_view_models.clone();
-        let bindings = self.renderer_bindings.clone();
-        let (table, context, missing_requested_data) =
-            bindings.with_factory_context(factory, || {
-                let missing_requested_data = Rc::new(Cell::new(false));
-                let context = lua
-                    .create_userdata(ScriptedContext::new(
-                        context_view_model,
-                        context_parent_view_models,
-                        Rc::clone(&missing_requested_data),
-                        self.gpu_canvas_context.clone(),
-                    ))
-                    .map_err(|error| self.script_error(error))?;
-                self.reset_execution_budget();
-                let table = generator
-                    .call(context.clone())
-                    .map_err(|error| self.script_error(error))?;
-                Ok((table, context, missing_requested_data))
-            })?;
-
-        self.table = table;
-        self.context = Some(context);
-        self.context_missing_requested_data = missing_requested_data;
-        self.user_init_done = false;
-        self.init_retry_requires_recreation = false;
-        Ok(())
+        self.prepare_init_retry_with_optional_factory(Some(factory))
     }
 
     fn call_path_effect_update(
@@ -1793,7 +2295,11 @@ impl ScriptInstance for LuaScriptInstance {
         _host: &mut dyn ScriptHost,
     ) -> std::result::Result<nuxie_render_api::RawPath, ScriptError> {
         self.reset_execution_budget();
-        renderer::call_path_effect_update(&self.table, source, node)
+        if self.table.is_none() {
+            return Ok(source);
+        }
+        let table = self.live_table()?;
+        renderer::call_path_effect_update(&table, source, node)
             .map_err(|error| self.script_error(error))
     }
 
@@ -1803,15 +2309,19 @@ impl ScriptInstance for LuaScriptInstance {
         renderer: &mut dyn Renderer,
         _host: &mut dyn ScriptHost,
     ) -> std::result::Result<(), ScriptError> {
+        if self.table.is_none() {
+            return Ok(());
+        }
+        let table = self.live_table()?;
         if let Some(gpu_canvas) = self.gpu_canvas.as_ref() {
             self.reset_execution_budget();
             gpu_canvas
-                .execute_draw_canvas(&self.table, factory)
+                .execute_draw_canvas(&table, factory)
                 .map_err(|error| self.script_error(error))?;
         }
         self.reset_execution_budget();
         self.renderer_bindings
-            .call_draw(&self.table, factory, renderer)
+            .call_draw(&table, factory, renderer)
             .map_err(|error| self.script_error(error))
     }
 
@@ -1820,30 +2330,50 @@ impl ScriptInstance for LuaScriptInstance {
         method: ScriptDataConverterMethod,
         value: ScriptValue,
     ) -> std::result::Result<ScriptValue, ScriptError> {
+        let fallback = value.clone();
+        Ok(self
+            .call_data_converter_once(method, value)?
+            .unwrap_or(fallback))
+    }
+
+    fn call_data_converter_if_present(
+        &mut self,
+        method: ScriptDataConverterMethod,
+        value: ScriptValue,
+    ) -> std::result::Result<Option<ScriptValue>, ScriptError> {
+        self.call_data_converter_once(method, value)
+    }
+
+    fn call_optional_data_converter(
+        &mut self,
+        method: ScriptDataConverterMethod,
+        value: Option<ScriptValue>,
+    ) -> std::result::Result<ScriptDataConverterOptionalCall, ScriptError> {
+        self.call_optional_data_converter_once(method, value)
+    }
+
+    fn has_data_converter_method(
+        &self,
+        method: ScriptDataConverterMethod,
+    ) -> std::result::Result<bool, ScriptError> {
         self.reset_execution_budget();
-        let function: Function = self
-            .table
+        if self.table.is_none() {
+            return Ok(false);
+        }
+        let table = self.live_table()?;
+        let value: Value = table
             .get(method.as_str())
             .map_err(|error| self.script_error(error))?;
-        let lua = self.table.lua();
-        let input = lua
-            .create_userdata(ScriptedDataValue::new(value))
-            .map_err(|error| self.script_error(error))?;
-        let output: AnyUserData = function
-            .call((self.table.clone(), input))
-            .map_err(|error| self.script_error(error))?;
-        let output = output
-            .borrow::<ScriptedDataValue>()
-            .map_err(|error| self.script_error(error))?;
-        Ok(output.value.clone())
+        Ok(matches!(value, Value::Function(_)))
     }
 
     fn get_input(&self, name: &str) -> std::result::Result<ScriptValue, ScriptError> {
         self.reset_execution_budget();
-        let value: Value = self
-            .table
-            .get(name)
-            .map_err(|error| self.script_error(error))?;
+        if self.table.is_none() {
+            return Ok(ScriptValue::Nil);
+        }
+        let table = self.live_table()?;
+        let value: Value = table.get(name).map_err(|error| self.script_error(error))?;
         script_value_from_lua(value).map_err(|error| self.script_error(error))
     }
 
@@ -1853,9 +2383,30 @@ impl ScriptInstance for LuaScriptInstance {
         value: ScriptValue,
     ) -> std::result::Result<(), ScriptError> {
         self.reset_execution_budget();
-        let lua = self.table.lua();
-        self.table
+        if self.table.is_none() {
+            return Ok(());
+        }
+        let table = self.live_table()?;
+        let lua = table.lua();
+        table
             .set(name, script_value_to_lua(&lua, &value))
+            .map_err(|error| self.script_error(error))
+    }
+
+    fn set_input_core(
+        &mut self,
+        name: &ScriptCoreString,
+        value: ScriptValue,
+    ) -> std::result::Result<(), ScriptError> {
+        self.reset_execution_budget();
+        if self.table.is_none() {
+            return Ok(());
+        }
+        let table = self.live_table()?;
+        let lua = table.lua();
+        let key = lua.create_string(name.as_c_str_bytes());
+        table
+            .set(key, script_value_to_lua(&lua, &value))
             .map_err(|error| self.script_error(error))
     }
 
@@ -1865,13 +2416,38 @@ impl ScriptInstance for LuaScriptInstance {
         artboard: Box<dyn ScriptArtboard>,
     ) -> std::result::Result<(), ScriptError> {
         self.reset_execution_budget();
-        let lua = self.table.lua();
+        if self.table.is_none() {
+            return Ok(());
+        }
+        let table = self.live_table()?;
+        let lua = table.lua();
         let artboard = self
             .renderer_bindings
             .create_scripted_artboard(&lua, artboard)
             .map_err(|error| self.script_error(error))?;
-        self.table
+        table
             .set(name, artboard)
+            .map_err(|error| self.script_error(error))
+    }
+
+    fn set_artboard_input_core(
+        &mut self,
+        name: &ScriptCoreString,
+        artboard: Box<dyn ScriptArtboard>,
+    ) -> std::result::Result<(), ScriptError> {
+        self.reset_execution_budget();
+        if self.table.is_none() {
+            return Ok(());
+        }
+        let table = self.live_table()?;
+        let lua = table.lua();
+        let key = lua.create_string(name.as_c_str_bytes());
+        let artboard = self
+            .renderer_bindings
+            .create_scripted_artboard(&lua, artboard)
+            .map_err(|error| self.script_error(error))?;
+        table
+            .set(key, artboard)
             .map_err(|error| self.script_error(error))
     }
 
@@ -1881,11 +2457,35 @@ impl ScriptInstance for LuaScriptInstance {
         view_model: ScriptViewModel,
     ) -> std::result::Result<(), ScriptError> {
         self.reset_execution_budget();
-        let lua = self.table.lua();
+        if self.table.is_none() {
+            return Ok(());
+        }
+        let table = self.live_table()?;
+        let lua = table.lua();
         let view_model = create_scripted_view_model(&lua, view_model)
             .map_err(|error| self.script_error(error))?;
-        self.table
+        table
             .set(name, view_model)
+            .map_err(|error| self.script_error(error))?;
+        Ok(())
+    }
+
+    fn set_view_model_input_core(
+        &mut self,
+        name: &ScriptCoreString,
+        view_model: ScriptViewModel,
+    ) -> std::result::Result<(), ScriptError> {
+        self.reset_execution_budget();
+        if self.table.is_none() {
+            return Ok(());
+        }
+        let table = self.live_table()?;
+        let lua = table.lua();
+        let key = lua.create_string(name.as_c_str_bytes());
+        let view_model = create_scripted_view_model(&lua, view_model)
+            .map_err(|error| self.script_error(error))?;
+        table
+            .set(key, view_model)
             .map_err(|error| self.script_error(error))?;
         Ok(())
     }
@@ -1908,6 +2508,7 @@ fn script_value_to_lua(lua: &Lua, value: &ScriptValue) -> Value {
         ScriptValue::Bool(value) => Value::Boolean(*value),
         ScriptValue::Number(value) => Value::Number(*value),
         ScriptValue::String(value) => Value::String(lua.create_string(value)),
+        ScriptValue::CoreString(value) => Value::String(lua.create_string(value.as_c_str_bytes())),
         ScriptValue::Color(value) => Value::Integer(i64::from(*value)),
         ScriptValue::Vec2 { x, y } => Value::Vector(LuaVector::new(*x, *y, 0.0)),
         ScriptValue::Vec3 { x, y, z } => Value::Vector(LuaVector::new(*x, *y, *z)),
@@ -1920,7 +2521,12 @@ fn script_value_from_lua(value: Value) -> Result<ScriptValue> {
         Value::Boolean(value) => ScriptValue::Bool(value),
         Value::Integer(value) => ScriptValue::Number(value as f64),
         Value::Number(value) => ScriptValue::Number(value),
-        Value::String(value) => ScriptValue::String(value.to_str()?),
+        Value::String(value) => match value.to_str() {
+            Ok(value) => ScriptValue::String(value),
+            Err(_) => {
+                ScriptValue::CoreString(ScriptCoreString::from_bytes(value.as_bytes().to_vec()))
+            }
+        },
         Value::Vector(value) => ScriptValue::Vec3 {
             x: value.x(),
             y: value.y(),
@@ -1940,6 +2546,877 @@ mod context_init_tests {
     use super::*;
     use nuxie_render_api::NullFactory;
     use nuxie_runtime::NoopScriptHost;
+
+    #[derive(Debug)]
+    struct TruthyUserData;
+
+    impl UserData for TruthyUserData {}
+
+    #[test]
+    fn converter_advance_uses_native_lua_truthiness_for_every_value_kind() {
+        let lua = Lua::new();
+        let table = lua.create_table();
+        let mut instance = LuaScriptInstance::new(table.clone());
+        let mut host = NoopScriptHost;
+
+        for (label, source) in [
+            ("table", "return function() return {} end"),
+            ("function", "return function() return function() end end"),
+            (
+                "thread",
+                "return function() return coroutine.create(function() end) end",
+            ),
+        ] {
+            let advance: Function = lua.load(source).eval().expect(label);
+            table.set("advance", advance).expect(label);
+            assert!(
+                instance.call_advance_truthy(0.25, &mut host).expect(label),
+                "{label} is truthy in Luau"
+            );
+        }
+
+        let userdata = lua
+            .create_userdata(TruthyUserData)
+            .expect("truthy userdata");
+        let advance = lua
+            .create_function(move |_, (_self, _seconds): (Table, f64)| Ok(userdata.clone()))
+            .expect("userdata-returning advance");
+        table.set("advance", advance).expect("userdata advance");
+        assert!(
+            instance
+                .call_advance_truthy(0.25, &mut host)
+                .expect("userdata"),
+            "userdata is truthy in Luau"
+        );
+
+        for (label, source) in [
+            ("nil", "return function() return nil end"),
+            ("false", "return function() return false end"),
+        ] {
+            let advance: Function = lua.load(source).eval().expect(label);
+            table.set("advance", advance).expect(label);
+            assert!(
+                !instance.call_advance_truthy(0.25, &mut host).expect(label),
+                "{label} is the false side of Lua truthiness"
+            );
+        }
+    }
+
+    #[test]
+    fn optional_callbacks_lookup_each_lua_field_once_before_invocation() {
+        let lua = Lua::new();
+        let (table, lookups): (Table, Table) = lua
+            .load(
+                r#"
+                    local lookups = {}
+                    local instance = {}
+                    setmetatable(instance, {
+                        __index = function(_self, key)
+                            lookups[key] = (lookups[key] or 0) + 1
+                            if key == "init" then
+                                return function(_self, _context) return true end
+                            elseif key == "convert" or key == "reverseConvert" then
+                                return function(_self, value) return value end
+                            elseif key == "advance" then
+                                return function(_self, _seconds) return true end
+                            elseif key == "performAction" then
+                                return function(_self, _invocation) end
+                            elseif key == "gamepadConnected" then
+                                return function(_self, _event) end
+                            end
+                            return nil
+                        end,
+                    })
+                    return instance, lookups
+                "#,
+            )
+            .eval()
+            .expect("build one-lookup scripted object");
+        let mut instance = LuaScriptInstance::new(table);
+        let mut host = NoopScriptHost;
+
+        assert!(instance.user_init_pending().expect("init lifecycle bit"));
+        assert_eq!(lookups.get::<i64>("init").unwrap_or(0), 0);
+        assert!(instance.call_init(&mut host).expect("single init lookup"));
+        assert_eq!(
+            instance
+                .call_data_converter_if_present(
+                    ScriptDataConverterMethod::Convert,
+                    ScriptValue::Number(3.0),
+                )
+                .expect("single convert lookup"),
+            Some(ScriptValue::Number(3.0))
+        );
+        assert_eq!(
+            instance
+                .call_data_converter_if_present(
+                    ScriptDataConverterMethod::ReverseConvert,
+                    ScriptValue::Number(4.0),
+                )
+                .expect("single reverse lookup"),
+            Some(ScriptValue::Number(4.0))
+        );
+        assert!(
+            instance
+                .call_advance_truthy(0.25, &mut host)
+                .expect("single advance lookup")
+        );
+        assert!(
+            instance
+                .call_preferred_listener_action(&ScriptListenerInvocation::None, &mut host)
+                .expect("single performAction lookup")
+        );
+        assert_eq!(
+            instance
+                .call_scripted_drawable_input(
+                    &ScriptListenerInvocation::GamepadConnected {
+                        snapshot: nuxie_runtime::ScriptGamepadSnapshot {
+                            device_id: 7,
+                            button_mask: 0,
+                            button_values: Vec::new(),
+                            axes: Vec::new(),
+                            mapping: nuxie_runtime::ScriptGamepadMappingKind::Standard,
+                        },
+                    },
+                    &mut host,
+                )
+                .expect("single gamepad lookup"),
+            nuxie_runtime::ScriptedDrawableInputResult {
+                invoked: true,
+                handled: true,
+            }
+        );
+
+        for key in [
+            "init",
+            "convert",
+            "reverseConvert",
+            "advance",
+            "performAction",
+            "gamepadConnected",
+        ] {
+            assert_eq!(
+                lookups.get::<i64>(key).unwrap_or(0),
+                1,
+                "pinned C++ resolves {key} once and invokes that exact value"
+            );
+        }
+
+        let (fallback, fallback_lookups): (Table, Table) = lua
+            .load(
+                r#"
+                    local lookups = {}
+                    local instance = {}
+                    setmetatable(instance, {
+                        __index = function(_self, key)
+                            lookups[key] = (lookups[key] or 0) + 1
+                            if key == "performAction" then
+                                return 17
+                            elseif key == "perform" then
+                                return function(_self, _pointer) end
+                            end
+                            return nil
+                        end,
+                    })
+                    return instance, lookups
+                "#,
+            )
+            .eval()
+            .expect("build one-lookup legacy listener");
+        let mut fallback = LuaScriptInstance::new(fallback);
+        assert!(
+            fallback
+                .call_preferred_listener_action(&ScriptListenerInvocation::None, &mut host)
+                .expect("single legacy fallback lookup")
+        );
+        assert_eq!(fallback_lookups.get::<i64>("performAction").unwrap_or(0), 1);
+        assert_eq!(fallback_lookups.get::<i64>("perform").unwrap_or(0), 1);
+    }
+
+    #[test]
+    fn optional_converter_lookup_and_call_are_one_atomic_operation() {
+        let lua = Lua::new();
+        let (table, lookups, calls): (Table, Table, Table) = lua
+            .load(
+                r#"
+                    local lookups = {}
+                    local calls = {}
+                    local instance = {}
+                    setmetatable(instance, {
+                        __index = function(_self, key)
+                            lookups[key] = (lookups[key] or 0) + 1
+                            if lookups[key] ~= 1 then
+                                return nil
+                            end
+                            if key == "convert" or key == "reverseConvert" then
+                                return function(_self, value)
+                                    calls[key] = (calls[key] or 0) + 1
+                                    return value
+                                end
+                            end
+                            return nil
+                        end,
+                    })
+                    return instance, lookups, calls
+                "#,
+            )
+            .eval()
+            .expect("build alternating converter lookup");
+        let mut instance = LuaScriptInstance::new(table);
+
+        for method in [
+            ScriptDataConverterMethod::Convert,
+            ScriptDataConverterMethod::ReverseConvert,
+        ] {
+            assert_eq!(
+                instance
+                    .call_optional_data_converter(method, Some(ScriptValue::Number(3.0)))
+                    .expect("atomic optional converter call"),
+                ScriptDataConverterOptionalCall::Returned(ScriptValue::Number(3.0))
+            );
+            assert_eq!(lookups.get::<i64>(method.as_str()).unwrap_or(0), 1);
+            assert_eq!(calls.get::<i64>(method.as_str()).unwrap_or(0), 1);
+        }
+
+        lookups.set("convert", 0).expect("reset lookup count");
+        calls.set("convert", 0).expect("reset call count");
+        assert_eq!(
+            instance
+                .call_optional_data_converter(ScriptDataConverterMethod::Convert, None)
+                .expect("unsupported input still resolves once"),
+            ScriptDataConverterOptionalCall::UnsupportedInput
+        );
+        assert_eq!(lookups.get::<i64>("convert").unwrap_or(0), 1);
+        assert_eq!(
+            calls.get::<i64>("convert").unwrap_or(0),
+            0,
+            "C++ resolves the function but does not call it when pushDataValue fails"
+        );
+    }
+
+    #[test]
+    fn missing_or_non_function_converter_advance_is_not_callable() {
+        for (label, non_function) in [("missing", None), ("number", Some(17_i64))] {
+            let lua = Lua::new();
+            let table = lua.create_table();
+            if let Some(non_function) = non_function {
+                table.set("advance", non_function).expect(label);
+            }
+            let instance = LuaScriptInstance::new(table);
+            assert!(
+                !instance.has_method(ScriptMethod::Advance).expect(label),
+                "{label} advance must stay inert when the authored method bit is enabled"
+            );
+        }
+    }
+
+    #[test]
+    fn missing_or_non_function_init_latches_complete_without_blocking_dispatch() {
+        for (label, initial_init) in [("missing", None), ("non-function", Some(17_i64))] {
+            let lua = Lua::new();
+            lua.globals().set("lateInitCalls", 0).expect(label);
+            lua.globals().set("actionCalls", 0).expect(label);
+            lua.globals().set("converterCalls", 0).expect(label);
+            let table = lua.create_table();
+            if let Some(initial_init) = initial_init {
+                table.set("init", initial_init).expect(label);
+            }
+            let perform: Function = lua
+                .load(
+                    "return function(_self, _event)
+                        actionCalls += 1
+                    end",
+                )
+                .eval()
+                .expect(label);
+            table.set("performAction", perform).expect(label);
+            let convert: Function = lua
+                .load(
+                    "return function(_self, value)
+                        converterCalls += 1
+                        return value
+                    end",
+                )
+                .eval()
+                .expect(label);
+            table.set("convert", convert).expect(label);
+            let mut instance = LuaScriptInstance::new(table.clone());
+            let mut host = NoopScriptHost;
+
+            assert!(
+                instance.user_init_pending().expect(label),
+                "{label} init remains a lifecycle operation until its one field lookup"
+            );
+            assert!(
+                instance.call_init(&mut host).expect(label),
+                "{label} init completes successfully without invoking a callback"
+            );
+            assert!(
+                !instance.user_init_pending().expect(label),
+                "{label} init completion is latched exactly once"
+            );
+
+            let late_init: Function = lua
+                .load(
+                    "return function(_self)
+                        lateInitCalls += 1
+                        return true
+                    end",
+                )
+                .eval()
+                .expect(label);
+            table.set("init", late_init).expect(label);
+            assert!(
+                !instance.user_init_pending().expect(label),
+                "{label} init stays latched after the table is mutated"
+            );
+
+            instance
+                .call_listener_action(
+                    ScriptListenerActionMethod::PerformAction,
+                    &ScriptListenerInvocation::None,
+                    &mut host,
+                )
+                .expect(label);
+            assert_eq!(
+                instance
+                    .call_data_converter(
+                        ScriptDataConverterMethod::Convert,
+                        ScriptValue::Number(3.5),
+                    )
+                    .expect(label),
+                ScriptValue::Number(3.5)
+            );
+            assert_eq!(lua.globals().get::<i64>("lateInitCalls").unwrap(), 0);
+            assert_eq!(lua.globals().get::<i64>("actionCalls").unwrap(), 1);
+            assert_eq!(lua.globals().get::<i64>("converterCalls").unwrap(), 1);
+        }
+    }
+
+    #[test]
+    fn attached_empty_context_rejects_only_when_init_requests_missing_data() {
+        for (label, init_source, expected) in [
+            (
+                "does-not-request",
+                "return function(_self, _context) return true end",
+                true,
+            ),
+            (
+                "requests-view-model",
+                "return function(_self, context)
+                    context:viewModel()
+                    return true
+                end",
+                false,
+            ),
+            (
+                "requests-only-data-context",
+                "return function(_self, context)
+                    local dataContext = context:dataContext()
+                    return dataContext ~= nil and dataContext:viewModel() == nil
+                end",
+                true,
+            ),
+        ] {
+            let lua = Lua::new();
+            let frame_context = ScriptViewModelFrameContext::default();
+            lua.set_app_data(frame_context.clone());
+            let table = lua.create_table();
+            table
+                .set(
+                    "init",
+                    lua.load(init_source).eval::<Function>().expect(label),
+                )
+                .expect(label);
+            let context_view_model = Rc::new(RefCell::new(None));
+            let context_present = Rc::new(Cell::new(false));
+            let missing_requested_data = Rc::new(Cell::new(false));
+            let context_alive = Rc::new(Cell::new(true));
+            let context = lua
+                .create_userdata(ScriptedContext::new_with_lifetime(
+                    Rc::clone(&context_view_model),
+                    Rc::clone(&context_present),
+                    Vec::new(),
+                    Rc::clone(&missing_requested_data),
+                    None,
+                    Rc::clone(&context_alive),
+                ))
+                .expect(label);
+            let mut instance = LuaScriptInstance::with_renderer_bindings(
+                table,
+                RendererBindings::new(frame_context),
+                context_view_model,
+                context_present,
+                Some(context),
+                Some(context_alive),
+                missing_requested_data,
+                Vec::new(),
+                None,
+                resource_limits::ResourceLimitTracker::default(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            );
+            instance
+                .set_context_view_model(None)
+                .expect("attach explicit empty context");
+
+            assert_eq!(
+                instance
+                    .call_init_with_factory(&mut NoopScriptHost, &mut NullFactory::new())
+                    .expect(label),
+                expected,
+                "{label}"
+            );
+            assert_eq!(instance.script_lifetime_valid(), expected, "{label}");
+        }
+    }
+
+    #[test]
+    fn failed_init_replaces_and_poison_disposes_each_captured_context() {
+        let lua = Lua::new();
+        let frame_context = ScriptViewModelFrameContext::default();
+        lua.set_app_data(frame_context.clone());
+        lua.globals()
+            .set("savedContexts", lua.create_table())
+            .expect("saved contexts");
+        lua.globals().set("generation", 0).expect("generation");
+        let generator: Function = lua
+            .load(
+                r#"
+                return function(context)
+                    generation += 1
+                    savedContexts[generation] = context
+                    local thisGeneration = generation
+                    return {
+                        init = function()
+                            return thisGeneration > 1
+                        end,
+                    }
+                end
+                "#,
+            )
+            .eval()
+            .expect("script generator");
+        let context_view_model = Rc::new(RefCell::new(None));
+        let context_present = Rc::new(Cell::new(false));
+        let missing_requested_data = Rc::new(Cell::new(false));
+        let first_context_alive = Rc::new(Cell::new(true));
+        let first_context = lua
+            .create_userdata(ScriptedContext::new_with_lifetime(
+                Rc::clone(&context_view_model),
+                Rc::clone(&context_present),
+                Vec::new(),
+                Rc::clone(&missing_requested_data),
+                None,
+                Rc::clone(&first_context_alive),
+            ))
+            .expect("first context");
+        let first_table: Table = generator
+            .call(first_context.clone())
+            .expect("first script table");
+        let mut instance = LuaScriptInstance::with_renderer_bindings(
+            first_table,
+            RendererBindings::new(frame_context),
+            context_view_model,
+            context_present,
+            Some(first_context),
+            Some(first_context_alive),
+            missing_requested_data,
+            Vec::new(),
+            Some(generator),
+            resource_limits::ResourceLimitTracker::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let mut factory = NullFactory::new();
+
+        assert!(
+            !instance
+                .call_init_with_factory(&mut NoopScriptHost, &mut factory)
+                .expect("first init returns false")
+        );
+        let first_context_live: bool = lua
+            .load(
+                "local ok = pcall(function() savedContexts[1]:viewModel() end)
+                 return ok",
+            )
+            .eval()
+            .expect("probe first context");
+        assert!(!first_context_live, "failed init poisons its Context");
+
+        instance
+            .prepare_init_retry_with_factory(&mut factory)
+            .expect("recreate script lifetime");
+        assert!(
+            instance
+                .call_init_with_factory(&mut NoopScriptHost, &mut factory)
+                .expect("second init succeeds")
+        );
+        let second_context_live: bool = lua
+            .load(
+                "local ok = pcall(function() savedContexts[2]:viewModel() end)
+                 return ok",
+            )
+            .eval()
+            .expect("probe second context");
+        assert!(second_context_live, "replacement Context is live");
+
+        drop(instance);
+        let second_context_live_after_drop: bool = lua
+            .load(
+                "local ok = pcall(function() savedContexts[2]:viewModel() end)
+                 return ok",
+            )
+            .eval()
+            .expect("probe dropped context");
+        assert!(
+            !second_context_live_after_drop,
+            "dropping the occurrence poisons its captured Context"
+        );
+    }
+
+    #[test]
+    fn failed_init_immediately_releases_the_lua_table_before_retry() {
+        let lua = Lua::new();
+        let frame_context = ScriptViewModelFrameContext::default();
+        lua.set_app_data(frame_context.clone());
+        lua.globals().set("generation", 0).expect("generation");
+        lua.globals()
+            .set(
+                "weakTables",
+                lua.load("return setmetatable({}, { __mode = 'v' })")
+                    .eval::<Table>()
+                    .expect("weak-value table"),
+            )
+            .expect("weak table global");
+        let generator: Function = lua
+            .load(
+                r#"
+                return function(_context)
+                    generation += 1
+                    local thisGeneration = generation
+                    local occurrence = {
+                        generation = thisGeneration,
+                        init = function()
+                            return thisGeneration > 1
+                        end,
+                    }
+                    weakTables[thisGeneration] = occurrence
+                    return occurrence
+                end
+                "#,
+            )
+            .eval()
+            .expect("script generator");
+        let context_view_model = Rc::new(RefCell::new(None));
+        let context_present = Rc::new(Cell::new(false));
+        let missing_requested_data = Rc::new(Cell::new(false));
+        let first_context_alive = Rc::new(Cell::new(true));
+        let first_context = lua
+            .create_userdata(ScriptedContext::new_with_lifetime(
+                Rc::clone(&context_view_model),
+                Rc::clone(&context_present),
+                Vec::new(),
+                Rc::clone(&missing_requested_data),
+                None,
+                Rc::clone(&first_context_alive),
+            ))
+            .expect("first context");
+        let first_table: Table = generator
+            .call(first_context.clone())
+            .expect("first script table");
+        let mut instance = LuaScriptInstance::with_renderer_bindings(
+            first_table,
+            RendererBindings::new(frame_context),
+            context_view_model,
+            context_present,
+            Some(first_context),
+            Some(first_context_alive),
+            missing_requested_data,
+            Vec::new(),
+            Some(generator),
+            resource_limits::ResourceLimitTracker::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let mut factory = NullFactory::new();
+
+        assert!(
+            !instance
+                .call_init_with_factory(&mut NoopScriptHost, &mut factory)
+                .expect("first init returns false")
+        );
+        assert!(
+            instance.table.is_none(),
+            "failed init is the Rust representation of C++ m_self == 0"
+        );
+        lua.gc_collect().expect("collect failed lifetime");
+        assert!(
+            lua.load("return weakTables[1] == nil")
+                .eval::<bool>()
+                .expect("probe failed table"),
+            "the failed table must be collectible before any retry boundary"
+        );
+        let mut host = NoopScriptHost;
+        assert!(
+            !instance
+                .has_method(ScriptMethod::Advance)
+                .expect("dead method lookup")
+        );
+        assert_eq!(
+            instance
+                .call_method(ScriptMethod::Update, &[], &mut host)
+                .expect("dead generic callback"),
+            ScriptValue::Nil
+        );
+        assert!(
+            !instance
+                .call_advance_truthy(0.25, &mut host)
+                .expect("dead advance")
+        );
+        instance
+            .call_listener_action(
+                ScriptListenerActionMethod::PerformAction,
+                &ScriptListenerInvocation::None,
+                &mut host,
+            )
+            .expect("dead listener callback");
+        assert_eq!(
+            instance
+                .call_scripted_drawable_input(
+                    &ScriptListenerInvocation::Keyboard {
+                        key: 65,
+                        modifiers: 0,
+                        is_pressed: true,
+                        is_repeat: false,
+                    },
+                    &mut host,
+                )
+                .expect("dead direct input"),
+            nuxie_runtime::ScriptedDrawableInputResult::default(),
+            "a dead C++ state() is not an invoked keyboard/text target"
+        );
+        assert_eq!(
+            instance
+                .call_data_converter(ScriptDataConverterMethod::Convert, ScriptValue::Number(7.5),)
+                .expect("dead converter"),
+            ScriptValue::Number(7.5)
+        );
+        instance
+            .set_input("ignored", ScriptValue::Number(1.0))
+            .expect("dead scalar setter");
+        instance
+            .call_input_trigger("ignored", &mut host)
+            .expect("dead trigger");
+
+        instance
+            .prepare_init_retry_with_factory(&mut factory)
+            .expect("recreate script lifetime");
+        assert_eq!(instance.table().get::<i64>("generation").unwrap(), 2);
+        lua.gc_collect().expect("collect with live replacement");
+        assert!(
+            lua.load("return weakTables[2] ~= nil")
+                .eval::<bool>()
+                .expect("probe live replacement"),
+            "the recreated occurrence owns its replacement table"
+        );
+        assert!(
+            instance
+                .call_init_with_factory(&mut NoopScriptHost, &mut factory)
+                .expect("second init succeeds")
+        );
+
+        drop(instance);
+        lua.gc_collect().expect("collect dropped replacement");
+        assert!(
+            lua.load("return weakTables[2] == nil")
+                .eval::<bool>()
+                .expect("probe dropped replacement"),
+            "final occurrence drop releases the replacement table exactly once"
+        );
+    }
+
+    #[test]
+    fn generator_failure_or_non_table_result_poisons_captured_context() {
+        for (label, generator_body) in [
+            ("error", "error('expected generator failure')"),
+            ("non-table", "return 17"),
+        ] {
+            let vm = ScriptVm::new();
+            vm.lua
+                .globals()
+                .set("savedContext", Value::Nil)
+                .expect(label);
+            let source = format!(
+                "return function(context)
+                    savedContext = context
+                    {generator_body}
+                end"
+            );
+            let generator: Function = vm.lua.load(&source).eval().expect(label);
+            let program = ScriptProgram { generator };
+            let error = match vm.instantiate_registered_script_with_factory_and_context(
+                &program,
+                &mut NoopScriptHost,
+                &mut NullFactory::new(),
+                None,
+                Vec::new(),
+            ) {
+                Ok(_) => panic!("{label} unexpectedly produced a script instance"),
+                Err(error) => error,
+            };
+            assert!(!error.message().is_empty());
+            let context_live: bool = vm
+                .lua
+                .load(
+                    "local ok = pcall(function() savedContext:viewModel() end)
+                     return ok",
+                )
+                .eval()
+                .expect(label);
+            assert!(!context_live, "{label} must poison its captured Context");
+        }
+    }
+
+    #[test]
+    fn authored_core_strings_keep_bytes_until_the_lua_c_string_boundary() {
+        let lua = Lua::new();
+        let table = lua.create_table();
+        let probe = table.clone();
+        let mut instance = LuaScriptInstance::new(table);
+        let name = ScriptCoreString::from_bytes(vec![0xff, b'k', 0, b't']);
+        let value = ScriptCoreString::from_bytes(vec![0xfe, b'v', 0, b'x']);
+
+        instance
+            .set_input_core(&name, ScriptValue::CoreString(value.clone()))
+            .expect("set raw authored input");
+        let stored: Value = probe
+            .get(lua.create_string(&[0xff, b'k']))
+            .expect("read raw Lua key");
+        let Value::String(stored) = stored else {
+            panic!("raw authored input was not a Lua string");
+        };
+        assert_eq!(stored.as_bytes(), &[0xfe, b'v']);
+        assert_eq!(
+            value.as_bytes(),
+            &[0xfe, b'v', 0, b'x'],
+            "the owned CoreString keeps its suffix after Lua projection"
+        );
+
+        let fired = Rc::new(Cell::new(false));
+        let fired_from_lua = Rc::clone(&fired);
+        probe
+            .set(
+                lua.create_string(&[0xff, b'k']),
+                lua.create_function(move |_, _self: Table| {
+                    fired_from_lua.set(true);
+                    Ok(())
+                })
+                .expect("trigger callback"),
+            )
+            .expect("install raw-name trigger");
+        instance
+            .call_input_trigger_core(&name, &mut NoopScriptHost)
+            .expect("call raw-name trigger");
+        assert!(fired.get());
+    }
+
+    #[test]
+    fn throwing_trigger_callbacks_still_mark_the_scripted_owner_dirty() {
+        #[derive(Default)]
+        struct RecordingHost {
+            updates: usize,
+        }
+
+        impl ScriptHost for RecordingHost {
+            fn mark_script_update(&mut self) {
+                self.updates += 1;
+            }
+        }
+
+        let lua = Lua::new();
+        let table = lua.create_table();
+        table
+            .set(
+                "pulse",
+                lua.load("return function() error('expected trigger failure') end")
+                    .eval::<Function>()
+                    .expect("throwing trigger"),
+            )
+            .expect("install throwing trigger");
+        let mut instance = LuaScriptInstance::new(table);
+        let mut host = RecordingHost::default();
+
+        let error = instance
+            .call_input_trigger("pulse", &mut host)
+            .expect_err("throwing trigger must report its protected-call failure");
+        assert!(error.resource_code().is_none());
+        assert_eq!(
+            host.updates, 1,
+            "C++ addScriptedDirt runs after invoking a present trigger function even when it throws"
+        );
+
+        instance
+            .call_input_trigger("missing", &mut host)
+            .expect("missing trigger is inert");
+        assert_eq!(
+            host.updates, 1,
+            "missing/non-function trigger fields do not dirty"
+        );
+    }
+
+    #[test]
+    fn scripted_data_value_preserves_unchanged_core_string_but_assignment_truncates() {
+        let lua = Lua::new();
+        let table = lua.create_table();
+        let unchanged: Function = lua
+            .load("return function(_self, value) return value end")
+            .eval()
+            .expect("unchanged converter");
+        table.set("convert", unchanged).expect("converter method");
+        let mut instance = LuaScriptInstance::new(table.clone());
+        let full = ScriptValue::CoreString(ScriptCoreString::from_bytes(vec![0xfe, b'A', 0, b'B']));
+
+        assert_eq!(
+            instance
+                .call_data_converter(ScriptDataConverterMethod::Convert, full.clone())
+                .expect("unchanged conversion"),
+            full,
+            "returning the wrapper unchanged retains its full DataValueString"
+        );
+
+        let assigned: Function = lua
+            .load(
+                "return function(_self, value)
+                    value.value = value.value
+                    return value
+                end",
+            )
+            .eval()
+            .expect("assigning converter");
+        table.set("convert", assigned).expect("replace converter");
+        assert_eq!(
+            instance
+                .call_data_converter(
+                    ScriptDataConverterMethod::Convert,
+                    ScriptValue::CoreString(ScriptCoreString::from_bytes(vec![
+                        0xfe, b'A', 0, b'B',
+                    ])),
+                )
+                .expect("assigning conversion"),
+            ScriptValue::CoreString(ScriptCoreString::from_bytes(vec![0xfe, b'A'])),
+            "luaL_checkstring followed by std::string(const char*) truncates at the first NUL"
+        );
+    }
 
     #[test]
     fn protected_host_callback_errors_remain_catchable() {
@@ -2121,13 +3598,17 @@ mod context_init_tests {
             .eval()
             .expect("script generator");
         let missing_requested_data = Rc::new(Cell::new(false));
+        let context_alive = Rc::new(Cell::new(true));
         let context_view_model = Rc::new(RefCell::new(None));
+        let context_present = Rc::new(Cell::new(false));
         let context = lua
-            .create_userdata(ScriptedContext::new(
+            .create_userdata(ScriptedContext::new_with_lifetime(
                 Rc::clone(&context_view_model),
+                Rc::clone(&context_present),
                 Vec::new(),
                 Rc::clone(&missing_requested_data),
                 None,
+                Rc::clone(&context_alive),
             ))
             .expect("scripted context");
         let table: Table = generator.call(context.clone()).expect("script table");
@@ -2135,7 +3616,9 @@ mod context_init_tests {
             table,
             RendererBindings::new(frame_context),
             context_view_model,
+            context_present,
             Some(context),
+            Some(context_alive),
             missing_requested_data,
             Vec::new(),
             Some(generator),
@@ -2167,7 +3650,7 @@ mod context_init_tests {
         instance
             .prepare_init_retry_with_factory(&mut factory)
             .expect("recreate script lifetime");
-        assert_eq!(instance.table.get::<i64>("generation").unwrap(), 2);
+        assert_eq!(instance.table().get::<i64>("generation").unwrap(), 2);
         assert!(
             instance
                 .call_init_with_factory(&mut host, &mut factory)
@@ -2189,48 +3672,37 @@ mod gpu_canvas_tests {
         bytes.extend_from_slice(&value.to_le_bytes());
     }
 
-    fn put_string(bytes: &mut Vec<u8>, value: &str) {
-        put_u16(bytes, value.len() as u16);
-        bytes.extend_from_slice(value.as_bytes());
-    }
-
-    fn shader_payload(fragment_color: &str) -> Vec<u8> {
-        let vertex = "#version 300 es\nvoid main() { gl_Position = vec4(0.0); }";
-        let fragment = format!(
-            "#version 300 es\nout vec4 color;\nvoid main() {{ color = {fragment_color}; }}"
-        );
-        let mut entries = vec![2];
-        for (stage, logical, source) in [(0, "vs_main", vertex), (1, "fs_main", fragment.as_str())]
-        {
-            entries.push(stage);
-            put_string(&mut entries, logical);
-            put_string(&mut entries, "main");
-            put_u32(&mut entries, source.len() as u32);
-            entries.extend_from_slice(source.as_bytes());
-        }
-
+    #[test]
+    fn malformed_shader_container_registration_retains_invalid_state() {
+        let vm = ScriptVm::new();
         let mut payload = vec![0];
         put_u32(&mut payload, 0x5253_5442);
         put_u16(&mut payload, 4);
-        payload.extend_from_slice(&[1, 0, 1]);
-        put_u32(&mut payload, 0);
-        put_u32(&mut payload, entries.len() as u32);
-        payload.extend(entries);
-        payload
+        payload.extend_from_slice(&[1, 0, 0]);
+        payload.extend_from_slice(&[0, 0, 0]);
+
+        vm.register_gpu_canvas_shader_asset("broken", &payload)
+            .expect("the C++ file importer ignores neutral decode failure");
+
+        assert!(vm.gpu_canvas_shaders.borrow().contains_key("broken"));
     }
 
     #[test]
-    fn duplicate_shader_registration_preserves_the_first_shader() {
+    fn multi_alias_shader_registration_shares_one_owner_and_rejects_atomically() {
         let vm = ScriptVm::new();
-        vm.register_gpu_canvas_shader_asset("scene", &shader_payload("vec4(1.0)"))
-            .expect("first shader registers");
-        let first = vm.gpu_canvas_shaders.borrow()["scene"].clone();
+        vm.register_gpu_canvas_shader_asset_aliases(&["scene", "effects/scene"], &[0, 1, 2, 3])
+            .expect("aliases register");
 
-        let error = vm
-            .register_gpu_canvas_shader_asset("scene", &shader_payload("vec4(0.0)"))
-            .expect_err("duplicate shader name is rejected");
+        let shaders = vm.gpu_canvas_shaders.borrow();
+        assert!(Rc::ptr_eq(&shaders["scene"], &shaders["effects/scene"]));
+        drop(shaders);
 
-        assert!(error.to_string().contains("duplicated"));
-        assert_eq!(vm.gpu_canvas_shaders.borrow()["scene"], first);
+        vm.register_gpu_canvas_shader_asset_aliases(&["unused/new-alias", "scene"], &[4, 5, 6, 7])
+            .expect_err("a duplicate alias rejects the whole registration");
+        assert!(
+            !vm.gpu_canvas_shaders
+                .borrow()
+                .contains_key("unused/new-alias")
+        );
     }
 }

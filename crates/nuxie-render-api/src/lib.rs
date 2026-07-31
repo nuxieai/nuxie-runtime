@@ -7,7 +7,11 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+mod serializing;
+pub use serializing::{SerializingFactory, SerializingRenderer};
 
 pub type ColorInt = u32;
 
@@ -531,6 +535,14 @@ pub trait RenderShader: Any {
     fn as_any(&self) -> &dyn Any;
 }
 
+/// One opaque, lookup-owned authored GPU-canvas shader module.
+///
+/// Each `context:shader` occurrence owns one of these handles. Backends retain
+/// their device/domain identity and physical shader module behind this seam.
+pub trait RenderGpuCanvasShader: Any {
+    fn as_any(&self) -> &dyn Any;
+}
+
 pub trait RenderImage: Any {
     fn as_any(&self) -> &dyn Any;
     fn width(&self) -> u32;
@@ -540,23 +552,109 @@ pub trait RenderImage: Any {
     }
 }
 
-/// One canonical GLSL stage decoded from a Rive `ShaderAsset` RSTB v4 blob.
-///
-/// The renderer API deliberately owns this transport type so scripting and
-/// file-runtime code never depend on a concrete GPU backend. Backends may
-/// translate the stage internally (for example, GLSL through Naga to Metal).
+/// One entry-point stage in a Rive whole-module shader source container.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum GpuCanvasShaderStage {
+    Vertex = 0,
+    Fragment = 1,
+    Compute = 2,
+}
+
+/// One authored entry record from a Rive whole-module shader source container.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GpuCanvasShaderStage {
-    pub source: String,
+pub struct GpuCanvasShaderEntry {
+    pub stage: GpuCanvasShaderStage,
     pub logical_entry_point: String,
     pub physical_entry_point: String,
 }
 
-/// The vertex and fragment stages selected by `context:shader(name)`.
+/// One resource kind from Rive's frozen `BindingMap` v2 wire schema.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum GpuCanvasShaderResourceKind {
+    UniformBuffer = 0,
+    StorageBufferReadOnly = 1,
+    StorageBufferReadWrite = 2,
+    SampledTexture = 3,
+    StorageTexture = 4,
+    Sampler = 5,
+    ComparisonSampler = 6,
+}
+
+/// Texture view dimension reflected into a Rive `BindingMap`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum GpuCanvasShaderTextureViewDimension {
+    Undefined = 0,
+    D1 = 1,
+    D2 = 2,
+    D2Array = 3,
+    Cube = 4,
+    CubeArray = 5,
+    D3 = 6,
+}
+
+/// Texture sample type reflected into a Rive `BindingMap`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum GpuCanvasShaderTextureSampleType {
+    Undefined = 0,
+    Float = 1,
+    UnfilterableFloat = 2,
+    Depth = 3,
+    Sint = 4,
+    Uint = 5,
+}
+
+/// One decoded row from the mandatory Rive WebGPU `BindingMap` sidecar.
+///
+/// `backend_slots` is ordered vertex, fragment, compute. `None` preserves
+/// Rive's `BindingMap::kAbsent` sentinel without leaking it to callers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasShaderBinding {
+    pub group: u8,
+    pub binding: u8,
+    pub kind: GpuCanvasShaderResourceKind,
+    pub stage_mask: u8,
+    pub backend_space: u8,
+    pub backend_slots: [Option<u16>; 3],
+    pub texture_view_dimension: GpuCanvasShaderTextureViewDimension,
+    pub texture_sample_type: GpuCanvasShaderTextureSampleType,
+    pub texture_multisampled: bool,
+}
+
+/// The authored WGSL module selected by WebGPU from a Rive `ShaderAsset`.
+///
+/// Rive target 0 stores one source module shared by every entry. Target 16
+/// stores the binding metadata that accompanies that exact module.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GpuCanvasShader {
-    pub vertex: GpuCanvasShaderStage,
-    pub fragment: GpuCanvasShaderStage,
+    pub source: String,
+    pub entries: Vec<GpuCanvasShaderEntry>,
+    pub bindings: Vec<GpuCanvasShaderBinding>,
+}
+
+impl GpuCanvasShader {
+    pub fn entry(
+        &self,
+        stage: GpuCanvasShaderStage,
+        logical_entry_point: &str,
+    ) -> Option<&GpuCanvasShaderEntry> {
+        self.entries
+            .iter()
+            .find(|entry| entry.stage == stage && entry.logical_entry_point == logical_entry_point)
+    }
+}
+
+/// The exact logical/physical entry pair selected by one authored pipeline
+/// stage. Bare shader descriptors select the first declaration of that stage;
+/// named descriptors retain both names so the renderer can reject stale or
+/// mismatched records before creating a backend object.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasShaderEntrySelection {
+    pub logical_entry_point: String,
+    pub physical_entry_point: String,
 }
 
 /// One uniform binding produced by an authored GPU-canvas frame.
@@ -592,6 +690,8 @@ pub struct GpuCanvasVertexBuffer {
 /// Backend-neutral result of executing one imported script's `drawCanvas`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GpuCanvasPlan {
+    pub vertex_entry: Option<GpuCanvasShaderEntrySelection>,
+    pub fragment_entry: Option<GpuCanvasShaderEntrySelection>,
     pub width: u32,
     pub height: u32,
     pub clear_color: [f64; 4],
@@ -731,15 +831,25 @@ pub trait Factory {
     fn make_render_paint(&mut self) -> Box<dyn RenderPaint>;
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError>;
 
+    /// Parse, validate, and materialize one fresh authored shader occurrence
+    /// in this factory's backend/device domain.
+    fn make_gpu_canvas_shader(
+        &mut self,
+        _shader: &GpuCanvasShader,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        Err(GpuCanvasError::unsupported())
+    }
+
     /// Execute one imported GPU-canvas plan and retain its result as a normal
     /// render image suitable for `Renderer::draw_image`.
     ///
-    /// The default is intentionally fail-closed. Recording, callback, WebGL2,
-    /// and other factories do not silently claim support merely because the
+    /// The default is intentionally fail-closed. Recording, callback, and
+    /// other factories do not silently claim support merely because the
     /// scripting surface exists.
     fn make_gpu_canvas_image(
         &mut self,
-        _shader: &GpuCanvasShader,
+        _vertex_shader: &Arc<dyn RenderGpuCanvasShader>,
+        _fragment_shader: &Arc<dyn RenderGpuCanvasShader>,
         _plan: &GpuCanvasPlan,
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
         Err(GpuCanvasError::unsupported())
@@ -2869,6 +2979,47 @@ mod tests {
                 "frame\n",
             )
         );
+    }
+
+    #[test]
+    fn sriv_serializer_matches_cpp_smoke_stream() {
+        let mut factory = SerializingFactory::new();
+        let mut renderer = factory.make_renderer();
+        let path = factory.make_empty_render_path();
+        let mut paint = factory.make_render_paint();
+
+        paint.color(0xff336699);
+        factory.frame_size(64, 64);
+        renderer.save();
+        renderer.draw_path(path.as_ref(), paint.as_ref());
+        renderer.restore();
+        factory.add_frame();
+
+        assert_eq!(
+            &*factory.bytes(),
+            &[
+                b'S', b'R', b'I', b'V', 1, // header/version
+                3, 0, // makeRenderPath 0
+                5, 0, // makeRenderPaint 0
+                21, 0, 0x99, 0xcd, 0xcd, 0xf9, 0x0f, // color
+                29, 64, 64, // frameSize
+                7,  // save
+                10, 0, 0,  // drawPath
+                8,  // restore
+                28, // frame
+            ]
+        );
+    }
+
+    #[test]
+    fn sriv_serializer_does_not_emit_constructor_fill_rule() {
+        let mut factory = SerializingFactory::new();
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(1.0, 2.0);
+
+        let _path = factory.make_render_path(raw_path, FillRule::EvenOdd);
+
+        assert_eq!(&factory.bytes()[5..8], &[3, 0, 16]);
     }
 
     #[test]

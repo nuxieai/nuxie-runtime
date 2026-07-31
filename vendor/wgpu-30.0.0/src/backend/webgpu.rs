@@ -1064,7 +1064,11 @@ fn future_request_device(
 fn future_pop_error_scope(
     result: Result<js_sys::JsOption<webgpu_sys::GpuError>, wasm_bindgen::JsValue>,
 ) -> Option<crate::Error> {
-    Some(crate::Error::from_js(result.ok()?.into_option()?.into()))
+    let error = result.ok()?;
+    if error.is_null() {
+        return None;
+    }
+    Some(crate::Error::from_js(error.into_option()?.into()))
 }
 
 fn future_compilation_info(

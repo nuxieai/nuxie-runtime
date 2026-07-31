@@ -27,6 +27,7 @@ GATE_COMMANDS = {
     "renderer-golden": ("make", "renderer-golden"),
     "cargo-test-workspace": ("make", "cpp-oracle-workspace-tests"),
     "capi-smoke": ("make", "capi-smoke"),
+    "browser-webgpu-only": ("make", "browser-webgpu-only-check"),
     "size-report": ("make", "size-report"),
 }
 
@@ -216,6 +217,12 @@ def check_scorecard(options: argparse.Namespace) -> int:
         source_sha,
         errors,
     )
+    browser_webgpu_only = validate_exit_evidence(
+        evidence_dir / "browser-webgpu-only.json",
+        "browser-webgpu-only",
+        source_sha,
+        errors,
+    )
     golden = golden_evidence and runtime_floor_valid
     scripted = scripted_evidence and runtime_floor_valid
     renderer = renderer_evidence and renderer_floor_valid
@@ -234,6 +241,7 @@ def check_scorecard(options: argparse.Namespace) -> int:
         golden,
         scripted,
         renderer,
+        browser_webgpu_only,
         repo_root,
         evidence_dir,
         source_sha,
@@ -540,6 +548,7 @@ def build_tiers(
     golden: bool,
     scripted: bool,
     renderer: bool,
+    browser_webgpu_only: bool,
     repo_root: Path,
     evidence_dir: Path,
     source_sha: str,
@@ -668,9 +677,11 @@ def build_tiers(
                     f"adapters {len(adapters)}/{required_adapters}",
                 ),
                 ratchet(
-                    "webgl2-decision",
-                    "NOT_BUILT",
-                    "WebGL2 decision not built (#HD-3)",
+                    "browser-backend-decision",
+                    "GREEN" if browser_webgpu_only else "RED",
+                    "WebGPU-only browser support gate green; legacy backend retired (#HD-3)"
+                    if browser_webgpu_only
+                    else "WebGPU-only browser support evidence unavailable/red (#HD-3)",
                 ),
             ],
         ),

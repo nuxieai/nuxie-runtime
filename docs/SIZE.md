@@ -13,6 +13,17 @@ evidence against `size.budget_bytes` in `parity-scorecard.toml`. A breach
 reopens the budget USER-GATE with fresh measurements — the constant is never
 silently raised.
 
+**Suspension (coordinator decision, 2026-07-30, user-directed): the hard
+gate above is suspended until the FL series (through FL-E) is complete.**
+Rationale: FL-D adds ~94 files of DataBind/ViewModel ownership and FL-E the
+live-draw owners; enforcing a fixed budget mid-port would either block
+faithful porting or invite size-motivated compensation, both worse than
+measuring honestly and deciding once the full surface exists. During the
+suspension `make size-report` remains in every floor and prints the same
+measurements plus a NOTE (never a failure) when a variant exceeds the 9 MiB
+reference. At FL-E completion the budget USER-GATE reopens with complete
+measurements and the binding number is set then.
+
 History: the initial 8 MiB choice was made against the 2026-07-20
 measurements below, which predate concurrent main `974aab66` (editor-cutover
 runtime support). Re-measurement at `2f82f9e7`, including the 43rd audited

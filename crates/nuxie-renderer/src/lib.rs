@@ -1,5 +1,4 @@
-//! Pure-Rust WebGPU and WebGL2 renderers behind the `nuxie-render-api` trait
-//! boundary.
+//! Pure-Rust WebGPU renderer behind the `nuxie-render-api` trait boundary.
 
 #[cfg(test)]
 mod atlas_blit_oracle;
@@ -11,6 +10,8 @@ mod atlas_pipeline;
 #[cfg(test)]
 mod atlas_placement_oracle;
 mod atomic_pipeline;
+#[cfg(any(test, target_arch = "wasm32"))]
+mod browser_surface_lifecycle;
 mod clockwise_atomic_pipeline;
 mod composite_pipeline;
 #[cfg(test)]
@@ -32,6 +33,8 @@ mod msaa_atlas_pipeline;
 mod msaa_image_mesh_pipeline;
 mod msaa_stencil_pipeline;
 mod path_pipeline;
+#[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
+mod present_pipeline;
 mod skyline;
 mod storage_texture;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
@@ -39,10 +42,6 @@ mod surface;
 #[cfg(test)]
 mod tess_span_oracle;
 mod tessellator;
-#[cfg(target_arch = "wasm32")]
-mod webgl2;
-#[cfg(any(target_arch = "wasm32", test))]
-mod webgl2_limits;
 mod work_metrics;
 
 use bytemuck::{Pod, Zeroable};
@@ -52,8 +51,8 @@ use nuxie_image_codec::{
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
     ImageDecodeError, ImageSampler, Mat2D, PathVerb, RawPath, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
-    Renderer, StrokeCap, StrokeJoin, Vec2D,
+    RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle,
+    RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 use std::any::Any;
 #[cfg(test)]
@@ -81,7 +80,6 @@ pub enum RendererError {
     InvalidGpuCanvas(String),
     Map(String),
     Unsupported(&'static str),
-    WebGl2(String),
 }
 
 impl fmt::Display for RendererError {
@@ -102,17 +100,12 @@ impl fmt::Display for RendererError {
             Self::InvalidGpuCanvas(message) => write!(f, "invalid GPU-canvas plan: {message}"),
             Self::Map(message) => write!(f, "wgpu readback error: {message}"),
             Self::Unsupported(feature) => write!(f, "unsupported renderer feature: {feature}"),
-            Self::WebGl2(message) => write!(f, "WebGL2 renderer error: {message}"),
         }
     }
 }
 
 #[cfg(target_arch = "wasm32")]
-pub use browser::{
-    BrowserBackend, BrowserBackendPreference, BrowserFactory, BrowserFrame, BrowserResizeError,
-};
-#[cfg(target_arch = "wasm32")]
-pub use webgl2::{WebGl2Factory, WebGl2Frame};
+pub use browser::{BrowserFactory, BrowserFrame, BrowserResizeError};
 
 impl Error for RendererError {}
 
@@ -613,8 +606,6 @@ pub struct WgpuFrameMetrics {
     pub backend_work: BackendWorkMetrics,
 }
 
-#[cfg(target_arch = "wasm32")]
-pub use gpu_canvas::WebGl2GpuCanvasRenderer;
 pub use gpu_canvas::{
     GpuCanvasRenderPlan, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer,
     GpuCanvasVertexLayout,
@@ -1331,12 +1322,20 @@ impl Factory for WgpuFactory {
         }))
     }
 
-    fn make_gpu_canvas_image(
+    fn make_gpu_canvas_shader(
         &mut self,
         shader: &GpuCanvasShader,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.make_imported_gpu_canvas_shader(shader)
+    }
+
+    fn make_gpu_canvas_image(
+        &mut self,
+        vertex_shader: &Arc<dyn RenderGpuCanvasShader>,
+        fragment_shader: &Arc<dyn RenderGpuCanvasShader>,
         plan: &GpuCanvasPlan,
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
-        self.make_imported_gpu_canvas_image(shader, plan)
+        self.make_imported_gpu_canvas_image(vertex_shader, fragment_shader, plan)
     }
 }
 
@@ -3227,16 +3226,16 @@ impl WgpuFrame {
     pub(crate) fn finish_to_texture_view(
         self,
         target: &wgpu::TextureView,
-        presenter: &surface::PresentPipeline,
+        presenter: &present_pipeline::PresentPipeline,
     ) -> Result<WgpuFrameMetrics, RendererError> {
         pollster::block_on(self.finish_to_texture_view_async(target, presenter))
     }
 
-    #[cfg(any(target_os = "ios", target_os = "macos"))]
-    async fn finish_to_texture_view_async(
+    #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
+    pub(crate) async fn finish_to_texture_view_async(
         self,
         target: &wgpu::TextureView,
-        presenter: &surface::PresentPipeline,
+        presenter: &present_pipeline::PresentPipeline,
     ) -> Result<WgpuFrameMetrics, RendererError> {
         let mut metrics = self.metrics();
         let (_, _, _, _, _, backend_work, _) = self
@@ -3252,11 +3251,10 @@ impl WgpuFrame {
         capture_atomic_planes: bool,
         schedule_msaa_draws: bool,
         read_pixels: bool,
-        #[cfg(any(target_os = "ios", target_os = "macos"))] presentation: Option<(
-            &wgpu::TextureView,
-            &surface::PresentPipeline,
-        )>,
-        #[cfg(not(any(target_os = "ios", target_os = "macos")))] _presentation: Option<()>,
+        #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
+        presentation: Option<(&wgpu::TextureView, &present_pipeline::PresentPipeline)>,
+        #[cfg(not(any(target_arch = "wasm32", target_os = "ios", target_os = "macos")))]
+        _presentation: Option<()>,
     ) -> Result<
         (
             Vec<u8>,
@@ -6784,7 +6782,7 @@ impl WgpuFrame {
 
         if !read_pixels {
             debug_assert!(!capture_clockwise_atomic_coverage && !capture_atomic_planes);
-            #[cfg(any(target_os = "ios", target_os = "macos"))]
+            #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
             if let Some((target, presenter)) = presentation {
                 presenter.encode(&self.context.device, &mut encoder, target, &view);
             }
@@ -6795,11 +6793,11 @@ impl WgpuFrame {
             if let Some(backing) = clockwise_atomic_backing.borrow_mut().as_mut() {
                 backing.did_submit();
             }
-            #[cfg(any(target_os = "ios", target_os = "macos"))]
+            #[cfg(any(target_arch = "wasm32", target_os = "ios", target_os = "macos"))]
             if presentation.is_none() {
                 wait_for_submitted_work(&self.context, submission).await?;
             }
-            #[cfg(not(any(target_os = "ios", target_os = "macos")))]
+            #[cfg(not(any(target_arch = "wasm32", target_os = "ios", target_os = "macos")))]
             wait_for_submitted_work(&self.context, submission).await?;
             return_uncaptured_device_error(&self.context)?;
             tessellation_texture_frame.borrow_mut().recycle();

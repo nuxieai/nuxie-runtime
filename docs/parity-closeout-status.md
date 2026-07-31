@@ -11,14 +11,14 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 | 1 Frame parity | PARTIAL | exact-segments 647/647; scripted 647/647; e2e-exact: gate not built | both runtime floors restored green 2026-07-21 (image-policy split); #OR-6 missing |
 | 2 Interaction parity | RED | side-channel: gate not built; fuzz-clean-nights: 0 | #OR-1/2/3/7 |
 | 3 SDK parity | RED | A-rows closed 0/8 | register A-table |
-| 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle and #HD-3 remain |
+| 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle remains; #HD-3 closed by retiring WebGL2 |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.88 MiB OFF / 8.76 MiB ON vs user-approved 9 MiB budget (both variants green at `5901c1fe`) | #OR-9 |
 
-Regression floor (must stay green): runtime lib 411/411, nuxie lib 167/167,
-C++ probe 721/721, both runtime golden gates 317/317 exact / 647/647 segments;
+Regression floor (must stay green): runtime lib 521/521, nuxie lib 146/146,
+C++ probe 747/747, both runtime golden gates 317/317 exact / 647/647 segments;
 ordinary and scripted both have zero failures. The workspace push gate is green
 as of 2026-07-22 and now builds/exports `RIVE_CPP_PROBE`, so its log contains
-the 721/721 probe run rather than silently skipping it. Every remaining RB-1
+the complete probe run rather than silently skipping it. Every remaining RB-1
 cut and every RB-1 push must run `make scripted-golden-compare` in addition to
 the ordinary gate. Review
 of e5(A) restored the distinction between raw `StateMachineInstance::advance`
@@ -983,20 +983,87 @@ upstream-sync-map registry).
 - [ ] #HD-2 renderer oracle hardening (V7; adapter matrix 2/2 complete,
   current-runtime same-runner 1,468/1,468 local, Paravirtual CI rerun and
   clockwise-atomic hypothesis oracle pending)
-- [ ] #HD-3 WebGL2 decision (USER-GATE)
+- [x] #HD-3 WebGL2 decision (USER-GATE) — user chose WebGPU-only browser
+  support on 2026-07-24. The WebGL2/FemtoVG renderer, public selector,
+  automatic fallback, and live qualification surface are removed. Missing or
+  unusable WebGPU is an explicit unsupported browser/device state; this closes
+  V8 by narrowing the product support matrix, not by claiming WebGL2 parity.
 - [ ] #HD-4 TODO(golden) pair
 - [ ] #HD-5 publish the parity claim doc
 - [ ] #LT-* long tail (each opens by USER-GATE)
 
+## Canonical program federation
+
+The overall objective remains the complete parity closeout in
+`docs/parity-closeout-map.md`. The current dependency subplan is the finite
+C++-corresponding runtime frame-loop program in
+`docs/runtime-frame-loop-port-map.md`, with live subplan state in
+`docs/runtime-frame-loop-status.md` and mechanical truth in
+`docs/runtime-frame-loop-ownership.toml` plus
+`file-correspondence-manifest.toml`. `docs/PORTING.md` is binding law.
+
+Precedence is: this top-level live status selects the current program
+milestone; the current subplan status selects its exact wave/lane; executable
+ledgers prove row state; maps define scope/order; static executor queue text is
+historical unless it agrees with these sources.
+
+**Canonical NEXT:** run the single complete floor on accepted joint FL-B/FL-C5
+candidate `14b187659a1eafadd3e425d75f516b7080c3b021`, with browser, size,
+pixel-same, and pixel-static legs in parallel under the 2026-07-30 coordinator
+floor policy and no Apple leg; then open the joint PR to main; then execute
+FL-D as dependency-ordered per-family PRs.
+
+The complete listener/action/event/focus-dispatch family (FL-C4) is accepted.
+Production source is
+`6f008b5b8acba0b93d1405aff0f0a08583138ca9`; the corrected executable-scope
+candidate is `0eb48976755d759c078f1f1a032bd88590e223f7`. Independent Standards and
+Spec/oracle reviews both passed with no findings. Its 25 exact file owners and
+the `state_machine.actions` / `state_machine.events` member rows are promoted;
+the partial component-owned `script_input_artboard.cpp` row remains pending in
+FL-D.
+
+The fresh non-performance receipt is runtime 665 / 665; public facade
+146 / 146; probe-armed workspace and pinned-C++ comparisons 759 / 759;
+ordinary and scripted golden 317 / 317 entries and 647 / 647 segments with
+zero divergences; static pixels 1,468 / 1,468 with 837 byte-exact and
+same-runner pixels 1,468 / 1,468 with 1,370 byte-exact, both with zero
+divergences; C API, native Apple, browser, lint, format, and diff green; size
+8,151,336 / 9,252,072 bytes under 9 MiB; Apple XCFramework checksum
+`316fad479f4a764610db39f94e5621330f9fc337a5d35597696aecd800b7f11c`;
+trace fingerprint
+`7f202a118e462fe298b88e7c56a76e0e8aec761e48876c12d242351180635320`;
+103 / 341 dynamically reached C++ files, 34 Rust modules, all 18 landmarks;
+and checker 41 / 41. No performance measurement was run.
+
+The FL-C1 input/listener-definition family is independently accepted at
+`efd87746` after six audit rounds. Its 12 exact file owners and the
+`state_machine.inputs` member row are promoted. Recorded gap
+`flc5-vm-listener-firing-boundary` remains owned by FL-C5 WP6.
+
+The coordinator accepted joint FL-B/FL-C5 candidate `14b18765` on 2026-07-30
+after eleven review rounds. FL-B's 45 files and eight members and FL-C5's two
+files and two members are promoted; FL-C is closed at 56 / 56 files.
+Accepted program counts are now 152 / 342 files and 63 / 75 members, with
+7 / 10 mechanism gaps open. FL-G03 remains open only for its explicitly
+tracked aggregate trace counters, not for an unaccepted FL-C5 owner. Active
+branch is `levi/fl-c`; there is no PR.
+
 ## Next queue (top = next; orchestrator maintains)
 
 1. Execute the finite C++-corresponding runtime frame-loop port recorded in
-   `docs/runtime-frame-loop-status.md`. FL-0's 337-file/74-member atlas is
-   committed. FL-1's dual translations are adjudicated into FLR-1..FLR-15;
+   `docs/runtime-frame-loop-status.md`. The executable atlas now contains
+   341 files and 75 members after FL-C1 added the three pinned concrete
+   listener-input importer owners omitted by the original capture. FL-1's
+   dual translations are adjudicated into FLR-1..FLR-16;
    source shaping found the existing owner-family module seams sufficient.
-   FL-A Component ownership is next, followed by dependency-ordered animation,
-   state-machine, Artboard/DataBind, and live-draw owner waves. Measure the
-   whole corpus only after a complete wave. The sorted slow-scene list is no
+   FL-A Component ownership is independently accepted and promoted. FL-B1
+   through FL-B4 are reaccepted and promoted with FL-C5 at `14b18765`; FL-C
+   is closed at 56 / 56 files. Run the one accepted-candidate complete floor,
+   open the joint PR to main, then execute dependency-ordered FL-D
+   Artboard/DataBind owners as per-family PRs, followed by the live-draw owner
+   waves. Run the canonical whole-corpus measurement only after every mapped
+   FL-A-through-FL-E code row is ported and the complete
+   correctness/structure floor is green. The sorted slow-scene list is no
    longer the implementation queue.
 2. Independent orchestrator verification may promote completed #RD-1
    correspondence rows from `pending-verification`. #B-6 is complete; the
@@ -1161,6 +1228,15 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   optimization, stop for user decision.
 
 ## Log
+
+- 2026-07-24 — #HD-3 received its user decision: browser support is WebGPU
+  only. The separate approximating WebGL2/FemtoVG renderer, backend-selection
+  API, and automatic fallback were deleted. The WebGL2 qualification fixtures
+  were retired from live qualification and retained as historical evidence.
+  WebGPU Core/Compatibility admission remains internal to the one browser
+  backend, and unavailable WebGPU now fails initialization explicitly. This
+  is a support-matrix reduction, not evidence that the retired backend matched
+  C++; native renderer pixels remain the referee.
 
 - 2026-07-24 — The seventh post-closeout performance burn-down slice ports
   `StateMachineInstance`'s authored state-machine definition owner. C++ stores

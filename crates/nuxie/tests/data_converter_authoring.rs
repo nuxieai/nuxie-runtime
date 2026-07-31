@@ -3,10 +3,11 @@ use nuxie::{
     ArtboardSpec, DataConverterEasing, DataConverterFormulaExpr, DataConverterFormulaFunction,
     DataConverterFormulaOperation, DataConverterFormulaRandomMode, DataConverterId,
     DataConverterOperation, DataConverterRangeFlags, DataConverterSpec, DataConverterStringPadSide,
-    DataConverterStringTrimMode, ExportedObjectKind, ExportedProperty, NodeSpec, Parent, Scene,
-    ScriptAssetSpec, ShapeSpec, ViewModelBooleanSource, ViewModelBooleanSpec,
-    ViewModelDataBindingDirection, ViewModelInstanceSpec, ViewModelNumberSource,
-    ViewModelNumberSpec, ViewModelScope, ViewModelSpec, ViewModelValueSource,
+    DataConverterStringTrimMode, EditReason, ExportedObjectKind, ExportedProperty, FillSpec,
+    NodeSpec, Parent, RectangleSpec, Scene, ScriptAssetSpec, ShapeSpec, SolidColorSpec,
+    ViewModelColorSource, ViewModelColorSpec, ViewModelDataBindingDirection, ViewModelInstanceSpec,
+    ViewModelNumberSource, ViewModelNumberSpec, ViewModelScope, ViewModelSpec,
+    ViewModelValueSource, props,
 };
 
 #[test]
@@ -405,7 +406,7 @@ fn scripted_converter_references_the_canonical_script_asset_ordinal() -> Result<
 #[test]
 fn converter_aware_bind_uses_typed_source_and_stable_converter_identity() -> Result<()> {
     let mut scene = Scene::new();
-    scene.edit(|tx| {
+    let ((artboard, shape, defaults, source_opacity), _) = scene.edit(|tx| {
         let artboard = tx.create_artboard(ArtboardSpec {
             name: "Root".into(),
             width: 100.0,
@@ -425,18 +426,20 @@ fn converter_aware_bind_uses_typed_source_and_stable_converter_identity() -> Res
         )?;
         let converter = tx
             .data_converters()
-            .create(DataConverterSpec::BooleanNegate {
-                name: "Invert".into(),
+            .create(DataConverterSpec::OperationValue {
+                name: "Offset".into(),
+                operation: DataConverterOperation::Add,
+                value: 0.25,
             })?;
         let mut view_models = tx.view_models();
         let model = view_models.create(ViewModelSpec {
             scope: ViewModelScope::Local,
             name: "State".into(),
         })?;
-        let hidden = view_models.create_boolean(
+        let source_opacity = view_models.create_number(
             model,
-            ViewModelBooleanSpec {
-                name: "hidden".into(),
+            ViewModelNumberSpec {
+                name: "sourceOpacity".into(),
             },
         )?;
         let defaults = view_models.create_instance(
@@ -445,15 +448,15 @@ fn converter_aware_bind_uses_typed_source_and_stable_converter_identity() -> Res
                 name: Some("Defaults".into()),
             },
         )?;
-        view_models.set_boolean(defaults, hidden, false)?;
+        view_models.set_number(defaults, source_opacity, 0.25)?;
         view_models.set_artboard_default(artboard, defaults)?;
         view_models.bind_opacity_with_converter(
             shape,
-            ViewModelValueSource::Boolean(ViewModelBooleanSource::direct(hidden)),
+            ViewModelValueSource::Number(ViewModelNumberSource::direct(source_opacity)),
             converter,
-            ViewModelDataBindingDirection::ToTarget,
+            ViewModelDataBindingDirection::TwoWay,
         )?;
-        Ok(())
+        Ok((artboard, shape, defaults, source_opacity))
     })?;
 
     let bind = scene
@@ -464,18 +467,206 @@ fn converter_aware_bind_uses_typed_source_and_stable_converter_identity() -> Res
             record.kind == ExportedObjectKind::DataBindContext
                 && record
                     .properties
-                    .contains(&ExportedProperty::DataBindWorldOpacityTarget)
+                    .contains(&ExportedProperty::DataBindPropertyKey(18))
         })
         .expect("converter-aware opacity bind");
     assert_eq!(
         bind.properties,
         [
-            ExportedProperty::DataBindWorldOpacityTarget,
-            ExportedProperty::DataBindFlags(0),
+            ExportedProperty::DataBindPropertyKey(18),
+            ExportedProperty::DataBindFlags((1 << 1) | (1 << 3)),
             ExportedProperty::DataBindSourcePath(vec![0, 0]),
             ExportedProperty::DataBindConverterId(0),
         ]
     );
+
+    let cold = scene.instantiate(artboard)?;
+    let opacity = scene.cursor(cold, shape, nuxie::props::WORLD_OPACITY)?;
+    let source_value = scene.vm_cursor(cold, defaults, source_opacity)?;
+    let mut events = Vec::new();
+    scene.frame().advance(cold, 0.0, &mut events);
+    assert_eq!(scene.frame().get(opacity)?, 0.5);
+    assert_eq!(scene.frame().get_vm(source_value)?, 0.25);
+
+    assert!(scene.frame().set_vm(source_value, 0.5)?);
+    assert!(scene.frame().advance(cold, 0.0, &mut events));
+    assert_eq!(scene.frame().get(opacity)?, 0.75);
+
+    scene.frame().set(opacity, 0.25)?;
+    assert!(scene.frame().advance(cold, 0.0, &mut events));
+    assert_eq!(
+        scene.frame().get_vm(source_value)?,
+        0.0,
+        "TwoWay reverse execution applies the inverse operation converter"
+    );
+
+    let second_cold = scene.instantiate(artboard)?;
+    let second_opacity = scene.cursor(second_cold, shape, nuxie::props::WORLD_OPACITY)?;
+    scene.frame().advance(second_cold, 0.0, &mut events);
+    assert_eq!(scene.frame().get(second_opacity)?, 0.5);
+    Ok(())
+}
+
+#[test]
+fn converter_aware_property_binds_reject_known_output_mismatches_atomically() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((rectangle, color, number, tint, to_number, boolean_negate, string_group), _) = scene
+        .edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Typed converter targets".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Card".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let rectangle = tx.create(
+                Parent::Object(shape),
+                NodeSpec::Rectangle(RectangleSpec::new("Bounds", 10.0, 10.0)),
+            )?;
+            let fill = tx.create(
+                Parent::Object(shape),
+                NodeSpec::Fill(FillSpec {
+                    name: "Fill".into(),
+                }),
+            )?;
+            let color = tx.create(
+                Parent::Object(fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Color".into(),
+                    color: 0xff00_0000,
+                }),
+            )?;
+            let (to_number, boolean_negate, string_group) = {
+                let mut converters = tx.data_converters();
+                let to_number = converters.create(DataConverterSpec::ToNumber {
+                    name: "To number".into(),
+                })?;
+                let boolean_negate = converters.create(DataConverterSpec::BooleanNegate {
+                    name: "Boolean negate".into(),
+                })?;
+                let to_string = converters.create(DataConverterSpec::ToString {
+                    name: "To string".into(),
+                    decimals: 0,
+                    round: false,
+                    trim_zeros: false,
+                    commas: false,
+                    color_format: String::new(),
+                })?;
+                let interpolator = converters.create(DataConverterSpec::Interpolator {
+                    name: "Input-preserving tail".into(),
+                    duration_seconds: 0.1,
+                    easing: DataConverterEasing::Linear,
+                })?;
+                let string_group = converters.create(DataConverterSpec::Group {
+                    name: "String then input".into(),
+                    items: vec![to_string, interpolator],
+                })?;
+                (to_number, boolean_negate, string_group)
+            };
+            let mut view_models = tx.view_models();
+            let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Values".into(),
+            })?;
+            let number = view_models.create_number(
+                model,
+                ViewModelNumberSpec {
+                    name: "number".into(),
+                },
+            )?;
+            let tint = view_models.create_color(
+                model,
+                ViewModelColorSpec {
+                    name: "tint".into(),
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                model,
+                ViewModelInstanceSpec {
+                    name: Some("Defaults".into()),
+                },
+            )?;
+            view_models.set_number(defaults, number, 10.0)?;
+            view_models.set_color(defaults, tint, 0xff12_3456)?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            Ok((
+                rectangle,
+                color,
+                number,
+                tint,
+                to_number,
+                boolean_negate,
+                string_group,
+            ))
+        })?;
+
+    let before = scene.export_records();
+    let epoch = scene.epoch();
+    let rejected = [
+        (
+            scene.edit(|tx| {
+                tx.view_models().bind_color_with_converter(
+                    color,
+                    props::COLOR_VALUE,
+                    ViewModelValueSource::Color(ViewModelColorSource::direct(tint)),
+                    to_number,
+                    ViewModelDataBindingDirection::ToTarget,
+                )?;
+                Ok(())
+            }),
+            ("colorValue", "color", "number"),
+        ),
+        (
+            scene.edit(|tx| {
+                tx.view_models().bind_number_with_converter(
+                    rectangle,
+                    props::PATH_WIDTH,
+                    ViewModelValueSource::Number(ViewModelNumberSource::direct(number)),
+                    boolean_negate,
+                    ViewModelDataBindingDirection::ToTarget,
+                )?;
+                Ok(())
+            }),
+            ("width", "number", "boolean"),
+        ),
+        (
+            scene.edit(|tx| {
+                tx.view_models().bind_number_with_converter(
+                    rectangle,
+                    props::PATH_WIDTH,
+                    ViewModelValueSource::Number(ViewModelNumberSource::direct(number)),
+                    string_group,
+                    ViewModelDataBindingDirection::ToTarget,
+                )?;
+                Ok(())
+            }),
+            ("width", "number", "string"),
+        ),
+    ];
+    for (rejected, (property, expected, actual)) in rejected {
+        assert!(matches!(
+            &rejected.unwrap_err().diagnostic().reason,
+            EditReason::DataConverterOutputMismatch {
+                property: observed_property,
+                expected: observed_expected,
+                actual: observed_actual,
+            } if *observed_property == property
+                && *observed_expected == expected
+                && *observed_actual == actual
+        ));
+    }
+    assert_eq!(scene.epoch(), epoch);
+    assert_eq!(scene.export_records(), before);
     Ok(())
 }
 

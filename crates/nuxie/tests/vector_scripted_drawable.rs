@@ -359,11 +359,21 @@ fn authored_vector_script_uses_one_file_program_and_fresh_occurrence_tables() ->
     let mut events = Vec::<SceneEvent>::new();
     let mut factory = RecordingFactory::new();
 
-    assert!(scene.frame().advance(first, 0.1, &mut events));
+    // C++ advances the live ScriptedDrawable directly in its retained
+    // m_advancingComponents slot and immediately publishes Paint dirt; it has
+    // no deferred replay queue (`artboard.cpp:1463-1480`;
+    // `scripted_drawable.cpp:376-398`). Keep the factory context active for
+    // the first authored occurrence while Rust's persistent VM render-context
+    // owner remains tracked separately by FL-G09.
+    assert!(
+        scene
+            .frame()
+            .try_advance_with_factory(first, 0.1, &mut events, &mut factory)?
+    );
     let first_stream = draw(&mut scene, first, &mut factory)?;
     assert!(
         first_stream.contains("transform matrix=[1,0,0,1,103,2]"),
-        "the exact pre-first-draw advance must replay before update: {first_stream}"
+        "the exact pre-first-draw advance must run before update: {first_stream}"
     );
     assert!(first_stream.contains("color=0xff3366cc"), "{first_stream}");
     assert!(first_stream.contains("drawPath "), "{first_stream}");

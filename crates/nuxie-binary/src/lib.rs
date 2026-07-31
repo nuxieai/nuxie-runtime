@@ -409,6 +409,19 @@ struct RuntimeStateMachineScriptedObjectOwner {
     scripted_object_index: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct RuntimeStateMachineListenerOwner {
+    state_machine_index: usize,
+    listener_index: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeStateMachineListenerInputTypeOwner {
+    state_machine_index: usize,
+    listener_index: usize,
+    input_type_index: usize,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct RuntimeFile {
     pub header: RuntimeHeader,
@@ -1049,6 +1062,7 @@ impl RuntimeFile {
             return Some(RuntimeDataBindPath {
                 object: Some(path_object),
                 property_name: "path",
+                is_relative: path_object.bool_property("isRelative").unwrap_or(false),
                 path_ids,
                 resolved_path_ids,
             });
@@ -1059,6 +1073,7 @@ impl RuntimeFile {
         Some(RuntimeDataBindPath {
             object: None,
             property_name,
+            is_relative: false,
             resolved_path_ids: path_ids.clone(),
             path_ids,
         })
@@ -1230,6 +1245,52 @@ impl RuntimeFile {
 
     pub fn data_converter(&self, index: usize) -> Option<&RuntimeObject> {
         self.cpp_data_converters().nth(index)
+    }
+
+    /// Script inputs attached by the pinned `ScriptedObjectImporter`.
+    ///
+    /// ScriptInput records do not carry an owner id. The importer assigns
+    /// them to the latest successfully imported ScriptedObject, so reproduce
+    /// that authored-order ownership directly instead of guessing from
+    /// Component parent links.
+    pub fn scripted_inputs_for_object<'a>(
+        &'a self,
+        scripted_object: &RuntimeObject,
+    ) -> Vec<&'a RuntimeObject> {
+        let Some(owner_id) = usize::try_from(scripted_object.id).ok() else {
+            return Vec::new();
+        };
+        if self.import_status(owner_id) != Some(RuntimeImportStatus::Imported)
+            || !definition_by_type_key(scripted_object.type_key)
+                .is_some_and(definition_is_cpp_scripted_object)
+        {
+            return Vec::new();
+        }
+
+        let mut inputs = Vec::new();
+        for candidate in self
+            .objects
+            .iter()
+            .skip(owner_id.saturating_add(1))
+            .flatten()
+        {
+            let Some(candidate_id) = usize::try_from(candidate.id).ok() else {
+                continue;
+            };
+            if self.import_status(candidate_id) != Some(RuntimeImportStatus::Imported) {
+                continue;
+            }
+            let Some(definition) = definition_by_type_key(candidate.type_key) else {
+                continue;
+            };
+            if definition_is_cpp_scripted_object(definition) {
+                break;
+            }
+            if definition.name.starts_with("ScriptInput") {
+                inputs.push(candidate);
+            }
+        }
+        inputs
     }
 
     pub fn data_converter_output_type(
@@ -2404,6 +2465,25 @@ impl RuntimeFile {
         };
 
         self.cpp_data_converter_formula_tokens(index)
+    }
+
+    /// Every authored FormulaToken occurrence owned by this concrete formula,
+    /// before C++'s shunting-yard pass removes parentheses/separators from the
+    /// output queue. This is the collection used by FormulaToken DataBind
+    /// ownership and clone retargeting.
+    pub fn data_converter_formula_authored_tokens_for_object(
+        &self,
+        data_converter: &RuntimeObject,
+    ) -> Vec<&RuntimeObject> {
+        let Some(index) = self
+            .data_converters()
+            .into_iter()
+            .position(|candidate| candidate.id == data_converter.id)
+        else {
+            return Vec::new();
+        };
+
+        self.cpp_data_converter_formula_authored_tokens(index)
     }
 
     pub fn data_converter_formula_output_tokens_for_object(
@@ -5102,19 +5182,9 @@ impl RuntimeFile {
     }
 
     fn cpp_artboard_range(&self, artboard_index: usize) -> Option<(usize, usize)> {
-        let artboard = self.artboard(artboard_index)?;
-        let start = usize::try_from(artboard.id).ok()?;
-        let end = self
-            .objects
-            .iter()
-            .enumerate()
-            .skip(start + 1)
-            .find_map(|(index, object)| {
-                matches!(object, Some(object) if object.type_name == "Artboard").then_some(index)
-            })
-            .unwrap_or(self.objects.len());
-
-        Some((start, end))
+        runtime_artboard_ranges(&self.objects, &self.import_statuses)
+            .get(artboard_index)
+            .copied()
     }
 
     fn cpp_artboard_index(&self, artboard_index: usize) -> Option<RuntimeArtboardIndex<'_>> {
@@ -5131,7 +5201,7 @@ impl RuntimeFile {
         object: &RuntimeObject,
     ) -> Option<(usize, (usize, usize), Vec<Option<usize>>, usize)> {
         let file_index = usize::try_from(object.id).ok()?;
-        for (artboard_index, range) in runtime_artboard_ranges(&self.objects)
+        for (artboard_index, range) in runtime_artboard_ranges(&self.objects, &self.import_statuses)
             .into_iter()
             .enumerate()
         {
@@ -5281,43 +5351,97 @@ impl RuntimeFile {
         &self,
         artboard_index: usize,
     ) -> Vec<RuntimeStateMachine<'_>> {
-        let Some(range) = self.cpp_artboard_range(artboard_index) else {
+        if self.artboard(artboard_index).is_none() {
             return Vec::new();
-        };
+        }
         let data_bind_targets = self.cpp_data_bind_targets();
-        let artboard_animations =
-            self.cpp_artboard_objects_named(artboard_index, "LinearAnimation");
-        let mut artboard_local_slots =
-            runtime_artboard_local_slots(&self.objects, &self.import_statuses, range);
-        validate_cpp_artboard_local_slots(&mut artboard_local_slots, &self.objects);
+        let artboard_ranges = runtime_artboard_ranges(&self.objects, &self.import_statuses);
+        let artboard_indices = self.cpp_artboard_indices_by_file_index();
+        let null_object_consumers =
+            runtime_null_object_consumers(&self.objects, &self.import_statuses);
+        let artboard_animations_by_index = artboard_ranges
+            .iter()
+            .enumerate()
+            .map(|(index, _)| self.cpp_artboard_objects_named(index, "LinearAnimation"))
+            .collect::<Vec<_>>();
+        let artboard_local_slots_by_index = artboard_ranges
+            .iter()
+            .map(|range| {
+                let mut slots =
+                    runtime_artboard_local_slots(&self.objects, &self.import_statuses, *range);
+                validate_cpp_artboard_local_slots(&mut slots, &self.objects);
+                slots
+            })
+            .collect::<Vec<_>>();
+        let mut current_artboard_index = None;
 
         let mut state_machines = Vec::<RuntimeStateMachine<'_>>::new();
+        let mut state_machine_artboard_owners = Vec::new();
+        let mut layer_importer_resolve_boundaries = Vec::<Vec<usize>>::new();
         let mut current_state_machine: Option<usize> = None;
-        let mut current_layer: Option<usize> = None;
-        let mut current_listener: Option<usize> = None;
+        // StateMachineLayerImporter captures the latest Artboard at the
+        // instant the layer is constructed. That identity survives later
+        // Artboard and StateMachine importers (`file.cpp:435-447`;
+        // `state_machine_layer_importer.cpp:9-12,18-50`).
+        let mut current_layer: Option<(usize, usize, Option<usize>)> = None;
+        // These two cursors mirror the distinct ImportStack keys. A transition
+        // does not replace the latest LayerState, and a new StateMachine does
+        // not replace either key.
+        let mut current_layer_state: Option<(usize, usize, usize, Option<usize>)> = None;
+        let mut current_transition: Option<(usize, usize, usize, usize)> = None;
+        // ImportStack retains the latest importer independently for every
+        // type key. Listener and ListenerInputType ownership therefore
+        // survives unrelated records, layer/state changes, and even a later
+        // StateMachine importer until the same importer key is replaced
+        // (`import_stack.hpp:23-68`; `listener_action.cpp:14-45`;
+        // `listener_input_type.cpp:10-22`).
+        let mut current_listener: Option<RuntimeStateMachineListenerOwner> = None;
+        let mut current_keyboard_input_type: Option<RuntimeStateMachineListenerInputTypeOwner> =
+            None;
+        let mut current_gamepad_input_type: Option<RuntimeStateMachineListenerInputTypeOwner> =
+            None;
+        let mut current_semantic_input_type: Option<RuntimeStateMachineListenerInputTypeOwner> =
+            None;
         let mut current_layer_component: Option<RuntimeStateMachineLayerComponentOwner> = None;
         let mut current_state_machine_scripted_object: Option<
             RuntimeStateMachineScriptedObjectOwner,
         > = None;
 
-        for (offset, object) in self.objects[range.0..range.1].iter().enumerate() {
-            let file_index = range.0 + offset;
+        // ImportStack cursor keys are file-global: a new Artboard replaces
+        // only the Artboard importer, not StateMachine, layer, listener, or
+        // scripted-object importers. Replay the complete file once and select
+        // the StateMachines whose own importer attached them to this artboard.
+        for (file_index, object) in self.objects.iter().enumerate() {
             let Some(object) = object.as_ref() else {
-                if self.import_status(file_index) == Some(RuntimeImportStatus::NullObject)
-                    && let Some(state_machine_index) = current_state_machine
-                    && let Some(layer_index) = current_layer
-                {
-                    state_machines[state_machine_index].layers[layer_index]
-                        .states
-                        .push(RuntimeLayerState {
-                            object: None,
-                            animation: None,
-                            blend_animations: Vec::new(),
-                            fire_actions: Vec::new(),
-                            listener_actions: Vec::new(),
-                            transitions: Vec::new(),
-                        });
-                    state_machines[state_machine_index].layers[layer_index].state_count += 1;
+                if self.import_status(file_index) == Some(RuntimeImportStatus::NullObject) {
+                    match null_object_consumers[file_index] {
+                        Some(NullObjectConsumer::StateMachineLayer) => {
+                            if let Some((owner_state_machine_index, layer_index, _)) = current_layer
+                            {
+                                state_machines[owner_state_machine_index].layers[layer_index]
+                                    .states
+                                    .push(RuntimeLayerState {
+                                        object: None,
+                                        animation: None,
+                                        blend_animations: Vec::new(),
+                                        fire_actions: Vec::new(),
+                                        listener_actions: Vec::new(),
+                                        transitions: Vec::new(),
+                                    });
+                                state_machines[owner_state_machine_index].layers[layer_index]
+                                    .state_count += 1;
+                            }
+                        }
+                        Some(NullObjectConsumer::StateMachine) => {
+                            if let Some(state_machine_index) = current_state_machine {
+                                // `StateMachineImporter::readNullObject` appends
+                                // a null input occurrence. Keep the slot so
+                                // every later `inputId` retains its C++ index.
+                                state_machines[state_machine_index].inputs.push(None);
+                            }
+                        }
+                        _ => {}
+                    }
                 }
                 continue;
             };
@@ -5328,6 +5452,11 @@ impl RuntimeFile {
                 continue;
             };
 
+            if definition.name == "Artboard" {
+                current_artboard_index = artboard_indices[file_index];
+                continue;
+            }
+
             if definition.name == "StateMachine" {
                 state_machines.push(RuntimeStateMachine {
                     object,
@@ -5337,16 +5466,38 @@ impl RuntimeFile {
                     data_binds: Vec::new(),
                     scripted_objects: Vec::new(),
                 });
+                state_machine_artboard_owners.push(current_artboard_index);
+                layer_importer_resolve_boundaries.push(Vec::new());
                 current_state_machine = Some(state_machines.len() - 1);
-                current_layer = None;
-                current_listener = None;
-                current_state_machine_scripted_object = None;
                 continue;
             }
 
             let Some(state_machine_index) = current_state_machine else {
                 continue;
             };
+
+            if matches!(
+                definition.name,
+                "GamepadInput" | "KeyboardInput" | "SemanticInput"
+            ) {
+                let owner = match definition.name {
+                    "KeyboardInput" => current_keyboard_input_type,
+                    "GamepadInput" => current_gamepad_input_type,
+                    "SemanticInput" => current_semantic_input_type,
+                    _ => unreachable!("the enclosing match filters concrete listener inputs"),
+                };
+                if let Some(owner) = owner
+                    && let Some(listener_input_type) = state_machines[owner.state_machine_index]
+                        .listeners
+                        .get_mut(owner.listener_index)
+                    && let Some(inputs) = listener_input_type
+                        .listener_input_type_inputs
+                        .get_mut(owner.input_type_index)
+                {
+                    inputs.push(object);
+                }
+                continue;
+            }
 
             if definition_adds_cpp_state_machine_scripted_object(definition) {
                 state_machines[state_machine_index]
@@ -5378,6 +5529,11 @@ impl RuntimeFile {
             }
 
             if definition.name == "StateMachineLayer" {
+                if let Some((previous_state_machine_index, previous_layer_index, _)) = current_layer
+                {
+                    layer_importer_resolve_boundaries[previous_state_machine_index]
+                        [previous_layer_index] = file_index;
+                }
                 state_machines[state_machine_index]
                     .layers
                     .push(RuntimeStateMachineLayer {
@@ -5385,61 +5541,77 @@ impl RuntimeFile {
                         state_count: 0,
                         states: Vec::new(),
                     });
-                current_layer = Some(state_machines[state_machine_index].layers.len() - 1);
-                current_listener = None;
+                layer_importer_resolve_boundaries[state_machine_index].push(self.objects.len());
+                current_layer = Some((
+                    state_machine_index,
+                    state_machines[state_machine_index].layers.len() - 1,
+                    current_artboard_index,
+                ));
                 continue;
             }
 
             if definition.is_a("LayerState") {
-                if let Some(layer_index) = current_layer {
-                    state_machines[state_machine_index].layers[layer_index]
+                if let Some((owner_state_machine_index, layer_index, layer_artboard_index)) =
+                    current_layer
+                {
+                    let layer_artboard_animations = layer_artboard_index
+                        .and_then(|index| artboard_animations_by_index.get(index))
+                        .map(Vec::as_slice)
+                        .unwrap_or_default();
+                    state_machines[owner_state_machine_index].layers[layer_index]
                         .states
                         .push(RuntimeLayerState {
                             object: Some(object),
                             animation: cpp_resolved_animation_state_animation(
                                 object,
-                                &artboard_animations,
+                                layer_artboard_animations,
                             ),
                             blend_animations: Vec::new(),
                             fire_actions: Vec::new(),
                             listener_actions: Vec::new(),
                             transitions: Vec::new(),
                         });
-                    current_layer_component = Some(RuntimeStateMachineLayerComponentOwner::State {
-                        state_machine_index,
+                    let state_index = state_machines[owner_state_machine_index].layers[layer_index]
+                        .states
+                        .len()
+                        - 1;
+                    current_layer_state = Some((
+                        owner_state_machine_index,
                         layer_index,
-                        state_index: state_machines[state_machine_index].layers[layer_index]
-                            .states
-                            .len()
-                            - 1,
+                        state_index,
+                        layer_artboard_index,
+                    ));
+                    current_layer_component = Some(RuntimeStateMachineLayerComponentOwner::State {
+                        state_machine_index: owner_state_machine_index,
+                        layer_index,
+                        state_index,
                     });
-                    state_machines[state_machine_index].layers[layer_index].state_count += 1;
+                    state_machines[owner_state_machine_index].layers[layer_index].state_count += 1;
                 }
-                current_listener = None;
                 continue;
             }
 
             if definition.is_a("BlendAnimation") {
-                if let Some(layer_index) = current_layer
-                    && let Some(state_index) = state_machines[state_machine_index].layers
-                        [layer_index]
-                        .states
-                        .iter()
-                        .rposition(|state| {
-                            state.object.is_some_and(|object| {
-                                definition_by_type_key(object.type_key)
-                                    .is_some_and(|definition| definition.is_a("BlendState"))
-                            })
-                        })
+                if let Some((owner_state_machine_index, layer_index, state_index, _)) =
+                    current_layer_state
                 {
+                    // BlendAnimation::import resolves against the Artboard
+                    // importer that is latest for this record, unlike the
+                    // enclosing layer's deferred AnimationState resolution
+                    // (`blend_animation.cpp:11-38`).
+                    let current_artboard_animations = current_artboard_index
+                        .and_then(|index| artboard_animations_by_index.get(index))
+                        .map(Vec::as_slice)
+                        .unwrap_or_default();
                     let animation_index =
                         usize::try_from(object.uint_property("animationId").unwrap_or(u64::MAX))
                             .ok()
-                            .filter(|index| *index < artboard_animations.len());
+                            .filter(|index| *index < current_artboard_animations.len());
                     let animation = animation_index
-                        .and_then(|index| artboard_animations.get(index))
+                        .and_then(|index| current_artboard_animations.get(index))
                         .copied();
-                    state_machines[state_machine_index].layers[layer_index].states[state_index]
+                    state_machines[owner_state_machine_index].layers[layer_index].states
+                        [state_index]
                         .blend_animations
                         .push(RuntimeBlendAnimation {
                             object,
@@ -5447,26 +5619,38 @@ impl RuntimeFile {
                             animation,
                         });
                 }
-                current_listener = None;
                 continue;
             }
 
             if definition.is_a("StateTransition") {
-                if let Some(layer_index) = current_layer
-                    && let Some(state_index) = state_machines[state_machine_index].layers
-                        [layer_index]
-                        .states
-                        .iter()
-                        .rposition(|state| state.object.is_some())
+                if let Some((owner_state_machine_index, layer_index, state_index, _)) =
+                    current_layer_state
                 {
-                    let interpolator = cpp_resolved_state_transition_interpolator(
-                        object,
-                        range,
-                        &self.objects,
-                        &self.import_statuses,
-                    );
+                    let owner_artboard_range = state_machine_artboard_owners
+                        .get(owner_state_machine_index)
+                        .copied()
+                        .flatten()
+                        .and_then(|index| artboard_ranges.get(index).copied());
+                    // StateTransition resolves its interpolator during the
+                    // owning Artboard's initialize/onAddedDirty pass. Replacing
+                    // that Artboard importer resolves it before a transition
+                    // later attached through a stale LayerState importer can
+                    // exist, so that late transition keeps a null interpolator
+                    // (`import_stack.hpp:33-68`; `artboard.cpp:264-312`;
+                    // `state_transition.cpp:28-40`).
+                    let interpolator = owner_artboard_range
+                        .filter(|(_, end)| file_index < *end)
+                        .and_then(|range| {
+                            cpp_resolved_state_transition_interpolator(
+                                object,
+                                range,
+                                &self.objects,
+                                &self.import_statuses,
+                            )
+                        });
 
-                    state_machines[state_machine_index].layers[layer_index].states[state_index]
+                    state_machines[owner_state_machine_index].layers[layer_index].states
+                        [state_index]
                         .transitions
                         .push(RuntimeStateTransition {
                             object,
@@ -5481,20 +5665,26 @@ impl RuntimeFile {
                             listener_actions: Vec::new(),
                             conditions: Vec::new(),
                         });
+                    let transition_index = state_machines[owner_state_machine_index].layers
+                        [layer_index]
+                        .states[state_index]
+                        .transitions
+                        .len()
+                        - 1;
+                    current_transition = Some((
+                        owner_state_machine_index,
+                        layer_index,
+                        state_index,
+                        transition_index,
+                    ));
                     current_layer_component =
                         Some(RuntimeStateMachineLayerComponentOwner::Transition {
-                            state_machine_index,
+                            state_machine_index: owner_state_machine_index,
                             layer_index,
                             state_index,
-                            transition_index: state_machines[state_machine_index].layers
-                                [layer_index]
-                                .states[state_index]
-                                .transitions
-                                .len()
-                                - 1,
+                            transition_index,
                         });
                 }
-                current_listener = None;
                 continue;
             }
 
@@ -5506,12 +5696,19 @@ impl RuntimeFile {
                             layer_index,
                             state_index,
                         } => {
+                            let owner_artboard_slots = state_machine_artboard_owners
+                                .get(state_machine_index)
+                                .copied()
+                                .flatten()
+                                .and_then(|index| artboard_local_slots_by_index.get(index))
+                                .map(Vec::as_slice)
+                                .unwrap_or_default();
                             state_machines[state_machine_index].layers[layer_index].states
                                 [state_index]
                                 .fire_actions
                                 .push(cpp_runtime_state_machine_fire_action(
                                     object,
-                                    &artboard_local_slots,
+                                    owner_artboard_slots,
                                     &self.objects,
                                 ));
                         }
@@ -5521,13 +5718,20 @@ impl RuntimeFile {
                             state_index,
                             transition_index,
                         } => {
+                            let owner_artboard_slots = state_machine_artboard_owners
+                                .get(state_machine_index)
+                                .copied()
+                                .flatten()
+                                .and_then(|index| artboard_local_slots_by_index.get(index))
+                                .map(Vec::as_slice)
+                                .unwrap_or_default();
                             state_machines[state_machine_index].layers[layer_index].states
                                 [state_index]
                                 .transitions[transition_index]
                                 .fire_actions
                                 .push(cpp_runtime_state_machine_fire_action(
                                     object,
-                                    &artboard_local_slots,
+                                    owner_artboard_slots,
                                     &self.objects,
                                 ));
                         }
@@ -5537,26 +5741,26 @@ impl RuntimeFile {
             }
 
             if definition.is_a("TransitionCondition") {
-                if let Some(layer_index) = current_layer
-                    && let Some(state_index) = state_machines[state_machine_index].layers
-                        [layer_index]
-                        .states
-                        .iter()
-                        .rposition(|state| state.object.is_some())
-                    && let Some(transition) =
-                        state_machines[state_machine_index].layers[layer_index].states[state_index]
-                            .transitions
-                            .last_mut()
+                if let Some((
+                    owner_state_machine_index,
+                    layer_index,
+                    state_index,
+                    transition_index,
+                )) = current_transition
                 {
-                    transition.conditions.push(object);
+                    state_machines[owner_state_machine_index].layers[layer_index].states
+                        [state_index]
+                        .transitions[transition_index]
+                        .conditions
+                        .push(object);
                 }
                 continue;
             }
 
             if definition.is_a("StateMachineInput") {
-                state_machines[state_machine_index].inputs.push(object);
-                current_layer = None;
-                current_listener = None;
+                state_machines[state_machine_index]
+                    .inputs
+                    .push(Some(object));
                 continue;
             }
 
@@ -5567,21 +5771,34 @@ impl RuntimeFile {
                         object,
                         actions: Vec::new(),
                         listener_input_types: Vec::new(),
+                        listener_input_type_inputs: Vec::new(),
                     });
-                current_layer = None;
-                current_listener = Some(state_machines[state_machine_index].listeners.len() - 1);
+                current_listener = Some(RuntimeStateMachineListenerOwner {
+                    state_machine_index,
+                    listener_index: state_machines[state_machine_index].listeners.len() - 1,
+                });
                 continue;
             }
 
             if definition.is_a("ListenerAction") {
                 if listener_action_parent_kind_is_listener(object) {
-                    if let Some(listener_index) = current_listener {
-                        state_machines[state_machine_index].listeners[listener_index]
+                    if let Some(owner) = current_listener {
+                        let owner_artboard_slots = state_machine_artboard_owners
+                            .get(owner.state_machine_index)
+                            .copied()
+                            .flatten()
+                            .and_then(|index| artboard_local_slots_by_index.get(index))
+                            .map(Vec::as_slice)
+                            .unwrap_or_default();
+                        state_machines[owner.state_machine_index].listeners[owner.listener_index]
                             .actions
                             .push(cpp_runtime_listener_action(
                                 object,
-                                &artboard_local_slots,
+                                owner_artboard_slots,
                                 &self.objects,
+                                (object.type_name == "ListenerViewModelChange")
+                                    .then(|| self.latest_bindable_property_for_object(object))
+                                    .flatten(),
                             ));
                     }
                 } else if let Some(owner) = current_layer_component {
@@ -5591,13 +5808,23 @@ impl RuntimeFile {
                             layer_index,
                             state_index,
                         } => {
+                            let owner_artboard_slots = state_machine_artboard_owners
+                                .get(state_machine_index)
+                                .copied()
+                                .flatten()
+                                .and_then(|index| artboard_local_slots_by_index.get(index))
+                                .map(Vec::as_slice)
+                                .unwrap_or_default();
                             state_machines[state_machine_index].layers[layer_index].states
                                 [state_index]
                                 .listener_actions
                                 .push(cpp_runtime_listener_action(
                                     object,
-                                    &artboard_local_slots,
+                                    owner_artboard_slots,
                                     &self.objects,
+                                    (object.type_name == "ListenerViewModelChange")
+                                        .then(|| self.latest_bindable_property_for_object(object))
+                                        .flatten(),
                                 ));
                         }
                         RuntimeStateMachineLayerComponentOwner::Transition {
@@ -5606,14 +5833,24 @@ impl RuntimeFile {
                             state_index,
                             transition_index,
                         } => {
+                            let owner_artboard_slots = state_machine_artboard_owners
+                                .get(state_machine_index)
+                                .copied()
+                                .flatten()
+                                .and_then(|index| artboard_local_slots_by_index.get(index))
+                                .map(Vec::as_slice)
+                                .unwrap_or_default();
                             state_machines[state_machine_index].layers[layer_index].states
                                 [state_index]
                                 .transitions[transition_index]
                                 .listener_actions
                                 .push(cpp_runtime_listener_action(
                                     object,
-                                    &artboard_local_slots,
+                                    owner_artboard_slots,
                                     &self.objects,
+                                    (object.type_name == "ListenerViewModelChange")
+                                        .then(|| self.latest_bindable_property_for_object(object))
+                                        .flatten(),
                                 ));
                         }
                     }
@@ -5622,10 +5859,28 @@ impl RuntimeFile {
             }
 
             if definition.is_a("ListenerInputType") {
-                if let Some(listener_index) = current_listener {
-                    state_machines[state_machine_index].listeners[listener_index]
-                        .listener_input_types
-                        .push(object);
+                if let Some(owner) = current_listener {
+                    let listener = &mut state_machines[owner.state_machine_index].listeners
+                        [owner.listener_index];
+                    listener.listener_input_types.push(object);
+                    listener.listener_input_type_inputs.push(Vec::new());
+                    let input_owner = Some(RuntimeStateMachineListenerInputTypeOwner {
+                        state_machine_index: owner.state_machine_index,
+                        listener_index: owner.listener_index,
+                        input_type_index: listener.listener_input_types.len() - 1,
+                    });
+                    match definition.name {
+                        "ListenerInputTypeKeyboard" => {
+                            current_keyboard_input_type = input_owner;
+                        }
+                        "ListenerInputTypeGamepad" => {
+                            current_gamepad_input_type = input_owner;
+                        }
+                        "ListenerInputTypeSemantic" => {
+                            current_semantic_input_type = input_owner;
+                        }
+                        _ => {}
+                    }
                 }
                 continue;
             }
@@ -5639,8 +5894,17 @@ impl RuntimeFile {
             }
         }
 
-        resolve_runtime_state_machine_transition_targets(&mut state_machines);
+        resolve_runtime_state_machine_transition_targets(
+            &mut state_machines,
+            &layer_importer_resolve_boundaries,
+        );
         state_machines
+            .into_iter()
+            .zip(state_machine_artboard_owners)
+            .filter_map(|(state_machine, owner)| {
+                (owner == Some(artboard_index)).then_some(state_machine)
+            })
+            .collect()
     }
 
     fn cpp_artboard_data_binds(&self, artboard_index: usize) -> Vec<RuntimeDataBind<'_>> {
@@ -5839,15 +6103,7 @@ impl RuntimeFile {
     }
 
     fn cpp_artboard_indices_by_file_index(&self) -> Vec<Option<usize>> {
-        let mut artboard_indices = vec![None; self.objects.len()];
-        for (artboard_index, artboard) in self.cpp_artboards().enumerate() {
-            if let Ok(file_index) = usize::try_from(artboard.id) {
-                if let Some(slot) = artboard_indices.get_mut(file_index) {
-                    *slot = Some(artboard_index);
-                }
-            }
-        }
-        artboard_indices
+        runtime_artboard_indices_by_file_index(&self.objects, &self.import_statuses)
     }
 
     fn cpp_artboard_local_owners(&self) -> Vec<Option<(usize, usize)>> {
@@ -5981,17 +6237,36 @@ impl RuntimeFile {
     ) -> Option<&'a RuntimeObject> {
         let object_id = usize::try_from(object.id).ok()?;
         let mut latest_bindable_property = None;
+        let mut import_context = ImportContext::default();
         for candidate in self.objects.iter().take(object_id).flatten() {
-            if self.import_status(usize::try_from(candidate.id).ok()?)
-                != Some(RuntimeImportStatus::Imported)
-            {
-                continue;
-            }
+            let candidate_id = usize::try_from(candidate.id).ok()?;
+            let status = self.import_status(candidate_id)?;
             let Some(definition) = definition_by_type_key(candidate.type_key) else {
                 continue;
             };
-            if definition.is_a("BindableProperty") {
+            if status == RuntimeImportStatus::Imported && definition.is_a("BindableProperty") {
                 latest_bindable_property = Some(candidate);
+            }
+
+            // `BindablePropertyImporter::bindableProperty()` transfers its
+            // pointer before delegating to `Super::import`. The transfer
+            // therefore occurs even when that superclass later drops the
+            // consumer for a missing owner. Reconstruct the pre-transfer
+            // importer checks from the same pinned C++ call order; filtering
+            // to imported consumers would incorrectly let a later action
+            // reacquire an already-consumed property.
+            if cpp_bindable_property_transfer_reached(candidate, definition, &import_context) {
+                latest_bindable_property = None;
+            }
+
+            match status {
+                RuntimeImportStatus::Imported => {
+                    update_import_context(candidate, definition, &mut import_context, false);
+                }
+                RuntimeImportStatus::Dropped { .. } => {
+                    import_context.read_dropped_object(definition);
+                }
+                RuntimeImportStatus::NullObject => import_context.read_null_object(),
             }
         }
         latest_bindable_property
@@ -6793,6 +7068,15 @@ impl RuntimeFile {
         &self,
         data_converter_index: usize,
     ) -> Vec<RuntimeFormulaOutputToken<'_>> {
+        Self::cpp_data_converter_formula_output_queue(
+            self.cpp_data_converter_formula_authored_tokens(data_converter_index),
+        )
+    }
+
+    fn cpp_data_converter_formula_authored_tokens(
+        &self,
+        data_converter_index: usize,
+    ) -> Vec<&RuntimeObject> {
         let Some(formula) = self.data_converter(data_converter_index) else {
             return Vec::new();
         };
@@ -6830,7 +7114,7 @@ impl RuntimeFile {
             }
         }
 
-        Self::cpp_data_converter_formula_output_queue(tokens)
+        tokens
     }
 
     fn cpp_data_converter_formula_output_queue<'a>(
@@ -7135,11 +7419,45 @@ impl RuntimeFile {
     }
 }
 
+fn cpp_bindable_property_transfer_reached(
+    object: &RuntimeObject,
+    definition: &'static Definition,
+    context: &ImportContext,
+) -> bool {
+    let has_bindable_importer = context.latest(ImportStackKey::BindableProperty);
+    match definition.name {
+        // Both owners transfer from BindableProperty before delegating to the
+        // ListenerAction/TransitionComparator superclass that may reject a
+        // missing parent (`listener_viewmodel_change.cpp:20-36`;
+        // `transition_property_viewmodel_comparator.cpp:31-48`).
+        "ListenerViewModelChange" | "TransitionPropertyViewModelComparator" => {
+            has_bindable_importer
+        }
+        // These owners first require StateMachine, then transfer the property,
+        // and only afterward delegate to their layer/blend superclass
+        // (`blend_state_1d_viewmodel.cpp:18-36`;
+        // `blend_animation_direct.cpp:24-65`).
+        "BlendState1DViewModel" => {
+            context.latest(ImportStackKey::StateMachine) && has_bindable_importer
+        }
+        "BlendAnimationDirect" if object.uint_property("blendSource") == Some(2) => {
+            context.latest(ImportStackKey::StateMachine) && has_bindable_importer
+        }
+        _ => false,
+    }
+}
+
 fn resolve_runtime_state_machine_transition_targets(
     state_machines: &mut [RuntimeStateMachine<'_>],
+    layer_importer_resolve_boundaries: &[Vec<usize>],
 ) {
-    for state_machine in state_machines {
-        for layer in &mut state_machine.layers {
+    for (state_machine_index, state_machine) in state_machines.iter_mut().enumerate() {
+        for (layer_index, layer) in state_machine.layers.iter_mut().enumerate() {
+            let importer_resolve_boundary = layer_importer_resolve_boundaries
+                .get(state_machine_index)
+                .and_then(|boundaries| boundaries.get(layer_index))
+                .copied()
+                .unwrap_or(0);
             let state_objects = layer
                 .states
                 .iter()
@@ -7164,14 +7482,23 @@ fn resolve_runtime_state_machine_transition_targets(
                     .collect::<Vec<_>>();
 
                 for transition in &mut state.transitions {
-                    let state_to_index = usize::try_from(
-                        transition
-                            .object
-                            .uint_property("stateToId")
-                            .unwrap_or(u64::MAX),
-                    )
-                    .ok()
-                    .filter(|index| *index < state_objects.len());
+                    // StateMachineLayerImporter resolves only the transitions
+                    // present when it is replaced (or at EOF). A transition
+                    // attached later through a stale LayerState importer is
+                    // retained but never gets a second target-resolution pass.
+                    let state_to_index = ((transition.object.id as usize)
+                        < importer_resolve_boundary)
+                        .then(|| {
+                            usize::try_from(
+                                transition
+                                    .object
+                                    .uint_property("stateToId")
+                                    .unwrap_or(u64::MAX),
+                            )
+                            .ok()
+                            .filter(|index| *index < state_objects.len())
+                        })
+                        .flatten();
                     transition.state_to_index = state_to_index;
                     transition.state_to = state_to_index.and_then(|index| state_objects[index]);
 
@@ -7220,6 +7547,7 @@ fn cpp_runtime_listener_action<'a>(
     object: &'a RuntimeObject,
     artboard_local_slots: &[Option<usize>],
     objects: &'a [Option<RuntimeObject>],
+    bindable_property: Option<&'a RuntimeObject>,
 ) -> RuntimeListenerAction<'a> {
     let (event_local_index, event) =
         cpp_resolved_action_event(object, artboard_local_slots, objects);
@@ -7227,6 +7555,7 @@ fn cpp_runtime_listener_action<'a>(
         object,
         event_local_index,
         event,
+        bindable_property,
     }
 }
 
@@ -8217,7 +8546,7 @@ pub struct RuntimeLinearAnimation<'a> {
 pub struct RuntimeStateMachine<'a> {
     pub object: &'a RuntimeObject,
     pub layers: Vec<RuntimeStateMachineLayer<'a>>,
-    pub inputs: Vec<&'a RuntimeObject>,
+    pub inputs: Vec<Option<&'a RuntimeObject>>,
     pub listeners: Vec<RuntimeStateMachineListener<'a>>,
     pub data_binds: Vec<&'a RuntimeObject>,
     pub scripted_objects: Vec<RuntimeScriptedObject<'a>>,
@@ -8258,6 +8587,7 @@ pub struct RuntimeListenerAction<'a> {
     pub object: &'a RuntimeObject,
     pub event_local_index: Option<usize>,
     pub event: Option<&'a RuntimeObject>,
+    pub bindable_property: Option<&'a RuntimeObject>,
 }
 
 #[derive(Debug, Clone)]
@@ -8293,6 +8623,11 @@ pub struct RuntimeStateMachineListener<'a> {
     pub object: &'a RuntimeObject,
     pub actions: Vec<RuntimeListenerAction<'a>>,
     pub listener_input_types: Vec<&'a RuntimeObject>,
+    /// Concrete KeyboardInput/GamepadInput/SemanticInput records retained by
+    /// the corresponding C++ ListenerInputType importer. The outer vector is
+    /// index-aligned with `listener_input_types`; each inner vector preserves
+    /// file order.
+    pub listener_input_type_inputs: Vec<Vec<&'a RuntimeObject>>,
 }
 
 #[derive(Debug, Clone)]
@@ -8428,6 +8763,7 @@ pub struct RuntimePathVertex<'a> {
 pub struct RuntimeDataBindPath<'a> {
     pub object: Option<&'a RuntimeObject>,
     pub property_name: &'static str,
+    pub is_relative: bool,
     pub path_ids: Vec<u32>,
     pub resolved_path_ids: Vec<u32>,
 }
@@ -9351,7 +9687,7 @@ fn validate_authoring_import_statuses(file: &RuntimeFile) -> Result<()> {
 }
 
 fn validate_authoring_artboard_local_objects(file: &RuntimeFile) -> Result<()> {
-    for range in runtime_artboard_ranges(&file.objects) {
+    for range in runtime_artboard_ranges(&file.objects, &file.import_statuses) {
         let original_slots =
             runtime_artboard_local_slots(&file.objects, &file.import_statuses, range);
         let mut validated_slots = original_slots.clone();
@@ -9495,6 +9831,16 @@ impl CppImportStack {
             .rev()
             .find_map(|key| key.null_object_consumer())
     }
+}
+
+/// The graph projection replays only the importer keys that affect the graph
+/// shape. Preserve the exact ImportStack “replace this key, then append it to
+/// reverse insertion order” rule for null-object ownership.
+fn replay_import_stack_make_latest(last_added: &mut Vec<ImportStackKey>, key: ImportStackKey) {
+    if let Some(index) = last_added.iter().rposition(|candidate| *candidate == key) {
+        last_added.remove(index);
+    }
+    last_added.push(key);
 }
 
 impl ImportStackKey {
@@ -11997,11 +12343,11 @@ fn validate_cpp_import_resolution(
     objects: &[Option<RuntimeObject>],
     import_statuses: &[RuntimeImportStatus],
 ) -> Result<()> {
-    for range in runtime_artboard_ranges(objects) {
+    validate_cpp_state_machine_layers(objects, import_statuses)?;
+    for range in runtime_artboard_ranges(objects, import_statuses) {
         let mut slots = runtime_artboard_local_slots(objects, import_statuses, range);
         validate_cpp_artboard_local_slots(&mut slots, objects);
 
-        validate_cpp_state_machine_layers(objects, import_statuses, range)?;
         validate_cpp_constraint_parentage(&slots, objects)?;
         validate_cpp_text_parentage(&slots, objects)?;
         validate_cpp_paint_effects(&slots, objects)?;
@@ -12211,6 +12557,8 @@ fn validate_cpp_paint_effects(
 #[derive(Debug)]
 struct CppStateMachineLayerResolution {
     object_id: u32,
+    owner_artboard_resolve_boundary: usize,
+    importer_resolve_boundary: usize,
     state_count: usize,
     has_any_state: bool,
     has_entry_state: bool,
@@ -12221,6 +12569,7 @@ struct CppStateMachineLayerResolution {
 #[derive(Debug)]
 struct CppStateTransitionResolution {
     object_id: u32,
+    file_index: usize,
     type_name: &'static str,
     state_to_id: u64,
 }
@@ -12228,16 +12577,26 @@ struct CppStateTransitionResolution {
 fn validate_cpp_state_machine_layers(
     objects: &[Option<RuntimeObject>],
     import_statuses: &[RuntimeImportStatus],
-    range: (usize, usize),
 ) -> Result<()> {
-    let mut current_layer: Option<CppStateMachineLayerResolution> = None;
+    let null_object_consumers = runtime_null_object_consumers(objects, import_statuses);
+    let artboard_ranges = runtime_artboard_ranges(objects, import_statuses);
+    let artboard_indices = runtime_artboard_indices_by_file_index(objects, import_statuses);
+    let mut current_artboard_index = None;
+    let mut current_state_machine_owner_artboard_boundary = None;
+    let mut layers = Vec::<CppStateMachineLayerResolution>::new();
+    let mut current_layer: Option<usize> = None;
+    // LayerState has its own ImportStack key and therefore survives a later
+    // StateMachineLayer, StateMachine, or Artboard until another LayerState
+    // replaces it. Transitions attach to that exact retained state owner.
+    let mut current_layer_state_owner: Option<usize> = None;
 
-    for file_index in range.0..range.1 {
+    for file_index in 0..objects.len() {
         let Some(object) = objects[file_index].as_ref() else {
-            if import_statuses.get(file_index) == Some(&RuntimeImportStatus::NullObject) {
-                if let Some(layer) = current_layer.as_mut() {
-                    layer.state_count += 1;
-                }
+            if null_object_consumers.get(file_index)
+                == Some(&Some(NullObjectConsumer::StateMachineLayer))
+                && let Some(layer_index) = current_layer
+            {
+                layers[layer_index].state_count += 1;
             }
             continue;
         };
@@ -12250,45 +12609,68 @@ fn validate_cpp_state_machine_layers(
             continue;
         };
 
+        if definition.name == "Artboard" {
+            current_artboard_index = artboard_indices[file_index];
+            continue;
+        }
+
+        if definition.name == "StateMachine" {
+            current_state_machine_owner_artboard_boundary = current_artboard_index
+                .and_then(|index| artboard_ranges.get(index))
+                .map(|(_, end)| *end);
+            continue;
+        }
+
         if definition.name == "StateMachineLayer" {
-            if let Some(layer) = current_layer.take() {
-                validate_cpp_state_machine_layer_transitions(&layer)?;
+            if let Some(previous_layer_index) = current_layer {
+                layers[previous_layer_index].importer_resolve_boundary = file_index;
             }
-            current_layer = Some(CppStateMachineLayerResolution {
+            layers.push(CppStateMachineLayerResolution {
                 object_id: object.id,
+                owner_artboard_resolve_boundary: current_state_machine_owner_artboard_boundary
+                    .unwrap_or(0),
+                importer_resolve_boundary: objects.len(),
                 state_count: 0,
                 has_any_state: false,
                 has_entry_state: false,
                 has_exit_state: false,
                 transitions: Vec::new(),
             });
+            current_layer = Some(layers.len() - 1);
             continue;
         }
 
         if definition.is_a("LayerState") {
-            if let Some(layer) = current_layer.as_mut() {
+            if let Some(layer_index) = current_layer {
+                let layer = &mut layers[layer_index];
                 layer.state_count += 1;
-                match definition.name {
-                    "AnyState" => layer.has_any_state = true,
-                    "EntryState" => layer.has_entry_state = true,
-                    "ExitState" => layer.has_exit_state = true,
-                    _ => {}
+                if file_index < layer.owner_artboard_resolve_boundary {
+                    match definition.name {
+                        "AnyState" => layer.has_any_state = true,
+                        "EntryState" => layer.has_entry_state = true,
+                        "ExitState" => layer.has_exit_state = true,
+                        _ => {}
+                    }
                 }
+                current_layer_state_owner = Some(layer_index);
             }
         }
 
         if definition.is_a("StateTransition") {
-            if let Some(layer) = current_layer.as_mut() {
-                layer.transitions.push(CppStateTransitionResolution {
-                    object_id: object.id,
-                    type_name: object.type_name,
-                    state_to_id: object.uint_property("stateToId").unwrap_or(u64::MAX),
-                });
+            if let Some(layer_index) = current_layer_state_owner {
+                layers[layer_index]
+                    .transitions
+                    .push(CppStateTransitionResolution {
+                        object_id: object.id,
+                        file_index,
+                        type_name: object.type_name,
+                        state_to_id: object.uint_property("stateToId").unwrap_or(u64::MAX),
+                    });
             }
         }
     }
 
-    if let Some(layer) = current_layer {
+    for layer in layers {
         validate_cpp_state_machine_layer_transitions(&layer)?;
     }
 
@@ -12298,7 +12680,9 @@ fn validate_cpp_state_machine_layers(
 fn validate_cpp_state_machine_layer_transitions(
     layer: &CppStateMachineLayerResolution,
 ) -> Result<()> {
-    if !layer.has_any_state || !layer.has_entry_state || !layer.has_exit_state {
+    if (layer.object_id as usize) < layer.owner_artboard_resolve_boundary
+        && (!layer.has_any_state || !layer.has_entry_state || !layer.has_exit_state)
+    {
         bail!(
             "state machine layer {} is missing required AnyState/EntryState/ExitState objects",
             layer.object_id
@@ -12306,6 +12690,9 @@ fn validate_cpp_state_machine_layer_transitions(
     }
 
     for transition in &layer.transitions {
+        if transition.file_index >= layer.importer_resolve_boundary {
+            continue;
+        }
         let Ok(state_to_id) = usize::try_from(transition.state_to_id) else {
             bail!(
                 "state transition object {} ({}) targets state {} outside {} states in state machine layer {}",
@@ -12886,12 +13273,20 @@ fn decode_cpp_mesh_triangle_indices(bytes: &[u8]) -> Vec<u16> {
     indices
 }
 
-fn runtime_artboard_ranges(objects: &[Option<RuntimeObject>]) -> Vec<(usize, usize)> {
+fn runtime_artboard_ranges(
+    objects: &[Option<RuntimeObject>],
+    import_statuses: &[RuntimeImportStatus],
+) -> Vec<(usize, usize)> {
     let starts = objects
         .iter()
         .enumerate()
         .filter_map(|(index, object)| match object {
-            Some(object) if object.type_name == "Artboard" => Some(index),
+            Some(object)
+                if object.type_name == "Artboard"
+                    && import_statuses.get(index) == Some(&RuntimeImportStatus::Imported) =>
+            {
+                Some(index)
+            }
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -12908,18 +13303,66 @@ fn runtime_artboard_ranges(objects: &[Option<RuntimeObject>]) -> Vec<(usize, usi
         .collect()
 }
 
+fn runtime_artboard_indices_by_file_index(
+    objects: &[Option<RuntimeObject>],
+    import_statuses: &[RuntimeImportStatus],
+) -> Vec<Option<usize>> {
+    let mut indices = vec![None; objects.len()];
+    let mut artboard_index = 0;
+    for (file_index, object) in objects.iter().enumerate() {
+        if import_statuses.get(file_index) != Some(&RuntimeImportStatus::Imported)
+            || !object
+                .as_ref()
+                .is_some_and(|object| object.type_name == "Artboard")
+        {
+            continue;
+        }
+        indices[file_index] = Some(artboard_index);
+        artboard_index += 1;
+    }
+    indices
+}
+
 fn runtime_artboard_local_slots(
     objects: &[Option<RuntimeObject>],
     import_statuses: &[RuntimeImportStatus],
     range: (usize, usize),
 ) -> Vec<Option<usize>> {
+    let null_object_consumers = runtime_null_object_consumers(objects, import_statuses);
     objects[range.0..range.1]
         .iter()
         .enumerate()
         .filter_map(|(relative_index, object)| {
             let file_index = range.0 + relative_index;
             match object {
-                None => Some(None),
+                // A serialized null is offered to ImportStack objects in
+                // reverse latest-insertion order and is owned by exactly the
+                // first importer that accepts it. It becomes an Artboard
+                // local slot only when ArtboardImporter wins; StateMachine,
+                // StateMachineLayer, and KeyedProperty nulls must not also
+                // shift Artboard-local ids (`import_stack.hpp:93-103`).
+                None if null_object_consumers.get(file_index)
+                    == Some(&Some(NullObjectConsumer::Artboard)) =>
+                {
+                    Some(None)
+                }
+                None => None,
+                Some(object) if runtime_object_is_cpp_script_input(object) => {
+                    // C++ ScriptInput*::import reaches Component::import (and
+                    // an Artboard slot) only when the owning ScriptedObject is
+                    // component-backed; inputs owned by listener actions,
+                    // transition conditions, converters, or interpolators
+                    // return Ok without registering with ArtboardImporter
+                    // (`script_input_boolean.cpp:30-36`). Failed inputs are
+                    // deleted without a slot (`file.cpp:326`).
+                    if import_statuses.get(file_index) == Some(&RuntimeImportStatus::Imported)
+                        && script_input_owner_is_component(objects, import_statuses, file_index)
+                    {
+                        Some(Some(file_index))
+                    } else {
+                        None
+                    }
+                }
                 Some(object) if runtime_object_is_cpp_artboard_local(object) => {
                     if import_statuses.get(file_index) == Some(&RuntimeImportStatus::Imported) {
                         Some(Some(file_index))
@@ -12929,6 +13372,46 @@ fn runtime_artboard_local_slots(
                 }
                 Some(_) => None,
             }
+        })
+        .collect()
+}
+
+fn runtime_null_object_consumers(
+    objects: &[Option<RuntimeObject>],
+    import_statuses: &[RuntimeImportStatus],
+) -> Vec<Option<NullObjectConsumer>> {
+    let mut last_added = Vec::new();
+    objects
+        .iter()
+        .enumerate()
+        .map(|(file_index, object)| {
+            if import_statuses.get(file_index) == Some(&RuntimeImportStatus::NullObject) {
+                return last_added
+                    .iter()
+                    .rev()
+                    .find_map(|key: &ImportStackKey| key.null_object_consumer());
+            }
+
+            if import_statuses.get(file_index) != Some(&RuntimeImportStatus::Imported) {
+                return None;
+            }
+            let Some(definition) = object
+                .as_ref()
+                .and_then(|object| definition_by_type_key(object.type_key))
+            else {
+                return None;
+            };
+            let key = match definition.name {
+                "Artboard" => Some(ImportStackKey::Artboard),
+                "KeyedProperty" => Some(ImportStackKey::KeyedProperty),
+                "StateMachine" => Some(ImportStackKey::StateMachine),
+                "StateMachineLayer" => Some(ImportStackKey::StateMachineLayer),
+                _ => None,
+            };
+            if let Some(key) = key {
+                replay_import_stack_make_latest(&mut last_added, key);
+            }
+            None
         })
         .collect()
 }
@@ -13087,9 +13570,39 @@ fn runtime_object_is_cpp_artboard_local(object: &RuntimeObject) -> bool {
     definition_by_type_key(object.type_key).is_some_and(definition_is_cpp_artboard_local)
 }
 
+fn runtime_object_is_cpp_script_input(object: &RuntimeObject) -> bool {
+    definition_by_type_key(object.type_key)
+        .is_some_and(|definition| definition.name.starts_with("ScriptInput"))
+}
+
+/// C++ `ScriptInput*::import` binds the input to the latest registered
+/// `ScriptedObjectImporter` and only continues into `Component::import` when
+/// that owner's `component()` override is non-null — true exactly for the
+/// Component-derived scripted owners (ScriptedDrawable, ScriptedLayout,
+/// ScriptedPathEffect).
+fn script_input_owner_is_component(
+    objects: &[Option<RuntimeObject>],
+    import_statuses: &[RuntimeImportStatus],
+    input_index: usize,
+) -> bool {
+    for index in (0..input_index).rev() {
+        let Some(object) = objects[index].as_ref() else {
+            continue;
+        };
+        if import_statuses.get(index) != Some(&RuntimeImportStatus::Imported) {
+            continue;
+        }
+        let Some(definition) = definition_by_type_key(object.type_key) else {
+            continue;
+        };
+        if definition_is_cpp_scripted_object(definition) {
+            return definition.is_a("Component");
+        }
+    }
+    false
+}
+
 fn definition_is_cpp_artboard_local(definition: &'static Definition) -> bool {
-    // Component-owned ScriptInputs call Component::import in C++ and occupy
-    // artboard slots; inputs owned by non-components fail parent validation.
     (definition.is_a("Component") && !definition.is_a("ScrollPhysics"))
         || definition.is_a("KeyFrameInterpolator")
         || definition.is_a("UserInput")
@@ -14089,6 +14602,493 @@ impl<'a> BinaryReader<'a> {
 
             shift = shift.wrapping_add(7);
         }
+    }
+}
+
+#[cfg(test)]
+mod file_global_state_machine_import_tests {
+    use super::{
+        AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile, compute_import_statuses,
+        cpp_property_key, definition_by_name,
+    };
+
+    fn record(type_name: &str) -> AuthoringRecord {
+        AuthoringRecord {
+            type_key: definition_by_name(type_name)
+                .expect("schema type")
+                .type_key
+                .int,
+            properties: Vec::new(),
+        }
+    }
+
+    fn uint_record(type_name: &str, property_name: &str, value: u64) -> AuthoringRecord {
+        uint_properties_record(type_name, &[(property_name, value)])
+    }
+
+    fn uint_properties_record(type_name: &str, properties: &[(&str, u64)]) -> AuthoringRecord {
+        AuthoringRecord {
+            type_key: definition_by_name(type_name)
+                .expect("schema type")
+                .type_key
+                .int,
+            properties: properties
+                .iter()
+                .map(|(property_name, value)| AuthoringProperty {
+                    key: u16::try_from(cpp_property_key(type_name, property_name))
+                        .expect("schema property key"),
+                    value: AuthoringValue::Uint(*value),
+                })
+                .collect(),
+        }
+    }
+
+    fn with_trailing_unknown(mut file: RuntimeFile) -> RuntimeFile {
+        file.objects.push(None);
+        file.import_statuses = compute_import_statuses(&file.objects, true);
+        file
+    }
+
+    fn with_leading_dropped_artboard(mut file: RuntimeFile) -> RuntimeFile {
+        let mut dropped_artboard = file.artboard(0).expect("imported Artboard").clone();
+        for object in file.objects.iter_mut().flatten() {
+            object.id += 1;
+        }
+        dropped_artboard.id = 0;
+        file.objects.insert(0, Some(dropped_artboard));
+        file.import_statuses = compute_import_statuses(&file.objects, true);
+        assert!(
+            !matches!(
+                file.import_statuses.first(),
+                Some(super::RuntimeImportStatus::Imported)
+            ),
+            "an Artboard authored before the Backboard must be dropped by C++ import",
+        );
+        file
+    }
+
+    #[test]
+    fn layer_cursor_survives_a_later_artboard_and_state_machine_cursor_change() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard"),
+            record("Artboard"),
+            record("StateMachine"),
+            record("StateMachineLayer"),
+            record("AnyState"),
+            record("EntryState"),
+            record("ExitState"),
+            record("Artboard"),
+            record("StateMachine"),
+            // ImportStack's StateMachineLayer key was not replaced, so this
+            // state remains on Artboard A's StateMachine layer.
+            record("AnimationState"),
+        ])
+        .expect("cross-artboard importer fixture imports");
+
+        let first = file.artboard_state_machine_graphs(0);
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].layers.len(), 1);
+        assert_eq!(first[0].layers[0].states.len(), 4);
+        assert_eq!(file.artboard_state_machine_graphs(1).len(), 1);
+        assert!(file.artboard_state_machine_graphs(1)[0].layers.is_empty());
+    }
+
+    #[test]
+    fn dropped_artboard_does_not_shift_imported_artboard_owner_ranges() {
+        let file = with_leading_dropped_artboard(
+            RuntimeFile::from_authoring_records(vec![
+                record("Backboard"),
+                record("Artboard"),
+                record("CubicEaseInterpolator"),
+                record("Event"),
+                record("StateMachine"),
+                record("StateMachineLayer"),
+                record("AnyState"),
+                record("EntryState"),
+                record("ExitState"),
+                record("AnimationState"),
+                uint_record("StateMachineFireEvent", "eventId", 2),
+                uint_properties_record(
+                    "StateTransition",
+                    &[("stateToId", 0), ("interpolatorId", 1)],
+                ),
+            ])
+            .expect("valid imported-Artboard owner fixture"),
+        );
+
+        assert_eq!(file.artboards().len(), 1);
+        let slots = file
+            .artboard_local_object_slots(0)
+            .expect("valid Artboard local table");
+        assert_eq!(
+            slots
+                .get(1)
+                .and_then(|slot| *slot)
+                .map(|object| object.type_name),
+            Some("CubicEaseInterpolator"),
+        );
+        assert_eq!(
+            slots
+                .get(2)
+                .and_then(|slot| *slot)
+                .map(|object| object.type_name),
+            Some("Event"),
+        );
+
+        let graphs = file.artboard_state_machine_graphs(0);
+        let state = graphs[0].layers[0].states.last().expect("AnimationState");
+        assert_eq!(
+            state.fire_actions[0].event.map(|event| event.type_name),
+            Some("Event"),
+            "the StateMachine owner must resolve through the imported Artboard's local table",
+        );
+        assert_eq!(
+            state.transitions[0]
+                .interpolator
+                .map(|interpolator| interpolator.type_name),
+            Some("CubicEaseInterpolator"),
+            "the owning Artboard initialization boundary must ignore the dropped Artboard record",
+        );
+    }
+
+    #[test]
+    fn unknown_object_is_owned_by_exactly_one_latest_importer() {
+        let artboard_null = with_trailing_unknown(
+            RuntimeFile::from_authoring_records(vec![record("Backboard"), record("Artboard")])
+                .expect("artboard null-owner fixture imports"),
+        );
+        assert_eq!(
+            artboard_null.artboard_local_object_slots(0).unwrap().len(),
+            2,
+            "ArtboardImporter owns the trailing unknown as one null local slot",
+        );
+
+        let state_machine_null = with_trailing_unknown(
+            RuntimeFile::from_authoring_records(vec![
+                record("Backboard"),
+                record("Artboard"),
+                record("StateMachine"),
+            ])
+            .expect("state-machine null-owner fixture imports"),
+        );
+        assert_eq!(
+            state_machine_null
+                .artboard_local_object_slots(0)
+                .unwrap()
+                .len(),
+            1,
+            "StateMachineImporter-owned null must not also shift Artboard ids",
+        );
+        assert_eq!(
+            state_machine_null.artboard_state_machine_graphs(0)[0]
+                .inputs
+                .len(),
+            1,
+            "the same null remains the StateMachine input slot",
+        );
+
+        let layer_null = with_trailing_unknown(
+            RuntimeFile::from_authoring_records(vec![
+                record("Backboard"),
+                record("Artboard"),
+                record("StateMachine"),
+                record("StateMachineLayer"),
+                record("AnyState"),
+                record("EntryState"),
+                record("ExitState"),
+            ])
+            .expect("layer null-owner fixture imports"),
+        );
+        assert_eq!(
+            layer_null.artboard_local_object_slots(0).unwrap().len(),
+            1,
+            "StateMachineLayerImporter-owned null must not also shift Artboard ids",
+        );
+        assert_eq!(
+            layer_null.artboard_state_machine_graphs(0)[0].layers[0]
+                .states
+                .len(),
+            4,
+            "the same null remains the generic LayerState occurrence",
+        );
+
+        let mut keyed_property_null = RuntimeFile::from_authoring_records(vec![
+            record("Backboard"),
+            record("Artboard"),
+            record("StateMachine"),
+            record("StateMachineLayer"),
+            record("AnyState"),
+            record("EntryState"),
+            record("ExitState"),
+            record("LinearAnimation"),
+            record("KeyedObject"),
+            record("KeyedProperty"),
+            AuthoringRecord {
+                type_key: definition_by_name("Shape").unwrap().type_key.int,
+                properties: vec![AuthoringProperty {
+                    key: 5,
+                    value: AuthoringValue::Uint(0),
+                }],
+            },
+        ])
+        .expect("keyed-property null-owner fixture imports");
+        let mut shape = keyed_property_null
+            .objects
+            .pop()
+            .flatten()
+            .expect("trailing Shape");
+        shape.id += 1;
+        keyed_property_null.objects.push(None);
+        keyed_property_null.objects.push(Some(shape));
+        keyed_property_null.import_statuses =
+            compute_import_statuses(&keyed_property_null.objects, true);
+        let slots = keyed_property_null.artboard_local_object_slots(0).unwrap();
+        assert_eq!(
+            slots.len(),
+            2,
+            "KeyedPropertyImporter-owned null must not also shift Artboard ids",
+        );
+        assert_eq!(slots[1].map(|object| object.type_name), Some("Shape"));
+        assert_eq!(
+            keyed_property_null.artboard_state_machine_graphs(0)[0].layers[0]
+                .states
+                .len(),
+            3,
+            "KeyedPropertyImporter swallows the null without adding a generic layer state",
+        );
+    }
+
+    #[test]
+    fn delayed_animation_state_uses_the_artboard_captured_by_its_layer_importer() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard"),
+            record("Artboard"),
+            record("LinearAnimation"),
+            record("StateMachine"),
+            record("StateMachineLayer"),
+            record("AnyState"),
+            record("EntryState"),
+            record("ExitState"),
+            record("Artboard"),
+            record("LinearAnimation"),
+            // The latest Layer importer still belongs to the first Artboard,
+            // even though the mutable Artboard cursor now names the second.
+            uint_record("AnimationState", "animationId", 0),
+        ])
+        .expect("captured-layer-artboard fixture imports");
+
+        let first = file.artboard_state_machine_graphs(0);
+        let delayed_state = first[0].layers[0].states.last().unwrap();
+        assert_eq!(
+            delayed_state.animation.map(|animation| animation.id),
+            Some(2),
+            "StateMachineLayerImporter resolves against its captured first Artboard",
+        );
+        assert_ne!(
+            delayed_state.animation.map(|animation| animation.id),
+            Some(9),
+            "the later Artboard's animation table must not leak into the old layer",
+        );
+    }
+
+    #[test]
+    fn layer_created_under_a_later_artboard_captures_that_later_animation_table() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard"),
+            record("Artboard"),
+            record("LinearAnimation"),
+            record("StateMachine"),
+            // StateMachineImporter A survives, while the latest Artboard
+            // importer becomes B before the layer is constructed.
+            record("Artboard"),
+            record("LinearAnimation"),
+            record("StateMachineLayer"),
+            record("AnyState"),
+            record("EntryState"),
+            record("ExitState"),
+            uint_record("AnimationState", "animationId", 0),
+        ])
+        .expect("layer-captured later-Artboard fixture imports");
+
+        let first = file.artboard_state_machine_graphs(0);
+        let state = first[0].layers[0].states.last().unwrap();
+        assert_eq!(
+            state.animation.map(|animation| animation.id),
+            Some(5),
+            "the layer importer captures Artboard B even though the layer belongs to StateMachine A",
+        );
+        assert_ne!(state.animation.map(|animation| animation.id), Some(2));
+    }
+
+    #[test]
+    fn delayed_blend_animation_uses_the_record_time_artboard_importer() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard"),
+            record("Artboard"),
+            record("LinearAnimation"),
+            record("StateMachine"),
+            record("StateMachineNumber"),
+            record("StateMachineLayer"),
+            record("AnyState"),
+            record("EntryState"),
+            record("ExitState"),
+            record("BlendStateDirect"),
+            record("Artboard"),
+            record("LinearAnimation"),
+            AuthoringRecord {
+                type_key: definition_by_name("BlendAnimationDirect")
+                    .unwrap()
+                    .type_key
+                    .int,
+                properties: vec![
+                    AuthoringProperty {
+                        key: 165,
+                        value: AuthoringValue::Uint(0),
+                    },
+                    AuthoringProperty {
+                        key: 168,
+                        value: AuthoringValue::Uint(0),
+                    },
+                ],
+            },
+        ])
+        .expect("record-time BlendAnimation Artboard fixture imports");
+
+        let first = file.artboard_state_machine_graphs(0);
+        let blend = &first[0].layers[0].states.last().unwrap().blend_animations[0];
+        assert_eq!(
+            blend.animation.map(|animation| animation.id),
+            Some(11),
+            "BlendAnimation::import uses the Artboard importer latest for its own record",
+        );
+        assert_ne!(blend.animation.map(|animation| animation.id), Some(2));
+    }
+
+    #[test]
+    fn delayed_fire_event_resolves_against_the_state_machine_owner_artboard() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard"),
+            record("Artboard"),
+            record("Event"),
+            record("StateMachine"),
+            record("StateMachineLayer"),
+            record("AnyState"),
+            record("EntryState"),
+            record("ExitState"),
+            record("AnimationState"),
+            record("Artboard"),
+            record("Event"),
+            // Both Artboards expose an Event at local id 1. The fire action is
+            // still owned by the first StateMachine occurrence.
+            uint_record("StateMachineFireEvent", "eventId", 1),
+        ])
+        .expect("state-machine-owner event fixture imports");
+
+        let first = file.artboard_state_machine_graphs(0);
+        let action = &first[0].layers[0].states.last().unwrap().fire_actions[0];
+        assert_eq!(action.event.map(|event| event.id), Some(2));
+        assert_ne!(action.event.map(|event| event.id), Some(10));
+    }
+
+    #[test]
+    fn transition_added_after_its_owner_artboard_resolved_keeps_null_interpolator() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard"),
+            record("Artboard"),
+            record("CubicEaseInterpolator"),
+            record("StateMachine"),
+            record("StateMachineLayer"),
+            record("AnyState"),
+            record("EntryState"),
+            record("ExitState"),
+            record("AnimationState"),
+            // Replacing the Artboard importer initializes the first Artboard
+            // before the transition below is attached through the still-latest
+            // LayerState importer.
+            record("Artboard"),
+            record("CubicEaseInterpolator"),
+            uint_properties_record(
+                "StateTransition",
+                &[("stateToId", 0), ("interpolatorId", 1)],
+            ),
+        ])
+        .expect("late-transition importer fixture imports");
+
+        let first = file.artboard_state_machine_graphs(0);
+        let transition = &first[0].layers[0].states.last().unwrap().transitions[0];
+        assert!(
+            transition.interpolator.is_none(),
+            "C++ already ran the owner Artboard's onAddedDirty pass, so the late transition cannot resolve an interpolator",
+        );
+    }
+
+    #[test]
+    fn transition_added_after_its_layer_importer_resolved_keeps_null_target() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard"),
+            record("Artboard"),
+            record("StateMachine"),
+            record("StateMachineLayer"),
+            record("AnyState"),
+            record("EntryState"),
+            record("ExitState"),
+            record("AnimationState"),
+            // Installing layer 1 resolves layer 0. Until the first state for
+            // layer 1 appears, LayerStateImporter still points at layer 0's
+            // AnimationState.
+            record("StateMachineLayer"),
+            uint_record("StateTransition", "stateToId", 0),
+            record("AnyState"),
+            record("EntryState"),
+            record("ExitState"),
+        ])
+        .expect("late transition after layer resolution imports");
+
+        let graphs = file.artboard_state_machine_graphs(0);
+        let transition = &graphs[0].layers[0].states.last().unwrap().transitions[0];
+        assert_eq!(transition.state_to_index, None);
+        assert!(transition.state_to.is_none());
+    }
+
+    #[test]
+    fn layer_added_after_its_owner_artboard_initialized_skips_system_state_validation() {
+        let file = RuntimeFile::from_authoring_records(vec![
+            record("Backboard"),
+            record("Artboard"),
+            record("StateMachine"),
+            // Replacing Artboard A initializes its existing StateMachine.
+            record("Artboard"),
+            // StateMachineImporter A is still latest, so this layer attaches to
+            // A after A's onAddedDirty validation has already completed.
+            record("StateMachineLayer"),
+        ])
+        .expect("late layer without system states matches pinned C++ import");
+
+        let graphs = file.artboard_state_machine_graphs(0);
+        assert_eq!(graphs[0].layers.len(), 1);
+        assert!(graphs[0].layers[0].states.is_empty());
+    }
+
+    #[test]
+    fn system_state_added_after_owner_artboard_initialization_cannot_repair_earlier_failure() {
+        let error = RuntimeFile::from_authoring_records(vec![
+            record("Backboard"),
+            record("Artboard"),
+            record("StateMachine"),
+            record("StateMachineLayer"),
+            record("AnyState"),
+            record("EntryState"),
+            // Artboard A initializes here and rejects the missing ExitState.
+            record("Artboard"),
+            record("ExitState"),
+        ])
+        .expect_err("a state authored after initialization cannot repair the failed layer");
+        assert!(
+            error
+                .to_string()
+                .contains("missing required AnyState/EntryState/ExitState"),
+            "{error:#}",
+        );
     }
 }
 

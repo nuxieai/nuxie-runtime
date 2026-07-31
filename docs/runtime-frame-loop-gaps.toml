@@ -3,40 +3,81 @@ title = "Runtime frame-loop mechanism and gap inventory"
 upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 
 # User-approved deliberate divergences are recorded here and cited by their
-# parity-gap-register D-row. There are none for the frame-loop port.
-decision = []
+# parity-gap-register D-row.
+
+[[decision]]
+id = "D2"
+source = "docs/parity-gap-register.md#d--deliberate-divergence-register-declare-dont-fix"
+approved = "The project-wide saturating float-to-int policy was already binding; the user reaffirmed on 2026-07-25 that Rust should make the sensible safe choice where C++ relies on a condition Rust cannot represent safely."
 
 [[gap]]
 id = "FL-G01"
 status = "open"
-mechanism = "KeyFrame seconds are represented separately from the authored keyframe values in the current retained-seconds experiment; the complete KeyFrame owner translation must decide the exact Rust owner."
+mechanism = "FL-B1/FL-B2/FL-B3/FL-B4 now mirror the C++ KeyFrame, LinearAnimation, AnimationReset, and blend definition/occurrence owners: each concrete frame occurrence retains attachment-time seconds inside one insertion-ordered KeyedProperty sequence, one type-safe target enum binds CoreRegistry's single property dispatch, the Artboard owns one immutable definition arena, every animation occurrence retains only a typed definition handle plus C++-shaped mutable state, and each reset occurrence leases one pooled first-seen object/property stream that is cleared and returned on final release. Each BlendState uniquely owns its ordered BlendAnimation definitions; every embedded blend occurrence retains a handle back to that exact definition, reads live source/value fields during advance, and retains unresolved animation IDs through the shared empty-animation owner. Rust-only StateMachineInstance snapshot clones share immutable definition/reset leases instead of cloning factory state. C++'s process-global empty animation is represented by one safe Artboard-shared definition because Rust's full definition type can contain non-Sync scripting handles; its generated defaults, occurrence sharing, and behavior remain exact. The former read-time fps calculation, six parallel frame vectors, property-family booleans, import-time source snapshots, per-occurrence descriptor clones, copied blend source/value payloads, positional from/to rediscovery, invalid-definition/empty-state elision, Option loop override, local zero guards, flat reset clones, global pair scans, and empty-reset elision are deleted. The gap remains open only until the complete FL-B owner family is independently verified."
 citations = [
   "cpp:src/animation/keyframe.cpp:10",
-  "rust:crates/nuxie-runtime/src/animation.rs:1055",
+  "cpp:src/importers/keyed_property_importer.cpp:13-17",
+  "cpp:src/animation/keyed_property.cpp:15-52",
+  "cpp:src/animation/linear_animation.cpp:27-150",
+  "cpp:src/animation/linear_animation_instance.cpp:17-79",
+  "cpp:src/animation/linear_animation_instance.cpp:187-435",
+  "cpp:src/animation/animation_reset.cpp:8-70",
+  "cpp:src/animation/animation_reset_factory.cpp:10-235",
+  "cpp:src/animation/animation_state_instance.cpp:7-41",
+  "cpp:src/animation/blend_animation.cpp:9-38",
+  "cpp:include/rive/animation/blend_animation.hpp:7-18",
+  "cpp:include/rive/animation/blend_state.hpp:13-26",
+  "cpp:include/rive/animation/blend_state_instance.hpp:18-129",
+  "cpp:src/animation/blend_state_1d_instance.cpp:10-149",
+  "cpp:src/animation/blend_state_direct_instance.cpp:10-62",
+  "rust:crates/nuxie-runtime/src/animation.rs:329-331",
+  "rust:crates/nuxie-runtime/src/animation.rs:1022-1064",
+  "rust:crates/nuxie-runtime/src/animation.rs:1338-1421",
+  "rust:crates/nuxie-runtime/src/animation.rs:1557-2067",
+  "rust:crates/nuxie-runtime/src/artboard.rs:390",
+  "rust:crates/nuxie-runtime/src/artboard.rs:4119-4196",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine.rs:763-1103",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine.rs:1143-1405",
+  "rust:crates/nuxie-runtime/src/state_machine/state_instance.rs:1-180",
 ]
-closure = "FL-B either lands the complete C++ KeyFrame owner with retained seconds or removes the experiment."
+closure = "Independent FL-B acceptance verifies the complete 45-file/eight-member wave and promotes the retained KeyFrame/KeyedProperty/LinearAnimation/AnimationReset/BlendState owners without any displaced sidecar, definition clone, reset clone, copied blend payload, dropped definition, or per-occurrence empty fallback."
 
 [[gap]]
 id = "FL-G02"
-status = "open"
-counter = "component_add_dirt"
-mechanism = "Component identity is split across local ids, component vectors, and subsystem sidecars; repeated id-to-owner resolution has not yet been structurally counted against C++ pointers."
+status = "closed"
+mechanism = "Component identity, retained relations, dirt, and dependency order now live on one occurrence-local object arena. Authored, PathComposer, and TextVariationHelper nodes share one typed-handle schedule; Artboard Components dirt is the root Component's sole dirt mask. Construction owner resolution, dependency builds, and dependency sorts match C++ exactly. Remaining component_add_dirt call-count differences are owned by the still-pending FL-C ListenerAlignTarget and FL-E Text-to-layout callback translations, not by the Component lifecycle."
 citations = [
-  "cpp:src/component.cpp:17",
-  "rust:crates/nuxie-runtime/src/components.rs:478",
+  "cpp:src/component.cpp:13-54",
+  "cpp:src/dependency_sorter.cpp:6-48",
+  "rust:crates/nuxie-runtime/src/objects.rs:232-275",
+  "rust:crates/nuxie-runtime/src/artboard.rs:6784-6830",
+  "rust:crates/nuxie-runtime/src/artboard.rs:7651-7815",
 ]
-closure = "FL-A records identity counters and ports the complete retained component/dependent lifecycle."
+closure = "Closed by FL-A: one retained owner graph, one root/component dirt owner, exact dependency construction/sort counts, direct-handle traversal, clone-local relation rebuild, and zero internal owner rediscovery."
 
 [[gap]]
 id = "FL-G03"
 status = "open"
-counter = "state_machine_transition_search"
-mechanism = "State-machine definition and instance collections must be checked for per-frame clone and name/id search work against C++ retained vectors and pointers."
-citations = [
-  "cpp:src/animation/state_machine_instance.cpp:2583",
-  "rust:crates/nuxie-runtime/src/state_machine/instance.rs:53",
+counters = [
+  "component_add_dirt",
+  "event_apply_batch",
+  "state_machine_advance",
+  "state_machine_transition_search",
+  "component_dirt_consumptions",
 ]
-closure = "FL-C reaches counter parity for collection clones/searches and deletes any displaced lookup path."
+mechanism = "The complete listener/action family now dispatches ListenerAlignTarget through the retained target Node with the pinned transform/world-transform dirt writes. The merged E5 trace reaches exact transition-search and component-dirt-consumption counts, while its exact ordinary and scripted golden streams expose a remaining call-topology difference: pinned C++ enters StateMachineInstance::advance/applyEvents 30 times and Rust enters advance_with_report_mode/apply_local_event_listeners 11 times. Rust performs callback-major batching and ancestor delivery, then report-time bubbling, audio unwind, deferred terminal-error retention, and owner-mediated settlement through its retained safe facade rather than a raw parent-pointer recursion. Independent round-nine standards review classified this 30-to-11 topology as a safe owner-boundary adaptation. The two coverage counters remain explicitly open; output equality alone does not close this mechanism-level difference."
+citations = [
+  "cpp:src/animation/state_machine_instance.cpp:2320-2342",
+  "cpp:src/animation/state_machine_instance.cpp:2548-2575",
+  "cpp:src/animation/state_machine_instance.cpp:2583",
+  "cpp:src/animation/listener_align_target.cpp:9",
+  "rust:crates/nuxie-runtime/src/state_machine/listener_align_target.rs:15-112",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7672-7721",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12613-12663",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12934",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:13115",
+]
+closure = "FL-C4 closes ListenerAlignTarget and its component-dirt branch. FL-C5 closes transition-search count parity and displaced lookup paths. The round-nine classification action is closed: the cited batching, ancestor-delivery, bubbling, audio, deferred-retention, and settlement path establishes the 30-to-11 advance/applyEvents topology as a safe owner-boundary adaptation. The final two counters remain tracked here for later aggregate trace closure rather than requiring exact call parity."
 
 [[gap]]
 id = "FL-G04"
@@ -45,9 +86,14 @@ counter = "databind_artboard_batch"
 mechanism = "DataBind target/source queues and ViewModel relay state are Rust adaptations whose batch identity and dirt consumption need member-level correspondence."
 citations = [
   "cpp:src/artboard.cpp:1153",
+  "cpp:src/data_bind/converters/data_converter_formula.cpp:526-552",
+  "cpp:src/data_bind/converters/data_converter_operation_viewmodel.cpp:48-59",
+  "cpp:src/data_bind/data_bind_context.cpp:56-89",
   "rust:crates/nuxie-runtime/src/artboard_data_bind.rs:1329",
+  "rust:crates/nuxie-runtime/src/retained_data_bind.rs:434",
+  "rust:crates/nuxie-runtime/src/state_machine/scripted_listener_action.rs:1270",
 ]
-closure = "FL-D proves one owner and one consume path for every C++ dirty DataBind batch."
+closure = "FL-D retains one container enrollment per authored DataBind occurrence over the complete dirt mask across clone/collapse; subordinate converter DataBinds execute only through an active outer owner; every compatibility/path source route, including list targets, dirties and enqueues that exact authored occurrence. The complete Formula and OperationViewModel owners must also settle pinned C++'s retained prior-source registrations on a non-null A-to-B rebind: Formula's old source can still clear source-change randoms, and OperationViewModel's old operand can still dirty the parent bind. Rust currently unregisters/re-homes those additional-source sinks, so this subclass-specific lifecycle remains open rather than being mislabeled as FL-C4 base-DataBind parity. Prove one insertion-ordered queue entry and one consume path per occurrence. FL-A closes only Component -> collapsable registration/notification and initial synchronization; it does not claim complete DataBind collapse execution parity."
 
 [[gap]]
 id = "FL-G05"
@@ -72,13 +118,35 @@ closure = "The imported runtime-drawing ledger is closed with zero legacy scene-
 [[gap]]
 id = "FL-G07"
 status = "open"
-counter = "per_frame_allocations"
-mechanism = "Per-frame allocation, path/text/bounds/layout rebuild, and unchanged-frame work counts are not yet emitted by both runners."
+counters = [
+  "component_add_dirt",
+  "per_frame_allocations",
+]
+mechanism = "Text/layout owners and per-frame allocation, path/text/bounds/layout rebuild work remain pending. The mechanism trace isolates four missing Rust root-Components publications to pinned Text::buildRenderStyles -> Node::markLayoutNodeDirty -> LayoutComponent::markLayoutNodeDirty -> Artboard::markLayoutDirty; Rust still materializes retained text drawing state without that complete FL-E owner callback chain. Ordinary LayoutComponentStyle padding and TextStyle fontSize/lineHeight writes expose the same missing ownership: Rust broadly bumps layout_epoch/global layout-and-text resources and apply_double_property_changed has no corresponding owner callback, while pinned C++ dirties the retained parent LayoutComponent/Yoga or owning Text."
 citations = [
   "cpp:src/artboard.cpp:1652",
+  "cpp:src/artboard.cpp:1314",
+  "cpp:src/layout/layout_component_style.cpp:208",
+  "cpp:src/layout/layout_component_style.cpp:336",
+  "cpp:src/layout/layout_component_style.cpp:417",
+  "cpp:src/layout_component.cpp:1412",
+  "cpp:src/layout_component.cpp:1419",
+  "cpp:src/node.cpp:54",
+  "cpp:src/text/text_style.cpp:166",
+  "cpp:src/text/text.cpp:951",
+  "cpp:src/text/text.cpp:1342",
+  "cpp:src/text/text.cpp:826",
+  "rust:crates/nuxie-runtime/src/artboard.rs:4012",
+  "rust:crates/nuxie-runtime/src/artboard.rs:6554",
+  "rust:crates/nuxie-runtime/src/artboard.rs:6660",
+  "rust:crates/nuxie-runtime/src/artboard.rs:8416",
+  "rust:crates/nuxie-runtime/src/artboard.rs:8644",
+  "rust:crates/nuxie-runtime/src/artboard.rs:7798",
   "rust:crates/nuxie-runtime/src/draw.rs:3816",
+  "rust:crates/nuxie-runtime/src/draw.rs:15779",
+  "rust:crates/nuxie-runtime/src/text.rs:113",
 ]
-closure = "The deterministic structural oracle records equal owner, dirt, rebuild, allocation, event, and clone/remount counts for the canonical corpus."
+closure = "FL-E ports the complete Text/layout dirty callback chain plus Text's retained m_bounds/localBounds owner read (including TransformConstraint targets). This includes ordinary LayoutComponentStyle padding writes (type 420, keys 512-515; unit keys 617-620) through the parent LayoutComponent (type 409, styleId 494) to its retained Yoga/artboard owner, and ordinary TextStyle/TextStylePaint fontSize and lineHeight writes (types 573/137, keys 274/370) through the owning Text's path/modifier/world/layout dirt. Direct and DataBindContext (type 447, propertyKey field key 586) writes must share that owner-local path; identical-value writes remain no-ops; unrelated subtrees remain clean; descendant/sibling/bounds/hit/text-reflow results update in the same advance. Rust's broad layout_epoch/global layout-and-text invalidation and missing apply_double_property_changed owner dispatch are displaced under PORTING.md section 2.3 and RF-17. The later Scene authoring slice for these properties waits on this runtime closure. The deterministic structural oracle records equal owner, dirt, rebuild, allocation, event, and clone/remount counts for the canonical corpus."
 
 [[gap]]
 id = "FL-G08"
@@ -97,6 +165,31 @@ citations = [
 ]
 closure = "FL-A/FL-E ports the retained Drawable link and exact DrawOrder/Clipping dirt lifecycle; the three counters match C++ or cite a binding adaptation."
 
+[[gap]]
+id = "FL-G09"
+status = "open"
+mechanism = "Pinned C++ installs one persistent ScriptingContext render context before file import, so context:shader can materialize from listener, input, path-effect, DataConverter, and draw callbacks. Rust currently installs RendererBindings.factory only around generator/init/method-with-factory/draw calls; ordinary callback entry points can therefore observe no factory and return nil."
+citations = [
+  "cpp:src/command_server.cpp:698",
+  "cpp:include/rive/lua/rive_lua_libs.hpp:1530-1543",
+  "rust:crates/nuxie-scripting/src/vm.rs:1693-1729",
+  "rust:crates/nuxie-scripting/src/vm.rs:1821-1870",
+  "rust:crates/nuxie-scripting/src/vm/renderer.rs:29-55",
+]
+closure = "FL-E gives each scripting VM one persistently installed RenderFactory context with C++ lifetime/identity, proves context:shader from every callback family, and deletes callback-scoped factory installation that displaced that owner. LOC-009 remains the renderer/scripting shader-occurrence implementation inside the active-factory boundary."
+
+[[gap]]
+id = "FL-G10"
+status = "closed"
+mechanism = "AnimationReset color replay follows pinned C++'s signed-int to float serialization and signed-int conversion for every defined result. The narrow positive signed-int range that rounds to 2^31 has no defined C++ float-to-int result; project decision D2 binds Rust's saturating conversion instead of preserving the old Rust-only u32 bypass or attempting to emulate undefined behavior."
+citations = [
+  "cpp:src/animation/animation_reset_factory.cpp:126-168",
+  "cpp:src/animation/animation_reset.cpp:30-35",
+  "cpp:src/animation/animation_reset.cpp:54-67",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine.rs:1907-1968",
+]
+closure = "A pinned-C++ probe locks 0x011d1d1d to 0x011d1d1c through the real AnimationReset binary buffer; Rust retains that float representation and exact defined conversion. Out-of-range conversion follows the user-approved project D2 saturation policy and is never labeled faithful C++ behavior."
+
 [[ratchet]]
 id = "legacy_image_layout_scale"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
@@ -114,3 +207,1743 @@ id = "nested_render_cache_key"
 globs = ["crates/nuxie-runtime/src/**/*.rs"]
 pattern = "\\bRuntimeNestedRenderCacheKey\\b"
 max_occurrences = 22
+
+[[ratchet]]
+id = "component_copied_relation_fields"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\b(?:constraint_locals|dependent_locals|component_by_local|RuntimeUpdateTarget|runtime_update_order)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "artboard_duplicate_component_dirt"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "^\\s*pub\\(crate\\) dirt: ComponentDirt,"
+max_occurrences = 0
+
+[[ratchet]]
+id = "deferred_state_machine_hit_shape_dirt"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bpending_state_machine_hit_shape_dirt\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_definition_raw_pointer"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\b(?:state_machine_definition_ptr|retained_state_machine_ptr)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "runtime_component_parent_local_field"
+globs = ["crates/nuxie-runtime/src/components.rs"]
+pattern = "^\\s*pub(?:\\(crate\\))?\\s+parent_local\\s*:"
+max_occurrences = 0
+
+[[ratchet]]
+id = "runtime_imported_dependency_schedule"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bruntime_dependency_node_order\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "runtime_path_composer_schedule_sidecar"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\b(?:path_composer_order|path_composer_dirt|pending_settlement_component_locals)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "keyframe_read_time_seconds"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "fn\\s+seconds\\s*\\(\\s*&self\\s*,\\s*fps"
+max_occurrences = 0
+
+[[ratchet]]
+id = "keyed_property_parallel_frame_vectors"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\b(?:color_key_frames|bool_key_frames|uint_key_frames|string_key_frames|callback_key_frames)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "keyed_property_family_sidecars"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "\\b(?:double_source_value|color_source_value|bool_source_value|double_property|color_property|bool_property|uint_property|string_property|callback_event)\\s*:"
+max_occurrences = 0
+
+[[ratchet]]
+id = "linear_animation_occurrence_descriptor"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\banimation\\s*:\\s*RuntimeLinearAnimation\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "linear_animation_option_loop_override"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\bloop_value\\s*:\\s*Option\\s*<\\s*u64\\s*>"
+max_occurrences = 0
+
+[[ratchet]]
+id = "linear_animation_local_zero_guard"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "if\\s+(?:self\\.fps\\s*==\\s*0|fps\\s*==\\s*0\\.0|duration\\s*==\\s*0\\.0|range\\s*!=\\s*0\\.0)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "linear_animation_definition_vec_owner"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "\\blinear_animations\\s*:\\s*Vec\\s*<\\s*RuntimeLinearAnimation\\s*>"
+max_occurrences = 0
+
+[[ratchet]]
+id = "animation_reset_flat_entries_owner"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "struct\\s+AnimationReset\\s*\\{\\s*entries\\s*:\\s*Vec"
+max_occurrences = 0
+
+[[ratchet]]
+id = "animation_reset_global_seen_scan"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "let\\s+mut\\s+seen\\s*=\\s*Vec"
+max_occurrences = 0
+
+[[ratchet]]
+id = "animation_reset_empty_owner_elision"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "if\\s+entries\\.is_empty\\(\\)\\s*\\{\\s*None"
+max_occurrences = 0
+
+[[ratchet]]
+id = "blend_occurrence_1d_value_copy"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "value\\s*:\\s*animation\\.value"
+max_occurrences = 0
+
+[[ratchet]]
+id = "blend_occurrence_direct_source_copy"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "source\\s*:\\s*animation\\.source\\.clone"
+max_occurrences = 0
+
+[[ratchet]]
+id = "blend_occurrence_state_source_copy"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "source\\s*:\\s*blend_state\\.source\\.clone"
+max_occurrences = 0
+
+[[ratchet]]
+id = "blend_invalid_definition_elision"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "\\(!animations\\.is_empty\\(\\)\\)\\.then_some"
+max_occurrences = 0
+
+[[ratchet]]
+id = "blend_from_to_index_rediscovery"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "let\\s+from_index\\s*=\\s*to_index\\.checked_sub"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_per_advance_collection_rebuild"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+advance[^\\{]*\\{(?:(?!\\n\\s*(?:pub(?:\\([^)]*\\))?\\s+)?fn\\s)[\\s\\S]){0,8000}?let\\s+(?:mut\\s+)?(?:inputs|layers|transitions|conditions|listeners|actions)\\s*=\\s*[^;]*\\.collect"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_occurrence_definition_copy"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "(?:input|layer|transition|condition|listener|action)_definition\\s*:\\s*[^,\\n]*\\.clone\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_replacement_candidate_container"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "(?:let\\s+(?:mut\\s+)?|pub(?:\\([^)]*\\))?\\s+)?(?:transition|condition|listener|action)_candidates\\s*(?::\\s*(?:Vec|BTreeMap|HashMap)|=\\s*(?:Vec|BTreeMap|HashMap)::new)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_event_listener_rescan"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:events|listeners)\\.iter\\(\\)\\s*\\.(?:find|find_map|position|any)"
+# The FL-C4 queue owner retains authored listener/event occurrence tables; no
+# replacement linear rediscovery remains.
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_transition_search_early_exit"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "if\\s+(?:transition|conditions?)\\.[^\\n]*\\{\\s*return\\s+(?:Ok\\(false\\)|None|false)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_invented_transition_return_guard"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "(?:condition_count\\s*==\\s*self\\.conditions\\.len\\(\\)|duration\\s*!=\\s*0\\.0)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_dropped_viewmodel_condition"
+globs = ["crates/nuxie-runtime/src/state_machine/transition_condition.rs"]
+pattern = "RuntimeTransitionViewModelCondition::from_object\\([^;]{0,240}\\.map\\(Self::ViewModel\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_dropped_focus_condition"
+globs = ["crates/nuxie-runtime/src/state_machine/transition_condition.rs"]
+pattern = "RuntimeTransitionFocusCondition::from_object\\([^;]{0,240}\\.map\\(Self::Focus\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_empty_any_shortcut"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "any_state[^\\n]{0,160}transitions\\.is_empty\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_parallel_occurrence_indices"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "(?:current|source)_state_index\\s*:"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_copied_active_transition_payload"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "active_transition_(?:actions|duration|interpolator|listener)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_prebuilt_state_occurrences"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "state_occurrences\\s*:\\s*(?:Vec|BTreeMap|HashMap)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_nested_owner_scan"
+globs = ["crates/nuxie-runtime/src/state_machine/nested_state_machine.rs"]
+pattern = "fn\\s+from_imported[\\s\\S]{0,3000}nested_artboards[^;]{0,400}find_map[^;]{0,400}RuntimeNestedAnimationInstance::StateMachine"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_shared_layer_occurrence_alias"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "(?:any_state|current_state|state_from)\\s*:\\s*Option<(?:Rc|Arc)<"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_advance_source_before_mix"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "advance_transition_source_animation[\\s\\S]{0,1200}update_transition_mix"
+max_occurrences = 0
+
+[[ratchet]]
+id = "nested_state_machine_public_clone_copies_live_occurrence"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "impl Clone for RuntimeNestedArtboardInstance[\\s\\S]{0,2400}animations:\\s*self\\.animations\\.clone\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_transition_random_constant"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "(?:(?:random_weight|random_value)\\s*=\\s*0(?:\\.0)?(?:_f(?:32|64))?|fn\\s+(?:random_transition_value|random_value)\\s*\\([^)]*\\)\\s*->\\s*f(?:32|64)\\s*\\{\\s*0(?:\\.0)?(?:_f(?:32|64))?\\s*\\})"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_transition_weight_widened_or_saturating"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "(?:total_weight|evaluated_random_weight)[^\\n]{0,120}(?:u64|saturating_add)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_transition_candidate_reorder"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "weighted_candidates\\.(?:sort|sort_by|sort_by_key|sort_unstable|sort_unstable_by|sort_unstable_by_key)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_occurrence_owned_random_provider"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "random_provider\\s*:\\s*RuntimeRandomProvider"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_time_only_seed"
+globs = ["crates/nuxie-runtime/src/math/random.rs"]
+pattern = "fn\\s+initialize_layer\\(\\)[\\s\\S]{0,240}let\\s+seed\\s*=\\s*SystemTime"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_unconditional_libc"
+globs = [
+  "crates/nuxie-runtime/src/math/random.rs",
+  "crates/nuxie-runtime/src/math/random/wasm.rs",
+]
+pattern = "libc::(?:rand|srand|RAND_MAX)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_native_rust_wall_clock_api"
+globs = ["crates/nuxie-runtime/src/math/random/native.rs"]
+pattern = "(?:SystemTime|UNIX_EPOCH)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_linux_wrong_high_resolution_clock"
+globs = ["crates/nuxie-runtime/src/math/random/native.rs"]
+pattern = "LINUX_HIGH_RESOLUTION_CLOCK_ID[^\\n]{0,120}=\\s*libc::CLOCK_MONOTONIC"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_apple_wrong_high_resolution_clock"
+globs = ["crates/nuxie-runtime/src/math/random/native.rs"]
+pattern = "APPLE_HIGH_RESOLUTION_CLOCK_ID[^\\n]{0,120}=\\s*libc::(?:CLOCK_REALTIME|CLOCK_MONOTONIC)(?:[^_]|$)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_other_unix_wrong_high_resolution_clock"
+globs = ["crates/nuxie-runtime/src/math/random/native.rs"]
+pattern = "OTHER_UNIX_HIGH_RESOLUTION_CLOCK_ID[^\\n]{0,120}=\\s*libc::(?:CLOCK_REALTIME|CLOCK_MONOTONIC_RAW)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_windows_wrong_high_resolution_clock"
+globs = ["crates/nuxie-runtime/src/math/random/native.rs"]
+pattern = "(?:GetSystemTime|GetSystemTimePreciseAsFileTime|GetTickCount|timeGetTime)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_native_panic"
+globs = ["crates/nuxie-runtime/src/math/random/native.rs"]
+pattern = "(?:panic!|unwrap\\(|expect\\()"
+max_occurrences = 0
+
+[[ratchet]]
+id = "nested_state_machine_optional_owner_construction"
+globs = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/state_machine/nested_state_machine.rs"]
+pattern = "(?:fn\\s+(?:nested_state_machine_instance|from_imported)[\\s\\S]{0,360}->\\s*Option<(?:RuntimeNestedAnimationInstance|Self)>|let\\s+Some\\([^)]*\\)\\s*=\\s*nested_state_machine_instance)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "nested_state_machine_missing_input_name_drop"
+globs = ["crates/nuxie-runtime/src/state_machine/nested_state_machine.rs"]
+pattern = "fn\\s+input_id_named[\\s\\S]{0,700}(?:\\.and_then\\(\\|input\\|\\s*input\\.name\\(\\)\\)[\\s\\S]{0,80}==\\s*Some\\(name\\)|input\\.name\\.as_deref\\(\\)\\s*==\\s*Some\\(name\\))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_all_layers_before_entry_actions"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:let\\s+layers\\s*=\\s*state_machine[\\s\\S]{0,700}\\.collect\\(\\)|initialize_layer_entry_actions)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_layer_init_error_drops_later_layers"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+initialize_layers_in_authored_order[\\s\\S]{0,3200}(?:if\\s+let\\s+Err\\([^)]*\\)[\\s\\S]{0,120}\\bbreak\\s*;|if\\s+self\\.script_error\\.is_some\\(\\)\\s*\\{\\s*(?:continue|break)\\s*;)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_waiting_for_exit_overwrite"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "fn\\s+find_random_transition[\\s\\S]{0,3600}self\\.waiting_for_exit\\s*=\\s*(?:false|waiting_for_exit)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_random_selected_wait_latch_not_cleared"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "if\\s+state\\.uses_random_transition_selection\\(\\)(?:(?!\\n\\s*for\\s*\\()[\\s\\S]){0,5000}self\\.change_state\\([\\s\\S]{0,1200}\\)\\?;\\s*return\\s+Ok\\(true\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_entry_databinds_available_too_early"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+initialize_layers_in_authored_order[\\s\\S]{0,4200}data_bind_facilities_ready:\\s*true[\\s\\S]{0,1000}perform_initial_entry_actions"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_focus_tree_built_before_layer_entries"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "pub\\(crate\\)\\s+fn\\s+new\\(\\s*state_machine_index(?:(?!self\\s*\\.initialize_layers_in_authored_order)[\\s\\S]){0,16000}(?:RuntimeFocusTree::from_artboard|focus\\.sync\\(artboard\\)|install_nested_external_focus_domain\\([^)]*\\))[\\s\\S]{0,6000}self\\s*\\.initialize_layers_in_authored_order"
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_action_occurrence_filter_map"
+globs = [
+  "crates/nuxie-runtime/src/state_machine/state_machine.rs",
+  "crates/nuxie-runtime/src/state_machine/**/*.rs",
+]
+pattern = "(?:listener\\.actions|state\\.fire_actions|transition\\.fire_actions|focus_listener_groups|keyboard_listener_groups|gamepad_listener_groups|semantic_listener_groups)[^;]{0,500}filter_map"
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_action_occurrence_reorder"
+globs = [
+  "crates/nuxie-runtime/src/state_machine/state_machine.rs",
+  "crates/nuxie-runtime/src/state_machine/**/*.rs",
+]
+pattern = "(?:listener_actions|fire_actions|focus_listener_groups|keyboard_listener_groups|gamepad_listener_groups|semantic_listener_groups)\\.(?:sort|sort_by|sort_by_key|sort_unstable|sort_unstable_by|sort_unstable_by_key|dedup)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_input_direct_before_nested"
+globs = [
+  "crates/nuxie-runtime/src/state_machine/listener_bool_change.rs",
+  "crates/nuxie-runtime/src/state_machine/listener_number_change.rs",
+  "crates/nuxie-runtime/src/state_machine/listener_trigger_change.rs",
+]
+pattern = "(?m)^    pub\\(crate\\) fn perform\\b(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,2500}direct_input_index(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,900}nested_input_local_id"
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_fire_event_import_snapshot"
+globs = [
+  "crates/nuxie-runtime/src/state_machine/listener_action.rs",
+  "crates/nuxie-runtime/src/state_machine/listener_fire_event.rs",
+  "crates/nuxie-runtime/src/state_machine/state_machine_fire_action.rs",
+]
+pattern = "(?:event_template|from_runtime_event\\([^)]*\\))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_fire_event_deferred_host_report"
+globs = [
+  "crates/nuxie-runtime/src/state_machine/listener_action.rs",
+  "crates/nuxie-runtime/src/state_machine/listener_fire_event.rs",
+  "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+]
+pattern = "RuntimeScheduledListenerAction::FireEvent[\\s\\S]{0,1200}pending_listener_events\\.push"
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_reported_event_payload_frozen_at_fire"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "reported_events\\[start\\.\\.\\]\\.to_vec\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_reported_event_observed_without_live_artboard"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "pub\\s+fn\\s+reported_event\\(\\s*&self[\\s\\S]{0,240}reported_events\\.get\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_viewmodel_consumed_null_occurrence_drop"
+globs = ["crates/nuxie-runtime/src/state_machine/listener_action.rs"]
+pattern = "\"ListenerViewModelChange\"[\\s\\S]{0,240}bindable_property\\.is_some\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_viewmodel_perform_reads_imported_default"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "RuntimeScheduledListenerAction::ViewModelChange\\(action\\)[\\s\\S]{0,1800}action\\.value\\.as_ref\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "focus_action_target_import_graph_lookup"
+globs = ["crates/nuxie-runtime/src/state_machine/focus_action_target.rs"]
+pattern = "\\.runtime_graph\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_group_import_graph_child_lookup"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+listener_target_direct_child[\\s\\S]{0,1400}\\.runtime_graph\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_pointer_mark_depends_on_action_change"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "if\\s+self\\.perform_listener_actions_with_event_context\\([\\s\\S]{0,700}\\)\\?\\s*\\{\\s*self\\.needs_advance\\s*=\\s*true"
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_align_target_shared_fused_inverse"
+globs = ["crates/nuxie-runtime/src/state_machine/listener_align_target.rs"]
+pattern = "parent_world\\.(?:determinant|invert|invert_or_identity)\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_scripted_action_double_dispatch"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+perform_listener_actions_with_event_context[\\s\\S]{0,6500}perform_script_object_listener_action"
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_scripted_resource_error_erased"
+globs = [
+  "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+  "crates/nuxie-runtime/src/state_machine/listener_action.rs",
+]
+pattern = "(?:(?:fn\\s+perform_listener_actions_with_event_context[\\s\\S]{0,6500}perform_scripted_listener_action|fn\\s+perform_scheduled_listener_actions[\\s\\S]{0,2600}perform_instance_action|call_scripted_drawable_input|perform_listener_actions)\\([^;]{0,300}unwrap_or\\(false\\)|let\\s+_\\s*=\\s*[^;]{0,300}(?:call_scripted_drawable_input|perform_listener_actions)\\()"
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_ordinary_script_error_truncates_fifo"
+globs = ["crates/nuxie-runtime/src/state_machine/listener_action.rs"]
+pattern = "perform_instance_action\\([^;]{0,300}\\)\\?"
+max_occurrences = 0
+
+[[ratchet]]
+id = "focused_dispatch_flat_group_scan"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "pub\\s+fn\\s+(?:key_input|text_input|gamepad_dispatch)\\([^\\{]*\\{[\\s\\S]{0,1800}(?:keyboard_listener_groups|gamepad_listener_groups)\\.iter\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "gamepad_focused_identity_global_only"
+globs = [
+  "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+  "crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs",
+]
+pattern = "already_dispatched\\s*:\\s*Option<u32>"
+max_occurrences = 0
+
+[[ratchet]]
+id = "gamepad_scripted_parent_listener_fallback"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "component\\(group\\.target_local_id\\)[\\s\\S]{0,420}type_name\\s*==\\s*\"ScriptedDrawable\"[\\s\\S]{0,220}&&\\s*let\\s+Some\\(script\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_drawable_subtype_dispatch_drop"
+globs = [
+  "crates/nuxie-runtime/src/artboard.rs",
+  "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+]
+pattern = "type_name\\s*(?:==|!=)\\s*\"ScriptedDrawable\""
+max_occurrences = 0
+
+[[ratchet]]
+id = "mixed_report_listener_falls_through"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "for\\s+\\([^)]*listener[^)]*\\)\\s+in\\s+listener_definitions[^\\{]*\\{(?:(?!listener_uses_report_queue)[\\s\\S]){0,700}(?:focus_listener_groups|keyboard_listener_groups|gamepad_listener_groups|semantic_listener_groups)\\.push"
+max_occurrences = 0
+
+[[ratchet]]
+id = "mixed_report_listener_hit_test_rediscovery"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+hit_test[\\s\\S]{0,900}state_machine\\.listeners"
+max_occurrences = 0
+
+[[ratchet]]
+id = "listener_missing_pointer_path_drops_other_channels"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_listener.rs"]
+pattern = "runtime_listener_hit_paths\\([^;]{0,300}(?:\\?|\\.is_empty\\(\\)[\\s\\S]{0,160}(?:return\\s+None|continue))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_input_groups_not_refreshed_at_dispatch"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "pub\\s+fn\\s+(?:key_input|text_input|gamepad_dispatch)\\([^\\{]*\\{(?:(?!ensure_scripted_input_groups_current)[\\s\\S]){0,500}(?:focus\\.sync|focused_listener_chain)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_listener_last_data_bind_first_match"
+globs = ["crates/nuxie-runtime/src/state_machine/scripted_listener_action.rs"]
+pattern = "fn\\s+runtime_scripted_listener_action_binding_definition[\\s\\S]{0,6500}\\.find(?:_map)?\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_listener_fresh_clone_aliases_live_state"
+globs = ["crates/nuxie-runtime/src/state_machine/scripted_listener_action.rs"]
+pattern = "fn\\s+fresh_clone[\\s\\S]{0,2600}(?:inputs:\\s*self\\.inputs\\.clone\\(\\)|retained_bind:\\s*binding\\.retained_bind\\.clone\\(\\)|converter_state:\\s*binding\\.converter_state\\.clone\\(\\)|formula_random_source:\\s*binding\\.formula_random_source\\.clone\\(\\))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_converter_occurrence_dedup_or_reorder"
+globs = [
+  "crates/nuxie-runtime/src/state_machine/scripted_listener_action.rs",
+  "crates/nuxie-runtime/src/data_bind_graph.rs",
+]
+pattern = "fn\\s+(?:scripted_converter_occurrences|collect_scripted_converter_occurrences|scripted_converter_occurrence_snapshots|collect_scripted_converter_occurrence_snapshots)[\\s\\S]{0,3200}(?:BTreeMap|HashMap|\\.sort|\\.dedup)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_input_binding_flags_zeroed_on_clone"
+globs = ["crates/nuxie-runtime/src/state_machine/scripted_listener_action.rs"]
+pattern = "(?:fn\\s+from_definition\\(\\s*definition:|pub\\(crate\\)\\s+fn\\s+fresh_clone\\(&self\\))[\\s\\S]{0,2600}(?:flags:\\s*0|RuntimeRetainedDataBind::new\\(\\s*0)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_converter_unbind_clears_authored_collection"
+globs = [
+  "crates/nuxie-runtime/src/scripted_data_converter.rs",
+  "crates/nuxie-runtime/src/data_converter.rs",
+]
+pattern = "fn\\s+unbind_sources[\\s\\S]{0,900}(?:inputs\\.clear\\(\\)|data_binds\\.clear\\(\\)|self\\.inputs\\s*=)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "script_input_artboard_id_equality_short_circuit"
+globs = ["crates/nuxie-runtime/src/scripted_object.rs"]
+pattern = "self\\.value\\s*==\\s*Some\\(RuntimeDataBindGraphValue::Artboard"
+max_occurrences = 0
+
+[[ratchet]]
+id = "script_input_artboard_live_source_overwrites_generated_id"
+globs = ["crates/nuxie-runtime/src/scripted_object.rs"]
+pattern = "(?m)^    pub\\(crate\\) fn apply_artboard_source\\b(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,1600}self\\.value\\s*="
+max_occurrences = 0
+
+[[ratchet]]
+id = "script_input_artboard_projection_reads_generated_id"
+globs = ["crates/nuxie-runtime/src/scripted_object.rs"]
+pattern = "(?m)^    pub\\(crate\\) fn projection_value\\b(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,1000}if\\s+kind\\s*==\\s*ScriptListenerInputKind::Artboard\\s*\\{(?:(?!^        \\})[\\s\\S]){0,500}self\\.value"
+max_occurrences = 0
+
+[[ratchet]]
+id = "script_input_artboard_clone_blindly_copies_reference_state"
+globs = ["crates/nuxie-runtime/src/scripted_object.rs"]
+pattern = "(?m)^    pub\\(crate\\) fn clone_for_scripted_object\\b(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,1200}artboard:\\s*self\\.artboard\\.clone\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "script_input_artboard_fresh_clone_uses_derived_state"
+globs = [
+  "crates/nuxie-runtime/src/state_machine/scripted_listener_action.rs",
+  "crates/nuxie-runtime/src/scripted_data_converter.rs",
+]
+pattern = "(?m)^    (?:pub\\(crate\\) )?fn (?:from_definition|fresh_clone|from_input_definitions)\\b(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,5000}properties:\\s*(?:definition|input)\\.properties\\.clone\\(\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "data_converter_group_forward_output_type_walk"
+globs = ["crates/nuxie-runtime/src/data_bind_graph.rs"]
+pattern = "(?m)^    (?:pub\\(crate\\) )?fn (?:cpp_output_data_type|cpp_output_kind)\\b(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,5000}Self::Group\\(converters\\)\\s*=>\\s*converters\\s*\\.iter\\(\\)(?!\\s*\\.rev\\(\\))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "data_converter_group_output_capability_union"
+globs = ["crates/nuxie-runtime/src/data_bind_graph.rs"]
+pattern = "(?m)^    pub\\(crate\\) fn can_change_output_kind\\b(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,1800}Self::Group\\(converters\\)\\s*=>\\s*converters\\s*\\.iter\\(\\)\\s*\\.any"
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_object_partial_hydration_during_validation"
+globs = ["crates/nuxie/src/lib.rs"]
+pattern = "(?m)^fn prepare_script_listener_(?:data_converter_)?hydration(?:s)?\\b(?:(?!^fn\\b)[\\s\\S]){0,14000}(?:\\.apply_inputs\\(|hydrate_and_initialize_scripted_listener|set_(?:input|artboard_input|view_model_input)_core\\(|call_init(?:_with_factory)?\\()"
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_object_split_hydration_entrypoint"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?m)^    pub(?:\\(crate\\))? fn hydrate_scripted_listener_(?:action|data_converter)_instance\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_object_batch_hydration_collection"
+globs = ["crates/nuxie/src/lib.rs"]
+pattern = "(?m)^(?:fn prepare_script_listener_(?:data_converter_)?hydrations\\b|fn prepare_script_listener_(?:data_converter_)?hydration\\b(?:(?!^fn\\b)[\\s\\S]){0,3000}->[^\\{\\n]*Vec\\s*<)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_object_mutable_hydration_preflight"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?m)^    pub fn hydrate_and_initialize_scripted_listener_(?:action|data_converter)_instance\\b(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,5000}F:\\s*Fn(?:Once|Mut)?\\(\\s*&mut Self"
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_object_live_context_barrier_runs_init"
+globs = ["crates/nuxie/src/lib.rs"]
+pattern = "(?m)^fn install_live_scripted_object_contexts\\b(?:(?!^fn\\b)[\\s\\S]){0,7000}(?:materialize_missing_scripted_object|hydrate_and_initialize|call_init)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_object_unbound_constructor_enters_live_context"
+globs = ["crates/nuxie/src/lib.rs"]
+pattern = "(?m)^[ \\t]*(?:pub(?:\\([^\\n)]*\\))?[ \\t]+)?fn[ \\t]+instantiate_script_listener_actions_with_optional_factory\\b(?:(?!^[ \\t]*(?:pub(?:\\([^\\n)]*\\))?[ \\t]+)?fn\\b)[\\s\\S]){0,18000}retry_cold_scripted_objects_during_constructor\\([^;]*;(?:(?!^[ \\t]*(?:pub(?:\\([^\\n)]*\\))?[ \\t]+)?fn\\b|^[ \\t]*if[ \\t]+!machine\\.has_scripted_listener_data_context\\(\\)[ \\t]*\\{[ \\t\\r\\n]*return[ \\t]+Ok\\(\\(\\)\\);[ \\t\\r\\n]*\\})[\\s\\S]){0,2400}instantiate_state_machine_data_converters\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_object_instance_map_drops_before_cloned_binds"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?m)^pub struct StateMachineInstance\\b(?:(?!^\\})[\\s\\S]){0,24000}scripted_instances_by_global:[^\\n]*\\n(?:(?!scripted_object_bindings:)[\\s\\S]){0,3000}scripted_object_bindings:"
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_converter_unstable_authored_order"
+globs = [
+  "crates/nuxie-runtime/src/scripted_data_converter.rs",
+  "crates/nuxie-runtime/src/data_converter.rs",
+  "crates/nuxie-runtime/src/data_bind_graph.rs",
+]
+pattern = "(?m)^\\s*(?:pub\\(crate\\)\\s+)?fn\\s+(?:from_definition|for_scripted_definition|runtime_scripted_data_converter_input_definitions)\\b(?:(?!^\\s*(?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,9000}\\.(?:sort|sort_by|sort_by_key|sort_unstable|sort_unstable_by|sort_unstable_by_key)\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "script_input_trigger_collapsed_to_boolean"
+globs = [
+  "crates/nuxie-runtime/src/scripted_object.rs",
+  "crates/nuxie-runtime/src/state_machine/scripted_listener_action.rs",
+  "crates/nuxie-runtime/src/scripted_data_converter.rs",
+]
+pattern = "RuntimeDataBindGraphValue::Trigger\\([^)]*(?:!=\\s*0|\\.min\\(1\\)|\\.clamp\\(0,\\s*1\\))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_fire_trigger_resolved_at_import"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_fire_trigger.rs"]
+pattern = "struct\\s+RuntimeStateMachineFireTriggerPath\\s*\\{(?:(?!\\n\\})[\\s\\S]){0,700}RuntimeViewModelCell"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_fire_trigger_drops_file_context"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+fire_view_model_trigger[\\s\\S]{0,900}owned_data_context[\\s\\S]{0,450}\\n\\s*false\\s*\\n\\s*\\}"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_data_bind_template_drop_or_reorder"
+globs = ["crates/nuxie-runtime/src/state_machine/data_bind_template.rs"]
+pattern = "(?m)^pub\\(super\\) fn runtime_state_machine_data_bind_templates\\b(?:(?!^(?:pub(?:\\([^)]*\\))?\\s+)?fn\\b)[\\s\\S]){0,14000}(?:\\.(?:filter|filter_map|find_map|flat_map|map_while)\\s*\\(|\\.(?:rev|reverse|sort|sort_by|sort_by_key|sort_unstable|sort_unstable_by|sort_unstable_by_key|dedup|dedup_by|dedup_by_key)\\s*\\(|collect\\s*::\\s*<\\s*(?:BTreeMap|HashMap|BTreeSet|HashSet|IndexMap|IndexSet)|\\?\\s*;|\\bcontinue\\s*;|\\breturn\\s+None\\b)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_data_bind_container_enrollment_drop_or_reorder"
+globs = ["crates/nuxie-runtime/src/data_bind_graph.rs"]
+pattern = "(?m)^    pub\\(crate\\) fn add_data_binds_to_container\\b(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,6000}(?:\\.(?:filter|filter_map|find_map|flat_map|map_while)\\s*\\(|\\.(?:rev|reverse|sort|sort_by|sort_by_key|sort_unstable|sort_unstable_by|sort_unstable_by_key|dedup|dedup_by|dedup_by_key)\\s*\\(|collect\\s*::\\s*<\\s*(?:BTreeMap|HashMap|BTreeSet|HashSet|IndexMap|IndexSet)|\\?\\s*;|\\bcontinue\\s*;|\\breturn\\s+None\\b)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_base_data_bind_requires_context_path"
+globs = ["crates/nuxie-runtime/src/state_machine/data_bind_template.rs"]
+pattern = "(?m)^pub\\(super\\) fn runtime_state_machine_data_bind_templates\\b(?:(?!^(?:pub(?:\\([^)]*\\))?\\s+)?fn\\b)[\\s\\S]){0,14000}(?:let\\s+Some\\([^)]*\\)\\s*=\\s*file\\s*\\.\\s*data_bind_context_source_path_ids_for_object|data_bind_context_source_path_ids_for_object\\(\\s*data_bind\\s*\\)\\s*(?:\\?|\\.\\s*(?:unwrap|expect)\\s*\\(|\\.\\s*is_none\\s*\\(\\)\\s*\\{(?:(?!^(?:pub(?:\\([^)]*\\))?\\s+)?fn\\b)[\\s\\S]){0,300}(?:continue|return\\s+None)))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_listener_slot_compaction"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "state_machine\\s*\\.\\s*listeners\\s*\\.\\s*(?:iter|into_iter)\\(\\)(?:\\s*\\.\\s*(?:enumerate|cloned|copied|inspect|map)\\s*\\([^)]*\\)){0,3}\\s*\\.\\s*(?:filter|filter_map|flatten|map_while|dedup|dedup_by|dedup_by_key|sort|sort_by|sort_by_key|sort_unstable|sort_unstable_by|sort_unstable_by_key)\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_input_slot_flattening"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "state_machine\\s*\\.\\s*inputs\\s*\\.\\s*(?:iter|into_iter)\\(\\)(?:\\s*\\.\\s*(?:enumerate|cloned|copied|inspect|map)\\s*\\([^)]*\\)){0,3}\\s*\\.\\s*(?:filter|filter_map|flatten|map_while|dedup|dedup_by|dedup_by_key|sort|sort_by|sort_by_key|sort_unstable|sort_unstable_by|sort_unstable_by_key)\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_other_authored_collection_drop_or_reorder"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "state_machine\\s*\\.\\s*(?:layers|data_binds|scripted_objects)\\s*\\.\\s*(?:iter|into_iter)\\(\\)(?:\\s*\\.\\s*(?:enumerate|cloned|copied|inspect|map)\\s*\\([^)]*\\)){0,3}\\s*\\.\\s*(?:filter|filter_map|flatten|map_while|dedup|dedup_by|dedup_by_key|sort|sort_by|sort_by_key|sort_unstable|sort_unstable_by|sort_unstable_by_key)\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_authored_collection_map_or_set"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine.rs"]
+pattern = "(?:(?:inputs|listeners|layers|data_bind_templates|scripted_objects)\\s*:\\s*(?:Arc\\s*<\\s*)?(?:BTreeMap|HashMap|BTreeSet|HashSet|IndexMap|IndexSet)\\s*<|state_machine\\s*\\.\\s*(?:layers|inputs|listeners|data_binds|scripted_objects)\\s*\\.\\s*(?:iter|into_iter)\\(\\)(?:(?!;)[\\s\\S]){0,500}collect\\s*::\\s*<\\s*(?:BTreeMap|HashMap|BTreeSet|HashSet|IndexMap|IndexSet))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_definition_owner_in_root"
+globs = ["crates/nuxie-runtime/src/state_machine.rs"]
+pattern = "(?m)(?:^\\s*(?:(?:pub(?:\\([^)]*\\))?|const|async|unsafe|extern(?:\\s+\"[^\"]*\")?)\\s+)*fn\\s+|^\\s*impl\\s+|^\\s*(?:pub(?:\\([^)]*\\))?\\s+)?(?:struct|enum|union|trait)\\s+)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_instance_owner_in_compat_entry"
+globs = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
+pattern = "(?m)(?:^\\s*(?:(?:pub(?:\\([^)]*\\))?|const|async|unsafe|extern(?:\\s+\"[^\"]*\")?)\\s+)*fn\\s+|^\\s*impl\\s+|^\\s*(?:pub(?:\\([^)]*\\))?\\s+)?(?:struct|enum|union|trait)\\s+)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_definition_reexport_required"
+globs = ["crates/nuxie-runtime/src/state_machine.rs"]
+pattern = "pub\\s+use\\s+state_machine::RuntimeStateMachine\\s*;"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_instance_reexport_required"
+globs = ["crates/nuxie-runtime/src/state_machine/instance.rs"]
+pattern = "pub\\s+use\\s+super::state_machine_instance::\\{\\s*FocusState\\s*,\\s*StateMachineInstance\\s*\\}\\s*;"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_public_export_hub_required"
+globs = ["crates/nuxie-runtime/src/lib.rs"]
+pattern = "pub\\s+use\\s+state_machine::\\{[\\s\\S]{0,700}FocusState[\\s\\S]{0,700}RuntimeStateMachine[\\s\\S]{0,700}StateMachineInstance[\\s\\S]{0,700}StateMachineReportedEvent"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_public_api_inventory_required"
+globs = ["crates/nuxie-runtime/tests/public_api_fl_c5.rs"]
+pattern = "\\A(?=[\\s\\S]*macro_rules!\\s+exact_public_signature\\s*\\{[\\s\\S]{0,240}let\\s+_\\s*:\\s*\\$signature\\s*=\\s*\\$method\\s*;)(?=[\\s\\S]*BEGIN exhaustive W4 exact signatures[\\s\\S]*fn\\s+definition_global_id_is_exact\\s*\\([^)]*RuntimeStateMachine[^)]*\\)\\s*->\\s*u32\\s*\\{\\s*machine\\.global_id\\s*\\}[\\s\\S]*fn\\s+definition_name_is_exact\\s*\\([^)]*RuntimeStateMachine[^)]*\\)\\s*->\\s*Option<Arc<str>>\\s*\\{\\s*machine\\.name\\s*\\}[\\s\\S]*fn\\s+definition_inputs_are_exact\\b[\\s\\S]*->\\s*Arc<Vec<Option<RuntimeStateMachineInput>>>\\s*\\{\\s*machine\\.inputs\\s*\\}[\\s\\S]*fn\\s+definition_layers_are_exact\\b[\\s\\S]*->\\s*Arc<Vec<RuntimeStateMachineLayer>>\\s*\\{\\s*machine\\.layers\\s*\\})(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}try_pointer_down_with_timestamp_and_script_host)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}scripted_listener_data_converter_occurrences)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}bind_owned_view_model_context_handle)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}bindable_view_model_instance_index_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}default_view_model_symbol_list_index_source_handle_by_property_name_path)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}set_imported_view_model_context_list_source_item_count_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}set_owned_view_model_context_view_model_source_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}view_model_trigger_property_id)(?=[\\s\\S]*struct\\s+ExactFnOnceToken<'a>\\s*\\{[\\s\\S]{0,300}borrowed:\\s*&'a\\s+mut\\s*\\(\\)[\\s\\S]{0,300}not_send_or_sync:\\s*Rc<Cell<\\(\\)>>)(?=[\\s\\S]*fn\\s+hydration_methods_accept_fn_once\\b[\\s\\S]*exact_fn_once_token\\([\\s\\S]*move\\s*\\|_\\|[\\s\\S]{0,300}drop\\(token\\)[\\s\\S]*END exhaustive W4 exact signatures)"
+content_begin = "// BEGIN exhaustive W4 exact signatures"
+content_end = "// END exhaustive W4 exact signatures"
+content_sha256 = "fcb7bc0b16fe2824ff3c2fb0bfe02a3ae8e295476d079f1321d259ae0d178312"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_public_api_exact_signature_count_required"
+globs = ["crates/nuxie-runtime/tests/public_api_fl_c5.rs"]
+pattern = "exact_public_signature!\\s*\\("
+min_occurrences = 328
+max_occurrences = 328
+
+[[ratchet]]
+id = "runtime_nested_remap_probe_feature_required"
+globs = ["crates/nuxie-runtime/Cargo.toml"]
+pattern = "\\[features\\][\\s\\S]{0,300}tools\\s*=\\s*\\[\\][\\s\\S]{0,1000}\\[\\[test\\]\\][\\s\\S]{0,300}name\\s*=\\s*\"cpp_probe\"[\\s\\S]{0,300}required-features\\s*=\\s*\\[\\s*\"tools\"\\s*\\]"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "runtime_nested_remap_probe_items_gated"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "#\\[cfg\\(feature\\s*=\\s*\"tools\"\\)\\][\\s\\S]{0,160}?(?:pub\\s+struct\\s+RuntimeNestedRemapAnimationReport|pub\\s+fn\\s+runtime_nested_remap_animation_reports)"
+min_occurrences = 2
+max_occurrences = 2
+
+[[ratchet]]
+id = "runtime_nested_remap_probe_reexport_gated"
+globs = ["crates/nuxie-runtime/src/lib.rs"]
+pattern = "#\\[cfg\\(feature\\s*=\\s*\"tools\"\\)\\]\\s*pub\\s+use\\s+artboard::RuntimeNestedRemapAnimationReport\\s*;"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "runtime_cpp_probe_tools_feature_command"
+globs = ["Makefile"]
+pattern = "cargo\\s+test\\s+-p\\s+nuxie-runtime\\s+--features\\s+tools\\s+--test\\s+cpp_probe"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_instance_constructor_phase_reorder"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "initialize_ordinary_data_bind_container\\(\\);[\\s\\S]{0,500}initialize_layers_in_authored_order\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_queued_event_default_sentinel"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:#\\s*\\[\\s*derive\\([^)]*Default[^)]*\\)\\][\\s\\S]{0,160}struct\\s+RuntimeQueued(?:Focus|Semantic)Event\\b|impl\\s+Default\\s+for\\s+RuntimeQueued(?:Focus|Semantic)Event\\b)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_lifecycle_shallow_clone"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:Arc|Rc)::clone\\(\\s*&self\\.(?:queued_focus_events|queued_semantic_events|nested_event_registrations|pointer_down_listener_hits|pointer_listener_states|pointer_positions|scripted_listener_action_instances|scripted_instances_by_global)\\s*\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_dispose_missing_nested_detach"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "pub\\s+fn\\s+dispose\\s*\\([^)]*\\)\\s*\\{(?:(?!detach_nested_event_registrations)[\\s\\S]){0,500}\\}"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_teardown_bind_layer_script_reorder"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "impl\\s+Drop\\s+for\\s+StateMachineInstance[\\s\\S]{0,1000}(?:self\\.teardown_layers\\(\\);[\\s\\S]{0,200}self\\.teardown_bind_occurrences\\(\\)|self\\.teardown_script_occurrences\\(\\);[\\s\\S]{0,200}self\\.teardown_(?:bind_occurrences|layers)\\(\\))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_layer_changed_flag_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "state_changed_on_advance\\s*:\\s*bool"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_layer_new_frame_clear_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "fn\\s+begin_new_frame\\s*\\(&mut\\s+self\\)\\s*\\{\\s*self\\.state_changed_on_advance\\s*=\\s*false\\s*;"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_layer_current_state_access_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "fn\\s+current_state\\s*<'a>\\s*\\([\\s\\S]{0,180}&'a\\s+RuntimeLayerState"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_changed_count_scans_layer_flags_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "pub\\s+fn\\s+changed_state_count\\s*\\(&self\\)\\s*->\\s*usize\\s*\\{[\\s\\S]{0,360}state_changed_on_advance\\(\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_cached_changed_count"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?m)^\\s*changed_state_count\\s*:\\s*usize\\s*,"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_changed_state_query_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "pub\\s+fn\\s+changed_state\\s*\\(&self,\\s*index:\\s*usize\\)\\s*->\\s*Option\\s*<\\s*&RuntimeLayerState\\s*>\\s*\\{[\\s\\S]{0,1500}state_changed_on_advance\\(\\)[\\s\\S]{0,500}current_state\\("
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_stale_transition_query_alias"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+(?:random_value|randomValue|find_random_transition|findRandomTransition|find_allowed_transition|findAllowedTransition)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_layer_random_scratch_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "evaluated_random_weights\\s*:\\s*Vec\\s*<\\s*u32\\s*>"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_layer_trigger_identity_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "view_model_trigger_layer_id\\s*:\\s*u64"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_hit_trait_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "trait\\s+HitComponent\\b"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_hit_concrete_types_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "struct\\s+Hit(?:Drawable|Expandable|TextRun|Layout|NestedArtboard|ComponentList)\\b"
+min_occurrences = 6
+max_occurrences = 6
+
+[[ratchet]]
+id = "state_machine_hit_result_tristate_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "enum\\s+HitResult\\s*\\{\\s*None\\s*,\\s*Hit\\s*,\\s*HitOpaque\\s*,?\\s*\\}"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_hit_three_pass_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "for\\s+group\\s+in\\s+&mut\\s+groups\\s*\\{\\s*group\\.reset\\([\\s\\S]{0,500}for\\s+hit\\s+in\\s+&mut\\s+hit_components\\s*\\{\\s*hit\\.prepare_event\\([\\s\\S]{0,200}let\\s+mut\\s+result\\s*=\\s*HitResult::None\\s*;[\\s\\S]{0,3500}for\\s+hit\\s+in\\s+&mut\\s+hit_components\\s*\\{\\s*let\\s+item\\s*=\\s*hit\\.process_event\\("
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_hit_can_hit_propagation_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "hit\\.process_event\\([^;]{0,500}\\bresult\\s*!=\\s*HitResult::HitOpaque"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_hit_break_after_opaque"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+update_listeners\\b[\\s\\S]{0,4200}HitResult::HitOpaque[\\s\\S]{0,120}\\bbreak\\s*;"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_hit_component_list_reverse_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "for\\s+item_index\\s+in\\s+order\\.into_iter\\(\\)\\.rev\\(\\)"
+min_occurrences = 2
+max_occurrences = 2
+
+[[ratchet]]
+id = "state_machine_hit_draw_order_counter_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "if\\s+self\\.draw_order_change_counter\\s*!=\\s*draw_order_change_counter\\s*\\{[\\s\\S]{0,180}self\\.sort_hit_components\\("
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_hit_exit_release_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "if\\s+hit_type\\s*==\\s*RuntimeListenerType::Exit\\s*\\{[\\s\\S]{0,220}self\\.release_pointer_input\\(pointer_id\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_hit_enable_disable_walks_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+(?:enable|disable)_pointer_events\\(&mut\\s+self,\\s*pointer_id:\\s*i32\\)\\s*\\{[^}]{0,220}for\\s+hit\\s+in\\s+&mut\\s+self\\.hit_components"
+min_occurrences = 2
+max_occurrences = 2
+
+[[ratchet]]
+id = "state_machine_displaced_pointer_listener_traversal"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+(?:pointer_down_with_context_and_script_host|pointer_up_with_context_and_script_host|update_pointer_listeners)[\\s\\S]{0,2500}listener_definitions\\s*\\.\\s*iter\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_bind_primary_family_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:pub\\(crate\\)\\s+)?fn\\s+(?:set_view_model_instance|set_global_view_model_instance|complete_view_model_instances|bind|bind_view_model_instance|bind_data_context|inherit_data_context|set_data_context|data_context|global_view_model_instance|rebind|clear_data_context|relink_data_context|rebuild_data_bind|unbind|internal_data_context)\\b"
+min_occurrences = 16
+max_occurrences = 16
+
+[[ratchet]]
+id = "state_machine_bind_null_branches_distinct_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+set_view_model_instance\\b[\\s\\S]{0,550}let\\s+Some\\(view_model_instance\\)\\s*=\\s*view_model_instance\\s+else\\s*\\{\\s*return\\s+false;\\s*\\}[\\s\\S]{0,8000}fn\\s+bind_view_model_instance\\b[\\s\\S]{0,700}let\\s+Some\\(view_model_instance\\)\\s*=\\s*view_model_instance\\s+else\\s*\\{[\\s\\S]{0,220}self\\.clear_data_context\\(\\);[\\s\\S]{0,220}artboard\\.unbind_for_state_machine_view_model_clear\\(file\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_bind_data_context_null_and_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+bind_data_context\\b[\\s\\S]{0,650}data_context\\.ok_or\\(RuntimeDataContextBindError::NullDataContext\\)\\?[\\s\\S]{0,350}self\\.clear_data_context\\(\\);[\\s\\S]{0,450}add_rebind_dependent[\\s\\S]{0,350}artboard\\.clear_data_context_for_state_machine_bind\\(\\);[\\s\\S]{0,500}artboard\\.bind_owned_view_model_artboard_data_context[\\s\\S]{0,350}self\\.internal_data_context"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_inherit_context_prior_clear"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+inherit_data_context\\b(?:(?!\\n\\s*(?:pub(?:\\([^)]*\\))?\\s+)?fn\\b)[\\s\\S]){0,900}clear_data_context\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_bind_machine_before_artboard"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+(?:bind|bind_data_context|rebind)\\b(?:(?!\\n\\s*(?:pub(?:\\([^)]*\\))?\\s+)?fn\\b)[\\s\\S]){0,1800}self\\.internal_data_context[\\s\\S]{0,650}artboard\\.(?:bind_owned_view_model_artboard_data_context|clear_data_context_for_state_machine_bind)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_internal_context_listener_before_script_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+internal_data_context\\b[\\s\\S]{0,2500}bind_view_model_listener_cells_for_data_context[\\s\\S]{0,500}record_bind_phase\\(\"script-context-pass\"\\)[\\s\\S]{0,350}record_bind_phase\\(\"script-init-pass\"\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_typed_context_primary_delegation_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+(?:bind_empty_data_context|bind_default_view_model_context|bind_view_model_instance_context|bind_imported_view_model_context|bind_owned_view_model_context|bind_owned_view_model_handle|bind_owned_view_model_context_handle|bind_owned_view_model_context_mut|bind_owned_view_model_contexts|bind_script_artboard_data_context|bind_owned_view_model_context_chain)\\b(?:(?!\\n\\s*(?:pub(?:\\([^)]*\\))?\\s+)?fn\\b)[\\s\\S]){0,1600}self\\.(?:bind_typed_context_adaptation|bind_owned_view_model_context_handle|bind_owned_view_model_data_context)\\("
+min_occurrences = 11
+max_occurrences = 11
+
+[[ratchet]]
+id = "state_machine_event_apply_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+apply_local_event_listener_batch\\b[\\s\\S]{0,1200}begin_local_event_listener_batch\\([\\s\\S]{0,900}finish_local_event_listener_batch\\()(?=[\\s\\S]*fn\\s+begin_local_event_listener_batch\\b[\\s\\S]{0,2200}update_data_binds_false\\([\\s\\S]{0,900}take\\(&mut\\s+self\\.reporting_events\\)[\\s\\S]{0,1200}reported_listener_view_models[\\s\\S]{0,900}notify_events_with_context\\()(?=[\\s\\S]*fn\\s+finish_local_event_listener_batch\\b[\\s\\S]{0,1800}for\\s+&listener_index\\s+in\\s+&batch\\.listener_indices)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_exact_100_batches_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "const\\s+MAX_EVENT_ITERATIONS:\\s*usize\\s*=\\s*100\\s*;[\\s\\S]{0,1800}for\\s+_\\s+in\\s+0\\.\\.MAX_EVENT_ITERATIONS"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_pending_cursor_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+reported_event_count\\b[\\s\\S]{0,900}next_unapplied_reported_event_index\\(\\)[\\s\\S]{0,3000}fn\\s+reported_event\\b[\\s\\S]{0,1200}next_unapplied_reported_event_index\\(\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_local_bubble_audio_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*trait\\s+AudioEventSeam\\b[\\s\\S]{0,500}fn\\s+selected\\b)(?=[\\s\\S]*impl\\s+AudioEventSeam\\s+for\\s+RecordingAudioEventSeam[\\s\\S]{0,700}\\*selection_count\\s*=\\s*selection_count\\.saturating_add\\(1\\)[\\s\\S]{0,180}\\*last_occurrence\\s*=\\s*Some\\(occurrence\\))(?=[\\s\\S]*audio_event_selection_count:\\s*usize)(?=[\\s\\S]*audio_event_last_occurrence:\\s*Option<AudioEventOccurrence>)(?=[\\s\\S]*audio_event_seam:\\s*Rc::new\\(RecordingAudioEventSeam\\))(?=[\\s\\S]*fn\\s+notify_events_with_context_and_script_host\\b[\\s\\S]{0,1800}record_event_dispatch_phase\\(\"local-dispatch\"\\)[\\s\\S]{0,5200}if\\s+self\\.bubble_events_to_owner_seam\\(events\\)[\\s\\S]{0,220}defer_recorded_audio_event_seam\\(events\\)[\\s\\S]{0,160}else\\s*\\{[\\s\\S]{0,160}reach_recorded_audio_event_seam\\(events\\))(?=[\\s\\S]*fn\\s+defer_recorded_audio_event_seam\\b[\\s\\S]{0,700}deferred_owner_audio_occurrences\\.extend\\([\\s\\S]{0,300}events[\\s\\S]{0,300}filter\\(\\|event\\|\\s*event\\.is_audio_event\\(\\)\\))(?=[\\s\\S]*fn\\s+flush_deferred_owner_audio_events\\b[\\s\\S]{0,500}take\\(&mut\\s+self\\.deferred_owner_audio_occurrences\\)[\\s\\S]{0,300}deliver_recorded_audio_occurrence\\(occurrence\\))(?=[\\s\\S]*fn\\s+deliver_recorded_audio_occurrence\\b[\\s\\S]{0,700}self\\.audio_event_seam\\.selected\\()"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_recursive_owner_total_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+advance_nested_animation_owner_with\\b[\\s\\S]{0,9000}begin_nested_apply_events_batch\\([\\s\\S]{0,1800}complete_nested_report_batch\\([\\s\\S]{0,1800}finish_nested_apply_events_batch\\([\\s\\S]{0,1800}finish_nested_advance_after_apply_events\\()(?=[\\s\\S]*fn\\s+finish_nested_apply_events_batch\\b[\\s\\S]{0,1200}for\\s+event\\s+in\\s+&batch\\.bubbled_events[\\s\\S]{0,500}flush_deferred_owner_audio_event\\(event\\)[\\s\\S]{0,800}finish_local_event_listener_batch\\()(?=[\\s\\S]*fn\\s+complete_nested_report_batch\\b[\\s\\S]{0,1800}deliver_to_ancestor\\(parent_artboard,\\s*host_local,\\s*events\\)[\\s\\S]{0,700}RuntimeNestedEventChainPhase::AncestorDispatch)(?=[\\s\\S]*fn\\s+dispatch_nested_events_to_animation_owners\\b[\\s\\S]{0,3600}try_notify_events_with_script_host\\(\\s*child,\\s*Some\\(source_local_id\\),\\s*events[\\s\\S]{0,1600}drain_bubbled_event_reports\\(\\)[\\s\\S]{0,1400}complete_nested_report_batch\\([\\s\\S]{0,1800}flush_deferred_owner_audio_event\\(event\\)[\\s\\S]{0,1000}pending_error[\\s\\S]{0,700}retain_script_result\\(Err\\(error\\)\\)[\\s\\S]{0,1400}update_data_binds_false\\()"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_listener_trigger_guard_sink_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "RuntimeCellDirtSink::reporting_listener\\(queue,\\s*listener_index\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_listener_trigger_zero_guard_required"
+globs = ["crates/nuxie-runtime/src/view_model_cell.rs"]
+pattern = "notification\\.suppress_trigger_zero[\\s\\S]{0,120}matches!\\(self\\.value,\\s*RuntimeViewModelCellValue::Trigger\\(0\\)\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_bubble_fifo_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+bubble_events_to_owner_seam\\b[\\s\\S]{0,400}bubbled_event_reports\\.extend_from_slice\\(events\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_bubble_owner_wiring_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*event_bubble_owner_attached:\\s*!artboard\\.frame_origin\\(\\))(?=[\\s\\S]*fn\\s+reported_event_count\\b[\\s\\S]{0,800}bubbled_event_reports)(?=[\\s\\S]*fn\\s+reported_event\\b[\\s\\S]{0,900}bubbled_event_reports)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_vm_listener_firing_boundary_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+finish_listener_view_model_firing_boundary\\b[\\s\\S]{0,500}reported_listener_view_models[\\s\\S]{0,200}report_data_bind)(?=[\\s\\S]*fn\\s+owned_context_listener_report_waits_for_nested_relative_relink\\b[\\s\\S]{0,3000}ptr_eq\\(changed_cell\\)[\\s\\S]{0,2000}RuntimeListenerViewModelPath::Relative[\\s\\S]{0,1000}resolved_name_ids\\.len\\(\\)\\s*>\\s*1[\\s\\S]{0,1000}manifest\\.resolve_name)(?=[\\s\\S]*fn\\s+write_owned_view_model_context_with_listener_boundary\\b[\\s\\S]{0,5000}post_apply_listener_view_models\\.push\\(listener_index\\))"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_event_current_batch_exposed"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+reported_event_count\\b[\\s\\S]{0,350}reporting_events"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_event_local_audio_execution"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\b(?:play_audio|audio_playback|play_audio_event)\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_advance_instance_owner_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+advance_on_artboard\\b)(?=[\\s\\S]*fn\\s+advance\\b[\\s\\S]{0,500}artboard:\\s*&mut\\s+ArtboardInstance)(?=[\\s\\S]*fn\\s+advance_artboard_frame_components\\b[\\s\\S]{0,3000}nested_event_dispatch)(?=[\\s\\S]*pub\\s+fn\\s+advance_and_apply\\b)(?=[\\s\\S]*pub\\s+fn\\s+advance_and_apply_with_view_models\\b)(?=[\\s\\S]*fn\\s+advance_and_apply_state_machines_with_view_models\\b[\\s\\S]{0,1800}if\\s+advance_view_models[\\s\\S]{0,300}advance_detached_view_models\\(\\))(?=[\\s\\S]*fn\\s+settle_artboard_update_passes\\b)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_facade_constructor_retains_preparation_error_required"
+globs = ["crates/nuxie/src/lib.rs"]
+pattern = "pub\\s+fn\\s+state_machine_instance\\(&mut\\s+self,\\s*index:\\s*usize\\)\\s*->\\s*Option<StateMachineInstance>\\s*\\{[\\s\\S]{0,900}?let\\s+_\\s*=\\s*try_prepare_state_machine_scripted_data_context_without_factory\\([\\s\\S]{0,400}?Some\\(machine\\)"
+min_occurrences = 2
+max_occurrences = 2
+
+[[ratchet]]
+id = "state_machine_facade_constructor_drops_preparation_error"
+globs = ["crates/nuxie/src/lib.rs"]
+pattern = "pub\\s+fn\\s+state_machine_instance\\b[\\s\\S]{0,900}try_prepare_state_machine_scripted_data_context_without_factory\\([\\s\\S]{0,300}\\.is_err\\(\\)[\\s\\S]{0,180}return\\s+None"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_advance_raw_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+advance_with_report_mode\\b[\\s\\S]{0,1800}prepare_advance_event_phase\\([\\s\\S]{0,1200}apply_local_event_listeners\\([\\s\\S]{0,800}record_advance_phase\\(\"clear-latch\"\\)[\\s\\S]{0,500}finish_advance_after_apply_events\\()(?=[\\s\\S]*fn\\s+prepare_advance_event_phase\\b[\\s\\S]{0,500}record_advance_phase\\(\"draw-sort-check\"\\))(?=[\\s\\S]*fn\\s+finish_advance_after_apply_events\\b[\\s\\S]{0,1800}record_advance_phase\\(\"pre-layer-binds\"\\)[\\s\\S]{0,3500}record_advance_phase\\(\"authored-layers\"\\)[\\s\\S]{0,7000}record_advance_phase\\(\"converter-advance\"\\)[\\s\\S]{0,3500}record_advance_phase\\(\"inputs-advanced\"\\))"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_advance_return_terms_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*let\\s+advanced\\s*=[\\s\\S]{0,700}reported_event_count\\(\\)\\s*!=\\s*0[\\s\\S]{0,200}has_pending_listener_view_model_reports\\(\\))(?=[\\s\\S]*fn\\s+advance_and_apply_return\\b[\\s\\S]{0,500}elapsed_seconds\\s*==\\s*0\\.0[\\s\\S]{0,500}reported_event_count\\(\\)\\s*!=\\s*0[\\s\\S]{0,200}has_pending_listener_view_model_reports\\(\\))"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_advance_unconditional_settlement_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+settle_artboard_update_passes\\b[\\s\\S]{0,700}const\\s+MAX_SETTLEMENT_PASSES:\\s*usize\\s*=\\s*5[\\s\\S]{0,800}for\\s+_\\s+in\\s+0\\.\\.MAX_SETTLEMENT_PASSES[\\s\\S]{0,800}for\\s+state_machine\\s+in\\s+state_machines\\.iter_mut\\(\\)(?![\\s\\S]{0,600}(?:requires_post_update_state_probe|post_update_probe_pending|state_machine_requires_outer_update_probe))[\\s\\S]{0,500}try_change_state_machine_instance\\(state_machine\\)[\\s\\S]{0,300}advance_state_machine_instance_after_state_probe\\([\\s\\S]{0,200}0\\.0"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_advance_persistent_dirt_real_facade_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+fl_c5_advance_and_apply_persistent_dirt_component_stops_after_five_passes\\b[\\s\\S]{0,800}install_persistent_dirt_component_fixture\\(\\)[\\s\\S]{0,800}\\.advance_and_apply\\(&mut\\s+artboard,\\s*0\\.25\\)[\\s\\S]{0,800}persistent_dirt_component_fixture_receipt\\(\\)[\\s\\S]{0,800}\\(true,\\s*6,\\s*5,\\s*true\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_advance_public_persistent_dirt_probe"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "pub\\s+fn\\s+runtime_persistent_dirt_settlement_probe\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_advance_clean_zero_fast_path"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "elapsed_seconds\\s*==\\s*0\\.0[\\s\\S]{0,300}return\\s+(?:Ok\\()?false"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_advance_capability_gated_probe"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "(?:\\b(?:requires_post_update_state_probe|post_update_probe_pending|state_machine_requires_outer_update_probe|schedule_post_update_probe|has_advanced_once)\\b|fn\\s+settle_artboard_update_passes\\b[\\s\\S]{0,1800}if\\s+(?!artboard\\.try_change_state_machine_instance\\(state_machine\\))[^{;]{0,500}\\btry_change_state_machine_instance\\(state_machine\\))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_advance_nonfinite_rejection"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+(?:advance|advance_on_artboard|advance_and_apply|advance_and_apply_with_view_models)\\b[\\s\\S]{0,900}\\.(?:is_finite|is_nan)\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_advance_artboard_settlement_implementation"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "fn\\s+\\w*settle\\w*\\b(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,4000}\\b(?:try_change_state_machine_instance|advance_state_machine_instance_after_state_probe)\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_artboard_single_nested_delegation_required"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "\\A(?=[\\s\\S]*pub\\s+fn\\s+advance_nested_artboards_with_state_machine\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_nested_event_sources_with\\([\\s\\S]{0,1400}Some\\(nested_event_dispatch\\))(?=[\\s\\S]*pub\\s+fn\\s+advance_frame_components_with_state_machine\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_nested_event_sources_with\\([\\s\\S]{0,1400}Some\\(nested_event_dispatch\\))(?=[\\s\\S]*fn\\s+advance_nested_artboard_entry\\b[\\s\\S]{0,4200}advance_nested_animation_owner_with\\([\\s\\S]{0,1800}advance_after_animation_owners\\()"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_nested_event_source_policy_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+advance_nested_animation_owner_with\\b[\\s\\S]{0,5000}advance_linear_animation_instance_with_callback_sink[\\s\\S]{0,5000}begin_nested_apply_events\\([\\s\\S]{0,2600}begin_nested_apply_events_batch\\([\\s\\S]{0,1800}complete_nested_report_batch\\([\\s\\S]{0,1800}finish_nested_apply_events_batch\\([\\s\\S]{0,2600}finish_nested_advance_after_apply_events\\()(?=[\\s\\S]*fn\\s+dispatch_nested_events_to_animation_owners\\b[\\s\\S]{0,3600}try_notify_events_with_script_host\\([\\s\\S]{0,1800}complete_nested_report_batch\\([\\s\\S]{0,2200}flush_deferred_owner_audio_event\\([\\s\\S]{0,1200}pending_error[\\s\\S]{0,700}retain_script_result\\(Err\\(error\\)\\)[\\s\\S]{0,1400}update_data_binds_false\\()"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_nested_event_batch_scratch"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:let\\s+mut\\s+\\w+|\\n\\s*\\w+)\\s*:\\s*Vec<\\(usize,\\s*Vec<StateMachineReportedEvent>\\)>"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_nested_event_collection_outside_instance_policy"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+detector = "rust_nested_event_owner_boundary"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_nested_animation_selection_outside_instance_policy"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+detector = "rust_nested_event_owner_boundary"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_nested_event_dispatch_outside_instance_policy"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+detector = "rust_nested_event_owner_boundary"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_nested_audio_unwind_outside_instance_policy"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+detector = "rust_nested_event_owner_boundary"
+max_occurrences = 0
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "ArtboardInstance::advance_nested_artboard_entry"
+guarded_name = "advance_nested_animation_owner_with"
+site_hash = "bb41a7fe4168ac27b6a05b3e1ee907c41219ae35fb9f0210c89e4628a6aaa3e9"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "ArtboardInstance::advance_nested_artboard_entry"
+guarded_name = "advance_nested_animation_owner_with"
+site_hash = "fdba451f76ab853e66e277b2b73008bfe364fb3fca4b1e4c1e0e0c75780a5db5"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "ArtboardInstance::clear_data_context_for_state_machine_bind"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "342ec1fffe0cf509d61f75b024a5214a8eb4067cbe79a3bde53aa308656843eb"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "ArtboardInstance::detach_active_nested_state_machines"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "ArtboardInstance::occurrence_state_machine"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "848336219f713147ee7b239f3484b1beb12e2fa08edfe6f81edd2fd8b59a016e"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "ArtboardInstance::occurrence_state_machine_mut"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "726e6878afe01d90014a330e841610317dffb6b617a27c96e6423d45b40ebfae"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "ArtboardInstance::restore_active_nested_state_machines"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "ArtboardInstance::update_nested_artboard_from_host_dirt"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "a4a9ad24b07b49b44819a975d6448d48bea87c1bed9281a58d033e0c482b4f07"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "Clone_for_RuntimeNestedArtboardInstance::clone"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "a8aa75d3c55b78b313ec988ebe3a0a3816c7132affac00b7670ac1764f7b96ed"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedAnimationInstance::has_ongoing_work"
+guarded_name = "StateMachine"
+site_hash = "5f408047103ace3dbe7872f67e0c2967ba72ed6574320bb5e6c8abdee96e126c"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::advance_after_animation_owners"
+guarded_name = "dispatch_nested_events_to_animation_owners"
+site_hash = "20b8689d3e4bacbd58c4ce88daac27919ec8134172aad088bcbd32fbc4ba5ee1"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::advance_after_animation_owners"
+guarded_name = "dispatch_nested_events_to_animation_owners"
+site_hash = "f183f8c5d3a176b03e2081f168f44f9ef29935b4740d954f9b7aca83ab4d0e18"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::advance_outer_update"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::advance_remap"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "6d16b73a78420b2110c3daad2c90207fb10a531f3c54527375a0c3ca2dd4968b"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::bind_owned_view_model_animation_contexts"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::bind_owned_view_model_animation_data_context"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::install_external_focus_domain"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::reset_outer_state_machine_changed_state_counts"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "ae85371fd1d2cb5824cc2ffcd06534074a43b14227bc0867ee1b25b8fec425b2"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::set_remap_time"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "329439c54592a0340c016944a2be82aa38c08d8638669ac8afb38fc5f7a5c0a2"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::set_simple_animation_is_playing"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "b978880bb8b0242722b6dc996e43727f0a0b41c9826720cb39ca6de365d3e518"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboardInstance::set_simple_animation_speed"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "06532ad249f1a0f342eac02c83836163b2c67362581080c60d873a3b2cfca9d8"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboards::rebuild_state_machine_index"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboards::state_machine"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "463d4d8259e615a6dcd513d23c54873a7e8cf932747464875b81125becc631b7"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboards::state_machine_mut"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "560a37d0f5c62516c70c85be5c65387bcc65742e7dcd4aec4be61550bcad8a46"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "dispatch"
+anchor = "ArtboardInstance::advance_frame_components_with_state_machine"
+guarded_name = "dispatch_nested_event_sources_with"
+site_hash = "bc3f3697d7139cf955cabcc157597b24ec8a590c95d9332fd463277a60307586"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "dispatch"
+anchor = "ArtboardInstance::advance_nested_artboards_with_state_machine"
+guarded_name = "dispatch_nested_event_sources_with"
+site_hash = "e6dc2e0273a06a63d61b093149002306da1be7d832f14690746c379a632eb37a"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "dispatch"
+anchor = "ArtboardInstance::advance_state_machine_instances_with_nested"
+guarded_name = "advance_artboard_frame_components_with"
+site_hash = "d1a6970a1e314a8de573f090c84b535d5790f1e7f7f154c9ec28f0db5b241e5f"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "dispatch"
+anchor = "ArtboardInstance::advance_state_machine_instances_with_nested_and_owned_view_model_context"
+guarded_name = "advance_artboard_frame_components_with"
+site_hash = "1ce0516fffd56caa0d29f04aef22fdbc1f94cbb519b5912f3ac658640ec64a56"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "audio"
+anchor = "RuntimeNestedArtboardInstance::advance_after_animation_owners"
+guarded_name = "dispatch_nested_events_to_animation_owners"
+site_hash = "20b8689d3e4bacbd58c4ce88daac27919ec8134172aad088bcbd32fbc4ba5ee1"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/artboard.rs"
+kind = "audio"
+anchor = "RuntimeNestedArtboardInstance::advance_after_animation_owners"
+guarded_name = "dispatch_nested_events_to_animation_owners"
+site_hash = "f183f8c5d3a176b03e2081f168f44f9ef29935b4740d954f9b7aca83ab4d0e18"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs"
+kind = "selection"
+anchor = "ArtboardInstance::broadcast_nested_gamepad_to_scripted_drawables"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs"
+kind = "selection"
+anchor = "ArtboardInstance::broadcast_nested_gamepad_to_scripted_drawables"
+guarded_name = "StateMachine"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs"
+kind = "selection"
+anchor = "ArtboardInstance::dispatch_nested_gamepad_at_focus"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs"
+kind = "selection"
+anchor = "ArtboardInstance::dispatch_nested_gamepad_at_focus"
+guarded_name = "StateMachine"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs"
+kind = "selection"
+anchor = "ArtboardInstance::dispatch_nested_key_input_at_focus"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs"
+kind = "selection"
+anchor = "ArtboardInstance::dispatch_nested_key_input_at_focus"
+guarded_name = "StateMachine"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs"
+kind = "selection"
+anchor = "ArtboardInstance::dispatch_nested_text_input_at_focus"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs"
+kind = "selection"
+anchor = "ArtboardInstance::dispatch_nested_text_input_at_focus"
+guarded_name = "StateMachine"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
+
+[[ratchet]]
+id = "state_machine_persistent_dirt_component_schedule_required"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "\\A(?=[\\s\\S]*struct\\s+PersistentDirtComponentFixture\\b[\\s\\S]{0,300}local_id:\\s*usize)(?=[\\s\\S]*fn\\s+install_persistent_dirt_component_fixture\\b[\\s\\S]{0,1800}dependency_order\\.push\\(root\\)[\\s\\S]{0,1800}advancing_components\\.push\\(RuntimeAdvancingComponent[\\s\\S]{0,500}kind:\\s*AdvancingComponentKind::Artboard)(?=[\\s\\S]*AdvancingComponentKind::Artboard\\s*=>[\\s\\S]{0,500}advance_persistent_dirt_component_fixture\\(\\s*entry\\.local_id,?\\s*\\))(?=[\\s\\S]*fn\\s+update_components_with_hook_recording\\b[\\s\\S]{0,5000}update_persistent_dirt_component_fixture\\(local_id\\))"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_first_source_bind_required"
+globs = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+pattern = "fn\\s+build_key_frame_data_bind_templates\\b[\\s\\S]{0,1800}let\\s+mut\\s+claimed_targets\\s*=\\s*BTreeSet::new\\(\\)[\\s\\S]{0,1800}if\\s+!claimed_targets\\.insert\\(target\\.id\\)\\s*\\{\\s*continue;\\s*\\}"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_last_source_bind_selection"
+globs = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+pattern = "fn\\s+build_key_frame_data_bind_templates\\b(?:(?!\\n(?:pub(?:\\([^)]*\\))?\\s+)?fn\\b)[\\s\\S]){0,6000}(?:artboard_data_binds\\([^)]*\\)[\\s\\S]{0,300}\\.rev\\(\\)|claimed_targets\\.(?:remove|replace|take)\\(|templates\\.(?:retain|retain_mut)\\()"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_keyframe_holder_set_required"
+globs = ["crates/nuxie-runtime/src/data_bind_graph.rs"]
+pattern = "enum\\s+RuntimeKeyFrameDataBindTarget\\s*\\{\\s*Number\\s*,\\s*Color\\s*,\\s*Boolean\\s*,\\s*String\\s*,?\\s*\\}"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_build_order_required"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "fn\\s+build_key_frame_data_binds\\b[\\s\\S]{0,2200}add_key_frame_value_holder\\([\\s\\S]{0,500}key_frame_data_bind_graphs\\s*\\.\\s*push\\(prototype\\.clone_for_key_frame_instance\\(\\)\\)[\\s\\S]{0,900}take_key_frame_binding_updates"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_animation_traversal_order_required"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "fn\\s+key_frame_data_bind_templates_in_animation_order\\b[\\s\\S]{0,2200}keyed_objects[\\s\\S]{0,300}keyed_properties[\\s\\S]{0,300}key_frames[\\s\\S]{0,300}filter_map\\(RuntimeKeyFrame::bindable_global_id\\)[\\s\\S]{0,500}template_by_key_frame"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_binding_reorder_by_data_bind_index"
+globs = ["crates/nuxie-runtime/src/data_bind_graph.rs"]
+pattern = "fn\\s+new_key_frame_bindings\\b(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,5000}default_view_model_bindings\\.sort"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_keyframe_container_phase_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+advance_with_report_mode\\b[\\s\\S]{0,15000}prepare_key_frame_data_bind_enrollment\\([\\s\\S]{0,180}Enrollment::Initial[\\s\\S]{0,500}update_data_binds_false\\([\\s\\S]{0,500}prepare_key_frame_data_bind_enrollment\\([\\s\\S]{0,180}Enrollment::Late[\\s\\S]{0,6500}record_advance_phase\\(\"authored-layers\"\\)[\\s\\S]{0,8500}record_advance_phase\\(\"converter-advance\"\\)[\\s\\S]{0,1200}advance_key_frame_data_bind_enrollment\\([\\s\\S]{0,180}Enrollment::Initial[\\s\\S]{0,2200}for\\s+occurrence\\s+in\\s+self\\.data_bind_occurrences\\.clone\\(\\)[\\s\\S]{0,3000}advance_key_frame_data_bind_enrollment\\([\\s\\S]{0,180}Enrollment::Late"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_remove_before_holder_required"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "fn\\s+remove_key_frame_data_binds\\b[\\s\\S]{0,600}key_frame_data_bind_occurrences[\\s\\S]{0,180}\\.drain\\(\\.\\.\\)[\\s\\S]{0,180}\\.zip\\(self\\.key_frame_data_bind_graphs\\.drain\\(\\.\\.\\)\\)[\\s\\S]{0,500}drop\\(graph\\);[\\s\\S]{0,180}key_frame_value_holders\\s*=\\s*None"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_snapshot_rebuild_and_owner_ids_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+key_frame_data_bind_occurrence_ids\\b[\\s\\S]{0,1200}layer\\.ensure_key_frame_data_binds\\(graphs\\)[\\s\\S]{0,300}layer\\.enroll_unassigned_key_frame_data_binds\\(next_id\\)[\\s\\S]{0,500}layer\\.collect_key_frame_data_bind_occurrence_ids\\(enrollment, &mut ids\\)[\\s\\S]{0,250}ids\\.sort_unstable\\(\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_snapshot_ensure_is_construction_only"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "fn\\s+ensure_key_frame_data_binds\\b[\\s\\S]{0,600}if\\s+self\\.key_frame_data_bind_graphs\\.is_empty\\(\\)[\\s\\S]{0,500}build_key_frame_data_binds_internal\\([\\s\\S]{0,250}false"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_snapshot_ensure_prepares_existing"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "fn\\s+ensure_key_frame_data_binds\\b(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,1200}(?:prepare_key_frame_data_binds|take_key_frame_binding_updates)\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_keyframe_machine_teardown_before_layers_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+teardown_bind_occurrences\\b[\\s\\S]{0,500}layer\\.remove_key_frame_data_binds\\(\\)[\\s\\S]{0,800}key_frame_data_bind_graphs\\.clear\\(\\)[\\s\\S]{0,800}fn\\s+teardown_layers\\b"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_cpp_initialize_converter_order_required"
+globs = ["crates/nuxie-runtime/tests/cpp_probe.rs"]
+pattern = "fn\\s+fl_c5_keyframe_initialize_converter_order\\b[\\s\\S]{0,2600}assert!\\(holder\\s*<\\s*clone\\)[\\s\\S]{0,250}assert!\\(clone\\s*<\\s*file\\)[\\s\\S]{0,250}assert!\\(file\\s*<\\s*target\\)[\\s\\S]{0,250}assert!\\(target\\s*<\\s*property\\)[\\s\\S]{0,250}assert!\\(property\\s*<\\s*initialize\\)[\\s\\S]{0,250}assert!\\(initialize\\s*<\\s*converter\\)[\\s\\S]{0,250}assert!\\(converter\\s*<\\s*enrollment\\)[\\s\\S]{0,250}assert!\\(enrollment\\s*<\\s*tracking\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_keyframe_state_build_sites_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "(?:any_state|current_state)\\.build_key_frame_data_binds\\(\\s*key_frame_data_bind_graphs,\\s*crate::animation::RuntimeKeyFrameDataBindEnrollment::(?:Initial|Late),?\\s*\\)"
+min_occurrences = 4
+max_occurrences = 4
+
+[[ratchet]]
+id = "state_machine_keyframe_layer_occurrence_order_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs"]
+pattern = "fn\\s+collect_key_frame_data_bind_occurrence_ids\\b[\\s\\S]{0,1000}any_state\\.collect_key_frame_data_bind_occurrence_ids\\(enrollment, ids\\)[\\s\\S]{0,400}state_from\\.collect_key_frame_data_bind_occurrence_ids\\(enrollment, ids\\)[\\s\\S]{0,400}current_state\\.collect_key_frame_data_bind_occurrence_ids\\(enrollment, ids\\)[\\s\\S]{0,3000}fn\\s+remove_key_frame_data_binds\\b[\\s\\S]{0,600}any_state\\.remove_key_frame_data_binds\\(\\)[\\s\\S]{0,400}state_from\\.remove_key_frame_data_binds\\(\\)[\\s\\S]{0,400}current_state\\.remove_key_frame_data_binds\\(\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_focus_semantic_typed_queues_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*struct\\s+RuntimeQueuedFocusEvent\\s*\\{\\s*listener_index:\\s*usize,\\s*is_focus:\\s*bool,?\\s*\\})(?=[\\s\\S]*struct\\s+RuntimeQueuedSemanticEvent\\s*\\{\\s*listener_index:\\s*Option<usize>,\\s*action_type:\\s*u32,?\\s*\\})(?=[\\s\\S]*queued_focus_events:\\s*Vec<RuntimeQueuedFocusEvent>)(?=[\\s\\S]*queued_semantic_events:\\s*Vec<RuntimeQueuedSemanticEvent>)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_focus_snapshot_clear_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+process_focus_events\\b[\\s\\S]{0,900}let\\s+focus_events\\s*=\\s*std::mem::take\\(&mut\\s+self\\.queued_focus_events\\);[\\s\\S]{0,180}for\\s+event\\s+in\\s+focus_events"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_semantic_snapshot_clear_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+process_semantic_events\\b[\\s\\S]{0,900}let\\s+semantic_events\\s*=\\s*std::mem::take\\(&mut\\s+self\\.queued_semantic_events\\);[\\s\\S]{0,180}for\\s+event\\s+in\\s+semantic_events"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_focus_then_semantic_phase_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+process_deferred_listener_group_events\\b[\\s\\S]{0,1600}process_focus_events\\([\\s\\S]{0,700}process_semantic_events\\("
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_focus_state_owner_safe_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*pub\\s+struct\\s+FocusState\\s*\\{\\s*pub\\s+has_focus:\\s*bool,\\s*pub\\s+expects_keyboard_input:\\s*bool,?\\s*\\})(?=[\\s\\S]*pub\\s+fn\\s+internal_focus_manager\\(&self\\)\\s*->\\s*bool)(?=[\\s\\S]*pub\\s+fn\\s+focus_state\\(&self\\)\\s*->\\s*FocusState[\\s\\S]{0,900}FocusState\\s*\\{\\s*has_focus,\\s*expects_keyboard_input,?\\s*\\})(?=[\\s\\S]*RECORDED[\\s\\S]{0,120}`src/input/focus_manager\\.cpp`[\\s\\S]{0,120}B6-0238)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_focus_manager_switch_fallback_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "fn\\s+install_external_focus\\b[\\s\\S]{0,700}external_focus_manager_selected\\s*&&\\s*self\\.focus\\.shares_manager\\(parent_focus\\)[\\s\\S]{0,900}clean_selected_focus_before_manager_switch\\(\\)[\\s\\S]{0,250}clean-tree-recorded-seam[\\s\\S]{0,500}internal_focus\\s*=\\s*Some\\(std::mem::take\\(&mut\\s+self\\.focus\\)\\)[\\s\\S]{0,500}external_focus_manager_selected\\s*=\\s*true[\\s\\S]{0,250}assign-external[\\s\\S]{0,250}rebuild-tree-recorded-seam[\\s\\S]{0,700}fn\\s+clear_external_focus_manager\\b[\\s\\S]{0,500}clean_selected_focus_before_manager_switch\\(\\)[\\s\\S]{0,500}internal_focus\\s*\\.\\s*take\\(\\)[\\s\\S]{0,350}external_focus_manager_selected\\s*=\\s*false[\\s\\S]{0,250}assign-internal[\\s\\S]{0,250}rebuild-tree-recorded-seam"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_focus_owner_safe_identity_projection_required"
+globs = ["crates/nuxie-runtime/src/focus.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+shares_manager\\(&self,\\s*other:\\s*&Self\\)\\s*->\\s*bool\\s*\\{\\s*Rc::ptr_eq\\(&self\\.domain,\\s*&other\\.domain\\)\\s*\\})(?=[\\s\\S]*fn\\s+has_focus_target\\b[\\s\\S]{0,350}targets[\\s\\S]{0,180}contains_key\\(&\\(self\\.owner_identity,\\s*target_local\\)\\))(?=[\\s\\S]*fn\\s+has_primary_focus\\(&self\\)\\s*->\\s*bool\\s*\\{[\\s\\S]{0,180}manager\\.primary_focus\\(\\)\\.is_some\\(\\))"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_semantic_resolver_seam_required"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "\\A(?=[\\s\\S]*trait\\s+SemanticNodeResolver\\b[\\s\\S]{0,300}semantic_data_local_id\\(\\s*&self,\\s*semantic_node_id:\\s*u32,?\\s*\\)\\s*->\\s*Option<usize>)(?=[\\s\\S]*semantic_node_resolver:\\s*Option<Rc<dyn\\s+SemanticNodeResolver>>)(?=[\\s\\S]*semantic_node_resolver:\\s*None)(?=[\\s\\S]*pub\\s+fn\\s+fire_semantic_action\\b[\\s\\S]{0,2500}self\\.semantic_node_resolver\\.clone\\(\\))(?=[\\s\\S]*pub\\s+fn\\s+fire_semantic_action\\b[\\s\\S]{0,2500}resolver\\.semantic_data_local_id\\(semantic_node_id\\))(?=[\\s\\S]*pub\\s+fn\\s+fire_semantic_action\\b[\\s\\S]{0,2500}match\\s+action_type\\s*\\{[\\s\\S]{0,300}0\\s*=>[\\s\\S]{0,160}1\\s*=>[\\s\\S]{0,160}2\\s*=>[\\s\\S]{0,160}_\\s*=>\\s*return\\s+false)(?=[\\s\\S]*pub\\s+fn\\s+fire_semantic_action\\b[\\s\\S]{0,2500}semantic_action_for_target\\()(?=[\\s\\S]*RECORDED[\\s\\S]{0,180}B6-0329[\\s\\S]{0,180}`src/semantic/semantic_manager\\.cpp`)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_semantic_ordinal_projection"
+globs = ["crates/nuxie-runtime/src/state_machine/**/*.rs"]
+pattern = "\"SemanticData\"[\\s\\S]{0,800}(?:\\.nth\\s*\\(|\\+=\\s*1|saturating_add\\s*\\(\\s*1\\s*\\))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_focus_semantic_queue_default_sentinel"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:derive\\([^)]*Default[^)]*\\)\\s*\\]\\s*struct\\s+RuntimeQueued(?:Focus|Semantic)Event|impl\\s+Default\\s+for\\s+RuntimeQueued(?:Focus|Semantic)Event)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_semantic_manager_internal_implementation"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:struct|enum)\\s+(?:Runtime)?Semantic(?:Manager|Tree|Node|Data)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "state_machine_focus_manager_internal_implementation"
+globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
+pattern = "(?:struct|enum)\\s+(?:Runtime)?Focus(?:Manager|Tree|Node)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "data_bind_per_type_target_to_source_path"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "(?m)^\\s*(?:pub\\(crate\\)\\s+)?fn\\s+apply_default_view_model_(?:number|symbol_list_index|boolean|string|color|enum|asset|artboard|list|trigger|view_model)(?:_public_update)?_targets_to_sources(?:_with_options)?\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "data_bind_target_dirt_default_context_only"
+globs = ["crates/nuxie-runtime/src/data_bind_graph.rs"]
+pattern = "(?m)^    pub\\(crate\\) fn mark_target_dirty_for_data_bind\\b(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,2200}(?:default_view_model_source_context_bound\\(\\)|context_kind\\s*(?:==|!=)\\s*RuntimeDataBindGraphContextKind::DefaultViewModel)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "data_bind_occurrence_target_apply_before_dirt_clear"
+globs = ["crates/nuxie-runtime/src/data_bind_graph.rs"]
+pattern = "(?m)^    pub\\(crate\\) fn (?:update_default_view_model_binding|public_update_default_view_model_binding)\\b(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b|clear_retained_data_bind_occurrence_dirt)[\\s\\S]){0,7200}targets\\s*\\.\\s*apply_default_view_model_binding\\s*\\("
+max_occurrences = 0
+
+[[ratchet]]
+id = "data_bind_occurrence_dirt_clear_incomplete"
+globs = ["crates/nuxie-runtime/src/data_bind_graph.rs"]
+pattern = "(?m)(?:^    fn clear_retained_data_bind_occurrence_dirt\\b(?!(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,2200}take_target_dirt\\s*\\()|^    fn clear_retained_data_bind_occurrence_dirt\\b(?!(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,2200}take_pending_source_dirt\\s*\\())"
+max_occurrences = 0
+
+[[ratchet]]
+id = "scripted_converter_optional_lookup_split"
+globs = [
+  "crates/nuxie-runtime/src/scripted_data_converter.rs",
+  "crates/nuxie-scripting/src/vm.rs",
+]
+pattern = "(?m)(?:^    pub\\(crate\\) fn apply_conversion\\b(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,7000}(?:has_data_converter_method|call_data_converter_if_present)\\s*\\(|^    fn call_optional_data_converter_once\\b(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,2600}(?:(?:has_data_converter_method|call_data_converter_if_present)\\s*\\((?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,1800}(?:call_data_converter_once|call_data_converter_if_present)\\s*\\(|\\.get\\s*\\(\\s*method\\.as_str\\(\\)\\s*\\)(?:(?!^    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,1800}(?:\\.get\\s*\\(\\s*method\\.as_str\\(\\)\\s*\\)|(?:call_data_converter_once|call_data_converter_if_present)\\s*\\()))"
+max_occurrences = 0
+
+[[ratchet]]
+id = "follow_path_graph_composer_rediscovery"
+globs = ["crates/nuxie-runtime/src/**/*.rs"]
+pattern = "graph\\.path_composers\\.iter\\(\\)\\.find_map"
+max_occurrences = 0
+
+[[ratchet]]
+id = "follow_path_copied_membership_clone"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "(?:shape_by_path_local:\\s*self\\.shape_by_path_local\\.clone|path_locals:\\s*self\\.path_locals\\.clone)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "follow_path_renderer_sidecar_flags"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "\\b(?:mark_follow_path_shape|mark_follow_path_path|follow_path_shape_paths)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "drawable_component_index_identity"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "\\bcomponent_index\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "drawable_authored_id_owner_rediscovery"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "\\bruntime_drawable_component\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "skinnable_authored_id_owner_rediscovery"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "\\bruntime_weighted_skinnable_context\\b"
+max_occurrences = 0

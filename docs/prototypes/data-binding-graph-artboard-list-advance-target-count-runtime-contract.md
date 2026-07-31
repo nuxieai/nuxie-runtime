@@ -7,13 +7,12 @@ entrypoint: after binding the default artboard view-model context, a
 zero-second `Artboard::advance(0.0f)` applies the bound list value to the exact
 `ArtboardComponentList` target's list-count report.
 
-This follows the C++ runtime boundary observed by the probe. A direct
-`Artboard::updateDataBinds(true)` call after binding still reports an empty
-target list for the synthetic fixtures; that direct-update boundary is covered
-by
+This follows the C++ runtime boundary observed by the provenance-bound
+`d788e8ec` probe. A direct `Artboard::updateDataBinds(true)` call after binding
+also applies the target list for these fixtures; that direct-update boundary is
+covered by
 `docs/prototypes/data-binding-graph-artboard-list-direct-update-boundary-runtime-contract.md`.
-The public post-bind advance is the smallest admitted behavior that changes
-the target count.
+The public post-bind advance separately proves the full artboard boundary.
 
 ## In Scope
 

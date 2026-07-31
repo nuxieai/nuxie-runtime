@@ -1,0 +1,13 @@
+[package]
+name = "runtime-frame-loop-owner-detector"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+proc-macro2 = { version = "1", features = ["span-locations"] }
+quote = "1"
+sha2 = "0.10"
+syn = { version = "2", features = ["full", "visit"] }

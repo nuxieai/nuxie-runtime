@@ -120,6 +120,14 @@ runner provenance, the fixed A-B-B-A order, paired C++ control drift,
 candidate-repeat drift, and the performance ratios remain gating. This
 supersedes the spread-admission part of the 2026-07-17 decision.
 
+**Decision (2026-07-24): browser support is WebGPU-only.** This supersedes the
+2026-07-16 WebGPU-plus-WebGL2 product contract. The WebGL2/FemtoVG renderer,
+public backend selector, automatic fallback, and its qualification surface are
+retired. WebGPU Core/Compatibility adapter admission remains an internal detail
+of the single browser backend; a missing or unusable WebGPU adapter is an
+explicit unsupported browser/device state. Historical R5 evidence below
+records what shipped at that time and is not the current support contract.
+
 **Decision (2026-07-17): close R4 on directional p50 after structural parity.**
 Once the deterministic counter report has zero excess rows, the final timing
 decision uses the counterbalanced fixed matrix as directional evidence rather
@@ -508,14 +516,12 @@ completed before the reopened R4.1 gate; R4.1 is now also closed.
    renderer feature; the C ABI must do so explicitly.
 2. Support browser WebGPU through an asynchronous constructor, submission, and
    readback path that never blocks the browser event loop.
-3. Support WebGL2 as an explicit backend and as the automatic browser fallback
-   when WebGPU is unavailable. WebGL2 is a separate capability path, not an
-   alias for the current storage-buffer pipelines: it requires WebGL2-compatible
-   resource transport and rendering, selected through the same public SDK
-   backend contract.
-4. Add compile gates and executable browser smoke/pixel oracles for both
-   backends. Backend selection, fallback, unsupported capabilities, and pixel
-   output must fail closed and be test-observable.
+3. Require a usable WebGPU adapter. Probe Core then Compatibility admission
+   within the WebGPU implementation; do not expose a renderer selector or
+   silently fall back to a second browser renderer.
+4. Keep compile gates and executable WebGPU smoke/pixel oracles for adapter
+   admission, explicit unavailability, lifecycle, stream replay, GPU-canvas,
+   and pixel output.
 
 ### Evidence-Gated Extensions
 
@@ -528,11 +534,11 @@ completed before the reopened R4.1 gate; R4.1 is now also closed.
 ### Exit Criteria
 
 The public SDK selects the Rust renderer by default; native synchronous and
-browser asynchronous paths are documented and tested; browser WebGPU and
-WebGL2 each pass their executable target and pixel gates; automatic fallback
-is proven; and every evidence-gated extension has either shipped or a recorded
-no-trigger decision. R5 met these criteria; R4 then resumed and closed on the
-final counter and directional timing evidence above.
+browser asynchronous paths are documented and tested; browser WebGPU passes
+its executable target and pixel gates; unavailable WebGPU fails explicitly;
+and every evidence-gated extension has either shipped or a recorded no-trigger
+decision. R5 originally met a broader two-backend contract; the 2026-07-24
+decision deliberately narrows the supported browser surface.
 
 ## Post-R Exactness Follow-up
 

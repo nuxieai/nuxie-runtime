@@ -600,11 +600,11 @@ slice.
   layout, or virtualization. The contract is
   `docs/prototypes/data-binding-graph-artboard-list-consumer-runtime-contract.md`.
 - Artboard list-consumer direct-update boundary: after binding the default
-  artboard view-model context, direct `Artboard::updateDataBinds(true)` keeps
-  exact `ArtboardComponentList` target list counts at the same empty value
-  observed immediately after binding for direct list sources and direct
-  `DataConverterNumberToList` sources. The target-count mutation is reserved
-  for the public post-bind advance boundary. The contract is
+  artboard view-model context, provenance-bound pinned-C++ `d788e8ec` direct
+  `Artboard::updateDataBinds(true)` applies exact `ArtboardComponentList`
+  target list counts for direct list sources and direct
+  `DataConverterNumberToList` sources. The full public post-bind advance is
+  covered separately. The contract is
   `docs/prototypes/data-binding-graph-artboard-list-direct-update-boundary-runtime-contract.md`.
 - Artboard list-consumer post-bind advance target-count slice: after binding
   the default artboard view-model context, a zero-second public

@@ -49,14 +49,6 @@ pub(crate) fn artboard_index_for_graph(file: &RuntimeFile, graph: &ArtboardGraph
         .position(|artboard| artboard.id == graph.global_id)
 }
 
-pub(crate) fn runtime_object_field_kind_by_key(
-    object: &RuntimeObject,
-    property_key: u16,
-) -> Option<FieldKind> {
-    property_by_key_in_hierarchy(object.type_key, property_key)
-        .map(|(_, property)| property.runtime_type)
-}
-
 fn runtime_object_property_value_by_key(
     object: &RuntimeObject,
     property_key: u16,

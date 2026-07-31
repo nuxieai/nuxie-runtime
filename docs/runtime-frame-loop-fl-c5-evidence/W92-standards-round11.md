@@ -1,0 +1,28 @@
+## Standards / structure
+
+- **BLOCKING — the frozen corrective report is not self-contained and pre-claims independent acceptance.** [W89-report.md](/Users/levi/dev/worktrees/nuxie-e9-verify/docs/runtime-frame-loop-fl-c5-evidence/W89-report.md:1) says independent reviews passed, while the live plan says those reviews are the next step ([status](/Users/levi/dev/worktrees/nuxie-e9-verify/docs/runtime-frame-loop-status.md:844)). It omits the required per-finding red→green evidence and links its “Full evidence” to another worktree’s untracked `.flc5` file ([W89 spec](/Users/levi/dev/worktrees/nuxie-e9-verify/docs/runtime-frame-loop-fl-c5-evidence/round-specs/W89-round11-spec.md:143)). This cannot substantiate the closure table’s claim that the committed report maps every blocker ([closure](/Users/levi/dev/worktrees/nuxie-e9-verify/docs/runtime-frame-loop-fl-c5-closure.md:984)).
+
+- **NON-BLOCKING — canonical NEXT remains stale.** It still names `e729dd74` and says E9 must be published ([parity status](/Users/levi/dev/worktrees/nuxie-e9-verify/docs/parity-closeout-status.md:1010)); E9 already publishes `14b18765` ([status](/Users/levi/dev/worktrees/nuxie-e9-verify/docs/runtime-frame-loop-status.md:7)).
+
+- The thirteen-row prose is corrected at [closure:480](/Users/levi/dev/worktrees/nuxie-e9-verify/docs/runtime-frame-loop-fl-c5-closure.md:480) and [closure:1015](/Users/levi/dev/worktrees/nuxie-e9-verify/docs/runtime-frame-loop-fl-c5-closure.md:1015).
+
+## Spec / detector
+
+- **BLOCKING — token-identical same-anchor relocation still consumes the blessed row.** `site_hash` hashes only normalized tokens of the innermost statement ([main.rs:118](/Users/levi/dev/worktrees/nuxie-e9-verify/tools/runtime-frame-loop-port/rust-owner-detector/src/main.rs:118), [main.rs:1345](/Users/levi/dev/worktrees/nuxie-e9-verify/tools/runtime-frame-loop-port/rust-owner-detector/src/main.rs:1345)). Matching then uses only `(anchor, guarded_name, site_hash)` within file/kind ([check.py:1691](/Users/levi/dev/worktrees/nuxie-e9-verify/tools/runtime-frame-loop-port/check.py:1691)). Moving the exact statement unchanged between approved and forbidden branches of the same function preserves every key field. The corrective test changes the scrutinee and policy body, guaranteeing a different hash instead of testing token-identical relocation ([test_check.py:5097](/Users/levi/dev/worktrees/nuxie-e9-verify/tools/runtime-frame-loop-port/test_check.py:5097)). This contradicts F3’s requirement that any relocation fail ([spec:80](/Users/levi/dev/worktrees/nuxie-e9-verify/docs/runtime-frame-loop-fl-c5-evidence/round-specs/W89-round11-spec.md:80)).
+
+- **BLOCKING — binding-`@` catch-alls evade construct marking.** Valid Rust such as `selected @ _` exhaustively selects the remaining variant. The detector accepts `Pat::Ident` only when `subpat.is_none()` and never recurses into the `@` subpattern ([main.rs:233](/Users/levi/dev/worktrees/nuxie-e9-verify/tools/runtime-frame-loop-port/rust-owner-detector/src/main.rs:233)). Therefore a marked match with `R::Simple`, `R::Remap`, and `selected @ _` records no catch-all hit at [main.rs:1386](/Users/levi/dev/worktrees/nuxie-e9-verify/tools/runtime-frame-loop-port/rust-owner-detector/src/main.rs:1386). Existing tests cover only plain bindings ([test_check.py:4898](/Users/levi/dev/worktrees/nuxie-e9-verify/tools/runtime-frame-loop-port/test_check.py:4898)).
+
+- **BLOCKING — guarded `matches!` launders enum aliases.** `MatchesInput` parses only `expression, pattern`, omitting optional `if guard` syntax ([main.rs:257](/Users/levi/dev/worktrees/nuxie-e9-verify/tools/runtime-frame-loop-port/rust-owner-detector/src/main.rs:257)). Thus `matches!(a, R::Simple { .. } if predicate())` fails semantic parsing at [main.rs:1458](/Users/levi/dev/worktrees/nuxie-e9-verify/tools/runtime-frame-loop-port/rust-owner-detector/src/main.rs:1458); macro fallback recognizes full guarded names, not alias `R` ([main.rs:1066](/Users/levi/dev/worktrees/nuxie-e9-verify/tools/runtime-frame-loop-port/rust-owner-detector/src/main.rs:1066)). Rust accepted both this syntax and `selected @ _` through parsing before the sandbox blocked metadata output.
+
+## Replay and controls
+
+- The original plain catch-all now reaches `record`; the modified-content site-87→146 relocation produces different hashes; reverse-order fragments, owner aliases/wrappers, and forged local anchors have corresponding closure logic.
+- The round-nine ten forms remain represented in the detector paths/tests beginning at [test_check.py:4462](/Users/levi/dev/worktrees/nuxie-e9-verify/tools/runtime-frame-loop-port/test_check.py:4462). Static inspection shows their paths remain fail-closed.
+- I could not honestly certify direct execution of all fifteen historical negatives or the exact blessed-source pass: this immutable sandbox has no cached candidate detector and no writable temporary directory. The live checker stops in `tempfile.gettempdir()` before candidate analysis. This also prevents an independent 83/83 replay.
+- The unrelated declared enum with `Simple`/`Remap` remains clean by inspection.
+- Fingerprint independently reproduced exactly: **7,315 files**, `c2447d362bd936edf49698ba9b89b25cd8078cf0c73fec1304e9bbb2b65bed82`, matching [trace](/Users/levi/dev/worktrees/nuxie-e9-verify/docs/runtime-frame-loop-trace.json:7851).
+- Candidate mode is active; 38 registry rows exist; production `crates` are unchanged from `e729dd74`; `cargo fmt --check`, locked offline metadata/tree resolution, both diff checks, and clean porcelain passed.
+
+Standards: 1 blocking, 1 non-blocking. Spec: 3 blocking, 1 non-blocking.
+
+**REJECT**

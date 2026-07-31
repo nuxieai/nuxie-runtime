@@ -1315,6 +1315,14 @@ impl ArtboardInstance {
                 .and_then(|component| component.concrete.path.as_ref())
                 .is_some()
             {
+                // Cycle guard: this is the unbounded shape-parent walk from
+                // `Path::onAddedClean` that hangs C++ on a malformed parent
+                // cycle. We deliberately DIVERGE and terminate via the
+                // DependencySorter visited-set idiom (see
+                // runtime_layout_ancestors in components.rs); a cycle with no
+                // Shape fails as if the chain ended. Unreachable on any valid
+                // file.
+                let mut visited = BTreeSet::new();
                 let mut ancestor = objects
                     .component(handle)
                     .and_then(|component| component.parent);
@@ -1328,6 +1336,9 @@ impl ArtboardInstance {
                         .is_some()
                     {
                         break candidate;
+                    }
+                    if !visited.insert(candidate) {
+                        anyhow::bail!("Path is missing its owning Shape");
                     }
                     ancestor = objects
                         .component(candidate)
@@ -1425,6 +1436,15 @@ impl ArtboardInstance {
                         .and_then(|component| component.concrete.bone.as_ref())
                         .is_none()
                     {
+                        break;
+                    }
+                    // Cycle guard: parentBoneCount is file-controlled, so a
+                    // malformed bone parent cycle would revisit a chain bone
+                    // (C++ registers the duplicate peer constraint; Rust's
+                    // uniqueness assert would fire). Terminate as if the
+                    // chain ended -- reverse_chain doubles as the visited
+                    // set. Unreachable on any valid file.
+                    if reverse_chain.contains(&parent) {
                         break;
                     }
                     remaining -= 1;

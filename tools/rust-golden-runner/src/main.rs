@@ -7,7 +7,8 @@ use nuxie_graph::{
     ShapePaintStateNode,
 };
 use nuxie_render_api::{
-    Factory as RenderFactory, NullFactory, RecordingFactory, Renderer as RenderRenderer,
+    Factory as RenderFactory, NullFactory, PersistentFactory, RecordingFactory,
+    Renderer as RenderRenderer,
 };
 use nuxie_runtime::{
     ArtboardInstance, RuntimeLayoutBoundsReport, RuntimeOwnedViewModelContext,
@@ -249,6 +250,44 @@ impl RunnerBackend for NullFactory {
     }
 }
 
+impl<F> RunnerBackend for PersistentFactory<F>
+where
+    F: RunnerBackend + RenderFactory + 'static,
+{
+    fn as_factory(&mut self) -> &mut dyn RenderFactory {
+        self
+    }
+
+    fn make_renderer(&self) -> Box<dyn RenderRenderer> {
+        self.borrow().make_renderer()
+    }
+
+    fn source(&mut self, file: &str, artboard: &str, scene: &str) {
+        self.borrow_mut().source(file, artboard, scene);
+    }
+
+    fn frame_size(&mut self, width: u32, height: u32) {
+        self.borrow_mut().frame_size(width, height);
+    }
+
+    fn add_input_event(&mut self, kind: &str, seconds: f32, x: f32, y: f32, pointer_id: i32) {
+        self.borrow_mut()
+            .add_input_event(kind, seconds, x, y, pointer_id);
+    }
+
+    fn add_sample(&mut self, seconds: f32) {
+        self.borrow_mut().add_sample(seconds);
+    }
+
+    fn add_frame(&mut self) {
+        self.borrow_mut().add_frame();
+    }
+
+    fn stream(&self) -> String {
+        self.borrow().stream()
+    }
+}
+
 fn main() {
     match run() {
         Ok(stream) => print!("{stream}"),
@@ -275,8 +314,6 @@ fn scripting_unsupported_feature(error: &anyhow::Error) -> Option<&'static str> 
         Some("script-artboard-animation")
     } else if message.contains("attempt to call missing method 'node' of userdata") {
         Some("script-artboard-node")
-    } else if message.contains("Paint allocation requires an active scripted draw context") {
-        Some("script-init-paint")
     } else if message.contains("attempt to index nil with 'viewModel'")
         || message.contains("attempt to index nil with 'lis'")
         || message.contains("attempt to index nil with 'Child'")
@@ -320,9 +357,9 @@ fn run() -> Result<String> {
         ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
             .context("failed to instantiate artboard")?;
     let mut factory: Box<dyn RunnerBackend> = if options.benchmark {
-        Box::new(NullFactory::new())
+        Box::new(PersistentFactory::new(NullFactory::new()))
     } else {
-        Box::new(RecordingFactory::new())
+        Box::new(PersistentFactory::new(RecordingFactory::new()))
     };
     #[cfg(feature = "scripting")]
     let has_scripted_layout = artboard
@@ -4231,6 +4268,7 @@ fn prepare_script_vm(
     factory: &mut dyn RenderFactory,
 ) -> Result<ScriptVm> {
     let mut vm = ScriptVm::new();
+    vm.install_render_factory(factory)?;
     vm.set_view_models(nuxie_runtime::script_view_models(runtime));
 
     // LibraryAsset records are serialized, caller-relative dependency pins.

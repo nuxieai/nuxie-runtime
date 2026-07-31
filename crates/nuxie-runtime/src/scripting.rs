@@ -1981,9 +1981,10 @@ pub trait ScriptInstance {
     /// [`ScriptValue`] seam.
     ///
     /// Pinned C++ initialization is a scripting-VM operation and does not
-    /// require a renderer factory. Renderer-capable callers may use
-    /// [`ScriptInstance::call_init_with_factory`] to make rendering resources
-    /// available during the same callback.
+    /// require a callback-local renderer factory. Renderer-capable VMs retain
+    /// the render context installed by their file owner before import;
+    /// [`ScriptInstance::call_init_with_factory`] remains an identity-checking
+    /// integration adapter.
     fn call_init(&mut self, host: &mut dyn ScriptHost) -> Result<bool, ScriptError> {
         let value = self.call_method(ScriptMethod::Init, &[], host)?;
         Ok(!matches!(

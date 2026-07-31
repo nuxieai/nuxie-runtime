@@ -8,9 +8,9 @@ use std::sync::Arc;
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie::{
     ColorInt, Factory, File, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
-    GpuCanvasShaderStage, ImageDecodeError, RawPath, RecordingFactory, RenderBuffer,
-    RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint,
-    RenderPath, RenderShader, WgpuFactory,
+    GpuCanvasShaderStage, ImageDecodeError, PersistentFactory, RawPath, RecordingFactory,
+    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage,
+    RenderPaint, RenderPath, RenderShader, WgpuFactory,
 };
 use nuxie_schema::definition_by_name;
 
@@ -530,11 +530,12 @@ fn foldered_shader_resolves_through_bare_and_qualified_aliases_as_distinct_occur
         .expect("fixture artboard")
         .instantiate()
         .unwrap();
-    let mut factory = GpuRecordingFactory::new();
-    let mut renderer = factory.inner.make_renderer();
+    let mut factory = PersistentFactory::new(GpuRecordingFactory::new());
+    let mut renderer = factory.borrow().inner.make_renderer();
 
     instance.draw(&mut factory, &mut renderer).unwrap();
 
+    let factory = factory.borrow();
     let occurrences = factory.shader_occurrences.borrow();
     assert_eq!(
         occurrences.len(),
@@ -558,12 +559,12 @@ fn unused_contentless_shader_asset_does_not_prevent_script_boot() {
         .expect("fixture artboard")
         .instantiate()
         .unwrap();
-    let mut factory = GpuRecordingFactory::new();
-    let mut renderer = factory.inner.make_renderer();
+    let mut factory = PersistentFactory::new(GpuRecordingFactory::new());
+    let mut renderer = factory.borrow().inner.make_renderer();
 
     instance.draw(&mut factory, &mut renderer).unwrap();
 
-    assert!(factory.shader_occurrences.borrow().is_empty());
+    assert!(factory.borrow().shader_occurrences.borrow().is_empty());
 }
 
 #[test]
@@ -577,12 +578,12 @@ fn requested_contentless_shader_asset_returns_nil_and_script_continues() {
         .expect("fixture artboard")
         .instantiate()
         .unwrap();
-    let mut factory = GpuRecordingFactory::new();
-    let mut renderer = factory.inner.make_renderer();
+    let mut factory = PersistentFactory::new(GpuRecordingFactory::new());
+    let mut renderer = factory.borrow().inner.make_renderer();
 
     instance.draw(&mut factory, &mut renderer).unwrap();
 
-    assert!(factory.shader_occurrences.borrow().is_empty());
+    assert!(factory.borrow().shader_occurrences.borrow().is_empty());
 }
 
 #[test]
@@ -593,11 +594,12 @@ fn shader_alias_collisions_preserve_the_first_owner_per_alias() {
         .expect("fixture artboard")
         .instantiate()
         .unwrap();
-    let mut factory = GpuRecordingFactory::new();
-    let mut renderer = factory.inner.make_renderer();
+    let mut factory = PersistentFactory::new(GpuRecordingFactory::new());
+    let mut renderer = factory.borrow().inner.make_renderer();
 
     instance.draw(&mut factory, &mut renderer).unwrap();
 
+    let factory = factory.borrow();
     let occurrences = factory.shader_occurrences.borrow();
     let sources = occurrences
         .iter()
@@ -625,12 +627,13 @@ fn imported_shader_and_script_execute_and_composite_through_one_factory() {
         .expect("fixture artboard")
         .instantiate()
         .unwrap();
-    let mut factory = GpuRecordingFactory::new();
-    let mut renderer = factory.inner.make_renderer();
+    let mut factory = PersistentFactory::new(GpuRecordingFactory::new());
+    let mut renderer = factory.borrow().inner.make_renderer();
 
     instance.draw(&mut factory, &mut renderer).unwrap();
 
-    let calls = factory.calls.borrow();
+    let factory_ref = factory.borrow();
+    let calls = factory_ref.calls.borrow();
     assert_eq!(
         calls.len(),
         1,
@@ -668,7 +671,7 @@ fn imported_shader_and_script_execute_and_composite_through_one_factory() {
     assert_eq!((plan.width, plan.height), (32, 24));
     assert_eq!(plan.vertex_count, 3);
     drop(calls);
-    let stream = factory.inner.stream();
+    let stream = factory_ref.inner.stream();
     assert!(stream.contains("drawImage image=0"), "{stream}");
     assert!(
         stream.contains("sampler={wrapX=0,wrapY=0,filter=1,key=9}"),
@@ -683,11 +686,12 @@ fn imported_shader_and_script_render_real_gpu_pixels() {
     let artboard = file.default_artboard().expect("fixture artboard");
     assert_eq!(artboard.dimensions(), Some((32.0, 24.0)));
     let mut instance = artboard.instantiate().unwrap();
-    let Ok(mut factory) = WgpuFactory::new(32, 24) else {
+    let Ok(factory) = WgpuFactory::new(32, 24) else {
         eprintln!("GPU adapter unavailable; browser execution remains a separate proof");
         return;
     };
-    let mut frame = factory.begin_frame(0xff00_0000);
+    let mut factory = PersistentFactory::new(factory);
+    let mut frame = factory.borrow_mut().begin_frame(0xff00_0000);
     instance.draw(&mut factory, &mut frame).unwrap();
     let pixels = frame.finish().unwrap();
     let red_pixels = pixels
@@ -708,8 +712,8 @@ fn default_factory_rejects_imported_gpu_canvas_instead_of_silently_drawing() {
         .expect("fixture artboard")
         .instantiate()
         .unwrap();
-    let mut factory = RecordingFactory::new();
-    let mut renderer = factory.make_renderer();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let mut renderer = factory.borrow().make_renderer();
 
     let error = instance.draw(&mut factory, &mut renderer).unwrap_err();
     // Pinned lua_scripted_context.cpp:547-556 returns zero values when backend

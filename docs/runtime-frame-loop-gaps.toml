@@ -174,16 +174,41 @@ closure = "FL-A/FL-E ports the retained Drawable link and exact DrawOrder/Clippi
 
 [[gap]]
 id = "FL-G09"
-status = "open"
-mechanism = "Pinned C++ installs one persistent ScriptingContext render context before file import, so context:shader can materialize from listener, input, path-effect, DataConverter, and draw callbacks. Rust currently installs RendererBindings.factory only around generator/init/method-with-factory/draw calls; ordinary callback entry points can therefore observe no factory and return nil."
+status = "closed"
+mechanism = "Pinned C++ and Rust now install one persistent scripting render context before file import. Rust retains an owned PersistentFactoryContext for the VM lifetime, every proxy reaches the same concrete RenderFactory identity, a different factory domain is rejected, and context:shader resolves through that retained owner from listener, input, path-effect, DataConverter, and draw callbacks."
 citations = [
-  "cpp:src/command_server.cpp:698",
+  "cpp:src/command_server.cpp:690-704",
   "cpp:include/rive/lua/rive_lua_libs.hpp:1530-1543",
-  "rust:crates/nuxie-scripting/src/vm.rs:1693-1729",
-  "rust:crates/nuxie-scripting/src/vm.rs:1821-1870",
-  "rust:crates/nuxie-scripting/src/vm/renderer.rs:29-55",
+  "cpp:src/lua/lua_scripted_context.cpp:511-556",
+  "cpp:src/lua/renderer/lua_gpu.cpp:689-735",
+  "rust:crates/nuxie-render-api/src/lib.rs:819-947",
+  "rust:crates/nuxie-scripting/src/vm/command_server.rs:14-73",
+  "rust:crates/nuxie/src/lib.rs:289-297",
+  "rust:crates/nuxie-scripting/tests/shader_asset_resolution.rs:685-790",
 ]
-closure = "FL-E gives each scripting VM one persistently installed RenderFactory context with C++ lifetime/identity, proves context:shader from every callback family, and deletes callback-scoped factory installation that displaced that owner. LOC-009 remains the renderer/scripting shader-occurrence implementation inside the active-factory boundary."
+closure = "FL-E1 gives each scripting VM one persistently installed RenderFactory context with C++ lifetime/identity. PersistentFactory owns the concrete factory behind cloneable checked proxies; the VM retains a type-erased clone, so no borrow lifetime is erased and dropping the installing proxy cannot dangle the context. The callback-family test materializes five shader occurrences through that same factory from listener, input, path-effect, DataConverter, and draw; an unbound-VM negative proves draw cannot establish ownership. RendererBindings::with_factory_context and FactoryContextGuard were deleted, and structural ratchets restrict bootstrap to the pre-import VM seam while preventing callback-scoped installation or a raw retained factory pointer from returning. LOC-009 remains the renderer/scripting shader-occurrence implementation inside the retained-factory boundary."
+
+[[ratchet]]
+id = "callback_scoped_scripting_render_context"
+globs = ["crates/nuxie-scripting/src/**/*.rs"]
+pattern = "\\b(?:with_factory_context|FactoryContextGuard|install_render_context)\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "preimport_scripting_render_context_bootstrap"
+globs = [
+  "crates/nuxie-scripting/src/vm.rs",
+  "crates/nuxie-scripting/src/vm/renderer.rs",
+]
+pattern = "self\\.renderer_bindings\\s*\\.bootstrap_render_context\\("
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "raw_persistent_scripting_render_context"
+globs = ["crates/nuxie-scripting/src/**/*.rs"]
+pattern = "\\b(?:erase_factory_lifetime|NonNull<dyn RenderFactory>)\\b"
+max_occurrences = 0
 
 [[gap]]
 id = "FL-G10"

@@ -24,6 +24,7 @@ use nuxie_runtime::{
     runtime_path_commands_from_raw_path,
 };
 
+use super::command_server::PersistentRenderContext;
 use super::view_model::{
     ScriptViewModelFrameContext, ScriptViewModelRegistration, create_scripted_view_model,
     model_from_table,
@@ -32,29 +33,24 @@ use crate::gpu_canvas::{GpuCanvasImage, ScriptedImageSampler, with_gpu_canvas_im
 
 #[derive(Clone, Default)]
 pub(crate) struct RendererBindings {
-    factory: Rc<Cell<Option<NonNull<dyn RenderFactory>>>>,
+    render_context: PersistentRenderContext,
     view_model_frame_context: ScriptViewModelFrameContext,
 }
 
 impl RendererBindings {
     pub(crate) fn new(view_model_frame_context: ScriptViewModelFrameContext) -> Self {
         Self {
-            factory: Rc::new(Cell::new(None)),
+            render_context: PersistentRenderContext::default(),
             view_model_frame_context,
         }
     }
 
-    pub(crate) fn with_factory_context<R>(
-        &self,
-        factory: &mut dyn RenderFactory,
-        f: impl FnOnce() -> R,
-    ) -> R {
-        let previous = self.factory.replace(Some(erase_factory_lifetime(factory)));
-        let _guard = FactoryContextGuard {
-            factory: Rc::clone(&self.factory),
-            previous,
-        };
-        f()
+    pub(crate) fn bootstrap_render_context(&self, factory: &mut dyn RenderFactory) -> Result<()> {
+        self.render_context.install(factory)
+    }
+
+    pub(crate) fn verify_render_context(&self, factory: &mut dyn RenderFactory) -> Result<()> {
+        self.render_context.verify(factory)
     }
 
     pub(crate) fn install(&self, lua: &Lua) -> Result<()> {
@@ -78,30 +74,29 @@ impl RendererBindings {
         };
 
         let lua = table.lua();
-        self.with_factory_context(factory, || {
-            let save_count = Rc::new(Cell::new(0usize));
-            let valid = Rc::new(Cell::new(true));
-            let renderer_ref = Rc::new(RefCell::new(erase_renderer_lifetime(renderer)));
+        self.verify_render_context(factory)?;
+        let save_count = Rc::new(Cell::new(0usize));
+        let valid = Rc::new(Cell::new(true));
+        let renderer_ref = Rc::new(RefCell::new(erase_renderer_lifetime(renderer)));
 
-            let scripted_renderer = lua.create_userdata(ScriptedRenderer {
-                renderer: Rc::clone(&renderer_ref),
-                bindings: self.clone(),
-                save_count: Rc::clone(&save_count),
-                valid: Rc::clone(&valid),
-            })?;
-            let result = function.call::<()>((table.clone(), scripted_renderer));
+        let scripted_renderer = lua.create_userdata(ScriptedRenderer {
+            renderer: Rc::clone(&renderer_ref),
+            bindings: self.clone(),
+            save_count: Rc::clone(&save_count),
+            valid: Rc::clone(&valid),
+        })?;
+        let result = function.call::<()>((table.clone(), scripted_renderer));
 
-            while save_count.get() > 0 {
-                let mut renderer = renderer_ref.borrow_mut();
-                // The renderer userdata is still valid while this cleanup runs;
-                // the pointer is invalidated immediately after the save stack is
-                // balanced.
-                unsafe { renderer.as_mut().restore() };
-                save_count.set(save_count.get() - 1);
-            }
-            valid.set(false);
-            result
-        })
+        while save_count.get() > 0 {
+            let mut renderer = renderer_ref.borrow_mut();
+            // The renderer userdata is still valid while this cleanup runs;
+            // the pointer is invalidated immediately after the save stack is
+            // balanced.
+            unsafe { renderer.as_mut().restore() };
+            save_count.set(save_count.get() - 1);
+        }
+        valid.set(false);
+        result
     }
 
     fn install_paint_global(&self, lua: &Lua) -> Result<()> {
@@ -188,14 +183,7 @@ impl RendererBindings {
         &self,
         f: impl FnOnce(&mut dyn RenderFactory) -> Result<R>,
     ) -> Result<R> {
-        let Some(mut factory) = self.factory.get() else {
-            return Err(Error::runtime(
-                "Paint allocation requires an active scripted draw context",
-            ));
-        };
-        // The pointer is installed only for the duration of call_draw, and the
-        // guard restores it before any borrowed factory can be dropped.
-        unsafe { f(factory.as_mut()) }
+        self.render_context.with_factory(f)
     }
 
     pub(crate) fn create_scripted_artboard(
@@ -207,29 +195,11 @@ impl RendererBindings {
     }
 }
 
-fn erase_factory_lifetime(factory: &mut dyn RenderFactory) -> NonNull<dyn RenderFactory> {
-    let ptr: NonNull<dyn RenderFactory + '_> = NonNull::from(factory);
-    // The pointer is restored by FactoryContextGuard before the scoped factory
-    // context returns. Paint.new/with closures may run only within that scope.
-    unsafe { mem::transmute::<NonNull<dyn RenderFactory + '_>, NonNull<dyn RenderFactory>>(ptr) }
-}
-
 fn erase_renderer_lifetime(renderer: &mut dyn Renderer) -> NonNull<dyn Renderer> {
     let ptr: NonNull<dyn Renderer + '_> = NonNull::from(renderer);
     // The pointer is held only by userdata created for one draw call; `valid`
     // is cleared before `call_draw` returns.
     unsafe { mem::transmute::<NonNull<dyn Renderer + '_>, NonNull<dyn Renderer>>(ptr) }
-}
-
-struct FactoryContextGuard {
-    factory: Rc<Cell<Option<NonNull<dyn RenderFactory>>>>,
-    previous: Option<NonNull<dyn RenderFactory>>,
-}
-
-impl Drop for FactoryContextGuard {
-    fn drop(&mut self) {
-        self.factory.set(self.previous);
-    }
 }
 
 struct ScriptedArtboardOwner {

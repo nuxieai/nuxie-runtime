@@ -54,9 +54,9 @@ pub use nuxie_render_api::{
     GpuCanvasShaderBinding, GpuCanvasShaderEntry, GpuCanvasShaderEntrySelection,
     GpuCanvasShaderResourceKind, GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
     GpuCanvasShaderTextureViewDimension, ImageDecodeError, ImageFilter, ImageSampler, ImageWrap,
-    Mat2D, PathVerb, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType,
-    RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
-    Renderer, StrokeCap, StrokeJoin, Vec2D,
+    Mat2D, PathVerb, PersistentFactory, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle,
+    RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
 };
 #[cfg(all(feature = "renderer", any(target_os = "ios", target_os = "macos")))]
 pub use nuxie_renderer::{
@@ -288,6 +288,7 @@ impl FileScriptRuntime {
         })?;
         let mut vm = ScriptVm::new_with_execution_limits(execution_limits)
             .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))?;
+        vm.install_render_factory(factory)?;
         vm.set_view_models(nuxie_runtime::script_view_models(runtime));
         // LibraryAsset records are serialized import edges. Seed every pin
         // before executing any module so both eager and lazy requires observe
@@ -498,6 +499,9 @@ fn asset_phase_error(
 
 #[cfg(feature = "scripting")]
 fn render_factory_domain(factory: &mut dyn Factory) -> usize {
+    if let Some(context) = factory.persistent_context() {
+        return context.identity() as usize;
+    }
     let pointer: *mut dyn Factory = factory;
     pointer as *mut () as usize
 }

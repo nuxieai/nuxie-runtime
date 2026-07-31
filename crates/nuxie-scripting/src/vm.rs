@@ -12,6 +12,7 @@
 //! runtime does not embed — useful for tests and future editor-style flows.
 
 mod bytecode;
+mod command_server;
 mod host_commands;
 mod listener_invocation;
 mod mat4;
@@ -519,10 +520,12 @@ impl LuaScriptInstance {
             let missing_requested_data = missing_before || missing_during;
             Ok(!missing_requested_data && !matches!(value, Value::Nil | Value::Boolean(false)))
         };
-        let result = match factory {
-            Some(factory) => bindings.with_factory_context(factory, call_init),
-            None => call_init(),
-        };
+        if let Some(factory) = factory {
+            bindings
+                .verify_render_context(factory)
+                .map_err(|error| self.script_error(error))?;
+        }
+        let result = call_init();
         match result {
             Ok(initialized) => {
                 self.user_init_done = initialized;
@@ -578,10 +581,12 @@ impl LuaScriptInstance {
                 .map_err(|error| self.script_error(error))?;
             Ok((table, context, missing_requested_data))
         };
-        let result = match factory {
-            Some(factory) => bindings.with_factory_context(factory, recreate),
-            None => recreate(),
-        };
+        if let Some(factory) = factory {
+            bindings
+                .verify_render_context(factory)
+                .map_err(|error| self.script_error(error))?;
+        }
+        let result = recreate();
         let (table, context, missing_requested_data) = match result {
             Ok(result) => result,
             Err(error) => {
@@ -705,6 +710,20 @@ impl ScriptVm {
         tracked_script_error(error, &self.resource_limits)
     }
 
+    /// Attach the VM's one C++-lifetime render context before file import.
+    ///
+    /// The first factory establishes identity for the VM. Repeating the call
+    /// with that same factory is harmless; attempting to switch factories is
+    /// rejected.
+    pub fn install_render_factory(
+        &self,
+        factory: &mut dyn RenderFactory,
+    ) -> std::result::Result<(), ScriptError> {
+        self.renderer_bindings
+            .bootstrap_render_context(factory)
+            .map_err(|error| self.script_error(error))
+    }
+
     pub fn instantiate_script_with_factory(
         &mut self,
         name: &str,
@@ -739,25 +758,24 @@ impl ScriptVm {
         payload: &[u8],
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<ScriptProgram, ScriptError> {
-        let bindings = self.renderer_bindings.clone();
-        bindings.with_factory_context(factory, || {
-            self.install_rive_globals()
-                .map_err(|error| self.script_error(error))?;
-            let chunkname = Self::readable_chunkname(name, scope);
-            self.set_chunkname_scope(&chunkname, scope);
-            let chunk = self
-                .load_script_asset_payload(&chunkname, payload)
-                .map_err(|error| self.script_error(error))?;
-            self.reset_execution_budget();
-            let generator = self
-                .execute_loaded_module(&chunkname, chunk)
-                .map_err(|error| self.script_error(error))?;
-            Ok(ScriptProgram { generator })
-        })
+        self.install_render_factory(factory)?;
+        self.install_rive_globals()
+            .map_err(|error| self.script_error(error))?;
+        let chunkname = Self::readable_chunkname(name, scope);
+        self.set_chunkname_scope(&chunkname, scope);
+        let chunk = self
+            .load_script_asset_payload(&chunkname, payload)
+            .map_err(|error| self.script_error(error))?;
+        self.reset_execution_budget();
+        let generator = self
+            .execute_loaded_module(&chunkname, chunk)
+            .map_err(|error| self.script_error(error))?;
+        Ok(ScriptProgram { generator })
     }
 
     /// Invoke a File-registered protocol generator for one concrete drawable
-    /// occurrence while the caller's renderer factory is in scope.
+    /// occurrence, verifying the caller still supplies the VM's retained
+    /// renderer-factory identity.
     pub fn instantiate_registered_script_with_factory(
         &self,
         program: &ScriptProgram,
@@ -797,10 +815,9 @@ impl ScriptVm {
         )
     }
 
-    /// Invoke a registered protocol generator without installing a renderer
-    /// factory. Pinned C++ generator/init lifecycle is available from the
-    /// scripting VM itself; renderer resources remain unavailable unless the
-    /// caller explicitly supplies a factory.
+    /// Invoke a registered protocol generator without a callback-local factory
+    /// argument. A render context installed on the VM before import remains
+    /// available, matching pinned C++; a headless VM remains headless.
     pub fn instantiate_registered_script_with_context(
         &self,
         program: &ScriptProgram,
@@ -865,10 +882,12 @@ impl ScriptVm {
                 Some(Rc::clone(&self.host_cycle_active)),
             )) as Box<dyn ScriptInstance>)
         };
-        let result = match factory {
-            Some(factory) => bindings.with_factory_context(factory, instantiate),
-            None => instantiate(),
-        };
+        if let Some(factory) = factory {
+            bindings
+                .verify_render_context(factory)
+                .map_err(|error| self.script_error(error))?;
+        }
+        let result = instantiate();
         if result.is_err() {
             context_alive.set(false);
         }
@@ -1329,11 +1348,9 @@ impl ScriptVm {
         payload: &[u8],
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<Value, ScriptError> {
-        let bindings = self.renderer_bindings.clone();
-        bindings.with_factory_context(factory, || {
-            self.register_module_scoped(name, scope, payload)
-                .map_err(|error| self.script_error(error))
-        })
+        self.install_render_factory(factory)?;
+        self.register_module_scoped(name, scope, payload)
+            .map_err(|error| self.script_error(error))
     }
 
     fn register_module_after_init(
@@ -2033,8 +2050,10 @@ impl ScriptInstance for LuaScriptInstance {
         host: &mut dyn ScriptHost,
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<ScriptValue, ScriptError> {
-        let bindings = self.renderer_bindings.clone();
-        bindings.with_factory_context(factory, || self.call_method(method, args, host))
+        self.renderer_bindings
+            .verify_render_context(factory)
+            .map_err(|error| self.script_error(error))?;
+        self.call_method(method, args, host)
     }
 
     fn call_listener_action(
@@ -2544,7 +2563,7 @@ fn script_value_from_lua(value: Value) -> Result<ScriptValue> {
 #[cfg(test)]
 mod context_init_tests {
     use super::*;
-    use nuxie_render_api::NullFactory;
+    use nuxie_render_api::{NullFactory, PersistentFactory};
     use nuxie_runtime::NoopScriptHost;
 
     #[derive(Debug)]
@@ -2942,9 +2961,14 @@ mod context_init_tests {
                     Rc::clone(&context_alive),
                 ))
                 .expect(label);
+            let bindings = RendererBindings::new(frame_context);
+            let mut factory = PersistentFactory::new(NullFactory::new());
+            bindings
+                .bootstrap_render_context(&mut factory)
+                .expect("pre-import render context");
             let mut instance = LuaScriptInstance::with_renderer_bindings(
                 table,
-                RendererBindings::new(frame_context),
+                bindings,
                 context_view_model,
                 context_present,
                 Some(context),
@@ -2965,7 +2989,7 @@ mod context_init_tests {
 
             assert_eq!(
                 instance
-                    .call_init_with_factory(&mut NoopScriptHost, &mut NullFactory::new())
+                    .call_init_with_factory(&mut NoopScriptHost, &mut factory)
                     .expect(label),
                 expected,
                 "{label}"
@@ -3017,9 +3041,14 @@ mod context_init_tests {
         let first_table: Table = generator
             .call(first_context.clone())
             .expect("first script table");
+        let bindings = RendererBindings::new(frame_context);
+        let mut factory = PersistentFactory::new(NullFactory::new());
+        bindings
+            .bootstrap_render_context(&mut factory)
+            .expect("pre-import render context");
         let mut instance = LuaScriptInstance::with_renderer_bindings(
             first_table,
-            RendererBindings::new(frame_context),
+            bindings,
             context_view_model,
             context_present,
             Some(first_context),
@@ -3034,8 +3063,6 @@ mod context_init_tests {
             None,
             None,
         );
-        let mut factory = NullFactory::new();
-
         assert!(
             !instance
                 .call_init_with_factory(&mut NoopScriptHost, &mut factory)
@@ -3131,9 +3158,14 @@ mod context_init_tests {
         let first_table: Table = generator
             .call(first_context.clone())
             .expect("first script table");
+        let bindings = RendererBindings::new(frame_context);
+        let mut factory = PersistentFactory::new(NullFactory::new());
+        bindings
+            .bootstrap_render_context(&mut factory)
+            .expect("pre-import render context");
         let mut instance = LuaScriptInstance::with_renderer_bindings(
             first_table,
-            RendererBindings::new(frame_context),
+            bindings,
             context_view_model,
             context_present,
             Some(first_context),
@@ -3148,8 +3180,6 @@ mod context_init_tests {
             None,
             None,
         );
-        let mut factory = NullFactory::new();
-
         assert!(
             !instance
                 .call_init_with_factory(&mut NoopScriptHost, &mut factory)
@@ -3267,7 +3297,7 @@ mod context_init_tests {
             let error = match vm.instantiate_registered_script_with_factory_and_context(
                 &program,
                 &mut NoopScriptHost,
-                &mut NullFactory::new(),
+                &mut PersistentFactory::new(NullFactory::new()),
                 None,
                 Vec::new(),
             ) {
@@ -3612,9 +3642,14 @@ mod context_init_tests {
             ))
             .expect("scripted context");
         let table: Table = generator.call(context.clone()).expect("script table");
+        let bindings = RendererBindings::new(frame_context);
+        let mut factory = PersistentFactory::new(NullFactory::new());
+        bindings
+            .bootstrap_render_context(&mut factory)
+            .expect("pre-import render context");
         let mut instance = LuaScriptInstance::with_renderer_bindings(
             table,
-            RendererBindings::new(frame_context),
+            bindings,
             context_view_model,
             context_present,
             Some(context),
@@ -3629,7 +3664,6 @@ mod context_init_tests {
             None,
             None,
         );
-        let mut factory = NullFactory::new();
         let mut host = NoopScriptHost;
 
         instance.context_missing_requested_data.set(true);

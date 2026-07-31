@@ -6,9 +6,9 @@ use anyhow::Result;
 use ed25519_dalek::{Signer as _, SigningKey};
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie::{
-    ArtboardSpec, DrawError, File, NodeSpec, OwnedArtboardInstance, Parent, RecordingFactory,
-    Scene, SceneEvent, ScriptAssetSpec, ScriptExecutionLimits, ScriptImportCapability,
-    ScriptedDrawableSpec,
+    ArtboardSpec, DrawError, File, NodeSpec, OwnedArtboardInstance, Parent, PersistentFactory,
+    RecordingFactory, Scene, SceneEvent, ScriptAssetSpec, ScriptExecutionLimits,
+    ScriptImportCapability, ScriptedDrawableSpec,
     flow_session::{
         FlowAdvance, FlowHostValue, FlowOperation, FlowOutputPayload, FlowOutputPhase,
         FlowPointerBatch, FlowPointerEvent, FlowPointerKind, FlowQuery, FlowSession,
@@ -17,6 +17,12 @@ use nuxie::{
 };
 use nuxie_schema::definition_by_name;
 use sha2::{Digest as _, Sha256};
+
+type ScriptFactory = PersistentFactory<RecordingFactory>;
+
+fn script_factory() -> ScriptFactory {
+    PersistentFactory::new(RecordingFactory::new())
+}
 
 fn compile_luau(source: &[u8]) -> Vec<u8> {
     luaur_common::set_all_flags(true);
@@ -339,16 +345,16 @@ fn scripted_scene() -> Result<(Scene, nuxie::ArtboardId)> {
 fn draw(
     scene: &mut Scene,
     instance: nuxie::InstanceId,
-    factory: &mut RecordingFactory,
+    factory: &mut ScriptFactory,
 ) -> std::result::Result<String, DrawError> {
     let mut cache = scene
         .new_draw_token(instance)
         .map_err(|_| DrawError::UnknownInstance)?;
-    let mut renderer = factory.make_renderer();
+    let mut renderer = factory.borrow().make_renderer();
     scene
         .frame()
         .draw(instance, factory, &mut renderer, &mut cache)?;
-    Ok(factory.stream())
+    Ok(factory.borrow().stream())
 }
 
 #[test]
@@ -357,7 +363,7 @@ fn authored_vector_script_uses_one_file_program_and_fresh_occurrence_tables() ->
     let first = scene.instantiate(artboard)?;
     let second = scene.instantiate(artboard)?;
     let mut events = Vec::<SceneEvent>::new();
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
 
     // C++ advances the live ScriptedDrawable directly in its retained
     // m_advancingComponents slot and immediately publishes Paint dirt; it has
@@ -378,7 +384,7 @@ fn authored_vector_script_uses_one_file_program_and_fresh_occurrence_tables() ->
     assert!(first_stream.contains("color=0xff3366cc"), "{first_stream}");
     assert!(first_stream.contains("drawPath "), "{first_stream}");
 
-    let before_second = factory.stream().len();
+    let before_second = factory.borrow().stream().len();
     let second_stream = draw(&mut scene, second, &mut factory)?;
     let second_frame = second_stream.get(before_second..).unwrap_or_default();
     assert!(
@@ -391,7 +397,7 @@ fn authored_vector_script_uses_one_file_program_and_fresh_occurrence_tables() ->
             .frame()
             .try_advance_with_factory(second, 0.1, &mut events, &mut factory)?
     );
-    let before_advanced_second = factory.stream().len();
+    let before_advanced_second = factory.borrow().stream().len();
     let second_stream = draw(&mut scene, second, &mut factory)?;
     let advanced_second = second_stream
         .get(before_advanced_second..)
@@ -401,7 +407,7 @@ fn authored_vector_script_uses_one_file_program_and_fresh_occurrence_tables() ->
         "factory-bearing advance mutates draw state before the invalidated paint is rendered: {advanced_second}"
     );
 
-    let mut different_factory = RecordingFactory::new();
+    let mut different_factory = script_factory();
     let error = draw(&mut scene, first, &mut different_factory)
         .expect_err("a distinct Factory object is a distinct script resource domain");
     assert_eq!(error, DrawError::RuntimeRejected);
@@ -416,10 +422,10 @@ fn visual_only_import_skips_scripts_but_keeps_ordinary_visuals_live() -> Result<
         .default_artboard()
         .expect("fixture artboard")
         .instantiate()?;
-    let mut inert_factory = RecordingFactory::new();
-    let mut inert_renderer = inert_factory.make_renderer();
+    let mut inert_factory = script_factory();
+    let mut inert_renderer = inert_factory.borrow().make_renderer();
     inert_instance.draw(&mut inert_factory, &mut inert_renderer)?;
-    let inert_stream = inert_factory.stream();
+    let inert_stream = inert_factory.borrow().stream();
     assert!(inert_stream.contains("color=0xffcc3300"), "{inert_stream}");
     assert!(inert_stream.contains("drawPath "), "{inert_stream}");
     assert!(
@@ -445,19 +451,19 @@ fn only_an_exact_authenticated_artifact_can_execute_imported_scripts() -> Result
     let (mut second_session, _) =
         FlowSession::create(Arc::clone(&trusted), FlowSessionConfig::default())?;
 
-    let mut trusted_factory = RecordingFactory::new();
-    let mut trusted_renderer = trusted_factory.make_renderer();
+    let mut trusted_factory = script_factory();
+    let mut trusted_renderer = trusted_factory.borrow().make_renderer();
     first_session.draw(&mut trusted_factory, &mut trusted_renderer)?;
-    let stream = trusted_factory.stream();
+    let stream = trusted_factory.borrow().stream();
     assert!(stream.contains("color=0xffcc3300"), "{stream}");
     assert!(stream.contains("color=0xff3366cc"), "{stream}");
     assert!(stream.contains("drawPath "), "{stream}");
 
-    let mut clone_factory = RecordingFactory::new();
-    let mut clone_renderer = clone_factory.make_renderer();
+    let mut clone_factory = script_factory();
+    let mut clone_renderer = clone_factory.borrow().make_renderer();
     second_session.draw(&mut clone_factory, &mut clone_renderer)?;
     assert!(
-        clone_factory.stream().contains("color=0xff3366cc"),
+        clone_factory.borrow().stream().contains("color=0xff3366cc"),
         "two sessions from one source File own fresh script VMs and distinct Factory domains"
     );
 
@@ -502,7 +508,7 @@ fn factory_bound_session_returns_typed_creation_and_cycle_host_work_in_fifo_orde
     );
     let capability = authenticated_capability(&bytes);
     let file = Arc::new(File::import_with_script_capability(&bytes, capability)?);
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, creation) = FlowSession::create_with_factory(
         Arc::clone(&file),
         FlowSessionConfig::default(),
@@ -583,7 +589,7 @@ fn factory_bound_session_returns_typed_creation_and_cycle_host_work_in_fifo_orde
         }),
         &mut factory,
     )?;
-    let mut renderer = factory.make_renderer();
+    let mut renderer = factory.borrow().make_renderer();
     session.draw_into_result(&mut factory, &mut renderer, &mut result)?;
     assert_eq!(
         result
@@ -651,7 +657,7 @@ fn aggregate_host_trees_overflow_before_crossing_the_apple_result_seam_and_poiso
         &bytes,
         authenticated_capability(&bytes),
     )?);
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, creation) =
         FlowSession::create_with_factory(file, FlowSessionConfig::default(), &mut factory)?;
     assert!(creation.outputs.is_empty());
@@ -703,7 +709,7 @@ fn pointer_subcycles_reset_script_budgets_and_roll_back_overflowing_host_work() 
         &bytes,
         authenticated_capability(&bytes),
     )?);
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, creation) = FlowSession::create_with_factory(
         Arc::clone(&file),
         FlowSessionConfig::default(),
@@ -768,7 +774,7 @@ fn pointer_subcycles_reset_script_budgets_and_roll_back_overflowing_host_work() 
     assert_eq!(terminal.kind(), FlowSessionErrorKind::Runtime);
     assert!(terminal.message().contains("flow session is terminal"));
 
-    let mut sibling_factory = RecordingFactory::new();
+    let mut sibling_factory = script_factory();
     let (mut sibling, sibling_creation) =
         FlowSession::create_with_factory(file, FlowSessionConfig::default(), &mut sibling_factory)?;
     assert!(sibling_creation.outputs.is_empty());
@@ -819,8 +825,8 @@ end
         .default_artboard()
         .expect("fixture artboard")
         .instantiate()?;
-    let mut factory = RecordingFactory::new();
-    let mut renderer = factory.make_renderer();
+    let mut factory = script_factory();
+    let mut renderer = factory.borrow().make_renderer();
 
     let error = instance
         .draw(&mut factory, &mut renderer)
@@ -852,7 +858,7 @@ end
     let retained = Arc::clone(&file);
     let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))?;
     let mut sibling = OwnedArtboardInstance::instantiate_default(file)?;
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
 
     instance.try_advance_with_factory(&mut factory, 0.0)?;
     sibling.try_advance_with_factory(&mut factory, 0.0)?;
@@ -903,7 +909,7 @@ end
         .default_artboard()
         .expect("fixture artboard")
         .instantiate()?;
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
 
     let error = instance
         .try_advance_with_factory(&mut factory, 1.0 / 60.0)
@@ -947,7 +953,7 @@ end
         .default_artboard()
         .expect("fixture artboard")
         .instantiate()?;
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
 
     let error = instance
         .try_advance_with_factory(&mut factory, 1.0 / 60.0)
@@ -1001,8 +1007,8 @@ end
         .default_artboard()
         .expect("fixture artboard")
         .instantiate()?;
-    let mut factory = RecordingFactory::new();
-    let mut renderer = factory.make_renderer();
+    let mut factory = script_factory();
+    let mut renderer = factory.borrow().make_renderer();
 
     let error = instance
         .draw(&mut factory, &mut renderer)

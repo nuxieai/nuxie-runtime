@@ -1043,8 +1043,8 @@ The FL-C1 input/listener-definition family is independently accepted at
 The coordinator accepted joint FL-B/FL-C5 candidate `14b18765` on 2026-07-30
 after eleven review rounds. FL-B's 45 files and eight members and FL-C5's two
 files and two members are promoted; FL-C is closed at 56 / 56 files.
-Accepted program counts are now 152 / 342 files and 63 / 75 members, with
-7 / 10 mechanism gaps open. FL-G03 remains open only for its explicitly
+Accepted program counts through FL-E1 are now 247 / 342 files and 73 / 75
+members, with 4 / 10 mechanism gaps open. FL-G03 remains open only for its explicitly
 tracked aggregate trace counters, not for an unaccepted FL-C5 owner. Active
 branch is `levi/fl-c`; there is no PR.
 
@@ -1059,8 +1059,8 @@ branch is `levi/fl-c`; there is no PR.
    FL-A Component ownership is independently accepted and promoted. FL-B1
    through FL-B4 are reaccepted and promoted with FL-C5 at `14b18765`; FL-C
    is closed at 56 / 56 files. Run the one accepted-candidate complete floor,
-   open the joint PR to main, then execute dependency-ordered FL-D
-   Artboard/DataBind owners as per-family PRs, followed by the live-draw owner
+   open the joint PR to main, then continue dependency-ordered FL-E
+   live-draw owner
    waves. Run the canonical whole-corpus measurement only after every mapped
    FL-A-through-FL-E code row is ported and the complete
    correctness/structure floor is green. The sorted slow-scene list is no
@@ -1090,8 +1090,11 @@ branch is `levi/fl-c`; there is no PR.
    adaptation note. Includes: revisit FL-G03's 30-to-11 advance/applyEvents
    topology classification and restore the C++ re-entrant per-event call
    topology; FL-G05 epoch classification-or-deletion; FL-G07 text/layout
-   dirty-chain; FL-G08 retained Drawable links; FL-G09 persistent
-   scripting render context. FL-G01's closure condition was met by the
+   dirty-chain; and FL-G08 retained Drawable links. FL-G09 is closed by FL-E1:
+   each VM retains one pre-import render-factory identity used by listener,
+   input, path-effect, DataConverter, and draw callbacks, and the
+   callback-scoped installation compensation is deleted. FL-G01's closure
+   condition was met by the
    FL-B promotion and needs verification and closing; FL-G04's remainder
    after FL-D4 rolls in here. One gap (or one tightly coupled pair) per
    PR, suites and counters green per landing.

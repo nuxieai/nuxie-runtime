@@ -3,6 +3,12 @@ use super::*;
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie_schema::definition_by_name;
 
+type ScriptFactory = PersistentFactory<RecordingFactory>;
+
+fn script_factory() -> ScriptFactory {
+    PersistentFactory::new(RecordingFactory::new())
+}
+
 fn compile_luau(source: &[u8]) -> Vec<u8> {
     luaur_common::set_all_flags(true);
     let mut output_size = 0;
@@ -1032,7 +1038,7 @@ fn prepared_machine(
     Arc<File>,
     OwnedArtboardInstance,
     StateMachineInstance,
-    RecordingFactory,
+    ScriptFactory,
 ) {
     let bytes = scripted_listener_file(protocol_source, action_count);
     let runtime = read_runtime_file_for_facade(&bytes).expect("import scripted listener fixture");
@@ -1042,7 +1048,7 @@ fn prepared_machine(
     let machine = instance
         .default_state_machine_instance()
         .expect("instantiate scripted listener state machine");
-    (file, instance, machine, RecordingFactory::new())
+    (file, instance, machine, script_factory())
 }
 
 #[test]
@@ -1062,7 +1068,7 @@ fn public_machine_construction_synchronously_prepares_scripted_data_without_bloc
     let file = Arc::new(File::from_runtime(runtime).expect("build public construction file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(file)
         .expect("instantiate public construction artboard");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("make the public runtime file resolver available");
@@ -1147,7 +1153,7 @@ fn public_machine_construction_retains_preparation_failure_without_dropping_the_
         Arc::new(File::from_runtime(runtime).expect("build failed public construction file"));
     let mut instance = OwnedArtboardInstance::instantiate_default(file)
         .expect("instantiate failed public construction artboard");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("make the public runtime file resolver available");
@@ -1219,7 +1225,7 @@ fn listener_init_uses_the_generator_context_once_before_first_perform() {
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import scripted listener fixture");
     let file = Arc::new(File::from_runtime(runtime).expect("build scripted listener file"));
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
         flow_session::FlowSessionConfig::default(),
@@ -1375,7 +1381,7 @@ fn unbound_listener_stops_after_cpp_constructor_two_attempts() {
         .first()
         .expect("scripted-listener definition")
         .scripted_object_global_id();
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("bootstrap unbound scripted-listener file VM");
@@ -1464,7 +1470,7 @@ fn no_factory_state_change_defers_listener_until_factory_pointer_uses_latest_sou
             }],
         })
     };
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let first = session
         .perform_with_factory(pointer(1), &mut factory)
         .expect("first Factory pointer completes the deferred lifecycle");
@@ -1524,7 +1530,7 @@ fn first_factory_state_batch_builds_file_vm_and_applies_latest_listener_sources(
         .catalog
         .root_instance_id
         .expect("fixture root instance");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let result = session
         .perform_with_factory(
             flow_session::FlowOperation::StateBatch(flow_session::FlowStateBatch {
@@ -1664,7 +1670,7 @@ fn foldered_listener_protocol_uses_resolved_asset_identity_not_display_name() {
         )
         .expect("build foldered listener file"),
     );
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, _) = flow_session::FlowSession::create_with_factory(
         file,
         flow_session::FlowSessionConfig::default(),
@@ -1711,7 +1717,7 @@ fn concrete_scripted_child_advance_forces_zero_keep_going_without_consuming_supp
     let file = Arc::new(File::from_runtime(runtime).expect("build child trigger file"));
     let mut owning_artboard = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
         .expect("instantiate owning artboard");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     owning_artboard
         .prepare_flow_scripts(&mut factory)
         .expect("prepare the File VM");
@@ -1770,7 +1776,7 @@ fn flow_pointer_callbacks_receive_event_time_and_the_prior_delivered_position() 
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import pointer callback fixture");
     let file = Arc::new(File::from_runtime(runtime).expect("build pointer callback file"));
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, _) = flow_session::FlowSession::create_with_factory(
         file,
         flow_session::FlowSessionConfig::default(),
@@ -1902,7 +1908,7 @@ fn listener_authored_inputs_are_hydrated_before_init() {
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import authored-input fixture");
     let file = Arc::new(File::from_runtime(runtime).expect("build authored-input file"));
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (_session, creation) = flow_session::FlowSession::create_with_factory(
         file,
         flow_session::FlowSessionConfig::default(),
@@ -1959,7 +1965,7 @@ fn listener_bound_context_inputs_rehydrate_and_fire_trigger_edges() {
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import bound-input fixture");
     let file = Arc::new(File::from_runtime(runtime).expect("build bound-input file"));
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
         flow_session::FlowSessionConfig::default(),
@@ -2028,7 +2034,7 @@ fn repeated_bound_trigger_edges_reset_and_invoke_once_per_frame() {
 
     let runtime = read_runtime_file_for_facade(&bytes).expect("import repeated-trigger fixture");
     let file = Arc::new(File::from_runtime(runtime).expect("build repeated-trigger file"));
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
         flow_session::FlowSessionConfig::default(),
@@ -2120,7 +2126,7 @@ fn scripted_listener_name_based_bind_uses_the_persistent_manifest_resolver() {
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import manifest listener fixture");
     let file = Arc::new(File::from_runtime(runtime).expect("build manifest listener file"));
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
         flow_session::FlowSessionConfig::default(),
@@ -2232,7 +2238,7 @@ fn scripted_converter_custom_inputs_hydrate_before_init_then_bind_before_convert
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import converted-listener fixture");
     let file = Arc::new(File::from_runtime(runtime).expect("build converted-listener file"));
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
         flow_session::FlowSessionConfig::default(),
@@ -2388,7 +2394,7 @@ fn scripted_converter_name_based_child_bind_uses_the_persistent_manifest_resolve
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import manifest converter fixture");
     let file = Arc::new(File::from_runtime(runtime).expect("build manifest converter file"));
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
         flow_session::FlowSessionConfig::default(),
@@ -2486,7 +2492,7 @@ fn public_factory_advance_mounts_scripted_listener_converter_once() {
     let mut root = instance
         .instantiate_view_model_instance(0)
         .expect("instantiate default view model");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
 
     instance
         .try_advance_with_state_machines_and_view_model_and_factory(
@@ -2574,7 +2580,7 @@ fn imported_scripted_transition_conditions_mount_and_evaluate_without_manual_inj
             .all(|global_id| !machine.has_scripted_object_instance(*global_id))
     );
 
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .try_advance_with_state_machines_and_view_model_and_factory(
             std::slice::from_mut(&mut machine),
@@ -2677,7 +2683,7 @@ fn public_factory_advance_mounts_each_ordinary_converter_occurrence_once() {
     let mut root = instance
         .instantiate_view_model_instance(0)
         .expect("instantiate default view model");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .try_advance_with_state_machines_and_view_model_and_factory(
             std::slice::from_mut(&mut machine),
@@ -2802,7 +2808,7 @@ fn ordinary_converter_replacement_is_visible_to_the_next_authored_bind_same_fram
         "the fixture begins with the old nested occurrence"
     );
 
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .try_advance_with_state_machines_and_view_model_and_factory(
             std::slice::from_mut(&mut machine),
@@ -2906,7 +2912,7 @@ fn public_factory_new_root_rehydrates_the_retained_ordinary_converter_same_frame
         .instantiate_view_model_instance(0)
         .expect("instantiate second root");
     assert!(second_root.set_number("amount", 17.0));
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
 
     instance
         .try_advance_with_state_machines_and_view_model_and_factory(
@@ -3063,7 +3069,7 @@ fn direct_runtime_callbacks_wait_for_same_root_structural_rebind() {
         .handle()
         .linked_view_model_by_property_name_path("child")
         .expect("fixture old child");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .try_advance_with_state_machines_and_view_model_and_factory(
             std::slice::from_mut(&mut machine),
@@ -3161,7 +3167,7 @@ fn scripted_converter_init_bit_disabled_skips_live_init_but_still_converts() {
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import method-mask fixture");
     let file = Arc::new(File::from_runtime(runtime).expect("build method-mask file"));
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
         flow_session::FlowSessionConfig::default(),
@@ -3247,7 +3253,7 @@ fn scripted_converter_failed_init_recreates_only_at_the_next_explicit_rebind() {
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import converter-retry fixture");
     let file = Arc::new(File::from_runtime(runtime).expect("build converter-retry file"));
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
         flow_session::FlowSessionConfig::default(),
@@ -3368,7 +3374,7 @@ fn scripted_converter_valid_null_nested_input_preserves_field_and_continues_hydr
     let mut machine = instance
         .default_state_machine_instance()
         .expect("instantiate atomic-hydration machine");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("bootstrap atomic-hydration scripts");
@@ -3508,7 +3514,7 @@ fn scripted_converter_failed_init_regeneration_survives_a_later_invalid_prefligh
     let mut machine = instance
         .default_state_machine_instance()
         .expect("instantiate retry-preflight machine");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("bootstrap retry-preflight scripts");
@@ -3666,7 +3672,7 @@ fn state_batch_commits_the_pre_callback_binding_source() {
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import callback-write fixture");
     let file = Arc::new(File::from_runtime(runtime).expect("build callback-write file"));
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, creation) = flow_session::FlowSession::create_with_factory(
         file,
         flow_session::FlowSessionConfig::default(),
@@ -3763,7 +3769,7 @@ fn pointer_listener_actions_precede_one_exact_binding_flush() {
     );
     let runtime = read_runtime_file_for_facade(&bytes).expect("import pointer-trigger fixture");
     let file = Arc::new(File::from_runtime(runtime).expect("build pointer-trigger file"));
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (mut session, _) = flow_session::FlowSession::create_with_factory(
         file,
         flow_session::FlowSessionConfig::default(),
@@ -3849,7 +3855,7 @@ fn first_factory_pointer_prepares_and_applies_fixed_bindings_before_callback() {
     let (mut session, _) =
         flow_session::FlowSession::create(file, flow_session::FlowSessionConfig::default())
             .expect("create a cold session without renderer authority");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
 
     let result = session
         .perform_with_factory(
@@ -3905,7 +3911,7 @@ fn first_factory_advance_initializes_against_the_session_root() {
     let (mut session, _) =
         flow_session::FlowSession::create(file, flow_session::FlowSessionConfig::default())
             .expect("create a cold session without renderer authority");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
 
     let result = session
         .perform_with_factory(
@@ -3980,7 +3986,7 @@ fn move_and_exit_binding_edges_wait_for_the_next_run_cycle() {
         let file = Arc::new(
             File::from_runtime(runtime).expect("build non-advancing pointer-trigger file"),
         );
-        let mut factory = RecordingFactory::new();
+        let mut factory = script_factory();
         let (mut session, _) = flow_session::FlowSession::create_with_factory(
             file,
             flow_session::FlowSessionConfig::default(),
@@ -4120,7 +4126,7 @@ fn listener_cold_generator_cannot_see_an_already_owned_live_data_context() {
     let mut machine = instance
         .default_state_machine_instance()
         .expect("instantiate cold-generator machine");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("bootstrap cold-generator scripts");
@@ -4181,7 +4187,7 @@ fn listener_cold_table_waits_for_live_view_model_input_without_regeneration() {
     let mut machine = instance
         .default_state_machine_instance()
         .expect("instantiate cold-table machine");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("bootstrap cold-table scripts");
@@ -4250,7 +4256,7 @@ fn prebound_constructor_hydrates_deferred_listener_before_converter_binding() {
     let mut machine = instance
         .default_state_machine_instance()
         .expect("instantiate constructor-order machine");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("bootstrap constructor-order scripts");
@@ -4319,7 +4325,7 @@ fn post_constructor_context_bind_runs_converter_before_live_listener_init() {
     let mut machine = instance
         .default_state_machine_instance()
         .expect("construct machine without a DataContext");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("bootstrap post-bind scripts");
@@ -4389,7 +4395,7 @@ fn listener_owned_empty_context_never_falls_back_to_the_facade_root() {
     let mut machine = instance
         .default_state_machine_instance()
         .expect("instantiate empty-listener machine");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("bootstrap empty-listener scripts");
@@ -4488,7 +4494,7 @@ fn converter_owned_empty_context_never_falls_back_to_the_facade_root() {
     let mut machine = instance
         .default_state_machine_instance()
         .expect("instantiate empty-converter machine");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("bootstrap empty-converter scripts");
@@ -4589,7 +4595,7 @@ fn listener_missing_context_hydration_keeps_the_table_until_context_arrives() {
     let mut machine = instance
         .default_state_machine_instance()
         .expect("instantiate failed-hydration machine");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("bootstrap failed-hydration VM");
@@ -4669,7 +4675,7 @@ fn listener_generator_and_init_do_not_require_a_new_renderer_factory() {
     let mut machine = instance
         .default_state_machine_instance()
         .expect("instantiate factoryless listener machine");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("register the protocol while the renderer factory is available");
@@ -4727,7 +4733,7 @@ fn listener_failed_init_recreates_without_a_new_renderer_factory() {
     let mut machine = instance
         .default_state_machine_instance()
         .expect("instantiate factoryless retry machine");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("register retry protocol");
@@ -4800,7 +4806,7 @@ fn converter_generation_init_and_retry_do_not_require_a_new_renderer_factory() {
     let mut machine = instance
         .default_state_machine_instance()
         .expect("instantiate factoryless converter machine");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("register converter protocol while the renderer factory is available");
@@ -4868,7 +4874,7 @@ fn public_update_data_binds_reconciles_a_machine_with_only_a_cloned_script_input
     let mut machine = instance
         .default_state_machine_instance()
         .expect("instantiate public-update machine");
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     instance
         .prepare_flow_scripts(&mut factory)
         .expect("bootstrap public-update VM");
@@ -4907,7 +4913,7 @@ fn failed_module_registration_attempt_rolls_back_only_its_host_effects() {
     let bytes = module_retry_listener_file();
     let runtime = read_runtime_file_for_facade(&bytes).expect("import module-retry fixture");
     let file = Arc::new(File::from_runtime(runtime).expect("build module-retry file"));
-    let mut factory = RecordingFactory::new();
+    let mut factory = script_factory();
     let (_session, creation) = flow_session::FlowSession::create_with_factory(
         file,
         flow_session::FlowSessionConfig::default(),

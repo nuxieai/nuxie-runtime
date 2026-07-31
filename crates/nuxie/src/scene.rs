@@ -24810,7 +24810,13 @@ mod tests {
     use nuxie_runtime::RuntimeOwnedViewModelListSourceHandle;
 
     use super::*;
-    use crate::RecordingFactory;
+    use crate::{PersistentFactory, RecordingFactory};
+
+    type ScriptFactory = PersistentFactory<RecordingFactory>;
+
+    fn script_factory() -> ScriptFactory {
+        PersistentFactory::new(RecordingFactory::new())
+    }
 
     #[test]
     fn list_string_match_boolean_cache_distinguishes_complete_nested_paths() -> Result<()> {
@@ -25105,22 +25111,22 @@ mod tests {
             .raw()
             .list_source_handle_by_property_name_path("items")
             .context("root items source")?;
-        let mut factory = RecordingFactory::new();
-        let mut renderer = factory.make_renderer();
+        let mut factory = script_factory();
+        let mut renderer = factory.borrow().make_renderer();
 
         replace_bound_component_list(&mut instance, &mut root, &source, &[&a_visible])?;
         instance.draw(&mut factory, &mut renderer)?;
-        let initial_a = factory.canonical_recording().stream().to_owned();
+        let initial_a = factory.borrow().canonical_recording().stream().to_owned();
 
         replace_bound_component_list(&mut instance, &mut root, &source, &[&b])?;
-        factory.clear();
+        factory.borrow_mut().clear();
         instance.draw(&mut factory, &mut renderer)?;
-        let middle_b = factory.canonical_recording().stream().to_owned();
+        let middle_b = factory.borrow().canonical_recording().stream().to_owned();
 
         replace_bound_component_list(&mut instance, &mut root, &source, &[&a_hidden])?;
-        factory.clear();
+        factory.borrow_mut().clear();
         instance.draw(&mut factory, &mut renderer)?;
-        let returned_a = factory.canonical_recording().stream().to_owned();
+        let returned_a = factory.borrow().canonical_recording().stream().to_owned();
         let fresh_a = fresh_component_list_draw(&file, &a_hidden)?;
 
         assert_ne!(middle_b, initial_a);
@@ -25333,21 +25339,21 @@ mod tests {
             .raw()
             .list_source_handle_by_property_name_path("items")
             .context("root items source")?;
-        let mut factory = RecordingFactory::new();
-        let mut renderer = factory.make_renderer();
+        let mut factory = script_factory();
+        let mut renderer = factory.borrow().make_renderer();
 
         replace_bound_component_list(&mut instance, &mut root, &source, &[&a_visible])?;
         instance.draw(&mut factory, &mut renderer)?;
-        let initial_a = factory.canonical_recording().stream().to_owned();
+        let initial_a = factory.borrow().canonical_recording().stream().to_owned();
 
         replace_bound_component_list(&mut instance, &mut root, &source, &[])?;
-        factory.clear();
+        factory.borrow_mut().clear();
         instance.draw(&mut factory, &mut renderer)?;
 
         replace_bound_component_list(&mut instance, &mut root, &source, &[&a_hidden])?;
-        factory.clear();
+        factory.borrow_mut().clear();
         instance.draw(&mut factory, &mut renderer)?;
-        let returned_a = factory.canonical_recording().stream().to_owned();
+        let returned_a = factory.borrow().canonical_recording().stream().to_owned();
         let fresh_a = fresh_component_list_draw(&file, &a_hidden)?;
 
         assert_ne!(
@@ -26807,7 +26813,7 @@ mod tests {
         let _ = view_model.set_number("value", 3.0);
         assert!(instance.bind_view_model(&view_model));
         instance.advance(0.0);
-        let mut factory = RecordingFactory::new();
+        let mut factory = script_factory();
         instance.try_advance_with_factory(&mut factory, 0.0)?;
         let scripted_global = file
             .runtime()
@@ -28089,10 +28095,10 @@ mod tests {
     }
 
     fn owned_canonical_draw(instance: &mut OwnedArtboardInstance) -> Result<String> {
-        let mut factory = RecordingFactory::new();
-        let mut renderer = factory.make_renderer();
+        let mut factory = script_factory();
+        let mut renderer = factory.borrow().make_renderer();
         instance.draw(&mut factory, &mut renderer)?;
-        Ok(factory.canonical_recording().stream().to_owned())
+        Ok(factory.borrow().canonical_recording().stream().to_owned())
     }
 
     #[test]
@@ -31030,18 +31036,18 @@ mod tests {
         // to the Artboard occurrence and remain bound to the prior factory
         // until an explicit device/backend reset.
         instance.reset_renderer();
-        let mut factory = RecordingFactory::new();
-        let mut renderer = factory.make_renderer();
+        let mut factory = script_factory();
+        let mut renderer = factory.borrow().make_renderer();
         instance.draw(&mut factory, &mut renderer)?;
-        Ok(factory.stream())
+        Ok(factory.borrow().stream())
     }
 
     fn borrowed_draw_stream(instance: &mut crate::ArtboardInstance<'_>) -> Result<String> {
         instance.reset_renderer();
-        let mut factory = RecordingFactory::new();
-        let mut renderer = factory.make_renderer();
+        let mut factory = script_factory();
+        let mut renderer = factory.borrow().make_renderer();
         instance.draw(&mut factory, &mut renderer)?;
-        Ok(factory.stream())
+        Ok(factory.borrow().stream())
     }
 
     fn stream_draws_path(stream: &str) -> bool {
@@ -31094,19 +31100,19 @@ mod tests {
             "the embedded oracle must draw at least one real glyph path"
         );
 
-        let mut retained_factory = RecordingFactory::new();
-        let mut retained_renderer = retained_factory.make_renderer();
+        let mut retained_factory = script_factory();
+        let mut retained_renderer = retained_factory.borrow().make_renderer();
         external.draw(&mut retained_factory, &mut retained_renderer)?;
         assert!(
-            !stream_draws_path(&retained_factory.stream()),
+            !stream_draws_path(&retained_factory.borrow().stream()),
             "the unresolved external font must initially draw no glyph paths"
         );
 
         external.attach_font_asset_bytes(0, fixture_font_bytes())?;
-        retained_factory.clear();
+        retained_factory.borrow_mut().clear();
         external.draw(&mut retained_factory, &mut retained_renderer)?;
         assert!(
-            stream_draws_path(&retained_factory.stream()),
+            stream_draws_path(&retained_factory.borrow().stream()),
             "attachment must invalidate the retained cache and draw glyph paths"
         );
 
@@ -31367,10 +31373,10 @@ mod tests {
         let file = Arc::new(File::from_runtime(runtime)?);
         assert_eq!(file.artboard_count(), 2);
         let mut instance = OwnedArtboardInstance::instantiate(file, 0)?;
-        let mut factory = RecordingFactory::new();
-        let mut renderer = factory.make_renderer();
+        let mut factory = script_factory();
+        let mut renderer = factory.borrow().make_renderer();
         instance.draw(&mut factory, &mut renderer)?;
-        let stream = parse_single_frame(&factory.stream())?;
+        let stream = parse_single_frame(&factory.borrow().stream())?;
         let commands = &stream.frames[0].commands;
         assert!(
             commands
@@ -32328,11 +32334,11 @@ mod tests {
             .default_artboard()
             .context("external file has a root artboard")?
             .instantiate()?;
-        let mut unresolved_factory = RecordingFactory::new();
-        let mut unresolved_renderer = unresolved_factory.make_renderer();
+        let mut unresolved_factory = script_factory();
+        let mut unresolved_renderer = unresolved_factory.borrow().make_renderer();
         unresolved.draw(&mut unresolved_factory, &mut unresolved_renderer)?;
         assert!(
-            !stream_draws_path(&unresolved_factory.stream()),
+            !stream_draws_path(&unresolved_factory.borrow().stream()),
             "neither root nor nested text may invent fallback glyphs before attachment"
         );
 
@@ -32346,16 +32352,16 @@ mod tests {
             .default_artboard()
             .context("external file has a root artboard")?
             .instantiate()?;
-        let mut embedded_factory = RecordingFactory::new();
-        let mut embedded_renderer = embedded_factory.make_renderer();
+        let mut embedded_factory = script_factory();
+        let mut embedded_renderer = embedded_factory.borrow().make_renderer();
         embedded_root.draw(&mut embedded_factory, &mut embedded_renderer)?;
-        let mut external_factory = RecordingFactory::new();
-        let mut external_renderer = external_factory.make_renderer();
+        let mut external_factory = script_factory();
+        let mut external_renderer = external_factory.borrow().make_renderer();
         external_root.draw(&mut external_factory, &mut external_renderer)?;
-        assert!(stream_draws_path(&external_factory.stream()));
+        assert!(stream_draws_path(&external_factory.borrow().stream()));
         assert_eq!(
-            external_factory.stream(),
-            embedded_factory.stream(),
+            external_factory.borrow().stream(),
+            embedded_factory.borrow().stream(),
             "the combined root+nested draw must exactly match embedded font authority"
         );
 
@@ -32963,13 +32969,13 @@ mod tests {
         let live_streams = [first_instance, second_instance]
             .into_iter()
             .map(|instance| {
-                let mut factory = RecordingFactory::new();
+                let mut factory = script_factory();
                 let mut cache = scene.new_draw_token(instance)?;
-                let mut renderer = factory.make_renderer();
+                let mut renderer = factory.borrow().make_renderer();
                 scene
                     .frame()
                     .draw(instance, &mut factory, &mut renderer, &mut cache)?;
-                Ok::<_, anyhow::Error>(factory.stream())
+                Ok::<_, anyhow::Error>(factory.borrow().stream())
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -32979,10 +32985,10 @@ mod tests {
         assert_eq!(file.artboard_count(), 2);
         for (index, expected) in live_streams.iter().enumerate() {
             let mut instance = OwnedArtboardInstance::instantiate(Arc::clone(&file), index)?;
-            let mut factory = RecordingFactory::new();
-            let mut renderer = factory.make_renderer();
+            let mut factory = script_factory();
+            let mut renderer = factory.borrow().make_renderer();
             instance.draw(&mut factory, &mut renderer)?;
-            let imported = parse_single_frame(&factory.stream())?;
+            let imported = parse_single_frame(&factory.borrow().stream())?;
             let live = parse_single_frame(expected)?;
             assert!(imported.resources.is_empty());
             assert!(live.resources.is_empty());
@@ -33123,9 +33129,9 @@ mod tests {
             Ok((artboard, text))
         })?;
         let instance = scene.instantiate(artboard)?;
-        let mut live_factory = RecordingFactory::new();
+        let mut live_factory = script_factory();
         let mut live_cache = scene.new_draw_token(instance)?;
-        let mut live_renderer = live_factory.make_renderer();
+        let mut live_renderer = live_factory.borrow().make_renderer();
         scene.frame().draw(
             instance,
             &mut live_factory,
@@ -33317,16 +33323,16 @@ mod tests {
         let runtime = RuntimeFile::from_authoring_records(exported.into_authoring_records())?;
         let file = Arc::new(File::from_runtime(runtime)?);
         let mut imported = OwnedArtboardInstance::instantiate(file, 0)?;
-        let mut imported_factory = RecordingFactory::new();
-        let mut imported_renderer = imported_factory.make_renderer();
+        let mut imported_factory = script_factory();
+        let mut imported_renderer = imported_factory.borrow().make_renderer();
         imported.draw(&mut imported_factory, &mut imported_renderer)?;
 
         assert_eq!(
             imported.world_bounds(1),
             Some(crate::Aabb::new(0.0, 0.0, 120.0, 40.0))
         );
-        let imported_frame = parse_single_frame(&imported_factory.stream())?;
-        let live_frame = parse_single_frame(&live_factory.stream())?;
+        let imported_frame = parse_single_frame(&imported_factory.borrow().stream())?;
+        let live_frame = parse_single_frame(&live_factory.borrow().stream())?;
         assert_eq!(imported_frame.frames, live_frame.frames);
         Ok(())
     }
@@ -35716,8 +35722,8 @@ mod tests {
             compile_luau(b"return function(_) return { init = function() return false end } end");
         for (case, bytes) in [("malformed", vec![0xff]), ("init false", init_false)] {
             let (mut scene, instance, global_id) = scene_with_failing_protocol(bytes)?;
-            let mut factory = RecordingFactory::new();
-            let mut renderer = factory.make_renderer();
+            let mut factory = script_factory();
+            let mut renderer = factory.borrow().make_renderer();
             let mut cache = scene.new_draw_token(instance)?;
 
             let error = scene
@@ -35749,8 +35755,8 @@ mod tests {
         let truthy_table =
             compile_luau(b"return function(_) return { init = function() return {} end } end");
         let (mut scene, instance, global_id) = scene_with_failing_protocol(truthy_table)?;
-        let mut factory = RecordingFactory::new();
-        let mut renderer = factory.make_renderer();
+        let mut factory = script_factory();
+        let mut renderer = factory.borrow().make_renderer();
         let mut cache = scene.new_draw_token(instance)?;
 
         scene

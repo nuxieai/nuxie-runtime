@@ -101,13 +101,16 @@ closure = "FL-D4 closes the owner boundary: every authored Artboard DataBind is 
 
 [[gap]]
 id = "FL-G05"
-status = "open"
-mechanism = "Artboard update and geometry state still expose Rust epoch/key mechanisms; each must be classified as owner-local adaptation or deleted if it compensates for missing C++ dirt ownership."
+status = "closed"
+mechanism = "FL-D7 classifies Artboard update epochs and nested layout-transfer keys as owner-local adaptations. DataBind dirty/processed epochs coalesce pushed occurrence dirt without polling the ViewModel graph; layout/path/prepared epochs fence retained derived state owned by the same Artboard occurrence; nested transfer keys represent Yoga's `hasNewLayout` handoff to one mounted child. None substitutes for a missing Component or DataBind owner."
 citations = [
-  "cpp:src/artboard.cpp:1161",
-  "rust:crates/nuxie-runtime/src/artboard.rs:4359",
+  "cpp:src/artboard.cpp:1417-1460",
+  "rust:crates/nuxie-runtime/src/artboard.rs:479-503",
+  "rust:crates/nuxie-runtime/src/artboard.rs:6733-6735",
+  "rust:crates/nuxie-runtime/src/artboard.rs:7290-7440",
+  "rust:crates/nuxie-runtime/src/nested_artboard_layout.rs:3-20",
 ]
-closure = "FL-A/FL-D classifies every epoch and leaves no unowned per-frame invalidation mechanism."
+closure = "Closed by FL-A/FL-D: every retained epoch/key belongs to the Artboard or mounted nested occurrence whose derived state it fences; dirty propagation remains on the direct Component/DataBind owners."
 
 [[gap]]
 id = "FL-G06"
@@ -1159,8 +1162,15 @@ max_occurrences = 1
 
 [[ratchet]]
 id = "state_machine_hit_exit_release_required"
+globs = ["crates/nuxie-runtime/src/listener_group.rs"]
+pattern = "fn\\s+release_event\\b[\\s\\S]{0,500}pointer_data\\.remove\\(index\\)[\\s\\S]{0,300}pointer_data_pool\\.push\\(data\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "state_machine_hit_exit_release_wiring_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "if\\s+hit_type\\s*==\\s*RuntimeListenerType::Exit\\s*\\{[\\s\\S]{0,220}self\\.release_pointer_input\\(pointer_id\\)"
+pattern = "if\\s+hit_type\\s*==\\s*RuntimeListenerType::Exit\\s*\\{[\\s\\S]{0,220}for\\s+group\\s+in\\s+&mut\\s+self\\.listener_groups\\s*\\{[\\s\\S]{0,120}group\\.release_event\\(pointer_id\\)"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1485,7 +1495,21 @@ guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "a4a9ad24b07b49b44819a975d6448d48bea87c1bed9281a58d033e0c482b4f07"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/nested_artboard.rs"
+kind = "selection"
+anchor = "Clone_for_RuntimeNestedArtboardInstance::clone"
+guarded_name = "StateMachine"
+site_hash = "a8aa75d3c55b78b313ec988ebe3a0a3816c7132affac00b7670ac1764f7b96ed"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/nested_artboard.rs"
+kind = "selection"
+anchor = "Clone_for_RuntimeNestedArtboardInstance::clone"
+guarded_name = "StateMachine"
+site_hash = "9b30576197f2203e67f04e4b37d7285bf61770ecde7955c2e45efa24666852d3"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/nested_artboard.rs"
 kind = "selection"
 anchor = "Clone_for_RuntimeNestedArtboardInstance::clone"
 guarded_name = "RuntimeNestedAnimationInstance"
@@ -1576,25 +1600,46 @@ guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "06532ad249f1a0f342eac02c83836163b2c67362581080c60d873a3b2cfca9d8"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboards::rebuild_state_machine_index"
-guarded_name = "RuntimeNestedAnimationInstance"
+guarded_name = "StateMachine"
 site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboards::state_machine"
+guarded_name = "StateMachine"
+site_hash = "463d4d8259e615a6dcd513d23c54873a7e8cf932747464875b81125becc631b7"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboards::state_machine"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "463d4d8259e615a6dcd513d23c54873a7e8cf932747464875b81125becc631b7"
 
 [[owner_boundary_allow]]
-file = "crates/nuxie-runtime/src/artboard.rs"
+file = "crates/nuxie-runtime/src/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboards::state_machine_mut"
+guarded_name = "StateMachine"
+site_hash = "560a37d0f5c62516c70c85be5c65387bcc65742e7dcd4aec4be61550bcad8a46"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/nested_artboard.rs"
 kind = "selection"
 anchor = "RuntimeNestedArtboards::state_machine_mut"
 guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "560a37d0f5c62516c70c85be5c65387bcc65742e7dcd4aec4be61550bcad8a46"
+
+[[owner_boundary_allow]]
+file = "crates/nuxie-runtime/src/nested_artboard.rs"
+kind = "selection"
+anchor = "RuntimeNestedArtboards::rebuild_state_machine_index"
+guarded_name = "RuntimeNestedAnimationInstance"
+site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
 
 [[owner_boundary_allow]]
 file = "crates/nuxie-runtime/src/artboard.rs"

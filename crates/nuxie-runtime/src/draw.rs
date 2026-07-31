@@ -18921,13 +18921,15 @@ fn runtime_nested_artboard_leaf_world_transform(
         .double_property(local_id, alignment_y_key)
         .unwrap_or(0.0);
 
-    Ok(host_world.multiply(runtime_compute_alignment(
-        fit,
-        alignment_x,
-        alignment_y,
-        frame,
-        content,
-    )))
+    Ok(
+        host_world.multiply(crate::artboard::runtime_nested_artboard_leaf_alignment(
+            fit,
+            alignment_x,
+            alignment_y,
+            (frame.left, frame.top, frame.width, frame.height),
+            (content.left, content.top, content.width, content.height),
+        )),
+    )
 }
 
 fn runtime_nested_artboard_leaf_frame_bounds(
@@ -18962,69 +18964,6 @@ fn runtime_nested_artboard_leaf_frame_bounds(
     }
 
     Ok(RuntimeAabb::from_artboard(child))
-}
-
-fn runtime_compute_alignment(
-    fit: u64,
-    alignment_x: f32,
-    alignment_y: f32,
-    frame: RuntimeAabb,
-    content: RuntimeAabb,
-) -> Mat2D {
-    let content_width = content.width;
-    let content_height = content.height;
-    let x = -content.left - content_width * 0.5 - alignment_x * content_width * 0.5;
-    let y = -content.top - content_height * 0.5 - alignment_y * content_height * 0.5;
-
-    let mut scale_x = 1.0;
-    let mut scale_y = 1.0;
-    match fit {
-        0 => {
-            scale_x = frame.width / content_width;
-            scale_y = frame.height / content_height;
-        }
-        1 => {
-            let scale = (frame.width / content_width).min(frame.height / content_height);
-            scale_x = scale;
-            scale_y = scale;
-        }
-        2 => {
-            let scale = (frame.width / content_width).max(frame.height / content_height);
-            scale_x = scale;
-            scale_y = scale;
-        }
-        3 => {
-            let scale = frame.width / content_width;
-            scale_x = scale;
-            scale_y = scale;
-        }
-        4 => {
-            let scale = frame.height / content_height;
-            scale_x = scale;
-            scale_y = scale;
-        }
-        5 => {}
-        6 => {
-            let scale = (frame.width / content_width).min(frame.height / content_height);
-            let scale = if scale < 1.0 { scale } else { 1.0 };
-            scale_x = scale;
-            scale_y = scale;
-        }
-        7 => {}
-        _ => {}
-    }
-
-    let translation = Mat2D([
-        1.0,
-        0.0,
-        0.0,
-        1.0,
-        frame.left + frame.width * 0.5 + alignment_x * frame.width * 0.5,
-        frame.top + frame.height * 0.5 + alignment_y * frame.height * 0.5,
-    ]);
-    let scale = Mat2D([scale_x, 0.0, 0.0, scale_y, 0.0, 0.0]);
-    let translate_content = Mat2D([1.0, 0.0, 0.0, 1.0, x, y]);
-    translation.multiply(scale).multiply(translate_content)
 }
 
 fn runtime_apply_nested_artboard_layout_child_bounds(

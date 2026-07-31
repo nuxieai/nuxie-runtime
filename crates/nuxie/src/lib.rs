@@ -3859,12 +3859,7 @@ impl<'a> ArtboardInstance<'a> {
     }
 
     pub fn advance(&mut self, elapsed_seconds: f32) -> bool {
-        let mut changed = self
-            .raw
-            .advance_frame_components(elapsed_seconds)
-            .unwrap_or(false);
-        changed |= self.raw.update_pass_with_script_errors().unwrap_or(false);
-        changed
+        self.raw.advance(elapsed_seconds).unwrap_or(false)
     }
 
     /// Advance with a renderer factory available to every script lifecycle
@@ -4451,12 +4446,7 @@ impl OwnedArtboardInstance {
     }
 
     pub fn advance(&mut self, elapsed_seconds: f32) -> bool {
-        let mut changed = self
-            .raw
-            .advance_frame_components(elapsed_seconds)
-            .unwrap_or(false);
-        changed |= self.raw.update_pass_with_script_errors().unwrap_or(false);
-        changed
+        self.raw.advance(elapsed_seconds).unwrap_or(false)
     }
 
     /// Owning mirror of [`ArtboardInstance::try_advance_with_factory`],

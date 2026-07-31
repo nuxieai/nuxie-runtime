@@ -29,9 +29,6 @@ impl RuntimeListenerFireEvent {
         let event_local_id = self
             .action_owner
             .uint(super::listener_action_owner::LISTENER_FIRE_EVENT_ID_KEY);
-        StateMachineReportedEvent::from_live_artboard_event(
-            artboard,
-            usize::try_from(event_local_id).ok()?,
-        )
+        crate::event::trigger_event(artboard, usize::try_from(event_local_id).ok()?, 0.0, None)
     }
 }

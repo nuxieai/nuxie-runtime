@@ -40,9 +40,7 @@ impl RuntimeStateMachineFireEvent {
         let Ok(event_local_id) = usize::try_from(event_local_id) else {
             return;
         };
-        let Some(event) =
-            StateMachineReportedEvent::from_live_artboard_event(artboard, event_local_id)
-        else {
+        let Some(event) = crate::event::trigger_event(artboard, event_local_id, 0.0, None) else {
             return;
         };
         reported_events.push(event);

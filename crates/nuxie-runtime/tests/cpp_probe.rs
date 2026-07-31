@@ -1,11 +1,11 @@
 use nuxie_binary::{RuntimeFile, read_runtime_file};
 use nuxie_graph::GraphFile;
 use nuxie_runtime::{
-    ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, RuntimeDataContext,
-    RuntimeDataContextLookupKind, RuntimeDataContextLookupReport, RuntimeDrawableDispatchKind,
-    RuntimeFeatherState, RuntimeGradientStop, RuntimeImportedViewModelInstanceContext,
-    RuntimeKeyFrame, RuntimeNestedEventChainPhase, RuntimeNestedEventChainTrace,
-    RuntimeNestedNotifyBatchTrace, RuntimeOwnedViewModelContext,
+    ArtboardInstance, ComponentDirt, Mat2D, RuntimeArtboardDefaultScene, RuntimeComponent,
+    RuntimeDataContext, RuntimeDataContextLookupKind, RuntimeDataContextLookupReport,
+    RuntimeDrawableDispatchKind, RuntimeFeatherState, RuntimeGradientStop,
+    RuntimeImportedViewModelInstanceContext, RuntimeKeyFrame, RuntimeNestedEventChainPhase,
+    RuntimeNestedEventChainTrace, RuntimeNestedNotifyBatchTrace, RuntimeOwnedViewModelContext,
     RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
     RuntimePathCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
     RuntimeStateMachineDataConverterBindStep, RuntimeViewModelLinkError, ScriptError, ScriptHost,
@@ -19731,6 +19731,12 @@ fn upstream_default_state_machine_fixture_contract() {
         &graph.artboards,
     )
     .expect("instantiate entry.riv");
+    assert_eq!(instance.default_state_machine_index(), Some(default_index));
+    assert!(instance.default_state_machine().is_some());
+    assert_eq!(
+        instance.default_scene(),
+        Some(RuntimeArtboardDefaultScene::StateMachine(default_index))
+    );
     assert!(instance.state_machine_instance(default_index).is_some());
     assert_eq!(
         graph.artboards[0].state_machines[default_index]
@@ -19741,7 +19747,11 @@ fn upstream_default_state_machine_fixture_contract() {
 
     // C++ defaultScene selects the same authored state-machine occurrence when
     // one is flagged as the default.
-    let default_scene_index = default_index;
+    let RuntimeArtboardDefaultScene::StateMachine(default_scene_index) =
+        instance.default_scene().expect("entry.riv default scene")
+    else {
+        panic!("entry.riv must select its authored state machine");
+    };
     assert!(
         instance
             .state_machine_instance(default_scene_index)

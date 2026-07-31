@@ -8241,6 +8241,7 @@ impl RuntimeShapePaintPathOwner {
 struct RuntimePathBackendState {
     path: Box<dyn RenderPath>,
     raw_mutation_id: u64,
+    fill_rule: RenderFillRule,
     // Rust exposes renderer-neutral caches, while pinned C++ fixes one
     // RenderFactory on the owning File/Artboard. Keep the C++ one-slot owner
     // topology, but rematerialize that slot when the public cache context
@@ -8274,7 +8275,8 @@ impl RuntimePathBackendSlot {
         context_id: u64,
         factory: &mut dyn RenderFactory,
         raw_path: &RawPath,
-        fill_rule: Option<RenderFillRule>,
+        path_fill_rule: RenderFillRule,
+        replay_fill_rule: Option<RenderFillRule>,
         use_path: impl FnOnce(&dyn RenderPath) -> R,
     ) -> R {
         let mut state = self.value.borrow_mut();
@@ -8287,10 +8289,11 @@ impl RuntimePathBackendSlot {
         let state = state.get_or_insert_with(|| {
             let mut path = factory.make_empty_render_path();
             path.add_raw_path(raw_path);
-            path.fill_rule(fill_rule.unwrap_or(RenderFillRule::Clockwise));
+            path.fill_rule(path_fill_rule);
             RuntimePathBackendState {
                 path,
                 raw_mutation_id: raw_path.mutation_id(),
+                fill_rule: path_fill_rule,
                 context_id,
             }
         });
@@ -8298,9 +8301,18 @@ impl RuntimePathBackendSlot {
             state.path.rewind();
             state.path.add_raw_path(raw_path);
             state.raw_mutation_id = raw_path.mutation_id();
+            // A ClippingShape stores a newly authored fill rule immediately,
+            // but only consumes it when a path dependency next rebuilds the
+            // retained path (`ClippingShape::update`, lines 151-173). Shape
+            // paint draws instead replay their authored rule below.
+            if replay_fill_rule.is_none() && state.fill_rule != path_fill_rule {
+                state.path.fill_rule(path_fill_rule);
+                state.fill_rule = path_fill_rule;
+            }
         }
-        if let Some(fill_rule) = fill_rule {
-            state.path.fill_rule(fill_rule);
+        if let Some(replay_fill_rule) = replay_fill_rule {
+            state.path.fill_rule(replay_fill_rule);
+            state.fill_rule = replay_fill_rule;
         }
         use_path(state.path.as_ref())
     }
@@ -17011,6 +17023,7 @@ fn runtime_draw_live_owned_shape_paint(
                 backend_context_id,
                 factory,
                 clip_raw_path,
+                RenderFillRule::Clockwise,
                 None,
                 |clip_path| renderer.clip_path(clip_path),
             );
@@ -17041,6 +17054,7 @@ fn runtime_draw_live_owned_shape_paint(
         backend_context_id,
         factory,
         draw_raw_path,
+        RenderFillRule::Clockwise,
         draw_fill_rule,
         |path| {
             let backend = owner.backend.value.borrow();
@@ -19095,7 +19109,8 @@ fn runtime_draw_live_clip_start(
         backend_context_id,
         factory,
         &path,
-        Some(clipping_shape.fill_rule.get()),
+        clipping_shape.fill_rule.get(),
+        None,
         |path| renderer.clip_path(path),
     );
 }
@@ -19864,7 +19879,12 @@ fn runtime_make_path_from_raw_path(
     fill_rule: RenderFillRule,
 ) -> Box<dyn RenderPath> {
     let mut path = factory.make_empty_render_path();
-    runtime_rebuild_path_from_raw_path(path.as_mut(), raw_path, fill_rule);
+    // C++ `ShapePaintPath::renderPath` materializes in this exact order:
+    // makeEmptyRenderPath, addRawPath, then apply the path's fill rule
+    // (`src/shapes/paint/shape_paint_path.cpp:61-66`). Rewind belongs only to
+    // the dirty retained-path branch (`shape_paint_path.cpp:68-72`).
+    path.add_raw_path(raw_path);
+    path.fill_rule(fill_rule);
     path
 }
 
@@ -30026,12 +30046,21 @@ mod tests {
     use std::cell::{Cell, RefCell};
     use std::rc::Rc;
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum PathOp {
+        MakeEmpty,
+        Rewind,
+        AddRawPath,
+        FillRule(RenderFillRule),
+    }
+
     #[derive(Default)]
     struct CountingStats {
         make_empty_paths: Cell<usize>,
         rewinds: Cell<usize>,
         add_raw_paths: Cell<usize>,
         fill_rules: Cell<usize>,
+        path_ops: RefCell<Vec<PathOp>>,
         lines: Cell<usize>,
         closes: Cell<usize>,
         paint_ops: RefCell<Vec<&'static str>>,
@@ -30242,11 +30271,16 @@ mod tests {
 
         fn rewind(&mut self) {
             self.stats.rewinds.set(self.stats.rewinds.get() + 1);
+            self.stats.path_ops.borrow_mut().push(PathOp::Rewind);
             self.raw_path.rewind();
         }
 
         fn fill_rule(&mut self, value: RenderFillRule) {
             self.stats.fill_rules.set(self.stats.fill_rules.get() + 1);
+            self.stats
+                .path_ops
+                .borrow_mut()
+                .push(PathOp::FillRule(value));
             self.fill_rule = value;
         }
 
@@ -30258,6 +30292,7 @@ mod tests {
             self.stats
                 .add_raw_paths
                 .set(self.stats.add_raw_paths.get() + 1);
+            self.stats.path_ops.borrow_mut().push(PathOp::AddRawPath);
             self.raw_path.add_path(path, RenderMat2D::IDENTITY);
         }
 
@@ -30457,6 +30492,7 @@ mod tests {
             self.stats
                 .make_empty_paths
                 .set(self.stats.make_empty_paths.get() + 1);
+            self.stats.path_ops.borrow_mut().push(PathOp::MakeEmpty);
             self.make_render_path(RawPath::new(), RenderFillRule::NonZero)
         }
 
@@ -31005,6 +31041,62 @@ mod tests {
     }
 
     #[test]
+    fn shape_paint_path_initial_materialization_matches_cpp_call_order() {
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(0.0, 0.0);
+        raw_path.line_to(1.0, 1.0);
+
+        let _path =
+            runtime_make_path_from_raw_path(&mut factory, &raw_path, RenderFillRule::Clockwise);
+
+        assert_eq!(
+            stats.path_ops.borrow().as_slice(),
+            [
+                PathOp::MakeEmpty,
+                PathOp::AddRawPath,
+                PathOp::FillRule(RenderFillRule::Clockwise),
+            ]
+        );
+    }
+
+    #[test]
+    fn owned_shape_fill_replays_authored_rule_after_path_rule() {
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(0.0, 0.0);
+        raw_path.line_to(1.0, 1.0);
+        let backend = RuntimePathBackendSlot::default();
+
+        backend.with_path(
+            7,
+            &mut factory,
+            &raw_path,
+            RenderFillRule::Clockwise,
+            Some(RenderFillRule::NonZero),
+            |_| {},
+        );
+
+        assert_eq!(
+            stats.path_ops.borrow().as_slice(),
+            [
+                PathOp::MakeEmpty,
+                PathOp::AddRawPath,
+                PathOp::FillRule(RenderFillRule::Clockwise),
+                PathOp::FillRule(RenderFillRule::NonZero),
+            ]
+        );
+    }
+
+    #[test]
     fn draw_path_reuses_render_path_until_path_epoch_changes() {
         let stats = Rc::new(CountingStats::default());
         let mut factory = CountingFactory {
@@ -31048,7 +31140,7 @@ mod tests {
         };
 
         assert_eq!(stats.make_empty_paths.get(), 1);
-        assert_eq!(stats.rewinds.get(), 1);
+        assert_eq!(stats.rewinds.get(), 0);
         assert_eq!(stats.add_raw_paths.get(), 1);
         assert_eq!(stats.lines.get(), 0);
 
@@ -31068,7 +31160,7 @@ mod tests {
 
         assert_eq!(second_id, first_id);
         assert_eq!(stats.make_empty_paths.get(), 1);
-        assert_eq!(stats.rewinds.get(), 1);
+        assert_eq!(stats.rewinds.get(), 0);
         assert_eq!(stats.add_raw_paths.get(), 1);
         assert_eq!(stats.lines.get(), 0);
 
@@ -31096,7 +31188,7 @@ mod tests {
 
         assert_eq!(third_id, first_id);
         assert_eq!(stats.make_empty_paths.get(), 1);
-        assert_eq!(stats.rewinds.get(), 2);
+        assert_eq!(stats.rewinds.get(), 1);
         assert_eq!(stats.add_raw_paths.get(), 2);
         assert_eq!(stats.lines.get(), 0);
         assert_eq!(stats.closes.get(), 0);
@@ -31146,7 +31238,7 @@ mod tests {
             .id;
         assert_eq!(runtime_draw_path_command_replays(), 0);
         assert_eq!(stats.make_empty_paths.get(), 1);
-        assert_eq!(stats.rewinds.get(), 1);
+        assert_eq!(stats.rewinds.get(), 0);
 
         let changed_commands = vec![
             RuntimePathCommand::Move { x: 0.0, y: 0.0 },
@@ -31183,7 +31275,7 @@ mod tests {
         assert_eq!(second_points, 2);
         assert_eq!(runtime_draw_path_command_replays(), 0);
         assert_eq!(stats.make_empty_paths.get(), 1);
-        assert_eq!(stats.rewinds.get(), 2);
+        assert_eq!(stats.rewinds.get(), 1);
         assert_eq!(stats.add_raw_paths.get(), 2);
     }
 

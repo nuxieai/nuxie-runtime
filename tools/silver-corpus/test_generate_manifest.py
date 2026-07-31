@@ -47,6 +47,144 @@ TEST_CASE("renders selected board", "[silver]")
             all(producer.producer_class == "layout-scroll-dynamic" for producer in producers)
         )
 
+    def test_expands_constant_cpp_frame_loops_into_ordered_actions(self):
+        chunk = """
+        stateMachine->bindViewModelInstance(vmi);
+        stateMachine->advanceAndApply(0.0f);
+        artboard->draw(renderer.get());
+        int frames = (int)(0.1f / 0.05f);
+        for (int i = 0; i < frames; i++)
+        {
+            silver.addFrame();
+            stateMachine->advanceAndApply(0.05f);
+            artboard->draw(renderer.get());
+        }
+        """
+        actions, blocker = generate_manifest.executable_actions(
+            chunk, "default", "none"
+        )
+        self.assertIsNone(blocker)
+        self.assertEqual(
+            actions,
+            (
+                {"kind": "bind-default-view-model"},
+                {"kind": "advance", "target": "state-machine", "seconds": 0.0},
+                {"kind": "draw"},
+                {"kind": "frame"},
+                {"kind": "advance", "target": "state-machine", "seconds": 0.05},
+                {"kind": "draw"},
+                {"kind": "frame"},
+                {"kind": "advance", "target": "state-machine", "seconds": 0.05},
+                {"kind": "draw"},
+            ),
+        )
+
+    def test_expands_literal_cpp_frame_count(self):
+        actions, blocker = generate_manifest.executable_actions(
+            """
+            int frames = 2;
+            for (int i = 0; i < frames; i++)
+            {
+                silver.addFrame();
+                artboard->advance(0.016f);
+                artboard->draw(renderer.get());
+            }
+            """,
+            "none",
+            "none",
+        )
+        self.assertIsNone(blocker)
+        self.assertEqual(
+            actions,
+            (
+                {"kind": "frame"},
+                {"kind": "advance", "target": "artboard", "seconds": 0.016},
+                {"kind": "draw"},
+                {"kind": "frame"},
+                {"kind": "advance", "target": "artboard", "seconds": 0.016},
+                {"kind": "draw"},
+            ),
+        )
+
+    def test_names_blocking_subsystem_instead_of_thinning_mutations(self):
+        actions, blocker = generate_manifest.executable_actions(
+            'vmi->propertyValue("score")->as<Number>()->propertyValue(42);',
+            "default",
+            "none",
+        )
+        self.assertEqual(actions, ())
+        self.assertEqual(blocker, "view-model-mutation")
+
+    def test_rejects_unencoded_focus_actions_instead_of_silently_dropping_them(self):
+        actions, blocker = generate_manifest.executable_actions(
+            """
+            stateMachine->focusManager()->focusNext();
+            stateMachine->advanceAndApply(0.016f);
+            artboard->draw(renderer.get());
+            """,
+            "default",
+            "none",
+        )
+        self.assertEqual(actions, ())
+        self.assertEqual(blocker, "focus-keyboard-dispatch")
+
+    def test_rejects_named_view_model_binding_as_non_default(self):
+        actions, blocker = generate_manifest.executable_actions(
+            """
+            auto vm = file->viewModel("ViewModel1");
+            auto vmi = file->createDefaultViewModelInstance(vm);
+            stateMachine->bindViewModelInstance(vmi);
+            artboard->draw(renderer.get());
+            """,
+            "default",
+            "none",
+        )
+        self.assertEqual(actions, ())
+        self.assertEqual(blocker, "named-view-model-instance")
+
+    def test_encodes_literal_pointer_events_in_source_order(self):
+        chunk = """
+        stateMachine->pointerMove(rive::Vec2D(10.5f, -2), 0.25f, 7);
+        stateMachine->pointerDown(Vec2D(10.5f, -2), 7);
+        stateMachine->advanceAndApply(0.016f);
+        stateMachine->pointerUp(rive::Vec2D(12, 3));
+        stateMachine->pointerExit(rive::Vec2D(12, 3), 7);
+        artboard->draw(renderer.get());
+        """
+        actions, blocker = generate_manifest.executable_actions(
+            chunk, "default", "none"
+        )
+        self.assertIsNone(blocker)
+        self.assertEqual(
+            actions,
+            (
+                {
+                    "kind": "pointer-move",
+                    "x": 10.5,
+                    "y": -2.0,
+                    "seconds": 0.25,
+                    "pointer_id": 7,
+                },
+                {"kind": "pointer-down", "x": 10.5, "y": -2.0, "pointer_id": 7},
+                {"kind": "advance", "target": "state-machine", "seconds": 0.016},
+                {"kind": "pointer-up", "x": 12.0, "y": 3.0, "pointer_id": 0},
+                {"kind": "pointer-exit", "x": 12.0, "y": 3.0, "pointer_id": 7},
+                {"kind": "draw"},
+            ),
+        )
+
+    def test_rejects_pointer_expressions_that_cannot_be_evaluated(self):
+        actions, blocker = generate_manifest.executable_actions(
+            """
+            stateMachine->pointerDown(rive::Vec2D(artboard->width() / 2, 10));
+            artboard->draw(renderer.get());
+            """,
+            "default",
+            "none",
+        )
+        self.assertEqual(actions, ())
+        self.assertEqual(blocker, "pointer-expression-encoding")
+
     def test_render_pins_lane_and_provenance_ratchets(self):
         producer = generate_manifest.Producer(
             id="placeholder",

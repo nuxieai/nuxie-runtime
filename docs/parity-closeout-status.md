@@ -1079,7 +1079,23 @@ branch is `levi/fl-c`; there is no PR.
    manifest rows updated to 1:1. One PR per aggregate file, and no
    semantic edits ride along with a split PR. After FL-F, reopen the
    #B-3 size budget USER-GATE (docs/SIZE.md) with complete measurements.
-3. Independent orchestrator verification may promote completed #RD-1
+3. FL-G gap-parity closeout (user-directed, 2026-07-31): after FL-F, close
+   every remaining open gap in docs/runtime-frame-loop-gaps.toml by
+   MECHANISM CORRESPONDENCE with the pinned C++, not behavioral
+   equivalence — port the retained-ownership/dirt mechanism the citations
+   name, delete every Rust-side compensation it displaced (epochs, broad
+   invalidation bumps, callback-scoped installs), and hold the mechanism
+   trace counters as the oracle: each gap's counters match pinned C++
+   exactly or the gap stays open with an explicitly user-approved
+   adaptation note. Includes: revisit FL-G03's 30-to-11 advance/applyEvents
+   topology classification and restore the C++ re-entrant per-event call
+   topology; FL-G05 epoch classification-or-deletion; FL-G07 text/layout
+   dirty-chain; FL-G08 retained Drawable links; FL-G09 persistent
+   scripting render context. FL-G01's closure condition was met by the
+   FL-B promotion and needs verification and closing; FL-G04's remainder
+   after FL-D4 rolls in here. One gap (or one tightly coupled pair) per
+   PR, suites and counters green per landing.
+4. Independent orchestrator verification may promote completed #RD-1
    correspondence rows from `pending-verification`. #B-6 is complete; the
    next ordinary closeout-spine implementation item after the frame-loop port
    remains #B-5. B-6 also opened RB-2/RB-3/RB-4/RB-5; their relative

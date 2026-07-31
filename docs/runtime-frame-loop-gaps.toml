@@ -1122,16 +1122,16 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_hit_three_pass_order_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "for\\s+group\\s+in\\s+&mut\\s+groups\\s*\\{\\s*group\\.reset\\([\\s\\S]{0,500}for\\s+hit\\s+in\\s+&mut\\s+hit_components\\s*\\{\\s*hit\\.prepare_event\\([\\s\\S]{0,3000}let\\s+mut\\s+result\\s*=\\s*HitResult::None\\s*;\\s*for\\s+hit\\s+in\\s+&mut\\s+hit_components"
+pattern = "for\\s+group\\s+in\\s+&mut\\s+groups\\s*\\{\\s*group\\.reset\\([\\s\\S]{0,500}for\\s+hit\\s+in\\s+&mut\\s+hit_components\\s*\\{\\s*hit\\.prepare_event\\([\\s\\S]{0,200}let\\s+mut\\s+result\\s*=\\s*HitResult::None\\s*;[\\s\\S]{0,3500}for\\s+hit\\s+in\\s+&mut\\s+hit_components\\s*\\{\\s*let\\s+item\\s*=\\s*hit\\.process_event\\("
 min_occurrences = 1
 max_occurrences = 1
 
 [[ratchet]]
 id = "state_machine_hit_can_hit_propagation_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "hit\\.process_event\\([^;]{0,500}result\\s*!=\\s*HitResult::HitOpaque"
-min_occurrences = 2
-max_occurrences = 2
+pattern = "hit\\.process_event\\([^;]{0,500}\\bresult\\s*!=\\s*HitResult::HitOpaque"
+min_occurrences = 1
+max_occurrences = 1
 
 [[ratchet]]
 id = "state_machine_hit_break_after_opaque"

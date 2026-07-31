@@ -5856,7 +5856,7 @@ fn create_view_model_string_fixture(
 }
 
 #[test]
-fn typed_view_model_string_cursors_hot_write_and_carry_across_same_schema_remounts() -> Result<()> {
+fn typed_view_model_string_cursors_retain_live_state_across_same_schema_remounts() -> Result<()> {
     let mut scene = Scene::new();
     let (fixture, _) = scene.edit(create_view_model_string_fixture)?;
     let instance = scene.instantiate(fixture.artboard)?;
@@ -5873,13 +5873,13 @@ fn typed_view_model_string_cursors_hot_write_and_carry_across_same_schema_remoun
 
     scene.edit(|tx| tx.set(fixture.shape, props::TRANSLATE_X, 12.0))?;
     assert_eq!(scene.frame().get_vm_string(cursor), Err(StaleCursor));
-    let carried = scene.vm_string_cursor(instance, fixture.defaults, fixture.label)?;
-    assert_eq!(scene.frame().get_vm_string(carried)?, "after");
+    let retained = scene.vm_string_cursor(instance, fixture.defaults, fixture.label)?;
+    assert_eq!(scene.frame().get_vm_string(retained)?, "after");
 
     scene.drop_instance(instance);
-    assert_eq!(scene.frame().get_vm_string(carried), Err(StaleCursor));
+    assert_eq!(scene.frame().get_vm_string(retained), Err(StaleCursor));
     assert_eq!(
-        scene.frame().set_vm_string(carried, "stale"),
+        scene.frame().set_vm_string(retained, "stale"),
         Err(StaleCursor)
     );
     Ok(())
@@ -6073,7 +6073,7 @@ fn live_view_model_numbers_drive_transition_duration_without_recompiling() -> Re
     assert!(scene.frame().set_vm(first_duration, 1_000.0)?);
     assert!(!scene.frame().set_vm(first_duration, 1_000.0)?);
     assert_eq!(scene.frame().get_vm(first_duration)?, 1_000.0);
-    assert_eq!(scene.frame().get_vm(second_duration)?, 0.0);
+    assert_eq!(scene.frame().get_vm(second_duration)?, 1_000.0);
     assert_eq!(scene.epoch(), epoch);
     assert_eq!(scene.export_records().into_records(), records);
 
@@ -6087,13 +6087,17 @@ fn live_view_model_numbers_drive_transition_duration_without_recompiling() -> Re
 
     scene.frame().fire(second_go)?;
     let _ = scene.frame().advance(second, 0.0, &mut events);
+    assert_eq!(scene.frame().get(second_opacity)?, 0.2);
+    let _ = scene.frame().advance(second, 0.5, &mut events);
+    assert!((scene.frame().get(second_opacity)? - 0.5).abs() <= 0.001);
+    let _ = scene.frame().advance(second, 0.5, &mut events);
     assert_eq!(scene.frame().get(second_opacity)?, 0.8);
-    assert_eq!(scene.frame().get_vm(second_duration)?, 0.0);
+    assert_eq!(scene.frame().get_vm(second_duration)?, 1_000.0);
     Ok(())
 }
 
 #[test]
-fn view_model_cursors_are_fenced_and_same_schema_remounts_carry_live_numbers() -> Result<()> {
+fn view_model_cursors_are_fenced_and_same_schema_remounts_retain_live_numbers() -> Result<()> {
     let mut scene = Scene::new();
     let (fixture, _) = scene.edit(create_view_model_duration_machine)?;
     let instance = scene.instantiate(fixture.artboard)?;
@@ -6133,20 +6137,20 @@ fn view_model_cursors_are_fenced_and_same_schema_remounts_carry_live_numbers() -
 
     scene.edit(|tx| tx.set(fixture.shape, props::TRANSLATE_X, 12.0))?;
     assert_eq!(scene.frame().get_vm(cursor), Err(StaleCursor));
-    let carried = scene.vm_cursor(instance, fixture.defaults, fixture.duration)?;
-    assert_eq!(scene.frame().get_vm(carried)?, 625.0);
+    let retained = scene.vm_cursor(instance, fixture.defaults, fixture.duration)?;
+    assert_eq!(scene.frame().get_vm(retained)?, 625.0);
 
     scene.edit(|tx| {
         tx.view_models()
             .set_number_name(fixture.duration, "Renamed duration".into())?;
         Ok(())
     })?;
-    assert_eq!(scene.frame().get_vm(carried), Err(StaleCursor));
+    assert_eq!(scene.frame().get_vm(retained), Err(StaleCursor));
     let renamed = scene.vm_cursor(instance, fixture.defaults, fixture.duration)?;
     assert_eq!(
         scene.frame().get_vm(renamed)?,
-        0.0,
-        "a schema rename must start from the authored default"
+        625.0,
+        "a schema rename must keep the exact retained authored instance"
     );
 
     scene.drop_instance(instance);
@@ -6156,7 +6160,7 @@ fn view_model_cursors_are_fenced_and_same_schema_remounts_carry_live_numbers() -
 }
 
 #[test]
-fn unoverridden_view_model_number_uses_a_new_authored_default_after_remount() -> Result<()> {
+fn authored_default_edit_does_not_replace_the_retained_live_view_model() -> Result<()> {
     let mut scene = Scene::new();
     let (fixture, _) = scene.edit(create_view_model_duration_machine)?;
     let instance = scene.instantiate(fixture.artboard)?;
@@ -6173,14 +6177,14 @@ fn unoverridden_view_model_number_uses_a_new_authored_default_after_remount() ->
     let fresh = scene.vm_cursor(instance, fixture.defaults, fixture.duration)?;
     assert_eq!(
         scene.frame().get_vm(fresh)?,
-        250.0,
-        "an untouched live slot must adopt the edited authored default"
+        0.0,
+        "authored metadata must not replace the live retained instance"
     );
     Ok(())
 }
 
 #[test]
-fn explicit_noop_view_model_write_remains_an_override_after_remount() -> Result<()> {
+fn explicit_noop_view_model_write_remains_stable_after_remount() -> Result<()> {
     let mut scene = Scene::new();
     let (fixture, _) = scene.edit(create_view_model_duration_machine)?;
     let instance = scene.instantiate(fixture.artboard)?;
@@ -6199,13 +6203,13 @@ fn explicit_noop_view_model_write_remains_an_override_after_remount() -> Result<
     assert_eq!(
         scene.frame().get_vm(fresh)?,
         0.0,
-        "a finite explicit write is an override even when the value was unchanged"
+        "the retained authored handle stays live even when the write was a no-op"
     );
     Ok(())
 }
 
 #[test]
-fn changing_the_authored_default_instance_does_not_cross_carry_live_values() -> Result<()> {
+fn changing_the_authored_default_instance_selects_a_distinct_retained_handle() -> Result<()> {
     let mut scene = Scene::new();
     let (fixture, _) = scene.edit(create_view_model_duration_machine)?;
     let instance = scene.instantiate(fixture.artboard)?;
@@ -12126,8 +12130,8 @@ fn generic_number_and_color_binds_export_import_execute_and_collide_by_target_pr
     let second_width = scene.cursor(second_cold, rectangle, props::PATH_WIDTH)?;
     let second_color_value = scene.cursor(second_cold, first_color, props::COLOR_VALUE)?;
     scene.frame().advance(second_cold, 0.0, &mut events);
-    assert_eq!(scene.frame().get(second_width)?, 80.0);
-    assert_eq!(scene.frame().get(second_color_value)?, 0xff12_3456);
+    assert_eq!(scene.frame().get(second_width)?, 96.0);
+    assert_eq!(scene.frame().get(second_color_value)?, 0xffab_cdef);
     Ok(())
 }
 
@@ -12431,10 +12435,16 @@ fn component_list_padding_binds_use_the_stable_style_target_and_survive_rollback
 
     let second_cold = scene.instantiate(root_artboard)?;
     scene.frame().advance(second_cold, 0.0, &mut events);
-    assert_eq!(
+    assert!(
         scene
             .frame()
             .hit_test_paths_with_bounds(second_cold, Vec2D::new(10.0, 16.0))
+            .is_empty()
+    );
+    assert_eq!(
+        scene
+            .frame()
+            .hit_test_paths_with_bounds(second_cold, Vec2D::new(20.0, 26.0))
             .len(),
         1
     );

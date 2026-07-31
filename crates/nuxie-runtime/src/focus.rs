@@ -1652,6 +1652,55 @@ mod tests {
     use super::*;
 
     #[test]
+    fn upstream_focus_node_defaults_and_property_setters() {
+        let mut node = FocusNode::new();
+        assert!(node.can_focus());
+        assert!(node.can_touch());
+        assert!(node.can_traverse());
+        assert_eq!(node.tab_index(), 0);
+        assert_eq!(node.edge_behavior(), FocusEdgeBehavior::ParentScope);
+        assert!(node.parent.is_none());
+        assert!(node.children.is_empty());
+        assert!(!node.has_focus());
+
+        node.set_can_focus(false);
+        assert!(!node.can_focus());
+        node.set_can_touch(false);
+        assert!(!node.can_touch());
+        node.set_can_traverse(false);
+        assert!(!node.can_traverse());
+        node.set_tab_index(42);
+        assert_eq!(node.tab_index(), 42);
+        node.set_edge_behavior(FocusEdgeBehavior::ClosedLoop);
+        assert_eq!(node.edge_behavior(), FocusEdgeBehavior::ClosedLoop);
+        node.set_edge_behavior(FocusEdgeBehavior::Stop);
+        assert_eq!(node.edge_behavior(), FocusEdgeBehavior::Stop);
+    }
+
+    #[test]
+    #[ignore = "finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-focus-node-representation"]
+    fn upstream_focus_node_fresh_focusable_scope_and_manager_defaults() {
+        let node = FocusNode::new();
+        assert!(
+            !node.has_focusable,
+            "focus_test.cpp:91 expects a fresh FocusNode::focusable() to be null"
+        );
+        panic!(
+            "focus_test.cpp:94/96 also exposes per-node isScope() and manager() pointers; \
+             nuxie-runtime infers scope topology and stores ownership in FocusManager"
+        );
+    }
+
+    #[test]
+    #[ignore = "coverage finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-focus-fixture-surface"]
+    fn upstream_focusable_identity_and_fixture_swap_contracts_need_runtime_occurrence_surface() {
+        panic!(
+            "focus_test.cpp exposes Focusable pointer identity/delegation and exact bindable \
+             artboard/list occurrence swaps that nuxie-runtime's public focus API does not expose"
+        );
+    }
+
+    #[test]
     fn focusing_child_notifies_leaf_and_ancestors() {
         let mut manager = FocusManager::new();
         let parent = manager.create_node(FocusNode::new());

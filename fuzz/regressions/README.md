@@ -61,6 +61,20 @@ DELIBERATE divergence: where C++ hangs, we terminate the walk gracefully
 (treated as no-ancestor / no-rule). It is unreachable on any valid file, so
 golden-compare is unchanged (263/584). See the code comments at each guard site.
 
+RECURRENCE (2026-07-31): the FL-E3 landing (`93ed556b`) re-ported
+`Path::onAddedClean`'s shape-parent walk into
+`crates/nuxie-runtime/src/artboard.rs`
+`ArtboardInstance::build_component_occurrence_relations` without the visited-id
+guard, so `fuzz_runtime-hang-layout-parent-cycle-orig.riv` hung again (all
+`sample` frames inside that walk). Fixed by adding the guard there plus two
+sibling FL-E walks found by audit: the IK FK-chain walk in the same function
+(a bone parent cycle re-registered a peer constraint and tripped the
+uniqueness assert — a panic, same malformed-cycle class) and the
+Shape-parent walk in `crates/nuxie-runtime/src/shapes/parametric_path.rs`
+`property_changed`. A 694-byte mutation-found sibling of the orig input
+(SHA-1 `9cbbb28260aff66f649225862c816dae8163a981`) hung identically pre-fix;
+it was not preserved, and post-fix `make fuzz-smoke` runs clean.
+
 Reproduce (any file above), from repo root:
 
     cd fuzz && rustup run nightly cargo fuzz run fuzz_runtime \

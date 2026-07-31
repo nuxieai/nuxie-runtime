@@ -14,6 +14,44 @@ Committed reproducers for findings from the fuzz targets.
   (that would wedge the gate). Move a file up into
   `fuzz/regressions/<target>/` when its finding is fixed.
 
+## FIXED: read-fonts 0.41 panic on a VALID zero-contour glyph with padding
+
+Upstream regression googlefonts/fontations#1962, fixed by fontations#1965
+(upstream commit `26503f2a0a24f9d0504d7ec6cb0fc4cba0e68a58`). A legal TrueType
+simple glyph may declare zero contours while its `loca`-allocated range keeps
+trailing alignment bytes. `read-fonts` 0.41.0 `read_points_fast` treated that
+padding as flag data and wrote `flags[0]` into an empty point buffer —
+`glyf.rs:244: index out of bounds: the len is 0 but the index is 0` — reached
+from `StaticTextSlice::render_data` -> `OutlineGlyph::draw_unhinted` ->
+`load_simple`. The pinned C++ runtime accepts the same glyph and produces an
+empty outline, so the font must stay accepted; the repair is the dependency
+upgrade `skrifa` 0.44.0 -> 0.45.1 (`read-fonts` 0.42.1 on the outline path),
+plus distilled font-fixture unit tests in `crates/nuxie-runtime/src/text.rs`
+(`embedded_font_validation_accepts_empty_glyph_with_padding`).
+
+Reproducers (replayed by `make fuzz-regressions` under `fuzz_runtime/`):
+
+- `fuzz_runtime-panic-readfonts-empty-glyph-padding-component-list.riv`
+  (806,803 bytes, SHA-256
+  `e165da6113e8d604f1c73085f154a32a31cf9e0a6432d667d354a8036cc54fa1`)
+- `fuzz_runtime-panic-readfonts-empty-glyph-padding-data-binding.riv`
+  (833,949 bytes, SHA-256
+  `0f6a27d5246a588236825a2e28bfba581ee09380c8b0315757b2ee05b6b4c6a1`)
+
+Provenance: the original libFuzzer artifacts (SHA-256
+`33025ff6407e479bfb45a47bf8d58fbbcbc23a32785f059bf79d5e92c07b9eb7`, 833,949
+bytes, and `4312ad12551b3d6c56ed73083d3878032f780708fb83cb34fefd75d69e28fb60`,
+806,803 bytes — mutations of the `component_list_2.riv` /
+`data_binding_test.riv` seeds) were lost with a destroyed scratch worktree
+before they could be committed. These reproducers were regenerated
+deterministically from the same two seeds: every simple glyph with contours in
+the embedded font is rewritten in place as a zero-contour glyph whose
+remaining `loca` range is zero padding (container framing, `loca`, and all
+table offsets unchanged). Verified equivalent to the originals at the pinned
+pre-fix revision `93ed556b` (read-fonts 0.41.0): both panic at the identical
+`glyf.rs:244` site; post-upgrade all three targets execute them cleanly, and
+the pinned C++ golden runner renders both with empty outlines (exit 0).
+
 ## FIXED: unbounded chain-walk HANGs on malformed input (not panics)
 
 One finding class, several reachable sites. In every case `read_runtime_file`

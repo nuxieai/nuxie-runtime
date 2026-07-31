@@ -2432,7 +2432,8 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                         hit.prepare_event(owner, groups);
                     }
                     let mut result = HitResult::None;
-                    for hit in &mut hit_components { hit.process_event(owner); }
+                    if captured { result = result.strongest(HitResult::Hit); }
+                    for hit in &mut hit_components { let item = hit.process_event(owner); }
                 }
                 """,
                 """
@@ -2441,7 +2442,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     let mut result = HitResult::None;
                     for hit in &mut hit_components {
                         hit.prepare_event(owner, groups);
-                        hit.process_event(owner);
+                        let item = hit.process_event(owner);
                     }
                 }
                 """,
@@ -2451,12 +2452,12 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 """
                 fn update() {
                     hit.process_event(owner, result != HitResult::HitOpaque);
-                    hit.process_event(owner, drag_start_result != HitResult::HitOpaque);
+                    hit.process_event(owner, drag_start_result_unrelated_helper(true));
                 }
                 """,
                 """
                 fn update() {
-                    hit.process_event(owner, result != HitResult::HitOpaque);
+                    hit.process_event(owner, drag_start_result != HitResult::HitOpaque);
                     hit.process_event(owner, true);
                 }
                 """,

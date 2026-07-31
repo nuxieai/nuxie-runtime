@@ -8171,7 +8171,7 @@ impl ArtboardInstance {
         runtime_path
     }
 
-    fn runtime_layout_control_size_for_path(
+    pub(crate) fn runtime_layout_control_size_for_path(
         &self,
         path_local: usize,
         layout_bounds: &BTreeMap<usize, RuntimeLayoutBounds>,
@@ -29595,6 +29595,58 @@ mod tests {
             instance.runtime_layout_control_size_for_path(rectangle_local, &BTreeMap::new()),
             None,
             "a cyclic non-layout parent chain must use the authored path size fallback"
+        );
+    }
+
+    #[test]
+    fn refreshed_layout_control_rebuilds_retained_parametric_path() {
+        let bytes = synthetic_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic layout riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let rectangle_local = instance
+            .components()
+            .iter()
+            .find(|component| component.type_name == "Rectangle")
+            .expect("fixture has a rectangle")
+            .local_id;
+        let layout_local = instance
+            .component_parent_local(rectangle_local)
+            .and_then(|shape_local| instance.component_parent_local(shape_local))
+            .expect("rectangle is controlled by a layout");
+
+        instance.enable_layout_constraint_bounds();
+        instance.update_components();
+        let width_key =
+            property_key_for_name("LayoutComponent", "width").expect("LayoutComponent.width key");
+        assert!(instance.set_double_property(layout_local, width_key, 140.0));
+        instance.refresh_layout_constraint_bounds();
+        assert_eq!(
+            instance.runtime_parametric_path_layout_control_size(rectangle_local, graph),
+            Some((140.0, 100.0))
+        );
+
+        instance.update_components();
+        let retained = instance.runtime_shapes.paths_by_local[rectangle_local]
+            .as_ref()
+            .expect("rectangle owns a retained path")
+            .retained
+            .borrow();
+        let points = retained
+            .as_ref()
+            .expect("rectangle path was built")
+            .raw_path
+            .points();
+        let (minimum_x, maximum_x) = points.iter().fold(
+            (f32::INFINITY, f32::NEG_INFINITY),
+            |(minimum, maximum), point| (minimum.min(point.x), maximum.max(point.x)),
+        );
+        assert_eq!(
+            maximum_x - minimum_x,
+            140.0,
+            "LayoutComponent::propagateSize must rebuild the ParametricPath at its new control \
+             size, got {points:?}"
         );
     }
 

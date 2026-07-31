@@ -6785,10 +6785,49 @@ impl ArtboardInstance {
 
     pub(crate) fn refresh_layout_constraint_bounds(&mut self) {
         self.layout_constraint_bounds_enabled = true;
-        self.layout_constraint_bounds = self.runtime_graph().and_then(|graph| {
+        let previous_bounds = self.layout_constraint_bounds.clone();
+        let next_bounds = self.runtime_graph().and_then(|graph| {
             self.runtime_taffy_layout_bounds(graph, self.runtime_file())
                 .map(Arc::new)
         });
+        let resized_parametric_paths = self
+            .runtime_graph()
+            .map(|graph| {
+                graph
+                    .paths
+                    .iter()
+                    .filter(|path| path.parametric.is_some())
+                    .filter_map(|path| {
+                        let control_size =
+                            |bounds: Option<&Arc<BTreeMap<usize, RuntimeLayoutBounds>>>| {
+                                bounds.and_then(|bounds| {
+                                    self.runtime_layout_control_size_for_path(
+                                        path.local_id,
+                                        bounds.as_ref(),
+                                    )
+                                    .map(|bounds| (bounds.width, bounds.height))
+                                })
+                            };
+                        (control_size(previous_bounds.as_ref())
+                            != control_size(next_bounds.as_ref()))
+                        .then_some(path.local_id)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        self.layout_constraint_bounds = next_bounds;
+        for path_local in resized_parametric_paths {
+            // C++ LayoutComponent::propagateSizeToChildren calls
+            // ParametricPath::controlSize. That setter writes the solved
+            // dimensions and raises both WorldTransform and Path dirt before
+            // dependency settlement (`layout_component.cpp:934-967`,
+            // `shapes/parametric_path.cpp:24-33`).
+            self.add_dirt(
+                path_local,
+                ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH,
+                false,
+            );
+        }
         self.enqueue_artboard_parametric_layout_control_sources();
         let layout_locals = self
             .components()

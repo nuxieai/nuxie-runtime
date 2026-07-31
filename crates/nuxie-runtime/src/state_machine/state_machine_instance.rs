@@ -16,12 +16,13 @@ use crate::data_bind_container::RuntimeDataBindContainerQueue;
 use crate::data_bind_graph::{
     RuntimeDataBindGraphContextKind, data_bind_flags_apply_source_to_target,
 };
+use crate::data_context::RuntimeStateMachineDataContext;
 use crate::focus::RuntimeFocusTree;
 use crate::properties::property_key_for_name;
 use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelAdvanceContext};
 use crate::view_model_cell::{
-    RuntimeCellDependent, RuntimeCellDirt, RuntimeCellDirtSink, RuntimeCellNotificationQueue,
+    RuntimeCellDirt, RuntimeCellDirtSink, RuntimeCellNotificationQueue,
     RuntimeFileViewModelInstanceCatalog, RuntimeViewModelCell, RuntimeViewModelCellValue,
     RuntimeViewModelInstanceCells,
 };
@@ -63,8 +64,9 @@ use crate::{
 };
 use nuxie_binary::RuntimeFile;
 use nuxie_render_api::Factory as RenderFactory;
+#[cfg(any(test, feature = "tools"))]
 use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 
 #[cfg(test)]
 use crate::{ScriptListenerActionMethod, ScriptMethod};
@@ -1366,246 +1368,6 @@ pub(crate) enum RuntimeDataContextBindError {
     NullDataContext,
     NullDataContextWithViewModelListeners,
     NullDataBind,
-}
-
-/// Mutable, shareable carrier for the C++ `DataContext` member surface.
-///
-/// The established Rust `RuntimeOwnedDataContext` is an immutable resolution
-/// snapshot and intentionally discards global slot keys. C++ setters instead
-/// mutate one shared main/global table and notify every registered container.
-/// Keep that primary identity here, in the StateMachineInstance owner, and
-/// project a fresh immutable Rust resolution view only at an actual bind.
-#[derive(Debug)]
-struct RuntimeStateMachineDataContextRelay {
-    handle: RuntimeOwnedViewModelHandle,
-    sink: RuntimeCellDirtSink,
-}
-
-impl RuntimeStateMachineDataContextRelay {
-    fn new(
-        handle: RuntimeOwnedViewModelHandle,
-        state: Weak<RefCell<RuntimeStateMachineDataContextState>>,
-    ) -> Self {
-        let sink = RuntimeCellDirtSink::new();
-        sink.set_before_notify(Some(Rc::new(move |dirt| {
-            if let Some(state) = state.upgrade() {
-                let _ = dirt;
-                state
-                    .borrow_mut()
-                    .notify_rebind_dependents(RuntimeCellDirt::BINDINGS);
-            }
-            // The relay forwards immediately and deliberately remains clean,
-            // so every later structural mutation reaches stale registrations
-            // such as inherit(A) followed by inherit(B).
-            false
-        })));
-        handle.add_rebind_dependent(&sink);
-        Self { handle, sink }
-    }
-}
-
-#[derive(Debug, Default)]
-struct RuntimeStateMachineDataContextState {
-    context: RuntimeOwnedViewModelContext,
-    unusual_slot_handles: BTreeMap<usize, RuntimeOwnedViewModelHandle>,
-    dependent_sinks: Vec<RuntimeCellDependent>,
-    main_rebind_relay: Option<RuntimeStateMachineDataContextRelay>,
-    global_rebind_relays: BTreeMap<usize, RuntimeStateMachineDataContextRelay>,
-}
-
-impl RuntimeStateMachineDataContextState {
-    fn sync_rebind_relays(&mut self, state: &Weak<RefCell<RuntimeStateMachineDataContextState>>) {
-        self.main_rebind_relay = self.context.main_handle().cloned().map(|handle| {
-            self.main_rebind_relay
-                .take()
-                .filter(|relay| relay.handle.ptr_eq(&handle))
-                .unwrap_or_else(|| RuntimeStateMachineDataContextRelay::new(handle, state.clone()))
-        });
-
-        let mut prior_globals = std::mem::take(&mut self.global_rebind_relays);
-        let mut slot_handles = self
-            .context
-            .global_slot_handles()
-            .map(|(slot, handle)| (slot, handle.clone()))
-            .collect::<BTreeMap<_, _>>();
-        for (&slot, handle) in &self.unusual_slot_handles {
-            slot_handles.insert(slot, handle.clone());
-        }
-        self.global_rebind_relays = slot_handles
-            .into_iter()
-            .map(|(slot, handle)| {
-                let relay = prior_globals
-                    .remove(&slot)
-                    .filter(|relay| relay.handle.ptr_eq(&handle))
-                    .unwrap_or_else(|| {
-                        RuntimeStateMachineDataContextRelay::new(handle, state.clone())
-                    });
-                (slot, relay)
-            })
-            .collect();
-    }
-
-    fn notify_rebind_dependents(&mut self, dirt: RuntimeCellDirt) {
-        self.dependent_sinks
-            .retain(|dependent| dependent.add_dirt(dirt));
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeStateMachineDataContext {
-    state: Rc<RefCell<RuntimeStateMachineDataContextState>>,
-}
-
-impl Default for RuntimeStateMachineDataContext {
-    fn default() -> Self {
-        Self::from_owned_context(RuntimeOwnedViewModelContext::default())
-    }
-}
-
-impl RuntimeStateMachineDataContext {
-    fn from_owned_context(context: RuntimeOwnedViewModelContext) -> Self {
-        Self::from_parts(context, BTreeMap::new())
-    }
-
-    fn from_parts(
-        context: RuntimeOwnedViewModelContext,
-        unusual_slot_handles: BTreeMap<usize, RuntimeOwnedViewModelHandle>,
-    ) -> Self {
-        let state = Rc::new(RefCell::new(RuntimeStateMachineDataContextState {
-            context,
-            unusual_slot_handles,
-            ..RuntimeStateMachineDataContextState::default()
-        }));
-        state
-            .borrow_mut()
-            .sync_rebind_relays(&Rc::downgrade(&state));
-        Self { state }
-    }
-
-    fn detached_snapshot(&self) -> Self {
-        let state = self.state.borrow();
-        Self::from_parts(state.context.clone(), state.unusual_slot_handles.clone())
-    }
-
-    fn add_rebind_dependent(&self, sink: &RuntimeCellDirtSink) {
-        let dependent = sink.downgrade();
-        let mut state = self.state.borrow_mut();
-        state
-            .dependent_sinks
-            .retain(|candidate| candidate.add_dirt(RuntimeCellDirt::NONE));
-        if !state
-            .dependent_sinks
-            .iter()
-            .any(|candidate| candidate.ptr_eq(&dependent))
-        {
-            state.dependent_sinks.push(dependent);
-        }
-    }
-
-    fn add_artboard_rebind_dependent(&self, artboard: &mut ArtboardInstance) {
-        // The ordinary Rust projection temporarily registers this sink
-        // directly on each handle. Rotate it immediately so those weak
-        // registrations become inert and the shared C++-shaped carrier owns
-        // all later detach/attach behavior.
-        artboard.artboard_owned_view_model_rebind_sink = RuntimeCellDirtSink::new();
-        self.add_rebind_dependent(&artboard.artboard_owned_view_model_rebind_sink);
-    }
-
-    fn set_main(&self, handle: RuntimeOwnedViewModelHandle) {
-        let weak_state = Rc::downgrade(&self.state);
-        let mut state = self.state.borrow_mut();
-        state.context.set_main_handle(handle);
-        state.sync_rebind_relays(&weak_state);
-    }
-
-    fn set_global_named(
-        &self,
-        file: &RuntimeFile,
-        name: &str,
-        handle: RuntimeOwnedViewModelHandle,
-    ) -> bool {
-        let weak_state = Rc::downgrade(&self.state);
-        let mut state = self.state.borrow_mut();
-        if !state.context.set_global_named_handle(file, name, handle) {
-            return false;
-        }
-        if let Some(slot) = file
-            .view_models()
-            .iter()
-            .position(|view_model| view_model.object.string_property("name") == Some(name))
-        {
-            state.unusual_slot_handles.remove(&slot);
-        }
-        state.sync_rebind_relays(&weak_state);
-        true
-    }
-
-    fn complete_for_artboard(&self, file: &RuntimeFile, artboard_index: usize) -> bool {
-        let weak_state = Rc::downgrade(&self.state);
-        let mut state = self.state.borrow_mut();
-        let unusual_slot_handles = state.unusual_slot_handles.clone();
-        for (slot, handle) in unusual_slot_handles {
-            state.context.set_global_slot_handle(file, slot, handle);
-        }
-        if !state.context.complete_for_artboard(file, artboard_index) {
-            return false;
-        }
-        state.sync_rebind_relays(&weak_state);
-        true
-    }
-
-    fn global_slot_handle(&self, slot: usize) -> Option<RuntimeOwnedViewModelHandle> {
-        let state = self.state.borrow();
-        state
-            .unusual_slot_handles
-            .get(&slot)
-            .or_else(|| state.context.global_slot_handle(slot))
-            .cloned()
-    }
-
-    fn projection(&self) -> RuntimeOwnedDataContext {
-        RuntimeOwnedDataContext::from_owned_context(&self.state.borrow().context)
-    }
-
-    #[cfg(test)]
-    fn snapshot(&self) -> RuntimeOwnedViewModelContext {
-        self.state.borrow().context.clone()
-    }
-
-    #[cfg(test)]
-    fn ptr_eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.state, &other.state)
-    }
-
-    #[cfg(test)]
-    fn mark_main_rebind_for_test(&self) {
-        let dependent = self
-            .state
-            .borrow()
-            .main_rebind_relay
-            .as_ref()
-            .map(|relay| relay.sink.downgrade());
-        if let Some(dependent) = dependent {
-            dependent.add_dirt(RuntimeCellDirt::BINDINGS);
-        }
-    }
-
-    #[cfg(test)]
-    fn main_rebind_dependent_for_test(&self) -> Option<RuntimeCellDependent> {
-        self.state
-            .borrow()
-            .main_rebind_relay
-            .as_ref()
-            .map(|relay| relay.sink.downgrade())
-    }
-
-    #[cfg(test)]
-    fn set_unusual_slot_for_test(&self, slot: usize, handle: RuntimeOwnedViewModelHandle) {
-        let weak_state = Rc::downgrade(&self.state);
-        let mut state = self.state.borrow_mut();
-        state.unusual_slot_handles.insert(slot, handle);
-        state.sync_rebind_relays(&weak_state);
-    }
 }
 
 #[derive(Debug)]
@@ -11113,6 +10875,35 @@ impl StateMachineInstance {
         })
     }
 
+    /// Create and bind the artboard's authored default `DataContext`.
+    ///
+    /// This is the C++ `createDefaultViewModelInstance(artboard)` followed by
+    /// `StateMachineInstance::bindViewModelInstance` path. Unlike the
+    /// graph-only compatibility method above, the mutable `DataContext` is
+    /// shared with the artboard tree, so nested artboards and the outer state
+    /// machine observe the same retained ViewModel cells.
+    pub fn bind_default_view_model_context_on_artboard(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+    ) -> bool {
+        let Some(file) = artboard.runtime_file_arc() else {
+            return false;
+        };
+        let Some(artboard_index) = file
+            .artboards()
+            .into_iter()
+            .position(|candidate| candidate.id == artboard.graph_global_id)
+        else {
+            return false;
+        };
+        let context = RuntimeStateMachineDataContext::default();
+        if !context.complete_for_artboard(&file, artboard_index) {
+            return false;
+        }
+        self.bind_data_context(&file, artboard, Some(&context))
+            .unwrap_or(false)
+    }
+
     pub fn set_data_bind_formula_random_values(&mut self, values: &[f32]) {
         self.data_bind_graph.set_formula_random_values(values);
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {
@@ -19654,7 +19445,7 @@ mod scripted_listener_action_tests {
             .as_ref()
             .expect("snapshot primary context");
         assert!(
-            !Rc::ptr_eq(&original_context.state, &cloned_context.state),
+            !original_context.shares_state_for_test(&cloned_context),
             "the primary DataContext carrier is rebuilt with detached state"
         );
         original.owned_view_model_rebind_sink.take_dirt();

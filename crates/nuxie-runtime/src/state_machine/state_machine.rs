@@ -1257,7 +1257,14 @@ mod tests {
         let duplicate_bind = |data_bind_index| RuntimeStateMachineDataBindTemplate {
             data_bind_index,
             authored_path: vec![1, 2],
-            resolved_path: vec![1, 2],
+            data_bind_path: {
+                let mut referencer =
+                    crate::data_bind_path_referencer::RuntimeDataBindPathReferencer::default();
+                assert!(referencer.claim_imported_path(
+                    crate::data_bind_path::RuntimeDataBindPath::resolved(vec![1, 2], None)
+                ));
+                referencer
+            },
             name_based: false,
             context_bindable: true,
             flags: 0,

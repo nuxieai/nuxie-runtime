@@ -4428,6 +4428,15 @@ impl ArtboardInstance {
         self.root_text_value_run_local_id(name).is_some()
     }
 
+    /// Read the first root-artboard `TextValueRun` with the exact authored
+    /// component name. Like the setter, this deliberately does not traverse
+    /// nested-artboard occurrences.
+    pub fn root_text_value_run(&self, name: &str) -> Option<&[u8]> {
+        let text_property_key = property_key_for_name("TextValueRun", "text")?;
+        let local_id = self.root_text_value_run_local_id(name)?;
+        self.string_property(local_id, text_property_key)
+    }
+
     fn root_text_value_run_local_id(&self, name: &str) -> Option<usize> {
         self.slots
             .iter()

@@ -143,19 +143,19 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 189
+faithful = 234
 adapted = 0
 divergent-by-decision = 0
-pending = 153
+pending = 108
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
 # are the state-bearing frame-loop owners still requiring member-level proof.
 [expected_member_status_counts]
-faithful = 24
+faithful = 28
 adapted = 40
 divergent-by-decision = 0
-pending = 11
+pending = 7
 compensation = 0
 
 [[wave]]
@@ -1488,364 +1488,361 @@ status = "faithful"
 upstream = "src/data_bind/context/context_target_value.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_target_value.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_value.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_value_any.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_any.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_value_artboard.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/view_model.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_artboard.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_value_asset_font.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_asset_font.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_value_asset_image.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_asset_image.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_value_boolean.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_boolean.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_value_color.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_color.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_value_enum.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_enum.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_value_list.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_list.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_value_number.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_number.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_value_string.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_string.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_value_symbol_list_index.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_symbol_list_index.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_value_trigger.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_trigger.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/context/context_value_viewmodel.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/context/context_value_viewmodel.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = [
-  "crates/nuxie-runtime/src/data_converter.rs",
-  "crates/nuxie-runtime/src/artboard_data_bind.rs",
-]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_boolean_negate.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_boolean_negate.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_formula.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_formula.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_group.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_group.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_group_item.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_group_item.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_interpolator.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_interpolator.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_list_to_length.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_list_to_length.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_number_to_list.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_number_to_list.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_operation.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_operation.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_operation_value.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_operation_value.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_operation_viewmodel.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_operation_viewmodel.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_range_mapper.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_range_mapper.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_rounder.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_rounder.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_string_pad.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_string_pad.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_string_remove_zeros.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_string_remove_zeros.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_string_trim.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_string_trim.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_system_degs_to_rads.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_system_degs_to_rads.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_system_normalizer.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_system_normalizer.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_to_number.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_to_number.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_to_string.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_to_string.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_trigger.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/data_converter_trigger.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/converters/formula/formula_token.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/converters/formula/formula_token.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/data_bind.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/data_bind.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/data_bind_container.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/data_bind_container.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/data_bind_context.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/data_bind_context.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/data_bind_list_item_consumer.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/data_bind_list_item_consumer.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/data_bind_path.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/data_bind_path.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/data_bind_viewmodel_consumer.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/data_bind_viewmodel_consumer.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind/data_context.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard_data_bind.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind/data_context.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/data_bind_path_referencer.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/lib.rs"]
+rust_modules = ["crates/nuxie-runtime/src/data_bind_path_referencer.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/dependency_sorter.cpp"
@@ -3597,25 +3594,52 @@ cpp_files = [
   "src/data_bind/data_context.cpp",
   "src/data_bind/data_bind_context.cpp",
 ]
-rust_file = "crates/nuxie-runtime/src/artboard_data_bind.rs"
+rust_file = "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
 rust_anchor = "pub(crate) struct RuntimeOwnedDataContext"
-status = "pending"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/data_bind/data_context.cpp:18-76", "rust:crates/nuxie-runtime/src/data_bind/data_context.rs:26-109"]
+retain = ["cpp:src/data_bind/data_context.cpp:78-145", "rust:crates/nuxie-runtime/src/data_bind/data_bind_context.rs:868-969"]
+dirty = ["cpp:src/data_bind/data_context.cpp:147-214", "rust:crates/nuxie-runtime/src/data_bind/data_context.rs:111-185"]
+update = ["cpp:src/data_bind/data_bind_context.cpp:30-56", "rust:crates/nuxie-runtime/src/data_bind/data_bind_context.rs:5477-5573"]
+advance = ["cpp:src/data_bind/data_context.cpp:216-324", "rust:crates/nuxie-runtime/src/data_bind/data_bind_context.rs:6837-6899"]
+draw = ["cpp:src/data_bind/data_bind_context.cpp:58-89", "rust:crates/nuxie-runtime/src/data_bind/data_bind_context.rs:6929-7018"]
+clone = ["cpp:src/data_bind/data_context.cpp:326-429", "rust:crates/nuxie-runtime/src/data_bind/data_context.rs:115-128"]
+drop = ["cpp:src/data_bind/data_context.cpp:431-535", "rust:crates/nuxie-runtime/src/data_bind/data_context.rs:22-71"]
 
 [[member]]
 id = "databind.owner"
 wave = "FL-D"
 cpp_files = ["src/data_bind/data_bind.cpp", "src/data_bind/data_bind_container.cpp"]
-rust_file = "crates/nuxie-runtime/src/artboard_data_bind.rs"
-rust_anchor = "RuntimeArtboardAuthoredDataBindState"
-status = "pending"
+rust_file = "crates/nuxie-runtime/src/data_bind/data_bind_container.rs"
+rust_anchor = "pub(crate) struct RuntimeDataBindContainerQueue"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/data_bind/data_bind.cpp:17-80", "rust:crates/nuxie-runtime/src/data_bind/data_bind.rs:211-278"]
+retain = ["cpp:src/data_bind/data_bind_container.cpp:17-77", "rust:crates/nuxie-runtime/src/data_bind/data_bind_container.rs:27-84"]
+dirty = ["cpp:src/data_bind/data_bind.cpp:82-181", "rust:crates/nuxie-runtime/src/data_bind/data_bind.rs:280-407"]
+update = ["cpp:src/data_bind/data_bind_container.cpp:79-190", "rust:crates/nuxie-runtime/src/data_bind/data_bind_container.rs:86-178"]
+advance = ["cpp:src/data_bind/data_bind.cpp:366-502", "rust:crates/nuxie-runtime/src/data_bind/data_bind.rs:627-733"]
+draw = ["cpp:src/data_bind/data_bind.cpp:504-562", "rust:crates/nuxie-runtime/src/data_bind/data_bind.rs:512-625"]
+clone = ["cpp:src/data_bind/data_bind.cpp:183-270", "rust:crates/nuxie-runtime/src/data_bind/data_bind.rs:101-199"]
+drop = ["cpp:src/data_bind/data_bind.cpp:239-249", "rust:crates/nuxie-runtime/src/data_bind/data_bind.rs:200-208"]
 
 [[member]]
 id = "databind.queues"
 wave = "FL-D"
 cpp_files = ["src/data_bind/data_bind_container.cpp", "src/artboard.cpp"]
-rust_file = "crates/nuxie-runtime/src/artboard_data_bind.rs"
-rust_anchor = "RuntimeArtboardDataBindTargetQueues"
-status = "pending"
+rust_file = "crates/nuxie-runtime/src/data_bind/data_bind_container.rs"
+rust_anchor = "pub(crate) struct RuntimeDataBindContainerQueue"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/data_bind/data_bind_container.cpp:17-77", "rust:crates/nuxie-runtime/src/data_bind/data_bind_context.rs:481-508"]
+retain = ["cpp:src/data_bind/data_bind_container.cpp:17-77", "rust:crates/nuxie-runtime/src/data_bind/data_bind_container.rs:27-85"]
+dirty = ["cpp:src/data_bind/data_bind_container.cpp:115-147", "rust:crates/nuxie-runtime/src/data_bind/data_bind_container.rs:88-141"]
+update = ["cpp:src/data_bind/data_bind_container.cpp:156-225", "rust:crates/nuxie-runtime/src/data_bind/data_bind_container.rs:92-169"]
+advance = ["cpp:src/data_bind/data_bind_container.cpp:156-225", "rust:crates/nuxie-runtime/src/data_bind/data_bind_context.rs:510-525"]
+draw = ["cpp:src/artboard.cpp:1189-1201", "rust:crates/nuxie-runtime/src/data_bind/data_bind_context.rs:5265-5280"]
+clone = ["cpp:src/data_bind/data_bind_container.cpp:17-77", "rust:crates/nuxie-runtime/src/data_bind/data_bind_context.rs:461-508"]
+drop = ["cpp:src/data_bind/data_bind_container.cpp:54-112", "rust:crates/nuxie-runtime/src/data_bind/data_bind_container.rs:53-74"]
 
 [[member]]
 id = "databind.converters"
@@ -3624,9 +3648,18 @@ cpp_files = [
   "src/data_bind/converters/data_converter.cpp",
   "src/data_bind/converters/data_converter_group.cpp",
 ]
-rust_file = "crates/nuxie-runtime/src/artboard_data_bind.rs"
-rust_anchor = "RuntimeArtboardAuthoredSharedConverterState"
-status = "pending"
+rust_file = "crates/nuxie-runtime/src/data_bind/context/context_value.rs"
+rust_anchor = "pub(crate) enum RuntimeDataBindGraphConverter"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/data_bind/converters/data_converter.cpp:12-24", "rust:crates/nuxie-runtime/src/data_bind/context/context_value.rs:510-630"]
+retain = ["cpp:src/data_bind/converters/data_converter_group.cpp:12-34", "rust:crates/nuxie-runtime/src/data_bind/converters/data_converter.rs:93-213"]
+dirty = ["cpp:src/data_bind/converters/data_converter.cpp:26-43", "rust:crates/nuxie-runtime/src/data_bind/data_bind.rs:330-381"]
+update = ["cpp:src/data_bind/converters/data_converter_group.cpp:63-87", "rust:crates/nuxie-runtime/src/data_bind/converters/data_converter.rs:817-914"]
+advance = ["cpp:src/data_bind/converters/data_converter.cpp:45-71", "rust:crates/nuxie-runtime/src/data_bind/context/context_value.rs:4533-4819"]
+draw = ["cpp:src/data_bind/converters/data_converter_group.cpp:89-127", "rust:crates/nuxie-runtime/src/data_bind/context/context_value.rs:10596-10725"]
+clone = ["cpp:src/data_bind/converters/data_converter_group.cpp:12-34", "rust:crates/nuxie-runtime/src/data_bind/converters/data_converter.rs:215-329"]
+drop = ["cpp:src/data_bind/converters/data_converter.cpp:12-24", "rust:crates/nuxie-runtime/src/data_bind/data_bind.rs:200-208"]
 
 [[member]]
 id = "viewmodel.owner"

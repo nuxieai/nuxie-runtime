@@ -1,15 +1,95 @@
 mod animation;
 mod artboard;
 mod artboard_component_list_order;
+#[path = "data_bind/data_bind_context.rs"]
 mod artboard_data_bind;
 mod components;
 mod constraints;
+#[path = "data_bind/context/context_target_value.rs"]
+mod context_target_value;
+#[path = "data_bind/context/context_value_any.rs"]
+mod context_value_any;
+#[path = "data_bind/context/context_value_artboard.rs"]
+mod context_value_artboard;
+#[path = "data_bind/context/context_value_asset_font.rs"]
+mod context_value_asset_font;
+#[path = "data_bind/context/context_value_asset_image.rs"]
+mod context_value_asset_image;
+#[path = "data_bind/context/context_value_boolean.rs"]
+mod context_value_boolean;
+#[path = "data_bind/context/context_value_color.rs"]
+mod context_value_color;
+#[path = "data_bind/context/context_value_enum.rs"]
+mod context_value_enum;
+#[path = "data_bind/context/context_value_list.rs"]
+mod context_value_list;
+#[path = "data_bind/context/context_value_number.rs"]
+mod context_value_number;
+#[path = "data_bind/context/context_value_string.rs"]
+mod context_value_string;
+#[path = "data_bind/context/context_value_symbol_list_index.rs"]
+mod context_value_symbol_list_index;
+#[path = "data_bind/context/context_value_trigger.rs"]
+mod context_value_trigger;
+#[path = "data_bind/context/context_value_viewmodel.rs"]
+mod context_value_viewmodel;
 mod data_bind_container;
+#[path = "data_bind/data_bind_container.rs"]
+mod data_bind_container_owner;
+#[path = "data_bind/context/context_value.rs"]
 mod data_bind_graph;
+#[path = "data_bind/data_bind_path.rs"]
+mod data_bind_path;
+mod data_bind_path_referencer;
+#[path = "data_bind/data_context.rs"]
+mod data_context;
+#[path = "data_bind/converters/data_converter.rs"]
 mod data_converter;
+#[path = "data_bind/converters/data_converter_boolean_negate.rs"]
+mod data_converter_boolean_negate;
+#[path = "data_bind/converters/data_converter_formula.rs"]
+mod data_converter_formula;
+#[path = "data_bind/converters/data_converter_group.rs"]
+mod data_converter_group;
+#[path = "data_bind/converters/data_converter_group_item.rs"]
+mod data_converter_group_item;
+#[path = "data_bind/converters/data_converter_interpolator.rs"]
+mod data_converter_interpolator;
+#[path = "data_bind/converters/data_converter_list_to_length.rs"]
+mod data_converter_list_to_length;
+#[path = "data_bind/converters/data_converter_number_to_list.rs"]
+mod data_converter_number_to_list;
+#[path = "data_bind/converters/data_converter_operation.rs"]
+mod data_converter_operation;
+#[path = "data_bind/converters/data_converter_operation_value.rs"]
+mod data_converter_operation_value;
+#[path = "data_bind/converters/data_converter_operation_viewmodel.rs"]
+mod data_converter_operation_viewmodel;
+#[path = "data_bind/converters/data_converter_range_mapper.rs"]
+mod data_converter_range_mapper;
+#[path = "data_bind/converters/data_converter_rounder.rs"]
+mod data_converter_rounder;
+#[path = "data_bind/converters/data_converter_string_pad.rs"]
+mod data_converter_string_pad;
+#[path = "data_bind/converters/data_converter_string_remove_zeros.rs"]
+mod data_converter_string_remove_zeros;
+#[path = "data_bind/converters/data_converter_string_trim.rs"]
+mod data_converter_string_trim;
+#[path = "data_bind/converters/data_converter_system_degs_to_rads.rs"]
+mod data_converter_system_degs_to_rads;
+#[path = "data_bind/converters/data_converter_system_normalizer.rs"]
+mod data_converter_system_normalizer;
+#[path = "data_bind/converters/data_converter_to_number.rs"]
+mod data_converter_to_number;
+#[path = "data_bind/converters/data_converter_to_string.rs"]
+mod data_converter_to_string;
 mod data_converter_trigger;
+#[path = "data_bind/converters/data_converter_trigger.rs"]
+mod data_converter_trigger_owner;
 mod draw;
 mod focus;
+#[path = "data_bind/converters/formula/formula_token.rs"]
+mod formula_token;
 mod math;
 mod nested_bool;
 mod nested_number;
@@ -36,6 +116,11 @@ mod text_input;
 mod view_model;
 // #RB-1: retained-identity view-model core (map Phase RB). Additive while
 // consumers migrate; the compensation family deletes when migration ends.
+#[path = "data_bind/data_bind_list_item_consumer.rs"]
+mod data_bind_list_item_consumer;
+#[path = "data_bind/data_bind_viewmodel_consumer.rs"]
+mod data_bind_viewmodel_consumer;
+#[path = "data_bind/data_bind.rs"]
 pub mod retained_data_bind;
 pub mod view_model_cell;
 

@@ -24,6 +24,33 @@ pub enum ActionTarget {
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Action {
     BindDefaultViewModel,
+    CreateDefaultViewModel,
+    BindPreparedViewModel,
+    SetViewModelNumber {
+        property: String,
+        value: f32,
+    },
+    SetViewModelColor {
+        property: String,
+        value: u32,
+    },
+    FireViewModelListItemTrigger {
+        list: String,
+        index: usize,
+        trigger: String,
+    },
+    AppendViewModelListItem {
+        list: String,
+        view_model: String,
+        #[serde(default)]
+        string_property: Option<String>,
+        #[serde(default)]
+        string_value: Option<String>,
+    },
+    RemoveViewModelListItem {
+        list: String,
+        index: usize,
+    },
     Advance {
         target: ActionTarget,
         seconds: f32,
@@ -123,6 +150,7 @@ impl Execution {
         let mut renderer = factory.make_renderer();
         let mut state_machine = select_state_machine(&mut instance, artboard, &case.state_machine)?;
         let mut animation = select_animation(&instance, artboard, &case.animation)?;
+        let mut owned_context = None;
         for action in actions {
             match action {
                 Action::BindDefaultViewModel => {
@@ -134,12 +162,138 @@ impl Execution {
                             machine.bind_owned_view_model_contexts(&context);
                             machine.advance_data_context();
                         }
+                        owned_context = Some(context);
                     } else {
                         instance.bind_default_view_model_artboard_list_context(&runtime);
                         if let Some(machine) = state_machine.as_mut() {
                             machine.bind_default_view_model_context();
                             machine.advance_data_context();
                         }
+                    }
+                }
+                Action::CreateDefaultViewModel => {
+                    owned_context =
+                        selected_artboard_owned_view_model_context(&runtime, artboard_index);
+                    if owned_context.is_none() {
+                        bail!("selected artboard has no default view model");
+                    }
+                }
+                Action::BindPreparedViewModel => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    instance.bind_owned_view_model_artboard_contexts(&runtime, context);
+                    if let Some(machine) = state_machine.as_mut() {
+                        machine.bind_owned_view_model_contexts(context);
+                        machine.advance_data_context();
+                    }
+                }
+                Action::SetViewModelNumber { property, value } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let mut main = context
+                        .main_mut()
+                        .context("prepared context has no main instance")?;
+                    if main
+                        .number_source_handle_by_property_name_path(property)
+                        .is_none()
+                    {
+                        bail!("missing numeric view-model property {property}");
+                    }
+                    main.set_number_by_property_name_path(property, *value);
+                }
+                Action::SetViewModelColor { property, value } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let mut main = context
+                        .main_mut()
+                        .context("prepared context has no main instance")?;
+                    if main
+                        .color_source_handle_by_property_name_path(property)
+                        .is_none()
+                    {
+                        bail!("missing color view-model property {property}");
+                    }
+                    main.set_color_by_property_name_path(property, *value);
+                }
+                Action::FireViewModelListItemTrigger {
+                    list,
+                    index,
+                    trigger,
+                } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let main = context
+                        .main_handle()
+                        .context("prepared context has no main instance")?;
+                    let item = main
+                        .list_items_by_property_name_path(list)
+                        .and_then(|items| items.get(*index).cloned())
+                        .with_context(|| format!("missing list item {list}[{index}]"))?;
+                    let next = item
+                        .borrow()
+                        .trigger_value_by_property_name_path(trigger)
+                        .unwrap_or(0)
+                        .wrapping_add(1);
+                    let mut item = item.borrow_mut();
+                    if item
+                        .trigger_source_handle_by_property_name_path(trigger)
+                        .is_none()
+                    {
+                        bail!("missing trigger property {list}[{index}].{trigger}");
+                    }
+                    item.set_trigger_by_property_name_path(trigger, next);
+                }
+                Action::AppendViewModelListItem {
+                    list,
+                    view_model,
+                    string_property,
+                    string_value,
+                } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let main = context
+                        .main_handle()
+                        .context("prepared context has no main instance")?;
+                    let view_model_index = runtime
+                        .view_models()
+                        .iter()
+                        .position(|candidate| {
+                            candidate.object.string_property("name") == Some(view_model)
+                        })
+                        .with_context(|| format!("missing view model {view_model}"))?;
+                    let mut child = RuntimeOwnedViewModelInstance::new(&runtime, view_model_index)
+                        .with_context(|| format!("cannot create view model {view_model}"))?;
+                    if let (Some(property), Some(value)) = (string_property, string_value) {
+                        if child
+                            .string_source_handle_by_property_name_path(property)
+                            .is_none()
+                        {
+                            bail!("missing string property {view_model}.{property}");
+                        }
+                        child.set_string_by_property_name_path(property, value.as_bytes());
+                    }
+                    let child = nuxie_runtime::RuntimeOwnedViewModelHandle::new(child);
+                    let index = main
+                        .list_item_count_by_property_name_path(list)
+                        .with_context(|| format!("missing list property {list}"))?;
+                    if !main.insert_list_item_by_property_name_path(list, index, &child) {
+                        bail!("failed to append {view_model} to {list}");
+                    }
+                }
+                Action::RemoveViewModelListItem { list, index } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let main = context
+                        .main_handle()
+                        .context("prepared context has no main instance")?;
+                    if !main.remove_list_item_by_property_name_path(list, *index) {
+                        bail!("failed to remove {list}[{index}]");
                     }
                 }
                 Action::Advance { target, seconds } => match target {

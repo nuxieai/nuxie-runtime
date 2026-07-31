@@ -11080,11 +11080,194 @@ mod tests {
     use nuxie_render_api::RecordingFactory;
     use nuxie_schema::definition_by_name;
     use std::cell::{Cell, RefCell};
+    use std::path::PathBuf;
     use std::rc::Rc;
 
     struct UpdateScriptInstance {
         inits: Rc<Cell<usize>>,
         updates: Rc<Cell<usize>>,
+    }
+
+    #[test]
+    fn upstream_runtime_nested_inputs_fixture_aliases_share_live_occurrences() {
+        let fixture = PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        )
+        .join("tests/unit_tests/assets/runtime_nested_inputs.riv");
+        let file = read_runtime_file(&std::fs::read(&fixture).expect("read nested-input fixture"))
+            .expect("import nested-input fixture");
+        let graph = GraphFile::from_runtime_file(&file).expect("build nested-input graph");
+        let main_index = graph
+            .artboards
+            .iter()
+            .position(|artboard| artboard.name.as_deref() == Some("MainArtboard"))
+            .expect("MainArtboard");
+        let main_graph = &graph.artboards[main_index];
+        let mut main =
+            ArtboardInstance::from_graph_with_artboards(&file, main_graph, &graph.artboards)
+                .expect("instantiate MainArtboard");
+        assert_eq!(main_graph.state_machines.len(), 1);
+
+        let local_named = |artboard: &ArtboardGraph, type_name: &str, name: &str| {
+            artboard
+                .local_objects
+                .iter()
+                .find(|object| {
+                    object.type_name == Some(type_name) && object.name.as_deref() == Some(name)
+                })
+                .map(|object| object.local_id)
+                .unwrap_or_else(|| panic!("{type_name} {name}"))
+        };
+        let nested_input_named =
+            |instance: &ArtboardInstance, artboard: &ArtboardGraph, type_name: &str, name: &str| {
+                artboard
+                    .local_objects
+                    .iter()
+                    .filter(|object| object.type_name == Some(type_name))
+                    .find(|object| {
+                        instance
+                            .nested_input_target(object.local_id)
+                            .and_then(|(machine_local, input_id)| {
+                                instance
+                                    .nested_state_machine(machine_local)
+                                    .and_then(|machine| machine.input(input_id))
+                            })
+                            .and_then(StateMachineInputInstance::name)
+                            == Some(name)
+                    })
+                    .map(|object| object.local_id)
+                    .unwrap_or_else(|| panic!("{type_name} forwarding {name}"))
+            };
+        let assert_bool_aliases = |artboard: &ArtboardInstance, local_id: usize, expected: bool| {
+            let (machine_local, input_id) = artboard
+                .nested_input_target(local_id)
+                .expect("nested bool target");
+            assert_eq!(artboard.nested_bool_value(local_id), Some(expected));
+            assert_eq!(
+                artboard
+                    .nested_state_machine(machine_local)
+                    .and_then(|machine| machine.input(input_id))
+                    .and_then(StateMachineInputInstance::bool_value),
+                Some(expected)
+            );
+            assert_eq!(
+                artboard.nested_bool_value(local_id),
+                Some(expected),
+                "NestedBool virtual alias"
+            );
+        };
+        let assert_number_aliases =
+            |artboard: &ArtboardInstance, local_id: usize, expected: f32| {
+                let (machine_local, input_id) = artboard
+                    .nested_input_target(local_id)
+                    .expect("nested number target");
+                assert_eq!(artboard.nested_number_value(local_id), Some(expected));
+                assert_eq!(
+                    artboard
+                        .nested_state_machine(machine_local)
+                        .and_then(|machine| machine.input(input_id))
+                        .and_then(StateMachineInputInstance::number_value),
+                    Some(expected)
+                );
+                assert_eq!(
+                    artboard.nested_number_value(local_id),
+                    Some(expected),
+                    "NestedNumber virtual alias"
+                );
+            };
+
+        let outer_bool = nested_input_named(&main, main_graph, "NestedBool", "CircleOuterState");
+        assert_bool_aliases(&main, outer_bool, false);
+        assert!(main.set_nested_bool_value(outer_bool, true));
+        assert_bool_aliases(&main, outer_bool, true);
+        let (outer_bool_machine, outer_bool_input) = main
+            .nested_input_target(outer_bool)
+            .expect("outer bool target");
+        assert!(
+            main.nested_state_machine_mut(outer_bool_machine)
+                .expect("outer state machine")
+                .set_bool(outer_bool_input, false)
+        );
+        assert_bool_aliases(&main, outer_bool, false);
+        assert!(main.set_nested_bool_value(outer_bool, true));
+        assert_bool_aliases(&main, outer_bool, true);
+
+        let outer_number =
+            nested_input_named(&main, main_graph, "NestedNumber", "CircleOuterNumber");
+        assert_number_aliases(&main, outer_number, 0.0);
+        assert!(main.set_nested_number_value(outer_number, 10.0));
+        assert_number_aliases(&main, outer_number, 10.0);
+        let (outer_number_machine, outer_number_input) = main
+            .nested_input_target(outer_number)
+            .expect("outer number target");
+        assert!(
+            main.nested_state_machine_mut(outer_number_machine)
+                .expect("outer state machine")
+                .set_number(outer_number_input, 5.0)
+        );
+        assert_number_aliases(&main, outer_number, 5.0);
+        assert!(main.set_nested_number_value(outer_number, 99.0));
+        assert_number_aliases(&main, outer_number, 99.0);
+
+        let outer_trigger =
+            nested_input_named(&main, main_graph, "NestedTrigger", "CircleOuterTrigger");
+        let (trigger_machine, trigger_input) = main
+            .nested_input_target(outer_trigger)
+            .expect("outer trigger target");
+        for _ in 0..3 {
+            assert_eq!(
+                main.nested_state_machine(trigger_machine)
+                    .and_then(|machine| machine.input(trigger_input))
+                    .and_then(StateMachineInputInstance::trigger_fired),
+                Some(false)
+            );
+        }
+        assert!(main.fire_nested_trigger_input(outer_trigger));
+        for _ in 0..3 {
+            assert_eq!(
+                main.nested_state_machine(trigger_machine)
+                    .and_then(|machine| machine.input(trigger_input))
+                    .and_then(StateMachineInputInstance::trigger_fired),
+                Some(true)
+            );
+        }
+
+        let outer_host = local_named(main_graph, "NestedArtboard", "CircleOuter");
+        let inner_graph = graph
+            .artboards
+            .iter()
+            .find(|artboard| {
+                artboard
+                    .local_objects
+                    .iter()
+                    .any(|object| object.type_name == Some("NestedBool"))
+                    && artboard.global_id != main_graph.global_id
+            })
+            .expect("outer-circle artboard graph");
+        let outer_child = main
+            .nested_artboards
+            .get_mut(&outer_host)
+            .expect("CircleOuter occurrence")
+            .child
+            .as_mut();
+        let inner_bool =
+            nested_input_named(outer_child, inner_graph, "NestedBool", "CircleInnerState");
+        assert_bool_aliases(outer_child, inner_bool, false);
+        assert!(outer_child.set_nested_bool_value(inner_bool, true));
+        assert_bool_aliases(outer_child, inner_bool, true);
+        let (inner_machine, inner_input) = outer_child
+            .nested_input_target(inner_bool)
+            .expect("inner bool target");
+        assert!(
+            outer_child
+                .nested_state_machine_mut(inner_machine)
+                .expect("inner state machine")
+                .set_bool(inner_input, false)
+        );
+        assert_bool_aliases(outer_child, inner_bool, false);
+        assert!(outer_child.set_nested_bool_value(inner_bool, true));
+        assert_bool_aliases(outer_child, inner_bool, true);
     }
 
     struct AdvanceScriptInstance {

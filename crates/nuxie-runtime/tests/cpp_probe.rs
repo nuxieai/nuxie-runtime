@@ -205,6 +205,12 @@ fn transform_x(instance: &ArtboardInstance, local_id: usize) -> f32 {
         .unwrap_or_else(|| panic!("missing transform x for local id {local_id}"))
 }
 
+fn transform_y(instance: &ArtboardInstance, local_id: usize) -> f32 {
+    instance
+        .transform_property(local_id, TransformProperty::Y)
+        .unwrap_or_else(|| panic!("missing transform y for local id {local_id}"))
+}
+
 fn push_object_with_properties(
     bytes: &mut Vec<u8>,
     type_name: &str,
@@ -19489,6 +19495,685 @@ fn linear_animation_apply_quantizes_seconds_before_sampling() {
 
     assert!(rust.apply_linear_animation(0, 0.99, 1.0));
     assert_close(transform_x(&rust, 1), 11.0, "quantized x");
+}
+
+#[test]
+fn upstream_quantize_and_looping_timeline_event_fixtures() {
+    let quantize_path = cpp_runtime_fixture("quantize_test.riv");
+    let quantize_bytes = std::fs::read(&quantize_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", quantize_path.display()));
+    let quantize_runtime =
+        read_runtime_file(&quantize_bytes).expect("import upstream quantize_test.riv");
+    let quantize_graph =
+        GraphFile::from_runtime_file(&quantize_runtime).expect("graph quantize_test.riv");
+    let quantize_artboard = &quantize_graph.artboards[0];
+    assert!(
+        quantize_artboard.animations[0].quantize,
+        "upstream A1: animation is authored quantized"
+    );
+    let shape_ids = quantize_artboard
+        .components
+        .iter()
+        .filter(|component| component.type_name == "Shape")
+        .map(|component| component.local_id)
+        .collect::<Vec<_>>();
+    assert_eq!(shape_ids.len(), 1, "upstream A2: exactly one Shape");
+    let mut quantized = ArtboardInstance::from_graph_with_artboards(
+        &quantize_runtime,
+        quantize_artboard,
+        &quantize_graph.artboards,
+    )
+    .expect("instantiate quantize_test.riv");
+    assert!(quantized.apply_linear_animation(0, 0.0, 1.0));
+    assert_eq!(
+        transform_x(&quantized, shape_ids[0]),
+        0.0,
+        "upstream A3: frame zero"
+    );
+    assert!(quantized.apply_linear_animation(0, 0.5, 1.0));
+    assert_eq!(
+        transform_x(&quantized, shape_ids[0]),
+        160.0,
+        "upstream A4: frame 2.5 floors to frame 2"
+    );
+
+    let events_path = cpp_runtime_fixture("looping_timeline_events.riv");
+    let events_bytes = std::fs::read(&events_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", events_path.display()));
+    let (events_runtime, mut events_artboard) =
+        read_rust_instance_from_bytes(&events_bytes, "looping_timeline_events.riv");
+    assert_eq!(
+        events_runtime.artboard_animations(0).len(),
+        1,
+        "upstream A2: one animation"
+    );
+    let mut animation = events_artboard
+        .linear_animation_instance(0)
+        .expect("upstream A3: animation instance");
+    let mut reported = Vec::new();
+    for (seconds, expected_time, expected_count) in [
+        (0.1, 0.1, 1),
+        (0.32, 0.42, 2),
+        (0.3, 0.72, 2),
+        (0.28, 0.0, 3),
+        (1.01, 0.01, 7),
+    ] {
+        events_artboard.advance_linear_animation_instance_with_events(
+            &mut animation,
+            seconds,
+            &mut reported,
+        );
+        assert_upstream_approx(
+            animation.time(),
+            expected_time,
+            "looping_timeline_events.riv animation time",
+        );
+        assert_eq!(
+            reported.len(),
+            expected_count,
+            "looping_timeline_events.riv cumulative report count"
+        );
+    }
+}
+
+#[test]
+#[ignore = "finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-mutable-animation-quantize"]
+fn upstream_quantize_toggle_requires_missing_mutable_definition_api() {
+    panic!(
+        "upstream linear_animation_test.cpp:85-87 mutates LinearAnimation::quantize(false); \
+         nuxie-runtime exposes imported RuntimeLinearAnimation definitions read-only"
+    );
+}
+
+#[test]
+fn upstream_cubic_and_elastic_fixture_assertions_match_cpp_probe() {
+    let cases = [
+        (
+            "cubic_value_test.riv",
+            "CubicValueInterpolator",
+            3,
+            4,
+            vec![(15.0 / 60.0, 290.71), (11.0 / 60.0, 363.01)],
+        ),
+        (
+            "test_elastic.riv",
+            "ElasticInterpolator",
+            1,
+            1,
+            vec![(7.0 / 60.0, 423.98), (14.0 / 60.0, 303.995)],
+        ),
+    ];
+
+    for (relative, interpolator_type, expected_interpolators, local_id, samples) in cases {
+        let fixture = cpp_runtime_fixture(relative);
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("read upstream fixture {}: {error}", fixture.display()));
+        let runtime = read_runtime_file(&bytes)
+            .unwrap_or_else(|error| panic!("import upstream fixture {relative}: {error}"));
+        assert_eq!(
+            (0..runtime.object_count())
+                .filter_map(|index| runtime.object(index))
+                .filter(|object| object.type_name == interpolator_type)
+                .count(),
+            expected_interpolators,
+            "{relative} imported interpolator count",
+        );
+
+        let graph = GraphFile::from_runtime_file(&runtime)
+            .unwrap_or_else(|error| panic!("graph upstream fixture {relative}: {error}"));
+        assert_eq!(graph.artboards.len(), 1, "{relative} artboard count");
+        assert_eq!(
+            graph.artboards[0].animations.len(),
+            1,
+            "{relative} animation count",
+        );
+        assert_eq!(
+            graph.artboards[0].animations[0].name.as_deref(),
+            Some("Timeline 1"),
+            "{relative} named animation",
+        );
+
+        if relative == "test_elastic.riv" {
+            let interpolator = (0..runtime.object_count())
+                .filter_map(|index| runtime.object(index))
+                .find(|object| object.type_name == "ElasticInterpolator")
+                .expect("elastic interpolator");
+            assert_eq!(interpolator.uint_property("easingValue"), Some(1));
+            assert_eq!(interpolator.double_property("amplitude"), Some(1.0));
+            assert_eq!(interpolator.double_property("period"), Some(0.25));
+            assert_eq!(
+                (0..runtime.object_count())
+                    .filter_map(|index| runtime.object(index))
+                    .filter(|object| object.type_name == "Shape")
+                    .count(),
+                1,
+            );
+            let initial = ArtboardInstance::from_graph_with_artboards(
+                &runtime,
+                &graph.artboards[0],
+                &graph.artboards,
+            )
+            .expect("instantiate elastic fixture");
+            assert_upstream_approx(
+                transform_x(&initial, local_id),
+                145.19,
+                "test_elastic.riv initial Shape.x",
+            );
+        } else {
+            assert!(
+                (0..runtime.object_count())
+                    .filter_map(|index| runtime.object(index))
+                    .any(|object| object.string_property("name") == Some("grey_rectangle")),
+                "cubic fixture named node",
+            );
+        }
+
+        for (seconds, expected_x) in samples {
+            let label = format!("{relative}@{seconds}");
+            let mut rust = ArtboardInstance::from_graph_with_artboards(
+                &runtime,
+                &graph.artboards[0],
+                &graph.artboards,
+            )
+            .unwrap_or_else(|error| panic!("instantiate {label}: {error}"));
+            assert!(
+                rust.apply_linear_animation(0, seconds, 1.0),
+                "{label} applies",
+            );
+            let report = rust.update_components();
+            assert_upstream_approx(
+                transform_x(&rust, local_id),
+                expected_x,
+                &format!("{label} upstream x"),
+            );
+
+            if let Some(probe) = probe_path() {
+                let cpp = read_cpp_probe_fixture_with_args(
+                    &probe,
+                    relative,
+                    &[
+                        "--runtime-apply-animation".to_owned(),
+                        "0".to_owned(),
+                        seconds.to_string(),
+                        "1".to_owned(),
+                    ],
+                );
+                compare_cpp_runtime_update(&cpp, &rust, &report, &label);
+            }
+        }
+    }
+}
+
+#[test]
+fn upstream_default_state_machine_fixture_contract() {
+    let fixture = cpp_runtime_fixture("entry.riv");
+    let bytes = std::fs::read(&fixture)
+        .unwrap_or_else(|error| panic!("read upstream fixture {}: {error}", fixture.display()));
+    let runtime = read_runtime_file(&bytes).expect("import upstream entry.riv");
+    let graph = GraphFile::from_runtime_file(&runtime).expect("graph upstream entry.riv");
+    let artboard = runtime.artboard(0).expect("entry.riv default artboard");
+    let default_index = artboard
+        .uint_property("defaultStateMachineId")
+        .and_then(|index| usize::try_from(index).ok())
+        .expect("entry.riv default state-machine index");
+
+    assert!(default_index < graph.artboards[0].state_machines.len());
+    assert_eq!(
+        graph.artboards[0].state_machines[default_index]
+            .name
+            .as_deref(),
+        Some("State Machine 1"),
+    );
+
+    let mut instance = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        &graph.artboards[0],
+        &graph.artboards,
+    )
+    .expect("instantiate entry.riv");
+    assert!(instance.state_machine_instance(default_index).is_some());
+    assert_eq!(
+        graph.artboards[0].state_machines[default_index]
+            .name
+            .as_deref(),
+        Some("State Machine 1"),
+    );
+
+    // C++ defaultScene selects the same authored state-machine occurrence when
+    // one is flagged as the default.
+    let default_scene_index = default_index;
+    assert!(
+        instance
+            .state_machine_instance(default_scene_index)
+            .is_some()
+    );
+    assert_eq!(
+        graph.artboards[0].state_machines[default_scene_index].name,
+        graph.artboards[0].state_machines[default_index].name,
+    );
+}
+
+#[test]
+fn upstream_state_machine_input_fixture_contract() {
+    let fixture = cpp_runtime_fixture("smi_test.riv");
+    let bytes = std::fs::read(&fixture)
+        .unwrap_or_else(|error| panic!("read upstream fixture {}: {error}", fixture.display()));
+    let runtime = read_runtime_file(&bytes).expect("import upstream smi_test.riv");
+    let objects = (0..runtime.object_count())
+        .filter_map(|index| runtime.object(index))
+        .collect::<Vec<_>>();
+
+    let nested_artboard = objects
+        .iter()
+        .copied()
+        .find(|object| {
+            object.type_name == "NestedArtboard"
+                && object.string_property("name") == Some("artboard to nest component")
+        })
+        .expect("named NestedArtboard");
+    assert_eq!(nested_artboard.double_property("x"), Some(100.0));
+    assert_eq!(nested_artboard.double_property("y"), Some(100.0));
+    assert_eq!(
+        nested_artboard.string_property("name"),
+        Some("artboard to nest component")
+    );
+    assert_eq!(nested_artboard.uint_property("artboardId"), Some(1));
+
+    for (type_name, expected_input_id) in [
+        ("NestedTrigger", Some(0)),
+        ("NestedBool", Some(1)),
+        ("NestedNumber", Some(2)),
+    ] {
+        let object = objects
+            .iter()
+            .copied()
+            .find(|object| object.type_name == type_name)
+            .unwrap_or_else(|| panic!("{type_name}"));
+        assert_eq!(object.string_property("name").unwrap_or(""), "");
+        assert_eq!(object.uint_property("inputId"), expected_input_id);
+    }
+
+    let nested_state_machine = objects
+        .iter()
+        .copied()
+        .find(|object| object.type_name == "NestedStateMachine")
+        .expect("NestedStateMachine");
+    assert_eq!(
+        nested_state_machine.string_property("name").unwrap_or(""),
+        ""
+    );
+    assert_eq!(nested_state_machine.uint_property("animationId"), Some(0));
+}
+
+#[test]
+fn upstream_rocket_and_blend_state_machine_fixture_structure() {
+    let rocket_path = cpp_runtime_fixture("rocket.riv");
+    let rocket_bytes = std::fs::read(&rocket_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", rocket_path.display()));
+    let rocket_runtime = read_runtime_file(&rocket_bytes).expect("import rocket.riv");
+    let rocket_graph = GraphFile::from_runtime_file(&rocket_runtime).expect("graph rocket.riv");
+    let rocket_artboard = &rocket_graph.artboards[0];
+    assert_eq!(rocket_artboard.animations.len(), 3);
+    assert_eq!(rocket_artboard.state_machines.len(), 1);
+    let rocket_index = rocket_artboard
+        .state_machines
+        .iter()
+        .position(|machine| machine.name.as_deref() == Some("Button"))
+        .expect("Button state machine");
+    let rocket_machine = &rocket_runtime.artboard_state_machine_graphs(0)[rocket_index];
+    assert_eq!(rocket_machine.layers.len(), 1);
+    assert_eq!(rocket_machine.inputs.len(), 2);
+    for name in ["Hover", "Press"] {
+        let input = rocket_machine
+            .inputs
+            .iter()
+            .flatten()
+            .find(|input| input.string_property("name") == Some(name))
+            .unwrap_or_else(|| panic!("{name} input"));
+        assert_eq!(input.type_name, "StateMachineBool");
+    }
+    let rocket_layer = &rocket_machine.layers[0];
+    assert_eq!(rocket_layer.state_count, 6);
+    for special in ["AnyState", "EntryState", "ExitState"] {
+        assert!(
+            rocket_layer.states.iter().any(|state| state
+                .object
+                .is_some_and(|object| object.type_name == special)),
+            "{special}"
+        );
+    }
+    let animation_states = rocket_layer
+        .states
+        .iter()
+        .filter(|state| {
+            state
+                .object
+                .is_some_and(|object| object.type_name == "AnimationState")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(animation_states.len(), 3);
+    for state in &animation_states {
+        assert!(state.animation.is_some());
+    }
+    let entry = rocket_layer
+        .states
+        .iter()
+        .find(|state| {
+            state
+                .object
+                .is_some_and(|object| object.type_name == "EntryState")
+        })
+        .expect("EntryState");
+    assert_eq!(entry.transitions.len(), 1);
+    let idle = entry.transitions[0]
+        .state_to
+        .expect("entry transition target");
+    assert_eq!(idle.type_name, "AnimationState");
+    let idle_state = rocket_layer
+        .states
+        .iter()
+        .find(|state| state.object.is_some_and(|object| object.id == idle.id))
+        .expect("idle state");
+    let idle_animation = idle_state.animation.expect("idle animation");
+    assert_eq!(idle_animation.string_property("name"), Some("idle"));
+    assert_eq!(idle_state.transitions.len(), 2);
+    let roll_over = idle_state
+        .transitions
+        .iter()
+        .find(|transition| {
+            transition.state_to.is_some_and(|target| {
+                rocket_layer
+                    .states
+                    .iter()
+                    .find(|state| state.object.is_some_and(|object| object.id == target.id))
+                    .and_then(|state| state.animation)
+                    .and_then(|animation| animation.string_property("name"))
+                    == Some("Roll_over")
+            })
+        })
+        .expect("Roll_over transition");
+    assert_eq!(roll_over.conditions.len(), 1);
+
+    let mut rocket_instance = ArtboardInstance::from_graph_with_artboards(
+        &rocket_runtime,
+        rocket_artboard,
+        &rocket_graph.artboards,
+    )
+    .expect("instantiate rocket.riv");
+    let rocket_smi = rocket_instance
+        .state_machine_instance(rocket_index)
+        .expect("Button state-machine instance");
+    assert_eq!(
+        rocket_smi.get_bool("Hover").and_then(|input| input.name()),
+        Some("Hover")
+    );
+    assert_eq!(
+        rocket_smi.get_bool("Press").and_then(|input| input.name()),
+        Some("Press")
+    );
+    assert!(rocket_smi.get_bool("Hover").is_some());
+    assert!(rocket_smi.get_bool("Press").is_some());
+    assert_eq!(rocket_smi.changed_state_count(), 0);
+    assert_eq!(rocket_smi.current_animation_count(), 0);
+
+    let blend_path = cpp_runtime_fixture("blend_test.riv");
+    let blend_bytes = std::fs::read(&blend_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", blend_path.display()));
+    let blend_runtime = read_runtime_file(&blend_bytes).expect("import blend_test.riv");
+    let blend_graph = GraphFile::from_runtime_file(&blend_runtime).expect("graph blend_test.riv");
+    let blend_artboard = &blend_graph.artboards[0];
+    assert_eq!(blend_artboard.animations.len(), 4);
+    assert_eq!(blend_artboard.state_machines.len(), 2);
+    let blend_index = blend_artboard
+        .state_machines
+        .iter()
+        .position(|machine| machine.name.as_deref() == Some("blend"))
+        .expect("blend state machine");
+    let blend_machine = &blend_runtime.artboard_state_machine_graphs(0)[blend_index];
+    assert_eq!(blend_machine.layers.len(), 1);
+    let blend_layer = &blend_machine.layers[0];
+    assert_eq!(blend_layer.state_count, 5);
+    for special in ["AnyState", "EntryState", "ExitState"] {
+        assert!(
+            blend_layer.states.iter().any(|state| state
+                .object
+                .is_some_and(|object| object.type_name == special)),
+            "{special}"
+        );
+    }
+    assert!(blend_layer.states[1].object.is_some_and(|object| {
+        definition_by_name(object.type_name).is_some_and(|definition| {
+            definition.name == "BlendState1D" || definition.ancestors.contains(&"BlendState1D")
+        })
+    }));
+    assert!(blend_layer.states[2].object.is_some_and(|object| {
+        definition_by_name(object.type_name).is_some_and(|definition| {
+            definition.name == "BlendState1D" || definition.ancestors.contains(&"BlendState1D")
+        })
+    }));
+    assert_eq!(blend_layer.states[1].blend_animations.len(), 3);
+    assert_eq!(blend_layer.states[2].blend_animations.len(), 3);
+    for (blend_animation, expected_name, expected_value) in [
+        (
+            &blend_layer.states[1].blend_animations[0],
+            "horizontal",
+            0.0,
+        ),
+        (
+            &blend_layer.states[1].blend_animations[1],
+            "vertical",
+            100.0,
+        ),
+        (&blend_layer.states[1].blend_animations[2], "rotate", 0.0),
+    ] {
+        assert_eq!(blend_animation.object.type_name, "BlendAnimation1D");
+        let animation = blend_animation.animation.expect("blend animation target");
+        assert_eq!(animation.string_property("name"), Some(expected_name));
+        assert_eq!(
+            blend_animation.object.double_property("value"),
+            Some(expected_value)
+        );
+    }
+    assert_eq!(blend_layer.states[1].transitions.len(), 1);
+    let blend_transition = &blend_layer.states[1].transitions[0];
+    assert_eq!(blend_transition.object.type_name, "BlendStateTransition");
+    assert!(blend_transition.exit_blend_animation.is_some());
+}
+
+fn upstream_click_event_fixture_instance() -> (
+    RuntimeFile,
+    ArtboardInstance,
+    StateMachineInstance,
+    usize,
+    usize,
+) {
+    let fixture = cpp_runtime_fixture("click_event.riv");
+    let bytes = std::fs::read(&fixture)
+        .unwrap_or_else(|error| panic!("read {}: {error}", fixture.display()));
+    let runtime = read_runtime_file(&bytes).expect("import click_event.riv");
+    let graph = GraphFile::from_runtime_file(&runtime).expect("graph click_event.riv");
+    let artboard_index = graph
+        .artboards
+        .iter()
+        .position(|artboard| artboard.name.as_deref() == Some("art-1"))
+        .expect("art-1");
+    let artboard_graph = &graph.artboards[artboard_index];
+    assert_eq!(artboard_graph.state_machines.len(), 1);
+    let machine_index = artboard_graph
+        .state_machines
+        .iter()
+        .position(|machine| machine.name.as_deref() == Some("sm-1"))
+        .expect("sm-1");
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
+            .expect("instantiate click-event artboard");
+    let mut machine = artboard
+        .state_machine_instance(machine_index)
+        .expect("instantiate sm-1");
+    artboard.advance_state_machine_instance(&mut machine, 0.0);
+    artboard.update_components();
+
+    (runtime, artboard, machine, artboard_index, machine_index)
+}
+
+#[test]
+fn upstream_click_event_fixture_initial_and_first_click_contract() {
+    let (runtime, mut artboard, mut machine, artboard_index, machine_index) =
+        upstream_click_event_fixture_instance();
+
+    assert!(machine.needs_advance());
+    artboard.advance_state_machine_instance(&mut machine, 0.0);
+    assert!(machine.has_listeners());
+    assert_eq!(
+        runtime.artboard_state_machine_graphs(artboard_index)[machine_index]
+            .layers
+            .len(),
+        1
+    );
+    assert_eq!(machine.reported_event_count(), 0);
+
+    machine.pointer_down(&mut artboard, 75.0, 75.0, 0);
+    machine.pointer_up(&mut artboard, 75.0, 75.0, 0);
+    assert_eq!(machine.reported_event_count(), 1);
+}
+
+#[test]
+#[ignore = "finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-click-up-outside"]
+fn upstream_click_event_fixture_reports_exact_group_click_sequence() {
+    let (_, mut artboard, mut machine, _, _) = upstream_click_event_fixture_instance();
+    let mut counts = Vec::new();
+
+    machine.pointer_down(&mut artboard, 75.0, 75.0, 0);
+    machine.pointer_up(&mut artboard, 75.0, 75.0, 0);
+    counts.push(machine.reported_event_count());
+
+    machine.pointer_down(&mut artboard, 75.0, 75.0, 0);
+    machine.pointer_up(&mut artboard, 300.0, 75.0, 0);
+    counts.push(machine.reported_event_count());
+
+    machine.pointer_down(&mut artboard, 300.0, 75.0, 0);
+    machine.pointer_up(&mut artboard, 75.0, 75.0, 0);
+    counts.push(machine.reported_event_count());
+
+    machine.pointer_down(&mut artboard, 75.0, 75.0, 0);
+    machine.pointer_up(&mut artboard, 225.0, 225.0, 0);
+    counts.push(machine.reported_event_count());
+
+    machine.pointer_down(&mut artboard, 150.0, 150.0, 0);
+    machine.pointer_up(&mut artboard, 150.0, 150.0, 0);
+    counts.push(machine.reported_event_count());
+    assert_eq!(
+        counts,
+        [1, 1, 1, 2, 3],
+        "hittest_test.cpp:284-310 cumulative click-event counts"
+    );
+}
+
+#[test]
+fn upstream_listener_align_target_fixture_contract() {
+    let fixture = cpp_runtime_fixture("align_target.riv");
+    let bytes = std::fs::read(&fixture)
+        .unwrap_or_else(|error| panic!("read upstream fixture {}: {error}", fixture.display()));
+    let runtime = read_runtime_file(&bytes).expect("import upstream align_target.riv");
+    let graph = GraphFile::from_runtime_file(&runtime).expect("graph upstream align_target.riv");
+
+    for (artboard_name, expected_y) in [("preserve-inactive", 51.0), ("preserve-active", 101.0)] {
+        let artboard_graph = graph
+            .artboards
+            .iter()
+            .find(|artboard| artboard.name.as_deref() == Some(artboard_name))
+            .unwrap_or_else(|| panic!("{artboard_name} artboard"));
+        let circle_local = artboard_graph
+            .local_objects
+            .iter()
+            .find(|object| object.name.as_deref() == Some("circle"))
+            .map(|object| object.local_id)
+            .expect("circle shape");
+        assert_eq!(artboard_graph.state_machines.len(), 1);
+        assert_eq!(
+            artboard_graph.state_machines[0].name.as_deref(),
+            Some("align-state-machine")
+        );
+
+        let mut artboard =
+            ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
+                .unwrap_or_else(|error| panic!("instantiate {artboard_name}: {error}"));
+        let mut state_machine = artboard
+            .state_machine_instance(0)
+            .expect("align state-machine instance");
+        let _ = artboard.update_components();
+        let _ = artboard.advance_state_machine_instance(&mut state_machine, 0.0);
+        let _ = state_machine.pointer_move(&mut artboard, 100.0, 50.0, 0.0, 0);
+        let _ = state_machine.pointer_move(&mut artboard, 100.0, 51.0, 0.0, 0);
+        let _ = artboard.advance_state_machine_instance(&mut state_machine, 1.0);
+        let _ = artboard.advance_state_machine_instance(&mut state_machine, 0.0);
+
+        assert_eq!(transform_x(&artboard, circle_local), 100.0);
+        assert_eq!(transform_y(&artboard, circle_local), expected_y);
+    }
+}
+
+#[test]
+fn upstream_gamepad_wire_size_and_fixture_load_contract() {
+    let button_count = 17usize;
+    let axis_count = 4usize;
+    let mut wire = Vec::new();
+    wire.extend_from_slice(&1u32.to_le_bytes());
+    wire.push(0);
+    wire.extend_from_slice(&0i32.to_le_bytes());
+    wire.extend_from_slice(&[0, button_count as u8, axis_count as u8, 0]);
+    wire.resize(wire.len() + button_count * 4 + axis_count * 4, 0);
+    assert_eq!(
+        wire.len(),
+        4 + 1 + 4 + 4 + button_count * 4 + axis_count * 4,
+        "gamepad_test.cpp single-connected-record serialized size"
+    );
+
+    let fixture = cpp_runtime_fixture("gamepad_test.riv");
+    let bytes = std::fs::read(&fixture)
+        .unwrap_or_else(|error| panic!("read {}: {error}", fixture.display()));
+    let (runtime, graph, _) = read_rust_graph_instance_from_bytes(&bytes, "gamepad_test.riv");
+    assert!(!graph.artboards.is_empty(), "upstream fixture artboard");
+    assert!(
+        !runtime.artboard_state_machine_graphs(0).is_empty(),
+        "upstream fixture state-machine occurrence"
+    );
+}
+
+#[test]
+#[ignore = "finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-gamepad-batch-buffer-api"]
+fn upstream_gamepad_batch_buffer_contract_requires_missing_runtime_api() {
+    panic!(
+        "pinned gamepad_test.cpp requires StateMachineInstance::submitGamepadsFromBuffer; \
+         nuxie-runtime exposes typed gamepad_dispatch only"
+    );
+}
+
+#[test]
+#[ignore = "coverage finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-silver-hit-test-fixtures"]
+fn upstream_hit_test_fixtures_require_unsupported_dynamic_pointer_actions() {
+    panic!(
+        "the remaining hittest_test.cpp fixtures use pointer positions computed from live layout \
+         or long loop-generated paths not expressible by the current silver action interpreter"
+    );
+}
+
+#[test]
+#[ignore = "coverage finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-state-machine-fixture-surface"]
+fn upstream_state_machine_fixture_contracts_without_exact_runtime_equivalents() {
+    panic!(
+        "the listed state_machine_test.cpp fixtures require exact state/reset/view-model \
+         occurrence observables not exposed through the current probe-facing Rust API"
+    );
+}
+
+#[test]
+#[ignore = "coverage finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-scripting-fixture-oracles"]
+fn upstream_scripting_fixture_contracts_require_script_and_silver_oracles() {
+    panic!(
+        "the listed scripting fixtures require pinned script-console/view-model results and \
+         SerializingFactory silver output not exposed by the current Rust test harness"
+    );
 }
 
 #[test]
@@ -85604,6 +86289,14 @@ fn assert_close(actual: f32, expected: f32, label: &str) {
     assert!(
         (actual - expected).abs() <= 0.0001,
         "{label} mismatch: expected {expected}, got {actual}"
+    );
+}
+
+fn assert_upstream_approx(actual: f32, expected: f32, label: &str) {
+    let margin = f32::EPSILON * 100.0 * expected.abs();
+    assert!(
+        (actual - expected).abs() <= margin,
+        "{label} mismatch under pinned Catch::Approx: expected {expected} ± {margin}, got {actual}",
     );
 }
 

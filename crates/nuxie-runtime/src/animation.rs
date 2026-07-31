@@ -2528,6 +2528,28 @@ mod tests {
         }
     }
 
+    fn upstream_test_animation(
+        speed: f32,
+        loop_value: u64,
+        enable_work_area: bool,
+    ) -> RuntimeLinearAnimation {
+        RuntimeLinearAnimation {
+            global_id: 2,
+            name: Some(Arc::<str>::from("upstream unit-test animation")),
+            fps: 2,
+            duration: if enable_work_area { 100 } else { 10 },
+            speed,
+            loop_value,
+            work_start: if enable_work_area { 4 } else { 0 },
+            work_end: if enable_work_area { 10 } else { 0 },
+            enable_work_area,
+            quantize: false,
+            keyed_objects: Arc::new(Vec::new()),
+            key_frame_data_bind_templates: Arc::new(Vec::new()),
+            has_keyed_callbacks: false,
+        }
+    }
+
     fn keyed_double_property(
         from_global_id: u32,
         from_value: f32,
@@ -2921,6 +2943,276 @@ mod tests {
         assert_eq!(instance.time(), animation.end_seconds());
         assert_eq!(instance.direction(), -1.0);
         assert!(instance.did_loop());
+    }
+
+    #[test]
+    fn upstream_animation_state_speed_start_and_spilled_time_matrix() {
+        // Assertion-for-assertion port of animation_state_instance_test.cpp.
+        for (label, animation_speed, state_speed, loop_value, elapsed, expected) in [
+            ("speed 1", 1.0, 1.0, 0, 2.0, (2.0, 2.0, 0.0)),
+            ("state speed 2", 1.0, 2.0, 0, 2.0, (4.0, 4.0, 0.0)),
+            ("state speed 0.5", 1.0, 0.5, 0, 2.0, (1.0, 1.0, 0.0)),
+            ("negative state speed", 1.0, -1.0, 1, 2.0, (3.0, 2.0, 0.0)),
+        ] {
+            let animation = upstream_test_animation(animation_speed, loop_value, false);
+            let mut instance = LinearAnimationInstance::new_for_test(
+                RuntimeLinearAnimationHandle::new(0),
+                &animation,
+                state_speed,
+            );
+            let _ = instance.advance(elapsed * state_speed);
+            assert_eq!(instance.time(), expected.0, "{label} time");
+            assert_eq!(instance.total_time(), expected.1, "{label} totalTime");
+            assert_eq!(instance.spilled_time(), expected.2, "{label} spilledTime");
+        }
+
+        for (label, animation_speed, state_speed, expected_time) in [
+            ("positive animation, positive state", 1.0, 1.0, 0.0),
+            ("negative animation, positive state", -1.0, 1.0, 5.0),
+            ("positive animation, negative state", 1.0, -1.0, 5.0),
+            ("negative animation, negative state", -1.0, -1.0, 0.0),
+        ] {
+            let animation = upstream_test_animation(animation_speed, 0, false);
+            let instance = LinearAnimationInstance::new_for_test(
+                RuntimeLinearAnimationHandle::new(0),
+                &animation,
+                state_speed,
+            );
+            assert_eq!(instance.time(), expected_time, "{label} initial time");
+        }
+
+        for (label, animation_speed, loop_value, elapsed, expected) in [
+            ("2x one-shot", 2.0, 0, 3.0, (2.0, 6.0, 2.0)),
+            ("0.5x one-shot", 0.5, 0, 5.0, (2.0, 2.5, 1.0)),
+            ("2x loop", 2.0, 1, 5.5, (1.0, 11.0, 0.5)),
+            ("0.5x loop", 0.5, 1, 10.0, (1.0, 5.0, 2.0)),
+            ("-2x one-shot", -2.0, 0, 3.0, (0.0, 6.0, 2.0)),
+            ("-2x loop", -2.0, 1, 5.5, (1.0, 11.0, 0.5)),
+        ] {
+            let mut animation = upstream_test_animation(animation_speed, loop_value, false);
+            animation.duration = 4;
+            let mut instance = LinearAnimationInstance::new_for_test(
+                RuntimeLinearAnimationHandle::new(0),
+                &animation,
+                1.0,
+            );
+            let _ = instance.advance(elapsed);
+            assert_eq!(instance.time(), expected.0, "{label} time");
+            assert_eq!(instance.total_time(), expected.1, "{label} totalTime");
+            assert_eq!(instance.spilled_time(), expected.2, "{label} spilledTime");
+        }
+    }
+
+    #[test]
+    fn upstream_linear_animation_definition_timing_and_keep_going() {
+        // Literal ports of the definition-only and work-area keep-going cases
+        // in linear_animation_test.cpp.
+        for (speed, expected_start_time, expected_end_time) in [(1.0, 0.0, 5.0), (-1.0, 5.0, 0.0)] {
+            let animation = upstream_test_animation(speed, 0, false);
+            assert_eq!(animation.start_seconds(), 0.0);
+            assert_eq!(animation.end_seconds(), 5.0);
+            assert_eq!(animation.start_time_with_speed(1.0), expected_start_time);
+            assert_eq!(animation.start_time_with_speed(-1.0), expected_end_time);
+            assert_eq!(animation.duration_seconds(), 5.0);
+        }
+
+        let animation = RuntimeLinearAnimation {
+            global_id: 3,
+            name: Some(Arc::<str>::from("upstream work-area animation")),
+            fps: 60,
+            duration: 60,
+            speed: 1.0,
+            loop_value: 0,
+            work_start: 30,
+            work_end: 42,
+            enable_work_area: true,
+            quantize: false,
+            keyed_objects: Arc::new(Vec::new()),
+            key_frame_data_bind_templates: Arc::new(Vec::new()),
+            has_keyed_callbacks: false,
+        };
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
+        assert!(!instance.advance(0.0));
+        assert_eq!(instance.time(), 0.5);
+        assert!(instance.advance(0.1));
+        assert_eq!(instance.time(), 0.6);
+        assert!(!instance.advance(0.2));
+        assert_eq!(instance.time(), 0.7);
+    }
+
+    #[test]
+    fn upstream_linear_animation_instance_sequences() {
+        // Assertion-for-assertion port of linear_animation_instance_test.cpp.
+        let animation = upstream_test_animation(1.0, 0, false);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
+        assert!(instance.advance(2.0));
+        assert_eq!(instance.time(), 2.0);
+        assert_eq!(instance.total_time(), 2.0);
+        assert!(!instance.did_loop());
+        assert!(!instance.advance(10.0));
+        assert_eq!(instance.time(), 5.0);
+        assert_eq!(instance.total_time(), 12.0);
+        assert!(instance.did_loop());
+
+        let animation = upstream_test_animation(0.5, 0, false);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
+        assert!(instance.advance(2.0));
+        assert_eq!(instance.time(), 1.0);
+        assert_eq!(instance.total_time(), 1.0);
+
+        let animation = upstream_test_animation(1.0, 1, false);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
+        assert!(instance.advance(-2.0));
+        assert_eq!(instance.time(), 3.0);
+        assert_eq!(instance.total_time(), 2.0);
+        assert!(instance.did_loop());
+
+        let animation = upstream_test_animation(1.0, 0, false);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
+        instance.set_direction(-1);
+        assert_eq!(instance.time(), 0.0);
+        assert!(!instance.advance(2.0));
+        assert_eq!(instance.time(), 0.0);
+        assert_eq!(instance.total_time(), 2.0);
+        assert!(instance.did_loop());
+        instance.set_time(&animation, 5.0);
+        assert_eq!(instance.total_time(), 5.0);
+        instance.set_direction(-1);
+        assert!(instance.advance(2.0));
+        assert_eq!(instance.time(), 3.0);
+        assert_eq!(instance.total_time(), 7.0);
+        assert!(!instance.did_loop());
+        assert!(!instance.advance(4.0));
+        assert_eq!(instance.time(), 0.0);
+        assert_eq!(instance.total_time(), 11.0);
+        assert!(instance.did_loop());
+
+        let animation = upstream_test_animation(1.0, 1, false);
+        let mut instance = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
+        assert!(instance.advance(2.0));
+        assert_eq!(instance.time(), 2.0);
+        assert_eq!(instance.total_time(), 2.0);
+        assert!(!instance.did_loop());
+        assert!(instance.advance(10.0));
+        assert_eq!(instance.time(), 2.0);
+        assert_eq!(instance.total_time(), 12.0);
+        assert!(instance.did_loop());
+
+        let mut reverse_loop = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &animation,
+            1.0,
+        );
+        reverse_loop.set_direction(-1);
+        assert_eq!(reverse_loop.time(), 0.0);
+        for (elapsed, expected_time, expected_total, expected_looped) in [
+            (2.0, 3.0, 2.0, true),
+            (2.0, 1.0, 4.0, false),
+            (4.0, 2.0, 8.0, true),
+        ] {
+            assert!(reverse_loop.advance(elapsed));
+            assert_eq!(reverse_loop.direction(), -1.0);
+            assert_eq!(reverse_loop.time(), expected_time);
+            assert_eq!(reverse_loop.total_time(), expected_total);
+            assert_eq!(reverse_loop.did_loop(), expected_looped);
+        }
+
+        let work_area = upstream_test_animation(1.0, 1, true);
+        let mut reverse_work_area = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &work_area,
+            1.0,
+        );
+        reverse_work_area.set_direction(-1);
+        assert_eq!(reverse_work_area.time(), 2.0);
+        assert!(!reverse_work_area.advance(0.0));
+        assert_eq!(reverse_work_area.direction(), -1.0);
+        assert_eq!(reverse_work_area.time(), 2.0);
+        assert_eq!(reverse_work_area.total_time(), 0.0);
+        assert!(!reverse_work_area.did_loop());
+        for (expected_time, expected_total) in [(3.0, 2.0), (4.0, 4.0), (5.0, 6.0)] {
+            assert!(reverse_work_area.advance(2.0));
+            assert_eq!(reverse_work_area.direction(), -1.0);
+            assert_eq!(reverse_work_area.time(), expected_time);
+            assert_eq!(reverse_work_area.total_time(), expected_total);
+            assert!(reverse_work_area.did_loop());
+        }
+
+        let ping_pong = upstream_test_animation(1.0, 2, false);
+        let mut forward_ping_pong = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &ping_pong,
+            1.0,
+        );
+        for (elapsed, expected_time, expected_total, expected_direction, expected_looped) in [
+            (2.0, 2.0, 2.0, 1.0, false),
+            (5.0, 3.0, 7.0, -1.0, true),
+            (9.0, 4.0, 16.0, -1.0, true),
+            (6.0, 2.0, 22.0, 1.0, true),
+            (20.0, 2.0, 42.0, 1.0, true),
+        ] {
+            assert!(forward_ping_pong.advance(elapsed));
+            assert_eq!(forward_ping_pong.time(), expected_time);
+            assert_eq!(forward_ping_pong.total_time(), expected_total);
+            assert_eq!(forward_ping_pong.direction(), expected_direction);
+            assert_eq!(forward_ping_pong.did_loop(), expected_looped);
+        }
+
+        let mut reverse_ping_pong = LinearAnimationInstance::new_for_test(
+            RuntimeLinearAnimationHandle::new(0),
+            &ping_pong,
+            1.0,
+        );
+        reverse_ping_pong.set_direction(-1);
+        assert_eq!(reverse_ping_pong.time(), 0.0);
+        for (elapsed, expected_time, expected_total, expected_direction, expected_looped) in [
+            (2.0, 2.0, 2.0, 1.0, true),
+            (4.0, 4.0, 6.0, -1.0, true),
+            (2.0, 2.0, 8.0, -1.0, false),
+        ] {
+            assert!(reverse_ping_pong.advance(elapsed));
+            assert_eq!(reverse_ping_pong.time(), expected_time);
+            assert_eq!(reverse_ping_pong.total_time(), expected_total);
+            assert_eq!(reverse_ping_pong.direction(), expected_direction);
+            assert_eq!(reverse_ping_pong.did_loop(), expected_looped);
+        }
+    }
+
+    #[test]
+    fn upstream_elastic_ease_numeric_contract() {
+        // Literal numeric assertions from elastic_easing_test.cpp.
+        let amplitude = 0.5;
+        let period = 3.14;
+        let shift = period / 4.0;
+        assert_eq!(elastic_actual_amplitude(0.0, amplitude, shift), 1.0);
+        assert_eq!(elastic_actual_amplitude(1.57, amplitude, shift), 0.5);
+        assert!((elastic_ease_out(0.22, amplitude, period, shift) - 0.8307).abs() <= 0.0001);
+        assert!((elastic_ease_in(1.58, amplitude, period, shift) - 14.01086).abs() <= 0.0001);
+        assert!((elastic_ease_in_out(1.58, amplitude, period, shift) - 1.0).abs() <= 0.0001);
     }
 
     #[test]

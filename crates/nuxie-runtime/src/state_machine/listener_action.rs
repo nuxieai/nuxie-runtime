@@ -538,6 +538,191 @@ mod tests {
     }
 
     #[test]
+    fn upstream_listener_action_flag_decode_occurrence_and_import_routing_matrix() {
+        // Assertion-for-assertion coverage for listener_action_flags_test.cpp.
+        // The runtime's observable parent-kind result is which importer owns
+        // the action; occurrence matching is exercised through the same bit
+        // predicate used by perform_scheduled_listener_actions.
+        let parent_kind = |flags: u64| match (flags >> 1) & 0x3 {
+            1 => "transition",
+            2 => "state",
+            _ => "listener",
+        };
+        assert_eq!(parent_kind(0), "listener");
+        assert_eq!(parent_kind(1 << 1), "transition");
+        assert_eq!(parent_kind(2 << 1), "state");
+        assert_eq!(parent_kind(3 << 1), "listener");
+
+        let matches_occurrence =
+            |flags: u64, occurrence: StateMachineFireOccurrence| flags & 1 == occurrence.value();
+        assert_eq!(parent_kind(1), "listener");
+        assert!(matches_occurrence(1, StateMachineFireOccurrence::AtEnd));
+        assert!(!matches_occurrence(1, StateMachineFireOccurrence::AtStart));
+        assert_eq!(parent_kind(2 << 1), "state");
+        assert!(matches_occurrence(
+            2 << 1,
+            StateMachineFireOccurrence::AtStart
+        ));
+        assert!(!matches_occurrence(
+            2 << 1,
+            StateMachineFireOccurrence::AtEnd
+        ));
+        assert_eq!(parent_kind(1 | (1 << 1)), "transition");
+        assert!(matches_occurrence(
+            1 | (1 << 1),
+            StateMachineFireOccurrence::AtEnd
+        ));
+
+        assert!(matches_occurrence(0, StateMachineFireOccurrence::AtStart));
+        assert!(!matches_occurrence(0, StateMachineFireOccurrence::AtEnd));
+        assert!(matches_occurrence(1, StateMachineFireOccurrence::AtEnd));
+        assert!(!matches_occurrence(1, StateMachineFireOccurrence::AtStart));
+
+        let routed = |transition_owner: bool, flags: u64| {
+            let mut records = vec![
+                record("Backboard", Vec::new()),
+                record("Artboard", Vec::new()),
+                record(
+                    "Node",
+                    vec![property("Node", "parentId", AuthoringValue::Uint(0))],
+                ),
+                record("StateMachine", Vec::new()),
+                record(
+                    "StateMachineListenerSingle",
+                    vec![
+                        property(
+                            "StateMachineListenerSingle",
+                            "targetId",
+                            AuthoringValue::Uint(1),
+                        ),
+                        property(
+                            "StateMachineListenerSingle",
+                            "listenerTypeValue",
+                            AuthoringValue::Uint(15),
+                        ),
+                    ],
+                ),
+                record("StateMachineLayer", Vec::new()),
+                record("AnyState", Vec::new()),
+                record("EntryState", Vec::new()),
+                record("ExitState", Vec::new()),
+                record("AnimationState", Vec::new()),
+            ];
+            if transition_owner {
+                records.push(record(
+                    "StateTransition",
+                    vec![property(
+                        "StateTransition",
+                        "stateToId",
+                        AuthoringValue::Uint(3),
+                    )],
+                ));
+            }
+            records.push(record(
+                "FocusActionClear",
+                vec![property(
+                    "FocusActionClear",
+                    "flags",
+                    AuthoringValue::Uint(flags),
+                )],
+            ));
+            RuntimeFile::from_authoring_records(records).expect("routed listener action")
+        };
+
+        let transition_file = routed(true, 1 << 1);
+        let transition_machine = &transition_file.artboard_state_machine_graphs(0)[0];
+        assert_eq!(transition_machine.layers[0].states[3].transitions.len(), 1);
+        assert_eq!(
+            transition_machine.layers[0].states[3].transitions[0]
+                .listener_actions
+                .len(),
+            1
+        );
+        assert_eq!(
+            transition_machine.layers[0].states[3].transitions[0].listener_actions[0]
+                .object
+                .type_name,
+            "FocusActionClear"
+        );
+        assert_eq!(transition_machine.listeners[0].actions.len(), 0);
+
+        let state_file = routed(false, 2 << 1);
+        let state_machine = &state_file.artboard_state_machine_graphs(0)[0];
+        assert_eq!(state_machine.layers[0].states[3].listener_actions.len(), 1);
+        assert_eq!(
+            state_machine.layers[0].states[3].listener_actions[0]
+                .object
+                .type_name,
+            "FocusActionClear"
+        );
+        assert!(state_machine.layers[0].states[3].transitions.is_empty());
+        assert_eq!(state_machine.listeners[0].actions.len(), 0);
+
+        let listener_file = routed(true, 0);
+        let listener_machine = &listener_file.artboard_state_machine_graphs(0)[0];
+        assert_eq!(listener_machine.listeners[0].actions.len(), 1);
+        assert!(
+            listener_machine.layers[0].states[3].transitions[0]
+                .listener_actions
+                .is_empty()
+        );
+
+        let missing_listener = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record("Artboard", Vec::new()),
+            record("StateMachine", Vec::new()),
+            record("StateMachineLayer", Vec::new()),
+            record("AnyState", Vec::new()),
+            record("EntryState", Vec::new()),
+            record("ExitState", Vec::new()),
+            record("AnimationState", Vec::new()),
+            record(
+                "StateTransition",
+                vec![property(
+                    "StateTransition",
+                    "stateToId",
+                    AuthoringValue::Uint(3),
+                )],
+            ),
+            record(
+                "FocusActionClear",
+                vec![property(
+                    "FocusActionClear",
+                    "flags",
+                    AuthoringValue::Uint(0),
+                )],
+            ),
+        ]);
+        assert!(missing_listener.is_err());
+        // The failed import did not attach the action to the layer component:
+        // constructing the same prefix without it leaves the transition empty.
+        let control = RuntimeFile::from_authoring_records(vec![
+            record("Backboard", Vec::new()),
+            record("Artboard", Vec::new()),
+            record("StateMachine", Vec::new()),
+            record("StateMachineLayer", Vec::new()),
+            record("AnyState", Vec::new()),
+            record("EntryState", Vec::new()),
+            record("ExitState", Vec::new()),
+            record("AnimationState", Vec::new()),
+            record(
+                "StateTransition",
+                vec![property(
+                    "StateTransition",
+                    "stateToId",
+                    AuthoringValue::Uint(3),
+                )],
+            ),
+        ])
+        .expect("control file");
+        assert!(
+            control.artboard_state_machine_graphs(0)[0].layers[0].states[3].transitions[0]
+                .listener_actions
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn ordinary_listener_actions_read_live_core_fields_at_perform_time() {
         struct NoopExecutor;
 

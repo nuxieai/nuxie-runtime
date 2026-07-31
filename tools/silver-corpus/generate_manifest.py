@@ -101,100 +101,102 @@ FORCED_BLOCKERS = {
     "db_health_tracker": "runtime-frame-loop-nontermination",
     "echo_show_demo": "renderer-paint-allocation",
 }
+EXACT = (
+    "focus_test",
+    "follow_path_constraint",
+    "nested_artboard_origin_override_test",
+    "nested_needs_advance",
+)
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
-advance_blend_mode-inputs|frame 0, op 1 (color): expected color, got makeRenderPaint
-advance_blend_mode-vms|frame 0, op 1 (color): expected color, got makeRenderPaint
-animated_clipping-layout|frame 0, op 1 (color): expected color, got makeRenderPaint
-animated_clipping-nodes|frame 0, op 1 (color): expected color, got makeRenderPaint
-artboard_list_map_rules|frame 0, op 1 (color): expected color, got makeRenderPaint
-artboard_list_overrides_horizontal|frame 0, op 1 (color): expected color, got makeRenderPaint
-artboard_list_overrides_vertical|frame 0, op 1 (color): expected color, got makeRenderPaint
-artboard_width_test|frame 0, op 1 (color): expected color, got makeRenderPaint
-bankcard|frame 0, op 1 (color): expected color, got makeRenderPaint
-clear_viewmodel_list|frame 0, op 1 (color): expected color, got makeRenderPaint
-clipping_and_draw_order|frame 0, op 1 (color): expected color, got makeRenderPaint
-collapse_data_binds-test_1|frame 0, op 1 (color): expected color, got makeRenderPaint
-collapse_data_binds-test_2|frame 0, op 1 (color): expected color, got makeRenderPaint
-collapsing_elements|frame 0, op 1 (color): expected color, got makeRenderPaint
-component_stateful|frame 0, op 1 (color): expected color, got makeRenderPaint
-computed_root_transform-list|frame 0, op 1 (color): expected color, got makeRenderPaint
-computed_root_transform-nested_artboard|frame 0, op 1 (color): expected color, got makeRenderPaint
-computed_values_test|frame 0, op 1 (color): expected color, got makeRenderPaint
-custom_property_enum|frame 0, op 1 (color): expected color, got makeRenderPaint
-data_bind_solo-solos-to-values|frame 0, op 1 (color): expected color, got makeRenderPaint
-data_bind_solo-values-to-solos|frame 0, op 1 (color): expected color, got makeRenderPaint
-data_converter_to_number|frame 0, op 1 (color): expected color, got makeRenderPaint
-fill_trim_path|frame 0, op 1 (color): expected color, got makeRenderPaint
-follow_path_constraint|frame 0, op 1 (style): expected style, got makeRenderPaint
-format_number_with_commas|frame 0, op 1 (color): expected color, got makeRenderPaint
-global_viewmodels_test-auto_instance|frame 0, op 1 (color): expected color, got makeRenderPaint
-group_effect-main-missing-targets|frame 0, op 1 (style): expected style, got makeRenderPaint
-hide_test|frame 0, op 1 (color): expected color, got makeRenderPaint
-hunter_x_demo|frame 0, op 2 (color): expected color, got makeRenderPaint
-layout_display|frame 0, op 1 (color): expected color, got makeRenderPaint
-layout_paint|frame 0, op 1 (color): expected color, got makeRenderPaint
-n_slice_triangle|frame 0, op 1 (color): expected color, got makeRenderPaint
-nested_hug|frame 0, op 1 (color): expected color, got makeRenderPaint
-relative_data_binding|frame 0, op 1 (color): expected color, got makeRenderPaint
-reset_phase_multi_main|frame 0, op 1 (color): expected color, got makeRenderPaint
-saturation|frame 0, op 1 (color): expected color, got makeRenderPaint
-spotify_kids_app_icon|frame 0, op 1 (color): expected color, got makeRenderPaint
-spotify_kids_demo|frame 0, op 2 (color): expected color, got makeRenderPaint
-stacked_path_effects|frame 0, op 1 (style): expected style, got makeRenderPaint
-state_transition_fire_trigger|frame 0, op 1 (color): expected color, got makeRenderPaint
-superbowl|frame 0, op 4 (color): expected color, got makeRenderPaint
-target_event|frame 0, op 1 (color): expected color, got makeRenderPaint
-text_input|frame 0, op 1 (color): expected color, got makeRenderPaint
-text_stroke_test|frame 0, op 1 (color): expected color, got makeRenderPaint
-text_vertical_trim_test|frame 0, op 1 (color): expected color, got makeRenderPaint
-transition_artboard_condition_test|frame 0, op 1 (color): expected color, got makeRenderPaint
-transition_index_condition|frame 0, op 1 (color): expected color, got makeRenderPaint
-unbound_stateful_component|frame 0, op 1 (color): expected color, got makeRenderPaint
-vertical_align_ellipsis|frame 0, op 1 (color): expected color, got makeRenderPaint
-viewmodel_based_condition|frame 0, op 3 (color): expected color, got makeRenderPaint
-virtualize_blendmode|frame 0, op 1 (color): expected color, got makeRenderPaint
-databind_artboard|frame 0, op 1 (color): expected color, got makeRenderPaint
-event_trigger_event|frame 0, op 1 (color): expected color, got makeRenderPaint
-focus_test|frame 0, op 1 (color): expected color, got makeRenderPaint
-focus_traversal|frame 0, op 1 (color): expected color, got makeRenderPaint
-hittest_ab1|frame 0, op 1 (color): expected color, got makeRenderPaint
-hittest_ab1_grand_parent|frame 0, op 1 (color): expected color, got makeRenderPaint
-hittest_ab1_parent|frame 0, op 1 (color): expected color, got makeRenderPaint
-hittest_collapsed_layouts|frame 0, op 1 (color): expected color, got makeRenderPaint
-hittest_nested|frame 0, op 1 (color): expected color, got makeRenderPaint
-multi_listeners|frame 0, op 1 (color): expected color, got makeRenderPaint
-multitouch|frame 0, op 1 (color): expected color, got makeRenderPaint
-multitouch_enter|frame 0, op 1 (color): expected color, got makeRenderPaint
-nested_artboard_origin_override_test|frame 0, op 1 (color): expected color, got makeRenderPaint
-nested_events|frame 0, op 1 (color): expected color, got makeRenderPaint
-number_to_list_nested_children|frame 0, op 1 (color): expected color, got makeRenderPaint
-pause_nested_artboard|frame 0, op 1 (color): expected color, got makeRenderPaint
-recursive_data_bind|frame 0, op 1 (color): expected color, got makeRenderPaint
-sorted_listeners|frame 0, op 1 (color): expected color, got makeRenderPaint
-time_based_interpolation|frame 0, op 1 (color): expected color, got makeRenderPaint
-transition_actions|frame 0, op 1 (color): expected color, got makeRenderPaint
-trigger_based_listeners|frame 0, op 1 (color): expected color, got makeRenderPaint
-trigger_fires_single_change|frame 0, op 1 (color): expected color, got makeRenderPaint
-component_list_child_origin|frame 0, op 1 (color): expected color, got makeRenderPaint
-component_list_follow_path_distance|frame 0, op 1 (color): expected color, got makeRenderPaint
-follow_path_animate_shape|frame 0, op 1 (color): expected color, got makeRenderPaint
-follow_path_animate_solo|frame 0, op 1 (color): expected color, got makeRenderPaint
-follow_path_animate_target|frame 0, op 1 (color): expected color, got makeRenderPaint
-image_fit_alignment_2|frame 0, op 3 (color): expected color, got makeRenderPaint
-image_fit_alignment_3|frame 0, op 1 (color): expected color, got makeRenderPaint
-image_fit_alignment_updated_test|frame 0, op 1 (color): expected color, got makeRenderPaint
-layout_anim_bound|frame 0, op 1 (color): expected color, got makeRenderPaint
-layout_anim_component_list|frame 0, op 1 (color): expected color, got makeRenderPaint
-layout_anim_nested|frame 0, op 1 (color): expected color, got makeRenderPaint
-layout_aspect_ratio|frame 0, op 1 (color): expected color, got makeRenderPaint
-nested_needs_advance|frame 0, op 1 (style): expected style, got makeRenderPaint
-path_effect_with_feathers|frame 0, op 1 (color): expected color, got makeRenderPaint
-stateful_keyed_trigger|frame 0, op 1 (color): expected color, got makeRenderPaint
-text_follow_path_shape_length|frame 0, op 1 (style): expected style, got makeRenderPaint
-transition_duration_bind_list|frame 0, op 1 (color): expected color, got makeRenderPaint
-transition_duration_bind_nested|frame 0, op 1 (color): expected color, got makeRenderPaint
+advance_blend_mode-inputs|frame 0, op 19 (color), field value: expected 4286928727, got 4282614325
+advance_blend_mode-vms|frame 0, op 19 (color), field value: expected 4286928727, got 4283534636
+animated_clipping-layout|frame 0, op 27 (fillRule): expected fillRule, got drawPath
+animated_clipping-nodes|frame 0, op 41 (fillRule): expected fillRule, got drawPath
+artboard_list_map_rules|frame 0, op 49 (fillRule): expected fillRule, got drawPath
+artboard_list_overrides_horizontal|frame 0, op 67 (fillRule): expected fillRule, got drawPath
+artboard_list_overrides_vertical|frame 0, op 67 (fillRule): expected fillRule, got drawPath
+artboard_width_test|frame 0, op 13 (color), field value: expected 4291035136, got 4280270848
+bankcard|frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint
+clear_viewmodel_list|frame 0, op 10 (makeRenderPaint): expected makeRenderPaint, got save
+clipping_and_draw_order|frame 0, op 38 (fillRule): expected fillRule, got drawPath
+collapse_data_binds-test_1|frame 0, op 71 (fillRule): expected fillRule, got drawPath
+collapse_data_binds-test_2|frame 0, op 51 (fillRule): expected fillRule, got drawPath
+collapsing_elements|frame 0, op 331 (fillRule): expected fillRule, got drawPath
+component_list_child_origin|frame 0, op 92 (addRawPath): expected addRawPath, got rewind
+component_list_follow_path_distance|frame 0, op 53 (fillRule): expected fillRule, got drawPath
+component_stateful|frame 0, op 51 (fillRule): expected fillRule, got drawPath
+computed_root_transform-list|frame 0, op 71 (fillRule): expected fillRule, got drawPath
+computed_root_transform-nested_artboard|frame 0, op 59 (fillRule): expected fillRule, got drawPath
+computed_values_test|frame 0, op 48 (addRawPath): expected addRawPath, got rewind
+custom_property_enum|frame 0, op 16 (fillRule): expected fillRule, got drawPath
+data_bind_solo-solos-to-values|frame 0, op 57 (fillRule): expected fillRule, got drawPath
+data_bind_solo-values-to-solos|frame 0, op 53 (fillRule): expected fillRule, got drawPath
+data_converter_to_number|frame 0, op 35 (fillRule): expected fillRule, got drawPath
+databind_artboard|frame 0, op 35 (fillRule): expected fillRule, got drawPath
+event_trigger_event|frame 0, op 20 (fillRule): expected fillRule, got drawPath
+fill_trim_path|frame 0, op 23 (fillRule): expected fillRule, got drawPath
+focus_traversal|frame 0, op 95 (color): expected color, got save
+follow_path_animate_shape|frame 0, op 175 (addRawPath): expected addRawPath, got rewind
+follow_path_animate_solo|frame 0, op 19 (addRawPath): expected addRawPath, got rewind
+follow_path_animate_target|frame 0, op 45 (addRawPath): expected addRawPath, got rewind
+format_number_with_commas|frame 0, op 31 (fillRule): expected fillRule, got drawPath
+global_viewmodels_test-auto_instance|frame 0, op 27 (color): expected color, got save
+group_effect-main-missing-targets|frame 0, op 44 (fillRule): expected fillRule, got drawPath
+hide_test|frame 0, op 45 (color), field paint_id: expected 4, got 13
+hittest_ab1|frame 0, op 117 (fillRule): expected fillRule, got drawPath
+hittest_ab1_grand_parent|frame 0, op 131 (fillRule): expected fillRule, got drawPath
+hittest_ab1_parent|frame 0, op 123 (fillRule): expected fillRule, got drawPath
+hittest_collapsed_layouts|frame 0, op 19 (fillRule): expected fillRule, got drawPath
+hittest_nested|frame 0, op 39 (fillRule): expected fillRule, got drawPath
+hunter_x_demo|frame 0, op 488 (blendMode): expected blendMode, got makeRenderPaint
+image_fit_alignment_2|frame 0, op 36 (addRawPath): expected addRawPath, got rewind
+image_fit_alignment_3|frame 0, op 58 (addRawPath): expected addRawPath, got rewind
+image_fit_alignment_updated_test|frame 0, op 24 (addRawPath): expected addRawPath, got rewind
+layout_anim_bound|frame 0, op 39 (fillRule): expected fillRule, got drawPath
+layout_anim_component_list|frame 0, op 31 (addRawPath): expected addRawPath, got rewind
+layout_anim_nested|frame 0, op 31 (addRawPath): expected addRawPath, got rewind
+layout_aspect_ratio|frame 0, op 27 (fillRule): expected fillRule, got drawPath
+layout_display|frame 0, op 35 (fillRule): expected fillRule, got drawPath
+layout_paint|frame 0, op 39 (fillRule): expected fillRule, got drawPath
+multi_listeners|frame 0, op 66 (addRawPath): expected addRawPath, got rewind
+multitouch|frame 0, op 25 (fillRule): expected fillRule, got drawPath
+multitouch_enter|frame 0, op 77 (fillRule): expected fillRule, got drawPath
+n_slice_triangle|frame 0, op 15 (fillRule): expected fillRule, got drawPath
+nested_events|frame 0, op 59 (fillRule): expected fillRule, got drawPath
+nested_hug|frame 0, op 63 (fillRule): expected fillRule, got drawPath
+number_to_list_nested_children|frame 0, op 141 (color): expected color, got save
+path_effect_with_feathers|frame 0, op 21 (feather), field paint_id: expected 8, got 5
+pause_nested_artboard|frame 0, op 24 (fillRule): expected fillRule, got drawPath
+recursive_data_bind|frame 0, op 29 (fillRule): expected fillRule, got drawPath
+relative_data_binding|frame 0, op 32 (fillRule): expected fillRule, got drawPath
+reset_phase_multi_main|frame 0, op 25 (color): expected color, got makeRenderPaint
+saturation|frame 0, op 31 (fillRule): expected fillRule, got drawPath
+sorted_listeners|frame 0, op 19 (fillRule): expected fillRule, got drawPath
+spotify_kids_app_icon|frame 0, op 145 (addRawPath): expected addRawPath, got rewind
+spotify_kids_demo|frame 0, op 200 (blendMode): expected blendMode, got makeRenderPaint
+stacked_path_effects|frame 0, op 39 (fillRule): expected fillRule, got drawPath
+state_transition_fire_trigger|frame 0, op 39 (fillRule): expected fillRule, got drawPath
+stateful_keyed_trigger|frame 1, op 30 (color): expected color, got save
+superbowl|frame 0, op 2825 (color), field paint_id: expected 220, got 610
+target_event|frame 0, op 20 (fillRule): expected fillRule, got drawPath
+text_follow_path_shape_length|frame 0, op 127 (fillRule): expected fillRule, got drawPath
+text_input|frame 0, op 20 (addRawPath): expected addRawPath, got rewind
+text_stroke_test|frame 0, op 23 (fillRule): expected fillRule, got drawPath
+text_vertical_trim_test|frame 0, op 49 (addRawPath): expected addRawPath, got rewind
+time_based_interpolation|frame 0, op 24 (fillRule): expected fillRule, got drawPath
+transition_actions|frame 0, op 33 (addRawPath): expected addRawPath, got rewind
+transition_artboard_condition_test|frame 0, op 16 (frameSize), field width: expected 983, got 984
+transition_duration_bind_list|frame 0, op 13 (makeRenderPaint): expected makeRenderPaint, got frame
+transition_duration_bind_nested|frame 0, op 57 (color): expected color, got frame
+transition_index_condition|frame 0, op 34 (fillRule): expected fillRule, got drawPath
+trigger_based_listeners|frame 0, op 27 (fillRule): expected fillRule, got drawPath
+trigger_fires_single_change|frame 0, op 23 (fillRule): expected fillRule, got drawPath
+unbound_stateful_component|frame 0, op 9 (color), field value: expected 4278255360, got 4278190080
+vertical_align_ellipsis|frame 0, op 55 (fillRule): expected fillRule, got drawPath
+viewmodel_based_condition|frame 0, op 24 (color), field paint_id: expected 6, got 5
+virtualize_blendmode|frame 0, op 33 (color): expected color, got save
 """.strip().splitlines()
 )
 
@@ -534,6 +536,12 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                         f"Unsupported feature: {blocker}; the upstream C++ body cannot yet be "
                         "replayed faithfully by the Rust action interpreter."
                     )
+                elif silver_id in EXACT:
+                    status = "exact"
+                    note = (
+                        "Rust renderer stream is operation-exact with the pinned C++ silver "
+                        "baseline after replaying the TEST_CASE actions."
+                    )
                 else:
                     difference = DIVERGENCES.get(silver_id)
                     if difference is None:
@@ -705,8 +713,10 @@ def render(producers: list[Producer]) -> str:
         "expected_runtime = 195",
         "expected_scripted = 41",
         "max_provenance_unknown = 2",
-        "min_cpp_rust_exact = 0",
-        "cpp_rust_exact_ids = []",
+        f"min_cpp_rust_exact = {len(EXACT)}",
+        "cpp_rust_exact_ids = ["
+        + ", ".join(quoted(silver_id) for silver_id in sorted(EXACT))
+        + "]",
         "",
     ]
     for producer in producers:

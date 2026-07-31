@@ -12063,6 +12063,7 @@ fn cpp_file_asset_extension(type_name: &str) -> Option<&'static str> {
         "ScriptAsset" => Some("lua"),
         "ShaderAsset" => Some("rstb"),
         "ManifestAsset" => Some("man"),
+        "LibraryAsset" => Some("library"),
         _ => None,
     }
 }
@@ -13346,6 +13347,22 @@ fn runtime_artboard_local_slots(
                     Some(None)
                 }
                 None => None,
+                Some(object) if runtime_object_is_cpp_script_input(object) => {
+                    // C++ ScriptInput*::import reaches Component::import (and
+                    // an Artboard slot) only when the owning ScriptedObject is
+                    // component-backed; inputs owned by listener actions,
+                    // transition conditions, converters, or interpolators
+                    // return Ok without registering with ArtboardImporter
+                    // (`script_input_boolean.cpp:30-36`). Failed inputs are
+                    // deleted without a slot (`file.cpp:326`).
+                    if import_statuses.get(file_index) == Some(&RuntimeImportStatus::Imported)
+                        && script_input_owner_is_component(objects, import_statuses, file_index)
+                    {
+                        Some(Some(file_index))
+                    } else {
+                        None
+                    }
+                }
                 Some(object) if runtime_object_is_cpp_artboard_local(object) => {
                     if import_statuses.get(file_index) == Some(&RuntimeImportStatus::Imported) {
                         Some(Some(file_index))
@@ -13553,9 +13570,39 @@ fn runtime_object_is_cpp_artboard_local(object: &RuntimeObject) -> bool {
     definition_by_type_key(object.type_key).is_some_and(definition_is_cpp_artboard_local)
 }
 
+fn runtime_object_is_cpp_script_input(object: &RuntimeObject) -> bool {
+    definition_by_type_key(object.type_key)
+        .is_some_and(|definition| definition.name.starts_with("ScriptInput"))
+}
+
+/// C++ `ScriptInput*::import` binds the input to the latest registered
+/// `ScriptedObjectImporter` and only continues into `Component::import` when
+/// that owner's `component()` override is non-null — true exactly for the
+/// Component-derived scripted owners (ScriptedDrawable, ScriptedLayout,
+/// ScriptedPathEffect).
+fn script_input_owner_is_component(
+    objects: &[Option<RuntimeObject>],
+    import_statuses: &[RuntimeImportStatus],
+    input_index: usize,
+) -> bool {
+    for index in (0..input_index).rev() {
+        let Some(object) = objects[index].as_ref() else {
+            continue;
+        };
+        if import_statuses.get(index) != Some(&RuntimeImportStatus::Imported) {
+            continue;
+        }
+        let Some(definition) = definition_by_type_key(object.type_key) else {
+            continue;
+        };
+        if definition_is_cpp_scripted_object(definition) {
+            return definition.is_a("Component");
+        }
+    }
+    false
+}
+
 fn definition_is_cpp_artboard_local(definition: &'static Definition) -> bool {
-    // Component-owned ScriptInputs call Component::import in C++ and occupy
-    // artboard slots; inputs owned by non-components fail parent validation.
     (definition.is_a("Component") && !definition.is_a("ScrollPhysics"))
         || definition.is_a("KeyFrameInterpolator")
         || definition.is_a("UserInput")
@@ -13738,9 +13785,15 @@ fn normalize_file_asset_ids(
         let Some(object) = objects[index].as_ref() else {
             continue;
         };
-        let is_file_asset = definition_by_type_key(object.type_key)
-            .is_some_and(|definition| definition.is_a("FileAsset"));
-        if !is_file_asset {
+        // C++ dedupes through BackboardImporter::addFileAsset, which
+        // FileAsset::import only reaches when addsToBackboard() is true;
+        // LibraryAsset and ManifestAsset opt out.
+        let is_backboard_file_asset =
+            definition_by_type_key(object.type_key).is_some_and(|definition| {
+                definition.is_a("FileAsset")
+                    && !matches!(definition.name, "LibraryAsset" | "ManifestAsset")
+            });
+        if !is_backboard_file_asset {
             continue;
         }
 

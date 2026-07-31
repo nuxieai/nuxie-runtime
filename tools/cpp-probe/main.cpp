@@ -112,6 +112,7 @@ size_t randomProviderTotalCalls();
 #undef protected
 #undef private
 #include "rive/assets/file_asset.hpp"
+#include "rive/assets/library_asset.hpp"
 #include "rive/bones/skin.hpp"
 #include "rive/bones/tendon.hpp"
 #include "rive/component.hpp"
@@ -255,6 +256,7 @@ size_t randomProviderTotalCalls();
 #include "rive/viewmodel/viewmodel.hpp"
 #include "rive/viewmodel/viewmodel_instance.hpp"
 #include "rive/viewmodel/viewmodel_instance_artboard.hpp"
+#include "rive/viewmodel/viewmodel_instance_asset_font.hpp"
 #include "rive/viewmodel/viewmodel_instance_asset_image.hpp"
 #include "rive/viewmodel/viewmodel_instance_boolean.hpp"
 #include "rive/viewmodel/viewmodel_instance_color.hpp"
@@ -268,6 +270,7 @@ size_t randomProviderTotalCalls();
 #include "rive/viewmodel/viewmodel_instance_symbol_list_index.hpp"
 #include "rive/viewmodel/viewmodel_instance_trigger.hpp"
 #include "rive/viewmodel/runtime/viewmodel_instance_artboard_runtime.hpp"
+#include "rive/viewmodel/runtime/viewmodel_instance_asset_font_runtime.hpp"
 #include "rive/viewmodel/runtime/viewmodel_instance_asset_image_runtime.hpp"
 #include "rive/viewmodel/runtime/viewmodel_instance_boolean_runtime.hpp"
 #include "rive/viewmodel/runtime/viewmodel_instance_color_runtime.hpp"
@@ -9252,8 +9255,23 @@ void write_registry_property_value(std::ostream& out,
     {
         case rive::CoreUintType::id:
             write_json_string(out, "uint");
-            out << ",\"value\":"
-                << rive::CoreRegistry::getUint(mutableObject, propertyKey);
+            out << ",\"value\":";
+            // CoreUint64Type::id aliases CoreUintType::id, but the registry
+            // splits their getters; route the uint64-backed keys explicitly.
+            switch (propertyKey)
+            {
+                case rive::FileAssetBase::scopeLibraryIdPropertyKey:
+                case rive::FileAssetBase::scopeLibraryVersionIdPropertyKey:
+                case rive::LibraryAssetBase::libraryIdPropertyKey:
+                case rive::LibraryAssetBase::libraryVersionIdPropertyKey:
+                    out << rive::CoreRegistry::getUint64(mutableObject,
+                                                         propertyKey);
+                    break;
+                default:
+                    out << rive::CoreRegistry::getUint(mutableObject,
+                                                       propertyKey);
+                    break;
+            }
             break;
         case rive::CoreStringType::id:
             write_json_string(out, "string");
@@ -12230,6 +12248,14 @@ void write_view_model_instance_value_runtime(
         out << ",\"assetIndex\":"
             << value->as<rive::ViewModelInstanceAssetImage>()->propertyValue();
     }
+    else if (value->is<rive::ViewModelInstanceAssetFont>())
+    {
+        rive::ViewModelInstanceAssetFontRuntime runtime(
+            value->as<rive::ViewModelInstanceAssetFont>());
+        out << static_cast<unsigned int>(runtime.dataType());
+        out << ",\"assetIndex\":"
+            << value->as<rive::ViewModelInstanceAssetFont>()->propertyValue();
+    }
     else if (value->is<rive::ViewModelInstanceArtboard>())
     {
         rive::ViewModelInstanceArtboardRuntime runtime(
@@ -12331,6 +12357,12 @@ void write_view_model_instance_source_data_value(
         out << static_cast<unsigned int>(rive::DataType::assetImage);
         out << ",\"integerValue\":"
             << value->as<rive::ViewModelInstanceAssetImage>()->propertyValue();
+    }
+    else if (value->is<rive::ViewModelInstanceAssetFont>())
+    {
+        out << static_cast<unsigned int>(rive::DataType::assetFont);
+        out << ",\"integerValue\":"
+            << value->as<rive::ViewModelInstanceAssetFont>()->propertyValue();
     }
     else if (value->is<rive::ViewModelInstanceArtboard>())
     {

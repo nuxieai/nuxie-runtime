@@ -1,10 +1,38 @@
 // Direct Rust owner for pinned C++ `src/viewmodel/viewmodel_instance_asset_image.cpp`.
 // Image asset value identity, sentinel handling, import, and clone behavior.
 
+/// Retained safe-Rust analogue of one decoded `RenderImage*`.
+#[derive(Debug, Clone)]
+pub struct RuntimeViewModelImage {
+    bytes: Arc<[u8]>,
+}
+
+impl RuntimeViewModelImage {
+    pub fn new(bytes: impl Into<Arc<[u8]>>) -> Self {
+        Self {
+            bytes: bytes.into(),
+        }
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.bytes, &other.bytes)
+    }
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct RuntimeOwnedViewModelImageState {
+    pub(crate) live_image: Option<RuntimeViewModelImage>,
+}
+
 #[derive(Debug)]
 struct RuntimeOwnedViewModelAsset {
     property_index: usize,
     cell: RuntimeViewModelCell,
+    runtime_state: Rc<RefCell<RuntimeOwnedViewModelImageState>>,
 }
 
 impl RuntimeOwnedViewModelAsset {
@@ -14,6 +42,7 @@ impl RuntimeOwnedViewModelAsset {
             cell: RuntimeViewModelCell::new(RuntimeViewModelCellValue::AssetImage(
                 owned_scalar_u32_payload(value),
             )),
+            runtime_state: Rc::new(RefCell::new(RuntimeOwnedViewModelImageState::default())),
         }
     }
 
@@ -32,6 +61,10 @@ impl RuntimeOwnedViewModelAsset {
             owned_scalar_u32_payload(value),
         ));
         true
+    }
+
+    fn runtime_state(&self) -> Rc<RefCell<RuntimeOwnedViewModelImageState>> {
+        Rc::clone(&self.runtime_state)
     }
 }
 

@@ -145,8 +145,8 @@ pub use text::{
     embedded_font_is_parseable, embedded_fonts_are_parseable, static_text_support_error,
 };
 pub use view_model::{
-    RuntimeDataContext, RuntimeDataContextInstanceRef, RuntimeDataContextLookupKind,
-    RuntimeDataContextLookupReport, RuntimeDataContextValueRef,
+    RuntimeBindableArtboard, RuntimeDataContext, RuntimeDataContextInstanceRef,
+    RuntimeDataContextLookupKind, RuntimeDataContextLookupReport, RuntimeDataContextValueRef,
     RuntimeDefaultViewModelArtboardSourceHandle, RuntimeDefaultViewModelAssetSourceHandle,
     RuntimeDefaultViewModelBooleanSourceHandle, RuntimeDefaultViewModelColorSourceHandle,
     RuntimeDefaultViewModelEnumSourceHandle, RuntimeDefaultViewModelListSourceHandle,
@@ -168,9 +168,15 @@ pub use view_model::{
     RuntimeOwnedViewModelListSourceHandle, RuntimeOwnedViewModelListStringMatchBooleanHandle,
     RuntimeOwnedViewModelNumberSourceHandle, RuntimeOwnedViewModelStringSourceHandle,
     RuntimeOwnedViewModelSymbolListIndexSourceHandle, RuntimeOwnedViewModelTriggerSourceHandle,
-    RuntimeOwnedViewModelViewModelSourceHandle, RuntimeViewModelLinkError,
-    runtime_data_context_lookup_reports, runtime_global_view_model_indices,
-    runtime_global_view_model_names,
+    RuntimeOwnedViewModelViewModelSourceHandle, RuntimeViewModelImage, RuntimeViewModelLinkError,
+    ViewModelInstanceArtboardRuntime, ViewModelInstanceAssetFontRuntime,
+    ViewModelInstanceAssetImageRuntime, ViewModelInstanceBooleanRuntime,
+    ViewModelInstanceColorRuntime, ViewModelInstanceEnumRuntime, ViewModelInstanceListIndexRuntime,
+    ViewModelInstanceListRuntime, ViewModelInstanceNumberRuntime, ViewModelInstanceRuntime,
+    ViewModelInstanceRuntimeProperty, ViewModelInstanceStringRuntime,
+    ViewModelInstanceTriggerRuntime, ViewModelInstanceValueRuntime, ViewModelRuntime,
+    ViewModelRuntimeDataType, ViewModelRuntimeProperty, runtime_data_context_lookup_reports,
+    runtime_global_view_model_indices, runtime_global_view_model_names,
 };
 pub(crate) use view_model::{
     RuntimeViewModelPointer, runtime_default_view_model_artboard_property_path_for_name,

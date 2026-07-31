@@ -1065,7 +1065,21 @@ branch is `levi/fl-c`; there is no PR.
    FL-A-through-FL-E code row is ported and the complete
    correctness/structure floor is green. The sorted slow-scene list is no
    longer the implementation queue.
-2. Independent orchestrator verification may promote completed #RD-1
+2. FL-F source-structure closeout (user-directed, 2026-07-31): after FL-E
+   completes, split the remaining many-to-one Rust owner files into the
+   pinned C++ source-file structure, so every manifest row maps one C++
+   file to one direct Rust file and nothing lives in giant aggregate
+   modules. Known aggregates: `artboard.rs`, `draw.rs`,
+   `state_machine/state_machine_instance.rs`,
+   `state_machine/state_machine.rs`, `animation.rs`, plus whatever the
+   manifest's multi-file `rust_modules` rows enumerate at that point.
+   Pattern is the one FL-D1/FL-D2 proved: behavior-preserving file moves
+   into a directory of direct owners with the old module reduced to a
+   shared-type/re-export coordinator; suites and goldens green per move;
+   manifest rows updated to 1:1. One PR per aggregate file, and no
+   semantic edits ride along with a split PR. After FL-F, reopen the
+   #B-3 size budget USER-GATE (docs/SIZE.md) with complete measurements.
+3. Independent orchestrator verification may promote completed #RD-1
    correspondence rows from `pending-verification`. #B-6 is complete; the
    next ordinary closeout-spine implementation item after the frame-loop port
    remains #B-5. B-6 also opened RB-2/RB-3/RB-4/RB-5; their relative

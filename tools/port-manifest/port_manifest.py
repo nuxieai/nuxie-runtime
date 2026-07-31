@@ -47,9 +47,9 @@ FEATURE_ROWS = {
         "F7/F8: Lua GPU binding and ORE GPU host are absent.",
     ),
     "src/joystick.cpp": (
-        "partial",
-        "crates/nuxie-runtime/src/animation.rs",
-        "F9: joystick behavior is ported but still needs a parity fixture.",
+        "ported",
+        "crates/nuxie-runtime/src/joystick.rs",
+        "FL-E4: direct occurrence-owned joystick runtime and parity fixtures.",
     ),
     "src/shapes/list_path.cpp": (
         "partial",
@@ -190,9 +190,9 @@ FEATURE_ROWS.update(
             "F14: command-path helper is outside the supported runtime architecture.",
         ),
         "src/intrinsically_sizeable.cpp": (
-            "not-applicable",
-            "",
-            "F14: intrinsic-size helper is represented by consolidated layout code.",
+            "ported",
+            "crates/nuxie-runtime/src/intrinsically_sizeable.rs",
+            "FL-E4: direct intrinsic-size dispatch and layout integration.",
         ),
     }
 )

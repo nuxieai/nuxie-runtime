@@ -47,44 +47,6 @@ pub(crate) enum RuntimeInterpolator {
     },
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeJoystick {
-    pub(crate) local_id: usize,
-    pub(crate) can_apply_before_update: bool,
-    pub(crate) x_animation_index: Option<usize>,
-    pub(crate) y_animation_index: Option<usize>,
-    pub(crate) nested_remap_dependents: Vec<usize>,
-}
-
-pub(crate) fn build_runtime_joysticks(
-    graph: &ArtboardGraph,
-    linear_animations: &[RuntimeLinearAnimation],
-) -> Vec<RuntimeJoystick> {
-    graph
-        .joysticks
-        .iter()
-        .map(|joystick| RuntimeJoystick {
-            local_id: joystick.local_id,
-            can_apply_before_update: joystick.can_apply_before_update,
-            x_animation_index: joystick.x_animation_global.and_then(|global_id| {
-                linear_animations
-                    .iter()
-                    .position(|animation| animation.global_id == global_id)
-            }),
-            y_animation_index: joystick.y_animation_global.and_then(|global_id| {
-                linear_animations
-                    .iter()
-                    .position(|animation| animation.global_id == global_id)
-            }),
-            nested_remap_dependents: joystick
-                .nested_remap_dependents
-                .iter()
-                .map(|dependent| dependent.local_id)
-                .collect(),
-        })
-        .collect()
-}
-
 impl RuntimeInterpolator {
     pub(crate) fn from_object(object: &RuntimeObject) -> Option<Self> {
         match object.type_name {

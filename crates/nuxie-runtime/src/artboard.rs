@@ -16,9 +16,8 @@ use nuxie_render_api::Factory as RenderFactory;
 use nuxie_schema::definition_by_name;
 
 use crate::animation::{
-    LinearAnimationInstance, RuntimeInterpolator, RuntimeJoystick, RuntimeKeyedCallback,
-    RuntimeLinearAnimation, RuntimeLinearAnimationHandle, build_linear_animations,
-    build_runtime_joysticks,
+    LinearAnimationInstance, RuntimeInterpolator, RuntimeKeyedCallback, RuntimeLinearAnimation,
+    RuntimeLinearAnimationHandle, build_linear_animations,
 };
 use crate::artboard_data_bind::{
     RuntimeArtboardAuthoredDataBindStates, RuntimeArtboardContextSourceValue,
@@ -63,12 +62,11 @@ use crate::draw::{
     runtime_apply_component_list_item_layout_bounds, runtime_component_list_item_base_transforms,
     runtime_component_list_item_layout_size,
 };
+use crate::joystick::{RuntimeJoystick, build_runtime_joysticks};
 use crate::objects::{ComponentAddress, InstanceObjectArena, InstanceSlot, ObjectHandle};
 use crate::properties::{
-    JOYSTICK_FLAG_INVERT_X, JOYSTICK_FLAG_INVERT_Y, RuntimeArtboardDimensions,
-    joystick_flags_property_key, joystick_x_property_key, joystick_y_property_key,
-    layout_component_style_display_value_property_key, property_key_for_name,
-    solid_color_value_property_key, solo_active_component_id_property_key,
+    RuntimeArtboardDimensions, layout_component_style_display_value_property_key,
+    property_key_for_name, solid_color_value_property_key, solo_active_component_id_property_key,
     transform_property_for_key,
 };
 use crate::script_asset::{RuntimeScriptImplementedMethods, RuntimeScriptedObjectOccurrence};
@@ -617,6 +615,12 @@ impl Clone for ArtboardInstance {
         }) {
             Self::build_component_occurrence_relations(&mut cloned.objects, &graph)
                 .expect("a validated source occurrence must rebuild the same dependency graph");
+            cloned.joysticks =
+                build_runtime_joysticks(&graph, &cloned.objects, cloned.linear_animations.as_ref());
+            cloned.joysticks_apply_before_update = cloned
+                .joysticks
+                .iter()
+                .all(RuntimeJoystick::can_apply_before_update);
             retain_runtime_layout_component_styles(&file, &cloned.slots, &mut cloned.objects);
             retain_runtime_solos(&file, &graph, &mut cloned.objects);
             retain_runtime_scroll_constraints(&file, &graph, &mut cloned.objects);
@@ -2060,7 +2064,10 @@ impl ArtboardInstance {
         let mut converter_cache = RuntimeDataBindGraphConverterBuildCache::default();
         let mut linear_animations =
             build_linear_animations(file, graph, &slots, &mut converter_cache);
-        let joysticks = build_runtime_joysticks(graph, &linear_animations);
+        let joysticks = build_runtime_joysticks(graph, &objects, &linear_animations);
+        let joysticks_apply_before_update = joysticks
+            .iter()
+            .all(RuntimeJoystick::can_apply_before_update);
         let state_machine_actions = build_context
             .as_ref()
             .map(|context| context.state_machine_actions.clone())
@@ -2175,7 +2182,7 @@ impl ArtboardInstance {
             resetting_components,
             component_lists,
             component_list_resource_pools: RuntimeComponentListResourcePools::default(),
-            joysticks_apply_before_update: graph.joysticks_apply_before_update,
+            joysticks_apply_before_update,
             linear_animations: Arc::new(linear_animations),
             empty_linear_animation: Arc::new(RuntimeLinearAnimation::empty()),
             state_machines: Arc::new(state_machines),
@@ -6727,6 +6734,7 @@ impl ArtboardInstance {
             self.runtime_graph().cloned(),
         ) {
             self.control_runtime_layout_images(&graph, bounds.as_ref());
+            self.control_runtime_layout_joysticks(&graph, bounds.as_ref());
         }
         for path_local in resized_parametric_paths {
             // C++ LayoutComponent::propagateSizeToChildren calls
@@ -7380,10 +7388,10 @@ impl ArtboardInstance {
             let joystick_count = self.joysticks.len();
             for joystick_index in 0..joystick_count {
                 let mut nested_did_update = false;
-                if !self.joysticks[joystick_index].can_apply_before_update {
+                if !self.joysticks[joystick_index].can_apply_before_update() {
                     self.update_data_binds_for_update_pass(root_transform);
                 }
-                if !self.joysticks[joystick_index].can_apply_before_update
+                if !self.joysticks[joystick_index].can_apply_before_update()
                     && self
                         .update_components_with_hook_recording(
                             false,
@@ -7411,7 +7419,7 @@ impl ArtboardInstance {
                     did_update = true;
                 }
                 did_update |= nested_did_update;
-                did_update |= self.apply_joystick_at(joystick_index);
+                did_update |= self.apply_runtime_joystick_at(joystick_index);
             }
             self.update_data_binds_for_update_pass(root_transform);
             let mut nested_did_update = false;
@@ -8044,6 +8052,7 @@ impl ArtboardInstance {
             }
             if let Some((graphs, graph_index)) = graph_owner.as_ref() {
                 self.control_runtime_layout_images(&graphs[*graph_index], layout_bounds);
+                self.control_runtime_layout_joysticks(&graphs[*graph_index], layout_bounds);
             }
         }
 
@@ -8193,7 +8202,7 @@ impl ArtboardInstance {
         }
     }
 
-    fn mark_components_dirty(&mut self) -> bool {
+    pub(crate) fn mark_components_dirty(&mut self) -> bool {
         // Artboard is itself the root Component in pinned C++. Publishing
         // Components dirt therefore uses the same equality guard as every
         // other `Component::addDirt` before assigning the retained root mask
@@ -8372,6 +8381,7 @@ impl ArtboardInstance {
                 self.mark_render_opacity_changed();
             }
         }
+        self.update_runtime_joystick(component_handle, dirt);
         if self
             .objects
             .component(component_handle)
@@ -8515,8 +8525,8 @@ impl ArtboardInstance {
         let mut changed = false;
         let joystick_count = self.joysticks.len();
         for joystick_index in 0..joystick_count {
-            if self.joysticks[joystick_index].can_apply_before_update == can_apply_before_update {
-                changed |= self.apply_joystick_at(joystick_index);
+            if self.joysticks[joystick_index].can_apply_before_update() == can_apply_before_update {
+                changed |= self.apply_runtime_joystick_at(joystick_index);
             }
         }
         changed
@@ -8535,63 +8545,6 @@ impl ArtboardInstance {
             self.runtime_drawables
                 .mark_text_resource_dirty_for_local(text_local);
         }
-    }
-
-    fn apply_joystick_at(&mut self, joystick_index: usize) -> bool {
-        // Mirrors C++ Artboard::updatePass / Joystick::apply: iterate retained
-        // joystick entries instead of cloning the joystick list per pass.
-        let Some(joystick) = self.joysticks.get(joystick_index) else {
-            return false;
-        };
-        let local_id = joystick.local_id;
-        let x_animation_index = joystick.x_animation_index;
-        let y_animation_index = joystick.y_animation_index;
-        let nested_remap_dependents_len = joystick.nested_remap_dependents.len();
-
-        let mut changed = false;
-        if let Some(animation_index) = x_animation_index {
-            if let Some(seconds) = self.joystick_axis_seconds(local_id, animation_index, true) {
-                changed |= self.apply_linear_animation(animation_index, seconds, 1.0);
-            }
-        }
-        if let Some(animation_index) = y_animation_index {
-            if let Some(seconds) = self.joystick_axis_seconds(local_id, animation_index, false) {
-                changed |= self.apply_linear_animation(animation_index, seconds, 1.0);
-            }
-        }
-        for dependent_index in 0..nested_remap_dependents_len {
-            let remap_local_id =
-                self.joysticks[joystick_index].nested_remap_dependents[dependent_index];
-            changed |= self.advance_nested_remap_animation(remap_local_id);
-        }
-        changed
-    }
-
-    pub(crate) fn joystick_axis_seconds(
-        &self,
-        local_id: usize,
-        animation_index: usize,
-        is_x_axis: bool,
-    ) -> Option<f32> {
-        let animation = self.linear_animation(animation_index)?;
-        let axis_key = if is_x_axis {
-            joystick_x_property_key()
-        } else {
-            joystick_y_property_key()
-        }?;
-        let flag = if is_x_axis {
-            JOYSTICK_FLAG_INVERT_X
-        } else {
-            JOYSTICK_FLAG_INVERT_Y
-        };
-        let mut axis = self.double_property(local_id, axis_key).unwrap_or(0.0);
-        let flags = joystick_flags_property_key()
-            .and_then(|key| self.uint_property(local_id, key))
-            .unwrap_or(0);
-        if flags & flag != 0 {
-            axis = -axis;
-        }
-        Some(((axis + 1.0) / 2.0) * animation.duration_seconds())
     }
 
     pub(crate) fn apply_uint_property_changed(
@@ -9040,7 +8993,15 @@ impl ArtboardInstance {
     ) -> bool {
         let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
         let owner_callback =
-            crate::shapes::double_property_changed(self, local_id, type_name, property_key);
+            crate::shapes::double_property_changed(self, local_id, type_name, property_key)
+                .or_else(|| {
+                    crate::joystick::double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                });
         *owner_callback_handled = owner_callback.is_some();
         let owner_changed = owner_callback.unwrap_or(false);
         if type_name == Some("Image") {
@@ -9639,7 +9600,7 @@ impl ArtboardInstance {
             .any(|nested| nested.set_simple_animation_is_playing(local_id, value))
     }
 
-    fn advance_nested_remap_animation(&mut self, remap_local_id: usize) -> bool {
+    pub(crate) fn advance_nested_remap_animation(&mut self, remap_local_id: usize) -> bool {
         self.nested_artboards
             .values_mut()
             .any(|nested| nested.advance_remap(remap_local_id))
@@ -14453,28 +14414,11 @@ mod tests {
     fn update_pass_repolls_data_binds_before_each_late_joystick_and_final_components() {
         let mut artboard = synthetic_instance(vec![synthetic_component(0, 0)], vec![0]);
         artboard.joysticks_apply_before_update = false;
+        let root = artboard.component_handle(0).expect("root component");
         artboard.joysticks = vec![
-            RuntimeJoystick {
-                local_id: 0,
-                can_apply_before_update: false,
-                x_animation_index: None,
-                y_animation_index: None,
-                nested_remap_dependents: Vec::new(),
-            },
-            RuntimeJoystick {
-                local_id: 0,
-                can_apply_before_update: true,
-                x_animation_index: None,
-                y_animation_index: None,
-                nested_remap_dependents: Vec::new(),
-            },
-            RuntimeJoystick {
-                local_id: 0,
-                can_apply_before_update: false,
-                x_animation_index: None,
-                y_animation_index: None,
-                nested_remap_dependents: Vec::new(),
-            },
+            RuntimeJoystick::test_fixture(root, false),
+            RuntimeJoystick::test_fixture(root, true),
+            RuntimeJoystick::test_fixture(root, false),
         ];
 
         artboard.update_pass();
@@ -15256,6 +15200,55 @@ mod tests {
         let layout_epoch = instance.layout_epoch();
         assert!(!instance.add_dirt(0, ComponentDirt::LAYOUT_STYLE, false));
         assert_eq!(instance.layout_epoch(), layout_epoch);
+    }
+
+    #[test]
+    fn joystick_generated_callback_publishes_only_root_components_dirt() {
+        let mut root = synthetic_component(0, 0);
+        root.type_name = "Artboard";
+        let mut joystick = synthetic_component(1, 1);
+        joystick.type_name = "Joystick";
+        let mut instance = synthetic_instance(vec![root.clone(), joystick.clone()], vec![0, 1]);
+        let x_key = property_key_for_name("Joystick", "x").expect("Joystick.x");
+        let mut objects = InstanceObjectArena::from_runtime_objects(vec![
+            Some(synthetic_runtime_object(0, "Artboard", Vec::new())),
+            Some(synthetic_runtime_object(
+                1,
+                "Joystick",
+                vec![RuntimeProperty {
+                    key: x_key,
+                    name: "x",
+                    owner: "Joystick",
+                    value: FieldValue::Double(0.0),
+                }],
+            )),
+        ]);
+        objects
+            .attach_component(0, root)
+            .expect("synthetic root component");
+        objects
+            .attach_component(1, joystick)
+            .expect("synthetic joystick component");
+        objects.set_dependency_order(vec![
+            objects.component_handle(0).expect("root handle"),
+            objects.component_handle(1).expect("joystick handle"),
+        ]);
+        instance.objects = objects;
+        instance.clear_component_dirt(0);
+        instance.clear_component_dirt(1);
+
+        let cache_epoch = instance.cache_epoch();
+        assert!(instance.set_double_property(1, x_key, 0.5));
+
+        assert!(instance.cache_epoch() > cache_epoch);
+        assert_eq!(
+            instance.component(0).expect("root component").dirt,
+            ComponentDirt::COMPONENTS
+        );
+        assert_eq!(
+            instance.component(1).expect("joystick component").dirt,
+            ComponentDirt::NONE
+        );
     }
 
     #[test]

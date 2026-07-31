@@ -626,8 +626,8 @@ note = "Consolidated Rust port for assets."
 [[file]]
 upstream = "src/assets/image_asset.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/objects.rs"
-note = "Consolidated Rust port for assets."
+rust_module = "crates/nuxie-runtime/src/assets/image_asset.rs"
+note = "Direct portable/native ImageAsset retained-resource port: Image owner state settles inline and exact local dirt queues to the next mutable Artboard update; Emscripten delegate/decodedAsync is an explicit unsupported platform branch because the Rust RenderImage API exposes neither hook."
 
 [[file]]
 upstream = "src/assets/manifest_asset.cpp"
@@ -1471,15 +1471,15 @@ note = "F5/F6: semantic input runtime is absent."
 
 [[file]]
 upstream = "src/intrinsically_sizeable.cpp"
-status = "not-applicable"
-rust_module = ""
-note = "F14: intrinsic-size helper is represented by consolidated layout code."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/intrinsically_sizeable.rs"
+note = "FL-E4: direct TransformComponent-first/Joystick-second intrinsic dispatcher, joystick measure/controlSize, and recursive layout propagation are ported with the W65 intrinsic-size fixture."
 
 [[file]]
 upstream = "src/joystick.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/animation.rs"
-note = "F9: joystick behavior is ported but still needs a parity fixture."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/joystick.rs"
+note = "FL-E4: occurrence-owned source/animation/dependent handles, world/inverse settlement, flags/apply, clone rebuild, intrinsic sizing, and exact Components dirt callbacks are ported and fixture-tested."
 
 [[file]]
 upstream = "src/layout.cpp"
@@ -1496,20 +1496,20 @@ note = "Consolidated Rust port for layout."
 [[file]]
 upstream = "src/layout/axis.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for layout."
+rust_module = "crates/nuxie-runtime/src/layout/axis.rs"
+note = "Direct Axis dirt callback port."
 
 [[file]]
 upstream = "src/layout/axis_x.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for layout."
+rust_module = "crates/nuxie-runtime/src/layout/axis_x.rs"
+note = "Direct AxisX parent validation and registration port."
 
 [[file]]
 upstream = "src/layout/axis_y.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for layout."
+rust_module = "crates/nuxie-runtime/src/layout/axis_y.rs"
+note = "Direct AxisY registration port."
 
 [[file]]
 upstream = "src/layout/layout_component_style.cpp"
@@ -1526,26 +1526,26 @@ note = "Consolidated Rust port for layout."
 [[file]]
 upstream = "src/layout/n_sliced_node.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for layout."
+rust_module = "crates/nuxie-runtime/src/layout/n_sliced_node.rs"
+note = "Direct NSlicedNode recursive dirt and mapping owner port."
 
 [[file]]
 upstream = "src/layout/n_slicer.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for layout."
+rust_module = "crates/nuxie-runtime/src/layout/n_slicer.rs"
+note = "Direct NSlicer parent validation, Image::setMesh registration, and unique SliceMesh owner port."
 
 [[file]]
 upstream = "src/layout/n_slicer_details.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for layout."
+rust_module = "crates/nuxie-runtime/src/layout/n_slicer_details.rs"
+note = "Direct NSlicerDetails axis, tile-mode, and patch-index owner port."
 
 [[file]]
 upstream = "src/layout/n_slicer_tile_mode.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for layout."
+rust_module = "crates/nuxie-runtime/src/layout/n_slicer_tile_mode.rs"
+note = "Direct patch-index tile-mode registration port."
 
 [[file]]
 upstream = "src/layout_component.cpp"
@@ -1988,230 +1988,230 @@ note = "F6: semantics runtime is absent."
 [[file]]
 upstream = "src/shapes/clipping_shape.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/clipping_shape.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/cubic_asymmetric_vertex.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/cubic_asymmetric_vertex.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/cubic_detached_vertex.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/cubic_detached_vertex.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/cubic_mirrored_vertex.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/cubic_mirrored_vertex.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/cubic_vertex.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/cubic_vertex.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/deformer.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/deformer.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/ellipse.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/ellipse.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/image.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/image.rs"
+note = "Direct Image layout, asset, mesh, and clone owner port."
 
 [[file]]
 upstream = "src/shapes/list_path.cpp"
 status = "partial"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "F10: generic handling exists but still needs a parity fixture."
+rust_module = "crates/nuxie-runtime/src/shapes/list_path.rs"
+note = "VertexListener unit conversion is ported, but dynamic ViewModel list-item subscription/remap and CubicDetachedVertex occurrence lifecycle remain absent."
 
 [[file]]
 upstream = "src/shapes/mesh.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/mesh.rs"
+note = "Direct Mesh Image::setMesh registration, dirt, clone, and buffer owner port."
 
 [[file]]
 upstream = "src/shapes/mesh_vertex.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/mesh_vertex.rs"
+note = "Direct MeshVertex parent validation, registration, and geometry callback port."
 
 [[file]]
 upstream = "src/shapes/paint/color.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/color.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/dash.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/dash.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/dash_path.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/dash_path.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/effects_container.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/effects_container.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/feather.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/feather.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/fill.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/fill.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/gradient_stop.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/gradient_stop.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/group_effect.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/group_effect.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/linear_gradient.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/linear_gradient.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/radial_gradient.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/radial_gradient.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/shape_paint.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/shape_paint.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/shape_paint_mutator.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/shape_paint_mutator.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/shape_paint_path.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/shape_paint_path.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/solid_color.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/solid_color.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/stroke.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/stroke.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/stroke_effect.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/stroke_effect.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/target_effect.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/target_effect.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/paint/trim_path.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/paint/trim_path.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/parametric_path.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/parametric_path.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/path.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/path.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/path_composer.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/path_composer.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/path_vertex.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/path_vertex.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/points_common_path.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/points_common_path.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/points_path.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/points_path.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/polygon.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/polygon.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/rectangle.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/rectangle.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/shape.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/shape.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/shape_paint_container.cpp"
@@ -2222,32 +2222,32 @@ note = "Consolidated Rust port for shapes."
 [[file]]
 upstream = "src/shapes/slice_mesh.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/slice_mesh.rs"
+note = "Direct SliceMesh topology and retained-buffer owner port."
 
 [[file]]
 upstream = "src/shapes/star.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/star.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/straight_vertex.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/straight_vertex.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/triangle.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/triangle.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/shapes/vertex.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/vertex.rs"
+note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint/effect lifecycle."
 
 [[file]]
 upstream = "src/simple_array.cpp"

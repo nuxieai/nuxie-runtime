@@ -102,15 +102,18 @@ closure = "FL-D4 closes the owner boundary: every authored Artboard DataBind is 
 [[gap]]
 id = "FL-G05"
 status = "closed"
-mechanism = "FL-D7 classifies Artboard update epochs and nested layout-transfer keys as owner-local adaptations. DataBind dirty/processed epochs coalesce pushed occurrence dirt without polling the ViewModel graph; layout/path/prepared epochs fence retained derived state owned by the same Artboard occurrence; nested transfer keys represent Yoga's `hasNewLayout` handoff to one mounted child. None substitutes for a missing Component or DataBind owner."
+mechanism = "FL-D7 classifies Artboard update epochs and nested layout-transfer keys as owner-local adaptations. DataBind dirty/processed epochs coalesce pushed occurrence dirt without polling the ViewModel graph; layout/path/prepared epochs fence retained derived state owned by the same Artboard occurrence; nested transfer keys represent Yoga's `hasNewLayout` handoff to one mounted child. FL-E4 deletes the joystick instance of the former broad prepared-frame fallback: the six generated double callbacks now publish only root Components dirt from the direct Joystick owner, while cache_epoch remains the Artboard's derived-observation fence. None substitutes for a missing Component or DataBind owner."
 citations = [
   "cpp:src/artboard.cpp:1417-1460",
+  "cpp:src/joystick.cpp:131-142",
   "rust:crates/nuxie-runtime/src/artboard.rs:479-503",
   "rust:crates/nuxie-runtime/src/artboard.rs:6733-6735",
   "rust:crates/nuxie-runtime/src/artboard.rs:7290-7440",
+  "rust:crates/nuxie-runtime/src/joystick.rs:149-170",
+  "rust:crates/nuxie-runtime/src/artboard.rs:15206-15252",
   "rust:crates/nuxie-runtime/src/nested_artboard_layout.rs:3-20",
 ]
-closure = "Closed by FL-A/FL-D: every retained epoch/key belongs to the Artboard or mounted nested occurrence whose derived state it fences; dirty propagation remains on the direct Component/DataBind owners."
+closure = "Closed by FL-A/FL-D and preserved by FL-E4: every retained epoch/key belongs to the Artboard or mounted nested occurrence whose derived state it fences; joystick dirty propagation now remains on the direct Joystick/Component owners. The focused unit test proves the exact dirt mask, while structural ratchets reject the former central fallback shapes and keep the global path-epoch compensation ceiling unchanged."
 
 [[gap]]
 id = "FL-G06"
@@ -2161,4 +2164,62 @@ max_occurrences = 0
 id = "skinnable_authored_id_owner_rediscovery"
 globs = ["crates/nuxie-runtime/src/draw.rs"]
 pattern = "\\bruntime_weighted_skinnable_context\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "fl_e4_intrinsic_dispatch_owner_required"
+globs = ["crates/nuxie-runtime/src/intrinsically_sizeable.rs"]
+pattern = "fn\\s+from_component\\b[\\s\\S]{0,700}capabilities\\.transform[\\s\\S]{0,350}else\\s+if\\s+owner\\.type_name\\s*==\\s*\"Joystick\""
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e4_joystick_occurrence_state_required"
+globs = ["crates/nuxie-runtime/src/joystick.rs"]
+pattern = "\\A(?=[\\s\\S]*struct\\s+RuntimeJoystick\\s*\\{)(?=[\\s\\S]*component:\\s*ComponentHandle)(?=[\\s\\S]*world_transform:\\s*Mat2D)(?=[\\s\\S]*inverse_world_transform:\\s*Mat2D)(?=[\\s\\S]*handle_source:\\s*Option<ComponentHandle>)(?=[\\s\\S]*x_animation:\\s*Option<RuntimeLinearAnimationHandle>)(?=[\\s\\S]*y_animation:\\s*Option<RuntimeLinearAnimationHandle>)(?=[\\s\\S]*dependents:\\s*Vec<ObjectHandle>)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e4_joystick_components_callback_required"
+globs = ["crates/nuxie-runtime/src/joystick.rs"]
+pattern = "fn\\s+double_property_changed\\b[\\s\\S]{0,1200}\\[\"x\",\\s*\"y\",\\s*\"posX\",\\s*\"posY\",\\s*\"width\",\\s*\"height\"\\][\\s\\S]{0,700}mark_components_dirty\\(\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e4_joystick_behavior_owner_required"
+globs = ["crates/nuxie-runtime/src/joystick.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+apply_runtime_joystick_at\\b)(?=[\\s\\S]*fn\\s+measure_joystick_layout\\b)(?=[\\s\\S]*fn\\s+control_runtime_joystick_size\\b)(?=[\\s\\S]*fn\\s+joystick_factor_from\\b)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e4_consolidated_joystick_owner_absent"
+globs = ["crates/nuxie-runtime/src/animation.rs"]
+pattern = "(?:struct\\s+RuntimeJoystick\\b|fn\\s+build_runtime_joysticks\\b|JOYSTICK_FLAG_)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "fl_e4_central_joystick_callback_absent"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "type_name\\s*==\\s*Some\\(\"Joystick\"\\)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "fl_e4_graph_schedule_snapshot_absent"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "graph\\.joysticks_apply_before_update"
+max_occurrences = 0
+
+[[ratchet]]
+id = "fl_e4_joystick_serialized_identity_field_absent"
+globs = ["crates/nuxie-runtime/src/joystick.rs"]
+pattern = "struct\\s+RuntimeJoystick\\s*\\{[^}]*\\blocal_id\\b"
+max_occurrences = 0
+
+[[ratchet]]
+id = "fl_e4_displaced_joystick_behavior_absent"
+globs = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/intrinsically_sizeable.rs"]
+pattern = "fn\\s+(?:apply_joystick_at|joystick_axis_seconds|measure_joystick_layout|control_runtime_joystick_size)\\b"
 max_occurrences = 0

@@ -7,7 +7,10 @@ repository.workspace = true
 publish = false
 
 [features]
-default = ["renderer"]
+default = ["renderer", "clock-seed"]
+# Browser-facing default builds retain the JS clock; `--no-default-features`
+# with `scripting` remains self-contained on wasm32-unknown-unknown.
+clock-seed = ["nuxie-runtime/clock-seed"]
 renderer = ["dep:nuxie-renderer"]
 scripting = [
     "dep:ed25519-dalek",

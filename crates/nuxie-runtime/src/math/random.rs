@@ -1,4 +1,13 @@
 use std::collections::VecDeque;
+#[cfg(any(
+    all(
+        target_arch = "wasm32",
+        target_os = "unknown",
+        not(feature = "clock-seed")
+    ),
+    test
+))]
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::thread::ThreadId;
@@ -41,6 +50,20 @@ fn emscripten_monotonic_millis_to_seed(milliseconds: f64) -> u32 {
     // `Math.round(now * 1000 * 1000)`, followed by C++'s unsigned narrowing.
     // Reassociating this as `now * 1_000_000` can change the low bit.
     (milliseconds * 1_000.0 * 1_000.0).round() as u64 as u32
+}
+
+#[cfg(any(
+    all(
+        target_arch = "wasm32",
+        target_os = "unknown",
+        not(feature = "clock-seed")
+    ),
+    test
+))]
+fn deterministic_counter_seed(counter: &AtomicU64) -> u32 {
+    // The counter is the fallback steady-clock duration count; narrow it the
+    // same way pinned C++ narrows that count to unsigned int.
+    counter.fetch_add(1, Ordering::Relaxed) as u32
 }
 
 /// Safe process-global translation of pinned C++ `RandomProvider`.
@@ -208,10 +231,28 @@ pub fn runtime_random_call_count() -> usize {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::AtomicU64;
+
     use super::{
-        RuntimeRandomProvider, emscripten_monotonic_millis_to_seed, emscripten_musl_draw,
-        emscripten_musl_next, emscripten_musl_seed,
+        RuntimeRandomProvider, deterministic_counter_seed, emscripten_monotonic_millis_to_seed,
+        emscripten_musl_draw, emscripten_musl_next, emscripten_musl_seed,
     };
+
+    #[test]
+    fn self_contained_browser_seed_counter_produces_distinct_seeds() {
+        let counter = AtomicU64::new(0);
+
+        assert_eq!(deterministic_counter_seed(&counter), 0);
+        assert_eq!(deterministic_counter_seed(&counter), 1);
+    }
+
+    #[test]
+    fn self_contained_browser_seed_counter_uses_cpp_unsigned_narrowing() {
+        let counter = AtomicU64::new(u64::from(u32::MAX));
+
+        assert_eq!(deterministic_counter_seed(&counter), u32::MAX);
+        assert_eq!(deterministic_counter_seed(&counter), 0);
+    }
 
     #[test]
     fn injected_values_are_counted_and_scoped() {

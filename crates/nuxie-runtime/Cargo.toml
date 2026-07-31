@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [features]
+clock-seed = ["dep:js-sys", "dep:wasm-bindgen"]
 tools = []
 
 [dependencies]
@@ -41,8 +42,8 @@ libc = "0.2"
 windows-sys = { version = "0.52", features = ["Win32_Foundation", "Win32_System_Performance"] }
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
-js-sys = "0.3"
-wasm-bindgen = "0.2"
+js-sys = { version = "0.3", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
 
 # Opt into the workspace panic-freedom clippy lints (root Cargo.toml).
 [lints]

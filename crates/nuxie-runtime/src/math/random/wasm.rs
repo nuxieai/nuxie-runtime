@@ -1,6 +1,14 @@
+#[cfg(not(feature = "clock-seed"))]
+use std::sync::atomic::AtomicU64;
+
+#[cfg(feature = "clock-seed")]
 use wasm_bindgen::{JsCast, JsValue};
 
-use super::{emscripten_monotonic_millis_to_seed, emscripten_musl_draw, emscripten_musl_seed};
+#[cfg(not(feature = "clock-seed"))]
+use super::deterministic_counter_seed;
+#[cfg(feature = "clock-seed")]
+use super::emscripten_monotonic_millis_to_seed;
+use super::{emscripten_musl_draw, emscripten_musl_seed};
 
 pub(super) fn seed(platform_seed: &mut u64, seed: u32) {
     emscripten_musl_seed(platform_seed, seed);
@@ -10,6 +18,7 @@ pub(super) fn draw(platform_seed: &mut u64) -> f32 {
     emscripten_musl_draw(platform_seed)
 }
 
+#[cfg(feature = "clock-seed")]
 pub(super) fn nondeterministic_seed() -> u32 {
     // Pinned C++'s browser build uses Emscripten 3.1.61. libc++ aliases
     // high_resolution_clock to steady_clock, whose CLOCK_MONOTONIC shim
@@ -31,4 +40,14 @@ pub(super) fn nondeterministic_seed() -> u32 {
         .unwrap_or_else(|| wasm_bindgen::throw_str("performance.now() did not return a number"));
 
     emscripten_monotonic_millis_to_seed(milliseconds)
+}
+
+/// Return a deterministic-by-construction seed for self-contained wasm builds.
+///
+/// Hosts wanting clock entropy can enable the `clock-seed` feature.
+#[cfg(not(feature = "clock-seed"))]
+pub(super) fn nondeterministic_seed() -> u32 {
+    static SEED_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    deterministic_counter_seed(&SEED_COUNTER)
 }

@@ -6194,6 +6194,7 @@ impl StateMachineInstance {
             hit.prepare_event(artboard, &mut groups, position, hit_type, pointer_id);
         }
 
+        let mut result = HitResult::None;
         if hit_type == RuntimeListenerType::Move {
             let mut started_drag = false;
             for capture in self
@@ -6206,45 +6207,49 @@ impl StateMachineInstance {
                     started_drag = true;
                 }
             }
-            if started_drag {
-                // ListenerGroup::processEvent re-enters the owning state
-                // machine with dragStart(..., disablePointer=false). Keep the
-                // re-entrant reset/prepare/process shape, but operate on the
-                // temporarily detached owners rather than borrowing `self`
-                // through them. The C++ dragStart timestamp is discarded.
-                for group in &mut groups {
-                    group.reset(self, pointer_id);
-                }
-                for hit in &mut hit_components {
-                    hit.prepare_event(
-                        artboard,
-                        &mut groups,
-                        position,
-                        RuntimeListenerType::DragStart,
-                        pointer_id,
-                    );
-                }
-                let mut drag_start_result = HitResult::None;
-                for hit in &mut hit_components {
-                    let item = hit.process_event(
-                        self,
-                        artboard,
-                        &mut groups,
-                        position,
-                        RuntimeListenerType::DragStart,
-                        drag_start_result != HitResult::HitOpaque,
-                        0.0,
-                        pointer_id,
-                        owned_context.as_deref_mut(),
-                        event_context,
-                        host,
-                    )?;
-                    drag_start_result = drag_start_result.strongest(item);
-                }
+            if started_drag
+                && self.dispatch_captured_pointer_listener_type(
+                    artboard,
+                    pointer_id,
+                    RuntimeListenerType::DragStart,
+                    position.0,
+                    position.1,
+                    timestamp_seconds,
+                    owned_context.as_deref_mut(),
+                    host,
+                )?
+            {
+                result = result.strongest(HitResult::Hit);
+            }
+            // The armed pointer keeps driving drag actions for its captured
+            // listeners even outside the hit target, and that capture counts
+            // as a hit for the caller.
+            if self.pointer_down_listener_hits.iter().any(|capture| {
+                capture.pointer_id == pointer_id
+                    && capture.drag_phase == Some(RuntimePointerDragPhase::Dragging)
+            }) {
+                result = result.strongest(HitResult::Hit);
             }
         }
+        if hit_type == RuntimeListenerType::Up
+            && self.pointer_down_listener_hits.iter().any(|capture| {
+                capture.pointer_id == pointer_id
+                    && capture.drag_phase == Some(RuntimePointerDragPhase::Dragging)
+            })
+            && self.dispatch_captured_pointer_listener_type(
+                artboard,
+                pointer_id,
+                RuntimeListenerType::DragEnd,
+                position.0,
+                position.1,
+                timestamp_seconds,
+                owned_context.as_deref_mut(),
+                host,
+            )?
+        {
+            result = result.strongest(HitResult::Hit);
+        }
 
-        let mut result = HitResult::None;
         for hit in &mut hit_components {
             let item = hit.process_event(
                 self,

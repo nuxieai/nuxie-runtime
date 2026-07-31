@@ -6136,6 +6136,23 @@ impl ArtboardInstance {
             .and_then(|bounds| bounds.get(&layout_local).copied())
             .or_else(|| self.runtime_supported_layout_component_bounds(layout_local, graph));
         if let Some(bounds) = bounds {
+            // Scene-authored files serialize TranslateX/Y on LayoutComponents
+            // (`LayoutComponentSpec::x/y`). C++ replaces the whole authored
+            // affine with the settled Yoga translation
+            // (`layout_component.cpp:100-121`), which leaves those records
+            // without a channel; compose the authored translation on top of
+            // the settled layout translation in parent-local space instead.
+            // Authored rotation/scale still do not survive, and the Taffy
+            // solver never sees authored translations, so descendants pick a
+            // parent's offset up exactly once through the parent-world walk.
+            let (authored_x, authored_y) = self
+                .component(layout_local)
+                .filter(|component| component.type_name == "LayoutComponent")
+                .map(|component| {
+                    let local = component.transform.local_transform.0;
+                    (local[4], local[5])
+                })
+                .unwrap_or((0.0, 0.0));
             // Taffy bounds are accumulated in untransformed artboard space. A
             // nested layout offset therefore has to be made parent-local before
             // its affine parent is applied, matching Yoga's parent-local
@@ -6161,13 +6178,13 @@ impl ArtboardInstance {
                                 visiting,
                             );
                         Some(parent_world.transform_point(
-                            bounds.x - parent_bounds.x,
-                            bounds.y - parent_bounds.y,
+                            bounds.x - parent_bounds.x + authored_x,
+                            bounds.y - parent_bounds.y + authored_y,
                         ))
                     });
             let (x, y) = nested_translation.unwrap_or((
-                bounds.x - self.width * self.origin_x,
-                bounds.y - self.height * self.origin_y,
+                bounds.x - self.width * self.origin_x + authored_x,
+                bounds.y - self.height * self.origin_y + authored_y,
             ));
             let stored_world = stored_world.0;
             return Mat2D([
@@ -27576,6 +27593,81 @@ mod tests {
     }
 
     #[test]
+    fn authored_layout_translation_composes_with_the_settled_layout_translation() {
+        let bytes = synthetic_translated_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic translated layout riv imports");
+        let graphs =
+            GraphFile::from_runtime_file(&file).expect("synthetic translated layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+        let report = instance
+            .debug_taffy_layout_bounds_report(&file, graph)
+            .expect("fixture settles with Taffy");
+        let mut cache = RuntimeGeometryState::default();
+
+        // The Taffy slots stay authored-translation-blind: the second row
+        // child still solves at (100, 0) and its padded nested child at
+        // (110, 20) in artboard space.
+        let translated = report
+            .iter()
+            .find(|entry| entry.local_id == 3)
+            .expect("translated layout component is reported");
+        assert_eq!((translated.x, translated.y), (100.0, 0.0));
+        let nested = report
+            .iter()
+            .find(|entry| entry.local_id == 5)
+            .expect("nested translated layout component is reported");
+        assert_eq!((nested.x, nested.y), (110.0, 20.0));
+
+        // The untranslated first child keeps the pure settled translation.
+        assert_mat2d_near(
+            instance
+                .runtime_layout_component_world_transform(1, graph)
+                .0,
+            [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+        );
+        // The authored translation composes on top of the settled slot.
+        assert_mat2d_near(translated.world_transform, [1.0, 0.0, 0.0, 1.0, 107.0, 9.0]);
+        // The nested child inherits the parent offset exactly once through
+        // the parent-world walk and adds its own authored translation.
+        assert_mat2d_near(nested.world_transform, [1.0, 0.0, 0.0, 1.0, 119.0, 32.0]);
+        // Shape descendants rebase onto the same composed layout world, so
+        // geometry queries and hit testing land on the drawn offset position.
+        assert_mat2d_near(
+            instance
+                .geometry_world_transform_with_context(&file, graph, 7, &mut cache)
+                .expect("nested child shape has a world transform")
+                .0,
+            [1.0, 0.0, 0.0, 1.0, 124.0, 38.0],
+        );
+        assert_eq!(
+            instance.geometry_hit_test_with_context(
+                &file,
+                graph,
+                RenderVec2D::new(124.0, 38.0),
+                &mut cache,
+            ),
+            vec![7]
+        );
+        // The layout-controlled 40x30 rectangle spans (95, 11)..(135, 41)
+        // around the untranslated settled center and (104, 23)..(144, 53)
+        // around the composed one; a point inside only the former must no
+        // longer hit once the authored translation composes.
+        assert!(
+            !instance
+                .geometry_hit_test_with_context(
+                    &file,
+                    graph,
+                    RenderVec2D::new(100.0, 15.0),
+                    &mut cache,
+                )
+                .contains(&7),
+            "the untranslated settled position must no longer hit the translated shape"
+        );
+    }
+
+    #[test]
     fn controlled_auto_text_without_shape_uses_exact_layout_bounds_and_authored_origin() {
         let bytes = synthetic_layout_text_bounds_riv();
         let file = read_runtime_file(&bytes).expect("synthetic layout Text riv imports");
@@ -29766,6 +29858,70 @@ mod tests {
             push_f32(bytes, "LayoutComponent", "width", 40.0);
             push_f32(bytes, "LayoutComponent", "height", 30.0);
             push_uint(bytes, "LayoutComponent", "styleId", 6);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 5);
+            push_f32(bytes, "Node", "x", 5.0);
+            push_f32(bytes, "Node", "y", 6.0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 7);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 8);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 7);
+            push_f32(bytes, "ParametricPath", "width", 20.0);
+            push_f32(bytes, "ParametricPath", "height", 10.0);
+        });
+        bytes
+    }
+
+    // Same row shape as the nested-affine fixture, but the second layout and
+    // its nested child carry scene-authored translations (`Node.x/y` records,
+    // the serialization of `LayoutComponentSpec::x/y`) instead of an authored
+    // affine. The Taffy solver never sees these records.
+    fn synthetic_translated_layout_geometry_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9651);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 300.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 4);
+            push_f32(bytes, "Node", "x", 7.0);
+            push_f32(bytes, "Node", "y", 9.0);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |bytes| {
+            push_f32(bytes, "LayoutComponentStyle", "paddingLeft", 10.0);
+            push_f32(bytes, "LayoutComponentStyle", "paddingTop", 20.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 3);
+            push_f32(bytes, "LayoutComponent", "width", 40.0);
+            push_f32(bytes, "LayoutComponent", "height", 30.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 6);
+            push_f32(bytes, "Node", "x", 2.0);
+            push_f32(bytes, "Node", "y", 3.0);
         });
         push_object(&mut bytes, "LayoutComponentStyle", |_| {});
         push_object(&mut bytes, "Shape", |bytes| {

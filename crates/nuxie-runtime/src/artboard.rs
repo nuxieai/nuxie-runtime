@@ -8339,6 +8339,26 @@ impl ArtboardInstance {
                     x -= self.width * self.origin_x;
                     y -= self.height * self.origin_y;
                 }
+                // Scene-authored files serialize TranslateX/Y on
+                // LayoutComponents (`LayoutComponentSpec::x/y`). C++ replaces
+                // the whole authored affine with the settled Yoga translation
+                // (`layout_component.cpp:100-121`), which leaves those
+                // records without a channel; compose the authored translation
+                // on top of the settled layout translation instead. The
+                // retained local transform carries exactly the authored x/y
+                // in its translation slots, and authored rotation/scale still
+                // do not survive the replacement world.
+                {
+                    let component = self
+                        .objects
+                        .component(component_handle)
+                        .expect("component handle must remain live");
+                    if component.type_name == "LayoutComponent" {
+                        let local_transform = component.transform.local_transform.0;
+                        x += local_transform[4];
+                        y += local_transform[5];
+                    }
+                }
                 let local = Mat2D([1.0, 0.0, 0.0, 1.0, x, y]);
                 self.objects
                     .component_mut(component_handle)

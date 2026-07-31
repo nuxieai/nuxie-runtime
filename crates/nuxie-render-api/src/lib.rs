@@ -189,6 +189,87 @@ impl RawPath {
         &self.points
     }
 
+    /// Coarse control-point bounds, matching C++ `RawPath::bounds()`.
+    pub fn bounds(&self) -> Option<Aabb> {
+        let first = *self.points.first()?;
+        Some(self.points.iter().copied().fold(
+            Aabb::new(first.x, first.y, first.x, first.y),
+            |mut bounds, point| {
+                bounds.min_x = bounds.min_x.min(point.x);
+                bounds.min_y = bounds.min_y.min(point.y);
+                bounds.max_x = bounds.max_x.max(point.x);
+                bounds.max_y = bounds.max_y.max(point.y);
+                bounds
+            },
+        ))
+    }
+
+    /// Exact Bézier extrema bounds, matching C++ `RawPath::preciseBounds()`.
+    pub fn precise_bounds(&self) -> Option<Aabb> {
+        let mut point_index = 0;
+        let mut current = Vec2D::new(0.0, 0.0);
+        let mut contour_start = current;
+        let mut bounds = None;
+        for verb in &self.verbs {
+            match verb {
+                PathVerb::Move => {
+                    current = self.points[point_index];
+                    point_index += 1;
+                    contour_start = current;
+                    include_raw_path_point(&mut bounds, current);
+                }
+                PathVerb::Line => {
+                    current = self.points[point_index];
+                    point_index += 1;
+                    include_raw_path_point(&mut bounds, current);
+                }
+                PathVerb::Quad => {
+                    let control = self.points[point_index];
+                    let end = self.points[point_index + 1];
+                    point_index += 2;
+                    include_raw_path_point(&mut bounds, current);
+                    include_raw_path_point(&mut bounds, end);
+                    for t in raw_path_quad_extrema(current.x, control.x, end.x)
+                        .into_iter()
+                        .chain(raw_path_quad_extrema(current.y, control.y, end.y))
+                    {
+                        include_raw_path_point(
+                            &mut bounds,
+                            Vec2D::new(
+                                raw_path_quad_value(current.x, control.x, end.x, t),
+                                raw_path_quad_value(current.y, control.y, end.y, t),
+                            ),
+                        );
+                    }
+                    current = end;
+                }
+                PathVerb::Cubic => {
+                    let outer = self.points[point_index];
+                    let inner = self.points[point_index + 1];
+                    let end = self.points[point_index + 2];
+                    point_index += 3;
+                    include_raw_path_point(&mut bounds, current);
+                    include_raw_path_point(&mut bounds, end);
+                    for t in raw_path_cubic_extrema(current.x, outer.x, inner.x, end.x)
+                        .into_iter()
+                        .chain(raw_path_cubic_extrema(current.y, outer.y, inner.y, end.y))
+                    {
+                        include_raw_path_point(
+                            &mut bounds,
+                            Vec2D::new(
+                                raw_path_cubic_value(current.x, outer.x, inner.x, end.x, t),
+                                raw_path_cubic_value(current.y, outer.y, inner.y, end.y, t),
+                            ),
+                        );
+                    }
+                    current = end;
+                }
+                PathVerb::Close => current = contour_start,
+            }
+        }
+        bounds
+    }
+
     /// Replaces this path's geometry as one logical mutation.
     ///
     /// C++ `RawPath` does not assign mutation identities while commands are
@@ -402,6 +483,61 @@ impl RawPath {
     fn mark_mutated(&mut self) {
         self.mutation_id = next_raw_path_mutation_id();
     }
+}
+
+fn include_raw_path_point(bounds: &mut Option<Aabb>, point: Vec2D) {
+    match bounds {
+        Some(bounds) => {
+            bounds.min_x = bounds.min_x.min(point.x);
+            bounds.min_y = bounds.min_y.min(point.y);
+            bounds.max_x = bounds.max_x.max(point.x);
+            bounds.max_y = bounds.max_y.max(point.y);
+        }
+        None => *bounds = Some(Aabb::new(point.x, point.y, point.x, point.y)),
+    }
+}
+
+fn raw_path_quad_extrema(start: f32, control: f32, end: f32) -> Option<f32> {
+    let denominator = start - 2.0 * control + end;
+    (denominator != 0.0)
+        .then_some((start - control) / denominator)
+        .filter(|t| *t > 0.0 && *t < 1.0)
+}
+
+fn raw_path_quad_value(start: f32, control: f32, end: f32, t: f32) -> f32 {
+    let one_minus_t = 1.0 - t;
+    one_minus_t * one_minus_t * start + 2.0 * one_minus_t * t * control + t * t * end
+}
+
+fn raw_path_cubic_extrema(start: f32, outer: f32, inner: f32, end: f32) -> Vec<f32> {
+    let a = -start + 3.0 * outer - 3.0 * inner + end;
+    let b = 2.0 * (start - 2.0 * outer + inner);
+    let c = outer - start;
+    if a.abs() <= f32::EPSILON {
+        return if b.abs() <= f32::EPSILON {
+            Vec::new()
+        } else {
+            let t = -c / b;
+            (t > 0.0 && t < 1.0).then_some(t).into_iter().collect()
+        };
+    }
+    let discriminant = b * b - 4.0 * a * c;
+    if discriminant < 0.0 {
+        return Vec::new();
+    }
+    let root = discriminant.sqrt();
+    [(-b + root) / (2.0 * a), (-b - root) / (2.0 * a)]
+        .into_iter()
+        .filter(|t| *t > 0.0 && *t < 1.0)
+        .collect()
+}
+
+fn raw_path_cubic_value(start: f32, outer: f32, inner: f32, end: f32, t: f32) -> f32 {
+    let one_minus_t = 1.0 - t;
+    one_minus_t * one_minus_t * one_minus_t * start
+        + 3.0 * one_minus_t * one_minus_t * t * outer
+        + 3.0 * one_minus_t * t * t * inner
+        + t * t * t * end
 }
 
 fn map_raw_path_point(transform: Mat2D, point: Vec2D) -> Vec2D {

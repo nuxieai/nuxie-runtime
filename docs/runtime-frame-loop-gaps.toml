@@ -127,12 +127,12 @@ closure = "The imported runtime-drawing ledger is closed with zero legacy scene-
 
 [[gap]]
 id = "FL-G07"
-status = "open"
+status = "closed"
 counters = [
   "component_add_dirt",
   "per_frame_allocations",
 ]
-mechanism = "FL-E5 now ports the ordinary owner-local property chain: LayoutComponentStyle writes reach their retained parent LayoutComponent node; TextStyle/TextStylePaint and TextValueRun writes reach the owning Text's Path/World dirt and Node parent walk; each dirty LayoutComponent publishes root Components dirt; direct and DataBind writes share the generated setter path; identical writes are no-ops; solved layout bounds dirty only the exact retained layout draw owner; Text localBounds and TransformConstraint queries prefer the retained Text bounds. The displaced layout_epoch property classifier and global layout/text resource sweep are deleted. FL-G07 remains open for one precise phase-order remainder: pinned Text::buildRenderStyles unconditionally calls Node::markLayoutNodeDirty in the update phase, while Rust lazily builds retained text render styles during drawing under a shared ArtboardInstance, stores m_bounds-equivalent state, but cannot publish the Node -> LayoutComponent -> Artboard callback until a later mutable phase. Before first draw, query paths may therefore reconstruct StaticTextSlice bounds instead of consuming the retained occurrence bounds. The residual layout_display/layout_paint allocation signatures and layout_anim_* geometry interpolation signatures are tracked as separate non-callback remainders."
+mechanism = "FL-E5 ports the complete owner-local callback chain. LayoutComponentStyle writes reach their retained parent LayoutComponent/Yoga owner. TextStyle/TextStylePaint and TextValueRun writes reach the owning Text's Path/World dirt. Layout propagation enrolls only dirty retained Text occurrences before dependency traversal. Text render styles and m_bounds-equivalent state are built while ArtboardInstance is mutably updating; successful Path/Paint builds immediately publish Text::buildRenderStyles -> Node::markLayoutNodeDirty -> each retained LayoutComponent -> Artboard::markLayoutDirty/root Components dirt. Drawing consumes the retained Text frame and has no Text-side construction fallback. Pre-first-draw local/controlled bounds and TransformConstraint consumers read retained Text bounds without constructing a StaticTextSlice; construction is confined to the mutable builder, explicit layout measurement, and separately scoped caret/hit/selection geometry queries. Direct and DataBind writes share generated setters, identical writes are no-ops, and the displaced layout_epoch property classifier/global layout-text resource sweep remain deleted."
 citations = [
   "cpp:src/artboard.cpp:1652",
   "cpp:src/artboard.cpp:1314",
@@ -153,15 +153,17 @@ citations = [
   "rust:crates/nuxie-runtime/src/text/text_style.rs:19",
   "rust:crates/nuxie-runtime/src/text/text_style_paint.rs:6",
   "rust:crates/nuxie-runtime/src/text/text_value_run.rs:6",
-  "rust:crates/nuxie-runtime/src/artboard.rs:6783",
-  "rust:crates/nuxie-runtime/src/artboard.rs:8776",
+  "rust:crates/nuxie-runtime/src/artboard.rs:6853-6866",
+  "rust:crates/nuxie-runtime/src/artboard.rs:8112-8147",
+  "rust:crates/nuxie-runtime/src/artboard.rs:8223-8236",
   "rust:crates/nuxie-runtime/src/components.rs:1015",
   "rust:crates/nuxie-runtime/src/components.rs:1109",
-  "rust:crates/nuxie-runtime/src/draw.rs:9317",
-  "rust:crates/nuxie-runtime/src/draw.rs:15421",
-  "rust:crates/nuxie-runtime/src/text.rs:114",
+  "rust:crates/nuxie-runtime/src/draw.rs:15583-15604",
+  "rust:crates/nuxie-runtime/src/draw.rs:15607-15776",
+  "rust:crates/nuxie-runtime/src/text/text_engine.rs:1-32",
+  "rust:crates/nuxie-runtime/src/text/text_engine.rs:58-65",
 ]
-closure = "Close the remaining phase-order seam by building/retaining Text render styles while ArtboardInstance is mutably updating (or by an equivalently source-cited deferred publication that preserves same-advance behavior), then publish Text::buildRenderStyles -> Node -> each retained LayoutComponent -> root Components exactly once per clean-to-dirty transition. Prove first-draw and TransformConstraint consumers never fall back to query-local bounds for a live Text occurrence, and re-run the structural owner/dirt/rebuild/allocation oracle before changing this row to closed."
+closure = "Closed by FL-E5 stage 2 mechanism correspondence. The mutable update phase now constructs and retains Text render styles/bounds, publishes the post-build Node/LayoutComponent/Artboard callback in the same dependency traversal, and drawing only reads that retained Text owner. Focused pre-first-draw bounds, direct W65 layout/text/modifier assertions, full runtime/cpp_probe suites, goldens, silver corpus, binary comparison, and the structural port checker are the closure ratchet. Residual layout_display/layout_paint operation identity and layout_anim_* point interpolation signatures are separate renderer/layout fidelity remainders, not callback or phase-order substitutes."
 
 [[gap]]
 id = "FL-G08"

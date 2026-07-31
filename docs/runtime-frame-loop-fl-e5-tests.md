@@ -2,27 +2,36 @@
 
 W65 assigns 22 `layout_test.cpp` cases, 3 `bounds_test.cpp` cases, 17
 `text_test.cpp` cases, 2 `text_modifier_test.cpp` cases, and the nested-text
-cases to this SCC. This change ports one direct bounds differential plus focused
-callback tests; the golden and silver fixtures exercise a wider cross-section,
-but they do not reproduce every assigned C++ fixture action and assertion.
-Consequently the W65 load is **partial**, and no test expectation or comparison
-tolerance was weakened.
+cases to this SCC. Stage 2 completes the assigned assertion load: direct Rust
+tests preserve every non-silver assertion sequence, while the nine layout and
+four text bodies whose pinned contract is a serialized-rendering comparison
+remain exercised by the silver corpus. No expectation or comparison tolerance
+was weakened.
 
 | W65 class | Upstream source | FL-E5 evidence |
 |---|---|---|
-| B | `bounds_test.cpp` (3 assigned) | One direct differential, `upstream_text_local_bounds_fixture_retains_origin_adjusted_bounds`, ports the `Text1`/`Text2` retained local-bounds assertions from `local_bounds.riv`, including origin adjustment. The normal golden corpus also contains `background_measure.riv` and `local_bounds.riv`; the other assigned assertion sequences remain to be ported directly. |
-| B | `layout_test.cpp` (22 assigned) | The existing E4 literal covers `measure_tests.riv`; FL-E5 adds owner-local padding/style and TextStyle callback tests. The silver corpus executes `collapsing_elements`, `layout_display`, `layout_paint`, `layout_anim_bound`, `layout_anim_component_list`, `layout_anim_nested`, `layout_aspect_ratio`, `layout_fixed_fill`, and `layout_hug_artboard`. These are fixture-stream evidence, not substitutes for all 22 direct test bodies. |
-| B | `text_test.cpp` (17 assigned) | Normal goldens cover `double_line`, `ellipsis`, `modifier_to_run`, `new_text`, `vertical_align_ellipsis`, `word_joiner_test`, and `zero_width_space_line_break`; runtime units cover shaping, line metrics, modifiers, opacity buckets, hit/caret geometry, and retained bounds. Direct parity for all 17 assigned test bodies remains open. |
-| B | `text_modifier_test.cpp` (2 assigned) | `text_feather_falloff` remains in both golden/silver inventories; modifier-to-run and opacity/falloff behavior are covered by runtime text unit tests. The two assigned C++ assertion sequences are not both direct ports. |
-| B | `serialized_rendering_test.cpp` text/layout cases | `saturation`, `spotify_kids_app_icon`, and `text_stroke_test` promote from divergent to exact. Other requested signatures remain classified at their unchanged first mismatch. |
+| B | `bounds_test.cpp` (3 assigned) | `upstream_background_shape_bounds_follow_text_and_artboard_transform`, `upstream_raw_path_coarse_and_precise_bounds_are_ported`, and `upstream_text_local_bounds_fixture_retains_origin_adjusted_bounds` directly port all three assertion sequences, including mutable Artboard world transform and retained pre-draw Text bounds. |
+| B | `layout_test.cpp` (22 assigned) | Thirteen direct bodies cover row/column/gap/wrap/center/intrinsic measurement, padding, margin, corner radii, inherited RTL, forced-size dirt, alignment mutation, and Artboard percent-margin behavior. The remaining nine pinned `[silver]` bodies execute as `collapsing_elements`, `layout_display`, `layout_paint`, `layout_anim_bound`, `layout_anim_component_list`, `layout_anim_nested`, `layout_aspect_ratio`, `layout_fixed_fill`, and `layout_hug_artboard`. |
+| B | `text_test.cpp` (17 assigned) | Thirteen direct bodies cover object/run discovery, mutation including empty text, vertical trim and packed passthroughs, ellipsis/glyph lookup, fit-font-size, word mapping, run-selected modifier coverage including whitespace, varying UTF-8 run size, double newlines, and opacity-modifier load. The four serialized bodies remain covered by `zero_width_space_line_break`, `word_joiner_test`, `fit_font_size_test`, and `text_vertical_trim_test`/`vertical_align_ellipsis`. |
+| B | `text_modifier_test.cpp` (2 assigned) | `upstream_text_modifier_structure_body_is_ported` and `upstream_text_feather_falloff_repro_structure_body_is_ported` directly preserve both assertion sequences; the latter's full animated draw remains in the `text_feather_falloff` silver/golden case. |
+| B | `serialized_rendering_test.cpp` text/layout cases | The silver report records every requested layout/text signature at its current first mismatch; exact-count ratchets remain active. |
 
-The following are deliberately not claimed as closed by this family:
+Boundary notes:
 
 - TextInput editing/cursor/selection tests belong to the input-text family.
-- The E5 map contains 27 direct C++ owners. Nine have new direct Rust modules;
-  `layout.cpp`, `solo.cpp`, and 16 text owners still rely on consolidated runtime
-  implementations rather than verified file/member correspondence.
-- `Text::buildRenderStyles` same-update layout publication remains recorded in
-  FL-G07.
+- The 18 former consolidated owners now have direct file/member boundaries.
+  Implemented members live with their matching pinned owner; owners that remain
+  tracked gaps (TextModifier, TextStyleFeature, TextTargetModifier, and
+  TextVariationModifier) directly own the explicit unsupported boundary rather
+  than unrelated helpers. RawText directly owns the implemented settled-value
+  read and records its standalone builder/update/render API as a precise
+  pending member remainder. Solo directly owns occurrence state while
+  `artboard.rs` remains its explicit graph-wide mutation/query integration
+  client. `text.rs`, `draw.rs`, `components.rs`, and `lib.rs` likewise remain
+  shared coordinators/integration clients, and pending feature ceilings are not
+  reclassified by the behavior-preserving moves.
+- `Text::buildRenderStyles` construction, retained bounds, and the
+  Text → Node → LayoutComponent → Artboard publication now occur in the mutable
+  update phase. FL-G07 is closed with mechanism citations.
 - The three `layout_anim_*` point-value mismatches are retained layout geometry
   interpolation differences, not hidden as callback-chain test passes.

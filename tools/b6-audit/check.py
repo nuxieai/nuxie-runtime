@@ -13,7 +13,7 @@ MANIFEST = ROOT / "file-correspondence-manifest.toml"
 EXPECTED_REF = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 EXPECTED_COUNTS = {
     "ISOMORPHIC": 19,
-    "ADAPTED": 192,
+    "ADAPTED": 193,
     "DIVERGENT": 157,
     "TRACKED-GAP": 30,
     "N/A": 49,
@@ -103,8 +103,8 @@ def main() -> None:
     rows = data.get("file", [])
     if data.get("upstream_ref") != EXPECTED_REF:
         fail(f"upstream_ref is {data.get('upstream_ref')!r}, expected {EXPECTED_REF}")
-    if data.get("row_count") != 447 or len(rows) != 447:
-        fail(f"expected 447 rows, manifest declares {data.get('row_count')} and has {len(rows)}")
+    if data.get("row_count") != 448 or len(rows) != 448:
+        fail(f"expected 448 rows, manifest declares {data.get('row_count')} and has {len(rows)}")
 
     ids = [row.get("b6_row_id") for row in rows]
     if len(set(ids)) != len(ids):
@@ -135,7 +135,7 @@ def main() -> None:
         if not any(token in note for token in OWNER_TOKENS):
             fail(f"{row['b6_row_id']} TRACKED-GAP note has no register owner")
     print(
-        "B-6 audit closure: 447 rows, zero UNKNOWN, exact second-pass "
+        "B-6 audit closure: 448 rows, zero UNKNOWN, exact second-pass "
         "dispositions and owners verified"
     )
 

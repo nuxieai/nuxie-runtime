@@ -7,7 +7,7 @@ upstream_repository = "rive-app/rive-runtime"
 upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 source_glob = "src/**/*.cpp"
 exclude_glob = "src/generated/**"
-row_count = 447
+row_count = 448
 status_values = ["faithful", "divergent-by-decision", "pending"]
 verification_values = ["pending-verification", "orchestrator-verified"]
 seed_manifest = "port-manifest.toml"
@@ -1867,6 +1867,18 @@ b6_verdict = "ADAPTED"
 b6_cluster = "binary-core"
 audit_record = "docs/b6-audit/results/binary-core.md"
 note = "Consolidated Rust port for core."
+
+[[file]]
+upstream = "src/core/field_types/core_uint64_type.cpp"
+status = "pending"
+verification = "pending-verification"
+rust_module = "crates/nuxie-binary/src/lib.rs"
+legacy_port_status = "ported"
+b6_row_id = "B6-0448"
+b6_verdict = "ADAPTED"
+b6_cluster = "binary-core"
+audit_record = "docs/b6-audit/results/binary-core.md"
+note = "Consolidated Rust port for core. Row added 2026-07-31 to repair the B-2 inventory omission at the d788e8ec pin (file exists upstream at the pin; removed later at candidate b73bc675); audited post-B6 as B6-0448."
 
 [[file]]
 upstream = "src/core/field_types/core_uint_type.cpp"

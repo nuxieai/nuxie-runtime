@@ -101,9 +101,18 @@ FORCED_BLOCKERS = {
     "db_health_tracker": "runtime-frame-loop-nontermination",
     "echo_show_demo": "renderer-paint-allocation",
 }
+CLASSIFIED_RUNTIME_BLOCKERS = {
+    "multi_listeners": (
+        "post-FL-D runner gap: raw nuxie-runtime replay does not create a nuxie-scripting VM "
+        "or attach the fixture ScriptAsset occurrence, so performAction remains inert"
+    ),
+}
 EXACT = (
+    "advance_blend_mode-inputs",
+    "advance_blend_mode-vms",
     "animated_clipping-layout",
     "artboard_list_map_rules",
+    "artboard_width_test",
     "component_list_follow_path_distance",
     "component_stateful",
     "custom_property_enum",
@@ -112,28 +121,43 @@ EXACT = (
     "event_trigger_event",
     "fill_trim_path",
     "focus_test",
+    "focus_traversal",
     "follow_path_animate_shape",
     "follow_path_constraint",
     "format_number_with_commas",
+    "global_viewmodels_test-auto_instance",
     "group_effect-main-missing-targets",
+    "hittest_ab1",
+    "hittest_ab1_grand_parent",
+    "hittest_ab1_parent",
     "hittest_collapsed_layouts",
+    "hittest_nested",
     "image_fit_alignment_3",
     "image_fit_alignment_updated_test",
     "multitouch",
     "multitouch_enter",
     "n_slice_triangle",
     "nested_artboard_origin_override_test",
+    "nested_events",
     "nested_hug",
     "nested_needs_advance",
     "pause_nested_artboard",
     "recursive_data_bind",
     "relative_data_binding",
+    "sorted_listeners",
     "stacked_path_effects",
+    "state_transition_fire_trigger",
     "target_event",
     "text_follow_path_shape_length",
+    "transition_actions",
+    "transition_duration_bind_list",
+    "transition_duration_bind_nested",
     "transition_index_condition",
+    "trigger_based_listeners",
+    "trigger_fires_single_change",
     "vertical_align_ellipsis",
     "viewmodel_list_trigger",
+    "viewmodel_based_condition",
 )
 
 
@@ -299,17 +323,14 @@ def fl_d4_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
-advance_blend_mode-inputs|frame 0, op 19 (color), field value: expected 4286928727, got 4282614325
-advance_blend_mode-vms|frame 0, op 19 (color), field value: expected 4286928727, got 4283534636
-animated_clipping-nodes|frame 10, op 328 (drawPath): expected drawPath, got rewind
+animated_clipping-nodes|frame 10, op 328 (drawPath): expected drawPath, got makeRenderPath
 artboard_list_overrides_horizontal|frame 1, op 303 (rewind): expected rewind, got drawPath
 artboard_list_overrides_vertical|frame 1, op 303 (rewind): expected rewind, got drawPath
-artboard_width_test|frame 0, op 13 (color), field value: expected 4291035136, got 4280270848
 bankcard|frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint
 clear_viewmodel_list|frame 0, op 10 (makeRenderPaint): expected makeRenderPaint, got save
 clipping_and_draw_order|frame 2, op 161 (transform), field tx: expected 0, got 1121
 collapse_data_binds-test_1|frame 10, op 721 (drawPath): expected drawPath, got rewind
-collapse_data_binds-test_2|frame 1, op 76 (makeRenderPath): expected makeRenderPath, got rewind
+collapse_data_binds-test_2|frame 15, op 315 (addRawPath): expected 151 fields, got 256
 collapsing_elements|frame 2, op 943 (rewind): expected rewind, got drawPath
 component_list_child_origin|frame 0, op 315 (transform), field xy: expected -0.0 (0x80000000), got 0
 computed_root_transform-list|frame 1, op 206 (drawPath): expected drawPath, got rewind
@@ -317,12 +338,12 @@ computed_root_transform-nested_artboard|frame 1, op 144 (drawPath): expected dra
 computed_values_test|frame 0, op 54 (addRawPath), field point: expected (256.2, -0.0 (0x80000000)), got (245, -0.0 (0x80000000))
 data_bind_solo-solos-to-values|frame 0, op 81 (addRawPath): expected 752 fields, got 669
 data_converter_interpolator_reset|frame 1, op 30 (save): expected save, got color
-data_converter_to_number|frame 1, op 110 (makeRenderPath): expected makeRenderPath, got rewind
+data_converter_to_number|frame 1, op 119 (drawPath): expected drawPath, got rewind
 focus_traversal|frame 0, op 95 (color): expected color, got save
 follow_path_animate_solo|frame 125, op 2406 (clipPath): expected clipPath, got rewind
 follow_path_animate_target|frame 1, op 150 (clipPath): expected clipPath, got rewind
 global_viewmodels_test-auto_instance|frame 0, op 27 (color): expected color, got save
-hide_test|frame 0, op 45 (color), field paint_id: expected 4, got 13
+hide_test|frame 0, op 50 (color), field paint_id: expected 14, got 10
 hittest_ab1|frame 1, op 153 (color): expected color, got save
 hittest_ab1_grand_parent|frame 2, op 304 (color): expected color, got save
 hittest_ab1_parent|frame 1, op 192 (color): expected color, got save
@@ -343,25 +364,17 @@ nested_events|frame 1, op 166 (makeRenderPath): expected makeRenderPath, got rew
 number_to_list_nested_children|frame 0, op 141 (color): expected color, got save
 path_effect_with_feathers|frame 0, op 21 (feather), field paint_id: expected 8, got 5
 reset_phase_multi_main|frame 0, op 25 (color): expected color, got makeRenderPaint
-saturation|frame 1, op 96 (makeRenderPath): expected makeRenderPath, got rewind
-sorted_listeners|frame 0, op 32 (restore): expected restore, got save
+saturation|frame 14, op 666 (drawPath): expected drawPath, got rewind
 spotify_kids_app_icon|frame 1, op 285 (clipPath): expected clipPath, got rewind
 spotify_kids_demo|frame 0, op 200 (blendMode): expected blendMode, got makeRenderPaint
-state_transition_fire_trigger|frame 1, op 127 (makeRenderPath): expected makeRenderPath, got rewind
 stateful_keyed_trigger|frame 1, op 30 (color): expected color, got save
-superbowl|frame 0, op 2825 (color), field paint_id: expected 220, got 610
+superbowl|frame 0, op 2825 (color), field paint_id: expected 220, got 208
 text_input|frame 0, op 25 (transform), field xy: expected -0.0 (0x80000000), got 0
-text_stroke_test|frame 1, op 55 (makeRenderPath): expected makeRenderPath, got rewind
+text_stroke_test|frame 1, op 62 (rewind): expected rewind, got makeRenderPath
 text_vertical_trim_test|frame 3, op 219 (transform), field ty: expected 177.93579, got 182.76001
 time_based_interpolation|frame 1, op 65 (transform), field tx: expected 250.07309, got 250.29443
-transition_actions|frame 2, op 72 (makeRenderPath): expected makeRenderPath, got rewind
 transition_artboard_condition_test|frame 0, op 16 (frameSize), field width: expected 983, got 984
-transition_duration_bind_list|frame 0, op 13 (makeRenderPaint): expected makeRenderPaint, got frame
-transition_duration_bind_nested|frame 0, op 57 (color): expected color, got frame
-trigger_based_listeners|frame 1, op 85 (makeRenderPath): expected makeRenderPath, got rewind
-trigger_fires_single_change|frame 1, op 67 (makeRenderPath): expected makeRenderPath, got rewind
 unbound_stateful_component|frame 0, op 9 (color), field value: expected 4278255360, got 4278190080
-viewmodel_based_condition|frame 0, op 24 (color), field paint_id: expected 6, got 5
 virtualize_blendmode|frame 0, op 33 (color): expected color, got save
 """.strip().splitlines()
 )
@@ -681,7 +694,20 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                     actions, blocker = executable_actions(chunk, state_machine, animation)
                     if (ported_actions := fl_d4_actions(silver_id)) is not None:
                         actions, blocker = ported_actions, None
+                    if silver_id == "sorted_listeners":
+                        # The C++ producer calls
+                        # `file->createViewModelInstance(artboard.get())`
+                        # rather than selecting the authored default instance
+                        # (`state_machine_test.cpp:546`).
+                        actions = tuple(
+                            {"kind": "bind-fresh-view-model"}
+                            if action.get("kind") == "bind-default-view-model"
+                            else action
+                            for action in actions
+                        )
                     blocker = FORCED_BLOCKERS.get(silver_id, blocker)
+                    if blocker is None:
+                        blocker = CLASSIFIED_RUNTIME_BLOCKERS.get(silver_id)
                     if blocker in FORCED_BLOCKERS.values():
                         actions = ()
                     if blocker is not None:

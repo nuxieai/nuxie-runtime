@@ -25,8 +25,8 @@ pub(crate) struct RuntimeNestedArtboardInstance {
     pub(crate) data_bind_path_is_relative: bool,
     pub(crate) stateful_view_model_instance_local: Option<usize>,
     pub(crate) stateful_view_model_instance_locals_by_id: BTreeMap<u32, usize>,
-    pub(crate) stateful_view_model_context: Option<RuntimeOwnedViewModelInstance>,
-    pub(crate) stateful_global_view_model_contexts: BTreeMap<usize, RuntimeOwnedViewModelInstance>,
+    pub(crate) stateful_view_model_context: Option<RuntimeOwnedViewModelHandle>,
+    pub(crate) stateful_global_view_model_contexts: BTreeMap<usize, RuntimeOwnedViewModelHandle>,
     pub(crate) data_bind_property_source_locals: Vec<Option<usize>>,
     pub(crate) data_bind_image_source_locals: Vec<Option<usize>>,
     pub(crate) data_bind_context_source_locals_by_path: BTreeMap<Vec<u32>, usize>,
@@ -67,8 +67,20 @@ impl Clone for RuntimeNestedArtboardInstance {
             stateful_view_model_instance_locals_by_id: self
                 .stateful_view_model_instance_locals_by_id
                 .clone(),
-            stateful_view_model_context: self.stateful_view_model_context.clone(),
-            stateful_global_view_model_contexts: self.stateful_global_view_model_contexts.clone(),
+            stateful_view_model_context: self
+                .stateful_view_model_context
+                .as_ref()
+                .map(|context| RuntimeOwnedViewModelHandle::new(context.borrow().clone())),
+            stateful_global_view_model_contexts: self
+                .stateful_global_view_model_contexts
+                .iter()
+                .map(|(&view_model_index, context)| {
+                    (
+                        view_model_index,
+                        RuntimeOwnedViewModelHandle::new(context.borrow().clone()),
+                    )
+                })
+                .collect(),
             data_bind_property_source_locals: self.data_bind_property_source_locals.clone(),
             data_bind_image_source_locals: self.data_bind_image_source_locals.clone(),
             data_bind_context_source_locals_by_path: self

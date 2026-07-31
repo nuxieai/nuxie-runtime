@@ -3619,9 +3619,9 @@ pub(super) fn build_artboard_custom_property_bindings<'a>(
                 {
                     RuntimeArtboardDataBindValueKind::Enum
                 }
-                "CustomPropertyTrigger"
+                "CustomPropertyTrigger" | "ViewModelInstanceTrigger"
                     if runtime_data_bind_property_key_for_name(
-                        "CustomPropertyTrigger",
+                        target.type_name,
                         "propertyValue",
                     ) == Some(property_key) =>
                 {
@@ -5517,19 +5517,18 @@ impl ArtboardInstance {
 
             let mut local_handles = Vec::new();
             if let Some(stateful_context) = nested.stateful_view_model_context.clone() {
-                local_handles.push(RuntimeOwnedViewModelHandle::new(stateful_context));
+                local_handles.push(stateful_context);
             }
-            local_handles.extend(
-                nested
-                    .stateful_global_view_model_contexts
-                    .values()
-                    .cloned()
-                    .map(RuntimeOwnedViewModelHandle::new),
-            );
-            // A nested composite has its local main/globals first and inherits
-            // the complete parent context as fallback.
-            let nested_data_context =
-                RuntimeOwnedDataContext::with_local_handles(local_handles, Some(&child_context));
+            local_handles.extend(nested.stateful_global_view_model_contexts.values().cloned());
+            // Stateful hosts prepend their active authored/default instance.
+            // Non-stateful hosts with no globals use the exact scoped
+            // dataBindPath instance resolved above; C++ passes that same
+            // rcp<ViewModelInstance> into NestedArtboard::bindViewModelInstance.
+            let nested_data_context = if local_handles.is_empty() {
+                child_context
+            } else {
+                RuntimeOwnedDataContext::with_local_handles(local_handles, Some(&child_context))
+            };
 
             if rebind_self {
                 changed |=
@@ -5580,17 +5579,14 @@ impl ArtboardInstance {
 
         let mut local_handles = Vec::new();
         if let Some(context) = nested.stateful_view_model_context.clone() {
-            local_handles.push(RuntimeOwnedViewModelHandle::new(context));
+            local_handles.push(context);
         }
-        local_handles.extend(
-            nested
-                .stateful_global_view_model_contexts
-                .values()
-                .cloned()
-                .map(RuntimeOwnedViewModelHandle::new),
-        );
-        let data_context =
-            RuntimeOwnedDataContext::with_local_handles(local_handles, Some(&inherited_context));
+        local_handles.extend(nested.stateful_global_view_model_contexts.values().cloned());
+        let data_context = if local_handles.is_empty() {
+            inherited_context
+        } else {
+            RuntimeOwnedDataContext::with_local_handles(local_handles, Some(&inherited_context))
+        };
 
         let mut changed = nested.bind_owned_view_model_animation_data_context(&data_context);
         changed |= nested.child.bind_owned_view_model_artboard_data_context(
@@ -8700,6 +8696,7 @@ impl ArtboardInstance {
         }
 
         let mut changed = false;
+        let mut child_layout_changed = false;
         let Some(file) = self.runtime_file_arc() else {
             return false;
         };
@@ -8717,18 +8714,31 @@ impl ArtboardInstance {
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
                 continue;
             };
+            let child_layout_epoch = nested.child.layout_epoch();
             let mut context_changed = false;
             for update in updates {
                 let context = if nested.stateful_view_model_instance_local
                     == Some(update.instance_local_id)
                 {
-                    nested.stateful_view_model_context.as_mut()
+                    nested.stateful_view_model_context.as_ref()
                 } else {
                     nested
                         .stateful_global_view_model_contexts
-                        .get_mut(&update.view_model_index)
+                        .get(&update.view_model_index)
                 };
                 let Some(context) = context else { continue };
+                let mut context = context.borrow_mut();
+                // A mounted child mutates the same ViewModelInstance pointer
+                // in C++. Until Rust publishes that retained-cell mutation
+                // back into the authored object arena, the arena can contain
+                // the previous value. Never let that stale mirror overwrite a
+                // live child write during an unrelated host-side sync.
+                if context
+                    .cell_by_property_path(&update.property_path)
+                    .is_some_and(|cell| cell.has_changed())
+                {
+                    continue;
+                }
                 let value_changed = match update.value {
                     RuntimeStatefulViewModelValueUpdate::Value(
                         RuntimeDataBindGraphValue::Number(value),
@@ -8775,15 +8785,9 @@ impl ArtboardInstance {
 
             let mut local_handles = Vec::new();
             if let Some(context) = nested.stateful_view_model_context.clone() {
-                local_handles.push(RuntimeOwnedViewModelHandle::new(context));
+                local_handles.push(context);
             }
-            local_handles.extend(
-                nested
-                    .stateful_global_view_model_contexts
-                    .values()
-                    .cloned()
-                    .map(RuntimeOwnedViewModelHandle::new),
-            );
+            local_handles.extend(nested.stateful_global_view_model_contexts.values().cloned());
             let nested_data_context = RuntimeOwnedDataContext::with_local_handles(
                 local_handles,
                 Some(&inherited_context),
@@ -8803,12 +8807,173 @@ impl ArtboardInstance {
             // hug-sized NestedArtboardLayout from the child.
             changed |= nested.child.advance_artboard_data_binds();
             changed |= nested.child.update_pass();
+            child_layout_changed |= nested.child.layout_epoch() != child_layout_epoch;
         }
-        if changed {
+        if child_layout_changed {
             // The mounted child can be a hug-sized provider in this artboard's
             // layout tree, so its live text/shape size participates in the
             // parent's layout cache key.
             self.mark_layout_changed();
+        }
+        changed
+    }
+
+    /// Publish mutations made through a mounted artboard's retained local
+    /// `ViewModelInstance` into the authored component objects owned by this
+    /// host artboard.
+    ///
+    /// C++ shares one object pointer, so the concrete property callback
+    /// immediately dirties any parent DataBind targeting that authored VMI.
+    /// Rust's object arena and retained context are separate representations;
+    /// mirror only cells with live `valueChanged` state so stale child values
+    /// cannot overwrite a newer host-side write.
+    pub(crate) fn publish_nested_view_model_context_mutations(
+        &mut self,
+        host_local_id: usize,
+    ) -> bool {
+        let Some(parent_key) = runtime_data_bind_component_parent_id_key() else {
+            return false;
+        };
+        let Some(property_id_key) = runtime_data_bind_view_model_instance_value_property_id_key()
+        else {
+            return false;
+        };
+        let Some(nested) = self.nested_artboards.get(&host_local_id) else {
+            return false;
+        };
+        let roots_by_local = nested
+            .stateful_view_model_instance_locals_by_id
+            .iter()
+            .filter_map(|(&view_model_id, &instance_local_id)| {
+                usize::try_from(view_model_id)
+                    .ok()
+                    .map(|view_model_index| (instance_local_id, view_model_index))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut updates = Vec::new();
+
+        for slot in &self.slots {
+            let Some(type_name) = slot.type_name else {
+                continue;
+            };
+            if !type_name.starts_with("ViewModelInstance") || type_name == "ViewModelInstance" {
+                continue;
+            }
+            let mut property_path = Vec::new();
+            let mut current_local = slot.local_id;
+            let mut visited = BTreeSet::new();
+            let (instance_local_id, view_model_index) = loop {
+                if !visited.insert(current_local) {
+                    break (usize::MAX, usize::MAX);
+                }
+                let Some(property_index) = self
+                    .uint_property(current_local, property_id_key)
+                    .and_then(|value| usize::try_from(value).ok())
+                else {
+                    break (usize::MAX, usize::MAX);
+                };
+                property_path.push(property_index);
+                let Some(parent_local) = self
+                    .uint_property(current_local, parent_key)
+                    .and_then(|value| usize::try_from(value).ok())
+                else {
+                    break (usize::MAX, usize::MAX);
+                };
+                if let Some(&view_model_index) = roots_by_local.get(&parent_local) {
+                    break (parent_local, view_model_index);
+                }
+                current_local = parent_local;
+            };
+            if instance_local_id == usize::MAX {
+                continue;
+            }
+            property_path.reverse();
+            let context = if nested.stateful_view_model_instance_local == Some(instance_local_id) {
+                nested.stateful_view_model_context.as_ref()
+            } else {
+                nested
+                    .stateful_global_view_model_contexts
+                    .get(&view_model_index)
+            };
+            let Some(cell) = context
+                .map(|context| context.borrow())
+                .and_then(|context| context.cell_by_property_path(&property_path))
+            else {
+                continue;
+            };
+            if !cell.has_changed() {
+                continue;
+            }
+            let Some(value_key) =
+                runtime_data_bind_property_key_for_name(type_name, "propertyValue")
+            else {
+                continue;
+            };
+            let value = cell.value();
+            let already_published = match &value {
+                RuntimeViewModelCellValue::Number(value) => self
+                    .double_property(slot.local_id, value_key)
+                    .is_some_and(|published| published.to_bits() == value.to_bits()),
+                RuntimeViewModelCellValue::Boolean(value) => {
+                    self.bool_property(slot.local_id, value_key) == Some(*value)
+                }
+                RuntimeViewModelCellValue::String(value) => self
+                    .string_property(slot.local_id, value_key)
+                    .is_some_and(|published| published == value.as_ref()),
+                RuntimeViewModelCellValue::Color(value) => {
+                    self.color_property(slot.local_id, value_key) == Some(*value)
+                }
+                RuntimeViewModelCellValue::Enum(value)
+                | RuntimeViewModelCellValue::SymbolListIndex(value)
+                | RuntimeViewModelCellValue::AssetImage(value)
+                | RuntimeViewModelCellValue::Artboard(value) => {
+                    self.uint_property(slot.local_id, value_key) == Some(u64::from(*value))
+                }
+                RuntimeViewModelCellValue::Trigger(value) => {
+                    self.uint_property(slot.local_id, value_key) == Some(*value)
+                }
+                RuntimeViewModelCellValue::AssetFont(value) => {
+                    self.uint_property(slot.local_id, value_key) == Some(value.file_asset_index())
+                }
+                _ => false,
+            };
+            if !already_published {
+                updates.push((slot.local_id, type_name, value_key, value));
+            }
+        }
+
+        let mut changed = false;
+        for (local_id, type_name, value_key, value) in updates {
+            changed |= match (type_name, value) {
+                ("ViewModelInstanceNumber", RuntimeViewModelCellValue::Number(value)) => {
+                    self.set_double_property(local_id, value_key, value)
+                }
+                ("ViewModelInstanceBoolean", RuntimeViewModelCellValue::Boolean(value)) => {
+                    self.set_bool_property(local_id, value_key, value)
+                }
+                ("ViewModelInstanceString", RuntimeViewModelCellValue::String(value)) => {
+                    self.set_string_property(local_id, value_key, value.as_ref().to_vec())
+                }
+                ("ViewModelInstanceColor", RuntimeViewModelCellValue::Color(value)) => {
+                    self.set_color_property(local_id, value_key, value)
+                }
+                ("ViewModelInstanceEnum", RuntimeViewModelCellValue::Enum(value))
+                | (
+                    "ViewModelInstanceSymbolListIndex",
+                    RuntimeViewModelCellValue::SymbolListIndex(value),
+                )
+                | ("ViewModelInstanceAssetImage", RuntimeViewModelCellValue::AssetImage(value))
+                | ("ViewModelInstanceArtboard", RuntimeViewModelCellValue::Artboard(value)) => {
+                    self.set_uint_property(local_id, value_key, u64::from(value))
+                }
+                ("ViewModelInstanceTrigger", RuntimeViewModelCellValue::Trigger(value)) => {
+                    self.set_uint_property(local_id, value_key, value)
+                }
+                ("ViewModelInstanceAssetFont", RuntimeViewModelCellValue::AssetFont(value)) => {
+                    self.set_uint_property(local_id, value_key, value.file_asset_index())
+                }
+                _ => false,
+            };
         }
         changed
     }

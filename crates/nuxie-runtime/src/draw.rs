@@ -44,7 +44,7 @@ use crate::text::{
     runtime_text_shape_paint_commands, static_text_caret_geometry, static_text_clip_bounds,
     static_text_constraint_bounds, static_text_controlled_layout_bounds, static_text_hit,
     static_text_layout_measure_bounds, static_text_selection_rects, static_text_value,
-    text_input_layout_measure_bounds,
+    static_text_value_run_hit, text_input_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, TransformProperty};
 use std::cell::{Cell, RefCell};
@@ -2603,7 +2603,7 @@ impl ArtboardInstance {
             }) else {
                 continue;
             };
-            let mut resources = item.render_resources.borrow_mut();
+            let mut resources = item.child.render_resources.borrow_mut();
             resources.initialize(
                 parent_backend_context_id,
                 runtime,
@@ -2752,7 +2752,7 @@ impl ArtboardInstance {
             .with_context(|| {
                 format!("missing nested artboard graph for global {referenced_artboard_global}")
             })?;
-        let mut resources = nested_instance.render_resources.borrow_mut();
+        let mut resources = nested_instance.child.render_resources.borrow_mut();
         resources.initialize(
             parent_backend_context_id,
             runtime,
@@ -2946,7 +2946,7 @@ impl ArtboardInstance {
                     }) else {
                         continue;
                     };
-                    let mut resources = item.render_resources.borrow_mut();
+                    let mut resources = item.child.render_resources.borrow_mut();
                     resources.initialize(
                         paint_by_global.backend_context_id,
                         runtime,
@@ -3016,7 +3016,7 @@ impl ArtboardInstance {
             .then(|| nested.initial_layout_paint_frame.borrow().clone())
             .flatten();
 
-        let mut resources = nested.render_resources.borrow_mut();
+        let mut resources = nested.child.render_resources.borrow_mut();
         resources.initialize(
             paint_by_global.backend_context_id,
             runtime,
@@ -3128,7 +3128,7 @@ impl ArtboardInstance {
                 format!("missing nested artboard graph for global {referenced_artboard_global}")
             })?;
         if let Some(nested) = nested_instance {
-            let mut resources = nested.render_resources.borrow_mut();
+            let mut resources = nested.child.render_resources.borrow_mut();
             resources.initialize(
                 paint_by_global.backend_context_id,
                 runtime,
@@ -3923,7 +3923,44 @@ impl ArtboardInstance {
             max_retained_decoded_image_bytes,
         )?;
         self.attach_runtime_image_assets_tree(Arc::clone(&resources.image_assets));
+        self.seed_runtime_shape_paint_opacity_tree();
         Ok(())
+    }
+
+    fn seed_runtime_shape_paint_opacity_tree(&self) {
+        let graph = self.runtime_graph();
+        for owner_ref in &self.runtime_shapes.paint_owner_refs {
+            let Some(owner) = self
+                .runtime_shapes
+                .get(owner_ref.shape_local)
+                .and_then(|shape| shape.paint_owners.get(owner_ref.owner_index))
+            else {
+                continue;
+            };
+            let opacity_local = graph.map_or(owner_ref.shape_local, |graph| {
+                shape_paint_container_opacity_local(graph, owner_ref.shape_local)
+            });
+            if let Some(render_opacity) = self
+                .component(opacity_local)
+                .map(|component| component.transform.render_opacity)
+            {
+                owner.render_opacity.set(render_opacity);
+            }
+        }
+        for nested in self.nested_artboards.values() {
+            nested.child.seed_runtime_shape_paint_opacity_tree();
+        }
+        for list_index in 0..self.component_list_count() {
+            let Some(list_local) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            let Some(items) = self.component_list_items(list_local) else {
+                continue;
+            };
+            for item in items {
+                item.child.seed_runtime_shape_paint_opacity_tree();
+            }
+        }
     }
 
     /// Attach a scripting-enabled backend after file/source renderer
@@ -5263,9 +5300,19 @@ impl ArtboardInstance {
         }) else {
             return;
         };
-        let render_opacity = self
-            .component(shape_paint_container_opacity_local(graph, container_local))
-            .map_or(1.0, |component| component.transform.render_opacity);
+        let opacity_local = shape_paint_container_opacity_local(graph, container_local);
+        let render_opacity = self.component(opacity_local).map_or(1.0, |component| {
+            if component.transform.render_opacity == 0.0
+                && component.dirt.contains(ComponentDirt::RENDER_OPACITY)
+            {
+                // Parent-before-child dependency order has not yet reached
+                // this retained nested occurrence. C++ observes the authored
+                // opacity when Shape propagates to its paint mutators.
+                self.authored_transform(opacity_local).opacity
+            } else {
+                component.transform.render_opacity
+            }
+        });
         let Some(shape) = self.runtime_shapes.get(container_local) else {
             return;
         };
@@ -5275,11 +5322,6 @@ impl ArtboardInstance {
                 continue;
             }
             owner.mark_mutator_dirty();
-            self.runtime_shapes
-                .queue_backend_paint(RuntimeShapePaintOwnerRef {
-                    shape_local: container_local,
-                    owner_index,
-                });
             let mutator_type = container
                 .paints
                 .get(owner.paint_index)
@@ -5298,13 +5340,33 @@ impl ArtboardInstance {
                     graph,
                     layout_bounds,
                 );
+                if let Some(mutator_local) = mutator_local
+                    && let Some(value) = self.solid_color_value(mutator_local)
+                {
+                    self.settle_runtime_solid_color_callback_with_graph(
+                        mutator_local,
+                        value,
+                        graph,
+                    );
+                }
             } else if matches!(mutator_type, Some("LinearGradient" | "RadialGradient"))
                 && let Some(mutator_local) = mutator_local
             {
+                self.runtime_shapes
+                    .queue_backend_paint(RuntimeShapePaintOwnerRef {
+                        shape_local: container_local,
+                        owner_index,
+                    });
                 // Gradient::renderOpacityChanged calls markGradientDirty,
                 // which enters the ordinary component graph with Paint dirt
                 // (`linear_gradient.cpp:203-215`).
                 self.add_dirt(mutator_local, ComponentDirt::PAINT, true);
+            } else {
+                self.runtime_shapes
+                    .queue_backend_paint(RuntimeShapePaintOwnerRef {
+                        shape_local: container_local,
+                        owner_index,
+                    });
             }
         }
     }
@@ -5389,8 +5451,10 @@ impl ArtboardInstance {
             .paint_owners_by_component_local
             .get(local_id)
         else {
+            self.settle_runtime_unowned_solid_color_backend(local_id, value, graph);
             return;
         };
+        let mut settled_owner = false;
         for owner in owners.iter().copied() {
             let is_solid_color = self
                 .runtime_shapes
@@ -5398,6 +5462,7 @@ impl ArtboardInstance {
                 .and_then(|shape| shape.paint_owners.get(owner.owner_index))
                 .is_some_and(|paint| paint.mutator_local == Some(local_id));
             if is_solid_color {
+                settled_owner = true;
                 let Some(paint) = self
                     .runtime_shapes
                     .get(owner.shape_local)
@@ -5405,6 +5470,17 @@ impl ArtboardInstance {
                 else {
                     continue;
                 };
+                let opacity_local = shape_paint_container_opacity_local(graph, owner.shape_local);
+                if self.component(opacity_local).is_some_and(|component| {
+                    component.transform.render_opacity == 0.0
+                        && component.dirt.contains(ComponentDirt::RENDER_OPACITY)
+                }) {
+                    // C++ dependency order settles Shape::RenderOpacity before
+                    // a synchronous SolidColor keyframe callback.
+                    paint
+                        .render_opacity
+                        .set(self.authored_transform(opacity_local).opacity);
+                }
                 let render_color = color_modulate_opacity(value, paint.render_opacity.get());
                 let settled = match paint.paint_state.borrow_mut().as_mut() {
                     Some(RuntimeShapePaintState::SolidColor {
@@ -5437,10 +5513,102 @@ impl ArtboardInstance {
                 // color (`src/shapes/paint/solid_color.cpp:23-54`). Factory
                 // construction remains queued for an owner that has not yet
                 // reached `ShapePaint::initRenderPaint`.
-                if let Some(render_paint) = paint.backend.value.borrow_mut().paint.as_mut() {
+                let mut backend = paint.backend.value.borrow_mut();
+                let settled_backend = if let Some(render_paint) = backend.paint.as_mut() {
                     render_paint.color(render_color);
+                    true
+                } else {
+                    false
+                };
+                // `RuntimeOccurrenceRenderResources` is the late-factory
+                // storage for this concrete Artboard clone. It represents
+                // the same C++ ShapePaint-owned RenderPaint as `backend`
+                // above, not a second logical paint. Use it only when the
+                // ordinary owner has not materialized a backend handle.
+                if !settled_backend {
+                    let mut resources = self.render_resources.borrow_mut();
+                    if let Some(render_paint) = resources.paints.paint_mut(paint.paint_global_id) {
+                        render_paint.color(render_color);
+                    }
+                    if let Some(cached) = resources
+                        .paint_configurations
+                        .get_mut(paint.paint_global_id)
+                    {
+                        cached.configuration.shader =
+                            RuntimeRenderPaintShaderConfiguration::SolidColor(render_color);
+                    }
                 }
             }
+        }
+        if !settled_owner {
+            self.settle_runtime_unowned_solid_color_backend(local_id, value, graph);
+        }
+    }
+
+    fn settle_runtime_unowned_solid_color_backend(
+        &self,
+        local_id: usize,
+        value: u32,
+        graph: &ArtboardGraph,
+    ) {
+        let Some(mutator_global) = graph
+            .local_objects
+            .iter()
+            .find(|object| object.local_id == local_id)
+            .map(|object| object.global_id)
+        else {
+            return;
+        };
+        let paint_global = self
+            .runtime_file()
+            .and_then(|runtime| runtime.object(mutator_global as usize))
+            .and_then(|mutator| mutator.uint_property("parentId"))
+            .and_then(|paint_local| usize::try_from(paint_local).ok())
+            .and_then(|paint_local| {
+                graph
+                    .local_objects
+                    .iter()
+                    .find(|object| object.local_id == paint_local)
+            })
+            .map(|object| object.global_id)
+            .or_else(|| {
+                graph
+                    .shape_paint_containers
+                    .iter()
+                    .flat_map(|container| &container.paints)
+                    .find(|paint| paint.mutator_global == Some(mutator_global))
+                    .map(|paint| paint.global_id)
+            });
+        let Some(paint_global) = paint_global else {
+            return;
+        };
+        let render_color = color_modulate_opacity(value, 1.0);
+        let mut settled_text_paint = false;
+        for drawable in self.runtime_drawables.iter() {
+            let Some(owner) = drawable.text_draw_owner.as_ref() else {
+                continue;
+            };
+            let mut backend = owner.backend.borrow_mut();
+            let Some(authored) = backend.authored_paints.get_mut(&paint_global) else {
+                continue;
+            };
+            authored.paint.color(render_color);
+            if let Some(cached) = authored.configuration.as_mut() {
+                cached.configuration.shader =
+                    RuntimeRenderPaintShaderConfiguration::SolidColor(render_color);
+            }
+            settled_text_paint = true;
+        }
+        if settled_text_paint {
+            return;
+        }
+        let mut resources = self.render_resources.borrow_mut();
+        if let Some(render_paint) = resources.paints.paint_mut(paint_global) {
+            render_paint.color(render_color);
+        }
+        if let Some(cached) = resources.paint_configurations.get_mut(paint_global) {
+            cached.configuration.shader =
+                RuntimeRenderPaintShaderConfiguration::SolidColor(render_color);
         }
     }
 
@@ -5810,7 +5978,7 @@ impl ArtboardInstance {
         if component.type_name == "Artboard"
             || (component.type_name != "LayoutComponent"
                 && component.type_name != "NestedArtboardLayout"
-                && (layout_bounds.is_none() || component.layout_ancestors.is_empty()))
+                && component.layout_ancestors.is_empty())
         {
             return component.transform.world_transform;
         }
@@ -5853,7 +6021,9 @@ impl ArtboardInstance {
             );
         }
         if component.type_name == "NestedArtboardLayout"
-            && let Some(bounds) = layout_bounds.and_then(|bounds| bounds.get(&local_id).copied())
+            && let Some(bounds) = layout_bounds
+                .and_then(|bounds| bounds.get(&local_id).copied())
+                .or_else(|| self.runtime_supported_layout_component_bounds(local_id, graph))
         {
             if mat2d_linear_is_identity(component.transform.local_transform) {
                 return Mat2D([1.0, 0.0, 0.0, 1.0, bounds.x, bounds.y]);
@@ -5876,7 +6046,7 @@ impl ArtboardInstance {
         let Some(parent_local) = self.component_parent_local(local_id) else {
             return component.transform.world_transform;
         };
-        if layout_bounds.is_none() || component.layout_ancestors.is_empty() {
+        if component.layout_ancestors.is_empty() {
             return component.transform.world_transform;
         }
         if let Some(layout_local) = component
@@ -9082,12 +9252,36 @@ impl RuntimeTextDrawOwner {
         self.dirty.set(true);
     }
 
+    fn mark_render_styles_dirty(&self) {
+        self.dirty.set(true);
+        self.backend.borrow_mut().paths.clear();
+    }
+
     fn retained_or_build(
         &self,
         build: impl FnOnce() -> Result<RuntimeCachedTextShapePaints>,
     ) -> Result<RuntimeCachedTextShapePaints> {
         if self.dirty.get() || self.retained.borrow().is_none() {
             let retained = build()?;
+            let rebuilt_render_styles = self
+                .retained
+                .borrow()
+                .as_ref()
+                .is_some_and(|previous| previous.commands != retained.commands);
+            if rebuilt_render_styles {
+                // `Text::buildRenderStyles()` begins with
+                // `clearRenderStyles()`, whose
+                // `TextStylePaint::rewindPath()` clears `m_opacityPaths`.
+                // Changed render styles therefore create fresh
+                // ShapePaintPath/RenderPath objects; only
+                // TextStylePaint::m_path and Text::m_clipPath rewind in place
+                // (`text.cpp:534-543`, `text_style_paint.cpp:15-43`).
+                //
+                // Rust's path/layout epochs conservatively invalidate
+                // unrelated Text owners too. Preserve those owners' backend
+                // identity when rebuilding produces the same commands.
+                self.backend.borrow_mut().paths.clear();
+            }
             *self.retained.borrow_mut() = Some(retained);
             self.dirty.set(false);
         }
@@ -9525,6 +9719,15 @@ impl RuntimeDrawableList {
         };
         if let Some(owner) = self.drawables[drawable_index].text_draw_owner.as_ref() {
             owner.mark_dirty();
+        }
+    }
+
+    pub(crate) fn mark_text_render_styles_dirty_for_local(&self, local_id: usize) {
+        let Some(drawable_index) = self.drawable_by_local.get(&local_id).copied() else {
+            return;
+        };
+        if let Some(owner) = self.drawables[drawable_index].text_draw_owner.as_ref() {
+            owner.mark_render_styles_dirty();
         }
     }
 
@@ -15435,7 +15638,7 @@ fn preallocate_artboard_render_paint_tree_batch_into(
                 include_script_input_artboards,
             );
         }
-        let mut resources = nested.render_resources.borrow_mut();
+        let mut resources = nested.child.render_resources.borrow_mut();
         resources.reset_for_parent_backend_context(paints.backend_context_id);
         preallocate_artboard_render_paint_tree_batch_into(
             runtime,
@@ -16479,7 +16682,7 @@ fn runtime_draw_live_nested_artboard(
     renderer.transform(runtime_render_mat(host_world));
 
     let draw_result = (|| {
-        let mut resources = nested.render_resources.borrow_mut();
+        let mut resources = nested.child.render_resources.borrow_mut();
         resources.initialize(
             paint_by_global.backend_context_id,
             runtime,
@@ -16639,6 +16842,23 @@ fn runtime_realize_owned_shape_paints(
             }
         }
         backend.paint = Some(render_paint);
+        // The late-factory realization above configures the concrete paint
+        // from the occurrence's already-settled state. C++ has already
+        // delivered that same inherited opacity through
+        // `ShapePaintMutator::renderOpacity` before the retained RenderPaint
+        // becomes observable. Seed the Rust callback guard at this seam so
+        // the next component update does not replay an unchanged opacity.
+        let opacity_local = instance
+            .runtime_graph()
+            .map_or(owner_ref.shape_local, |graph| {
+                shape_paint_container_opacity_local(graph, owner_ref.shape_local)
+            });
+        if let Some(render_opacity) = instance
+            .component(opacity_local)
+            .map(|component| component.transform.render_opacity)
+        {
+            owner.render_opacity.set(render_opacity);
+        }
         owner.initial_gradient_event_supplied.set(false);
         owner.backend_queued.set(false);
     }
@@ -18791,7 +19011,7 @@ fn runtime_draw_component_list_with_state(
 
         renderer.save();
         renderer.transform(runtime_render_mat(item_transforms[item_index]));
-        let mut resources = item.render_resources.borrow_mut();
+        let mut resources = item.child.render_resources.borrow_mut();
         resources.initialize(
             paint_by_global.backend_context_id,
             runtime,
@@ -24078,6 +24298,64 @@ pub(crate) fn runtime_path_geometry_commands(
     );
     prune_empty_path_segments(&mut commands);
     commands
+}
+
+/// C++ `Shape::hitTestHiFi` equivalent for one authored path.
+///
+/// The pinned implementation feeds the path into a `HitTestCommandPath` with
+/// a two-pixel query radius. Filled containment covers the interior, while a
+/// four-pixel round stroke covers the same two-pixel boundary neighborhood.
+pub(crate) fn runtime_path_geometry_hit_test(
+    artboard: &ArtboardInstance,
+    path: &PathGeometryNode,
+    transform: Mat2D,
+    point: (f32, f32),
+) -> bool {
+    let commands = runtime_path_geometry_commands(artboard, path, transform);
+    let point = RenderVec2D::new(point.0, point.1);
+    runtime_path_contains(&commands, point, RuntimeGeometryFillRule::NonZero)
+        || runtime_stroked_path_contains(
+            &commands,
+            point,
+            4.0,
+            RenderStrokeCap::Round,
+            RenderStrokeJoin::Round,
+        )
+}
+
+pub(crate) fn runtime_text_value_run_hit_test(
+    artboard: &ArtboardInstance,
+    run_local: usize,
+    point: (f32, f32),
+) -> bool {
+    let Some(runtime) = artboard.runtime_file() else {
+        return false;
+    };
+    let Some(graph) = artboard.runtime_graph() else {
+        return false;
+    };
+    let Some(text_local) = artboard.component_parent_local(run_local) else {
+        return false;
+    };
+    if artboard
+        .component(text_local)
+        .is_none_or(|component| component.type_name != "Text")
+    {
+        return false;
+    }
+    let layout_constraint = artboard.runtime_text_layout_constraint(text_local, None);
+    let text_world = artboard.runtime_component_world_transform(text_local, graph);
+    static_text_value_run_hit(
+        runtime,
+        graph,
+        artboard,
+        text_local,
+        run_local,
+        layout_constraint,
+        text_world,
+        RenderVec2D::new(point.0, point.1),
+        2.0,
+    )
 }
 
 fn runtime_path_geometry(artboard: &ArtboardInstance, path: &PathGeometryNode) -> PathGeometryNode {

@@ -24,6 +24,7 @@ pub enum ActionTarget {
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Action {
     BindDefaultViewModel,
+    BindFreshViewModel,
     CreateDefaultViewModel,
     BindPreparedViewModel,
     SetViewModelNumber {
@@ -171,6 +172,16 @@ impl Execution {
                         }
                     }
                 }
+                Action::BindFreshViewModel => {
+                    let context =
+                        selected_artboard_fresh_view_model_context(&runtime, artboard_index)
+                            .context("selected artboard has no view-model schema")?;
+                    instance.bind_owned_view_model_artboard_contexts(&runtime, &context);
+                    if let Some(machine) = state_machine.as_mut() {
+                        machine.bind_owned_view_model_contexts(&context);
+                        machine.advance_data_context();
+                    }
+                }
                 Action::CreateDefaultViewModel => {
                     owned_context =
                         selected_artboard_owned_view_model_context(&runtime, artboard_index);
@@ -297,13 +308,26 @@ impl Execution {
                     }
                 }
                 Action::Advance { target, seconds } => match target {
-                    StateMachine => advance_state_machine(
-                        &mut instance,
-                        state_machine
-                            .as_mut()
-                            .context("no selected state machine")?,
-                        *seconds,
-                    )?,
+                    StateMachine => {
+                        advance_state_machine(
+                            &mut instance,
+                            state_machine
+                                .as_mut()
+                                .context("no selected state machine")?,
+                            *seconds,
+                            &mut factory,
+                        )?;
+                        instance
+                            .synchronize_artboard_renderer(
+                                &runtime,
+                                artboard,
+                                &graph.artboards,
+                                &external_images,
+                                &mut factory,
+                                None,
+                            )
+                            .context("state-machine renderer synchronization failed")?;
+                    }
                     Artboard => {
                         instance
                             .advance_frame_components(*seconds)
@@ -490,21 +514,18 @@ fn advance_state_machine(
     instance: &mut ArtboardInstance,
     state_machine: &mut StateMachineInstance,
     seconds: f32,
+    factory: &mut SerializingFactory,
 ) -> anyhow::Result<()> {
-    instance.advance_state_machine_instance(state_machine, seconds);
-    if instance
-        .advance_frame_components_with_state_machine(seconds, state_machine)
-        .map_err(|error| anyhow::anyhow!(error))
-        .context("retained frame-component advance failed")?
-    {
-        instance.advance_state_machine_instance(state_machine, 0.0);
-    }
-    instance
-        .settle_state_machine_update_passes_after_main_advance_with_script_errors(
-            std::slice::from_mut(state_machine),
-        )
-        .map_err(|error| anyhow::anyhow!(error))
-        .context("state-machine update failed")?;
+    StateMachineInstance::advance_and_apply_state_machines_with_factory_and_view_models(
+        instance,
+        std::slice::from_mut(state_machine),
+        seconds,
+        factory,
+        true,
+        || false,
+    )
+    .map_err(|error| anyhow::anyhow!(error))
+    .context("state-machine update failed")?;
     Ok(())
 }
 
@@ -518,6 +539,20 @@ fn selected_artboard_owned_view_model_context(
         .and_then(|index| usize::try_from(index).ok())?;
     let main = RuntimeOwnedViewModelInstance::from_instance(runtime, view_model_index, 0)
         .or_else(|| RuntimeOwnedViewModelInstance::new(runtime, view_model_index))?;
+    let mut context = RuntimeOwnedViewModelContext::from_main(main);
+    context.complete_for_artboard(runtime, artboard_index);
+    Some(context)
+}
+
+fn selected_artboard_fresh_view_model_context(
+    runtime: &RuntimeFile,
+    artboard_index: usize,
+) -> Option<RuntimeOwnedViewModelContext> {
+    let view_model_index = runtime
+        .artboard(artboard_index)?
+        .uint_property("viewModelId")
+        .and_then(|index| usize::try_from(index).ok())?;
+    let main = RuntimeOwnedViewModelInstance::new(runtime, view_model_index)?;
     let mut context = RuntimeOwnedViewModelContext::from_main(main);
     context.complete_for_artboard(runtime, artboard_index);
     Some(context)

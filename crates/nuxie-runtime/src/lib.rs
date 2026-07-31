@@ -148,15 +148,15 @@ pub(crate) use data_bind_graph::{
     RuntimeDataBindGraphTargetsMut, RuntimeDataBindGraphValue,
     data_bind_flags_apply_source_to_target, data_bind_flags_apply_target_to_source,
 };
+pub use draw::image_asset::{RuntimeImageAssetLoader, RuntimeImageAssetOwners};
 pub use draw::{
     RuntimeContourMeasure, RuntimeDrawableDispatch, RuntimeDrawableDispatchKind,
     RuntimeDrawableDispatchObjectKind, RuntimeFeatherState, RuntimeGeometryHit,
     RuntimeGeometryHitOccurrence, RuntimeGeometryHitPathSegment, RuntimeGradientStop,
-    RuntimeImageAssetOwners, RuntimeImageDimensionConflict, RuntimeLayoutBoundsReport,
-    RuntimePathCommand, RuntimePathMeasure, RuntimePathSample, RuntimeRenderPaints,
-    RuntimeSemanticTextHit, RuntimeShapePaintCommand, RuntimeShapePaintKind,
-    RuntimeShapePaintPathKind, RuntimeShapePaintState, preallocate_source_render_paints,
-    runtime_path_commands_from_raw_path,
+    RuntimeImageDimensionConflict, RuntimeLayoutBoundsReport, RuntimePathCommand,
+    RuntimePathMeasure, RuntimePathSample, RuntimeRenderPaints, RuntimeSemanticTextHit,
+    RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind,
+    RuntimeShapePaintState, preallocate_source_render_paints, runtime_path_commands_from_raw_path,
 };
 pub use focus::{
     FocusBounds, FocusDirection, FocusEdgeBehavior, FocusEvent, FocusEventKind, FocusManager,

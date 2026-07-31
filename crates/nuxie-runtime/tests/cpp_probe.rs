@@ -1,5 +1,6 @@
 use nuxie_binary::{RuntimeFile, read_runtime_file};
 use nuxie_graph::GraphFile;
+use nuxie_image_codec::{decoded_rgba_len, preflight_encoded_image, validate_encoded_image};
 use nuxie_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeArtboardDefaultScene, RuntimeComponent,
     RuntimeDataContext, RuntimeDataContextLookupKind, RuntimeDataContextLookupReport,
@@ -111,6 +112,64 @@ fn cpp_runtime_fixture(relative: &str) -> PathBuf {
     PathBuf::from(root)
         .join("tests/unit_tests/assets")
         .join(relative)
+}
+
+fn pinned_decoder_fixture(relative: &str, expected_len: usize) -> Vec<u8> {
+    let bytes = std::fs::read(cpp_runtime_fixture(relative))
+        .unwrap_or_else(|error| panic!("read pinned image decoder fixture {relative}: {error}"));
+    assert_eq!(
+        bytes.len(),
+        expected_len,
+        "pinned image decoder fixture length"
+    );
+    bytes
+}
+
+#[test]
+fn upstream_png_decoder_fixture_contract() {
+    let bytes = pinned_decoder_fixture("placeholder.png", 1_096);
+    let decoded = validate_encoded_image(&bytes).expect("placeholder PNG fully decodes");
+    assert_eq!((decoded.width, decoded.height), (226, 128));
+    assert_eq!(
+        decoded_rgba_len(decoded.width, decoded.height),
+        Some(226 * 128 * 4)
+    );
+}
+
+#[test]
+fn upstream_jpeg_decoder_fixture_contract() {
+    let bytes = pinned_decoder_fixture("open_source.jpg", 8_880);
+    let decoded = validate_encoded_image(&bytes).expect("open-source JPEG fully decodes");
+    assert_eq!((decoded.width, decoded.height), (350, 200));
+    assert_eq!(
+        decoded_rgba_len(decoded.width, decoded.height),
+        Some(350 * 200 * 4)
+    );
+}
+
+#[test]
+fn upstream_bad_jpeg_fixture_is_rejected_before_oversized_allocation() {
+    let bytes = pinned_decoder_fixture("bad.jpg", 88_731);
+    assert_eq!(preflight_encoded_image(&bytes), None);
+    assert_eq!(validate_encoded_image(&bytes), None);
+}
+
+#[test]
+fn upstream_bad_png_fixture_is_rejected_before_oversized_allocation() {
+    let bytes = pinned_decoder_fixture("bad.png", 534_283);
+    assert_eq!(preflight_encoded_image(&bytes), None);
+    assert_eq!(validate_encoded_image(&bytes), None);
+}
+
+#[test]
+fn upstream_webp_decoder_fixture_contract() {
+    let bytes = pinned_decoder_fixture("1.webp", 30_320);
+    let decoded = validate_encoded_image(&bytes).expect("WebP fully decodes");
+    assert_eq!((decoded.width, decoded.height), (550, 368));
+    assert_eq!(
+        decoded_rgba_len(decoded.width, decoded.height),
+        Some(550 * 368 * 4)
+    );
 }
 
 fn read_cpp_probe_fixture_with_args(
@@ -17355,6 +17414,25 @@ fn runtime_update_matches_cpp_for_transform_hierarchy() {
             .component(cpp_component.local_id)
             .unwrap_or_else(|| panic!("missing Rust component {}", cpp_component.local_id));
         compare_component(cpp_component, rust_component, label);
+    }
+}
+
+#[test]
+fn image_mesh_and_in_band_asset_fixtures_match_pinned_cpp_update() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ image/mesh comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+
+    for relative in ["tape.riv", "in_band_asset.riv"] {
+        let cpp = read_cpp_probe_fixture_with_args(&probe, relative, &[]);
+        let fixture = cpp_runtime_fixture(relative);
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("read {}: {error}", fixture.display()));
+        let (_, mut rust) = read_rust_instance_from_bytes(&bytes, relative);
+        let _ = rust.update_components();
+        let report = rust.update_components();
+        compare_cpp_runtime_update(&cpp, &rust, &report, relative);
     }
 }
 

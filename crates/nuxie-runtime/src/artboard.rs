@@ -1,5 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 use std::sync::{
     Arc,
     atomic::{AtomicU64, Ordering},
@@ -146,46 +147,6 @@ pub enum ExternalFontAssetError {
     UnknownAsset { asset_id: u32 },
     WrongAssetKind { asset_id: u32, actual: &'static str },
     InvalidFont { asset_id: u32 },
-}
-
-/// Inputs that make C++ `Image::updateImageScale()` overwrite the public
-/// `scaleX`/`scaleY` fields for a pre-7.2 file. The draw module packs the
-/// decoded image identity, dimensions, fit/alignment, and controlled layout
-/// size into these words. A public scale write remains authoritative until one
-/// of those inputs changes and C++ would run `updateImageScale()` again.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct RuntimeLegacyImageLayoutScaleKey([u64; 12]);
-
-impl RuntimeLegacyImageLayoutScaleKey {
-    pub(crate) fn new(words: [u64; 12]) -> Self {
-        Self(words)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct RuntimeLegacyImageLayoutScaleState {
-    key: RuntimeLegacyImageLayoutScaleKey,
-    scale_x: f32,
-    scale_y: f32,
-    user_scale_x: bool,
-    user_scale_y: bool,
-}
-
-fn legacy_image_layout_scale_axis(property_key: u16) -> Option<bool> {
-    static SCALE_KEYS: std::sync::OnceLock<(Option<u16>, Option<u16>)> = std::sync::OnceLock::new();
-    let (scale_x_key, scale_y_key) = *SCALE_KEYS.get_or_init(|| {
-        (
-            property_key_for_name("Node", "scaleX"),
-            property_key_for_name("Node", "scaleY"),
-        )
-    });
-    if scale_x_key == Some(property_key) {
-        Some(true)
-    } else if scale_y_key == Some(property_key) {
-        Some(false)
-    } else {
-        None
-    }
 }
 
 impl std::fmt::Display for ExternalFontAssetError {
@@ -483,13 +444,17 @@ pub struct ArtboardInstance {
     pub(crate) artboard_data_bind_processed_epoch: u64,
     pub(crate) image_asset_overrides: BTreeMap<usize, Option<u32>>,
     text_style_font_overrides: BTreeMap<usize, RuntimeFontAssetValue>,
-    has_legacy_image_layout_scales: Cell<bool>,
-    legacy_image_layout_scales: RefCell<BTreeMap<usize, RuntimeLegacyImageLayoutScaleState>>,
+    pub(crate) runtime_images: crate::draw::image::RuntimeImageList,
     external_font_assets: Arc<BTreeMap<u32, Arc<[u8]>>>,
     /// C++ File/ImageAsset ownership projected into the runtime occurrence
     /// tree. Every clone retains the same file-owned owner list; Images borrow
     /// RenderImage from it and never from a facade scene cache.
-    pub(crate) runtime_image_assets: RefCell<Option<Arc<crate::draw::RuntimeImageAssetOwners>>>,
+    pub(crate) runtime_image_assets:
+        RefCell<Option<Arc<crate::draw::image_asset::RuntimeImageAssetOwners>>>,
+    /// Occurrence-local callback sink registered with every retained
+    /// ImageAsset owner, mirroring `FileAssetReferencer` registration.
+    pub(crate) runtime_image_asset_referencer:
+        Rc<crate::draw::image_asset::RuntimeImageAssetReferencerQueue>,
     /// C++ `ArtboardInstance` owns the concrete renderer-facing members of
     /// every object in its cloned graph. Rust attaches the backend late, but
     /// the resulting resources still follow this exact occurrence through
@@ -609,10 +574,10 @@ impl Clone for ArtboardInstance {
             artboard_data_bind_processed_epoch: self.artboard_data_bind_processed_epoch,
             image_asset_overrides: self.image_asset_overrides.clone(),
             text_style_font_overrides: self.text_style_font_overrides.clone(),
-            has_legacy_image_layout_scales: self.has_legacy_image_layout_scales.clone(),
-            legacy_image_layout_scales: self.legacy_image_layout_scales.clone(),
+            runtime_images: self.runtime_images.clone(),
             external_font_assets: self.external_font_assets.clone(),
             runtime_image_assets: self.runtime_image_assets.clone(),
+            runtime_image_asset_referencer: Rc::new(Default::default()),
             render_resources: self.render_resources.clone(),
             geometry_state: self.geometry_state.clone(),
             dirt_depth: 0,
@@ -674,6 +639,10 @@ impl Clone for ArtboardInstance {
         // custom DataBind flags. Re-run authored Solo/Layout collapse only
         // after the clone-owned Component ↔ DataBind links are rebuilt.
         cloned.rederive_initial_component_collapse();
+        let image_assets = cloned.runtime_image_assets.borrow().clone();
+        if let Some(owners) = image_assets {
+            cloned.attach_runtime_image_assets_tree(owners);
+        }
         cloned
     }
 }
@@ -2258,10 +2227,10 @@ impl ArtboardInstance {
             artboard_data_bind_processed_epoch: 0,
             image_asset_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
-            has_legacy_image_layout_scales: Cell::new(false),
-            legacy_image_layout_scales: RefCell::new(BTreeMap::new()),
+            runtime_images: crate::draw::image::RuntimeImageList::from_graph(file, graph),
             external_font_assets,
             runtime_image_assets: RefCell::new(None),
+            runtime_image_asset_referencer: Rc::new(Default::default()),
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
             geometry_state: RefCell::new(crate::draw::RuntimeGeometryState::default()),
             dirt_depth: 0,
@@ -3817,6 +3786,12 @@ impl ArtboardInstance {
             return false;
         }
         self.image_asset_overrides.insert(local_id, asset_global);
+        let dimensions = asset_global
+            .and_then(|asset_global| self.runtime_render_image(asset_global))
+            .map(|image| (image.width(), image.height()));
+        self.runtime_images
+            .set_asset(local_id, asset_global, dimensions);
+        self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
         self.mark_artboard_data_bind_work_dirty();
         self.mark_changed();
         self.mark_prepared_changed();
@@ -3873,106 +3848,10 @@ impl ArtboardInstance {
             // (`src/animation/nested_number.cpp:36-48`).
             return Some(self.nested_number_value(local_id).unwrap_or(0.0));
         }
-        self.has_legacy_image_layout_scales
-            .get()
-            .then(|| self.legacy_image_layout_public_scale(local_id, property_key))
-            .flatten()
+        self.runtime_images
+            .public_scale(local_id, property_key)
             .or_else(|| runtime_scroll_double_property(self, local_id, property_key))
             .or_else(|| self.objects.double_property(local_id, property_key))
-    }
-
-    /// Mirrors the legacy branch of C++ `Image::updateImageScale()`. Files
-    /// before 7.2 expose the layout fit through public scale fields; a later
-    /// user/animation write wins until another fit-driving input changes.
-    pub(crate) fn resolve_legacy_image_layout_scale(
-        &self,
-        local_id: usize,
-        key: RuntimeLegacyImageLayoutScaleKey,
-        fit_scale_x: f32,
-        fit_scale_y: f32,
-    ) -> (f32, f32) {
-        self.has_legacy_image_layout_scales.set(true);
-        let mut states = self.legacy_image_layout_scales.borrow_mut();
-        let state = states
-            .entry(local_id)
-            .and_modify(|state| {
-                if state.key != key {
-                    *state = RuntimeLegacyImageLayoutScaleState {
-                        key,
-                        scale_x: fit_scale_x,
-                        scale_y: fit_scale_y,
-                        user_scale_x: false,
-                        user_scale_y: false,
-                    };
-                }
-            })
-            .or_insert(RuntimeLegacyImageLayoutScaleState {
-                key,
-                scale_x: fit_scale_x,
-                scale_y: fit_scale_y,
-                user_scale_x: false,
-                user_scale_y: false,
-            });
-        let authored_scale_x = property_key_for_name("Node", "scaleX")
-            .and_then(|property_key| self.objects.double_property(local_id, property_key))
-            .unwrap_or(1.0);
-        let authored_scale_y = property_key_for_name("Node", "scaleY")
-            .and_then(|property_key| self.objects.double_property(local_id, property_key))
-            .unwrap_or(1.0);
-        (
-            if state.user_scale_x {
-                authored_scale_x
-            } else {
-                state.scale_x
-            },
-            if state.user_scale_y {
-                authored_scale_y
-            } else {
-                state.scale_y
-            },
-        )
-    }
-
-    fn legacy_image_layout_public_scale(&self, local_id: usize, property_key: u16) -> Option<f32> {
-        let axis_x = legacy_image_layout_scale_axis(property_key)?;
-        let states = self.legacy_image_layout_scales.borrow();
-        let state = states.get(&local_id)?;
-        match (axis_x, state.user_scale_x, state.user_scale_y) {
-            (true, false, _) => Some(state.scale_x),
-            (false, _, false) => Some(state.scale_y),
-            _ => None,
-        }
-    }
-
-    fn has_legacy_image_layout_scale(&self, local_id: usize, property_key: u16) -> bool {
-        self.has_legacy_image_layout_scales.get()
-            && legacy_image_layout_scale_axis(property_key).is_some()
-            && self
-                .legacy_image_layout_scales
-                .borrow()
-                .contains_key(&local_id)
-    }
-
-    fn mark_legacy_image_layout_scale_written(&self, local_id: usize, property_key: u16) -> bool {
-        if !self.has_legacy_image_layout_scales.get() {
-            return false;
-        }
-        let Some(axis_x) = legacy_image_layout_scale_axis(property_key) else {
-            return false;
-        };
-        let mut states = self.legacy_image_layout_scales.borrow_mut();
-        let Some(state) = states.get_mut(&local_id) else {
-            return false;
-        };
-        if axis_x {
-            let changed = !state.user_scale_x;
-            state.user_scale_x = true;
-            changed
-        } else {
-            let changed = !state.user_scale_y;
-            state.user_scale_y = true;
-            changed
-        }
     }
 
     /// Typed property write with dirt propagation — the write path the
@@ -3996,7 +3875,7 @@ impl ArtboardInstance {
                 .set_generated_double_property(local_id, property_key, value);
             return self.after_double_property_set(local_id, property_key, value);
         }
-        if self.has_legacy_image_layout_scale(local_id, property_key)
+        if self.runtime_images.has_public_scale(local_id, property_key)
             && self.double_property(local_id, property_key) == Some(value)
         {
             return false;
@@ -4004,9 +3883,10 @@ impl ArtboardInstance {
         let object_changed = self
             .objects
             .set_double_property(local_id, property_key, value);
-        let legacy_scale_changed =
-            self.mark_legacy_image_layout_scale_written(local_id, property_key);
-        if !object_changed && !legacy_scale_changed {
+        let image_scale_changed = self
+            .runtime_images
+            .mark_public_scale_written(local_id, property_key);
+        if !object_changed && !image_scale_changed {
             return false;
         }
         self.after_double_property_set(local_id, property_key, value)
@@ -4034,7 +3914,7 @@ impl ArtboardInstance {
                 .set_generated_double_property(local_id, property_key, value);
             return self.after_double_property_set(local_id, property_key, value);
         }
-        if self.has_legacy_image_layout_scale(local_id, property_key)
+        if self.runtime_images.has_public_scale(local_id, property_key)
             && self.double_property(local_id, property_key) == Some(value)
         {
             return false;
@@ -4042,9 +3922,10 @@ impl ArtboardInstance {
         let object_changed =
             self.objects
                 .set_generated_double_property(local_id, property_key, value);
-        let legacy_scale_changed =
-            self.mark_legacy_image_layout_scale_written(local_id, property_key);
-        if !object_changed && !legacy_scale_changed {
+        let image_scale_changed = self
+            .runtime_images
+            .mark_public_scale_written(local_id, property_key);
+        if !object_changed && !image_scale_changed {
             return false;
         }
         self.after_double_property_set(local_id, property_key, value)
@@ -6418,9 +6299,10 @@ impl ArtboardInstance {
         let object_changed =
             self.objects
                 .set_generated_double_property(local_id, property_key, value);
-        let legacy_scale_changed =
-            self.mark_legacy_image_layout_scale_written(local_id, property_key);
-        if !object_changed && !legacy_scale_changed {
+        let image_scale_changed = self
+            .runtime_images
+            .mark_public_scale_written(local_id, property_key);
+        if !object_changed && !image_scale_changed {
             return false;
         }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
@@ -6518,6 +6400,16 @@ impl ArtboardInstance {
             .component(handle)
             .and_then(|component| component.concrete.skinnable.as_ref())
             .is_some_and(|skinnable| skinnable.skin.is_some())
+    }
+
+    pub(crate) fn runtime_skinnable_skin_local(&self, handle: ComponentHandle) -> Option<usize> {
+        self.objects
+            .component(handle)?
+            .concrete
+            .skinnable
+            .as_ref()?
+            .skin
+            .and_then(|skin| self.objects.component_local_id(skin))
     }
 
     pub(crate) fn runtime_node_computed_local_transform(&self, local_id: usize) -> Option<Mat2D> {
@@ -6816,6 +6708,12 @@ impl ArtboardInstance {
             })
             .unwrap_or_default();
         self.layout_constraint_bounds = next_bounds;
+        if let (Some(bounds), Some(graph)) = (
+            self.layout_constraint_bounds.clone(),
+            self.runtime_graph().cloned(),
+        ) {
+            self.control_runtime_layout_images(&graph, bounds.as_ref());
+        }
         for path_local in resized_parametric_paths {
             // C++ LayoutComponent::propagateSizeToChildren calls
             // ParametricPath::controlSize. That setter writes the solved
@@ -6845,6 +6743,23 @@ impl ArtboardInstance {
         self.runtime_drawables.mark_layout_resources_dirty();
         self.runtime_drawables.mark_text_resources_dirty();
         self.mark_prepared_changed();
+    }
+
+    /// Direct `LayoutComponent::markLayoutNodeDirty` publication. The epoch is
+    /// only a derived fence for the retained layout solve; renderer resources
+    /// outside this exact LayoutComponent are not dirtied.
+    pub(crate) fn mark_layout_node_changed(&mut self, local_id: usize) -> bool {
+        if !self
+            .component(local_id)
+            .is_some_and(|component| component.type_name == "LayoutComponent")
+        {
+            return false;
+        }
+        self.layout_epoch = self.layout_epoch.wrapping_add(1);
+        self.runtime_drawables
+            .mark_layout_resource_dirty_for_local(local_id);
+        self.mark_prepared_changed();
+        true
     }
 
     pub(crate) fn mark_path_changed(&mut self) {
@@ -7361,6 +7276,7 @@ impl ArtboardInstance {
     }
 
     pub fn update_components(&mut self) -> UpdateComponentsReport {
+        self.settle_runtime_image_asset_updates();
         let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
         self.update_components_with_hook_recording(
             true,
@@ -7389,6 +7305,7 @@ impl ArtboardInstance {
         script_mode: &mut RuntimeScriptUpdateMode<'_>,
         root_transform: Mat2D,
     ) -> bool {
+        let image_assets_did_update = self.settle_runtime_image_asset_updates();
         // Mirrors C++ src/artboard.cpp Artboard::updatePass: data binds run
         // before components, with artboard-host children publishing first.
         self.update_data_binds_for_update_pass(root_transform);
@@ -7397,7 +7314,8 @@ impl ArtboardInstance {
         // parent Yoga graph reports a new layout. The transfer key keeps later
         // precise child-local writes from causing a second solve in the same
         // outer update while still refreshing genuine parent assignments.
-        let mut did_update = self.apply_nested_artboard_layout_bounds_after_parent_solve();
+        let mut did_update =
+            image_assets_did_update | self.apply_nested_artboard_layout_bounds_after_parent_solve();
         if self.joysticks_apply_before_update {
             did_update |= self.apply_joysticks(true);
         }
@@ -8101,6 +8019,9 @@ impl ArtboardInstance {
             for (&local_id, &bounds) in layout_bounds {
                 self.retain_runtime_layout_component_bounds(local_id, bounds, Some(layout_bounds));
             }
+            if let Some((graphs, graph_index)) = graph_owner.as_ref() {
+                self.control_runtime_layout_images(&graphs[*graph_index], layout_bounds);
+            }
         }
 
         report.did_update = true;
@@ -8655,6 +8576,15 @@ impl ArtboardInstance {
         local_id: usize,
         property_key: u16,
     ) -> bool {
+        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("Image")
+            && let Some(value) = self.uint_property(local_id, property_key)
+        {
+            // Generated Image fields update in place. Pinned Image does not
+            // rerun `updateImageScale` for fit writes; the next controlSize,
+            // setMesh, or assetUpdated callback consumes the new value.
+            self.runtime_images
+                .apply_uint_property(local_id, property_key, value);
+        }
         let mut changed = self
             .component(local_id)
             .and_then(|component| component.concrete.constraint)
@@ -9082,6 +9012,18 @@ impl ArtboardInstance {
         value: f32,
     ) -> bool {
         let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+        if type_name == Some("Image") {
+            // Same generated-field ownership as C++ ImageBase. These setters
+            // intentionally do not call updateImageScale themselves.
+            self.runtime_images
+                .apply_double_property(local_id, property_key, value);
+        }
+        if type_name == Some("NSlicedNode")
+            && let Some(changed) =
+                crate::draw::n_sliced_node::size_changed(self, local_id, property_key)
+        {
+            return changed;
+        }
         if type_name == Some("LayoutComponentStyle")
             && property_key_for_name("LayoutComponentStyle", "interpolationTime")
                 == Some(property_key)
@@ -9196,35 +9138,12 @@ impl ArtboardInstance {
                 if property_key_for_name("Vertex", "x") == Some(property_key)
                     || property_key_for_name("Vertex", "y") == Some(property_key) =>
             {
-                // `MeshVertex::markGeometryDirty` calls its parent Mesh's
-                // `markDrawableDirty`, which pushes Vertices dirt
-                // (`src/shapes/mesh_vertex.cpp:5-8`,
-                // `src/shapes/mesh.cpp:14-23`).
-                let Some(mesh_local) = self.component_parent_local(local_id) else {
-                    return false;
-                };
-                let Some(mesh) = self.component_handle(mesh_local) else {
-                    return false;
-                };
-                if let Some(skin) = self
-                    .objects
-                    .component(mesh)
-                    .and_then(|component| component.concrete.skinnable.as_ref())
-                    .and_then(|skinnable| skinnable.skin)
-                {
-                    self.add_component_dirt(skin, ComponentDirt::SKIN, false);
-                }
-                self.add_component_dirt(mesh, ComponentDirt::VERTICES, false)
+                crate::draw::mesh_vertex::geometry_changed(self, local_id)
             }
             Some("AxisX" | "AxisY")
                 if property_key_for_name("Axis", "offset") == Some(property_key) =>
             {
-                // `Axis::offsetChanged` resolves NSlicerDetails from the
-                // parent and pushes NSlicer dirt (`src/layout/axis.cpp:23-29`).
-                self.component_parent_local(local_id)
-                    .is_some_and(|slicer_local| {
-                        self.add_dirt(slicer_local, ComponentDirt::N_SLICER, false)
-                    })
+                crate::draw::axis::offset_changed(self, local_id)
             }
             Some("Artboard")
                 if local_id == 0
@@ -11485,10 +11404,10 @@ mod tests {
             artboard_data_bind_processed_epoch: 0,
             image_asset_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
-            has_legacy_image_layout_scales: Cell::new(false),
-            legacy_image_layout_scales: RefCell::new(BTreeMap::new()),
+            runtime_images: crate::draw::image::RuntimeImageList::default(),
             external_font_assets: Arc::new(BTreeMap::new()),
             runtime_image_assets: RefCell::new(None),
+            runtime_image_asset_referencer: Rc::new(Default::default()),
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
             geometry_state: RefCell::new(crate::draw::RuntimeGeometryState::default()),
             dirt_depth: 0,

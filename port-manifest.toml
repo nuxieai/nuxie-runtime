@@ -2036,8 +2036,8 @@ note = "Direct Image layout, asset, mesh, and clone owner port."
 [[file]]
 upstream = "src/shapes/list_path.cpp"
 status = "partial"
-rust_module = "crates/nuxie-runtime/src/shapes/list_path.rs"
-note = "VertexListener unit conversion is ported, but dynamic ViewModel list-item subscription/remap and CubicDetachedVertex occurrence lifecycle remain absent."
+rust_module = "crates/nuxie-runtime/src/draw.rs"
+note = "F10: generic list-path handling lives in the component-list draw/layout path; dynamic ViewModel list-item subscription/remap and CubicDetachedVertex occurrence lifecycle remain absent."
 
 [[file]]
 upstream = "src/shapes/mesh.cpp"

@@ -8,8 +8,8 @@ expected_entries = 238
 expected_runtime = 195
 expected_scripted = 41
 max_provenance_unknown = 2
-min_cpp_rust_exact = 0
-cpp_rust_exact_ids = []
+min_cpp_rust_exact = 4
+cpp_rust_exact_ids = ["focus_test", "follow_path_constraint", "nested_artboard_origin_override_test", "nested_needs_advance"]
 
 [[case]]
 id = "advance_blend_mode-inputs"
@@ -31,7 +31,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Advance two consecutive blend modes and apply inputs"
 producer_line = 1642
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 19 (color), field value: expected 4286928727, got 4282614325."
 
 [[case]]
 id = "advance_blend_mode-vms"
@@ -53,7 +53,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Advance two consecutive blend modes and apply view model"
 producer_line = 1674
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 19 (color), field value: expected 4286928727, got 4283534636."
 
 [[case]]
 id = "ai_assitant"
@@ -97,7 +97,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/clip_test.cpp"
 provenance_test = "Animated layout clippings work"
 producer_line = 198
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 27 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "animated_clipping-nodes"
@@ -119,7 +119,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/clip_test.cpp"
 provenance_test = "Animated node clippings work"
 producer_line = 167
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 41 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "artboard_list_map_rules"
@@ -141,7 +141,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard list map rules"
 producer_line = 980
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 49 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "artboard_list_overrides_horizontal"
@@ -163,7 +163,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard override with horizontal distribution"
 producer_line = 569
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 67 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "artboard_list_overrides_vertical"
@@ -185,7 +185,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard override with vertical distribution"
 producer_line = 603
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 67 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "artboard_width_test"
@@ -207,7 +207,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Artboard properties conditions work without binding"
 producer_line = 2399
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 13 (color), field value: expected 4291035136, got 4280270848."
 
 [[case]]
 id = "bankcard"
@@ -229,7 +229,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "bank card data binding"
 producer_line = 298
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint."
 
 [[case]]
 id = "bidirectional_binding_source"
@@ -361,7 +361,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_bind_lists_test.cpp"
 provenance_test = "Clear view model list"
 producer_line = 165
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 10 (makeRenderPaint): expected makeRenderPaint, got save."
 
 [[case]]
 id = "clipping_and_draw_order"
@@ -383,7 +383,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/clip_test.cpp"
 provenance_test = "Apply clipping to elements that are moved outside their hierarchy"
 producer_line = 136
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 38 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "collapsable_data_binding"
@@ -427,7 +427,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Collapsed data binds from layouts with display hidden"
 producer_line = 709
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 71 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "collapse_data_binds-test_2"
@@ -449,7 +449,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Collapsed data binds from property groups in solos"
 producer_line = 743
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 51 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "collapse_data_binds-test_3"
@@ -493,7 +493,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Multiple layout collapsing and soloing in hierarchy."
 producer_line = 464
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 331 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "component_based_conditions"
@@ -559,7 +559,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard lists with child artboard origin offset"
 producer_line = 1037
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 92 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "component_list_follow_path"
@@ -603,7 +603,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard list with follow path constraint distance"
 producer_line = 852
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 53 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "component_list_grouped"
@@ -691,7 +691,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Stateful Component"
 producer_line = 1003
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 51 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "component_stateful_vm_instance"
@@ -757,7 +757,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Computed root transform list"
 producer_line = 1191
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 71 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "computed_root_transform-nested_artboard"
@@ -779,7 +779,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Computed root transform nested artboard"
 producer_line = 1155
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 59 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "computed_values_test"
@@ -801,7 +801,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_computed_values_test.cpp"
 provenance_test = "Computed root values"
 producer_line = 38
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 48 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "custom_property_enum"
@@ -823,7 +823,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Custom enum properties"
 producer_line = 1421
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 16 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "custom_property_trigger_bind"
@@ -933,7 +933,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Data binding solos - target to source"
 producer_line = 1342
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 57 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "data_bind_solo-values-to-solos"
@@ -955,7 +955,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Data binding solos"
 producer_line = 1306
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 53 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "data_binding_artboards_default_test"
@@ -1065,7 +1065,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Convert to number"
 producer_line = 1582
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 35 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "data_viz_demo"
@@ -1109,7 +1109,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Artboards as conditions"
 producer_line = 2109
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 35 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "databind_external_artboard_main"
@@ -1307,7 +1307,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Event triggers another event"
 producer_line = 675
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 20 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "fill_trim_path"
@@ -1329,7 +1329,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Apply trim path effect to fill"
 producer_line = 598
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 23 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "fit_font_size_test"
@@ -1390,12 +1390,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.016, 0.016, 0.016]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 55, y = 65, pointer_id = 0 }, { kind = "pointer-up", x = 55, y = 65, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 442, y = 65, pointer_id = 0 }, { kind = "pointer-up", x = 442, y = 65, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus based transitions work"
 producer_line = 2233
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "focus_traversal"
@@ -1417,7 +1417,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus traversal listener actions"
 producer_line = 1997
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 95 (color): expected color, got save."
 
 [[case]]
 id = "focusable_element"
@@ -1461,7 +1461,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/follow_path_constraint_test.cpp"
 provenance_test = "Animate shape along follow path"
 producer_line = 99
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 175 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "follow_path_animate_solo"
@@ -1483,7 +1483,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/follow_path_constraint_test.cpp"
 provenance_test = "Animate solo along follow path"
 producer_line = 126
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 19 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "follow_path_animate_target"
@@ -1505,7 +1505,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/follow_path_constraint_test.cpp"
 provenance_test = "Animate follow path target path"
 producer_line = 153
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 45 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "follow_path_constraint"
@@ -1522,12 +1522,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1, 0.1, 0.16]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.16 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.16 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.16 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.16 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.16 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.16 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/follow_path_constraint_test.cpp"
 provenance_test = "Follow path constraint with path as target"
 producer_line = 222
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (style): expected style, got makeRenderPaint."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "format_number_with_commas"
@@ -1549,7 +1549,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Format text with commas"
 producer_line = 1847
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 31 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "formula_random-always"
@@ -1681,7 +1681,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
 provenance_test = "Test global view models with automatic instancing"
 producer_line = 81
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 27 (color): expected color, got save."
 
 [[case]]
 id = "global_viewmodels_test-set_instance"
@@ -1747,7 +1747,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Apply group effect with missing items"
 producer_line = 700
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (style): expected style, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 44 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "hide_test"
@@ -1769,7 +1769,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "hide silver"
 producer_line = 74
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 45 (color), field paint_id: expected 4, got 13."
 
 [[case]]
 id = "hittest_ab1"
@@ -1791,7 +1791,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Shape clipped by parent layout"
 producer_line = 429
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 117 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "hittest_ab1_grand_parent"
@@ -1813,7 +1813,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Shape clipped by parent and grand-parent artboard"
 producer_line = 512
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 131 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "hittest_ab1_parent"
@@ -1835,7 +1835,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Shape clipped by parent artboard"
 producer_line = 468
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 123 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "hittest_ab_2_non_virtualized"
@@ -1945,7 +1945,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit test leaves in collapsed layouts"
 producer_line = 1187
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 19 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "hittest_nested"
@@ -1967,7 +1967,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit testing objects inside shapes"
 producer_line = 816
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 39 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "hunter_x_demo"
@@ -1989,7 +1989,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "hunter x demo data binding"
 producer_line = 521
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 2 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 488 (blendMode): expected blendMode, got makeRenderPaint."
 
 [[case]]
 id = "image_binding_with_listener"
@@ -2055,7 +2055,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 provenance_test = "Image fit & alignment with databound images 2"
 producer_line = 396
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 3 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 36 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "image_fit_alignment_3"
@@ -2077,7 +2077,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 provenance_test = "Image fit & alignment images 3"
 producer_line = 429
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 58 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "image_fit_alignment_updated_test"
@@ -2099,7 +2099,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 provenance_test = "Image fit & alignment with image scaling"
 producer_line = 463
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 24 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "image_scripting_property_value"
@@ -2297,7 +2297,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout animation time databound"
 producer_line = 552
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 39 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "layout_anim_component_list"
@@ -2319,7 +2319,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout animation artboard component list"
 producer_line = 615
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 31 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "layout_anim_nested"
@@ -2341,7 +2341,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout animation nested artboards"
 producer_line = 581
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 31 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "layout_aspect_ratio"
@@ -2363,7 +2363,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout aspect ratio"
 producer_line = 647
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 27 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "layout_display"
@@ -2385,7 +2385,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Animating layout display"
 producer_line = 492
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 35 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "layout_fixed_fill"
@@ -2451,7 +2451,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout background & foreground shape paints."
 producer_line = 520
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 39 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "layout_scroll_drag_multiplier_layouts"
@@ -2825,7 +2825,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Listeners with multiple types of events"
 producer_line = 647
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 66 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "multi_listeners-rebind"
@@ -2869,7 +2869,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit testing multi touch events"
 producer_line = 953
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 25 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "multitouch_debug"
@@ -2913,7 +2913,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Multitouch with nested artboard and pointer exit event"
 producer_line = 1040
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 77 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "multitouch_enter-MainList"
@@ -2979,7 +2979,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "n-slice silver"
 producer_line = 89
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 15 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "nested_artboard_origin_override_test"
@@ -2996,12 +2996,12 @@ view_model = "cpp-test-defined"
 sample_times = [0, 0.016, 0.016]
 actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 250, y = 250, pointer_id = 0 }, { kind = "pointer-up", x = 250, y = 250, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/nested_artboard_origin_test.cpp"
 provenance_test = "Animated origin and click events"
 producer_line = 86
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "nested_artboard_quantize_and_speed"
@@ -3045,7 +3045,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/nested_artboard_test.cpp"
 provenance_test = "Nested events don't conflict with parent events."
 producer_line = 150
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 59 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "nested_hug"
@@ -3067,7 +3067,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/nested_artboard_test.cpp"
 provenance_test = "All nested artboard modes respect hug"
 producer_line = 177
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 63 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "nested_needs_advance"
@@ -3084,12 +3084,12 @@ view_model = "none"
 sample_times = [0.1, 0.016]
 actions = [{ kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "diverges"
+status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/nested_artboard_test.cpp"
 provenance_test = "Nested artboard needs advance"
 producer_line = 334
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (style): expected style, got makeRenderPaint."
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
 id = "number_to_list_nested_children"
@@ -3111,7 +3111,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_bind_lists_test.cpp"
 provenance_test = "data bind list with number to list and lists children"
 producer_line = 99
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 141 (color): expected color, got save."
 
 [[case]]
 id = "path_effect_with_feathers"
@@ -3133,7 +3133,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Path effects with inner & outer feathers"
 producer_line = 726
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 21 (feather), field paint_id: expected 8, got 5."
 
 [[case]]
 id = "pause_nested_artboard"
@@ -3155,7 +3155,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/nested_artboard_test.cpp"
 provenance_test = "Pause and resume nested artboards"
 producer_line = 259
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 24 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "pointer_exit"
@@ -3221,7 +3221,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Recursive data binding artboards are skipped"
 producer_line = 1515
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 29 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "relative_data_bind_path"
@@ -3331,7 +3331,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Relative data binding"
 producer_line = 2132
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 32 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "remove_from_list"
@@ -3463,7 +3463,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Number to Lists reset triggers correctly"
 producer_line = 637
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 25 (color): expected color, got makeRenderPaint."
 
 [[case]]
 id = "reset_shared_viewmodel_instance_test"
@@ -3551,7 +3551,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Target to source with different data types on source and target"
 producer_line = 985
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 31 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "script_affects_has_changed"
@@ -4343,7 +4343,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Listeners are sorted in the right order"
 producer_line = 597
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 19 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "spotify_kids_app_icon"
@@ -4365,7 +4365,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "spotify kids app icon data binding"
 producer_line = 487
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 145 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "spotify_kids_demo"
@@ -4387,7 +4387,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "spotify kids demo data binding"
 producer_line = 453
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 2 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 200 (blendMode): expected blendMode, got makeRenderPaint."
 
 [[case]]
 id = "stacked_path_effects"
@@ -4409,7 +4409,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Apply stacked path effects to paths"
 producer_line = 561
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (style): expected style, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 39 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "state_transition_fire_trigger"
@@ -4431,7 +4431,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "State machine fire triggers"
 producer_line = 1385
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 39 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "stateful_artboard_swap"
@@ -4475,7 +4475,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful Component Keyed Triggers"
 producer_line = 953
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 30 (color): expected color, got save."
 
 [[case]]
 id = "stateful_list_props"
@@ -4607,7 +4607,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "superbowl data binding"
 producer_line = 218
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 4 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 2825 (color), field paint_id: expected 220, got 610."
 
 [[case]]
 id = "target_event"
@@ -4629,7 +4629,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_event_test.cpp"
 provenance_test = "event targetting an event object triggers correctly"
 producer_line = 376
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 20 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "text_feather_falloff"
@@ -4673,7 +4673,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/follow_path_constraint_test.cpp"
 provenance_test = "Text follow path modifier"
 producer_line = 186
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (style): expected style, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 127 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "text_input"
@@ -4695,7 +4695,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_input_test.cpp"
 provenance_test = "file with text input renders correctly"
 producer_line = 47
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 20 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "text_listener_simpler"
@@ -4739,7 +4739,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "validate text with modifiers and dashes render correctly"
 producer_line = 183
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 23 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "text_vertical_trim_test"
@@ -4761,7 +4761,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Vertical Trim"
 producer_line = 771
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 49 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "time_based_interpolation"
@@ -4783,7 +4783,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Interpolate color and number"
 producer_line = 1931
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 24 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "transition_actions"
@@ -4805,7 +4805,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Transitions and state layers can trigger actions"
 producer_line = 960
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 33 (addRawPath): expected addRawPath, got rewind."
 
 [[case]]
 id = "transition_artboard_condition_test"
@@ -4827,7 +4827,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Test State machine transition conditions based on artboards"
 producer_line = 1713
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 16 (frameSize), field width: expected 983, got 984."
 
 [[case]]
 id = "transition_duration_bind_list"
@@ -4849,7 +4849,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Transition duration in artboard list state machines is bindable"
 producer_line = 779
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 13 (makeRenderPaint): expected makeRenderPaint, got frame."
 
 [[case]]
 id = "transition_duration_bind_nested"
@@ -4871,7 +4871,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Transition duration in nested state machines is bindable"
 producer_line = 747
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 57 (color): expected color, got frame."
 
 [[case]]
 id = "transition_index_condition"
@@ -4893,7 +4893,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Transition with list index can be compared to a number"
 producer_line = 534
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 34 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "transition_self_comparator_test"
@@ -4937,7 +4937,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Trigger based listeners"
 producer_line = 1230
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 27 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "trigger_fires_single_change"
@@ -4959,7 +4959,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Trigger fires single change on listener"
 producer_line = 1546
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 23 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "unbound_stateful_component"
@@ -4981,7 +4981,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_viewmodels_test.cpp"
 provenance_test = "Stateful component is bound before binding the view model instance"
 producer_line = 75
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 9 (color), field value: expected 4278255360, got 4278190080."
 
 [[case]]
 id = "vertical_align_ellipsis"
@@ -5003,7 +5003,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Vertical align on text with ellipsis"
 producer_line = 633
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 55 (fillRule): expected fillRule, got drawPath."
 
 [[case]]
 id = "viewmodel_access"
@@ -5047,7 +5047,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 provenance_test = "Image based conditions work"
 producer_line = 176
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 3 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 24 (color), field paint_id: expected 6, got 5."
 
 [[case]]
 id = "viewmodel_from_context"
@@ -5179,7 +5179,7 @@ producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Virtualized list with blended animations as initial state correctly render their mixed values"
 producer_line = 1611
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 1 (color): expected color, got makeRenderPaint."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 33 (color): expected color, got save."
 
 [[case]]
 id = "virtualized_artboard_databound_children"

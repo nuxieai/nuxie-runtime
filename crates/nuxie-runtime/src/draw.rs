@@ -15260,12 +15260,76 @@ fn preallocate_render_paint_batch(
     factory: &mut dyn RenderFactory,
 ) -> RuntimeRenderPaints {
     let mut paints = RuntimeRenderPaints::default();
-    for object in runtime.objects.iter().flatten() {
-        if matches!(object.type_name, "Fill" | "Stroke") {
-            paints.insert(object.id, factory.make_render_paint());
+    let mut allocated = BTreeSet::new();
+    for artboard_index in 0..runtime.artboards().len() {
+        let Some(local_objects) = runtime.artboard_local_object_slots(artboard_index) else {
+            continue;
+        };
+        for object in local_objects.iter().flatten() {
+            if !matches!(
+                object.type_name,
+                "SolidColor" | "LinearGradient" | "RadialGradient"
+            ) {
+                continue;
+            }
+            let Some(paint_object) = object
+                .uint_property("parentId")
+                .and_then(|parent_local_id| usize::try_from(parent_local_id).ok())
+                .and_then(|parent_local_id| local_objects.get(parent_local_id))
+                .copied()
+                .flatten()
+            else {
+                continue;
+            };
+            if !matches!(paint_object.type_name, "Fill" | "Stroke")
+                || !allocated.insert(paint_object.id)
+            {
+                continue;
+            }
+
+            // Direct port of the source Artboard's onAddedDirty traversal. The
+            // concrete mutator initializes its parent ShapePaint in object order:
+            // ShapePaint allocates, Fill/Stroke applies constructor fields, and
+            // SolidColor immediately applies color
+            // (`artboard.cpp:264-288`, `shape_paint_mutator.cpp:7-25`,
+            // `shape_paint.cpp:50-57`, `fill.cpp:13-17`,
+            // `stroke.cpp:12-19`, `solid_color.cpp:9-21`).
+            let mut render_paint = factory.make_render_paint();
+            initialize_authored_shape_render_paint(
+                render_paint.as_mut(),
+                paint_object,
+                Some(object),
+            );
+            paints.insert(paint_object.id, render_paint);
         }
     }
     paints
+}
+
+fn initialize_authored_shape_render_paint(
+    render_paint: &mut dyn RenderPaint,
+    paint_object: &RuntimeObject,
+    mutator_object: Option<&RuntimeObject>,
+) {
+    match paint_object.type_name {
+        "Fill" => render_paint.style(RenderPaintStyle::Fill),
+        "Stroke" => {
+            render_paint.style(RenderPaintStyle::Stroke);
+            render_paint.thickness(paint_object.double_property("thickness").unwrap_or(1.0));
+            render_paint.cap(
+                runtime_stroke_cap(paint_object.uint_property("cap").unwrap_or(0))
+                    .unwrap_or_default(),
+            );
+            render_paint.join(
+                runtime_stroke_join(paint_object.uint_property("join").unwrap_or(0))
+                    .unwrap_or_default(),
+            );
+        }
+        _ => return,
+    }
+    if let Some(mutator) = mutator_object.filter(|mutator| mutator.type_name == "SolidColor") {
+        render_paint.color(mutator.color_property("colorValue").unwrap_or(0xff00_0000));
+    }
 }
 
 #[cfg(test)]
@@ -15377,7 +15441,9 @@ fn preallocate_artboard_render_paint_tree_batch_into(
     for local_object in &graph.local_objects {
         if let Some(paint_global_id) = paint_by_mutator.get(&Some(local_object.global_id)) {
             preallocate_render_paint_for_instance(
+                runtime,
                 *paint_global_id,
+                Some(local_object.global_id),
                 factory,
                 paints,
                 &mut allocated_for_instance,
@@ -15391,7 +15457,9 @@ fn preallocate_artboard_render_paint_tree_batch_into(
         };
         if matches!(object.type_name, "Fill" | "Stroke") {
             preallocate_render_paint_for_instance(
+                runtime,
                 object.id,
+                None,
                 factory,
                 paints,
                 &mut allocated_for_instance,
@@ -15453,7 +15521,9 @@ fn preallocate_unmounted_artboard_render_paint_tree_batch_into(
     for local_object in &graph.local_objects {
         if let Some(paint_global_id) = paint_by_mutator.get(&Some(local_object.global_id)) {
             preallocate_render_paint_for_instance(
+                runtime,
                 *paint_global_id,
+                Some(local_object.global_id),
                 factory,
                 &mut cache.paints,
                 &mut allocated_for_instance,
@@ -15466,7 +15536,9 @@ fn preallocate_unmounted_artboard_render_paint_tree_batch_into(
         };
         if matches!(object.type_name, "Fill" | "Stroke") {
             preallocate_render_paint_for_instance(
+                runtime,
                 object.id,
+                None,
                 factory,
                 &mut cache.paints,
                 &mut allocated_for_instance,
@@ -15540,7 +15612,9 @@ fn preallocate_render_paint(
 }
 
 fn preallocate_render_paint_for_instance(
+    runtime: &RuntimeFile,
     global_id: u32,
+    mutator_global_id: Option<u32>,
     factory: &mut dyn RenderFactory,
     paints: &mut RuntimeRenderPaints,
     allocated_for_instance: &mut BTreeSet<u32>,
@@ -15549,7 +15623,16 @@ fn preallocate_render_paint_for_instance(
         return;
     }
 
-    let render_paint = factory.make_render_paint();
+    let mut render_paint = factory.make_render_paint();
+    if let Some(paint_object) = runtime.object(global_id as usize) {
+        let mutator_object =
+            mutator_global_id.and_then(|mutator_global| runtime.object(mutator_global as usize));
+        // Artboard::instance() re-runs the same onAddedDirty traversal over the
+        // clone. Initialize this concrete occurrence before the next mutator
+        // allocates its paint; later owner realization only settles live values
+        // onto this retained backend object.
+        initialize_authored_shape_render_paint(render_paint.as_mut(), paint_object, mutator_object);
+    }
     if !paints.contains(global_id) {
         paints.insert(global_id, render_paint);
     }
@@ -29951,6 +30034,7 @@ mod tests {
         fill_rules: Cell<usize>,
         lines: Cell<usize>,
         closes: Cell<usize>,
+        paint_ops: RefCell<Vec<&'static str>>,
         linear_gradients: RefCell<Vec<[f32; 4]>>,
         linear_gradient_colors: RefCell<Vec<Vec<ColorInt>>>,
         image_decode_attempts: Cell<usize>,
@@ -30269,8 +30353,8 @@ mod tests {
         }
     }
 
-    #[derive(Default)]
     struct TestRenderPaint {
+        stats: Rc<CountingStats>,
         has_shader: bool,
     }
 
@@ -30279,17 +30363,34 @@ mod tests {
             self
         }
 
-        fn style(&mut self, _style: RenderPaintStyle) {}
-        fn color(&mut self, _value: ColorInt) {}
-        fn thickness(&mut self, _value: f32) {}
-        fn join(&mut self, _value: RenderStrokeJoin) {}
-        fn cap(&mut self, _value: RenderStrokeCap) {}
-        fn feather(&mut self, _value: f32) {}
-        fn blend_mode(&mut self, _value: RenderBlendMode) {}
+        fn style(&mut self, _style: RenderPaintStyle) {
+            self.stats.paint_ops.borrow_mut().push("style");
+        }
+        fn color(&mut self, _value: ColorInt) {
+            self.stats.paint_ops.borrow_mut().push("color");
+        }
+        fn thickness(&mut self, _value: f32) {
+            self.stats.paint_ops.borrow_mut().push("thickness");
+        }
+        fn join(&mut self, _value: RenderStrokeJoin) {
+            self.stats.paint_ops.borrow_mut().push("join");
+        }
+        fn cap(&mut self, _value: RenderStrokeCap) {
+            self.stats.paint_ops.borrow_mut().push("cap");
+        }
+        fn feather(&mut self, _value: f32) {
+            self.stats.paint_ops.borrow_mut().push("feather");
+        }
+        fn blend_mode(&mut self, _value: RenderBlendMode) {
+            self.stats.paint_ops.borrow_mut().push("blend_mode");
+        }
         fn shader(&mut self, shader: Option<&dyn RenderShader>) {
+            self.stats.paint_ops.borrow_mut().push("shader");
             self.has_shader = shader.is_some();
         }
-        fn invalidate_stroke(&mut self) {}
+        fn invalidate_stroke(&mut self) {
+            self.stats.paint_ops.borrow_mut().push("invalidate_stroke");
+        }
     }
 
     impl RenderFactory for CountingFactory {
@@ -30360,7 +30461,11 @@ mod tests {
         }
 
         fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
-            Box::new(TestRenderPaint::default())
+            self.stats.paint_ops.borrow_mut().push("make");
+            Box::new(TestRenderPaint {
+                stats: Rc::clone(&self.stats),
+                has_shader: false,
+            })
         }
 
         fn decode_image(
@@ -32440,6 +32545,116 @@ mod tests {
             push_f32(bytes, "Vertex", "y", 10.0);
         });
         bytes
+    }
+
+    fn synthetic_two_solid_fills_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9641);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |_| {});
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 2);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 4);
+            push_color(bytes, "SolidColor", "colorValue", 0xffaa_6633);
+        });
+        bytes
+    }
+
+    #[test]
+    fn source_paint_import_interleaves_allocation_with_solid_color_initialization() {
+        let bytes = synthetic_two_solid_fills_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic solid fills import");
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+
+        let _paints = preallocate_source_render_paints(&file, &mut factory);
+
+        let operations = stats.paint_ops.borrow();
+        let allocations = operations
+            .iter()
+            .enumerate()
+            .filter_map(|(index, operation)| (*operation == "make").then_some(index))
+            .collect::<Vec<_>>();
+        assert_eq!(allocations.len(), 2, "{operations:?}");
+        let first_style = operations
+            .iter()
+            .position(|operation| *operation == "style")
+            .unwrap_or_else(|| panic!("first paint style is initialized: {operations:?}"));
+        let first_color = operations
+            .iter()
+            .position(|operation| *operation == "color")
+            .unwrap_or_else(|| panic!("first paint is initialized: {operations:?}"));
+        assert!(
+            allocations[0] < first_style
+                && first_style < first_color
+                && first_color < allocations[1],
+            "C++ initializes the first fill style and SolidColor before constructing the second \
+             paint: {operations:?}"
+        );
+    }
+
+    #[test]
+    fn instance_paint_clone_interleaves_allocation_with_solid_color_initialization() {
+        let bytes = synthetic_two_solid_fills_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic solid fills import");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic solid fill graphs");
+        let graph = graphs.artboards.first().expect("synthetic artboard");
+        let instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+
+        let _paints = preallocate_render_paint_cache_for_artboard_instance(
+            &file,
+            &instance,
+            graph,
+            &graphs.artboards,
+            &mut factory,
+        );
+
+        let operations = stats.paint_ops.borrow();
+        let allocations = operations
+            .iter()
+            .enumerate()
+            .filter_map(|(index, operation)| (*operation == "make").then_some(index))
+            .collect::<Vec<_>>();
+        assert_eq!(allocations.len(), 2, "{operations:?}");
+        let first_style = operations
+            .iter()
+            .position(|operation| *operation == "style")
+            .unwrap_or_else(|| panic!("first clone paint style is initialized: {operations:?}"));
+        let first_color = operations
+            .iter()
+            .position(|operation| *operation == "color")
+            .unwrap_or_else(|| panic!("first clone paint is initialized: {operations:?}"));
+        assert!(
+            allocations[0] < first_style
+                && first_style < first_color
+                && first_color < allocations[1],
+            "C++ initializes the first cloned fill style and SolidColor before constructing the \
+             second paint: {operations:?}"
+        );
     }
 
     fn synthetic_dashed_stroke_riv() -> Vec<u8> {

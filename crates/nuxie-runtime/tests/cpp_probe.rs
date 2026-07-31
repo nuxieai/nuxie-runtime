@@ -87994,3 +87994,307 @@ struct CppRuntimeComponent {
     #[serde(rename = "renderOpacity")]
     render_opacity: Option<f32>,
 }
+
+fn fl_d4_cycle_fixture(artboard_name: &str) -> (GraphFile, ArtboardInstance, StateMachineInstance) {
+    let label = "data_binding_test_3.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read C++ cycle fixture {label}: {error}"));
+    let runtime = read_runtime_file(&bytes)
+        .unwrap_or_else(|error| panic!("failed to import {label}: {error:#}"));
+    let graph = GraphFile::from_runtime_file(&runtime)
+        .unwrap_or_else(|error| panic!("failed to graph {label}: {error:#}"));
+    let artboard_graph = graph
+        .artboards
+        .iter()
+        .find(|artboard| artboard.name.as_deref() == Some(artboard_name))
+        .unwrap_or_else(|| panic!("{label} has no artboard named {artboard_name}"));
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
+            .unwrap_or_else(|error| {
+                panic!("failed to instantiate {artboard_name} from {label}: {error:#}")
+            });
+    let mut state_machine = artboard
+        .state_machine_instance(0)
+        .unwrap_or_else(|| panic!("{artboard_name} has no default state machine"));
+    assert!(
+        state_machine.bind_default_view_model_context_on_artboard(&mut artboard),
+        "{artboard_name} binds its authored default DataContext"
+    );
+    state_machine
+        .advance_and_apply(&mut artboard, 0.0)
+        .unwrap_or_else(|error| panic!("{artboard_name} initial advance failed: {error}"));
+    (graph, artboard, state_machine)
+}
+
+fn fl_d4_named_double(
+    graph: &GraphFile,
+    artboard: &ArtboardInstance,
+    graph_global_id: u32,
+    object_name: &str,
+    type_name: &str,
+    property_name: &str,
+) -> f32 {
+    let artboard_graph = graph
+        .artboards
+        .iter()
+        .find(|candidate| candidate.global_id == graph_global_id)
+        .unwrap_or_else(|| panic!("missing graph artboard {graph_global_id}"));
+    let local_id = artboard_graph
+        .local_objects
+        .iter()
+        .find(|object| {
+            object.name.as_deref() == Some(object_name) && object.type_name == Some(type_name)
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "artboard {:?} has no {type_name} named {object_name}",
+                artboard_graph.name
+            )
+        })
+        .local_id;
+    artboard
+        .double_property(local_id, property_key_for_name(type_name, property_name))
+        .unwrap_or_else(|| panic!("{type_name}.{property_name} is not readable"))
+}
+
+fn fl_d4_nested_named_double(
+    graph: &GraphFile,
+    artboard: &mut ArtboardInstance,
+    depth: usize,
+    object_name: &str,
+    type_name: &str,
+    property_name: &str,
+) -> f32 {
+    let mut found = None;
+    artboard
+        .try_visit_nested_artboard_instances_mut(&mut |candidate_depth,
+                                                       graph_global_id,
+                                                       child|
+         -> Result<(), ()> {
+            if candidate_depth == depth {
+                found = Some(fl_d4_named_double(
+                    graph,
+                    child,
+                    graph_global_id,
+                    object_name,
+                    type_name,
+                    property_name,
+                ));
+            }
+            Ok(())
+        })
+        .expect("nested cycle fixture visit");
+    found.unwrap_or_else(|| panic!("no nested depth {depth} contains {object_name}"))
+}
+
+fn fl_d4_nested_text(artboard: &mut ArtboardInstance, depth: usize, name: &str) -> Vec<u8> {
+    let mut found = None;
+    artboard
+        .try_visit_nested_artboard_instances_mut(&mut |candidate_depth,
+                                                       _graph_global_id,
+                                                       child|
+         -> Result<(), ()> {
+            if candidate_depth == depth {
+                found = child.root_text_value_run(name).map(<[u8]>::to_vec);
+            }
+            Ok(())
+        })
+        .expect("nested cycle fixture visit");
+    found.unwrap_or_else(|| panic!("no nested depth {depth} contains text run {name}"))
+}
+
+#[test]
+fn fl_d4_cycle_child_view_model_updates_parent_on_next_frame() {
+    let (graph, mut artboard, mut machine) = fl_d4_cycle_fixture("main-1");
+    let graph_id = graph
+        .artboards
+        .iter()
+        .find(|candidate| candidate.name.as_deref() == Some("main-1"))
+        .expect("main-1 graph")
+        .global_id;
+    assert_eq!(
+        fl_d4_named_double(
+            &graph,
+            &artboard,
+            graph_id,
+            "sized-rect-path",
+            "Rectangle",
+            "width",
+        ),
+        100.0
+    );
+    machine.pointer_down(&mut artboard, 75.0, 75.0, 0);
+    machine.pointer_up(&mut artboard, 75.0, 75.0, 0);
+    machine
+        .advance_and_apply(&mut artboard, 0.0)
+        .expect("main-1 post-click advance");
+    assert_eq!(
+        fl_d4_named_double(
+            &graph,
+            &artboard,
+            graph_id,
+            "sized-rect-path",
+            "Rectangle",
+            "width",
+        ),
+        200.0
+    );
+}
+
+#[test]
+fn fl_d4_cycle_parent_view_model_updates_child_on_next_frame() {
+    let (graph, mut artboard, mut machine) = fl_d4_cycle_fixture("main-2");
+    assert_eq!(
+        fl_d4_nested_named_double(
+            &graph,
+            &mut artboard,
+            1,
+            "child-rect-path",
+            "Rectangle",
+            "width",
+        ),
+        100.0
+    );
+    machine.pointer_down(&mut artboard, 250.0, 250.0, 0);
+    machine.pointer_up(&mut artboard, 250.0, 250.0, 0);
+    machine
+        .advance_and_apply(&mut artboard, 0.0)
+        .expect("main-2 post-click advance");
+    assert_eq!(
+        fl_d4_nested_named_double(
+            &graph,
+            &mut artboard,
+            1,
+            "child-rect-path",
+            "Rectangle",
+            "width",
+        ),
+        200.0
+    );
+}
+
+#[test]
+fn fl_d4_cycle_child_event_updates_parent_on_following_frame() {
+    let (graph, mut artboard, mut machine) = fl_d4_cycle_fixture("main-3");
+    let graph_id = graph
+        .artboards
+        .iter()
+        .find(|candidate| candidate.name.as_deref() == Some("main-3"))
+        .expect("main-3 graph")
+        .global_id;
+    machine
+        .advance_and_apply(&mut artboard, 0.5)
+        .expect("main-3 event advance");
+    assert_eq!(
+        fl_d4_named_double(
+            &graph,
+            &artboard,
+            graph_id,
+            "sized-rect-path",
+            "Rectangle",
+            "width",
+        ),
+        100.0
+    );
+    machine
+        .advance_and_apply(&mut artboard, 0.0)
+        .expect("main-3 settlement advance");
+    assert_eq!(
+        fl_d4_named_double(
+            &graph,
+            &artboard,
+            graph_id,
+            "sized-rect-path",
+            "Rectangle",
+            "width",
+        ),
+        200.0
+    );
+}
+
+#[test]
+fn fl_d4_cycle_parent_event_updates_child_on_following_frame() {
+    let (graph, mut artboard, mut machine) = fl_d4_cycle_fixture("main-4");
+    machine
+        .advance_and_apply(&mut artboard, 0.5)
+        .expect("main-4 event advance");
+    assert_eq!(
+        fl_d4_nested_named_double(
+            &graph,
+            &mut artboard,
+            1,
+            "child-rect-path",
+            "Rectangle",
+            "width",
+        ),
+        100.0
+    );
+    machine
+        .advance_and_apply(&mut artboard, 0.0)
+        .expect("main-4 settlement advance");
+    assert_eq!(
+        fl_d4_nested_named_double(
+            &graph,
+            &mut artboard,
+            1,
+            "child-rect-path",
+            "Rectangle",
+            "width",
+        ),
+        200.0
+    );
+}
+
+#[test]
+fn fl_d4_cycle_child_target_to_source_updates_parent_in_same_frame() {
+    let (_graph, mut artboard, mut machine) = fl_d4_cycle_fixture("main-5");
+    assert_eq!(
+        artboard.root_text_value_run("text-run-test"),
+        Some(b"before".as_slice())
+    );
+    machine
+        .advance_and_apply(&mut artboard, 0.5)
+        .expect("main-5 target-to-source advance");
+    assert_eq!(
+        artboard.root_text_value_run("text-run-test"),
+        Some(b"after".as_slice())
+    );
+}
+
+#[test]
+fn fl_d4_cycle_parent_target_to_source_updates_child_in_same_frame() {
+    let (_graph, mut artboard, mut machine) = fl_d4_cycle_fixture("main-6");
+    assert_eq!(
+        fl_d4_nested_text(&mut artboard, 1, "child-text-run"),
+        b"parent-before"
+    );
+    machine
+        .advance_and_apply(&mut artboard, 0.5)
+        .expect("main-6 target-to-source advance");
+    assert_eq!(
+        fl_d4_nested_text(&mut artboard, 1, "child-text-run"),
+        b"parent-after"
+    );
+}
+
+#[test]
+fn fl_d4_cycle_three_artboard_levels_share_each_authored_write() {
+    let (_graph, mut artboard, mut machine) = fl_d4_cycle_fixture("main-7");
+    for (seconds, expected) in [
+        (0.5, b"main-test-2".as_slice()),
+        (1.5, b"child-text-1".as_slice()),
+        (0.5, b"child-text-2".as_slice()),
+        (1.5, b"grand-child-text-1".as_slice()),
+        (0.5, b"grand-child-text-2".as_slice()),
+    ] {
+        machine
+            .advance_and_apply(&mut artboard, seconds)
+            .unwrap_or_else(|error| panic!("main-7 advance {seconds} failed: {error}"));
+        assert_eq!(artboard.root_text_value_run("main-run"), Some(expected));
+        assert_eq!(fl_d4_nested_text(&mut artboard, 1, "child-run"), expected);
+        assert_eq!(
+            fl_d4_nested_text(&mut artboard, 2, "grand-child-run"),
+            expected
+        );
+    }
+}

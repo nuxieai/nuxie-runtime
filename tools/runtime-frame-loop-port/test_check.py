@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import fnmatch
 import json
 import pathlib
 import subprocess
@@ -320,6 +321,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         self.assertTrue(
             any(
                 relative_source == glob
+                or fnmatch.fnmatchcase(relative_source, glob)
                 or relative_path.match(glob)
                 or (
                     "/**/" in glob
@@ -1337,13 +1339,13 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "data_converter_group_forward_output_type_walk",
-                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                "crates/nuxie-runtime/src/data_bind/context/context_value.rs",
                 "impl C {\n    pub(crate) fn cpp_output_data_type(&self) -> T {\n        match self {\n            Self::Group(converters) => converters.iter().find(ok).unwrap(),\n            _ => T::None,\n        }\n    }\n    fn next(&self) {}\n}\n",
                 "impl C {\n    pub(crate) fn cpp_output_data_type(&self) -> T {\n        match self {\n            Self::Group(converters) => converters.iter().rev().find(ok).unwrap(),\n            _ => T::None,\n        }\n    }\n    fn next(&self) {\n        if let Self::Group(converters) = self { let _ = converters.iter(); }\n    }\n}\n",
             ),
             (
                 "data_converter_group_output_capability_union",
-                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                "crates/nuxie-runtime/src/data_bind/context/context_value.rs",
                 "impl C {\n    pub(crate) fn can_change_output_kind(&self) -> bool {\n        match self {\n            Self::Group(converters) => converters.iter().any(Self::can_change_output_kind),\n            _ => false,\n        }\n    }\n    fn next(&self) {}\n}\n",
                 "impl C {\n    pub(crate) fn can_change_output_kind(&self) -> bool {\n        self.cpp_output_kind() == Kind::Deferred\n    }\n    pub(crate) fn next(&self) {\n        if let Self::Group(converters) = self { let _ = converters.iter().any(ok); }\n    }\n}\n",
             ),
@@ -1499,7 +1501,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "state_machine_data_bind_container_enrollment_drop_or_reorder",
-                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                "crates/nuxie-runtime/src/data_bind/context/context_value.rs",
                 (
                     "impl X {\n"
                     "    pub(crate) fn add_data_binds_to_container(&mut self) {\n"
@@ -1545,7 +1547,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "data_bind_per_type_target_to_source_path",
-                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                "crates/nuxie-runtime/src/data_bind/context/context_value.rs",
                 (
                     "fn apply_default_view_model_number_targets_to_sources() {}\n"
                 ),
@@ -1553,7 +1555,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "data_bind_target_dirt_default_context_only",
-                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                "crates/nuxie-runtime/src/data_bind/context/context_value.rs",
                 (
                     "impl X {\n"
                     "    pub(crate) fn mark_target_dirty_for_data_bind(&mut self) {\n"
@@ -1577,7 +1579,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "data_bind_occurrence_target_apply_before_dirt_clear",
-                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                "crates/nuxie-runtime/src/data_bind/context/context_value.rs",
                 (
                     "impl X {\n"
                     "    pub(crate) fn update_default_view_model_binding(&mut self) {\n"
@@ -1599,7 +1601,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "data_bind_occurrence_dirt_clear_incomplete",
-                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                "crates/nuxie-runtime/src/data_bind/context/context_value.rs",
                 (
                     "impl X {\n"
                     "    fn clear_retained_data_bind_occurrence_dirt(&mut self) {\n"
@@ -5516,7 +5518,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         required_cases = [
             (
                 "state_machine_keyframe_first_source_bind_required",
-                "crates/nuxie-runtime/src/artboard_data_bind.rs",
+                "crates/nuxie-runtime/src/data_bind/data_bind_context.rs",
                 """
                 fn build_key_frame_data_bind_templates() {
                     let mut claimed_targets = BTreeSet::new();
@@ -5537,7 +5539,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "state_machine_keyframe_holder_set_required",
-                "crates/nuxie-runtime/src/data_bind_graph.rs",
+                "crates/nuxie-runtime/src/data_bind/context/context_value.rs",
                 """
                 enum RuntimeKeyFrameDataBindTarget {
                     Number,
@@ -5831,7 +5833,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
 
         self.assert_production_ratchet_case(
             "state_machine_keyframe_last_source_bind_selection",
-            "crates/nuxie-runtime/src/artboard_data_bind.rs",
+            "crates/nuxie-runtime/src/data_bind/data_bind_context.rs",
             textwrap.dedent(
                 """
                 fn build_key_frame_data_bind_templates() {
@@ -5853,7 +5855,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         )
         self.assert_production_ratchet_case(
             "state_machine_keyframe_binding_reorder_by_data_bind_index",
-            "crates/nuxie-runtime/src/data_bind_graph.rs",
+            "crates/nuxie-runtime/src/data_bind/context/context_value.rs",
             textwrap.dedent(
                 """
                 fn new_key_frame_bindings() {

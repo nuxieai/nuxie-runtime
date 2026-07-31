@@ -133,7 +133,169 @@ EXACT = (
     "text_follow_path_shape_length",
     "transition_index_condition",
     "vertical_align_ellipsis",
+    "viewmodel_list_trigger",
 )
+
+
+def fl_d4_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
+    """Literal action ports for the mutable DataBind tests owned by FL-D4."""
+
+    create = {"kind": "create-default-view-model"}
+    bind = {"kind": "bind-prepared-view-model"}
+
+    if silver_id == "viewmodel_list_trigger":
+        actions = [
+            create,
+            bind,
+            {"kind": "advance", "target": "state-machine", "seconds": 0.1},
+            {"kind": "draw"},
+            {
+                "kind": "fire-view-model-list-item-trigger",
+                "list": "lis",
+                "index": 0,
+                "trigger": "tri",
+            },
+        ]
+        actions += [
+            action
+            for _ in range(4)
+            for action in (
+                {"kind": "frame"},
+                {
+                    "kind": "fire-view-model-list-item-trigger",
+                    "list": "lis",
+                    "index": 0,
+                    "trigger": "tri",
+                },
+                {"kind": "advance", "target": "state-machine", "seconds": 0.064},
+                {"kind": "draw"},
+            )
+        ]
+        return tuple(actions)
+
+    if silver_id == "list_items":
+        return (
+            create,
+            {
+                "kind": "append-view-model-list-item",
+                "list": "lis1",
+                "view_model": "child",
+                "string_property": "label",
+                "string_value": "test",
+            },
+            bind,
+            {"kind": "advance", "target": "state-machine", "seconds": 0.1},
+            {"kind": "draw"},
+            {"kind": "frame"},
+            {"kind": "remove-view-model-list-item", "list": "lis1", "index": 0},
+            {"kind": "advance", "target": "state-machine", "seconds": 0.1},
+            {"kind": "draw"},
+        )
+
+    if silver_id == "list_to_length_test":
+        actions = [
+            create,
+            bind,
+            {"kind": "advance", "target": "state-machine", "seconds": 0.1},
+            {"kind": "draw"},
+        ]
+        actions += [
+            action
+            for _ in range(4)
+            for action in (
+                {"kind": "frame"},
+                {
+                    "kind": "append-view-model-list-item",
+                    "list": "lis",
+                    "view_model": "child",
+                },
+                {"kind": "advance", "target": "state-machine", "seconds": 0.1},
+                {"kind": "advance", "target": "state-machine", "seconds": 0.1},
+                {"kind": "draw"},
+            )
+        ]
+        return tuple(actions)
+
+    if silver_id == "data_converter_interpolator_reset":
+        actions = []
+        for final_color, final_number in ((0xFF00FF00, 500.0), (0xFF0000FF, 0.0)):
+            if actions:
+                actions.append({"kind": "frame"})
+            actions += [
+                create,
+                {"kind": "set-view-model-number", "property": "xPos", "value": 250.0},
+                {"kind": "set-view-model-color", "property": "col", "value": 0xFFFF0000},
+                bind,
+                {"kind": "advance", "target": "state-machine", "seconds": 0.1},
+                {"kind": "draw"},
+                {
+                    "kind": "set-view-model-color",
+                    "property": "col",
+                    "value": final_color,
+                },
+                {
+                    "kind": "set-view-model-number",
+                    "property": "xPos",
+                    "value": final_number,
+                },
+            ]
+            actions += [
+                action
+                for _ in range(62)
+                for action in (
+                    {"kind": "frame"},
+                    {"kind": "advance", "target": "state-machine", "seconds": 0.016},
+                    {"kind": "draw"},
+                )
+            ]
+        return tuple(actions)
+
+    if silver_id == "interpolation_zero_duration":
+        actions = [
+            create,
+            bind,
+            {"kind": "advance", "target": "state-machine", "seconds": 0.1},
+            {"kind": "draw"},
+            {"kind": "set-view-model-number", "property": "objectX", "value": 200.0},
+        ]
+        actions += [
+            action
+            for _ in range(15)
+            for action in (
+                {"kind": "frame"},
+                {"kind": "advance", "target": "state-machine", "seconds": 0.1},
+                {"kind": "draw"},
+            )
+        ]
+        for duration, target in ((0.0, 400.0), (1.0, 200.0)):
+            actions += [
+                {
+                    "kind": "set-view-model-number",
+                    "property": "interpValue",
+                    "value": duration,
+                },
+                {"kind": "advance", "target": "state-machine", "seconds": 0.016},
+                {
+                    "kind": "set-view-model-number",
+                    "property": "objectX",
+                    "value": target,
+                },
+                {"kind": "advance", "target": "state-machine", "seconds": 0.016},
+            ]
+            actions += [
+                action
+                for _ in range(15)
+                for action in (
+                    {"kind": "frame"},
+                    {"kind": "advance", "target": "state-machine", "seconds": 0.1},
+                    {"kind": "draw"},
+                )
+            ]
+        return tuple(actions)
+
+    return None
+
+
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
@@ -154,11 +316,12 @@ computed_root_transform-list|frame 1, op 206 (drawPath): expected drawPath, got 
 computed_root_transform-nested_artboard|frame 1, op 144 (drawPath): expected drawPath, got rewind
 computed_values_test|frame 0, op 54 (addRawPath), field point: expected (256.2, -0.0 (0x80000000)), got (245, -0.0 (0x80000000))
 data_bind_solo-solos-to-values|frame 0, op 81 (addRawPath): expected 752 fields, got 669
+data_converter_interpolator_reset|frame 1, op 30 (save): expected save, got color
 data_converter_to_number|frame 1, op 110 (makeRenderPath): expected makeRenderPath, got rewind
 focus_traversal|frame 0, op 95 (color): expected color, got save
-global_viewmodels_test-auto_instance|frame 0, op 27 (color): expected color, got save
 follow_path_animate_solo|frame 125, op 2406 (clipPath): expected clipPath, got rewind
 follow_path_animate_target|frame 1, op 150 (clipPath): expected clipPath, got rewind
+global_viewmodels_test-auto_instance|frame 0, op 27 (color): expected color, got save
 hide_test|frame 0, op 45 (color), field paint_id: expected 4, got 13
 hittest_ab1|frame 1, op 153 (color): expected color, got save
 hittest_ab1_grand_parent|frame 2, op 304 (color): expected color, got save
@@ -166,12 +329,15 @@ hittest_ab1_parent|frame 1, op 192 (color): expected color, got save
 hittest_nested|frame 1, op 155 (save): expected save, got color
 hunter_x_demo|frame 0, op 488 (blendMode): expected blendMode, got makeRenderPaint
 image_fit_alignment_2|frame 1, op 95 (setVertexBufferData): expected setVertexBufferData, got save
+interpolation_zero_duration|frame 1, op 38 (transform), field tx: expected 0, got 200
 layout_anim_bound|frame 2, op 146 (addRawPath), field point: expected (450, 0), got (250, 0)
 layout_anim_component_list|frame 1, op 89 (addRawPath), field point: expected (500, 0), got (495.2, 0)
 layout_anim_nested|frame 1, op 86 (addRawPath), field point: expected (500, 0), got (495.2, 0)
 layout_aspect_ratio|frame 0, op 42 (addRawPath), field point: expected (142, 71), got (142, 133)
 layout_display|frame 3, op 173 (drawPath): expected drawPath, got rewind
 layout_paint|frame 0, op 77 (drawPath): expected drawPath, got makeRenderPath
+list_items|frame 1, op 105 (drawPath): expected drawPath, got rewind
+list_to_length_test|frame 1, op 139 (drawPath): expected drawPath, got rewind
 multi_listeners|frame 2, op 253 (makeRenderPath): expected makeRenderPath, got rewind
 nested_events|frame 1, op 166 (makeRenderPath): expected makeRenderPath, got rewind
 number_to_list_nested_children|frame 0, op 141 (color): expected color, got save
@@ -513,6 +679,8 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                 blocker = None
                 if lane == "runtime":
                     actions, blocker = executable_actions(chunk, state_machine, animation)
+                    if (ported_actions := fl_d4_actions(silver_id)) is not None:
+                        actions, blocker = ported_actions, None
                     blocker = FORCED_BLOCKERS.get(silver_id, blocker)
                     if blocker in FORCED_BLOCKERS.values():
                         actions = ()
@@ -675,7 +843,11 @@ def render_action_value(value: object) -> str:
         return quoted(value)
     if isinstance(value, bool):
         return "true" if value else "false"
-    if isinstance(value, (int, float)):
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if value.is_integer():
+            return f"{value:.1f}"
         return format(value, ".9g")
     raise TypeError(f"unsupported action value {value!r}")
 

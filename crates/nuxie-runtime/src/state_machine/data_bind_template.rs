@@ -12,6 +12,8 @@ use crate::data_bind_graph::{
     RuntimeDataBindGraphTarget, RuntimeDataBindGraphValue,
     runtime_data_bind_graph_converter_with_cache,
 };
+use crate::data_bind_path::RuntimeDataBindPath;
+use crate::data_bind_path_referencer::RuntimeDataBindPathReferencer;
 use crate::data_converter::{
     RuntimeDataConverterDataBindDefinition, runtime_data_converter_data_bind_definition,
 };
@@ -26,7 +28,7 @@ use nuxie_binary::{RuntimeDataValue, RuntimeFile, RuntimeObject};
 pub(crate) struct RuntimeStateMachineDataBindTemplate {
     pub(crate) data_bind_index: usize,
     pub(crate) authored_path: Vec<u32>,
-    pub(crate) resolved_path: Vec<u32>,
+    pub(crate) data_bind_path: RuntimeDataBindPathReferencer,
     pub(crate) name_based: bool,
     pub(crate) context_bindable: bool,
     pub(crate) flags: u64,
@@ -36,6 +38,15 @@ pub(crate) struct RuntimeStateMachineDataBindTemplate {
     pub(crate) source_seed: RuntimeDataBindGraphValue,
     pub(crate) source_bound: bool,
     pub(crate) view_model_instance_ids: Vec<u32>,
+}
+
+impl RuntimeStateMachineDataBindTemplate {
+    pub(crate) fn resolved_path(&self) -> &[u32] {
+        self.data_bind_path
+            .path()
+            .map(RuntimeDataBindPath::path)
+            .unwrap_or_default()
+    }
 }
 
 pub(super) fn runtime_state_machine_data_bind_templates<'a>(
@@ -58,6 +69,13 @@ pub(super) fn runtime_state_machine_data_bind_templates<'a>(
             let resolved_path = file
                 .data_bind_context_resolved_source_path_ids_for_object(data_bind)
                 .unwrap_or_else(|| authored_path.clone());
+            let mut data_bind_path = RuntimeDataBindPathReferencer::default();
+            let claimed = data_bind_path
+                .claim_imported_path(RuntimeDataBindPath::resolved(resolved_path.clone(), None));
+            debug_assert!(
+                claimed,
+                "a fresh DataBindPathReferencer must accept its path"
+            );
             let name_based = file
                 .data_bind_is_name_based_for_object(data_bind)
                 .unwrap_or(false);
@@ -88,7 +106,7 @@ pub(super) fn runtime_state_machine_data_bind_templates<'a>(
             RuntimeStateMachineDataBindTemplate {
                 data_bind_index,
                 authored_path,
-                resolved_path,
+                data_bind_path,
                 name_based,
                 context_bindable,
                 flags: data_bind.uint_property("flags").unwrap_or(0),

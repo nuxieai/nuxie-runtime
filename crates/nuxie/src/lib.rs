@@ -5457,11 +5457,17 @@ mod owned_instance_tests {
     use super::*;
     #[cfg(feature = "scripting")]
     use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
-    use nuxie_render_api::RecordingFactory;
+    use nuxie_render_api::{PersistentFactory, RecordingFactory};
     #[cfg(not(feature = "scripting"))]
     use nuxie_schema::definition_by_name;
 
     const FIXTURE: &[u8] = include_bytes!("../../../fixtures/graph/dependency_test.riv");
+
+    type ScriptFactory = PersistentFactory<RecordingFactory>;
+
+    fn script_factory() -> ScriptFactory {
+        PersistentFactory::new(RecordingFactory::new())
+    }
 
     fn external_fixture(relative: &str) -> Vec<u8> {
         let path = std::path::PathBuf::from(
@@ -5484,10 +5490,10 @@ mod owned_instance_tests {
         u32::try_from(value).expect("semantic asset id fits u32")
     }
 
-    fn stream_of(draw: impl FnOnce(&mut RecordingFactory) -> Result<()>) -> String {
-        let mut factory = RecordingFactory::new();
+    fn stream_of(draw: impl FnOnce(&mut ScriptFactory) -> Result<()>) -> String {
+        let mut factory = script_factory();
         draw(&mut factory).expect("draw succeeds");
-        factory.stream()
+        factory.borrow().stream()
     }
 
     #[cfg(not(feature = "scripting"))]
@@ -5566,7 +5572,7 @@ mod owned_instance_tests {
             .expect("scroll artboard has a state machine");
         start_clamped_scroll_physics(scroll.raw_mut(), &mut scroll_machine);
         let (_view_model_file, mut view_model) = detached_test_view_model();
-        let mut factory = RecordingFactory::new();
+        let mut factory = script_factory();
 
         assert!(
             scroll
@@ -5637,7 +5643,7 @@ mod owned_instance_tests {
             .expect("scroll artboard has a state machine");
         start_clamped_scroll_physics(scroll.raw_mut(), &mut scroll_machine);
         let (_view_model_file, mut view_model) = detached_test_view_model();
-        let mut factory = RecordingFactory::new();
+        let mut factory = script_factory();
 
         assert!(
             scroll
@@ -5701,7 +5707,7 @@ mod owned_instance_tests {
             let artboard = file.default_artboard().context("default artboard")?;
             let mut instance = artboard.instantiate()?;
             instance.advance(0.0);
-            let mut renderer = factory.make_renderer();
+            let mut renderer = factory.borrow().make_renderer();
             instance.draw(factory, &mut renderer)
         });
 
@@ -5709,7 +5715,7 @@ mod owned_instance_tests {
             let file = Arc::new(File::import(FIXTURE)?);
             let mut instance = OwnedArtboardInstance::instantiate_default(file)?;
             instance.advance(0.0);
-            let mut renderer = factory.make_renderer();
+            let mut renderer = factory.borrow().make_renderer();
             instance.draw(factory, &mut renderer)
         });
 
@@ -5937,7 +5943,7 @@ mod owned_instance_tests {
             ScriptExecutionAuthorization::Authenticated,
             Some(ScriptExecutionLimits::new()),
         );
-        let mut factory = RecordingFactory::new();
+        let mut factory = script_factory();
 
         let ready = scripts
             .build_candidate(&runtime, &mut factory)
@@ -5977,7 +5983,7 @@ mod owned_instance_tests {
             .next()
             .cloned()
             .expect("fixture contains a view-model definition");
-        let mut factory = RecordingFactory::new();
+        let mut factory = script_factory();
 
         let ready = scripts
             .build_candidate(&runtime, &mut factory)

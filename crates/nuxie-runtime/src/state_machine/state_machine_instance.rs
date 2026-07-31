@@ -5671,6 +5671,9 @@ impl StateMachineInstance {
         if self.script_error.is_some() {
             return false;
         }
+        if self.scripted_data_context_rebind_pending() {
+            return false;
+        }
         self.ensure_scripted_input_groups_current(artboard);
         if self.script_error.is_some() {
             return false;
@@ -5721,6 +5724,9 @@ impl StateMachineInstance {
         if self.script_error.is_some() {
             return RuntimeInputDispatchOutcome::terminal();
         }
+        if self.scripted_data_context_rebind_pending() {
+            return RuntimeInputDispatchOutcome::default();
+        }
         self.ensure_scripted_input_groups_current(artboard);
         if self.script_error.is_some() {
             return RuntimeInputDispatchOutcome::terminal();
@@ -5743,6 +5749,9 @@ impl StateMachineInstance {
     /// Dispatch owned committed text to the currently focused listener groups.
     pub fn text_input(&mut self, artboard: &mut ArtboardInstance, text: &str) -> bool {
         if self.script_error.is_some() {
+            return false;
+        }
+        if self.scripted_data_context_rebind_pending() {
             return false;
         }
         self.ensure_scripted_input_groups_current(artboard);
@@ -5778,6 +5787,9 @@ impl StateMachineInstance {
         if self.script_error.is_some() {
             return RuntimeInputDispatchOutcome::terminal();
         }
+        if self.scripted_data_context_rebind_pending() {
+            return RuntimeInputDispatchOutcome::default();
+        }
         self.ensure_scripted_input_groups_current(artboard);
         if self.script_error.is_some() {
             return RuntimeInputDispatchOutcome::terminal();
@@ -5808,6 +5820,9 @@ impl StateMachineInstance {
         invocation: ScriptListenerInvocation,
     ) -> bool {
         if self.script_error.is_some() {
+            return false;
+        }
+        if self.scripted_data_context_rebind_pending() {
             return false;
         }
         self.ensure_scripted_input_groups_current(artboard);
@@ -5855,6 +5870,9 @@ impl StateMachineInstance {
     ) -> RuntimeInputDispatchOutcome {
         if self.script_error.is_some() {
             return RuntimeInputDispatchOutcome::terminal();
+        }
+        if self.scripted_data_context_rebind_pending() {
+            return RuntimeInputDispatchOutcome::default();
         }
         self.ensure_scripted_input_groups_current(artboard);
         if self.script_error.is_some() {
@@ -5920,6 +5938,9 @@ impl StateMachineInstance {
     ) -> (RuntimeInputDispatchOutcome, Option<(u64, u32)>) {
         if self.script_error.is_some() {
             return (RuntimeInputDispatchOutcome::terminal(), None);
+        }
+        if self.scripted_data_context_rebind_pending() {
+            return (RuntimeInputDispatchOutcome::default(), None);
         }
         self.ensure_scripted_input_groups_current(artboard);
         if self.script_error.is_some() {
@@ -6177,6 +6198,11 @@ impl StateMachineInstance {
         event_context: Option<&StateMachineEventContext>,
         host: &mut dyn ScriptHost,
     ) -> Result<HitResult, ScriptError> {
+        // Direct callbacks fail closed while the split facade still owes the
+        // synchronous C++ `internalDataContext` work for this occurrence.
+        if self.scripted_data_context_rebind_pending() {
+            return Ok(HitResult::None);
+        }
         if !self.focus.is_inert() {
             self.focus.sync(artboard);
         }
@@ -12533,6 +12559,9 @@ impl StateMachineInstance {
         if let Some(error) = self.script_error.as_ref() {
             return Err(error.clone());
         }
+        if self.scripted_data_context_rebind_pending() {
+            return Ok(false);
+        }
         #[cfg(test)]
         {
             self.transition_probe_count += 1;
@@ -12624,6 +12653,9 @@ impl StateMachineInstance {
     ) -> Result<bool, ScriptError> {
         if let Some(error) = self.script_error.as_ref() {
             return Err(error.clone());
+        }
+        if self.scripted_data_context_rebind_pending() {
+            return Ok(false);
         }
         #[cfg(test)]
         {

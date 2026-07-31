@@ -79,6 +79,31 @@ impl StateMachineInstance {
                 .contains(RuntimeCellDirt::BINDINGS)
     }
 
+    /// Whether an already-initialized occurrence has crossed a structural
+    /// DataContext boundary whose C++ `internalDataContext` work the split
+    /// facade has not finished yet.
+    ///
+    /// Unlike [`Self::scripted_data_context_prepare_pending`], the pre-init
+    /// window is excluded: listener dispatch gates on the C++ table lifetime,
+    /// not on pending init, so cold occurrences keep processing events while
+    /// only their unavailable script callbacks stay inert. After init, C++
+    /// rebinds atomically inside `dataContext`/`rebind`; Rust's facade splits
+    /// that boundary, so direct callbacks fail closed across the split
+    /// (`state_machine_instance.cpp:2880-2933`).
+    pub(super) fn scripted_data_context_rebind_pending(&self) -> bool {
+        if !self.scripted_object_initialization_complete
+            || !self.has_fixed_scripted_data_context_owner()
+            || self.owned_data_context.is_none()
+        {
+            return false;
+        }
+        !self.scripted_data_context_bind_complete
+            || self
+                .owned_view_model_rebind_sink
+                .peek_dirt()
+                .contains(RuntimeCellDirt::BINDINGS)
+    }
+
     /// Record a successful complete initial mount or live rehydration.
     ///
     /// The handle is identity-only; the mutable ViewModel graph remains owned

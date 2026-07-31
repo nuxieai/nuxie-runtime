@@ -1,12 +1,14 @@
 #![cfg(feature = "luau")]
 
-use nuxie_render_api::RecordingFactory;
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::{NoopScriptHost, ScriptInstance};
 use nuxie_scripting::vm::ScriptVm;
 
 #[test]
 fn scripted_draw_can_emit_renderer_path_calls() {
     let vm = ScriptVm::new();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    vm.install_render_factory(&mut factory).unwrap();
     vm.install_rive_globals().unwrap();
     let chunk = vm
         .load(
@@ -33,15 +35,14 @@ fn scripted_draw_can_emit_renderer_path_calls() {
     let mut instance = vm.script_instance_from_table(table);
     let mut host = NoopScriptHost;
 
-    let mut factory = RecordingFactory::new();
-    let mut renderer = factory.make_renderer();
-    factory.add_sample(0.0);
+    let mut renderer = factory.borrow().make_renderer();
+    factory.borrow_mut().add_sample(0.0);
     instance
         .call_draw(&mut factory, &mut renderer, &mut host)
         .unwrap();
-    factory.add_frame();
+    factory.borrow_mut().add_frame();
 
-    let stream = factory.stream();
+    let stream = factory.borrow().stream();
     assert!(
         stream.contains("save\ntransform matrix=[1,0,0,1,3,4]\n"),
         "{stream}"
@@ -84,6 +85,8 @@ fn scripted_mat2d_multiplication_matches_rive_composition_order() {
 #[test]
 fn scripted_draw_can_allocate_and_apply_gradients() {
     let vm = ScriptVm::new();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    vm.install_render_factory(&mut factory).unwrap();
     vm.install_rive_globals().unwrap();
     let chunk = vm
         .load(
@@ -112,14 +115,13 @@ fn scripted_draw_can_allocate_and_apply_gradients() {
     let table: luaur_rt::Table = generator.call(luaur_rt::Value::Nil).unwrap();
     let mut instance = vm.script_instance_from_table(table);
     let mut host = NoopScriptHost;
-    let mut factory = RecordingFactory::new();
-    let mut renderer = factory.make_renderer();
+    let mut renderer = factory.borrow().make_renderer();
 
     instance
         .call_draw(&mut factory, &mut renderer, &mut host)
         .unwrap();
 
-    let stream = factory.stream();
+    let stream = factory.borrow().stream();
     assert!(
         stream.contains(
             "makeLinearGradient id=1 start=(1,2) end=(3,4) stops=[{color=0xff000000,stop=0},{color=0xffffffff,stop=1}]"

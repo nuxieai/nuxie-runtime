@@ -4,9 +4,9 @@ upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 porting_rules_file = "docs/PORTING.md"
 file_correspondence_manifest = "file-correspondence-manifest.toml"
 trace_evidence_file = "docs/runtime-frame-loop-trace.json"
-phase = "fl-d-closed"
-# FL-D is ledger-promoted by the final D5-D7 landing. FL-E remains the next
-# dependent wave; check.py does not constrain phase vocabulary.
+phase = "fl-e1-closed"
+# FL-D is ledger-promoted by the final D5-D7 landing. FL-E1 is the first
+# dependency-ordered FL-E family; check.py does not constrain phase vocabulary.
 provisional_runtime_base = "95eb04b7cfb847f24ba77872bd8a0ee43da1af41"
 provisional_fl_b_tip = "0b08970fccc42ff3677534d4dcece0f05f69a0bc"
 fl_b_verification = "reaccepted"
@@ -142,19 +142,19 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 246
+faithful = 247
 adapted = 0
 divergent-by-decision = 0
-pending = 96
+pending = 95
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
 # are the state-bearing frame-loop owners still requiring member-level proof.
 [expected_member_status_counts]
-faithful = 32
+faithful = 33
 adapted = 40
 divergent-by-decision = 0
-pending = 3
+pending = 2
 compensation = 0
 
 [[wave]]
@@ -409,10 +409,12 @@ wave = "FL-E"
 include = ["src/command_server.cpp"]
 exclude = []
 rust_modules = [
+  "crates/nuxie-render-api/src/lib.rs",
+  "crates/nuxie-scripting/src/vm/command_server.rs",
   "crates/nuxie-scripting/src/vm.rs",
   "crates/nuxie-scripting/src/vm/renderer.rs",
 ]
-static_closure = "The host installs one persistent ScriptingContext render factory before import; listener, input, path-effect, DataConverter, and draw callbacks must all observe that same context through the live RenderFactory boundary (`src/command_server.cpp:698`; `include/rive/lua/rive_lua_libs.hpp:1530-1543`)."
+static_closure = "The host installs one persistent ScriptingContext render factory before import; Rust retains an owned stable-identity PersistentFactoryContext rather than erasing a borrow lifetime. Listener, input, path-effect, DataConverter, and draw callbacks all observe that same context through the live RenderFactory boundary (`src/command_server.cpp:690-704`; `include/rive/lua/rive_lua_libs.hpp:1530-1543`; `src/lua/lua_scripted_context.cpp:511-556`)."
 
 [[source_set]]
 id = "live-draw-boundary"
@@ -1312,11 +1314,10 @@ upstream = "src/command_server.cpp"
 source_set = "scripting-render-context"
 wave = "FL-E"
 rust_modules = [
-  "crates/nuxie-scripting/src/vm.rs",
-  "crates/nuxie-scripting/src/vm/renderer.rs",
+  "crates/nuxie-scripting/src/vm/command_server.rs",
 ]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/constraints/constrainable_list.cpp"
@@ -3763,9 +3764,21 @@ drop = ["cpp:src/animation/state_machine_instance.cpp:2169-2198", "rust:crates/n
 id = "scripting.render_context"
 wave = "FL-E"
 cpp_files = ["src/command_server.cpp"]
-rust_file = "crates/nuxie-scripting/src/vm/renderer.rs"
-rust_anchor = "pub(crate) struct RendererBindings"
-status = "pending"
+rust_file = "crates/nuxie-scripting/src/vm/command_server.rs"
+rust_anchor = "pub(crate) struct PersistentRenderContext"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/command_server.cpp:690-704", "rust:crates/nuxie/src/lib.rs:289-297", "rust:crates/nuxie-scripting/src/vm/command_server.rs:19-41"]
+retain = ["cpp:include/rive/command_server.hpp:210-213", "cpp:include/rive/lua/rive_lua_libs.hpp:1530-1543", "rust:crates/nuxie-render-api/src/lib.rs:819-879", "rust:crates/nuxie-scripting/src/vm/command_server.rs:14-17"]
+# The render-context identity is immutable after construction; there is no
+# dirty/update state to reconstruct. Callback phases all consume the same
+# context:shader path below.
+dirty = ["cpp:include/rive/lua/rive_lua_libs.hpp:1530-1543", "rust:crates/nuxie-scripting/src/vm/command_server.rs:30-40"]
+update = ["cpp:src/lua/lua_scripted_context.cpp:511-556", "cpp:src/lua/renderer/lua_gpu.cpp:689-735", "rust:crates/nuxie-scripting/src/vm/command_server.rs:44-73", "rust:crates/nuxie-scripting/tests/shader_asset_resolution.rs:703-724"]
+advance = ["cpp:src/lua/lua_scripted_context.cpp:511-556", "cpp:src/lua/renderer/lua_gpu.cpp:689-735", "rust:crates/nuxie-scripting/src/vm/command_server.rs:44-73", "rust:crates/nuxie-scripting/tests/shader_asset_resolution.rs:703-724"]
+draw = ["cpp:src/lua/lua_scripted_context.cpp:511-556", "cpp:src/lua/renderer/lua_gpu.cpp:689-735", "rust:crates/nuxie-scripting/src/vm/renderer.rs:65-99", "rust:crates/nuxie-scripting/tests/shader_asset_resolution.rs:725-739"]
+clone = ["cpp:include/rive/lua/rive_lua_libs.hpp:1530-1543", "rust:crates/nuxie-render-api/src/lib.rs:830-835", "rust:crates/nuxie-scripting/tests/shader_asset_resolution.rs:700-701"]
+drop = ["cpp:src/command_server.cpp:283-283", "rust:crates/nuxie-render-api/src/lib.rs:826-828", "rust:crates/nuxie-scripting/src/vm/command_server.rs:14-17"]
 
 [[member]]
 id = "artboard.live_draw"

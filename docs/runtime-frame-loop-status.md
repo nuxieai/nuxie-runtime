@@ -4,6 +4,22 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
+- FL-E1 is closed by mechanism correspondence. Each `ScriptVm` now owns one
+  safe, stable-identity `PersistentFactoryContext`, installed by the file runtime immediately
+  after VM construction and before script import. Listener, input,
+  path-effect, DataConverter, and draw callbacks all resolve `context:shader`
+  through that same retained factory identity; cloneable proxies reach the one
+  owned concrete factory, and installing a different factory into the VM is
+  rejected. Callback adapters only verify that pre-import identity; an
+  unbound-VM negative proves they cannot establish ownership. The
+  callback-scoped `with_factory_context` /
+  `FactoryContextGuard` compensation and its scripted-golden diagnostic
+  downgrade are deleted, and FL-G09 is closed. Focused scripting tests are
+  175 / 175; runtime 812 / 812 with two ignored; `nuxie --lib` 147 / 147;
+  C++ probe 838 / 838 with six ignored; ordinary and forced-scripted goldens
+  are each 317 / 317 entries and 647 / 647 exact segments with zero
+  divergences; silver remains 32 `cpp-rust-exact` because its 41 scripted
+  cases are still blocked by the unadopted scripted replay lane.
 - FL-D closes with this landing. FL-D5 moves all nine mounted
   nested-artboard/ArtboardComponentList owners to filename-corresponding Rust
   files, FL-D6 moves per-pointer ListenerGroup state and `Event::trigger` to
@@ -105,15 +121,16 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `src/animation/scripted_listener_action.cpp` remains deliberately assigned
   to FL-C; it is not a substitute FL-B row. The checker pins the exact
   45-file FL-B membership so either omission or reassignment fails.
-- File closure: 246 / 342. FL-D is closed by the dependency-ordered D1–D7
-  landings; 96 FL-E/later rows remain pending.
-- Member closure: 72 / 75 owner/member rows (32 faithful plus 40 accepted
-  adaptations); three FL-E rows remain pending.
-- Open mechanism gaps: 5 / 10. FL-G02, FL-G05, and FL-G06 remain closed;
+- File closure: 247 / 342. FL-D is closed by the dependency-ordered D1–D7
+  landings and FL-E1 promotes `src/command_server.cpp`; 95 FL-E/later rows
+  remain pending.
+- Member closure: 73 / 75 owner/member rows (33 faithful plus 40 accepted
+  adaptations); two FL-E rows remain pending.
+- Open mechanism gaps: 4 / 10. FL-G02, FL-G05, FL-G06, and FL-G09 are closed;
   FL-G10 records
   the user-approved D2 saturation choice for AnimationReset's otherwise
   undefined float-to-int edge.
-- Current dependency wave: FL-D is closed; FL-E is next. FL-C is closed
+- Current dependency wave: FL-D and FL-E1 are closed; FL-E2 is next. FL-C is closed
   56 / 56. FL-B's frozen
   45-file/eight-member mini-map is reaccepted and promoted with FL-C5 at
   `14b18765`. After the accepted-candidate complete floor and the PR to main,
@@ -817,11 +834,11 @@ FL-A post-rebase floor, refreshed after final independent review:
   four local-only fixture symlinks are explicitly excluded; stale production
   or harness source fails closed.
 - LOC-009 follow-up evidence added the FL-E `scripting.render_context` owner
-  and FL-G09: pinned C++ installs one persistent ScriptingContext render
-  factory before import, whereas Rust currently scopes it to selected
-  callbacks. FL-E must make listener/input/path-effect/DataConverter/draw
-  callbacks observe one retained factory; this is runtime callback plumbing,
-  not renderer-backend ownership.
+  and FL-G09. FL-E1 closes both: pinned C++ and Rust now install one
+  persistent ScriptingContext render factory before import, and focused tests
+  prove listener/input/path-effect/DataConverter/draw callbacks observe that
+  retained identity. This is runtime callback plumbing, not renderer-backend
+  ownership.
 - A post-rebase probe found a separate Scene-authoring boundary outside FL-A:
   Scene-authored ComponentList padding/gap values omit explicit Yoga units,
   and mapped plain Artboard items omit the root `LayoutComponentStyle` that
@@ -861,4 +878,4 @@ FL-A post-rebase floor, refreshed after final independent review:
    pixel-same, and pixel-static legs in parallel under the 2026-07-30
    coordinator floor policy. There is no Apple leg.
 2. Open the joint FL-B/FL-C5 PR to main.
-3. Execute FL-D as dependency-ordered per-family PRs.
+3. Execute FL-E2 as the next dependency-ordered family.

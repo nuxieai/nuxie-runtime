@@ -3,7 +3,7 @@
 // /Users/levi/dev/oss/rive-runtime/include/rive/factory.hpp
 // /Users/levi/dev/rive-rust/tools/golden-runner/recording_renderer.cpp
 use std::any::Any;
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::rc::Rc;
@@ -802,7 +802,90 @@ pub trait Renderer {
     fn modulate_opacity(&mut self, opacity: f32);
 }
 
+trait PersistentFactoryAccess {
+    fn with_factory(&self, callback: &mut dyn FnMut(&mut dyn Factory));
+}
+
+struct PersistentFactoryCell<F> {
+    factory: RefCell<F>,
+}
+
+impl<F: Factory + 'static> PersistentFactoryAccess for PersistentFactoryCell<F> {
+    fn with_factory(&self, callback: &mut dyn FnMut(&mut dyn Factory)) {
+        callback(&mut *self.factory.borrow_mut());
+    }
+}
+
+/// An owned, stable-identity renderer factory suitable for retained scripting
+/// contexts.
+///
+/// Clones are lightweight proxies for the same concrete factory. Each factory
+/// operation borrows the underlying object only for that operation, so a
+/// scripting callback can safely reach the same factory without lifetime
+/// erasure or independently manufactured mutable references.
+pub struct PersistentFactory<F> {
+    access: Rc<PersistentFactoryCell<F>>,
+}
+
+impl<F> Clone for PersistentFactory<F> {
+    fn clone(&self) -> Self {
+        Self {
+            access: Rc::clone(&self.access),
+        }
+    }
+}
+
+impl<F> PersistentFactory<F> {
+    pub fn new(factory: F) -> Self {
+        Self {
+            access: Rc::new(PersistentFactoryCell {
+                factory: RefCell::new(factory),
+            }),
+        }
+    }
+
+    pub fn borrow(&self) -> Ref<'_, F> {
+        self.access.factory.borrow()
+    }
+
+    pub fn borrow_mut(&self) -> RefMut<'_, F> {
+        self.access.factory.borrow_mut()
+    }
+}
+
+/// Type-erased retained handle shared by one scripting VM and its factory
+/// proxies.
+#[derive(Clone)]
+pub struct PersistentFactoryContext {
+    access: Rc<dyn PersistentFactoryAccess>,
+    identity: *const (),
+}
+
+impl PersistentFactoryContext {
+    pub fn identity(&self) -> *const () {
+        self.identity
+    }
+
+    pub fn with_factory<R>(&self, callback: impl FnOnce(&mut dyn Factory) -> R) -> R {
+        let mut callback = Some(callback);
+        let mut result = None;
+        self.access.with_factory(&mut |factory| {
+            let callback = callback
+                .take()
+                .expect("persistent factory callback executes exactly once");
+            result = Some(callback(factory));
+        });
+        result.expect("persistent factory callback executes exactly once")
+    }
+}
+
 pub trait Factory {
+    /// Return the stable owned context used by scripting VMs, when this
+    /// factory is a [`PersistentFactory`] proxy.
+    fn persistent_context(&self) -> Option<PersistentFactoryContext> {
+        None
+    }
+
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,
@@ -853,6 +936,82 @@ pub trait Factory {
         _plan: &GpuCanvasPlan,
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
         Err(GpuCanvasError::unsupported())
+    }
+}
+
+impl<F: Factory + 'static> Factory for PersistentFactory<F> {
+    fn persistent_context(&self) -> Option<PersistentFactoryContext> {
+        let identity = Rc::as_ptr(&self.access).cast::<()>();
+        let access: Rc<dyn PersistentFactoryAccess> = self.access.clone();
+        Some(PersistentFactoryContext { access, identity })
+    }
+
+    fn make_render_buffer(
+        &mut self,
+        buffer_type: RenderBufferType,
+        flags: RenderBufferFlags,
+        size_in_bytes: usize,
+    ) -> Box<dyn RenderBuffer> {
+        self.borrow_mut()
+            .make_render_buffer(buffer_type, flags, size_in_bytes)
+    }
+
+    fn make_linear_gradient(
+        &mut self,
+        sx: f32,
+        sy: f32,
+        ex: f32,
+        ey: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.borrow_mut()
+            .make_linear_gradient(sx, sy, ex, ey, colors, stops)
+    }
+
+    fn make_radial_gradient(
+        &mut self,
+        cx: f32,
+        cy: f32,
+        radius: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.borrow_mut()
+            .make_radial_gradient(cx, cy, radius, colors, stops)
+    }
+
+    fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
+        self.borrow_mut().make_render_path(raw_path, fill_rule)
+    }
+
+    fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
+        self.borrow_mut().make_empty_render_path()
+    }
+
+    fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
+        self.borrow_mut().make_render_paint()
+    }
+
+    fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
+        self.borrow_mut().decode_image(data)
+    }
+
+    fn make_gpu_canvas_shader(
+        &mut self,
+        shader: &GpuCanvasShader,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.borrow_mut().make_gpu_canvas_shader(shader)
+    }
+
+    fn make_gpu_canvas_image(
+        &mut self,
+        vertex_shader: &Arc<dyn RenderGpuCanvasShader>,
+        fragment_shader: &Arc<dyn RenderGpuCanvasShader>,
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        self.borrow_mut()
+            .make_gpu_canvas_image(vertex_shader, fragment_shader, plan)
     }
 }
 

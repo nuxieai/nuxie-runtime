@@ -6,10 +6,13 @@ use std::sync::{Arc, Weak};
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie_render_api::{
     ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader, ImageDecodeError,
-    RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType,
-    RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPath, RenderShader,
+    PersistentFactory, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPath, RenderShader,
 };
-use nuxie_runtime::{NoopScriptHost, ScriptMethod, ScriptValue};
+use nuxie_runtime::{
+    NoopScriptHost, ScriptDataConverterMethod, ScriptListenerInvocation, ScriptMethod, ScriptNode,
+    ScriptValue, ScriptingVm,
+};
 use nuxie_scripting::vm::ScriptVm;
 
 const UNUSED_SHADER_SCRIPT: &[u8] = br#"
@@ -43,6 +46,38 @@ const LOOKUP_ONLY_SCRIPT: &[u8] = br#"
 return function(context)
     context:shader("scene")
     return {}
+end
+"#;
+
+const EVERY_CALLBACK_SHADER_SCRIPT: &[u8] = br#"
+return function(context)
+    local shaderCount = 0
+    local function materializeShader()
+        assert(context:shader("scene") ~= nil)
+        shaderCount += 1
+    end
+    return {
+        performAction = function(self, _invocation)
+            materializeShader()
+        end,
+        pulse = function(self)
+            materializeShader()
+        end,
+        update = function(self, path, _node)
+            materializeShader()
+            return path
+        end,
+        convert = function(self, value)
+            materializeShader()
+            return value
+        end,
+        draw = function(self, _renderer)
+            materializeShader()
+        end,
+        evaluate = function(self)
+            return shaderCount
+        end,
+    }
 end
 "#;
 
@@ -339,6 +374,10 @@ impl ObservingFactory {
     }
 }
 
+fn persistent_observing_factory() -> PersistentFactory<ObservingFactory> {
+    PersistentFactory::new(ObservingFactory::new())
+}
+
 impl Factory for ObservingFactory {
     fn make_render_buffer(
         &mut self,
@@ -447,7 +486,7 @@ fn unused_incompatible_shader_does_not_poison_unrelated_script_boot() {
         .expect("registration retains an unused shader without selecting a backend");
 
     let mut host = NoopScriptHost;
-    let mut factory = RecordingFactory::new();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
     let mut instance = vm
         .instantiate_script_with_factory(
             "unrelated",
@@ -477,7 +516,7 @@ fn requested_incompatible_shader_returns_nil_and_execution_continues() {
         .expect("registration retains the shader without selecting a backend");
 
     let mut host = NoopScriptHost;
-    let mut factory = ObservingFactory::new();
+    let mut factory = persistent_observing_factory();
     let mut instance = vm
         .instantiate_script_with_factory(
             "requesting",
@@ -493,7 +532,7 @@ fn requested_incompatible_shader_returns_nil_and_execution_continues() {
             .expect("script continues after failed shader lookup"),
         ScriptValue::Bool(true)
     );
-    assert!(factory.module_sources.is_empty());
+    assert!(factory.borrow().module_sources.is_empty());
 }
 
 #[test]
@@ -503,23 +542,22 @@ fn malformed_neutral_shader_registers_then_returns_nil_when_requested() {
         .expect("public file registration retains failed neutral decode state");
 
     let mut host = NoopScriptHost;
-    let mut unused_factory = ObservingFactory::new();
+    let mut factory = persistent_observing_factory();
     vm.instantiate_script_with_factory(
         "unrelated",
         &script_payload(UNUSED_SHADER_SCRIPT),
         &mut host,
-        &mut unused_factory,
+        &mut factory,
     )
     .expect("malformed unused shader does not poison boot");
-    assert!(unused_factory.module_sources.is_empty());
+    assert!(factory.borrow().module_sources.is_empty());
 
-    let mut requested_factory = ObservingFactory::new();
     let mut instance = vm
         .instantiate_script_with_factory(
             "requesting",
             &script_payload(REQUESTED_SHADER_SCRIPT),
             &mut host,
-            &mut requested_factory,
+            &mut factory,
         )
         .expect("the retained neutral decode failure returns no values at exact lookup");
     assert_eq!(
@@ -528,14 +566,14 @@ fn malformed_neutral_shader_registers_then_returns_nil_when_requested() {
             .expect("script continues after malformed shader lookup"),
         ScriptValue::Bool(true)
     );
-    assert!(requested_factory.module_sources.is_empty());
+    assert!(factory.borrow().module_sources.is_empty());
 }
 
 #[test]
 fn missing_shader_returns_nil_and_execution_continues() {
     let mut vm = ScriptVm::new();
     let mut host = NoopScriptHost;
-    let mut factory = ObservingFactory::new();
+    let mut factory = persistent_observing_factory();
     let mut instance = vm
         .instantiate_script_with_factory(
             "requesting",
@@ -551,7 +589,7 @@ fn missing_shader_returns_nil_and_execution_continues() {
             .expect("script continues after missing shader lookup"),
         ScriptValue::Bool(true)
     );
-    assert!(factory.module_sources.is_empty());
+    assert!(factory.borrow().module_sources.is_empty());
 }
 
 #[test]
@@ -560,8 +598,10 @@ fn backend_module_creation_failure_returns_nil_and_execution_continues() {
     vm.register_gpu_canvas_shader_asset("legacy", &complete_shader_payload("backend-rejected"))
         .expect("valid shader registers");
     let mut host = NoopScriptHost;
-    let mut factory = ObservingFactory::new();
-    factory.fail_module_creation("backend rejected module");
+    let mut factory = persistent_observing_factory();
+    factory
+        .borrow_mut()
+        .fail_module_creation("backend rejected module");
     let mut instance = vm
         .instantiate_script_with_factory(
             "requesting",
@@ -577,7 +617,7 @@ fn backend_module_creation_failure_returns_nil_and_execution_continues() {
             .expect("script continues after backend module failure"),
         ScriptValue::Bool(true)
     );
-    assert!(factory.module_sources.is_empty());
+    assert!(factory.borrow().module_sources.is_empty());
 }
 
 #[test]
@@ -586,7 +626,7 @@ fn pipeline_construction_still_fails_closed_when_given_a_nil_shader() {
     vm.register_gpu_canvas_shader_asset("legacy", &target_1_only_shader_payload())
         .expect("target-incompatible shader registers");
     let mut host = NoopScriptHost;
-    let mut factory = ObservingFactory::new();
+    let mut factory = persistent_observing_factory();
 
     vm.instantiate_script_with_factory(
         "nil-pipeline",
@@ -596,7 +636,7 @@ fn pipeline_construction_still_fails_closed_when_given_a_nil_shader() {
     )
     .err()
     .expect("GPUPipeline must reject a nil module");
-    assert!(factory.module_sources.is_empty());
+    assert!(factory.borrow().module_sources.is_empty());
 }
 
 #[test]
@@ -608,7 +648,7 @@ fn duplicate_registration_rejects_the_second_source_and_preserves_the_first() {
         .expect_err("the existing stronger Rust duplicate policy rejects replacement");
 
     let mut host = NoopScriptHost;
-    let mut factory = ObservingFactory::new();
+    let mut factory = persistent_observing_factory();
     vm.instantiate_script_with_factory(
         "lookup",
         &script_payload(LOOKUP_ONLY_SCRIPT),
@@ -617,9 +657,9 @@ fn duplicate_registration_rejects_the_second_source_and_preserves_the_first() {
     )
     .expect("the first source remains resolvable");
 
-    assert_eq!(factory.module_sources.len(), 1);
-    assert!(factory.module_sources[0].contains("first-source"));
-    assert!(!factory.module_sources[0].contains("second-source"));
+    assert_eq!(factory.borrow().module_sources.len(), 1);
+    assert!(factory.borrow().module_sources[0].contains("first-source"));
+    assert!(!factory.borrow().module_sources[0].contains("second-source"));
 }
 
 #[test]
@@ -628,7 +668,7 @@ fn successful_lookup_without_a_pipeline_creates_one_module() {
     vm.register_gpu_canvas_shader_asset("scene", &complete_shader_payload("lookup-only"))
         .unwrap();
     let mut host = NoopScriptHost;
-    let mut factory = ObservingFactory::new();
+    let mut factory = persistent_observing_factory();
 
     vm.instantiate_script_with_factory(
         "lookup",
@@ -638,8 +678,119 @@ fn successful_lookup_without_a_pipeline_creates_one_module() {
     )
     .unwrap();
 
-    assert_eq!(factory.module_sources.len(), 1);
-    assert!(factory.image_calls.is_empty());
+    assert_eq!(factory.borrow().module_sources.len(), 1);
+    assert!(factory.borrow().image_calls.is_empty());
+}
+
+#[test]
+fn one_persistent_render_context_serves_every_callback_family() {
+    let mut vm = ScriptVm::new();
+    vm.register_gpu_canvas_shader_asset("scene", &complete_shader_payload("callbacks"))
+        .unwrap();
+    let mut host = NoopScriptHost;
+    let mut factory = persistent_observing_factory();
+    let mut instance = vm
+        .instantiate_script_with_factory(
+            "callback-shaders",
+            &script_payload(EVERY_CALLBACK_SHADER_SCRIPT),
+            &mut host,
+            &mut factory,
+        )
+        .unwrap();
+    let mut callback_factory = factory.clone();
+    drop(factory);
+
+    assert!(
+        instance
+            .call_preferred_listener_action(&ScriptListenerInvocation::None, &mut host)
+            .unwrap()
+    );
+    instance.call_input_trigger("pulse", &mut host).unwrap();
+    instance
+        .call_path_effect_update(
+            RawPath::new(),
+            ScriptNode {
+                path: None,
+                paint: None,
+            },
+            &mut host,
+        )
+        .unwrap();
+    assert_eq!(
+        instance
+            .call_data_converter(ScriptDataConverterMethod::Convert, ScriptValue::Number(7.0),)
+            .unwrap(),
+        ScriptValue::Number(7.0)
+    );
+    let mut renderer = callback_factory.borrow().inner.make_renderer();
+    instance
+        .call_draw(&mut callback_factory, &mut renderer, &mut host)
+        .unwrap();
+
+    assert_eq!(
+        instance
+            .call_method(ScriptMethod::Evaluate, &[], &mut host)
+            .unwrap(),
+        ScriptValue::Number(5.0)
+    );
+    assert_eq!(
+        callback_factory.borrow().module_sources,
+        vec!["complete shader source callbacks"; 5],
+        "listener, input, path-effect, DataConverter, and draw must all use the VM's retained factory"
+    );
+}
+
+#[test]
+fn draw_callback_cannot_bootstrap_an_unbound_vm_render_context() {
+    let mut vm = ScriptVm::new();
+    vm.register_gpu_canvas_shader_asset("scene", &complete_shader_payload("unbound"))
+        .unwrap();
+    let mut host = NoopScriptHost;
+    let mut instance = ScriptingVm::instantiate_script(
+        &mut vm,
+        "unbound-callback",
+        &script_payload(EVERY_CALLBACK_SHADER_SCRIPT),
+        &mut host,
+    )
+    .unwrap();
+    let mut callback_factory = persistent_observing_factory();
+    let mut renderer = callback_factory.borrow().inner.make_renderer();
+
+    let error = instance
+        .call_draw(&mut callback_factory, &mut renderer, &mut host)
+        .expect_err("a callback factory must not become the VM's lifetime owner");
+
+    assert!(
+        error
+            .to_string()
+            .contains("pre-import persistent render context"),
+        "{error}"
+    );
+    assert!(
+        callback_factory.borrow().module_sources.is_empty(),
+        "the rejected callback must not materialize a shader or retain its factory"
+    );
+}
+
+#[test]
+fn one_vm_rejects_a_second_render_context_identity() {
+    let vm = ScriptVm::new();
+    let mut first = persistent_observing_factory();
+    let mut second = persistent_observing_factory();
+
+    vm.install_render_factory(&mut first).unwrap();
+    vm.install_render_factory(&mut first)
+        .expect("reinstalling the retained C++ factory identity is idempotent");
+    let error = vm
+        .install_render_factory(&mut second)
+        .expect_err("one scripting VM cannot migrate renderer/device domains");
+
+    assert!(
+        error
+            .to_string()
+            .contains("different persistent render context"),
+        "{error}"
+    );
 }
 
 #[test]
@@ -648,7 +799,7 @@ fn first_shader_lookup_inside_draw_canvas_uses_active_factory_and_combined_handl
     vm.register_gpu_canvas_shader_asset("scene", &complete_shader_payload("draw-lazy"))
         .unwrap();
     let mut host = NoopScriptHost;
-    let mut factory = ObservingFactory::new();
+    let mut factory = persistent_observing_factory();
     let mut instance = vm
         .instantiate_script_with_factory(
             "draw-lazy",
@@ -659,17 +810,17 @@ fn first_shader_lookup_inside_draw_canvas_uses_active_factory_and_combined_handl
         .unwrap();
 
     assert!(
-        factory.module_sources.is_empty(),
+        factory.borrow().module_sources.is_empty(),
         "generator construction must not resolve the shader"
     );
 
-    let mut renderer = factory.inner.make_renderer();
+    let mut renderer = factory.borrow().inner.make_renderer();
     instance
         .call_draw(&mut factory, &mut renderer, &mut host)
         .unwrap();
 
-    assert_eq!(factory.module_sources.len(), 1);
-    assert_eq!(factory.image_calls, vec![(1, 1, true)]);
+    assert_eq!(factory.borrow().module_sources.len(), 1);
+    assert_eq!(factory.borrow().image_calls, vec![(1, 1, true)]);
 }
 
 #[test]
@@ -678,7 +829,7 @@ fn one_occurrence_keeps_one_identity_across_two_pipeline_keys() {
     vm.register_gpu_canvas_shader_asset("scene", &complete_shader_payload("two-pipelines"))
         .unwrap();
     let mut host = NoopScriptHost;
-    let mut factory = ObservingFactory::new();
+    let mut factory = persistent_observing_factory();
     let mut instance = vm
         .instantiate_script_with_factory(
             "two-pipelines",
@@ -687,7 +838,7 @@ fn one_occurrence_keeps_one_identity_across_two_pipeline_keys() {
             &mut factory,
         )
         .unwrap();
-    let mut renderer = factory.inner.make_renderer();
+    let mut renderer = factory.borrow().inner.make_renderer();
 
     instance
         .call_draw(&mut factory, &mut renderer, &mut host)
@@ -696,9 +847,9 @@ fn one_occurrence_keeps_one_identity_across_two_pipeline_keys() {
         .call_draw(&mut factory, &mut renderer, &mut host)
         .unwrap();
 
-    assert_eq!(factory.module_sources.len(), 1);
+    assert_eq!(factory.borrow().module_sources.len(), 1);
     assert_eq!(
-        factory.image_calls,
+        factory.borrow().image_calls,
         vec![(1, 1, true), (1, 1, true)],
         "both pipeline descriptors retain the exact lookup occurrence"
     );
@@ -710,7 +861,7 @@ fn two_same_name_lookups_create_distinct_module_identities() {
     vm.register_gpu_canvas_shader_asset("scene", &complete_shader_payload("same-name"))
         .unwrap();
     let mut host = NoopScriptHost;
-    let mut factory = ObservingFactory::new();
+    let mut factory = persistent_observing_factory();
 
     let mut instance = vm
         .instantiate_script_with_factory(
@@ -720,14 +871,17 @@ fn two_same_name_lookups_create_distinct_module_identities() {
             &mut factory,
         )
         .unwrap();
-    let mut renderer = factory.inner.make_renderer();
+    let mut renderer = factory.borrow().inner.make_renderer();
     instance
         .call_draw(&mut factory, &mut renderer, &mut host)
         .unwrap();
 
-    assert_eq!(factory.module_sources.len(), 2);
-    assert_eq!(factory.module_sources[0], factory.module_sources[1]);
-    assert_eq!(factory.image_calls, vec![(1, 2, false)]);
+    assert_eq!(factory.borrow().module_sources.len(), 2);
+    assert_eq!(
+        factory.borrow().module_sources[0],
+        factory.borrow().module_sources[1]
+    );
+    assert_eq!(factory.borrow().image_calls, vec![(1, 2, false)]);
 }
 
 #[test]
@@ -744,7 +898,7 @@ fn explicit_different_name_stages_and_combined_fallback_keep_exact_handles() {
     )
     .unwrap();
     let mut host = NoopScriptHost;
-    let mut factory = ObservingFactory::new();
+    let mut factory = persistent_observing_factory();
     let mut instance = vm
         .instantiate_script_with_factory(
             "distinct-stages",
@@ -753,22 +907,22 @@ fn explicit_different_name_stages_and_combined_fallback_keep_exact_handles() {
             &mut factory,
         )
         .unwrap();
-    let mut renderer = factory.inner.make_renderer();
+    let mut renderer = factory.borrow().inner.make_renderer();
     instance
         .call_draw(&mut factory, &mut renderer, &mut host)
         .unwrap();
 
     assert_eq!(
-        factory.module_sources,
+        factory.borrow().module_sources,
         vec!["vertex-only-source", "fragment-only-source"]
     );
-    assert_eq!(factory.image_calls, vec![(1, 2, false)]);
+    assert_eq!(factory.borrow().image_calls, vec![(1, 2, false)]);
 
     let mut combined_vm = ScriptVm::new();
     combined_vm
         .register_gpu_canvas_shader_asset("scene", &complete_shader_payload("combined"))
         .unwrap();
-    let mut combined_factory = ObservingFactory::new();
+    let mut combined_factory = persistent_observing_factory();
     let mut combined = combined_vm
         .instantiate_script_with_factory(
             "combined",
@@ -777,13 +931,13 @@ fn explicit_different_name_stages_and_combined_fallback_keep_exact_handles() {
             &mut combined_factory,
         )
         .unwrap();
-    let mut combined_renderer = combined_factory.inner.make_renderer();
+    let mut combined_renderer = combined_factory.borrow().inner.make_renderer();
     combined
         .call_draw(&mut combined_factory, &mut combined_renderer, &mut host)
         .unwrap();
 
-    assert_eq!(combined_factory.module_sources.len(), 1);
-    assert_eq!(combined_factory.image_calls, vec![(1, 1, true)]);
+    assert_eq!(combined_factory.borrow().module_sources.len(), 1);
+    assert_eq!(combined_factory.borrow().image_calls, vec![(1, 1, true)]);
 }
 
 #[test]
@@ -793,9 +947,9 @@ fn opaque_shader_handles_are_rejected_by_another_factory_domain() {
         entries: Vec::new(),
         bindings: Vec::new(),
     };
-    let mut first = ObservingFactory::new();
+    let mut first = persistent_observing_factory();
     let handle = first.make_gpu_canvas_shader(&shader).unwrap();
-    let mut second = ObservingFactory::new();
+    let mut second = persistent_observing_factory();
     let error = second
         .make_gpu_canvas_image(&handle, &handle, &empty_plan())
         .err()

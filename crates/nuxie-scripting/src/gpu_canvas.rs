@@ -454,8 +454,8 @@ impl ImportedGpuCanvasInstance {
             state.completed = None;
             state.image = None;
         }
-        self.renderer_bindings
-            .with_factory_context(factory, || function.call::<()>((table.clone(),)))?;
+        self.renderer_bindings.verify_render_context(factory)?;
+        function.call::<()>((table.clone(),))?;
         let completed =
             self.state.borrow_mut().completed.take().ok_or_else(|| {
                 Error::runtime("gpu-canvas drawCanvas did not finish a render pass")

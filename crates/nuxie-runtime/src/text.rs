@@ -123,6 +123,13 @@ pub(crate) fn static_text_constraint_bounds(
     instance: &ArtboardInstance,
     text_local: usize,
 ) -> Option<(f32, f32, f32, f32)> {
+    if let Some(bounds) = instance
+        .component(text_local)
+        .and_then(|component| component.concrete.text.as_ref())
+        .and_then(|text| text.bounds())
+    {
+        return Some(bounds);
+    }
     if let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local)
         && let Ok(Some(bounds)) = slice.local_bounds(runtime, instance)
     {
@@ -3432,6 +3439,16 @@ impl<'a> StaticTextSlice<'a> {
         layout_constraint: Option<RuntimeTextLayoutConstraint>,
     ) -> Result<u64> {
         let authored = self.authored_sizing(runtime, instance)?;
+        if let Some(constraint) = layout_constraint
+            && let Some(text) = instance
+                .component(self.text_local)
+                .and_then(|component| component.concrete.text.as_ref())
+        {
+            text.retain_layout_scale_types(
+                constraint.width_scale_type,
+                constraint.height_scale_type,
+            );
+        }
         Ok(layout_constraint
             .map(|constraint| constraint.effective_sizing(authored))
             .unwrap_or(authored))
@@ -6400,12 +6417,12 @@ mod tests {
         let mut value = RuntimeFontAssetValue::default();
         assert!(value.set_live_font_bytes(Some(std::sync::Arc::clone(&live))));
         let path_epoch = instance.path_epoch();
-        let layout_epoch = instance.layout_epoch();
+        let layout_revision = instance.layout_revision();
 
         assert!(instance.set_text_style_font_override(style.local_id, value.clone()));
         assert_eq!(style.font_bytes(&runtime, &instance), Some(live.as_ref()));
         assert!(instance.path_epoch() > path_epoch);
-        assert!(instance.layout_epoch() > layout_epoch);
+        assert!(instance.layout_revision() > layout_revision);
         assert!(
             !instance.set_text_style_font_override(style.local_id, value),
             "reapplying the same live font must not re-dirty text"

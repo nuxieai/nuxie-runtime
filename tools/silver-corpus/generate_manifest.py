@@ -115,7 +115,9 @@ EXACT = (
     "artboard_width_test",
     "component_list_follow_path_distance",
     "component_stateful",
+    "computed_root_transform-nested_artboard",
     "custom_property_enum",
+    "data_converter_to_number",
     "data_bind_solo-values-to-solos",
     "databind_artboard",
     "event_trigger_event",
@@ -123,6 +125,8 @@ EXACT = (
     "focus_test",
     "focus_traversal",
     "follow_path_animate_shape",
+    "follow_path_animate_solo",
+    "follow_path_animate_target",
     "follow_path_constraint",
     "format_number_with_commas",
     "global_viewmodels_test-auto_instance",
@@ -134,6 +138,8 @@ EXACT = (
     "hittest_nested",
     "image_fit_alignment_3",
     "image_fit_alignment_updated_test",
+    "list_items",
+    "list_to_length_test",
     "multitouch",
     "multitouch_enter",
     "n_slice_triangle",
@@ -144,11 +150,14 @@ EXACT = (
     "pause_nested_artboard",
     "recursive_data_bind",
     "relative_data_binding",
+    "saturation",
     "sorted_listeners",
+    "spotify_kids_app_icon",
     "stacked_path_effects",
     "state_transition_fire_trigger",
     "target_event",
     "text_follow_path_shape_length",
+    "text_stroke_test",
     "transition_actions",
     "transition_duration_bind_list",
     "transition_duration_bind_nested",
@@ -329,19 +338,15 @@ artboard_list_overrides_vertical|frame 1, op 303 (rewind): expected rewind, got 
 bankcard|frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint
 clear_viewmodel_list|frame 0, op 10 (makeRenderPaint): expected makeRenderPaint, got save
 clipping_and_draw_order|frame 2, op 161 (transform), field tx: expected 0, got 1121
-collapse_data_binds-test_1|frame 10, op 721 (drawPath): expected drawPath, got rewind
+collapse_data_binds-test_1|frame 10, op 760 (rewind): expected rewind, got drawPath
 collapse_data_binds-test_2|frame 15, op 315 (addRawPath): expected 151 fields, got 256
 collapsing_elements|frame 2, op 943 (rewind): expected rewind, got drawPath
 component_list_child_origin|frame 0, op 315 (transform), field xy: expected -0.0 (0x80000000), got 0
-computed_root_transform-list|frame 1, op 206 (drawPath): expected drawPath, got rewind
-computed_root_transform-nested_artboard|frame 1, op 144 (drawPath): expected drawPath, got rewind
+computed_root_transform-list|frame 1, op 255 (rewind): expected rewind, got drawPath
 computed_values_test|frame 0, op 54 (addRawPath), field point: expected (256.2, -0.0 (0x80000000)), got (245, -0.0 (0x80000000))
 data_bind_solo-solos-to-values|frame 0, op 81 (addRawPath): expected 752 fields, got 669
 data_converter_interpolator_reset|frame 1, op 30 (save): expected save, got color
-data_converter_to_number|frame 1, op 119 (drawPath): expected drawPath, got rewind
 focus_traversal|frame 0, op 95 (color): expected color, got save
-follow_path_animate_solo|frame 125, op 2406 (clipPath): expected clipPath, got rewind
-follow_path_animate_target|frame 1, op 150 (clipPath): expected clipPath, got rewind
 global_viewmodels_test-auto_instance|frame 0, op 27 (color): expected color, got save
 hide_test|frame 0, op 50 (color), field paint_id: expected 14, got 10
 hittest_ab1|frame 1, op 153 (color): expected color, got save
@@ -355,22 +360,17 @@ layout_anim_bound|frame 2, op 146 (addRawPath), field point: expected (450, 0), 
 layout_anim_component_list|frame 1, op 89 (addRawPath), field point: expected (500, 0), got (495.2, 0)
 layout_anim_nested|frame 1, op 86 (addRawPath), field point: expected (500, 0), got (495.2, 0)
 layout_aspect_ratio|frame 0, op 42 (addRawPath), field point: expected (142, 71), got (142, 133)
-layout_display|frame 3, op 173 (drawPath): expected drawPath, got rewind
+layout_display|frame 3, op 188 (makeRenderPath): expected makeRenderPath, got rewind
 layout_paint|frame 0, op 77 (drawPath): expected drawPath, got makeRenderPath
-list_items|frame 1, op 105 (drawPath): expected drawPath, got rewind
-list_to_length_test|frame 1, op 139 (drawPath): expected drawPath, got rewind
 multi_listeners|frame 2, op 253 (makeRenderPath): expected makeRenderPath, got rewind
 nested_events|frame 1, op 166 (makeRenderPath): expected makeRenderPath, got rewind
 number_to_list_nested_children|frame 0, op 141 (color): expected color, got save
 path_effect_with_feathers|frame 0, op 21 (feather), field paint_id: expected 8, got 5
 reset_phase_multi_main|frame 0, op 25 (color): expected color, got makeRenderPaint
-saturation|frame 14, op 666 (drawPath): expected drawPath, got rewind
-spotify_kids_app_icon|frame 1, op 285 (clipPath): expected clipPath, got rewind
 spotify_kids_demo|frame 0, op 200 (blendMode): expected blendMode, got makeRenderPaint
 stateful_keyed_trigger|frame 1, op 30 (color): expected color, got save
 superbowl|frame 0, op 2825 (color), field paint_id: expected 220, got 208
 text_input|frame 0, op 25 (transform), field xy: expected -0.0 (0x80000000), got 0
-text_stroke_test|frame 1, op 62 (rewind): expected rewind, got makeRenderPath
 text_vertical_trim_test|frame 3, op 219 (transform), field ty: expected 177.93579, got 182.76001
 time_based_interpolation|frame 1, op 65 (transform), field tx: expected 250.07309, got 250.29443
 transition_artboard_condition_test|frame 0, op 16 (frameSize), field width: expected 983, got 984

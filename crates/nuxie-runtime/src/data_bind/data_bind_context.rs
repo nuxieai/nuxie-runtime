@@ -8714,7 +8714,7 @@ impl ArtboardInstance {
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
                 continue;
             };
-            let child_layout_epoch = nested.child.layout_epoch();
+            let child_layout_revision = nested.child.layout_revision();
             let mut context_changed = false;
             for update in updates {
                 let context = if nested.stateful_view_model_instance_local
@@ -8807,7 +8807,7 @@ impl ArtboardInstance {
             // hug-sized NestedArtboardLayout from the child.
             changed |= nested.child.advance_artboard_data_binds();
             changed |= nested.child.update_pass();
-            child_layout_changed |= nested.child.layout_epoch() != child_layout_epoch;
+            child_layout_changed |= nested.child.layout_revision() != child_layout_revision;
         }
         if child_layout_changed {
             // The mounted child can be a hug-sized provider in this artboard's

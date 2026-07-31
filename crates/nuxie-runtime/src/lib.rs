@@ -1,6 +1,8 @@
 mod animation;
 mod artboard;
 mod artboard_component_list_order;
+#[path = "layout/artboard_component_list_override.rs"]
+mod artboard_component_list_override;
 #[path = "data_bind/data_bind_context.rs"]
 mod artboard_data_bind;
 mod components;
@@ -89,10 +91,16 @@ mod data_converter_trigger_owner;
 mod draw;
 mod event;
 mod focus;
+mod foreground_layout_drawable;
 #[path = "data_bind/converters/formula/formula_token.rs"]
 mod formula_token;
 mod intrinsically_sizeable;
 mod joystick;
+mod layout_component;
+#[path = "layout/layout_component_style.rs"]
+mod layout_component_style;
+#[path = "layout/layout_node_provider.rs"]
+mod layout_node_provider;
 mod listener_group;
 mod math;
 mod nested_bool;
@@ -118,6 +126,14 @@ mod shapes;
 mod state_machine;
 mod text;
 mod text_input;
+#[path = "text/text.rs"]
+mod text_owner;
+#[path = "text/text_style.rs"]
+mod text_style_owner;
+#[path = "text/text_style_paint.rs"]
+mod text_style_paint_owner;
+#[path = "text/text_value_run.rs"]
+mod text_value_run_owner;
 mod view_model;
 // #RB-1: retained-identity view-model core (map Phase RB). Additive while
 // consumers migrate; the compensation family deletes when migration ends.

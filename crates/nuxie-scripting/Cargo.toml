@@ -11,7 +11,8 @@ description = "Scripting spike for the Rive Rust runtime: pure-Rust Luau VM (lua
 # `cargo test --workspace` and the editor ProductHost exercise the same VM.
 # Build with `--no-default-features` for the dependency-free envelope-parsing
 # subset.
-default = ["luau"]
+default = ["luau", "js-host-seed"]
+js-host-seed = ["nuxie-runtime/js-host-seed"]
 luau = [
     "dep:luaur-common",
     "dep:luaur-rt",
@@ -21,7 +22,7 @@ luau = [
 
 [dependencies]
 nuxie-render-api = { path = "../nuxie-render-api", optional = true }
-nuxie-runtime = { path = "../nuxie-runtime" }
+nuxie-runtime = { path = "../nuxie-runtime", default-features = false }
 # Pinned exactly: luaur-rt 0.1.8 (pure-Rust Luau translation, validated
 # against upstream Luau commit 8f33df9 per the luaur README).
 luaur-common = { version = "=0.1.8", optional = true }

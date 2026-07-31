@@ -2433,6 +2433,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                     for hit in &mut hit_components {
                         hit.prepare_event(owner, groups);
                     }
+                    if up { for group in &mut groups { group.suppress_click_once(pointer_id); } }
                     let mut result = HitResult::None;
                     if captured { result = result.strongest(HitResult::Hit); }
                     for hit in &mut hit_components { let item = hit.process_event(owner); }

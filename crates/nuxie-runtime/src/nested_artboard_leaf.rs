@@ -19,6 +19,9 @@ pub(crate) fn runtime_nested_artboard_leaf_alignment(
     frame: (f32, f32, f32, f32),
     content: (f32, f32, f32, f32),
 ) -> Mat2D {
+    let alignment = crate::layout::Alignment::new(alignment_x, alignment_y);
+    let alignment_x = alignment.x;
+    let alignment_y = alignment.y;
     let (frame_left, frame_top, frame_width, frame_height) = frame;
     let (content_left, content_top, content_width, content_height) = content;
     let x = -content_left - content_width * 0.5 - alignment_x * content_width * 0.5;

@@ -40,9 +40,11 @@ use crate::properties::{
 };
 use crate::scripting::{ScriptNode, script_paint_for_shape};
 use crate::text::{
-    RuntimeTextLayoutConstraint, StaticTextClipBounds, runtime_text_input_shape_paint_commands,
-    runtime_text_shape_paint_commands, static_text_caret_geometry, static_text_clip_bounds,
-    static_text_constraint_bounds, static_text_controlled_layout_bounds, static_text_hit,
+    RuntimeTextLayoutConstraint, RuntimeTextLayoutDebugReport, StaticTextClipBounds,
+    build_static_text_constraint_bounds, runtime_text_input_shape_paint_commands,
+    runtime_text_shape_paint_commands, static_fixed_text_constraint_bounds,
+    static_text_caret_geometry, static_text_clip_bounds, static_text_constraint_bounds,
+    static_text_controlled_layout_bounds, static_text_hit, static_text_layout_debug_report,
     static_text_layout_measure_bounds, static_text_selection_rects, static_text_value,
     static_text_value_run_hit, text_input_layout_measure_bounds,
 };
@@ -6206,7 +6208,6 @@ impl ArtboardInstance {
                 (bounds.width, bounds.height) =
                     layout.apply_forced_size(bounds.width, bounds.height);
             }
-            self.retain_runtime_layout_component_bounds(layout_local, bounds, layout_bounds);
             return bounds;
         }
         let mut cache = BTreeMap::new();
@@ -6223,7 +6224,6 @@ impl ArtboardInstance {
         {
             (bounds.width, bounds.height) = layout.apply_forced_size(bounds.width, bounds.height);
         }
-        self.retain_runtime_layout_component_bounds(layout_local, bounds, Some(&cache));
         bounds
     }
 
@@ -6232,11 +6232,7 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         runtime: Option<&RuntimeFile>,
     ) -> Option<BTreeMap<usize, RuntimeLayoutBounds>> {
-        let solved_bounds = TaffyRuntimeLayoutEngine.compute_bounds(self, graph, runtime)?;
-        for (&local_id, &bounds) in &solved_bounds {
-            self.retain_runtime_layout_component_bounds(local_id, bounds, Some(&solved_bounds));
-        }
-        Some(solved_bounds)
+        TaffyRuntimeLayoutEngine.compute_bounds(self, graph, runtime)
     }
 
     pub(crate) fn retain_runtime_layout_component_bounds(
@@ -6410,6 +6406,52 @@ impl ArtboardInstance {
         )
     }
 
+    #[doc(hidden)]
+    pub fn debug_layout_actual_direction(&self, local_id: usize) -> Option<u64> {
+        self.component(local_id)?;
+        let mut current = Some(local_id);
+        while let Some(local) = current {
+            if let Some(style_local) = self.runtime_layout_component_style_local(local) {
+                match self.runtime_layout_style_uint_default(
+                    style_local,
+                    RuntimeLayoutStyleProperty::DirectionValue,
+                    0,
+                ) {
+                    direction @ (1 | 2) => return Some(direction),
+                    _ => {}
+                }
+            }
+            current = self.component_parent_local(local);
+        }
+        // With no authored or inherited override C++ keeps
+        // `m_inheritedDirection` at `LayoutDirection::inherit`; Yoga may
+        // resolve that to LTR for placement, but Text::align must still
+        // preserve the authored left/right value (`layout_component.cpp:
+        // 997-1011,1236-1245`; `text.cpp:1429-1438`).
+        Some(0)
+    }
+
+    #[doc(hidden)]
+    pub fn debug_text_actual_align(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        text_local: usize,
+    ) -> Option<u64> {
+        if self.component(text_local)?.type_name != "Text" {
+            return None;
+        }
+        let authored = runtime
+            .object(self.component(text_local)?.global_id as usize)?
+            .uint_property("alignValue")?;
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
+        Some(
+            self.runtime_text_layout_constraint(text_local, layout_bounds.as_ref())
+                .map(|constraint| constraint.effective_align(authored))
+                .unwrap_or(authored),
+        )
+    }
+
     /// Test-only parity surface for C++ `Text::localBounds()` after layout.
     #[doc(hidden)]
     pub fn debug_text_local_bounds(
@@ -6430,6 +6472,26 @@ impl ArtboardInstance {
         }
     }
 
+    #[doc(hidden)]
+    pub fn debug_text_layout_report(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        text_local: usize,
+    ) -> Option<RuntimeTextLayoutDebugReport> {
+        if self.component(text_local)?.type_name != "Text" {
+            return None;
+        }
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, Some(runtime));
+        static_text_layout_debug_report(
+            runtime,
+            graph,
+            self,
+            text_local,
+            self.runtime_text_layout_constraint(text_local, layout_bounds.as_ref()),
+        )
+    }
+
     fn runtime_text_layout_constraint(
         &self,
         text_local: usize,
@@ -6447,6 +6509,9 @@ impl ArtboardInstance {
             height: bounds.height,
             width_scale_type: self.runtime_layout_axis_scale(style_local, true),
             height_scale_type: self.runtime_layout_axis_scale(style_local, false),
+            layout_direction: self
+                .debug_layout_actual_direction(parent_local)
+                .unwrap_or(0),
         })
     }
 
@@ -6470,6 +6535,9 @@ impl ArtboardInstance {
             height: bounds.height,
             width_scale_type: self.runtime_layout_axis_scale(style_local, true),
             height_scale_type: self.runtime_layout_axis_scale(style_local, false),
+            layout_direction: self
+                .debug_layout_actual_direction(parent_local)
+                .unwrap_or(0),
         })
     }
 
@@ -9305,6 +9373,10 @@ impl Default for RuntimeTextDrawOwner {
 }
 
 impl RuntimeTextDrawOwner {
+    fn is_dirty(&self) -> bool {
+        self.dirty.get() || self.retained.borrow().is_none()
+    }
+
     fn mark_dirty(&self) {
         self.dirty.set(true);
     }
@@ -9357,6 +9429,28 @@ impl RuntimeTextDrawOwner {
             .as_ref()
             .expect("text owner was just populated")
             .clone())
+    }
+
+    fn rebuild(
+        &self,
+        build: impl FnOnce() -> Result<RuntimeCachedTextShapePaints>,
+    ) -> Result<bool> {
+        if !self.dirty.get() && self.retained.borrow().is_some() {
+            return Ok(false);
+        }
+        self.retained_or_build(build)?;
+        Ok(true)
+    }
+
+    fn retained_frame(&self) -> Result<RuntimeCachedTextShapePaints> {
+        if self.dirty.get() {
+            anyhow::bail!("Text render styles were not rebuilt during component update");
+        }
+        self.retained
+            .borrow()
+            .as_ref()
+            .cloned()
+            .context("Text update did not retain render styles")
     }
 }
 
@@ -9765,6 +9859,22 @@ impl RuntimeDrawableList {
                 owner.mark_dirty();
             }
         }
+    }
+
+    pub(crate) fn dirty_text_locals(&self) -> Vec<usize> {
+        self.drawables
+            .iter()
+            .take(self.imported_count)
+            .filter(|drawable| drawable.type_name == "Text")
+            .filter_map(|drawable| {
+                drawable
+                    .text_draw_owner
+                    .as_ref()
+                    .is_some_and(RuntimeTextDrawOwner::is_dirty)
+                    .then_some(drawable.local_id)
+                    .flatten()
+            })
+            .collect()
     }
 
     pub(crate) fn mark_text_resource_dirty_for_local(&self, local_id: usize) {
@@ -11156,6 +11266,37 @@ impl TaffyRuntimeLayoutEngine {
                 self.intrinsic_static_hug_min_is_auto(instance, graph, local, style_local, false)?,
             )?,
         };
+        // The top-level Artboard adapter preserves its historical
+        // undefined-unit minimum as an external host constraint. Ordinary
+        // Yoga LayoutComponents do not: YGUnitUndefined means no min bound.
+        if !is_root {
+            if instance.runtime_layout_style_uint_default(
+                style_local,
+                RuntimeLayoutStyleProperty::MinWidthUnitsValue,
+                0,
+            ) == 0
+                && instance
+                    .runtime_layout_style_double(style_local, RuntimeLayoutStyleProperty::MinWidth)
+                    .unwrap_or(0.0)
+                    .abs()
+                    > f32::EPSILON
+            {
+                style.min_size.width = Dimension::auto();
+            }
+            if instance.runtime_layout_style_uint_default(
+                style_local,
+                RuntimeLayoutStyleProperty::MinHeightUnitsValue,
+                0,
+            ) == 0
+                && instance
+                    .runtime_layout_style_double(style_local, RuntimeLayoutStyleProperty::MinHeight)
+                    .unwrap_or(0.0)
+                    .abs()
+                    > f32::EPSILON
+            {
+                style.min_size.height = Dimension::auto();
+            }
+        }
         style.max_size = Size {
             width: self.dimension_style(
                 instance,
@@ -11267,7 +11408,19 @@ impl TaffyRuntimeLayoutEngine {
             width_scale
         };
         match main_scale {
-            0 | 2 => {
+            0 => {
+                style.flex_grow = 0.0;
+                style.flex_shrink = 0.0;
+                // Yoga's fixed-scale LayoutComponent uses its authored main
+                // size as the flex basis. Leaving Taffy's basis at `auto`
+                // lets intrinsic Text content replace that fixed width.
+                style.flex_basis = if parent_is_row {
+                    style.size.width
+                } else {
+                    style.size.height
+                };
+            }
+            2 => {
                 style.flex_grow = 0.0;
                 style.flex_shrink = 0.0;
                 style.flex_basis = Dimension::auto();
@@ -11537,7 +11690,19 @@ impl TaffyRuntimeLayoutEngine {
         };
 
         match main_scale {
-            0 | 2 => {
+            0 => {
+                style.flex_grow = 0.0;
+                style.flex_shrink = 0.0;
+                // Yoga preserves the authored main-axis size for fixed
+                // LayoutComponents. Taffy's `auto` basis would instead let
+                // intrinsic Text content widen the fixed child.
+                style.flex_basis = if parent_is_row {
+                    style.size.width
+                } else {
+                    style.size.height
+                };
+            }
+            2 => {
                 style.flex_grow = 0.0;
                 style.flex_shrink = 0.0;
                 style.flex_basis = Dimension::auto();
@@ -11779,6 +11944,33 @@ impl TaffyRuntimeLayoutEngine {
             .components
             .iter()
             .find(|component| component.local_id == layout_local)?;
+        let style_local = instance.runtime_layout_component_style_local(layout_local);
+        let fixed_width = style_local.and_then(|style_local| {
+            self.fixed_layout_measure_dimension(
+                instance,
+                graph,
+                layout_local,
+                style_local,
+                true,
+                available_space.width,
+            )
+        });
+        let fixed_height = style_local.and_then(|style_local| {
+            self.fixed_layout_measure_dimension(
+                instance,
+                graph,
+                layout_local,
+                style_local,
+                false,
+                available_space.height,
+            )
+        });
+        let constrained_dimensions = Size {
+            // Yoga's fixed-axis style is authoritative even when the layout
+            // engine offers an intrinsic known dimension to the callback.
+            width: fixed_width.or(known_dimensions.width),
+            height: fixed_height.or(known_dimensions.height),
+        };
         let mut measured = Size::ZERO;
         for child_local in &component.children {
             // Mirrors C++ `LayoutComponent::measureLayout`: hidden/collapsed
@@ -11821,11 +12013,11 @@ impl TaffyRuntimeLayoutEngine {
                         .runtime_layout_component_style_local(layout_local)
                         .and_then(|style_local| {
                             let layout_constraint = RuntimeTextLayoutConstraint {
-                                width: known_dimensions
+                                width: constrained_dimensions
                                     .width
                                     .or_else(|| definite_available_space(available_space.width))
                                     .unwrap_or(f32::MAX),
-                                height: known_dimensions
+                                height: constrained_dimensions
                                     .height
                                     .or_else(|| definite_available_space(available_space.height))
                                     .unwrap_or(f32::MAX),
@@ -11833,6 +12025,9 @@ impl TaffyRuntimeLayoutEngine {
                                     .runtime_layout_axis_scale(style_local, true),
                                 height_scale_type: instance
                                     .runtime_layout_axis_scale(style_local, false),
+                                layout_direction: instance
+                                    .debug_layout_actual_direction(layout_local)
+                                    .unwrap_or(0),
                             };
                             static_text_layout_measure_bounds(
                                 runtime,
@@ -11856,11 +12051,11 @@ impl TaffyRuntimeLayoutEngine {
                         .runtime_layout_component_style_local(layout_local)
                         .and_then(|style_local| {
                             let layout_constraint = RuntimeTextLayoutConstraint {
-                                width: known_dimensions
+                                width: constrained_dimensions
                                     .width
                                     .or_else(|| definite_available_space(available_space.width))
                                     .unwrap_or(f32::MAX),
-                                height: known_dimensions
+                                height: constrained_dimensions
                                     .height
                                     .or_else(|| definite_available_space(available_space.height))
                                     .unwrap_or(f32::MAX),
@@ -11868,6 +12063,9 @@ impl TaffyRuntimeLayoutEngine {
                                     .runtime_layout_axis_scale(style_local, true),
                                 height_scale_type: instance
                                     .runtime_layout_axis_scale(style_local, false),
+                                layout_direction: instance
+                                    .debug_layout_actual_direction(layout_local)
+                                    .unwrap_or(0),
                             };
                             text_input_layout_measure_bounds(
                                 runtime,
@@ -11918,9 +12116,36 @@ impl TaffyRuntimeLayoutEngine {
             }
         }
         Some(Size {
-            width: known_dimensions.width.unwrap_or(measured.width),
-            height: known_dimensions.height.unwrap_or(measured.height),
+            width: constrained_dimensions.width.unwrap_or(measured.width),
+            height: constrained_dimensions.height.unwrap_or(measured.height),
         })
+    }
+
+    fn fixed_layout_measure_dimension(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        layout_local: usize,
+        style_local: usize,
+        width_axis: bool,
+        available_space: AvailableSpace,
+    ) -> Option<f32> {
+        if instance.runtime_layout_axis_scale(style_local, width_axis) != 0 {
+            return None;
+        }
+        let value = instance
+            .runtime_layout_component_dimension(
+                layout_local,
+                if width_axis { "width" } else { "height" },
+            )
+            .max(0.0);
+        match self.effective_units(instance, graph, layout_local, style_local, width_axis)? {
+            0 | 1 => Some(value),
+            2 => {
+                definite_available_space(available_space).map(|available| available * value / 100.0)
+            }
+            _ => None,
+        }
     }
 
     /// C++ exposes each `ArtboardComponentList` row as a layout-provider node
@@ -12055,13 +12280,13 @@ impl TaffyRuntimeLayoutEngine {
         value_property: RuntimeLayoutStyleProperty,
         unit_property: RuntimeLayoutStyleProperty,
         zero_undefined_is_auto: bool,
-        nonzero_undefined_is_auto: bool,
+        _nonzero_undefined_is_auto: bool,
     ) -> Option<Dimension> {
         let value = instance
             .runtime_layout_style_double(style_local, value_property)
             .unwrap_or(0.0);
         let units = instance.runtime_layout_style_uint_default(style_local, unit_property, 0);
-        if nonzero_undefined_is_auto
+        if _nonzero_undefined_is_auto
             && units == 0
             && value.abs() > f32::EPSILON
             && matches!(
@@ -13461,6 +13686,7 @@ struct RuntimeCachedTextShapePaints {
     commands: Arc<Vec<RuntimeShapePaintCommand>>,
     paths: Arc<BTreeMap<RuntimeTextPathOwnerKey, Arc<RawPath>>>,
     clip_path: Option<Arc<RawPath>>,
+    publishes_layout_dirty: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15365,74 +15591,190 @@ fn runtime_retained_text_draw_frame(
         .text_draw_owner
         .as_ref()
         .context("live text drawable is missing its retained owner")?;
+    if drawable.type_name == "Text" {
+        return owner.retained_frame().with_context(|| {
+            format!(
+                "Text local {} retained owner",
+                drawable.local_id.unwrap_or(usize::MAX)
+            )
+        });
+    }
+    owner.retained_or_build(|| {
+        runtime_build_text_draw_frame(runtime, instance, graph, drawable, layout_bounds)
+    })
+}
+
+fn runtime_build_text_draw_frame(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    drawable: &RuntimeDrawable,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+) -> Result<RuntimeCachedTextShapePaints> {
     let drawable_local = drawable
         .local_id
         .context("live text drawable is missing its local id")?;
-    owner.retained_or_build(|| {
-        let (mut commands, clip_bounds) = if drawable.type_name == "Text" {
-            let layout_constraint =
-                instance.runtime_text_layout_constraint(drawable_local, layout_bounds);
-            (
-                runtime_text_shape_paint_commands(
-                    runtime,
-                    instance,
-                    graph,
-                    drawable_local,
-                    layout_bounds,
-                    layout_constraint,
-                )?,
-                static_text_clip_bounds(
-                    runtime,
-                    graph,
-                    instance,
-                    drawable_local,
-                    layout_constraint,
-                )?,
-            )
-        } else {
-            (
-                runtime_text_input_shape_paint_commands(
-                    runtime,
-                    instance,
-                    graph,
-                    drawable_local,
-                    layout_bounds,
-                )?,
-                None,
-            )
-        };
-        assign_shape_paint_path_slot_indices(&mut commands);
-        let paths = Arc::new(runtime_text_owned_raw_paths(&commands));
-        let clip_path = clip_bounds
-            // C++ `Text::buildRenderStyles` returns before rebuilding
-            // `m_clipRect` when shaping produced no renderable frame
-            // (`src/text/text.cpp:534-543`).
-            .filter(|_| !commands.is_empty())
-            .map(|bounds| {
-                let world = instance.runtime_component_world_transform_with_bounds(
-                    drawable_local,
-                    graph,
-                    layout_bounds,
-                );
-                Arc::new(runtime_raw_path_from_commands(
-                    &runtime_text_clip_path_commands(bounds, world),
-                ))
+    if drawable.type_name == "Text" {
+        let has_authored_run = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == drawable_local)
+            .is_some_and(|text| {
+                text.children.iter().any(|child_local| {
+                    graph.local_objects.iter().any(|object| {
+                        object.local_id == *child_local && object.type_name == Some("TextValueRun")
+                    })
+                })
             });
-        if drawable.type_name == "Text"
-            && let Some(bounds) =
-                static_text_constraint_bounds(runtime, graph, instance, drawable_local)
-            && let Some(text) = instance
+        let text_run_list_source_key = property_key_for_name("Text", "textRunListSource");
+        let has_run_list_source = graph.data_binds.iter().any(|data_bind| {
+            data_bind.target_local == Some(drawable_local)
+                && data_bind.target_type_name == Some("Text")
+                && u16::try_from(data_bind.property_key).ok() == text_run_list_source_key
+        });
+        if !has_authored_run && !has_run_list_source {
+            // C++ `Text::buildRenderStyles` clears its retained styles and
+            // publishes zero bounds when shaping has no runs. This is still a
+            // successful update-phase rebuild, not an owner left dirty for a
+            // later draw (`text.cpp:534-543`).
+            if let Some(text) = instance
                 .component(drawable_local)
                 .and_then(|component| component.concrete.text.as_ref())
-        {
-            text.retain_bounds(bounds);
+            {
+                text.retain_bounds(
+                    static_fixed_text_constraint_bounds(
+                        runtime,
+                        graph,
+                        instance,
+                        drawable_local,
+                        instance.runtime_text_layout_constraint(drawable_local, layout_bounds),
+                    )
+                    .unwrap_or((0.0, 0.0, 0.0, 0.0)),
+                );
+            }
+            return Ok(RuntimeCachedTextShapePaints {
+                commands: Arc::new(Vec::new()),
+                paths: Arc::new(BTreeMap::new()),
+                clip_path: None,
+                publishes_layout_dirty: false,
+            });
         }
-        Ok(RuntimeCachedTextShapePaints {
-            commands: Arc::new(commands),
-            paths,
-            clip_path,
-        })
+    }
+    let (mut commands, clip_bounds) = if drawable.type_name == "Text" {
+        let layout_constraint =
+            instance.runtime_text_layout_constraint(drawable_local, layout_bounds);
+        (
+            runtime_text_shape_paint_commands(
+                runtime,
+                instance,
+                graph,
+                drawable_local,
+                layout_bounds,
+                layout_constraint,
+            )?,
+            static_text_clip_bounds(runtime, graph, instance, drawable_local, layout_constraint)?,
+        )
+    } else {
+        (
+            runtime_text_input_shape_paint_commands(
+                runtime,
+                instance,
+                graph,
+                drawable_local,
+                layout_bounds,
+            )?,
+            None,
+        )
+    };
+    assign_shape_paint_path_slot_indices(&mut commands);
+    let paths = Arc::new(runtime_text_owned_raw_paths(&commands));
+    let clip_path = clip_bounds
+        // C++ `Text::buildRenderStyles` returns before rebuilding
+        // `m_clipRect` when shaping produced no renderable frame
+        // (`src/text/text.cpp:534-543`).
+        .filter(|_| !commands.is_empty())
+        .map(|bounds| {
+            let world = instance.runtime_component_world_transform_with_bounds(
+                drawable_local,
+                graph,
+                layout_bounds,
+            );
+            Arc::new(runtime_raw_path_from_commands(
+                &runtime_text_clip_path_commands(bounds, world),
+            ))
+        });
+    if drawable.type_name == "Text"
+        && let Some(bounds) = build_static_text_constraint_bounds(
+            runtime,
+            graph,
+            instance,
+            drawable_local,
+            instance.runtime_text_layout_constraint(drawable_local, layout_bounds),
+        )
+        && let Some(text) = instance
+            .component(drawable_local)
+            .and_then(|component| component.concrete.text.as_ref())
+    {
+        text.retain_bounds(bounds);
+    }
+    Ok(RuntimeCachedTextShapePaints {
+        commands: Arc::new(commands),
+        paths,
+        clip_path,
+        publishes_layout_dirty: true,
     })
+}
+
+impl ArtboardInstance {
+    /// Direct update-phase counterpart of C++ `Text::buildRenderStyles`.
+    /// Drawing only consumes this retained result.
+    pub(crate) fn update_runtime_text_render_styles(
+        &self,
+        local_id: usize,
+        dirt: ComponentDirt,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) -> bool {
+        if (dirt
+            & (ComponentDirt::TEXT_SHAPE
+                | ComponentDirt::PAINT
+                | ComponentDirt::WORLD_TRANSFORM
+                | ComponentDirt::RENDER_OPACITY))
+            .is_empty()
+            || self
+                .component(local_id)
+                .map(|component| component.type_name)
+                != Some("Text")
+        {
+            return false;
+        }
+        let Some(runtime) = self.runtime_file() else {
+            return false;
+        };
+        let Some(drawable_index) = self
+            .runtime_drawables
+            .drawable_by_local
+            .get(&local_id)
+            .copied()
+        else {
+            return false;
+        };
+        let drawable = self.runtime_drawables.drawables[drawable_index].as_ref();
+        let Some(owner) = drawable.text_draw_owner.as_ref() else {
+            return false;
+        };
+        let rebuilt = owner
+            .rebuild(|| {
+                runtime_build_text_draw_frame(runtime, self, graph, drawable, layout_bounds)
+            })
+            .unwrap_or(false);
+        rebuilt
+            && owner
+                .retained
+                .borrow()
+                .as_ref()
+                .is_some_and(|frame| frame.publishes_layout_dirty)
+    }
 }
 
 fn runtime_text_backend_path<'a>(
@@ -24680,6 +25022,7 @@ mod tests {
                 commands: Arc::new(Vec::new()),
                 paths: Arc::new(BTreeMap::new()),
                 clip_path: None,
+                publishes_layout_dirty: true,
             })
         };
 
@@ -24707,6 +25050,7 @@ mod tests {
                     commands: Arc::new(Vec::new()),
                     paths: Arc::new(BTreeMap::new()),
                     clip_path: None,
+                    publishes_layout_dirty: true,
                 })
             })
             .expect("source Text owner builds");
@@ -26938,6 +27282,11 @@ mod tests {
             .expect("painted layout draws a path");
         let path_epoch = instance.path_epoch();
         let layout_revision = instance.layout_revision();
+        let layout_node_revision = instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("nearest layout owner")
+            .layout_node_revision();
 
         let width_key = runtime_layout_component_property_key_for_name("width")
             .expect("LayoutComponent width key");
@@ -26947,8 +27296,16 @@ mod tests {
             path_epoch,
             "layout-only writes must not masquerade as path edits"
         );
-        assert!(instance.layout_revision() > layout_revision);
         instance.update_components();
+        assert!(instance.layout_revision() > layout_revision);
+        assert!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .expect("nearest layout owner")
+                .layout_node_revision()
+                > layout_node_revision
+        );
         instance
             .update_artboard_backend_tree(
                 &file,
@@ -27658,12 +28015,23 @@ mod tests {
         let graph = graphs.artboards.first().expect("fixture has an artboard");
         let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
         instance.update_pass();
-        let layout_revision = instance.layout_revision();
+        let layout_node_revision = instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("nearest layout owner")
+            .layout_node_revision();
 
         let width_key =
             property_key_for_name("NSlicedNode", "width").expect("NSlicedNode.width key");
         assert!(instance.set_double_property(3, width_key, 250.0));
-        assert!(instance.layout_revision() > layout_revision);
+        assert!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .expect("nearest layout owner")
+                .layout_node_revision()
+                > layout_node_revision
+        );
         assert!(
             instance
                 .component(8)

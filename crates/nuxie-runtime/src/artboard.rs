@@ -3906,6 +3906,48 @@ impl ArtboardInstance {
             .or_else(|| self.objects.double_property(local_id, property_key))
     }
 
+    #[doc(hidden)]
+    pub fn debug_uint_property(&self, local_id: usize, property_key: u16) -> Option<u64> {
+        self.uint_property(local_id, property_key)
+    }
+
+    #[doc(hidden)]
+    pub fn debug_component_dirt(&self, local_id: usize) -> Option<ComponentDirt> {
+        self.component(local_id).map(|component| component.dirt)
+    }
+
+    #[doc(hidden)]
+    pub fn debug_layout_forced_size(&self, local_id: usize) -> Option<(Option<f32>, Option<f32>)> {
+        self.component(local_id)?
+            .concrete
+            .layout
+            .as_ref()
+            .map(|layout| layout.forced_size())
+    }
+
+    #[doc(hidden)]
+    pub fn debug_set_layout_forced_size(
+        &mut self,
+        local_id: usize,
+        width: f32,
+        height: f32,
+    ) -> bool {
+        let Some(layout) = self
+            .component(local_id)
+            .and_then(|component| component.concrete.layout.as_ref())
+        else {
+            return false;
+        };
+        let previous = layout.forced_size();
+        if previous == (Some(width), Some(height)) {
+            return false;
+        }
+        layout.forced_width(width);
+        layout.forced_height(height);
+        self.add_dirt(local_id, ComponentDirt::LAYOUT_STYLE, false);
+        true
+    }
+
     /// Typed property write with dirt propagation — the write path the
     /// data-bind pipeline uses. Public for authoring hosts (editors, FFI
     /// embeddings): returns whether a matching property existed and its
@@ -4072,6 +4114,11 @@ impl ArtboardInstance {
         self.mark_prepared_changed_for_property(local_id, property_key);
         self.apply_string_property_changed(local_id, property_key);
         true
+    }
+
+    #[doc(hidden)]
+    pub fn debug_string_property(&self, local_id: usize, property_key: u16) -> Option<&[u8]> {
+        self.string_property(local_id, property_key)
     }
 
     /// Set the first root-artboard `TextValueRun` with the exact authored
@@ -6760,6 +6807,18 @@ impl ArtboardInstance {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        let resized_layout_components = self
+            .components()
+            .iter()
+            .filter(|component| component.type_name == "LayoutComponent")
+            .filter_map(|component| {
+                let bounds_for = |bounds: Option<&Arc<BTreeMap<usize, RuntimeLayoutBounds>>>| {
+                    bounds.and_then(|bounds| bounds.get(&component.local_id).copied())
+                };
+                (bounds_for(previous_bounds.as_ref()) != bounds_for(next_bounds.as_ref()))
+                    .then_some(component.local_id)
+            })
+            .collect::<Vec<_>>();
         self.layout_constraint_bounds = next_bounds;
         if let (Some(bounds), Some(graph)) = (
             self.layout_constraint_bounds.clone(),
@@ -6781,13 +6840,7 @@ impl ArtboardInstance {
             );
         }
         self.enqueue_artboard_parametric_layout_control_sources();
-        let layout_locals = self
-            .components()
-            .iter()
-            .filter(|component| component.type_name == "LayoutComponent")
-            .map(|component| component.local_id)
-            .collect::<Vec<_>>();
-        for local_id in layout_locals {
+        for local_id in resized_layout_components {
             self.add_dirt(local_id, ComponentDirt::WORLD_TRANSFORM, true);
         }
     }
@@ -6797,9 +6850,9 @@ impl ArtboardInstance {
         self.mark_prepared_changed();
     }
 
-    /// Direct `LayoutComponent::markLayoutNodeDirty` publication. The epoch is
-    /// only a derived fence for the retained layout solve; renderer resources
-    /// outside this exact LayoutComponent are not dirtied.
+    /// Direct `LayoutComponent::markLayoutNodeDirty` publication. The revision
+    /// is only a derived fence for the retained layout solve; unrelated paint
+    /// preparation is not dirtied.
     pub(crate) fn mark_layout_node_changed(&mut self, local_id: usize) -> bool {
         let owner_changed = self
             .component(local_id)
@@ -6810,7 +6863,6 @@ impl ArtboardInstance {
         }
         self.layout_revision = self.layout_revision.wrapping_add(1);
         self.mark_components_dirty();
-        self.mark_prepared_changed();
         true
     }
 
@@ -7336,6 +7388,21 @@ impl ArtboardInstance {
     pub fn update_pass(&mut self) -> bool {
         let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
         self.update_pass_with_script_mode(&mut script_mode, Mat2D::IDENTITY)
+    }
+
+    #[doc(hidden)]
+    pub fn debug_update_pass_with_root_transform(&mut self, root_transform: Mat2D) -> bool {
+        if let Some(root) = self.objects.root() {
+            if let Some(component) = self.objects.component_mut(root) {
+                // `Artboard::mutableWorldTransform` is retained owner state;
+                // unlike a TransformComponent, the Artboard update does not
+                // rebuild this matrix from authored x/y/scale properties.
+                component.transform.world_transform = root_transform;
+            }
+            self.add_component_dirt(root, ComponentDirt::WORLD_TRANSFORM, true);
+        }
+        let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
+        self.update_pass_with_script_mode(&mut script_mode, root_transform)
     }
 
     fn update_data_binds_for_update_pass(&mut self, root_transform: Mat2D) {
@@ -8042,6 +8109,12 @@ impl ArtboardInstance {
                 .flatten()?;
             Some((Arc::clone(&context.artboards), graph_index))
         });
+        // Every retained Text render owner dirt transition corresponds to
+        // C++ Text Path dirt. Enroll exactly those occurrences before the
+        // clean-frame guard so update, never draw, owns reconstruction.
+        for text_local in self.runtime_drawables.dirty_text_locals() {
+            self.add_dirt(text_local, ComponentDirt::PATH, false);
+        }
         // Core::clone copies generated properties into fresh concrete
         // Components, then Artboard::initialize runs one FILTHY traversal over
         // the clone-owned graph. InstanceObjectArena performs that concrete
@@ -8065,6 +8138,12 @@ impl ArtboardInstance {
         if let Some(layout_bounds) = layout_bounds.as_deref() {
             for (&local_id, &bounds) in layout_bounds {
                 self.retain_runtime_layout_component_bounds(local_id, bounds, Some(layout_bounds));
+            }
+            // The solve above can dirty a Text owner after the pre-guard
+            // enrollment. Mirror `propagateSizeToChildren -> controlSize` by
+            // enrolling that exact second set before component traversal.
+            for text_local in self.runtime_drawables.dirty_text_locals() {
+                self.add_dirt(text_local, ComponentDirt::PATH, false);
             }
             if let Some((graphs, graph_index)) = graph_owner.as_ref() {
                 self.control_runtime_layout_images(&graphs[*graph_index], layout_bounds);
@@ -8141,6 +8220,20 @@ impl ArtboardInstance {
                                 &graphs[*graph_index],
                                 layout_bounds.as_deref(),
                             );
+                            if self.update_runtime_text_render_styles(
+                                local_id,
+                                dirt,
+                                &graphs[*graph_index],
+                                layout_bounds.as_deref(),
+                            ) && !(dirt & (ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT))
+                                .is_empty()
+                            {
+                                // `Text::buildRenderStyles` publishes this
+                                // post-bounds Node -> LayoutComponent ->
+                                // Artboard callback from the mutable update
+                                // phase (`text.cpp:534-826,1130-1213`).
+                                crate::layout_node_provider::mark_layout_node_dirty(self, local_id);
+                            }
                         }
                         if record_updated_locals {
                             report.updated_locals.push(local_id);
@@ -8165,7 +8258,7 @@ impl ArtboardInstance {
                         }
                     }
                     ComponentAddress::TextVariationHelper { text, .. } => {
-                        self.update_runtime_text_variation_helper(text, dirt);
+                        crate::text::update_text_variation_helper(self, text, dirt);
                     }
                 }
 
@@ -8546,21 +8639,6 @@ impl ArtboardInstance {
             }
         }
         changed
-    }
-
-    fn update_runtime_text_variation_helper(&mut self, text: ComponentHandle, dirt: ComponentDirt) {
-        if !dirt.contains(ComponentDirt::TEXT_SHAPE) {
-            return;
-        }
-        if let Some(text_local) = self.component_local_id(text) {
-            // C++ rebuilds the variation-bearing Font on the helper update
-            // (`src/text/text_variation_helper.cpp:14-17`,
-            // `src/text/text_style.cpp:98-124`). Rust's retained text owner
-            // rebuilds lazily from the same live axis values, so invalidate
-            // precisely that Text occurrence here.
-            self.runtime_drawables
-                .mark_text_resource_dirty_for_local(text_local);
-        }
     }
 
     pub(crate) fn apply_uint_property_changed(
@@ -9077,6 +9155,14 @@ impl ArtboardInstance {
                     )
                 })
                 .or_else(|| {
+                    crate::text::text_style_axis_double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                })
+                .or_else(|| {
                     crate::text_owner::double_property_changed(
                         self,
                         local_id,
@@ -9175,16 +9261,6 @@ impl ArtboardInstance {
         }
 
         match self.slot(local_id).and_then(|slot| slot.type_name) {
-            Some("TextStyleAxis")
-                if property_key_for_name("TextStyleAxis", "axisValue") == Some(property_key) =>
-            {
-                // `TextStyleAxis::axisValueChanged` dirties its TextStyle
-                // parent; TextStyle::onDirty then dirties Text and the
-                // embedded variation helper (`text_style_axis.cpp:27-30`,
-                // `text_style.cpp:22-34`).
-                self.component_parent_local(local_id)
-                    .is_some_and(|style| self.add_dirt(style, ComponentDirt::TEXT_SHAPE, false))
-            }
             Some("MeshVertex")
                 if property_key_for_name("Vertex", "x") == Some(property_key)
                     || property_key_for_name("Vertex", "y") == Some(property_key) =>
@@ -14928,7 +15004,7 @@ mod tests {
     }
 
     #[test]
-    fn enabling_layout_constraint_bounds_dirties_layout_dependents() {
+    fn enabling_empty_layout_constraint_bounds_does_not_dirty_layout_dependents() {
         let mut layout = synthetic_component(0, 0);
         layout.type_name = "LayoutComponent";
         let dependent = synthetic_component(1, 1);
@@ -14940,6 +15016,47 @@ mod tests {
         instance.enable_layout_constraint_bounds();
 
         assert!(instance.layout_constraint_bounds_enabled);
+        assert!(
+            !instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::WORLD_TRANSFORM)
+        );
+        assert!(
+            !instance
+                .component(1)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::WORLD_TRANSFORM)
+        );
+        assert_eq!(instance.prepared_epoch(), prepared_epoch);
+
+        let cache_epoch = instance.cache_epoch();
+        instance.enable_layout_constraint_bounds();
+        assert_eq!(instance.cache_epoch(), cache_epoch);
+    }
+
+    #[test]
+    fn enabling_layout_constraint_bounds_dirties_layout_dependents() {
+        let mut layout = synthetic_component(0, 0);
+        layout.type_name = "LayoutComponent";
+        let dependent = synthetic_component(1, 1);
+        let mut instance = synthetic_instance(vec![layout, dependent], vec![0, 1]);
+        synthetic_add_dependent(&mut instance, 0, 1);
+        instance.layout_constraint_bounds = Some(Arc::new(BTreeMap::from([(
+            0,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: 10.0,
+            },
+        )])));
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
+
+        instance.enable_layout_constraint_bounds();
+
         assert!(
             instance
                 .component(0)
@@ -14954,11 +15071,6 @@ mod tests {
                 .dirt
                 .contains(ComponentDirt::WORLD_TRANSFORM)
         );
-        assert!(instance.prepared_epoch() > prepared_epoch);
-
-        let cache_epoch = instance.cache_epoch();
-        instance.enable_layout_constraint_bounds();
-        assert_eq!(instance.cache_epoch(), cache_epoch);
     }
 
     #[test]
@@ -15164,7 +15276,11 @@ mod tests {
                 .parent_layout,
             next_parent_layout
         );
-        assert!(parent.nested_artboards[&0].child.cache_epoch() > after_child_refresh);
+        assert_eq!(
+            parent.nested_artboards[&0].child.cache_epoch(),
+            after_child_refresh,
+            "an unchanged assigned rectangle must not dirty the child world tree"
+        );
     }
 
     #[test]
@@ -15310,6 +15426,7 @@ mod tests {
 
         let padding_left = property_key_for_name("LayoutComponentStyle", "paddingLeft")
             .expect("LayoutComponentStyle.paddingLeft");
+        let prepared_epoch = instance.prepared_epoch();
         assert!(instance.set_double_property(2, padding_left, 12.0));
 
         let parent = instance
@@ -15329,6 +15446,11 @@ mod tests {
                 .unwrap()
                 .dirt
                 .contains(ComponentDirt::COMPONENTS)
+        );
+        assert_eq!(
+            instance.prepared_epoch(),
+            prepared_epoch,
+            "layout-node publication must not dirty unrelated paint preparation"
         );
 
         let revision = instance.layout_revision();
@@ -15639,15 +15761,28 @@ mod tests {
         let text = property_key_for_name("TextValueRun", "text").expect("text run text");
         let color = property_key_for_name("SolidColor", "colorValue").expect("solid color");
 
-        let mut layout_revision = instance.layout_revision();
+        let layout_revision = instance.layout_revision();
+        let layout_node_revision = instance
+            .component(0)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("layout owner")
+            .layout_node_revision();
         assert!(instance.set_double_property(0, fractional_width, 0.5));
         assert!(instance.layout_revision() > layout_revision);
+        assert!(
+            instance
+                .component(0)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .expect("layout owner")
+                .layout_node_revision()
+                > layout_node_revision
+        );
 
-        layout_revision = instance.layout_revision();
+        let layout_revision = instance.layout_revision();
+
         assert!(instance.set_string_property(1, text, b"hello".to_vec()));
         assert_eq!(instance.layout_revision(), layout_revision);
 
-        layout_revision = instance.layout_revision();
         assert!(instance.set_color_property(2, color, 0xff00ff00));
         assert_eq!(instance.layout_revision(), layout_revision);
     }
@@ -17265,7 +17400,11 @@ mod tests {
         instance.clear_component_dirt(1);
         instance.clear_component_dirt(2);
         instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
-        let layout_revision = instance.layout_revision();
+        let layout_node_revision = instance
+            .component(0)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("layout owner")
+            .layout_node_revision();
 
         assert!(instance.set_double_property(2, width, 24.0));
         assert!(
@@ -17275,7 +17414,14 @@ mod tests {
                 .dirt
                 .contains(ComponentDirt::PATH)
         );
-        assert!(instance.layout_revision() > layout_revision);
+        assert!(
+            instance
+                .component(0)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .expect("layout owner")
+                .layout_node_revision()
+                > layout_node_revision
+        );
 
         instance.clear_component_dirt(2);
         instance.set_artboard_dirt_for_test(ComponentDirt::NONE);

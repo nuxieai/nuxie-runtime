@@ -96,6 +96,7 @@ mod foreground_layout_drawable;
 mod formula_token;
 mod intrinsically_sizeable;
 mod joystick;
+mod layout;
 mod layout_component;
 #[path = "layout/layout_component_style.rs"]
 mod layout_component_style;
@@ -249,7 +250,9 @@ pub(crate) use state_machine::{
     StateMachineTransitionDurationInstance,
 };
 pub use text::{
-    embedded_font_is_parseable, embedded_fonts_are_parseable, static_text_support_error,
+    RuntimeTextLayoutDebugReport, RuntimeTextModifierDebugReport,
+    RuntimeTextSelectedRunDebugReport, debug_text_word_unit_count, embedded_font_is_parseable,
+    embedded_fonts_are_parseable, static_text_support_error,
 };
 pub use view_model::{
     RuntimeBindableArtboard, RuntimeDataContext, RuntimeDataContextInstanceRef,

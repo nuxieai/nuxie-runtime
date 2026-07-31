@@ -1,6 +1,7 @@
 use nuxie_binary::{RuntimeFile, read_runtime_file};
 use nuxie_graph::GraphFile;
 use nuxie_image_codec::{decoded_rgba_len, preflight_encoded_image, validate_encoded_image};
+use nuxie_render_api::RawPath;
 use nuxie_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeArtboardDefaultScene, RuntimeComponent,
     RuntimeDataContext, RuntimeDataContextLookupKind, RuntimeDataContextLookupReport,
@@ -88584,4 +88585,899 @@ fn upstream_text_local_bounds_fixture_retains_origin_adjusted_bounds() {
     ] {
         assert_close(actual, expected, field);
     }
+}
+
+#[test]
+fn upstream_raw_path_coarse_and_precise_bounds_are_ported() {
+    let mut path = RawPath::new();
+    path.move_to(0.0, 0.0);
+    path.cubic_to(236.0, 10.0, 569.0, -58.0, 366.0, 180.0);
+    path.cubic_to(163.0, 420.0, 508.0, 365.0, 408.0, 456.0);
+    path.cubic_to(308.0, 547.0, -236.0, -10.0, 0.0, 0.0);
+    path.close();
+
+    let coarse = path.bounds().expect("non-empty raw path has coarse bounds");
+    for (actual, expected, field) in [
+        (coarse.min_x, -236.0, "coarse.left"),
+        (coarse.min_y, -58.0, "coarse.top"),
+        (coarse.max_x, 569.0, "coarse.right"),
+        (coarse.max_y, 547.0, "coarse.bottom"),
+    ] {
+        assert_close(actual, expected, field);
+    }
+
+    let precise = path
+        .precise_bounds()
+        .expect("non-empty raw path has precise bounds");
+    for (actual, expected, field) in [
+        (precise.min_x, -58.79769, "precise.left"),
+        (precise.min_y, -1.78456, "precise.top"),
+        (precise.max_x, 428.90216, "precise.right"),
+        (precise.max_y, 466.05313, "precise.bottom"),
+    ] {
+        assert_close(actual, expected, field);
+    }
+}
+
+#[test]
+fn upstream_background_shape_bounds_follow_text_and_artboard_transform() {
+    let label = "background_measure.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read {label}: {error}"));
+    let runtime = read_runtime_file(&bytes)
+        .unwrap_or_else(|error| panic!("failed to import {label}: {error:#}"));
+    let graph = GraphFile::from_runtime_file(&runtime)
+        .unwrap_or_else(|error| panic!("failed to graph {label}: {error:#}"));
+    let artboard_graph = graph.artboards.first().expect("background artboard");
+    let background = artboard_graph
+        .components
+        .iter()
+        .find(|component| {
+            component.name.as_deref() == Some("background") && component.type_name == "Shape"
+        })
+        .expect("background Shape")
+        .local_id;
+    assert!(artboard_graph.components.iter().any(|component| {
+        component.name.as_deref() == Some("nameRun") && component.type_name == "TextValueRun"
+    }));
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
+            .unwrap_or_else(|error| panic!("failed to instantiate {label}: {error:#}"));
+    artboard.update_pass();
+
+    let initial = artboard
+        .object_world_bounds(background)
+        .expect("initial background world bounds");
+    assert_close(initial.width(), 42.010925, "initial.width");
+    assert_close(initial.height(), 29.995453, "initial.height");
+
+    assert_eq!(
+        artboard.set_root_text_value_run("nameRun", b"much much longer".to_vec()),
+        Some(true)
+    );
+    artboard.update_pass();
+    let extended = artboard
+        .object_world_bounds(background)
+        .expect("extended background world bounds");
+    assert_close(extended.width(), 138.01093, "extended.width");
+    assert_close(extended.height(), 29.995453, "extended.height");
+
+    artboard.debug_update_pass_with_root_transform(Mat2D([0.5, 0.0, 0.0, 0.5, 0.0, 0.0]));
+    let scaled = artboard
+        .object_world_bounds(background)
+        .expect("scaled background world bounds");
+    assert_close(scaled.width(), 138.01093 / 2.0, "scaled.width");
+    assert_close(scaled.height(), 29.995453 / 2.0, "scaled.height");
+    assert_close(scaled.width() / 0.5, 138.01093, "local.width");
+    assert_close(scaled.height() / 0.5, 29.995453, "local.height");
+}
+
+fn upstream_layout_fixture(
+    label: &str,
+    artboard_name: Option<&str>,
+) -> (RuntimeFile, GraphFile, usize, ArtboardInstance) {
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read {label}: {error}"));
+    let runtime = read_runtime_file(&bytes)
+        .unwrap_or_else(|error| panic!("failed to import {label}: {error:#}"));
+    let graph = GraphFile::from_runtime_file(&runtime)
+        .unwrap_or_else(|error| panic!("failed to graph {label}: {error:#}"));
+    let graph_index = graph
+        .artboards
+        .iter()
+        .position(|artboard| {
+            artboard_name.is_none_or(|name| artboard.name.as_deref() == Some(name))
+        })
+        .unwrap_or_else(|| panic!("missing requested artboard in {label}"));
+    let instance = ArtboardInstance::from_graph_with_artboards(
+        &runtime,
+        &graph.artboards[graph_index],
+        &graph.artboards,
+    )
+    .unwrap_or_else(|error| panic!("failed to instantiate {label}: {error:#}"));
+    (runtime, graph, graph_index, instance)
+}
+
+fn upstream_layout_local(graph: &nuxie_graph::ArtboardGraph, name: &str) -> usize {
+    graph
+        .components
+        .iter()
+        .find(|component| component.name.as_deref() == Some(name))
+        .unwrap_or_else(|| panic!("missing layout component named {name}"))
+        .local_id
+}
+
+fn upstream_layout_style_local(graph: &nuxie_graph::ArtboardGraph, owner: &str) -> usize {
+    let owner = upstream_layout_local(graph, owner);
+    graph
+        .components
+        .iter()
+        .find(|component| {
+            component.parent_local == Some(owner) && component.type_name == "LayoutComponentStyle"
+        })
+        .unwrap_or_else(|| panic!("missing LayoutComponentStyle for local {owner}"))
+        .local_id
+}
+
+fn upstream_layout_world_xy(
+    runtime: &RuntimeFile,
+    graph: &nuxie_graph::ArtboardGraph,
+    instance: &ArtboardInstance,
+    name: &str,
+) -> (f32, f32) {
+    let local = upstream_layout_local(graph, name);
+    let report = instance
+        .debug_taffy_layout_bounds_report(runtime, graph)
+        .expect("fixture has a layout tree");
+    let item = report
+        .iter()
+        .find(|item| item.local_id == local)
+        .unwrap_or_else(|| panic!("missing solved bounds for {name}"));
+    (item.world_transform[4], item.world_transform[5])
+}
+
+#[test]
+fn upstream_layout_flex_direction_row_body_is_ported() {
+    let (runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("layout/layout_horizontal.riv", None);
+    artboard.update_pass();
+    let graph = &graph.artboards[index];
+    for (name, expected) in [
+        ("LayoutComponent1", (0.0, 0.0)),
+        ("LayoutComponent2", (100.0, 0.0)),
+        ("LayoutComponent3", (200.0, 0.0)),
+    ] {
+        assert_eq!(
+            upstream_layout_world_xy(&runtime, graph, &artboard, name),
+            expected
+        );
+    }
+    let style = upstream_layout_style_local(graph, "LayoutComponent1");
+    assert_eq!(
+        artboard.debug_uint_property(
+            style,
+            property_key_for_name("LayoutComponentStyle", "flexDirectionValue")
+        ),
+        Some(2)
+    );
+}
+
+#[test]
+fn upstream_layout_flex_direction_column_body_is_ported() {
+    let (runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("layout/layout_vertical.riv", None);
+    artboard.update_pass();
+    let graph = &graph.artboards[index];
+    for (name, expected) in [
+        ("LayoutComponent1", (0.0, 0.0)),
+        ("LayoutComponent2", (0.0, 100.0)),
+        ("LayoutComponent3", (0.0, 200.0)),
+    ] {
+        assert_eq!(
+            upstream_layout_world_xy(&runtime, graph, &artboard, name),
+            expected
+        );
+    }
+}
+
+#[test]
+fn upstream_layout_horizontal_gap_body_is_ported() {
+    let (runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("layout/layout_horizontal_gaps.riv", None);
+    artboard.update_pass();
+    let graph = &graph.artboards[index];
+    for (name, expected) in [
+        ("LayoutComponent1", (0.0, 0.0)),
+        ("LayoutComponent2", (110.0, 0.0)),
+        ("LayoutComponent3", (220.0, 0.0)),
+    ] {
+        assert_eq!(
+            upstream_layout_world_xy(&runtime, graph, &artboard, name),
+            expected
+        );
+    }
+}
+
+#[test]
+fn upstream_layout_horizontal_wrap_body_is_ported() {
+    let (runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("layout/layout_horizontal_wrap.riv", None);
+    artboard.update_pass();
+    assert_eq!(
+        upstream_layout_world_xy(
+            &runtime,
+            &graph.artboards[index],
+            &artboard,
+            "LayoutComponent6"
+        ),
+        (0.0, 100.0)
+    );
+}
+
+#[test]
+fn upstream_layout_center_body_is_ported() {
+    let (runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("layout/layout_center.riv", None);
+    artboard.update_pass();
+    assert_eq!(
+        upstream_layout_world_xy(
+            &runtime,
+            &graph.artboards[index],
+            &artboard,
+            "LayoutComponent1"
+        ),
+        (200.0, 200.0)
+    );
+}
+
+#[test]
+fn upstream_layout_padding_body_is_ported() {
+    let (runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("layout/layout_complex1.riv", None);
+    artboard.update_pass();
+    let graph = &graph.artboards[index];
+    let style = upstream_layout_style_local(graph, "LayoutLeft");
+    for edge in ["Left", "Right", "Top", "Bottom"] {
+        assert_eq!(
+            artboard.double_property(
+                style,
+                property_key_for_name("LayoutComponentStyle", &format!("padding{edge}"))
+            ),
+            Some(20.0)
+        );
+        assert_eq!(
+            artboard.debug_uint_property(
+                style,
+                property_key_for_name("LayoutComponentStyle", &format!("padding{edge}UnitsValue"))
+            ),
+            Some(1)
+        );
+    }
+    for (name, expected) in [
+        ("LayoutLeft", (0.0, 0.0)),
+        ("LayoutLeftChild1", (20.0, 20.0)),
+        ("LayoutLeftChild2", (130.0, 20.0)),
+    ] {
+        assert_eq!(
+            upstream_layout_world_xy(&runtime, graph, &artboard, name),
+            expected
+        );
+    }
+}
+
+#[test]
+fn upstream_layout_margin_body_is_ported() {
+    let (runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("layout/layout_complex1.riv", None);
+    artboard.update_pass();
+    let graph = &graph.artboards[index];
+    for (owner, value, unit, alignment, wrap) in [
+        ("LayoutRightChild1", 10.0, 1, 4, 0),
+        ("LayoutRightChild2", 5.0, 2, 0, 1),
+    ] {
+        let style = upstream_layout_style_local(graph, owner);
+        for edge in ["Left", "Right", "Top", "Bottom"] {
+            assert_eq!(
+                artboard.double_property(
+                    style,
+                    property_key_for_name("LayoutComponentStyle", &format!("margin{edge}"))
+                ),
+                Some(value)
+            );
+            assert_eq!(
+                artboard.debug_uint_property(
+                    style,
+                    property_key_for_name(
+                        "LayoutComponentStyle",
+                        &format!("margin{edge}UnitsValue")
+                    )
+                ),
+                Some(unit)
+            );
+        }
+        assert_eq!(
+            artboard.debug_uint_property(
+                style,
+                property_key_for_name("LayoutComponentStyle", "layoutAlignmentType")
+            ),
+            Some(alignment)
+        );
+        assert_eq!(
+            artboard.debug_uint_property(
+                style,
+                property_key_for_name("LayoutComponentStyle", "flexWrapValue")
+            ),
+            Some(wrap)
+        );
+    }
+    for (name, expected) in [
+        ("LayoutRight", (250.0, 0.0)),
+        ("LayoutRightChild1", (285.0, 35.0)),
+        ("LayoutRightChild2", (285.0, 215.0)),
+    ] {
+        assert_eq!(
+            upstream_layout_world_xy(&runtime, graph, &artboard, name),
+            expected
+        );
+    }
+}
+
+#[test]
+fn upstream_layout_corner_radius_body_is_ported() {
+    let (_runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("layout/layout_complex1.riv", None);
+    artboard.update_pass();
+    let style = upstream_layout_style_local(&graph.artboards[index], "LayoutLeftChild1");
+    for corner in ["TL", "TR", "BL", "BR"] {
+        assert_eq!(
+            artboard.double_property(
+                style,
+                property_key_for_name("LayoutComponentStyle", &format!("cornerRadius{corner}"))
+            ),
+            Some(15.0)
+        );
+    }
+}
+
+#[test]
+fn upstream_layout_direction_body_is_ported() {
+    let (runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("layout/layout_direction.riv", None);
+    artboard.update_pass();
+    let graph = &graph.artboards[index];
+    for (name, expected_x) in [("Layout1", 200.0), ("Layout2", 100.0), ("Layout3", 0.0)] {
+        assert_eq!(
+            upstream_layout_world_xy(&runtime, graph, &artboard, name).0,
+            expected_x
+        );
+        assert_eq!(
+            artboard.debug_layout_actual_direction(upstream_layout_local(graph, name)),
+            Some(2)
+        );
+    }
+    let text = upstream_layout_local(graph, "SampleText");
+    assert_eq!(
+        artboard.debug_text_actual_align(&runtime, graph, text),
+        Some(1)
+    );
+}
+
+#[test]
+fn upstream_layout_forced_size_dirt_body_is_ported() {
+    let (_runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("layout/layout_complex1.riv", None);
+    let layout = upstream_layout_local(&graph.artboards[index], "LayoutLeftChild1");
+    assert_eq!(
+        artboard.debug_layout_forced_size(layout),
+        Some((None, None))
+    );
+    assert!(artboard.debug_set_layout_forced_size(layout, 100.0, 150.0));
+    assert_eq!(
+        artboard.debug_layout_forced_size(layout),
+        Some((Some(100.0), Some(150.0)))
+    );
+    assert!(
+        artboard
+            .debug_component_dirt(layout)
+            .is_some_and(|dirt| dirt.contains(ComponentDirt::LAYOUT_STYLE))
+    );
+    artboard.update_pass();
+    assert!(
+        artboard
+            .debug_component_dirt(layout)
+            .is_some_and(|dirt| !dirt.contains(ComponentDirt::LAYOUT_STYLE))
+    );
+    assert!(!artboard.debug_set_layout_forced_size(layout, 100.0, 150.0));
+    assert!(
+        artboard
+            .debug_component_dirt(layout)
+            .is_some_and(|dirt| !dirt.contains(ComponentDirt::LAYOUT_STYLE))
+    );
+}
+
+#[test]
+fn upstream_layout_alignment_mutation_body_is_ported() {
+    let (runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("layout/layout_alignment.riv", None);
+    let graph = &graph.artboards[index];
+    let style = upstream_layout_style_local(graph, "LayoutContainer");
+    let alignment = property_key_for_name("LayoutComponentStyle", "layoutAlignmentType");
+    let flex_direction = property_key_for_name("LayoutComponentStyle", "flexDirectionValue");
+    let assert_positions = |artboard: &ArtboardInstance, expected: [(f32, f32); 3]| {
+        for (name, expected) in ["Layout1", "Layout2", "Layout3"].into_iter().zip(expected) {
+            assert_eq!(
+                upstream_layout_world_xy(&runtime, graph, artboard, name),
+                expected
+            );
+        }
+    };
+    assert!(artboard.set_uint_property(style, alignment, 9));
+    artboard.update_pass();
+    assert_positions(&artboard, [(0.0, 0.0), (200.0, 0.0), (400.0, 0.0)]);
+    assert!(artboard.set_uint_property(style, alignment, 10));
+    artboard.update_pass();
+    assert_positions(&artboard, [(0.0, 200.0), (200.0, 200.0), (400.0, 200.0)]);
+    assert!(artboard.set_uint_property(style, flex_direction, 0));
+    artboard.update_pass();
+    assert_positions(&artboard, [(200.0, 0.0), (200.0, 200.0), (200.0, 400.0)]);
+    assert!(artboard.set_uint_property(style, alignment, 11));
+    artboard.update_pass();
+    assert_positions(&artboard, [(400.0, 0.0), (400.0, 200.0), (400.0, 400.0)]);
+}
+
+#[test]
+fn upstream_layout_prevents_percent_margin_on_artboard_body_is_ported() {
+    let (runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("layout/artboard_percent_margin.riv", None);
+    artboard.update_pass();
+    let report = artboard
+        .debug_taffy_layout_bounds_report(&runtime, &graph.artboards[index])
+        .expect("artboard layout report");
+    let root = report
+        .iter()
+        .find(|item| item.local_id == 0)
+        .expect("root layout");
+    assert_eq!((root.width, root.height), (501.0, 512.0));
+}
+
+fn upstream_object_count(artboard: &ArtboardInstance, type_name: &str) -> usize {
+    artboard
+        .slots()
+        .iter()
+        .filter(|slot| {
+            slot.type_name.is_some_and(|concrete| {
+                concrete == type_name
+                    || nuxie_schema::definition_by_name(concrete)
+                        .is_some_and(|definition| definition.is_a(type_name))
+            })
+        })
+        .count()
+}
+
+fn upstream_text_local(graph: &nuxie_graph::ArtboardGraph, name: Option<&str>) -> usize {
+    graph
+        .components
+        .iter()
+        .find(|component| {
+            component.type_name == "Text"
+                && name.is_none_or(|name| component.name.as_deref() == Some(name))
+        })
+        .unwrap_or_else(|| panic!("missing requested Text {name:?}"))
+        .local_id
+}
+
+fn upstream_first_local(graph: &nuxie_graph::ArtboardGraph, type_name: &str) -> usize {
+    graph
+        .local_objects
+        .iter()
+        .find(|object| object.type_name == Some(type_name))
+        .unwrap_or_else(|| panic!("missing {type_name}"))
+        .local_id
+}
+
+#[test]
+fn upstream_new_text_load_body_is_ported() {
+    let (_runtime, graph, index, mut artboard) = upstream_layout_fixture("new_text.riv", None);
+    let graph = &graph.artboards[index];
+    assert_eq!(upstream_object_count(&artboard, "Text"), 5);
+    assert_eq!(upstream_object_count(&artboard, "TextStyle"), 13);
+    assert_eq!(upstream_object_count(&artboard, "TextValueRun"), 22);
+    assert!(artboard.update_pass());
+}
+
+#[test]
+fn upstream_query_all_text_runs_body_is_ported() {
+    let (_runtime, _graph, _index, artboard) = upstream_layout_fixture("new_text.riv", None);
+    assert_eq!(upstream_object_count(&artboard, "TextValueRun"), 22);
+}
+
+#[test]
+fn upstream_query_text_run_at_index_body_is_ported() {
+    let (_runtime, graph, index, artboard) = upstream_layout_fixture("hello_world.riv", None);
+    let graph = &graph.artboards[index];
+    let run = upstream_first_local(graph, "TextValueRun");
+    assert_eq!(
+        artboard.debug_string_property(run, property_key_for_name("TextValueRun", "text")),
+        Some(b"Hello World!".as_slice())
+    );
+}
+
+#[test]
+fn upstream_simple_text_mutation_body_is_ported() {
+    let (runtime, graph, index, mut artboard) = upstream_layout_fixture("hello_world.riv", None);
+    let graph = &graph.artboards[index];
+    assert_eq!(upstream_object_count(&artboard, "Text"), 1);
+    assert_eq!(upstream_object_count(&artboard, "TextStyle"), 1);
+    assert_eq!(upstream_object_count(&artboard, "TextValueRun"), 1);
+    let text = upstream_text_local(graph, None);
+    let run = upstream_first_local(graph, "TextValueRun");
+    let text_key = property_key_for_name("TextValueRun", "text");
+    for (value, paragraphs, glyphs) in [
+        (b"Hello World!".as_slice(), 1, 12),
+        (b"Just Hello".as_slice(), 1, 10),
+        (b" ".as_slice(), 1, 1),
+        (b"".as_slice(), 0, 0),
+    ] {
+        if artboard.debug_string_property(run, text_key) != Some(value) {
+            assert!(artboard.set_string_property(run, text_key, value.to_vec()));
+        }
+        artboard.update_pass();
+        let report = artboard
+            .debug_text_layout_report(&runtime, graph, text)
+            .expect("supported hello-world Text report");
+        assert_eq!(report.paragraph_count, paragraphs);
+        assert_eq!(report.run_count, 1);
+        assert_eq!(
+            report.line_glyph_ids.iter().map(Vec::len).sum::<usize>(),
+            glyphs
+        );
+    }
+    let bounds = artboard
+        .debug_text_local_bounds(&runtime, graph, text)
+        .expect("empty Text retains zero bounds");
+    assert_eq!((bounds.2, bounds.3), (0.0, 0.0));
+}
+
+#[test]
+fn upstream_vertical_trim_body_is_ported() {
+    let (runtime, graph, index, mut artboard) = upstream_layout_fixture("hello_world.riv", None);
+    let graph = &graph.artboards[index];
+    let text = upstream_text_local(graph, None);
+    assert!(
+        artboard.set_uint_property(text, property_key_for_name("Text", "sizingValue"), 0)
+            || artboard.debug_uint_property(text, property_key_for_name("Text", "sizingValue"))
+                == Some(0)
+    );
+    let trim = property_key_for_name("Text", "verticalTrimValue");
+    let mut measure = |top: u64, bottom: u64| {
+        let packed = top | (bottom << 8);
+        if artboard.debug_uint_property(text, trim) != Some(packed) {
+            assert!(artboard.set_uint_property(text, trim, packed));
+        }
+        artboard.update_pass();
+        artboard
+            .debug_text_local_bounds(&runtime, graph, text)
+            .expect("trimmed bounds")
+    };
+    let normal = measure(0, 0);
+    let cap = measure(1, 1);
+    let ex = measure(2, 1);
+    let top_only = measure(1, 0);
+    assert!(normal.3 > 0.0);
+    assert!(cap.3 > 0.0 && cap.3 < normal.3);
+    assert_close(cap.2, normal.2, "cap.width");
+    assert!(ex.3 > 0.0 && ex.3 < cap.3);
+    assert!(top_only.3 > cap.3 && top_only.3 < normal.3);
+}
+
+#[test]
+fn upstream_vertical_trim_passthrough_body_is_ported() {
+    let (_runtime, graph, index, mut artboard) = upstream_layout_fixture("hello_world.riv", None);
+    let text = upstream_text_local(&graph.artboards[index], None);
+    let packed = property_key_for_name("Text", "verticalTrimValue");
+    let top = property_key_for_name("Text", "verticalTrimTopValue");
+    let bottom = property_key_for_name("Text", "verticalTrimBottomValue");
+    assert!(artboard.set_uint_property(text, top, 2));
+    assert!(artboard.set_uint_property(text, bottom, 2));
+    assert_eq!(
+        artboard.debug_uint_property(text, packed),
+        Some(2 | (2 << 8))
+    );
+    assert_eq!(artboard.debug_uint_property(text, top), Some(2));
+    assert_eq!(artboard.debug_uint_property(text, bottom), Some(2));
+    assert!(artboard.set_uint_property(text, top, 1));
+    assert_eq!(artboard.debug_uint_property(text, top), Some(1));
+    assert_eq!(artboard.debug_uint_property(text, bottom), Some(2));
+    assert!(artboard.set_uint_property(text, top, 0x1ff));
+    assert_eq!(artboard.debug_uint_property(text, top), Some(0xff));
+    assert_eq!(artboard.debug_uint_property(text, bottom), Some(2));
+}
+
+#[test]
+fn upstream_ellipsis_and_glyph_lookup_body_is_ported() {
+    let (runtime, graph, index, mut artboard) = upstream_layout_fixture("ellipsis.riv", None);
+    let graph = &graph.artboards[index];
+    assert_eq!(upstream_object_count(&artboard, "Text"), 1);
+    assert_eq!(upstream_object_count(&artboard, "TextStyle"), 1);
+    assert_eq!(upstream_object_count(&artboard, "TextValueRun"), 1);
+    let text = upstream_text_local(graph, None);
+    artboard.update_pass();
+    let ellipsis = artboard
+        .debug_text_layout_report(&runtime, graph, text)
+        .expect("ellipsis report");
+    assert_eq!(ellipsis.line_glyph_ids.len(), 1);
+    assert_eq!(ellipsis.line_glyph_ids[0].len(), 10);
+    assert_eq!(ellipsis.line_glyph_ids[0][7], 1405);
+    assert_eq!(&ellipsis.line_glyph_ids[0][7..10], &[1405, 1405, 1405]);
+
+    assert!(artboard.set_uint_property(text, property_key_for_name("Text", "overflowValue"), 0));
+    artboard.update_pass();
+    let visible = artboard
+        .debug_text_layout_report(&runtime, graph, text)
+        .expect("visible report");
+    assert_eq!(visible.line_glyph_ids.len(), 2);
+    assert_eq!(visible.line_glyph_ids[0].len(), 7);
+    assert_eq!(visible.glyph_lookup_counts[0], 1);
+
+    let run = upstream_first_local(graph, "TextValueRun");
+    assert!(artboard.set_string_property(
+        run,
+        property_key_for_name("TextValueRun", "text"),
+        b"a -> b".to_vec()
+    ));
+    artboard.update_pass();
+    let ligature = artboard
+        .debug_text_layout_report(&runtime, graph, text)
+        .expect("ligature report");
+    for (index, expected) in [(0, 1), (1, 1), (2, 2), (4, 1), (5, 1)] {
+        assert_eq!(ligature.glyph_lookup_counts[index], expected);
+    }
+}
+
+#[test]
+fn upstream_fit_font_size_body_is_ported() {
+    let (runtime, graph, index, mut artboard) = upstream_layout_fixture("ellipsis.riv", None);
+    let graph = &graph.artboards[index];
+    let text = upstream_text_local(graph, None);
+    let overflow = property_key_for_name("Text", "overflowValue");
+    assert!(artboard.set_uint_property(text, overflow, 0));
+    artboard.update_pass();
+    let authored = artboard
+        .debug_text_layout_report(&runtime, graph, text)
+        .and_then(|report| report.font_size)
+        .expect("authored font size");
+    assert!(authored > 1.0);
+    assert!(artboard.set_uint_property(text, overflow, 5));
+    artboard.update_pass();
+    let fitted = artboard
+        .debug_text_layout_report(&runtime, graph, text)
+        .expect("fitted report");
+    let fitted_size = fitted.font_size.expect("fitted font size");
+    assert!(fitted_size < authored && fitted_size >= 1.0);
+    assert_eq!(fitted_size, fitted_size.floor());
+    assert_close(fitted.local_transform[0], 1.0, "fitFontSize.transform.xx");
+}
+
+#[test]
+fn upstream_range_mapper_words_body_is_ported() {
+    assert_eq!(
+        nuxie_runtime::debug_text_word_unit_count("one two three four"),
+        4
+    );
+}
+
+#[test]
+fn upstream_modifier_to_run_body_is_ported() {
+    let (runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("modifier_to_run.riv", None);
+    let graph = &graph.artboards[index];
+    artboard.update_pass();
+    for (name, group_count, selected, coverage_end) in [
+        ("Characters", 2, (4, 5, 5), 26),
+        ("Words", 1, (4, 34, 34), 50),
+    ] {
+        let report = artboard
+            .debug_text_layout_report(&runtime, graph, upstream_text_local(graph, Some(name)))
+            .unwrap_or_else(|| panic!("{name} report"));
+        assert_eq!(report.modifier_groups.len(), group_count);
+        let group = &report.modifier_groups[0];
+        assert_eq!(group.range_count, 1);
+        let run = group.selected_runs[0].as_ref().expect("range-selected run");
+        assert_eq!((run.offset, run.length, run.byte_length), selected);
+        assert!(group.coverage[..4].iter().all(|coverage| *coverage == 0.0));
+        match name {
+            "Characters" => {
+                assert!(group.coverage[4..9].iter().all(|coverage| *coverage != 0.0));
+                assert!(
+                    group.coverage[9..26]
+                        .iter()
+                        .all(|coverage| *coverage == 0.0)
+                );
+            }
+            "Words" => {
+                for index in 4..39 {
+                    let is_whitespace = report
+                        .text
+                        .chars()
+                        .nth(index)
+                        .is_some_and(char::is_whitespace);
+                    assert_eq!(
+                        group.coverage[index] == 0.0,
+                        is_whitespace,
+                        "Words coverage[{index}] must match pinned run whitespace"
+                    );
+                }
+                assert!(
+                    group.coverage[39..50]
+                        .iter()
+                        .all(|coverage| *coverage == 0.0)
+                );
+            }
+            _ => unreachable!(),
+        }
+        assert!(
+            group.coverage[coverage_end..]
+                .iter()
+                .all(|coverage| *coverage == 0.0)
+        );
+    }
+}
+
+#[test]
+fn upstream_modifier_varying_run_size_body_is_ported() {
+    let (runtime, graph, index, mut artboard) =
+        upstream_layout_fixture("test_modifier_run.riv", None);
+    let graph = &graph.artboards[index];
+    artboard.update_pass();
+    let report = artboard
+        .debug_text_layout_report(
+            &runtime,
+            graph,
+            upstream_text_local(graph, Some("MultiRunText")),
+        )
+        .expect("MultiRunText report");
+    assert_eq!(report.modifier_groups.len(), 1);
+    let group = &report.modifier_groups[0];
+    assert_eq!(group.range_count, 1);
+    let run = group.selected_runs[0]
+        .as_ref()
+        .expect("selected second run");
+    assert_eq!((run.offset, run.length, run.byte_length), (18, 16, 22));
+    assert!(group.coverage[..18].iter().all(|coverage| *coverage == 0.0));
+    assert!(
+        group.coverage[18..34]
+            .iter()
+            .all(|coverage| *coverage != 0.0)
+    );
+    assert!(
+        group.coverage[34..54]
+            .iter()
+            .all(|coverage| *coverage == 0.0)
+    );
+}
+
+#[test]
+fn upstream_double_newline_body_is_ported() {
+    let (runtime, graph, index, mut artboard) = upstream_layout_fixture("double_line.riv", None);
+    let graph = &graph.artboards[index];
+    assert_eq!(upstream_object_count(&artboard, "Text"), 1);
+    assert_eq!(upstream_object_count(&artboard, "TextStyle"), 1);
+    assert_eq!(upstream_object_count(&artboard, "TextValueRun"), 9);
+    artboard.update_pass();
+    let report = artboard
+        .debug_text_layout_report(&runtime, graph, upstream_text_local(graph, None))
+        .expect("double-line report");
+    assert_eq!(report.line_glyph_ids.len(), 3);
+}
+
+#[test]
+fn upstream_text_opacity_modifier_load_body_is_ported() {
+    let (_runtime, _graph, _index, mut artboard) =
+        upstream_layout_fixture("text_opacity_modifier.riv", None);
+    artboard.update_pass();
+    assert!(!artboard.visible_geometry_with_bounds().is_empty());
+}
+
+#[test]
+fn upstream_text_modifier_structure_body_is_ported() {
+    let (_runtime, graph, index, artboard) = upstream_layout_fixture("modifier_test.riv", None);
+    let graph = &graph.artboards[index];
+    assert_eq!(upstream_object_count(&artboard, "Text"), 1);
+    let text = upstream_text_local(graph, None);
+    let text_component = graph
+        .components
+        .iter()
+        .find(|component| component.local_id == text)
+        .expect("Text component");
+    let groups = text_component
+        .children
+        .iter()
+        .filter_map(|local| {
+            graph
+                .components
+                .iter()
+                .find(|component| component.local_id == *local)
+        })
+        .filter(|component| component.type_name == "TextModifierGroup")
+        .collect::<Vec<_>>();
+    assert_eq!(groups.len(), 1);
+    let group_children = groups[0]
+        .children
+        .iter()
+        .filter_map(|local| {
+            graph
+                .components
+                .iter()
+                .find(|component| component.local_id == *local)
+        })
+        .collect::<Vec<_>>();
+    let ranges = group_children
+        .iter()
+        .filter(|component| component.type_name == "TextModifierRange")
+        .copied()
+        .collect::<Vec<_>>();
+    assert_eq!(ranges.len(), 1);
+    assert_eq!(
+        group_children
+            .iter()
+            .filter(|component| component.type_name == "TextModifier")
+            .count(),
+        0
+    );
+    assert!(ranges[0].children.iter().any(|local| {
+        graph
+            .components
+            .iter()
+            .find(|component| component.local_id == *local)
+            .is_some_and(|component| component.type_name == "CubicInterpolatorComponent")
+    }));
+}
+
+#[test]
+fn upstream_text_feather_falloff_repro_structure_body_is_ported() {
+    let (_runtime, graph, index, artboard) =
+        upstream_layout_fixture("text_feather_falloff.riv", None);
+    let graph = &graph.artboards[index];
+    assert_eq!(upstream_object_count(&artboard, "Text"), 3);
+    let texts_with_modifiers = graph
+        .components
+        .iter()
+        .filter(|component| component.type_name == "Text")
+        .filter(|text| {
+            text.children.iter().any(|local| {
+                graph
+                    .components
+                    .iter()
+                    .find(|component| component.local_id == *local)
+                    .is_some_and(|group| {
+                        group.type_name == "TextModifierGroup"
+                            && group.children.iter().any(|range| {
+                                graph
+                                    .components
+                                    .iter()
+                                    .find(|component| component.local_id == *range)
+                                    .is_some_and(|component| {
+                                        component.type_name == "TextModifierRange"
+                                    })
+                            })
+                    })
+            })
+        })
+        .count();
+    assert_eq!(texts_with_modifiers, 2);
+    let repro_styles = graph
+        .shape_paint_containers
+        .iter()
+        .filter(|container| {
+            container.type_name == "TextStylePaint"
+                && container.paints.len() == 2
+                && container
+                    .paints
+                    .iter()
+                    .filter(|paint| paint.feather.is_some())
+                    .count()
+                    == 1
+        })
+        .count();
+    assert!(repro_styles >= 1);
 }

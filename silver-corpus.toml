@@ -2385,7 +2385,7 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Animating layout display"
 producer_line = 492
-note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 3, op 188 (makeRenderPath): expected makeRenderPath, got rewind."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 35, op 667 (drawPath): expected drawPath, got makeRenderPath."
 
 [[case]]
 id = "layout_fixed_fill"

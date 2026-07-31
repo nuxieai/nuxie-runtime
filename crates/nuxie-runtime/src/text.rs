@@ -50,62 +50,7 @@ const TEXT_TRIM_BOTTOM_ALPHABETIC: u64 = 1;
 const TEXT_TRIM_BOTTOM_TEXT: u64 = 2;
 const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
 
-fn font_parser_panic_boundary<F>(parse: F) -> bool
-where
-    F: FnOnce() -> bool + std::panic::UnwindSafe,
-{
-    std::panic::catch_unwind(parse).unwrap_or(false)
-}
-
-/// Whether embedded font bytes can be parsed by both runtime text backends.
-///
-/// Dynamic authoring calls this before publishing a structural edit so a
-/// committed scene cannot defer malformed-font failure until layout or draw.
-#[must_use]
-pub fn embedded_font_is_parseable(font_bytes: &[u8]) -> bool {
-    if HarfFontRef::new(font_bytes).is_err() {
-        return false;
-    }
-
-    font_parser_panic_boundary(|| {
-        let Ok(font) = SkrifaFontRef::new(font_bytes) else {
-            return false;
-        };
-        let Ok(maxp) = font.maxp() else {
-            return false;
-        };
-        let outlines = font.outline_glyphs();
-        for glyph_index in 0..u32::from(maxp.num_glyphs()) {
-            let Some(outline) = outlines.get(GlyphId::new(glyph_index)) else {
-                continue;
-            };
-            if outline
-                .draw(
-                    DrawSettings::unhinted(Size::unscaled(), LocationRef::default()),
-                    &mut NullPen,
-                )
-                .is_err()
-            {
-                return false;
-            }
-        }
-        true
-    })
-}
-
-/// Whether every in-band `FontAsset` can be safely consumed by the text
-/// backends. Hosted font assets without in-band contents remain valid and are
-/// checked when their bytes are attached.
-#[must_use]
-pub fn embedded_fonts_are_parseable(runtime: &RuntimeFile) -> bool {
-    runtime
-        .file_assets()
-        .into_iter()
-        .filter(|asset| asset.type_name == "FontAsset")
-        .all(|asset| {
-            embedded_file_asset_bytes(runtime, asset.id).is_none_or(embedded_font_is_parseable)
-        })
-}
+include!("text/font_hb.rs");
 
 pub fn static_text_support_error(
     runtime: &RuntimeFile,
@@ -117,90 +62,141 @@ pub fn static_text_support_error(
         .map(|error| error.to_string())
 }
 
-pub(crate) fn static_text_constraint_bounds(
-    runtime: &RuntimeFile,
-    graph: &ArtboardGraph,
-    instance: &ArtboardInstance,
-    text_local: usize,
-) -> Option<(f32, f32, f32, f32)> {
-    if let Some(bounds) = instance
-        .component(text_local)
-        .and_then(|component| component.concrete.text.as_ref())
-        .and_then(|text| text.bounds())
-    {
-        return Some(bounds);
-    }
-    if let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local)
-        && let Ok(Some(bounds)) = slice.local_bounds(runtime, instance)
-    {
-        return Some(bounds);
-    }
-    static_fixed_text_constraint_bounds(runtime, graph, instance, text_local, None)
+#[doc(hidden)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeTextLayoutDebugReport {
+    pub text: String,
+    pub paragraph_count: usize,
+    pub run_count: usize,
+    pub line_glyph_ids: Vec<Vec<u32>>,
+    pub glyph_lookup_counts: Vec<usize>,
+    pub font_size: Option<f32>,
+    pub local_transform: [f32; 6],
+    pub modifier_groups: Vec<RuntimeTextModifierDebugReport>,
 }
 
-/// Return the exact settled text rendered by one Text object.
-///
-/// This follows the same resolved-run path as shaping, including live string
-/// property writes and dynamically projected list runs. Callers opt into this
-/// allocation only for semantic text observation; ordinary geometry queries
-/// do not materialize text values.
-pub(crate) fn static_text_value(
+#[doc(hidden)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuntimeTextModifierDebugReport {
+    pub range_count: usize,
+    pub coverage: Vec<f32>,
+    pub selected_runs: Vec<Option<RuntimeTextSelectedRunDebugReport>>,
+}
+
+#[doc(hidden)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeTextSelectedRunDebugReport {
+    pub offset: usize,
+    pub length: usize,
+    pub byte_length: usize,
+}
+
+pub(crate) fn static_text_layout_debug_report(
     runtime: &RuntimeFile,
     graph: &ArtboardGraph,
     instance: &ArtboardInstance,
     text_local: usize,
-) -> Option<String> {
+    layout_constraint: Option<RuntimeTextLayoutConstraint>,
+) -> Option<RuntimeTextLayoutDebugReport> {
     let slice = StaticTextSlice::from_graph(runtime, graph, text_local).ok()?;
-    let runs = slice.resolved_runs(runtime, instance).ok()?;
-    Some(runs.into_iter().map(|run| run.text).collect())
+    let resolved = slice.resolved_runs(runtime, instance).ok()?;
+    let text = resolved
+        .iter()
+        .map(|run| run.text.as_str())
+        .collect::<String>();
+    let layout = slice
+        .shaped_layout(runtime, instance, layout_constraint, Mat2D::IDENTITY)
+        .ok()?;
+    let source_lines = split_static_text_lines(&text);
+    let modifier_groups = slice
+        .modifiers
+        .iter()
+        .map(|group| {
+            let coverage = group
+                .coverage_by_character(runtime, instance, &text, &resolved, &source_lines)
+                .ok()?;
+            let selected_runs = group
+                .ranges
+                .iter()
+                .map(|range| {
+                    let run_id = range
+                        .uint_property(runtime, instance, "runId", u32::MAX as u64)
+                        .ok()?;
+                    if run_id == u32::MAX as u64 {
+                        return Some(None);
+                    }
+                    let run = resolved.iter().find(|run| {
+                        run.local_id as u64 == run_id || run.global_id as u64 == run_id
+                    })?;
+                    Some(Some(RuntimeTextSelectedRunDebugReport {
+                        offset: run.char_start,
+                        length: run.char_len,
+                        byte_length: run.text.len(),
+                    }))
+                })
+                .collect::<Option<Vec<_>>>()?;
+            Some(RuntimeTextModifierDebugReport {
+                range_count: group.ranges.len(),
+                coverage,
+                selected_runs,
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let Some(layout) = layout else {
+        return Some(RuntimeTextLayoutDebugReport {
+            text,
+            paragraph_count: 0,
+            run_count: resolved.len(),
+            line_glyph_ids: Vec::new(),
+            glyph_lookup_counts: Vec::new(),
+            font_size: None,
+            local_transform: Mat2D::IDENTITY.0,
+            modifier_groups,
+        });
+    };
+    let mut glyph_lookup_counts = vec![0; text.chars().count()];
+    for glyph in layout.lines.iter().flat_map(|line| &line.glyphs) {
+        if let Some(count) = glyph_lookup_counts.get_mut(glyph.glyph.char_index) {
+            *count = glyph.glyph.char_len;
+        }
+    }
+    let font_size = layout
+        .lines
+        .iter()
+        .flat_map(|line| &line.glyphs)
+        .next()
+        .map(|glyph| glyph.glyph.scale * TEXT_SHAPE_SCALE_F32);
+    Some(RuntimeTextLayoutDebugReport {
+        paragraph_count: (!text.is_empty())
+            .then(|| text.split('\n').count())
+            .unwrap_or(0),
+        run_count: resolved.len(),
+        line_glyph_ids: layout
+            .lines
+            .iter()
+            .map(|line| {
+                line.glyphs
+                    .iter()
+                    .map(|glyph| glyph.glyph.glyph_id)
+                    .collect()
+            })
+            .collect(),
+        glyph_lookup_counts,
+        font_size,
+        local_transform: layout.local_transform.0,
+        modifier_groups,
+        text,
+    })
 }
 
-pub(crate) fn static_text_layout_measure_bounds(
-    runtime: &RuntimeFile,
-    graph: &ArtboardGraph,
-    instance: &ArtboardInstance,
-    text_local: usize,
-    layout_constraint: RuntimeTextLayoutConstraint,
-) -> Option<(f32, f32, f32, f32)> {
-    if let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local)
-        && let Ok(Some(bounds)) =
-            slice.measure_bounds_with_layout_constraint(runtime, instance, layout_constraint)
-    {
-        return Some(bounds);
-    }
-    static_fixed_text_constraint_bounds(runtime, graph, instance, text_local, None).map(
-        |(_x, _y, width, height)| {
-            (
-                0.0,
-                0.0,
-                width.min(layout_constraint.width),
-                height.min(layout_constraint.height),
-            )
-        },
-    )
+#[doc(hidden)]
+pub fn debug_text_word_unit_count(text: &str) -> usize {
+    text.split_word_bound_indices().len()
 }
 
-pub(crate) fn static_text_controlled_layout_bounds(
-    runtime: &RuntimeFile,
-    graph: &ArtboardGraph,
-    instance: &ArtboardInstance,
-    text_local: usize,
-    layout_constraint: RuntimeTextLayoutConstraint,
-) -> Option<(f32, f32, f32, f32)> {
-    if let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local)
-        && let Ok(Some(bounds)) =
-            slice.local_bounds_with_layout_constraint(runtime, instance, layout_constraint)
-    {
-        return Some(bounds);
-    }
-    static_fixed_text_constraint_bounds(
-        runtime,
-        graph,
-        instance,
-        text_local,
-        Some(layout_constraint),
-    )
-}
+include!("text/text_engine.rs");
+
+include!("text/raw_text.rs");
 
 pub(crate) fn static_text_clip_bounds(
     runtime: &RuntimeFile,
@@ -331,7 +327,7 @@ pub(crate) fn static_text_value_run_hit(
 }
 
 #[allow(clippy::arithmetic_side_effects)]
-fn static_fixed_text_constraint_bounds(
+pub(crate) fn static_fixed_text_constraint_bounds(
     runtime: &RuntimeFile,
     graph: &ArtboardGraph,
     instance: &ArtboardInstance,
@@ -630,12 +626,7 @@ struct StaticTextStyle<'a> {
     variations: Vec<StaticTextVariation>,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct StaticTextVariation {
-    tag: u32,
-    axis_local: usize,
-    authored_value: f32,
-}
+include!("text/text_style_axis.rs");
 
 #[derive(Debug, Clone, Copy)]
 struct StaticTextLine<'a> {
@@ -690,44 +681,7 @@ struct StaticTextRenderData {
     local_transform: Mat2D,
 }
 
-/// One authoritative shaping/layout result shared by drawing and editor reads.
-///
-/// Keeping caret, hit, and selection geometry on this exact path prevents the
-/// editor from growing an observation-side text layout that can drift from the
-/// glyphs the runtime draws.
-#[derive(Clone)]
-struct StaticShapedTextLayout {
-    text: String,
-    lines: Vec<StaticShapedTextLine>,
-    caret_boundaries: Option<Vec<StaticCaretBoundary>>,
-    local_transform: Mat2D,
-    shape_world: Mat2D,
-    has_geometric_modifiers: bool,
-    has_non_monotone_advances: bool,
-}
-
-#[derive(Clone)]
-struct StaticShapedTextLine {
-    line_index: usize,
-    char_start: usize,
-    char_end: usize,
-    soft_wrap_skipped_start: Option<usize>,
-    terminal_soft_wrap_skipped_end: Option<usize>,
-    start_x: f32,
-    end_x: f32,
-    top: f32,
-    baseline: f32,
-    bottom: f32,
-    glyphs: Vec<StaticPositionedTextGlyph>,
-}
-
-#[derive(Clone)]
-struct StaticPositionedTextGlyph {
-    glyph: StyledTextGlyph,
-    x: f32,
-    modifier_transform: Mat2D,
-    modifier_opacity: f32,
-}
+include!("text/fully_shaped_text.rs");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum StaticCaretAffinity {
@@ -776,165 +730,6 @@ impl StaticCaretBoundary {
             StaticCaretAffinity::Upstream => self.upstream,
             StaticCaretAffinity::Downstream => self.downstream,
         }
-    }
-}
-
-impl StaticShapedTextLayout {
-    fn caret(&self, byte_offset: usize) -> Option<(RenderVec2D, RenderVec2D)> {
-        if !self.geometry_is_finite() {
-            return None;
-        }
-        let char_index = self.char_index_at_byte(byte_offset)?;
-        self.caret_for_char_index(char_index, StaticCaretAffinity::Downstream)
-            .filter(|(top, bottom)| text_point_is_finite(*top) && text_point_is_finite(*bottom))
-    }
-
-    fn caret_for_char_index(
-        &self,
-        char_index: usize,
-        affinity: StaticCaretAffinity,
-    ) -> Option<(RenderVec2D, RenderVec2D)> {
-        let segment = self
-            .caret_boundaries
-            .as_ref()?
-            .get(char_index)?
-            .segment(affinity)?;
-        Some((segment.top, segment.bottom))
-    }
-
-    fn hit(&self, point: RenderVec2D) -> Option<usize> {
-        if !self.geometry_is_finite() || !text_point_is_finite(point) {
-            return None;
-        }
-        let determinant = self.shape_world.determinant();
-        if !determinant.is_finite() || determinant == 0.0 {
-            return None;
-        }
-        if self.has_geometric_modifiers || self.has_non_monotone_advances {
-            let mut best: Option<(f32, usize, StaticCaretAffinity)> = None;
-            for boundary in self.caret_boundaries.as_ref()? {
-                for affinity in [
-                    StaticCaretAffinity::Upstream,
-                    StaticCaretAffinity::Downstream,
-                ] {
-                    let Some(segment) = boundary.segment(affinity) else {
-                        continue;
-                    };
-                    let distance =
-                        point_segment_distance_squared(point, segment.top, segment.bottom);
-                    if !distance.is_finite() {
-                        continue;
-                    }
-                    if best.is_none_or(|best| {
-                        distance < best.0
-                            || (distance == best.0
-                                && text_hit_candidate_wins_tie(
-                                    boundary.byte_offset,
-                                    affinity,
-                                    best.1,
-                                    best.2,
-                                ))
-                    }) {
-                        best = Some((distance, boundary.byte_offset, affinity));
-                    }
-                }
-            }
-            return best.map(|(_, byte_offset, _)| byte_offset);
-        }
-        let inverse = self.shape_world.invert_or_identity();
-        let (x, y) = inverse.transform_point(point.x, point.y);
-        if !x.is_finite() || !y.is_finite() {
-            return None;
-        }
-        let line_index = self
-            .lines
-            .iter()
-            .position(|line| y <= line.bottom)
-            .or_else(|| self.lines.len().checked_sub(1))?;
-        let line = self.lines.get(line_index)?;
-        let mut char_index = line.hit_char_index(x).min(self.text.chars().count());
-        if char_index == line.char_end
-            && let Some(next_line) = line_index
-                .checked_add(1)
-                .and_then(|next_line| self.lines.get(next_line))
-            && next_line.soft_wrap_skipped_start == Some(char_index)
-        {
-            char_index = next_line.char_start;
-        } else if char_index == line.char_end
-            && let Some(skipped_end) = line.terminal_soft_wrap_skipped_end
-        {
-            char_index = skipped_end;
-        }
-        Some(char_byte_index(&self.text, char_index))
-    }
-
-    fn selection_rects(&self, range: std::ops::Range<usize>) -> Vec<RenderAabb> {
-        if !self.geometry_is_finite() || range.is_empty() {
-            return Vec::new();
-        }
-        let Some(start) = self.char_index_at_byte(range.start) else {
-            return Vec::new();
-        };
-        let Some(end) = self.char_index_at_byte(range.end) else {
-            return Vec::new();
-        };
-        if start >= end {
-            return Vec::new();
-        }
-
-        let mut rects = Vec::new();
-        for line in &self.lines {
-            let selected_start = start.max(line.char_start);
-            let selected_end = end.min(line.char_end);
-            if selected_start >= selected_end {
-                continue;
-            }
-            if let Some(rect) = line.selection_rect(
-                selected_start,
-                selected_end,
-                self.shape_world,
-                self.has_geometric_modifiers,
-                self.has_non_monotone_advances
-                    && line
-                        .glyphs
-                        .iter()
-                        .any(|positioned| positioned.glyph.advance < 0.0),
-            ) {
-                rects.push(rect);
-            }
-        }
-        if rects.iter().all(|rect| text_aabb_is_finite(*rect)) {
-            rects
-        } else {
-            Vec::new()
-        }
-    }
-
-    fn char_index_at_byte(&self, byte_offset: usize) -> Option<usize> {
-        self.caret_boundaries
-            .as_ref()?
-            .binary_search_by_key(&byte_offset, |boundary| boundary.byte_offset)
-            .ok()
-    }
-
-    fn geometry_is_finite(&self) -> bool {
-        self.local_transform.0.iter().all(|value| value.is_finite())
-            && self.shape_world.0.iter().all(|value| value.is_finite())
-            && self
-                .lines
-                .iter()
-                .all(StaticShapedTextLine::geometry_is_finite)
-            && self.caret_boundaries.as_ref().is_some_and(|boundaries| {
-                boundaries.iter().all(|boundary| {
-                    [boundary.upstream, boundary.downstream]
-                        .into_iter()
-                        .flatten()
-                        .all(|segment| {
-                            text_point_is_finite(segment.top)
-                                && text_point_is_finite(segment.bottom)
-                        })
-                })
-            })
     }
 }
 
@@ -1027,354 +822,6 @@ fn text_hit_candidate_wins_tie(
             && best_affinity == StaticCaretAffinity::Upstream)
 }
 
-impl StaticShapedTextLine {
-    fn geometry_is_finite(&self) -> bool {
-        [
-            self.start_x,
-            self.end_x,
-            self.top,
-            self.baseline,
-            self.bottom,
-        ]
-        .into_iter()
-        .all(f32::is_finite)
-            && self.glyphs.iter().all(|positioned| {
-                positioned.x.is_finite()
-                    && positioned.glyph.advance.is_finite()
-                    && positioned.modifier_opacity.is_finite()
-                    && positioned
-                        .modifier_transform
-                        .0
-                        .iter()
-                        .all(|value| value.is_finite())
-            })
-    }
-
-    fn write_caret_boundaries(
-        &self,
-        shape_world: Mat2D,
-        boundaries: &mut [StaticCaretBoundary],
-        work: &mut StaticCaretBuildWork,
-    ) {
-        let clusters = self.positioned_clusters(work);
-        let mut x_cluster = 0;
-        let mut previous_cluster = None;
-        let mut previous_cursor = 0;
-        let mut next_cluster = 0;
-
-        for char_index in self.char_start..=self.char_end {
-            work.boundary_visits = work.boundary_visits.saturating_add(1);
-            while clusters
-                .get(x_cluster)
-                .is_some_and(|cluster| cluster.char_end < char_index)
-            {
-                x_cluster = x_cluster.saturating_add(1);
-            }
-            while clusters
-                .get(previous_cursor)
-                .is_some_and(|cluster| cluster.char_end <= char_index)
-            {
-                previous_cluster = Some(previous_cursor);
-                previous_cursor = previous_cursor.saturating_add(1);
-            }
-            while clusters
-                .get(next_cluster)
-                .is_some_and(|cluster| cluster.char_start < char_index)
-            {
-                next_cluster = next_cluster.saturating_add(1);
-            }
-
-            let current = clusters.get(x_cluster).copied();
-            let containing = current
-                .filter(|cluster| cluster.char_start < char_index && char_index < cluster.char_end);
-            let x = if char_index <= self.char_start {
-                self.start_x
-            } else if let Some(cluster) = current {
-                if char_index <= cluster.char_start {
-                    cluster.start_x
-                } else {
-                    cluster.end_x
-                }
-            } else {
-                self.end_x
-            };
-
-            let upstream_glyph = containing
-                .map(|cluster| cluster.last_glyph)
-                .or_else(|| {
-                    previous_cluster
-                        .and_then(|index| clusters.get(index))
-                        .map(|cluster| cluster.last_glyph)
-                })
-                .or_else(|| clusters.first().map(|cluster| cluster.first_glyph));
-            let downstream_glyph = containing
-                .map(|cluster| cluster.last_glyph)
-                .or_else(|| {
-                    clusters
-                        .get(next_cluster)
-                        .map(|cluster| cluster.first_glyph)
-                })
-                .or_else(|| clusters.last().map(|cluster| cluster.last_glyph));
-            let upstream = self.caret_segment(
-                x,
-                upstream_glyph.and_then(|index| self.glyphs.get(index)),
-                shape_world,
-            );
-            let downstream = self.caret_segment(
-                x,
-                downstream_glyph.and_then(|index| self.glyphs.get(index)),
-                shape_world,
-            );
-
-            if let Some(boundary) = boundaries.get_mut(char_index) {
-                boundary.upstream.get_or_insert(upstream);
-                boundary.downstream = Some(downstream);
-            }
-        }
-    }
-
-    fn positioned_clusters(
-        &self,
-        work: &mut StaticCaretBuildWork,
-    ) -> Vec<StaticPositionedTextCluster> {
-        let mut clusters = Vec::new();
-        let mut glyph_index = 0;
-        while let Some(first) = self.glyphs.get(glyph_index) {
-            work.glyph_visits = work.glyph_visits.saturating_add(1);
-            let char_start = first.glyph.char_index;
-            let char_end = char_start.saturating_add(first.glyph.char_len);
-            let first_glyph = glyph_index;
-            let mut last_glyph = glyph_index;
-            let mut end_x = first.x + first.glyph.advance;
-            glyph_index = glyph_index.saturating_add(1);
-            while let Some(next) = self.glyphs.get(glyph_index) {
-                let next_end = next.glyph.char_index.saturating_add(next.glyph.char_len);
-                if next.glyph.char_index != char_start || next_end != char_end {
-                    break;
-                }
-                work.glyph_visits = work.glyph_visits.saturating_add(1);
-                last_glyph = glyph_index;
-                // A cluster's caret follows its final logical cursor. Its
-                // visual extrema are retained separately by selection bounds.
-                end_x = next.x + next.glyph.advance;
-                glyph_index = glyph_index.saturating_add(1);
-            }
-            clusters.push(StaticPositionedTextCluster {
-                char_start,
-                char_end,
-                start_x: first.x,
-                end_x,
-                first_glyph,
-                last_glyph,
-            });
-        }
-        clusters
-    }
-
-    fn caret_segment(
-        &self,
-        x: f32,
-        glyph: Option<&StaticPositionedTextGlyph>,
-        shape_world: Mat2D,
-    ) -> StaticCaretSegment {
-        let map = |y| {
-            let (x, y) = glyph
-                .map(|glyph| glyph.modified_point(x, y, self.baseline))
-                .unwrap_or((x, y));
-            let (x, y) = shape_world.transform_point(x, y);
-            RenderVec2D::new(x, y)
-        };
-        StaticCaretSegment {
-            top: map(self.top),
-            bottom: map(self.bottom),
-        }
-    }
-
-    fn caret_points(
-        &self,
-        char_index: usize,
-        shape_world: Mat2D,
-        affinity: StaticCaretAffinity,
-    ) -> (RenderVec2D, RenderVec2D) {
-        let x = self.caret_x(char_index);
-        let glyph = self.caret_glyph(char_index, affinity);
-        let segment = self.caret_segment(x, glyph, shape_world);
-        (segment.top, segment.bottom)
-    }
-
-    fn selection_rect(
-        &self,
-        selected_start: usize,
-        selected_end: usize,
-        shape_world: Mat2D,
-        has_geometric_modifiers: bool,
-        has_non_monotone_advances: bool,
-    ) -> Option<RenderAabb> {
-        // A selected visual segment starts downstream and ends upstream.
-        // Combining clusters and ligatures still remain indivisible because
-        // both affinities snap internal source boundaries to the cluster end.
-        let start_x = self.caret_x(selected_start);
-        let end_x = self.caret_x(selected_end);
-        if !has_geometric_modifiers && !has_non_monotone_advances {
-            return (start_x != end_x).then(|| {
-                transformed_text_rect(
-                    shape_world,
-                    start_x.min(end_x),
-                    self.top,
-                    start_x.max(end_x),
-                    self.bottom,
-                )
-            });
-        }
-
-        let start_caret =
-            self.caret_points(selected_start, shape_world, StaticCaretAffinity::Downstream);
-        let end_caret = self.caret_points(selected_end, shape_world, StaticCaretAffinity::Upstream);
-        let mut bounds = None;
-        let mut has_selected_glyph_extent = false;
-        extend_text_bounds(&mut bounds, start_caret.0);
-        extend_text_bounds(&mut bounds, start_caret.1);
-        extend_text_bounds(&mut bounds, end_caret.0);
-        extend_text_bounds(&mut bounds, end_caret.1);
-        for positioned in &self.glyphs {
-            let glyph_start = positioned.glyph.char_index;
-            if glyph_start < selected_start || glyph_start >= selected_end {
-                continue;
-            }
-            let [top_left, top_right, bottom_right, bottom_left] = [
-                (positioned.x, self.top),
-                (positioned.x + positioned.glyph.advance, self.top),
-                (positioned.x + positioned.glyph.advance, self.bottom),
-                (positioned.x, self.bottom),
-            ]
-            .map(|(x, y)| {
-                let (x, y) = positioned.modified_point(x, y, self.baseline);
-                let (x, y) = shape_world.transform_point(x, y);
-                RenderVec2D::new(x, y)
-            });
-            has_selected_glyph_extent |= top_left != top_right || bottom_right != bottom_left;
-            for point in [top_left, top_right, bottom_right, bottom_left] {
-                extend_text_bounds(&mut bounds, point);
-            }
-        }
-        (start_caret != end_caret || has_selected_glyph_extent)
-            .then_some(bounds)
-            .flatten()
-    }
-
-    fn caret_glyph(
-        &self,
-        char_index: usize,
-        affinity: StaticCaretAffinity,
-    ) -> Option<&StaticPositionedTextGlyph> {
-        if let Some(containing) = self.glyphs.iter().find(|positioned| {
-            let start = positioned.glyph.char_index;
-            let end = start.saturating_add(positioned.glyph.char_len);
-            start < char_index && char_index < end
-        }) {
-            let start = containing.glyph.char_index;
-            let end = start.saturating_add(containing.glyph.char_len);
-            return self.glyphs.iter().rev().find(|positioned| {
-                positioned.glyph.char_index == start
-                    && positioned
-                        .glyph
-                        .char_index
-                        .saturating_add(positioned.glyph.char_len)
-                        == end
-            });
-        }
-        match affinity {
-            StaticCaretAffinity::Upstream => self
-                .glyphs
-                .iter()
-                .rev()
-                .find(|positioned| {
-                    positioned
-                        .glyph
-                        .char_index
-                        .saturating_add(positioned.glyph.char_len)
-                        <= char_index
-                })
-                .or_else(|| self.glyphs.first()),
-            StaticCaretAffinity::Downstream => self
-                .glyphs
-                .iter()
-                .find(|positioned| positioned.glyph.char_index >= char_index)
-                .or_else(|| self.glyphs.last()),
-        }
-    }
-
-    fn caret_x(&self, char_index: usize) -> f32 {
-        if char_index <= self.char_start {
-            return self.start_x;
-        }
-        let mut glyphs = self.glyphs.iter().peekable();
-        while let Some(positioned) = glyphs.next() {
-            let glyph_start = positioned.glyph.char_index;
-            let glyph_end = glyph_start.saturating_add(positioned.glyph.char_len);
-            let cluster_x = positioned.x;
-            let mut cluster_end_x = positioned.x + positioned.glyph.advance;
-            while glyphs.peek().is_some_and(|next| {
-                next.glyph.char_index == glyph_start
-                    && next.glyph.char_index.saturating_add(next.glyph.char_len) == glyph_end
-            }) {
-                if let Some(next) = glyphs.next() {
-                    // Preserve the final logical cursor even when glyphs in
-                    // one cluster backtrack. Selection tracks visual bounds.
-                    cluster_end_x = next.x + next.glyph.advance;
-                }
-            }
-            if char_index < glyph_start {
-                return cluster_x;
-            }
-            if char_index <= glyph_end && glyph_start < glyph_end {
-                return if char_index == glyph_start {
-                    cluster_x
-                } else {
-                    cluster_end_x
-                };
-            }
-        }
-        self.end_x
-    }
-
-    fn hit_char_index(&self, x: f32) -> usize {
-        if x <= self.start_x {
-            return self.char_start;
-        }
-        let mut glyphs = self.glyphs.iter().peekable();
-        while let Some(positioned) = glyphs.next() {
-            let glyph_start = positioned.glyph.char_index;
-            let glyph_end = glyph_start.saturating_add(positioned.glyph.char_len);
-            let cluster_x = positioned.x;
-            let mut cluster_end_x = positioned.x + positioned.glyph.advance;
-            while glyphs.peek().is_some_and(|next| {
-                next.glyph.char_index == glyph_start
-                    && next.glyph.char_index.saturating_add(next.glyph.char_len) == glyph_end
-            }) {
-                if let Some(next) = glyphs.next() {
-                    cluster_end_x = cluster_end_x.max(next.x + next.glyph.advance);
-                }
-            }
-            if x <= cluster_end_x {
-                let midpoint = cluster_x + (cluster_end_x - cluster_x) / 2.0;
-                return if x < midpoint { glyph_start } else { glyph_end };
-            }
-        }
-        self.char_end
-    }
-}
-
-impl StaticPositionedTextGlyph {
-    fn modified_point(&self, x: f32, y: f32, baseline: f32) -> (f32, f32) {
-        let center_x = self.x + self.glyph.advance * 0.5;
-        let (x, y) = self
-            .modifier_transform
-            .transform_point(x - center_x, y - baseline);
-        (center_x + x, baseline + y)
-    }
-}
-
 fn extend_text_bounds(bounds: &mut Option<RenderAabb>, point: RenderVec2D) {
     *bounds = Some(match *bounds {
         Some(bounds) => RenderAabb::new(
@@ -1450,6 +897,7 @@ pub(crate) struct RuntimeTextLayoutConstraint {
     pub(crate) height: f32,
     pub(crate) width_scale_type: u64,
     pub(crate) height_scale_type: u64,
+    pub(crate) layout_direction: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1470,69 +918,31 @@ impl RuntimeTextLayoutConstraint {
             TEXT_SIZING_FIXED
         }
     }
+
+    pub(crate) fn effective_align(self, authored_align: u64) -> u64 {
+        // `Text::align()` preserves center and otherwise resolves left/right
+        // from the LayoutComponent direction supplied by `controlSize`.
+        if authored_align == 2 || self.layout_direction == 0 {
+            authored_align
+        } else if self.layout_direction == 2 {
+            1
+        } else {
+            0
+        }
+    }
 }
 
-#[derive(Debug, Clone)]
-struct StaticTextModifierGroup {
-    local_id: usize,
-    global_id: u32,
-    ranges: Vec<StaticTextModifierRange>,
-    follow_path_modifiers: Vec<StaticTextFollowPathModifier>,
-}
+include!("text/text_modifier_group.rs");
 
-#[derive(Debug, Clone)]
-struct StaticTextModifierRange {
-    local_id: usize,
-    global_id: u32,
-    interpolator: Option<StaticCubicInterpolator>,
-}
+include!("text/text_modifier_range.rs");
 
-#[derive(Debug, Clone)]
-struct StaticTextFollowPathModifier {
-    local_id: usize,
-    global_id: u32,
-    paths: Vec<StaticTextFollowPathPath>,
-}
+include!("text/text_follow_path_modifier.rs");
 
-#[derive(Debug, Clone)]
-struct StaticTextFollowPathPath {
-    local_id: usize,
-    geometry: PathGeometryNode,
-}
+include!("text/text_modifier.rs");
 
-#[derive(Debug, Clone)]
-struct StaticTextGlyphContext<'a> {
-    origin_x: f32,
-    origin_y: f32,
-    line_index_in_paragraph: usize,
-    paragraph_baselines: &'a [f32],
-    text_world_inverse: Mat2D,
-}
+include!("text/text_target_modifier.rs");
 
-#[derive(Debug, Clone, Copy)]
-struct StaticFollowPathGlyphTransform {
-    x: f32,
-    y: f32,
-    rotation: f32,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct StaticRangeUnit {
-    start: usize,
-    len: usize,
-}
-
-#[derive(Debug, Clone)]
-struct StaticTextPathBucket {
-    opacity: f32,
-    commands: Vec<RuntimePathCommand>,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct StaticCubicInterpolator {
-    local_id: usize,
-    global_id: u32,
-}
+include!("text/text_variation_modifier.rs");
 
 fn static_text_data_bind_supported(data_bind: &DataBindNode) -> bool {
     if !data_bind_flags_apply_source_to_target(data_bind.flags) {
@@ -1985,13 +1395,12 @@ impl<'a> StaticTextSlice<'a> {
                         | "TextInputText"
                         | "TextInputSelection"
                         | "TextInputSelectedText"
-                        | "TextStyleFeature"
-                        | "TextModifier"
                         | "TextShapeModifier"
-                        | "TextVariationModifier"
-                        | "TextTargetModifier"
                 )
-            )
+            ) || static_text_modifier_is_unsupported(object.type_name)
+                || static_text_style_feature_is_unsupported(object.type_name)
+                || static_text_variation_modifier_is_unsupported(object.type_name)
+                || static_text_target_modifier_is_unsupported(object.type_name)
         }) {
             bail!(
                 "static text subset does not support {} global {}",
@@ -2131,10 +1540,8 @@ impl<'a> StaticTextSlice<'a> {
             bail!("TextInput subset currently supports exactly one TextStyle child");
         }
         if text_input_component.children.iter().copied().any(|local| {
-            matches!(
-                child_type(local),
-                Some("TextStyleFeature" | "TextInputSelectedText")
-            )
+            static_text_style_feature_is_unsupported(child_type(local))
+                || child_type(local) == Some("TextInputSelectedText")
         }) {
             bail!("TextInput subset does not support style features or selected-text draws");
         }
@@ -3956,7 +3363,10 @@ impl<'a> StaticTextSlice<'a> {
         };
         let origin_x = self.text_double_property(runtime, instance, "originX", 0.0)?;
         let origin_y = self.text_double_property(runtime, instance, "originY", 0.0)?;
-        let align_value = self.text_uint_property(runtime, instance, "alignValue")?;
+        let authored_align = self.text_uint_property(runtime, instance, "alignValue")?;
+        let align_value = layout_constraint
+            .map(|constraint| constraint.effective_align(authored_align))
+            .unwrap_or(authored_align);
         let last_line_index = lines.last().map(|line| line.line_index).unwrap_or(0);
         let mut total_height = full_height;
         let mut ellipsis_line = None;
@@ -4067,7 +3477,11 @@ impl<'a> StaticTextSlice<'a> {
         let mut y_offset = -bounds_height * origin_y + fit_baseline * (1.0 - scale);
 
         if scale != 1.0 {
-            match self.text_uint_property(runtime, instance, "alignValue")? {
+            let authored_align = self.text_uint_property(runtime, instance, "alignValue")?;
+            let align = layout_constraint
+                .map(|constraint| constraint.effective_align(authored_align))
+                .unwrap_or(authored_align);
+            match align {
                 1 => {
                     x_offset += bounds_width - measured_width * scale - minimum_line_x * scale;
                 }
@@ -4360,834 +3774,8 @@ impl<'a> StaticTextStyle<'a> {
 
 // Mirrors the static coverage/translation subset from C++
 // src/text/text_modifier_group.cpp and src/text/text_modifier_range.cpp.
-impl StaticTextModifierGroup {
-    fn from_graph(runtime: &RuntimeFile, graph: &ArtboardGraph, local_id: usize) -> Result<Self> {
-        let global_id = global_for_local(graph, local_id)?;
-        let object = runtime
-            .object(global_id as usize)
-            .with_context(|| format!("missing TextModifierGroup global {global_id}"))?;
-        let flags = object.uint_property("modifierFlags").unwrap_or(0);
-        const MODIFY_TRANSLATION: u64 = 1 << 2;
-        const MODIFY_ROTATION: u64 = 1 << 3;
-        const MODIFY_SCALE: u64 = 1 << 4;
-        const MODIFY_OPACITY: u64 = 1 << 5;
-        const INVERT_OPACITY: u64 = 1 << 6;
-        if flags
-            & !(MODIFY_TRANSLATION
-                | MODIFY_ROTATION
-                | MODIFY_SCALE
-                | MODIFY_OPACITY
-                | INVERT_OPACITY)
-            != 0
-        {
-            bail!(
-                "static text subset only supports translation/rotation/scale/opacity TextModifierGroup flags, found {flags}"
-            );
-        }
-
-        let component = component_for_local(graph, local_id)
-            .with_context(|| format!("TextModifierGroup local {local_id} component is missing"))?;
-        let mut ranges = Vec::new();
-        let mut follow_path_modifiers = Vec::new();
-        for child_local in &component.children {
-            match type_for_local(graph, *child_local) {
-                Some("TextModifierRange") => {
-                    ranges.push(StaticTextModifierRange::from_graph(
-                        runtime,
-                        graph,
-                        *child_local,
-                    )?);
-                }
-                Some("TextFollowPathModifier") => {
-                    follow_path_modifiers.push(StaticTextFollowPathModifier::from_graph(
-                        runtime,
-                        graph,
-                        *child_local,
-                    )?);
-                }
-                Some(type_name) => {
-                    bail!("static text subset does not support TextModifierGroup child {type_name}")
-                }
-                None => bail!(
-                    "static text subset does not support unknown TextModifierGroup child local {child_local}"
-                ),
-            }
-        }
-
-        Ok(Self {
-            local_id,
-            global_id,
-            ranges,
-            follow_path_modifiers,
-        })
-    }
-
-    fn transform(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        amount: f32,
-        glyph: &StaticTextGlyphContext<'_>,
-    ) -> Result<Mat2D> {
-        let flags = runtime_uint_property(
-            runtime,
-            instance,
-            "TextModifierGroup",
-            self.local_id,
-            self.global_id,
-            "modifierFlags",
-            0,
-        )?;
-        const MODIFY_TRANSLATION: u64 = 1 << 2;
-        const MODIFY_ROTATION: u64 = 1 << 3;
-        const MODIFY_SCALE: u64 = 1 << 4;
-        let follows_path = !self.follow_path_modifiers.is_empty();
-        if amount == 0.0 && !follows_path {
-            return Ok(Mat2D::IDENTITY);
-        }
-
-        let mut x = 0.0;
-        let mut y = 0.0;
-        let mut rotation = 0.0;
-        let mut scale_x = 1.0;
-        let mut scale_y = 1.0;
-
-        if follows_path {
-            // Ported from C++ `src/text/text_modifier_group.cpp`
-            // `TextModifierGroup::transform` for follow-path modifiers.
-            let mut current = StaticFollowPathGlyphTransform {
-                x: glyph.origin_x,
-                y: glyph.origin_y,
-                rotation: 0.0,
-            };
-            let offset = if flags & MODIFY_TRANSLATION != 0 {
-                (
-                    runtime_double_property(
-                        runtime,
-                        instance,
-                        "TextModifierGroup",
-                        self.local_id,
-                        self.global_id,
-                        "x",
-                        0.0,
-                    )?,
-                    runtime_double_property(
-                        runtime,
-                        instance,
-                        "TextModifierGroup",
-                        self.local_id,
-                        self.global_id,
-                        "y",
-                        0.0,
-                    )?,
-                )
-            } else {
-                (0.0, 0.0)
-            };
-            for modifier in &self.follow_path_modifiers {
-                current = modifier.transform_glyph(runtime, instance, current, glyph, offset)?;
-            }
-            x = (current.x - glyph.origin_x) * amount;
-            y = (current.y - glyph.origin_y) * amount;
-            rotation += current.rotation * amount;
-        } else if flags & MODIFY_TRANSLATION != 0 {
-            x = runtime_double_property(
-                runtime,
-                instance,
-                "TextModifierGroup",
-                self.local_id,
-                self.global_id,
-                "x",
-                0.0,
-            )? * amount;
-            y = runtime_double_property(
-                runtime,
-                instance,
-                "TextModifierGroup",
-                self.local_id,
-                self.global_id,
-                "y",
-                0.0,
-            )? * amount;
-        }
-
-        if flags & MODIFY_ROTATION != 0 {
-            rotation += runtime_double_property(
-                runtime,
-                instance,
-                "TextModifierGroup",
-                self.local_id,
-                self.global_id,
-                "rotation",
-                0.0,
-            )? * amount;
-        }
-        if flags & MODIFY_SCALE != 0 {
-            let inverse_amount = 1.0 - amount;
-            scale_x = inverse_amount
-                + runtime_double_property(
-                    runtime,
-                    instance,
-                    "TextModifierGroup",
-                    self.local_id,
-                    self.global_id,
-                    "scaleX",
-                    1.0,
-                )? * amount;
-            scale_y = inverse_amount
-                + runtime_double_property(
-                    runtime,
-                    instance,
-                    "TextModifierGroup",
-                    self.local_id,
-                    self.global_id,
-                    "scaleY",
-                    1.0,
-                )? * amount;
-        }
-        let mut transform = Mat2D::from_rotation(rotation);
-        transform.0[4] = x;
-        transform.0[5] = y;
-        transform.scale_by_values(scale_x, scale_y);
-        Ok(transform)
-    }
-
-    fn modifies_opacity(&self, runtime: &RuntimeFile, instance: &ArtboardInstance) -> Result<bool> {
-        let flags = runtime_uint_property(
-            runtime,
-            instance,
-            "TextModifierGroup",
-            self.local_id,
-            self.global_id,
-            "modifierFlags",
-            0,
-        )?;
-        const MODIFY_OPACITY: u64 = 1 << 5;
-        Ok(flags & MODIFY_OPACITY != 0)
-    }
-
-    fn opacity(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        current: f32,
-        amount: f32,
-    ) -> Result<f32> {
-        let flags = runtime_uint_property(
-            runtime,
-            instance,
-            "TextModifierGroup",
-            self.local_id,
-            self.global_id,
-            "modifierFlags",
-            0,
-        )?;
-        let opacity = runtime_double_property(
-            runtime,
-            instance,
-            "TextModifierGroup",
-            self.local_id,
-            self.global_id,
-            "opacity",
-            1.0,
-        )?;
-        const INVERT_OPACITY: u64 = 1 << 6;
-        if flags & INVERT_OPACITY != 0 {
-            Ok(current * (1.0 - amount) + opacity * amount)
-        } else {
-            Ok(current * opacity * amount)
-        }
-    }
-
-    fn coverage_by_character(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        text: &str,
-        runs: &[StaticResolvedRun],
-        lines: &[StaticTextLine<'_>],
-    ) -> Result<Vec<f32>> {
-        let mut coverage = vec![0.0; text.chars().count()];
-        for range in &self.ranges {
-            range.apply_coverage(runtime, instance, text, runs, lines, &mut coverage)?;
-        }
-        Ok(coverage)
-    }
-}
 
 // Ported from C++ `src/text/text_follow_path_modifier.cpp`.
-impl StaticTextFollowPathModifier {
-    fn from_graph(runtime: &RuntimeFile, graph: &ArtboardGraph, local_id: usize) -> Result<Self> {
-        let global_id = global_for_local(graph, local_id)?;
-        let object = runtime
-            .object(global_id as usize)
-            .with_context(|| format!("missing TextFollowPathModifier global {global_id}"))?;
-        let target_local = object
-            .uint_property("targetId")
-            .and_then(|target| usize::try_from(target).ok());
-        let paths = match target_local {
-            Some(target_local) if type_for_local(graph, target_local) == Some("Shape") => graph
-                .path_composers
-                .iter()
-                .find(|composer| composer.shape_local == target_local)
-                .map(|composer| {
-                    composer
-                        .paths
-                        .iter()
-                        .filter_map(|path_ref| {
-                            graph
-                                .paths
-                                .iter()
-                                .find(|path| path.local_id == path_ref.local_id)
-                                .cloned()
-                                .map(|geometry| StaticTextFollowPathPath {
-                                    local_id: path_ref.local_id,
-                                    geometry,
-                                })
-                        })
-                        .collect()
-                })
-                .unwrap_or_default(),
-            Some(target_local) => graph
-                .paths
-                .iter()
-                .find(|path| path.local_id == target_local)
-                .cloned()
-                .map(|geometry| {
-                    vec![StaticTextFollowPathPath {
-                        local_id: target_local,
-                        geometry,
-                    }]
-                })
-                .unwrap_or_default(),
-            None => Vec::new(),
-        };
-
-        Ok(Self {
-            local_id,
-            global_id,
-            paths,
-        })
-    }
-
-    fn transform_glyph(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        current: StaticFollowPathGlyphTransform,
-        glyph: &StaticTextGlyphContext<'_>,
-        offset: (f32, f32),
-    ) -> Result<StaticFollowPathGlyphTransform> {
-        let path_measure = self.path_measure(instance, glyph.text_world_inverse);
-        let path_length = path_measure.length();
-        if path_length == 0.0 {
-            return Ok(current);
-        }
-
-        let position_on_path = (glyph.origin_x + offset.0, glyph.origin_y + offset.1);
-        let start = self.double_property(runtime, instance, "start", 0.0)?;
-        let end = self.double_property(runtime, instance, "end", 1.0)?;
-        let start_pct = start.min(end).clamp(0.0, 1.0);
-        let end_pct = start.max(end).clamp(0.0, 1.0);
-        let can_wrap = path_measure.raw_is_closed() && (end_pct - start_pct) == 1.0;
-        let valid_length = (end_pct - start_pct) * path_length;
-        let offset_pct = self
-            .double_property(runtime, instance, "offset", 0.0)?
-            .rem_euclid(1.0);
-        let start_pct = start_pct + offset_pct;
-        let end_pct = end_pct + offset_pct;
-
-        let sample = if (!can_wrap && position_on_path.0 < 0.0) || start_pct == end_pct {
-            let result = path_measure.at_percentage(start_pct);
-            let tangent = normalize_point(result.tan);
-            let extra = -position_on_path.0;
-            RuntimePathSampleParts {
-                position: (
-                    result.pos.0 - tangent.0 * extra,
-                    result.pos.1 - tangent.1 * extra,
-                ),
-                tangent,
-            }
-        } else if !can_wrap && position_on_path.0 > valid_length {
-            let result = path_measure.at_percentage(end_pct);
-            let tangent = normalize_point(result.tan);
-            let extra = position_on_path.0 - valid_length;
-            RuntimePathSampleParts {
-                position: (
-                    result.pos.0 + tangent.0 * extra,
-                    result.pos.1 + tangent.1 * extra,
-                ),
-                tangent,
-            }
-        } else {
-            let result = path_measure.at_percentage(start_pct + position_on_path.0 / path_length);
-            RuntimePathSampleParts {
-                position: result.pos,
-                tangent: normalize_point(result.tan),
-            }
-        };
-
-        let last_line_index = glyph.line_index_in_paragraph.checked_sub(1);
-        let last_baseline = last_line_index
-            .and_then(|index| glyph.paragraph_baselines.get(index).copied())
-            .unwrap_or(0.0);
-        let current_baseline = glyph
-            .paragraph_baselines
-            .get(glyph.line_index_in_paragraph)
-            .copied()
-            .unwrap_or(0.0);
-        let translation = if self.bool_property(runtime, instance, "radial", false)? {
-            let vertical_spacing = position_on_path.1 - current_baseline;
-            let perpendicular = (-sample.tangent.1, sample.tangent.0);
-            (
-                sample.position.0 + vertical_spacing * perpendicular.0,
-                sample.position.1 + vertical_spacing * perpendicular.1,
-            )
-        } else {
-            (
-                sample.position.0,
-                position_on_path.1 - current_baseline + sample.position.1 + last_baseline,
-            )
-        };
-        let rotation = if self.bool_property(runtime, instance, "orient", true)? {
-            sample.tangent.1.atan2(sample.tangent.0)
-        } else {
-            0.0
-        };
-
-        let strength = self
-            .double_property(runtime, instance, "strength", 1.0)?
-            .clamp(0.0, 1.0);
-        let inverse_strength = 1.0 - strength;
-        Ok(StaticFollowPathGlyphTransform {
-            x: translation.0 * strength + current.x * inverse_strength,
-            y: translation.1 * strength + current.y * inverse_strength,
-            rotation: rotation * strength + current.rotation * inverse_strength,
-        })
-    }
-
-    fn path_measure(
-        &self,
-        instance: &ArtboardInstance,
-        text_world_inverse: Mat2D,
-    ) -> RuntimePathMeasure {
-        let mut commands = Vec::new();
-        for path in &self.paths {
-            let Some(path_world) = instance
-                .component(path.local_id)
-                .map(|component| component.transform.world_transform)
-            else {
-                continue;
-            };
-            let mut path_commands =
-                runtime_path_geometry_commands(instance, &path.geometry, path_world);
-            transform_path_commands(&mut path_commands, text_world_inverse);
-            commands.extend(path_commands);
-        }
-        RuntimePathMeasure::from_commands_with_tolerance(&commands, 0.1)
-    }
-
-    fn double_property(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        property_name: &str,
-        default: f32,
-    ) -> Result<f32> {
-        runtime_double_property(
-            runtime,
-            instance,
-            "TextFollowPathModifier",
-            self.local_id,
-            self.global_id,
-            property_name,
-            default,
-        )
-    }
-
-    fn bool_property(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        property_name: &str,
-        default: bool,
-    ) -> Result<bool> {
-        runtime_bool_property(
-            runtime,
-            instance,
-            "TextFollowPathModifier",
-            self.local_id,
-            self.global_id,
-            property_name,
-            default,
-        )
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct RuntimePathSampleParts {
-    position: (f32, f32),
-    tangent: (f32, f32),
-}
-
-fn normalize_point(point: (f32, f32)) -> (f32, f32) {
-    let length = (point.0 * point.0 + point.1 * point.1).sqrt();
-    if length == 0.0 {
-        (0.0, 0.0)
-    } else {
-        (point.0 / length, point.1 / length)
-    }
-}
-
-impl StaticTextModifierRange {
-    fn from_graph(runtime: &RuntimeFile, graph: &ArtboardGraph, local_id: usize) -> Result<Self> {
-        let global_id = global_for_local(graph, local_id)?;
-        let object = runtime
-            .object(global_id as usize)
-            .with_context(|| format!("missing TextModifierRange global {global_id}"))?;
-        let units = object.uint_property("unitsValue").unwrap_or(0);
-        if units > 3 {
-            bail!("static text subset does not support TextModifierRange units {units}");
-        }
-
-        let component = component_for_local(graph, local_id)
-            .with_context(|| format!("TextModifierRange local {local_id} component is missing"))?;
-        let mut interpolator = None;
-        for child_local in &component.children {
-            match type_for_local(graph, *child_local) {
-                Some("CubicInterpolatorComponent") => {
-                    if interpolator.is_some() {
-                        bail!("static text subset supports one TextModifierRange interpolator");
-                    }
-                    interpolator = Some(StaticCubicInterpolator {
-                        local_id: *child_local,
-                        global_id: global_for_local(graph, *child_local)?,
-                    });
-                }
-                Some(type_name) => {
-                    bail!("static text subset does not support TextModifierRange child {type_name}")
-                }
-                None => bail!(
-                    "static text subset does not support unknown TextModifierRange child local {child_local}"
-                ),
-            }
-        }
-
-        Ok(Self {
-            local_id,
-            global_id,
-            interpolator,
-        })
-    }
-
-    fn apply_coverage(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        text: &str,
-        runs: &[StaticResolvedRun],
-        lines: &[StaticTextLine<'_>],
-        coverage: &mut [f32],
-    ) -> Result<()> {
-        if coverage.is_empty() {
-            return Ok(());
-        }
-        let (start, end) = self.character_range(runtime, instance, runs, coverage.len())?;
-        let units_value = self.uint_property(runtime, instance, "unitsValue", 0)?;
-        let units = self.range_units(units_value, text, start, end, lines)?;
-        if units.is_empty() {
-            return Ok(());
-        }
-        let unit_count = units.len() as f32;
-        let offset = self.double_property(runtime, instance, "offset", 0.0)?;
-        let range_type = self.uint_property(runtime, instance, "typeValue", 0)?;
-        let (index_from, index_to, falloff_from, falloff_to) = match range_type {
-            0 => (
-                unit_count * (self.double_property(runtime, instance, "modifyFrom", 0.0)? + offset),
-                unit_count * (self.double_property(runtime, instance, "modifyTo", 1.0)? + offset),
-                unit_count
-                    * (self.double_property(runtime, instance, "falloffFrom", 0.0)? + offset),
-                unit_count * (self.double_property(runtime, instance, "falloffTo", 1.0)? + offset),
-            ),
-            1 => (
-                self.double_property(runtime, instance, "modifyFrom", 0.0)? + offset,
-                self.double_property(runtime, instance, "modifyTo", 1.0)? + offset,
-                self.double_property(runtime, instance, "falloffFrom", 0.0)? + offset,
-                self.double_property(runtime, instance, "falloffTo", 1.0)? + offset,
-            ),
-            other => bail!("static text subset does not support TextModifierRange type {other}"),
-        };
-        let strength = self.double_property(runtime, instance, "strength", 1.0)?;
-        let mode = self.uint_property(runtime, instance, "modeValue", 0)?;
-        let clamp = self.bool_property(runtime, instance, "clamp", false)?;
-
-        for (unit_index, unit) in units.iter().enumerate() {
-            let t = unit_index as f32 + 0.5;
-            let c = strength
-                * self.coverage_at(
-                    runtime,
-                    instance,
-                    t,
-                    index_from,
-                    index_to,
-                    falloff_from,
-                    falloff_to,
-                )?;
-            for character_index in unit.start..unit.start + unit.len {
-                let current = coverage[character_index];
-                let next = match mode {
-                    0 => current + c,
-                    1 => current - c,
-                    2 => current * c,
-                    3 => current.min(c),
-                    4 => current.max(c),
-                    5 => (current - c).abs(),
-                    other => {
-                        bail!("static text subset does not support TextModifierRange mode {other}")
-                    }
-                };
-                coverage[character_index] = if clamp { next.clamp(0.0, 1.0) } else { next };
-            }
-
-            let next_start = units
-                .get(unit_index + 1)
-                .map(|next| next.start)
-                .unwrap_or(end);
-            for character_index in unit.start + unit.len..next_start {
-                coverage[character_index] = 0.0;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn character_range(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        runs: &[StaticResolvedRun],
-        text_len: usize,
-    ) -> Result<(usize, usize)> {
-        let run_id = self.uint_property(runtime, instance, "runId", u32::MAX as u64)?;
-        if run_id == u32::MAX as u64 {
-            return Ok((0, text_len));
-        }
-        let run = runs
-            .iter()
-            .find(|run| run.local_id as u64 == run_id || run.global_id as u64 == run_id)
-            .with_context(|| format!("TextModifierRange runId {run_id} did not resolve"))?;
-        Ok((run.char_start, run.char_start + run.char_len))
-    }
-
-    fn range_units(
-        &self,
-        units_value: u64,
-        text: &str,
-        start: usize,
-        end: usize,
-        lines: &[StaticTextLine<'_>],
-    ) -> Result<Vec<StaticRangeUnit>> {
-        match units_value {
-            0 => Ok((start..end)
-                .map(|index| StaticRangeUnit {
-                    start: index,
-                    len: 1,
-                })
-                .collect()),
-            1 => Ok(text
-                .chars()
-                .enumerate()
-                .skip(start)
-                .take(end.saturating_sub(start))
-                .filter_map(|(index, ch)| {
-                    (!ch.is_whitespace()).then_some(StaticRangeUnit {
-                        start: index,
-                        len: 1,
-                    })
-                })
-                .collect()),
-            2 => Ok(Self::word_range_units(text, start, end)),
-            3 => Ok(Self::line_range_units(lines, start, end)),
-            other => bail!("static text subset does not support TextModifierRange units {other}"),
-        }
-    }
-
-    fn word_range_units(text: &str, start: usize, end: usize) -> Vec<StaticRangeUnit> {
-        let mut units = Vec::new();
-        let mut word_start = None;
-        for (index, ch) in text.chars().enumerate() {
-            if ch.is_whitespace() {
-                if let Some(index_from) = word_start.take() {
-                    add_range_unit(&mut units, index_from, index, start, end);
-                }
-            } else if word_start.is_none() {
-                word_start = Some(index);
-            }
-        }
-        if let Some(index_from) = word_start {
-            add_range_unit(&mut units, index_from, text.chars().count(), start, end);
-        }
-        units
-    }
-
-    fn line_range_units(
-        lines: &[StaticTextLine<'_>],
-        start: usize,
-        end: usize,
-    ) -> Vec<StaticRangeUnit> {
-        let mut units = Vec::new();
-        for line in lines {
-            add_range_unit(
-                &mut units,
-                line.char_start,
-                line.char_start + line.text.chars().count(),
-                start,
-                end,
-            );
-        }
-        units
-    }
-
-    fn coverage_at(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        t: f32,
-        index_from: f32,
-        index_to: f32,
-        falloff_from: f32,
-        falloff_to: f32,
-    ) -> Result<f32> {
-        let mut c = if index_to < index_from || t < index_from || t > index_to {
-            0.0
-        } else if t < falloff_from {
-            let range = (falloff_from - index_from).max(0.0);
-            if range == 0.0 {
-                1.0
-            } else {
-                ((t - index_from).max(0.0) / range).max(0.0)
-            }
-        } else if t > falloff_to {
-            let range = (index_to - falloff_to).max(0.0);
-            if range == 0.0 {
-                1.0
-            } else {
-                1.0 - ((t - falloff_to) / range).min(1.0)
-            }
-        } else {
-            1.0
-        };
-        if c != 0.0
-            && c != 1.0
-            && let Some(interpolator) = self.interpolator
-        {
-            c = interpolator.transform(runtime, instance, c)?;
-        }
-        Ok(c)
-    }
-
-    fn double_property(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        property_name: &str,
-        default: f32,
-    ) -> Result<f32> {
-        runtime_double_property(
-            runtime,
-            instance,
-            "TextModifierRange",
-            self.local_id,
-            self.global_id,
-            property_name,
-            default,
-        )
-    }
-
-    fn uint_property(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        property_name: &str,
-        default: u64,
-    ) -> Result<u64> {
-        runtime_uint_property(
-            runtime,
-            instance,
-            "TextModifierRange",
-            self.local_id,
-            self.global_id,
-            property_name,
-            default,
-        )
-    }
-
-    fn bool_property(
-        &self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        property_name: &str,
-        default: bool,
-    ) -> Result<bool> {
-        runtime_bool_property(
-            runtime,
-            instance,
-            "TextModifierRange",
-            self.local_id,
-            self.global_id,
-            property_name,
-            default,
-        )
-    }
-}
-
-impl StaticCubicInterpolator {
-    fn transform(
-        self,
-        runtime: &RuntimeFile,
-        instance: &ArtboardInstance,
-        factor: f32,
-    ) -> Result<f32> {
-        let x1 = runtime_double_property(
-            runtime,
-            instance,
-            "CubicInterpolatorComponent",
-            self.local_id,
-            self.global_id,
-            "x1",
-            0.42,
-        )?;
-        let y1 = runtime_double_property(
-            runtime,
-            instance,
-            "CubicInterpolatorComponent",
-            self.local_id,
-            self.global_id,
-            "y1",
-            0.0,
-        )?;
-        let x2 = runtime_double_property(
-            runtime,
-            instance,
-            "CubicInterpolatorComponent",
-            self.local_id,
-            self.global_id,
-            "x2",
-            0.58,
-        )?;
-        let y2 = runtime_double_property(
-            runtime,
-            instance,
-            "CubicInterpolatorComponent",
-            self.local_id,
-            self.global_id,
-            "y2",
-            1.0,
-        )?;
-        let t = cubic_interpolator_get_t(factor, x1, x2);
-        Ok(cubic_interpolator_calc_bezier(t, y1, y2))
-    }
-}
 
 fn runtime_double_property(
     runtime: &RuntimeFile,
@@ -5252,717 +3840,15 @@ fn runtime_bool_property(
         .unwrap_or(default))
 }
 
-fn character_index_for_cluster(text: &str, cluster: u32) -> usize {
-    let cluster = cluster as usize;
-    text.char_indices()
-        .take_while(|(byte_index, _)| *byte_index <= cluster)
-        .count()
-        .saturating_sub(1)
-}
+include!("text/utf.rs");
 
-fn char_byte_index(text: &str, char_index: usize) -> usize {
-    text.char_indices()
-        .nth(char_index)
-        .map(|(byte_index, _)| byte_index)
-        .unwrap_or(text.len())
-}
+include!("text/glyph_lookup.rs");
 
-fn glyph_character_len(text: &str, glyphs: &[TextGlyph], glyph_index: usize) -> usize {
-    let char_index = character_index_for_cluster(text, glyphs[glyph_index].cluster);
-    let next_char_index = glyphs
-        .iter()
-        .skip(glyph_index + 1)
-        .find_map(|glyph| {
-            (glyph.cluster != glyphs[glyph_index].cluster)
-                .then_some(character_index_for_cluster(text, glyph.cluster))
-        })
-        .unwrap_or_else(|| text.chars().count());
-    next_char_index.saturating_sub(char_index).max(1)
-}
+include!("text/line_breaker.rs");
 
-fn glyph_coverage(coverage: &[f32], char_index: usize, char_len: usize) -> f32 {
-    let end = (char_index + char_len).min(coverage.len());
-    if char_index >= end {
-        return 0.0;
-    }
-    coverage[char_index..end].iter().copied().sum::<f32>() / (end - char_index) as f32
-}
+include!("text/text_style_feature.rs");
 
-fn append_opacity_bucket(
-    buckets: &mut Vec<StaticTextPathBucket>,
-    opacity: f32,
-    commands: Vec<RuntimePathCommand>,
-) {
-    if opacity <= 0.0 {
-        return;
-    }
-    if let Some(bucket) = buckets.iter_mut().find(|bucket| bucket.opacity == opacity) {
-        bucket.commands.extend(commands);
-    } else {
-        buckets.push(StaticTextPathBucket { opacity, commands });
-    }
-}
-
-fn transform_path_commands(commands: &mut [RuntimePathCommand], transform: Mat2D) {
-    for command in commands {
-        match command {
-            RuntimePathCommand::Move { x, y } | RuntimePathCommand::Line { x, y } => {
-                (*x, *y) = transform.transform_point(*x, *y);
-            }
-            RuntimePathCommand::Cubic {
-                x1,
-                y1,
-                x2,
-                y2,
-                x3,
-                y3,
-            } => {
-                (*x1, *y1) = transform.transform_point(*x1, *y1);
-                (*x2, *y2) = transform.transform_point(*x2, *y2);
-                (*x3, *y3) = transform.transform_point(*x3, *y3);
-            }
-            RuntimePathCommand::Close => {}
-        }
-    }
-}
-
-fn order_opacity_buckets_like_cpp(
-    mut buckets: Vec<StaticTextPathBucket>,
-) -> Vec<StaticTextPathBucket> {
-    // rive-runtime 43dfc847 changed TextStylePaint::m_opacityPaths from
-    // std::unordered_map<float, ...> to std::map<float, ...>. Modifier
-    // falloff paths are now drawn in ascending opacity order.
-    buckets.sort_by(|a, b| {
-        a.opacity
-            .partial_cmp(&b.opacity)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    buckets
-}
-
-fn split_static_text_lines(text: &str) -> Vec<StaticTextLine<'_>> {
-    let mut lines = Vec::new();
-    let mut line_start_byte = 0;
-    let mut line_start_char = 0;
-    let mut line_index = 0;
-    let mut iter = text.char_indices().peekable();
-
-    while let Some((byte_index, ch)) = iter.next() {
-        if !matches!(ch, '\n' | '\r' | '\u{2028}') {
-            continue;
-        }
-
-        lines.push(StaticTextLine {
-            text: &text[line_start_byte..byte_index],
-            char_start: line_start_char,
-            line_index,
-            soft_wrap_skipped_start: None,
-            terminal_soft_wrap_skipped_end: None,
-        });
-
-        let mut next_start_byte = byte_index + ch.len_utf8();
-        let mut separator_chars = 1;
-        if ch == '\r'
-            && let Some((next_byte_index, '\n')) = iter.peek().copied()
-        {
-            iter.next();
-            next_start_byte = next_byte_index + '\n'.len_utf8();
-            separator_chars = 2;
-        }
-
-        line_start_char += text[line_start_byte..byte_index].chars().count() + separator_chars;
-        line_start_byte = next_start_byte;
-        line_index += 1;
-    }
-
-    // Static Text matches Rive's line-break contract: a trailing separator
-    // does not create another paragraph/GlyphLine. Editable RawTextInput adds
-    // its own U+200B sentinel; that is a separate future geometry surface.
-    if line_start_byte < text.len() || lines.is_empty() {
-        lines.push(StaticTextLine {
-            text: &text[line_start_byte..],
-            char_start: line_start_char,
-            line_index,
-            soft_wrap_skipped_start: None,
-            terminal_soft_wrap_skipped_end: None,
-        });
-    }
-    lines
-}
-
-fn static_text_line_iteration(
-    overflow: u64,
-    sizing: u64,
-    vertical_align: u64,
-    metrics: StaticTextLineMetrics,
-    current_y: f32,
-    total_height: f32,
-    fixed_height: f32,
-) -> StaticTextLineIteration {
-    if sizing != TEXT_SIZING_FIXED
-        || !matches!(overflow, TEXT_OVERFLOW_HIDDEN | TEXT_OVERFLOW_CLIPPED)
-    {
-        return StaticTextLineIteration::Draw;
-    }
-
-    // Exact `Text::shouldDrawLine` comparisons against the authoritative
-    // GlyphLine geometry. Hidden requires the full line; clipped admits a
-    // partially intersecting line.
-    let line_top = current_y + metrics.top;
-    let line_bottom = current_y + metrics.bottom;
-
-    if overflow == TEXT_OVERFLOW_HIDDEN {
-        match vertical_align {
-            1 if line_top < total_height - fixed_height => StaticTextLineIteration::Skip,
-            2 if line_top < total_height / 2.0 - fixed_height / 2.0 => {
-                StaticTextLineIteration::Skip
-            }
-            2 if line_bottom > total_height / 2.0 + fixed_height / 2.0 => {
-                StaticTextLineIteration::Stop
-            }
-            0 if line_bottom > fixed_height => StaticTextLineIteration::Stop,
-            _ => StaticTextLineIteration::Draw,
-        }
-    } else {
-        match vertical_align {
-            1 if line_bottom < total_height - fixed_height => StaticTextLineIteration::Skip,
-            2 if line_bottom < total_height / 2.0 - fixed_height / 2.0 => {
-                StaticTextLineIteration::Skip
-            }
-            2 if line_top > total_height / 2.0 + fixed_height / 2.0 => {
-                StaticTextLineIteration::Stop
-            }
-            0 if line_top > fixed_height => StaticTextLineIteration::Stop,
-            _ => StaticTextLineIteration::Draw,
-        }
-    }
-}
-
-fn add_range_unit(
-    units: &mut Vec<StaticRangeUnit>,
-    index_from: usize,
-    index_to: usize,
-    start_offset: usize,
-    end_offset: usize,
-) {
-    if index_to > start_offset && end_offset > index_from {
-        let actual_start = start_offset.max(index_from);
-        let actual_end = end_offset.min(index_to);
-        if actual_end > actual_start {
-            units.push(StaticRangeUnit {
-                start: actual_start,
-                len: actual_end - actual_start,
-            });
-        }
-    }
-}
-
-fn byte_index_for_glyph_end(text: &str, glyphs: &[TextGlyph], glyph_end: usize) -> usize {
-    if glyph_end >= glyphs.len() {
-        return text.len();
-    }
-    let target = (glyphs[glyph_end].cluster as usize).min(text.len());
-    if text.is_char_boundary(target) {
-        return target;
-    }
-    text.char_indices()
-        .map(|(index, _)| index)
-        .take_while(|index| *index <= target)
-        .last()
-        .unwrap_or(0)
-}
-
-fn leading_whitespace_bytes(text: &str) -> usize {
-    text.char_indices()
-        .find_map(|(index, ch)| (!ch.is_whitespace()).then_some(index))
-        .unwrap_or(text.len())
-}
-
-fn cubic_interpolator_calc_bezier(t: f32, a1: f32, a2: f32) -> f32 {
-    (((1.0 - 3.0 * a2 + 3.0 * a1) * t + (3.0 * a2 - 6.0 * a1)) * t + (3.0 * a1)) * t
-}
-
-fn cubic_interpolator_slope(t: f32, a1: f32, a2: f32) -> f32 {
-    3.0 * (1.0 - 3.0 * a2 + 3.0 * a1) * t * t + 2.0 * (3.0 * a2 - 6.0 * a1) * t + (3.0 * a1)
-}
-
-fn cubic_interpolator_get_t(x: f32, x1: f32, x2: f32) -> f32 {
-    const SPLINE_TABLE_SIZE: usize = 11;
-    const SAMPLE_STEP_SIZE: f32 = 1.0 / (SPLINE_TABLE_SIZE as f32 - 1.0);
-    const NEWTON_ITERATIONS: usize = 4;
-    const NEWTON_MIN_SLOPE: f32 = 0.001;
-    const SUBDIVISION_PRECISION: f32 = 0.0000001;
-    const SUBDIVISION_MAX_ITERATIONS: usize = 10;
-
-    let mut values = [0.0; SPLINE_TABLE_SIZE];
-    for (i, value) in values.iter_mut().enumerate() {
-        *value = cubic_interpolator_calc_bezier(i as f32 * SAMPLE_STEP_SIZE, x1, x2);
-    }
-
-    let mut interval_start = 0.0;
-    let mut current_sample = 1;
-    let last_sample = SPLINE_TABLE_SIZE - 1;
-    while current_sample != last_sample && values[current_sample] <= x {
-        interval_start += SAMPLE_STEP_SIZE;
-        current_sample += 1;
-    }
-    current_sample -= 1;
-
-    let dist = (x - values[current_sample]) / (values[current_sample + 1] - values[current_sample]);
-    let mut guess_for_t = interval_start + dist * SAMPLE_STEP_SIZE;
-    let initial_slope = cubic_interpolator_slope(guess_for_t, x1, x2);
-    if initial_slope >= NEWTON_MIN_SLOPE {
-        for _ in 0..NEWTON_ITERATIONS {
-            let current_slope = cubic_interpolator_slope(guess_for_t, x1, x2);
-            if current_slope == 0.0 {
-                return guess_for_t;
-            }
-            let current_x = cubic_interpolator_calc_bezier(guess_for_t, x1, x2) - x;
-            guess_for_t -= current_x / current_slope;
-        }
-        guess_for_t
-    } else if initial_slope == 0.0 {
-        guess_for_t
-    } else {
-        let mut upper_bound = interval_start + SAMPLE_STEP_SIZE;
-        let mut iterations = 0;
-        loop {
-            let current_t = interval_start + (upper_bound - interval_start) / 2.0;
-            let current_x = cubic_interpolator_calc_bezier(current_t, x1, x2) - x;
-            if current_x > 0.0 {
-                upper_bound = current_t;
-            } else {
-                interval_start = current_t;
-            }
-            iterations += 1;
-            if current_x.abs() <= SUBDIVISION_PRECISION || iterations >= SUBDIVISION_MAX_ITERATIONS
-            {
-                return current_t;
-            }
-        }
-    }
-}
-
-#[derive(Clone)]
-struct TextGlyph {
-    glyph_id: u32,
-    cluster: u32,
-    advance: f32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct CxxScriptRun<'a> {
-    text: &'a str,
-    byte_start: usize,
-    script: HarfScript,
-}
-
-fn cxx_script_runs(text: &str) -> Vec<CxxScriptRun<'_>> {
-    let Some((_, first_character)) = text.char_indices().next() else {
-        return Vec::new();
-    };
-
-    // Exact port of the script-boundary half of
-    // `HBFont::onShapeText`. The first code point starts a run with its raw
-    // Unicode Script value. Common, inherited, and non-spacing characters
-    // after that inherit the preceding run's script.
-    let mut runs = Vec::with_capacity(1);
-    let mut run_byte_start = 0;
-    let mut last_script = harfrust_script_for_unicode_script(first_character.script());
-    for (byte_index, character) in text.char_indices().skip(1) {
-        let unicode_script = if character.general_category() == GeneralCategory::NonspacingMark {
-            UnicodeScript::Inherited
-        } else {
-            character.script()
-        };
-        let mut script = harfrust_script_for_unicode_script(unicode_script);
-        if script == harfrust::script::COMMON || script == harfrust::script::INHERITED {
-            script = last_script;
-        }
-        if script != last_script {
-            runs.push(CxxScriptRun {
-                text: &text[run_byte_start..byte_index],
-                byte_start: run_byte_start,
-                script: last_script,
-            });
-            run_byte_start = byte_index;
-            last_script = script;
-        }
-    }
-    runs.push(CxxScriptRun {
-        text: &text[run_byte_start..],
-        byte_start: run_byte_start,
-        script: last_script,
-    });
-    runs
-}
-
-fn harfrust_script_for_unicode_script(script: UnicodeScript) -> HarfScript {
-    HarfScript::from_iso15924_tag(HarfTag::from_u32(script.as_iso15924_tag()))
-        .unwrap_or(harfrust::script::UNKNOWN)
-}
-
-#[derive(Clone)]
-struct StyledTextGlyph {
-    glyph_id: u32,
-    char_index: usize,
-    char_len: usize,
-    style_index: usize,
-    advance: f32,
-    scale: f32,
-}
-
-fn harfbuzz_line_metrics(font: &SkrifaFontRef<'_>, location_ref: LocationRef<'_>) -> (f32, f32) {
-    // Mirrors src/text/font_hb.cpp::make_lmx: HarfBuzz scales extents to
-    // kStdScale and rounds them before Rive applies the authored font size. Its
-    // OpenType funcs use the platform line-metric policy: OS/2 typo metrics
-    // only when USE_TYPO_METRICS is set, hhea otherwise, with font fallbacks.
-    let metrics = font.metrics(Size::new(TEXT_SHAPE_SCALE_F32), location_ref);
-    (metrics.ascent.round(), metrics.descent.round())
-}
-
-fn harfbuzz_scaled_glyph_top(raw_edge: f32) -> f32 {
-    // C++ asks HarfBuzz for integer glyph extents after scaling to 2048.
-    // Skrifa returns exact varied bounds as floats, so keep integral bounds
-    // stable and snap fractional varied tops to HarfBuzz's lower integer step.
-    let rounded = raw_edge.round();
-    if (raw_edge - rounded).abs() <= 1e-4 {
-        rounded
-    } else {
-        raw_edge.trunc() - 1.0
-    }
-}
-
-fn disable_legacy_kern_for_advances(font: &SkrifaFontRef<'_>) -> bool {
-    font.kern().is_ok() && font.gpos().is_err()
-}
-
-fn shape_text_glyphs(
-    shaper: &harfrust::Shaper<'_>,
-    text: &str,
-    disable_legacy_kern: bool,
-) -> Vec<TextGlyph> {
-    let mut glyphs = Vec::new();
-    for run in cxx_script_runs(text) {
-        let cluster_offset = u32::try_from(run.byte_start).unwrap_or(u32::MAX);
-        let mut run_glyphs =
-            shape_cxx_script_run_glyphs(shaper, run.text, run.script, disable_legacy_kern);
-        for glyph in &mut run_glyphs {
-            glyph.cluster = glyph.cluster.saturating_add(cluster_offset);
-        }
-        glyphs.extend(run_glyphs);
-    }
-    glyphs
-}
-
-fn shape_cxx_script_run_glyphs(
-    shaper: &harfrust::Shaper<'_>,
-    text: &str,
-    script: HarfScript,
-    disable_legacy_kern: bool,
-) -> Vec<TextGlyph> {
-    let mut buffer = UnicodeBuffer::new();
-    buffer.push_str(text);
-    buffer.set_direction(Direction::LeftToRight);
-    buffer.set_script(script);
-    buffer.guess_segment_properties();
-    let kern_off = [Feature::new(HarfTag::new(b"kern"), 0, ..)];
-    let shape_options = ShapeOptions::new().scale(Some(TEXT_SHAPE_SCALE));
-    let shape_options = if disable_legacy_kern {
-        shape_options.features(&kern_off)
-    } else {
-        shape_options
-    };
-    let glyphs = shaper.shape(buffer, shape_options);
-    glyphs
-        .glyph_infos()
-        .iter()
-        .zip(glyphs.glyph_positions())
-        .map(|(info, position)| TextGlyph {
-            glyph_id: info.glyph_id,
-            cluster: info.cluster,
-            advance: position.x_advance as f32,
-        })
-        .collect()
-}
-
-fn shape_text_glyphs_for_style(
-    font_bytes: &[u8],
-    style: &StaticTextStyle<'_>,
-    instance: &ArtboardInstance,
-    text: &str,
-) -> Result<Vec<TextGlyph>> {
-    let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
-    let harf_variations = style.harf_variations(instance);
-    let shaper_instance = if harf_variations.is_empty() {
-        None
-    } else {
-        Some(ShaperInstance::from_variations(
-            &harf_font,
-            harf_variations.iter().copied(),
-        ))
-    };
-    let shaper_data = ShaperData::new(&harf_font);
-    let shaper = shaper_data
-        .shaper(&harf_font)
-        .instance(shaper_instance.as_ref())
-        .build();
-    let skrifa_font = SkrifaFontRef::new(font_bytes).context("failed to parse font for shaping")?;
-    Ok(shape_text_glyphs(
-        &shaper,
-        text,
-        disable_legacy_kern_for_advances(&skrifa_font),
-    ))
-}
-
-trait StaticTextWords {
-    fn split_word_bound_indices(&self) -> Vec<(usize, &str)>;
-}
-
-impl StaticTextWords for str {
-    fn split_word_bound_indices(&self) -> Vec<(usize, &str)> {
-        let mut words = Vec::new();
-        let mut start = None;
-        for (index, ch) in self.char_indices() {
-            if ch.is_whitespace() {
-                if let Some(word_start) = start.take() {
-                    words.push((word_start, &self[word_start..index]));
-                }
-            } else if start.is_none() {
-                start = Some(index);
-            }
-        }
-        if let Some(word_start) = start {
-            words.push((word_start, &self[word_start..]));
-        }
-        words
-    }
-}
-
-fn text_glyph_width(glyphs: &[TextGlyph], scale: f32, letter_spacing: f32) -> f32 {
-    glyphs
-        .iter()
-        .map(|glyph| glyph.advance * scale + letter_spacing)
-        .sum()
-}
-
-fn first_fitting_glyph_end(
-    glyphs: &[TextGlyph],
-    max_width: f32,
-    scale: f32,
-    letter_spacing: f32,
-) -> usize {
-    let mut width = 0.0;
-    for (index, glyph) in glyphs.iter().enumerate() {
-        let advance = glyph.advance * scale + letter_spacing;
-        if width + advance > max_width {
-            return index.max(1);
-        }
-        width += advance;
-    }
-    glyphs.len()
-}
-
-fn apply_static_ellipsis(
-    glyphs: &mut Vec<StyledTextGlyph>,
-    ellipsis: Vec<StyledTextGlyph>,
-    max_width: f32,
-    force: bool,
-) {
-    // Exact port of C++ `src/text/text_engine.cpp`
-    // `OrderedLine::buildEllipsisRuns`: the final visual line first measures
-    // its authored advances without reserving room for an ellipsis. If the
-    // entire line fits, C++ returns the original glyphs unchanged.
-    if !force {
-        let mut authored_width = 0.0f32;
-        let mut fits = true;
-        for glyph in glyphs.iter() {
-            authored_width += glyph.advance;
-            if authored_width > max_width {
-                fits = false;
-                break;
-            }
-        }
-        if fits {
-            return;
-        }
-    }
-
-    let ellipsis_width = ellipsis.iter().map(|glyph| glyph.advance).sum::<f32>();
-    let mut width = 0.0;
-    let mut keep = glyphs.len();
-    for (index, glyph) in glyphs.iter().enumerate() {
-        if width + glyph.advance + ellipsis_width > max_width {
-            keep = index;
-            break;
-        }
-        width += glyph.advance;
-    }
-    if keep < glyphs.len() {
-        glyphs.truncate(keep);
-        glyphs.extend(ellipsis);
-    } else if force {
-        glyphs.extend(ellipsis);
-    }
-}
-
-struct TextOutlinePen {
-    commands: Vec<RuntimePathCommand>,
-    x: f32,
-    y: f32,
-    scale: f32,
-    center_x: f32,
-    center_y: f32,
-    transform: Mat2D,
-    current: Option<(f32, f32)>,
-    contour_start: Option<(f32, f32)>,
-    current_outline: Option<(f32, f32)>,
-    contour_start_outline: Option<(f32, f32)>,
-}
-
-impl TextOutlinePen {
-    fn new(x: f32, y: f32, scale: f32, center_x: f32, center_y: f32, transform: Mat2D) -> Self {
-        Self {
-            commands: Vec::new(),
-            x,
-            y,
-            scale,
-            center_x,
-            center_y,
-            transform,
-            current: None,
-            contour_start: None,
-            current_outline: None,
-            contour_start_outline: None,
-        }
-    }
-
-    fn normalize_outline_point(x: f32, y: f32) -> (f32, f32) {
-        let inverse_shape_scale = 1.0 / TEXT_SHAPE_SCALE_F32;
-        (x * inverse_shape_scale, -y * inverse_shape_scale)
-    }
-
-    fn map_normalized(&self, x: f32, y: f32) -> (f32, f32) {
-        let font_size = self.scale * TEXT_SHAPE_SCALE_F32;
-        if self.transform == Mat2D::IDENTITY {
-            // C++ first records HarfBuzz outlines in em units, then maps the
-            // normalized path with the font-size matrix. Preserve its scale-
-            // and-translate operation order here.
-            let glyph_center = self.center_x - self.x;
-            let translation_x = -glyph_center + (self.x + glyph_center);
-            return (font_size * x + translation_x, font_size * y + self.y);
-        }
-        let point = (self.x + x * font_size, self.y + y * font_size);
-        let transformed = self
-            .transform
-            .transform_point(point.0 - self.center_x, point.1 - self.center_y);
-        (self.center_x + transformed.0, self.center_y + transformed.1)
-    }
-
-    fn map(&self, x: f32, y: f32) -> ((f32, f32), (f32, f32)) {
-        let outline = Self::normalize_outline_point(x, y);
-        (self.map_normalized(outline.0, outline.1), outline)
-    }
-}
-
-impl OutlinePen for TextOutlinePen {
-    fn move_to(&mut self, x: f32, y: f32) {
-        let (point, outline) = self.map(x, y);
-        self.commands.push(RuntimePathCommand::Move {
-            x: point.0,
-            y: point.1,
-        });
-        self.current = Some(point);
-        self.contour_start = Some(point);
-        self.current_outline = Some(outline);
-        self.contour_start_outline = Some(outline);
-    }
-
-    fn line_to(&mut self, x: f32, y: f32) {
-        if self.scale == 0.0 {
-            // C++ RawPath collapses zero-size glyph contours to move/close pairs.
-            return;
-        }
-        let (point, outline) = self.map(x, y);
-        self.commands.push(RuntimePathCommand::Line {
-            x: point.0,
-            y: point.1,
-        });
-        self.current = Some(point);
-        self.current_outline = Some(outline);
-    }
-
-    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-        if self.scale == 0.0 {
-            return;
-        }
-        let Some(current_outline) = self.current_outline else {
-            self.move_to(x, y);
-            return;
-        };
-        let control_outline = Self::normalize_outline_point(cx0, cy0);
-        let end_outline = Self::normalize_outline_point(x, y);
-        // C++ converts HarfBuzz quadratic contours to cubics before applying
-        // the glyph matrix. Doing the lerps after mapping is algebraically
-        // equivalent but rounds hundreds of text control points differently.
-        let t = 2.0 / 3.0;
-        let control1_outline = (
-            current_outline.0 + (control_outline.0 - current_outline.0) * t,
-            current_outline.1 + (control_outline.1 - current_outline.1) * t,
-        );
-        let control2_outline = (
-            end_outline.0 + (control_outline.0 - end_outline.0) * t,
-            end_outline.1 + (control_outline.1 - end_outline.1) * t,
-        );
-        let control1 = self.map_normalized(control1_outline.0, control1_outline.1);
-        let control2 = self.map_normalized(control2_outline.0, control2_outline.1);
-        let end = self.map_normalized(end_outline.0, end_outline.1);
-        self.commands.push(RuntimePathCommand::Cubic {
-            x1: control1.0,
-            y1: control1.1,
-            x2: control2.0,
-            y2: control2.1,
-            x3: end.0,
-            y3: end.1,
-        });
-        self.current = Some(end);
-        self.current_outline = Some(end_outline);
-    }
-
-    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        if self.scale == 0.0 {
-            return;
-        }
-        let (control0, _) = self.map(cx0, cy0);
-        let (control1, _) = self.map(cx1, cy1);
-        let (end, end_outline) = self.map(x, y);
-        self.commands.push(RuntimePathCommand::Cubic {
-            x1: control0.0,
-            y1: control0.1,
-            x2: control1.0,
-            y2: control1.1,
-            x3: end.0,
-            y3: end.1,
-        });
-        self.current = Some(end);
-        self.current_outline = Some(end_outline);
-    }
-
-    fn close(&mut self) {
-        if let (Some(current), Some(start)) = (self.current, self.contour_start)
-            && ((current.0 - start.0).abs() > f32::EPSILON
-                || (current.1 - start.1).abs() > f32::EPSILON)
-        {
-            self.commands.push(RuntimePathCommand::Line {
-                x: start.0,
-                y: start.1,
-            });
-        }
-        self.commands.push(RuntimePathCommand::Close);
-        self.current = self.contour_start;
-        self.current_outline = self.contour_start_outline;
-    }
-}
+include!("text/text_variation_helper.rs");
 
 fn global_for_local(graph: &ArtboardGraph, local_id: usize) -> Result<u32> {
     graph
@@ -6614,6 +4500,7 @@ mod tests {
             height: 100.0,
             width_scale_type: 0,
             height_scale_type: 0,
+            layout_direction: 0,
         };
 
         let measured = slice

@@ -17,6 +17,7 @@ use crate::data_bind_graph::{
     RuntimeDataBindGraphContextKind, data_bind_flags_apply_source_to_target,
 };
 use crate::data_context::RuntimeStateMachineDataContext;
+use crate::draw::{runtime_path_geometry_hit_test, runtime_text_value_run_hit_test};
 use crate::focus::RuntimeFocusTree;
 use crate::listener_group::{ListenerGroup, ListenerGroupKind, select_listener_action};
 use crate::properties::property_key_for_name;
@@ -5652,6 +5653,10 @@ impl StateMachineInstance {
         position: (f32, f32),
     ) -> bool {
         let owner = artboard.component_at(component);
+        if owner.type_name == "TextValueRun" {
+            return artboard.component_hit_test_point(component, position, true, true)
+                && runtime_text_value_run_hit_test(artboard, owner.local_id, position);
+        }
         if owner.type_name != "Shape" {
             return artboard.component_hit_test_point(component, position, true, true);
         }
@@ -5661,36 +5666,23 @@ impl StateMachineInstance {
         let Some(shape) = owner.concrete.shape.as_ref() else {
             return false;
         };
+        let Some(graph) = artboard.runtime_graph() else {
+            return false;
+        };
         for path in &shape.paths {
             let path_owner = artboard.component_at(*path);
-            if path_owner.is_collapsed()
-                || path_owner.transform.world_transform.determinant() == 0.0
-            {
+            let path_world = artboard.runtime_component_world_transform(path_owner.local_id, graph);
+            if path_owner.is_collapsed() || path_world.determinant() == 0.0 {
                 continue;
             }
-            if path_owner.type_name != "Rectangle" {
+            let Some(path) = graph
+                .paths
+                .iter()
+                .find(|path| path.local_id == path_owner.local_id)
+            else {
                 continue;
-            }
-            let local = path_owner
-                .transform
-                .world_transform
-                .invert_or_identity()
-                .transform_point(position.0, position.1);
-            let property = |name, default| {
-                property_key_for_name("Rectangle", name)
-                    .and_then(|key| artboard.double_property(path_owner.local_id, key))
-                    .unwrap_or(default)
             };
-            let width = property("width", 0.0);
-            let height = property("height", 0.0);
-            let left = -width * property("originX", 0.5);
-            let top = -height * property("originY", 0.5);
-            const HIT_RADIUS: f32 = 2.0;
-            if local.0 >= left - HIT_RADIUS
-                && local.0 <= left + width + HIT_RADIUS
-                && local.1 >= top - HIT_RADIUS
-                && local.1 <= top + height + HIT_RADIUS
-            {
+            if runtime_path_geometry_hit_test(artboard, path, path_world, position) {
                 return true;
             }
         }
@@ -5808,8 +5800,9 @@ impl StateMachineInstance {
                 if captured_drag {
                     group.mark_dragged();
                 }
-                let click_matched =
-                    pointer_state.clicked && listener.has_listener(RuntimeListenerType::Click);
+                let click_matched = pointer_state.clicked
+                    && !pointer_state.drag_ended
+                    && listener.has_listener(RuntimeListenerType::Click);
                 if hit_type == RuntimeListenerType::Down && is_hovered {
                     if listener.has_listener(RuntimeListenerType::Click)
                         || listener.has_listener(RuntimeListenerType::Drag)
@@ -5899,7 +5892,22 @@ impl StateMachineInstance {
         for hit in &mut hit_components {
             hit.prepare_event(artboard, &mut groups, position, hit_type, pointer_id);
         }
-
+        if hit_type == RuntimeListenerType::Up
+            && groups
+                .iter()
+                .any(|group| group.phase_is_down(pointer_id) && group.has_dragged())
+        {
+            // C++ ListenerGroup::processEvent calls StateMachineInstance::dragEnd
+            // before it evaluates Clicked. dragEnd recursively resets every
+            // listener group and its pointerMove turns the clicked phases back
+            // to Out (`listener_group.cpp:171-210`;
+            // `state_machine_instance.cpp:1598-1607`). The direct FL-D owner
+            // avoids that recursive traversal, so retain its one observable
+            // effect explicitly for every group participating in this up.
+            for group in &mut groups {
+                group.suppress_click_once(pointer_id);
+            }
+        }
         let mut result = HitResult::None;
         if hit_type == RuntimeListenerType::Move
             && groups.iter().any(|group| {
@@ -5960,7 +5968,11 @@ impl StateMachineInstance {
     ) -> Option<(usize, (f32, f32))> {
         let component = component?;
         let owner = artboard.component_at(component);
-        if owner.is_collapsed() || owner.transform.world_transform.determinant() == 0.0 {
+        let world = artboard
+            .runtime_graph()
+            .map(|graph| artboard.runtime_component_world_transform(owner.local_id, graph))
+            .unwrap_or(owner.transform.world_transform);
+        if owner.is_collapsed() || world.determinant() == 0.0 {
             return None;
         }
         let paused = property_key_for_name("NestedArtboard", "isPaused")
@@ -5971,12 +5983,29 @@ impl StateMachineInstance {
         }
         Some((
             owner.local_id,
-            owner
-                .transform
-                .world_transform
+            world
                 .invert_or_identity()
                 .transform_point(position.0, position.1),
         ))
+    }
+
+    fn nested_host_ancestors_hit(
+        artboard: &ArtboardInstance,
+        component: Option<ComponentHandle>,
+        position: (f32, f32),
+    ) -> bool {
+        let Some(host) = component else {
+            return false;
+        };
+        let Some(parent) = artboard.component_parent_handle(host) else {
+            return true;
+        };
+        // A hit inside the mounted Artboard eventually reaches
+        // `Artboard::hitTestPoint`, which crosses the ArtboardHost boundary.
+        // `NestedArtboard::hitTestHost` deliberately resumes at the host's
+        // parent (not the host itself), preserving ancestor layout clipping
+        // (`artboard.cpp:1575-1599`; `nested_artboard.cpp:529-535`).
+        artboard.component_hit_test_point(parent, position, false, false)
     }
 
     fn hit_test_nested_artboard(
@@ -5985,6 +6014,9 @@ impl StateMachineInstance {
         component: Option<ComponentHandle>,
         position: (f32, f32),
     ) -> bool {
+        if !Self::nested_host_ancestors_hit(artboard, component, position) {
+            return false;
+        }
         let Some((local_id, position)) = Self::nested_local_position(artboard, component, position)
         else {
             return false;
@@ -6015,93 +6047,98 @@ impl StateMachineInstance {
         timestamp_seconds: f32,
         pointer_id: i32,
     ) -> HitResult {
+        let can_hit = can_hit && Self::nested_host_ancestors_hit(artboard, component, position);
         let Some((local_id, position)) = Self::nested_local_position(artboard, component, position)
         else {
             return HitResult::None;
         };
-        let Some(nested) = artboard.nested_artboards.get_mut(&local_id) else {
-            return HitResult::None;
-        };
-        let mut result = HitResult::None;
-        for animation in &mut nested.animations {
-            let crate::artboard::RuntimeNestedAnimationInstance::StateMachine(occurrence) =
-                animation
-            else {
-                continue;
+        let result = {
+            let Some(nested) = artboard.nested_artboards.get_mut(&local_id) else {
+                return HitResult::None;
             };
-            let Some(state_machine) = occurrence.state_machine_mut() else {
-                continue;
-            };
-            let routed = if can_hit {
-                match hit_type {
+            let mut result = HitResult::None;
+            for animation in &mut nested.animations {
+                let crate::artboard::RuntimeNestedAnimationInstance::StateMachine(occurrence) =
+                    animation
+                else {
+                    continue;
+                };
+                let Some(state_machine) = occurrence.state_machine_mut() else {
+                    continue;
+                };
+                let routed = if can_hit {
+                    match hit_type {
+                        RuntimeListenerType::Down
+                        | RuntimeListenerType::Up
+                        | RuntimeListenerType::Move
+                        | RuntimeListenerType::Exit => state_machine
+                            .update_listeners(
+                                &mut nested.child,
+                                hit_type,
+                                position.0,
+                                position.1,
+                                pointer_id,
+                                if hit_type == RuntimeListenerType::Move {
+                                    timestamp_seconds
+                                } else {
+                                    0.0
+                                },
+                                None,
+                                None,
+                                &mut NoopScriptHost,
+                            )
+                            .unwrap_or(HitResult::None),
+                        RuntimeListenerType::DragStart => {
+                            let _ = state_machine.drag_start(
+                                &mut nested.child,
+                                position.0,
+                                position.1,
+                                timestamp_seconds,
+                                pointer_id,
+                            );
+                            HitResult::None
+                        }
+                        RuntimeListenerType::DragEnd => {
+                            let _ = state_machine.drag_end(
+                                &mut nested.child,
+                                position.0,
+                                position.1,
+                                timestamp_seconds,
+                                pointer_id,
+                            );
+                            HitResult::None
+                        }
+                        _ => HitResult::None,
+                    }
+                } else if matches!(
+                    hit_type,
                     RuntimeListenerType::Down
-                    | RuntimeListenerType::Up
-                    | RuntimeListenerType::Move
-                    | RuntimeListenerType::Exit => state_machine
-                        .update_listeners(
-                            &mut nested.child,
-                            hit_type,
-                            position.0,
-                            position.1,
-                            pointer_id,
-                            if hit_type == RuntimeListenerType::Move {
-                                timestamp_seconds
-                            } else {
-                                0.0
-                            },
-                            None,
-                            None,
-                            &mut NoopScriptHost,
-                        )
-                        .unwrap_or(HitResult::None),
-                    RuntimeListenerType::DragStart => {
-                        let _ = state_machine.drag_start(
-                            &mut nested.child,
-                            position.0,
-                            position.1,
-                            timestamp_seconds,
-                            pointer_id,
-                        );
-                        HitResult::None
-                    }
-                    RuntimeListenerType::DragEnd => {
-                        let _ = state_machine.drag_end(
-                            &mut nested.child,
-                            position.0,
-                            position.1,
-                            timestamp_seconds,
-                            pointer_id,
-                        );
-                        HitResult::None
-                    }
-                    _ => HitResult::None,
-                }
-            } else if matches!(
-                hit_type,
-                RuntimeListenerType::Down
-                    | RuntimeListenerType::Up
-                    | RuntimeListenerType::Move
-                    | RuntimeListenerType::Exit
-            ) {
-                let _ = state_machine.update_listeners(
-                    &mut nested.child,
-                    RuntimeListenerType::Exit,
-                    position.0,
-                    position.1,
-                    pointer_id,
-                    0.0,
-                    None,
-                    None,
-                    &mut NoopScriptHost,
-                );
-                HitResult::None
-            } else {
-                HitResult::None
-            };
-            // Pinned nested routing deliberately lets a later child overwrite
-            // an earlier hit/opaque result.
-            result = routed;
-        }
+                        | RuntimeListenerType::Up
+                        | RuntimeListenerType::Move
+                        | RuntimeListenerType::Exit
+                ) {
+                    let _ = state_machine.update_listeners(
+                        &mut nested.child,
+                        RuntimeListenerType::Exit,
+                        position.0,
+                        position.1,
+                        pointer_id,
+                        0.0,
+                        None,
+                        None,
+                        &mut NoopScriptHost,
+                    );
+                    HitResult::None
+                } else {
+                    HitResult::None
+                };
+                // Pinned nested routing deliberately lets a later child
+                // overwrite an earlier hit/opaque result.
+                result = routed;
+            }
+            result
+        };
+        artboard.publish_nested_view_model_context_mutations(local_id);
         result
     }
 
@@ -9774,7 +9811,7 @@ impl StateMachineInstance {
         };
 
         bindable_trigger.set_value(value);
-        if !self.write_owned_view_model_context_with_listener_boundary(
+        let changed = self.write_owned_view_model_context_with_listener_boundary(
             context,
             data_bind_index,
             |graph, context, data_bind_index| {
@@ -9785,7 +9822,8 @@ impl StateMachineInstance {
                     property_path,
                 )
             },
-        ) {
+        );
+        if !changed {
             return false;
         }
         self.needs_advance = true;

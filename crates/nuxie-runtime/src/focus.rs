@@ -90,7 +90,7 @@ impl FocusNode {
         Self {
             parent: None,
             children: Vec::new(),
-            has_focusable: true,
+            has_focusable: false,
             can_focus: true,
             can_touch: true,
             can_traverse: true,
@@ -1484,6 +1484,10 @@ fn authored_focus_node(
     root_transform: Mat2D,
 ) -> FocusNode {
     let mut node = FocusNode::new();
+    // C++ FocusData::onAddedDirty wires the authored FocusData through a
+    // Focusable into its FocusNode. A bare FocusNode starts with nullptr, but
+    // a node constructed from authored FocusData is therefore backed.
+    node.has_focusable = true;
     let focus_flags = property_key_for_name("FocusData", "focusFlags")
         .and_then(|property_key| artboard.objects.uint_property(focus_local, property_key))
         .unwrap_or(7);
@@ -1678,16 +1682,11 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-focus-node-representation"]
-    fn upstream_focus_node_fresh_focusable_scope_and_manager_defaults() {
+    fn upstream_focus_node_fresh_focusable_defaults_to_null() {
         let node = FocusNode::new();
         assert!(
             !node.has_focusable,
-            "focus_test.cpp:91 expects a fresh FocusNode::focusable() to be null"
-        );
-        panic!(
-            "focus_test.cpp:94/96 also exposes per-node isScope() and manager() pointers; \
-             nuxie-runtime infers scope topology and stores ownership in FocusManager"
+            "focus_test.cpp:88 expects a fresh FocusNode::focusable() to be null"
         );
     }
 
@@ -1932,6 +1931,7 @@ mod tests {
         assert!(!manager.has_focusable_content());
 
         let mut authored = FocusNode::new();
+        authored.has_focusable = true;
         authored.set_can_focus(false);
         authored.set_can_traverse(false);
         authored.set_eligible(false);
@@ -2071,6 +2071,7 @@ mod tests {
     fn only_unbacked_structural_scopes_are_transparent_to_traversal() {
         let mut manager = FocusManager::new();
         let mut authored_scope = FocusNode::new();
+        authored_scope.has_focusable = true;
         authored_scope.set_can_focus(false);
         let authored_scope = manager.create_node(authored_scope);
         let blocked_leaf = manager.create_node(FocusNode::new());

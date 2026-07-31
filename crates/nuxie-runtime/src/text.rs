@@ -265,6 +265,57 @@ pub(crate) fn static_text_selection_rects(
     layout.selection_rects(range)
 }
 
+/// Test one authored `TextValueRun` against the glyph advance rectangles that
+/// C++ records in `Text::shape` for `TextValueRun::hitTestPoint`.
+pub(crate) fn static_text_value_run_hit(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    instance: &ArtboardInstance,
+    text_local: usize,
+    run_local: usize,
+    layout_constraint: Option<RuntimeTextLayoutConstraint>,
+    text_world: Mat2D,
+    point: RenderVec2D,
+    hit_radius: f32,
+) -> bool {
+    let Ok(slice) = StaticTextSlice::from_graph(runtime, graph, text_local) else {
+        return false;
+    };
+    if !slice
+        .text_geometry_supported(runtime, instance)
+        .unwrap_or(false)
+    {
+        return false;
+    }
+    let Ok(runs) = slice.resolved_runs(runtime, instance) else {
+        return false;
+    };
+    let Some(run) = runs.iter().find(|run| run.local_id == run_local) else {
+        return false;
+    };
+    let Ok(Some(layout)) = slice.shaped_layout_from_resolved_runs(
+        runtime,
+        instance,
+        layout_constraint,
+        text_world,
+        &runs,
+        StaticShapedTextPurpose::Geometry,
+    ) else {
+        return false;
+    };
+    let start = char_byte_index(&layout.text, run.char_start);
+    let end = char_byte_index(&layout.text, run.char_start.saturating_add(run.char_len));
+    layout
+        .selection_rects(start..end)
+        .into_iter()
+        .any(|bounds| {
+            point.x >= bounds.min_x - hit_radius
+                && point.x <= bounds.max_x + hit_radius
+                && point.y >= bounds.min_y - hit_radius
+                && point.y <= bounds.max_y + hit_radius
+        })
+}
+
 #[allow(clippy::arithmetic_side_effects)]
 fn static_fixed_text_constraint_bounds(
     runtime: &RuntimeFile,
@@ -5775,10 +5826,7 @@ impl TextOutlinePen {
             // and-translate operation order here.
             let glyph_center = self.center_x - self.x;
             let translation_x = -glyph_center + (self.x + glyph_center);
-            return (
-                font_size.mul_add(x, translation_x),
-                font_size.mul_add(y, self.y),
-            );
+            return (font_size * x + translation_x, font_size * y + self.y);
         }
         let point = (self.x + x * font_size, self.y + y * font_size);
         let transformed = self
@@ -6431,7 +6479,7 @@ mod tests {
     }
 
     #[test]
-    fn quadratic_outline_conversion_precedes_glyph_mapping() {
+    fn quadratic_outline_conversion_uses_cpp_non_fused_glyph_mapping() {
         let mut pen = TextOutlinePen::new(
             0.1,
             0.0,
@@ -6457,12 +6505,13 @@ mod tests {
             mapped_start.0 + (mapped_control.0 - mapped_start.0) * t,
             mapped_start.1 + (mapped_control.1 - mapped_start.1) * t,
         );
-        assert_ne!(
+        assert_eq!(
             (expected.0.to_bits(), expected.1.to_bits()),
             (
                 mapped_then_lerped.0.to_bits(),
                 mapped_then_lerped.1.to_bits()
-            )
+            ),
+            "the pinned C++ multiply-then-add mapping preserves this affine equality"
         );
 
         pen.move_to(start.0, start.1);

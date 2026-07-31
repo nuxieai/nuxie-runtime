@@ -3284,7 +3284,10 @@ impl ArtboardInstance {
         let Some(layout) = owner.concrete.layout.as_ref() else {
             return false;
         };
-        let world = owner.transform.world_transform;
+        let world = self
+            .runtime_graph()
+            .map(|graph| self.runtime_component_world_transform(owner.local_id, graph))
+            .unwrap_or(owner.transform.world_transform);
         if world.determinant() == 0.0 {
             return false;
         }
@@ -3649,7 +3652,10 @@ impl ArtboardInstance {
         if data_bind_observed {
             self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         }
-        self.mark_changed();
+        // `SolidColor::renderOpacityChanged()` mutates the retained
+        // RenderPaint and calls only `Artboard::changed()`; it does not dirty
+        // component/path preparation (`solid_color.cpp:23-54`).
+        self.did_change.set(true);
         // Pinned C++ `SolidColor::colorValueChanged` immediately calls
         // `renderOpacityChanged` and mutates the ShapePaint-owned paint
         // (`solid_color.cpp:23-54`). It does not dirty or reconstruct the
@@ -3658,7 +3664,6 @@ impl ArtboardInstance {
         if let Some(revision) = self.solid_color_paint_revisions.get_mut(local_id) {
             *revision = revision.wrapping_add(1);
         }
-        self.mark_tree_paint_preparation_changed();
         self.mark_prepared_changed_for_solid_color_visibility(Some(previous), value);
         true
     }
@@ -3672,7 +3677,15 @@ impl ArtboardInstance {
     ) -> bool {
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
-        self.mark_changed();
+        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("SolidColor")
+            && solid_color_value_property_key() == Some(property_key)
+        {
+            // See `SolidColor::renderOpacityChanged`: the renderer-visible
+            // paint changes in place without invalidating prepared paths.
+            self.did_change.set(true);
+        } else {
+            self.mark_changed_unless_view_model_instance(local_id);
+        }
         self.mark_text_changed_for_local(local_id);
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("SolidColor")
             && solid_color_value_property_key() == Some(property_key)
@@ -3685,10 +3698,8 @@ impl ArtboardInstance {
             if let Some(revision) = self.solid_color_paint_revisions.get_mut(local_id) {
                 *revision = revision.wrapping_add(1);
             }
-            // SolidColor mutates its retained paint in place, so it does not
-            // invalidate local prepared geometry. A parent preparation frame
-            // still needs to observe the nested paint value change.
-            self.mark_tree_paint_preparation_changed();
+            // The retained paint is shared with the parent renderer
+            // occurrence, so neither local nor tree preparation is dirtied.
         } else {
             self.mark_runtime_shape_property_changed(local_id, false);
         }
@@ -4051,7 +4062,7 @@ impl ArtboardInstance {
         self.apply_double_property_changed(local_id, property_key, value);
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
-        self.mark_changed();
+        self.mark_changed_unless_view_model_instance(local_id);
         self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
@@ -4080,7 +4091,7 @@ impl ArtboardInstance {
         self.apply_uint_property_changed(local_id, property_key);
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
-        self.mark_changed();
+        self.mark_changed_unless_view_model_instance(local_id);
         self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
@@ -4122,7 +4133,7 @@ impl ArtboardInstance {
         }
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
-        self.mark_changed();
+        self.mark_changed_unless_view_model_instance(local_id);
         self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_property(local_id, property_key);
         self.mark_layout_changed_for_property(local_id, property_key);
@@ -5714,6 +5725,7 @@ impl ArtboardInstance {
             let entry = self.advancing_components[index];
             changed |= match entry.kind {
                 AdvancingComponentKind::NestedArtboard => {
+                    let host_local = entry.local_id;
                     let has_dispatch = nested_event_dispatch.is_some();
                     let mut dispatch_source =
                         |artboard: &mut ArtboardInstance,
@@ -5723,8 +5735,8 @@ impl ArtboardInstance {
                                 .as_mut()
                                 .is_some_and(|dispatch| (**dispatch)(artboard, host_local, events))
                         };
-                    self.advance_nested_artboard_entry(
-                        entry.local_id,
+                    let advanced = self.advance_nested_artboard_entry(
+                        host_local,
                         elapsed_seconds,
                         new_frame,
                         script_mode,
@@ -5739,7 +5751,8 @@ impl ArtboardInstance {
                                     &[StateMachineReportedEvent],
                                 ) -> bool,
                         ),
-                    )?
+                    )?;
+                    advanced | self.publish_nested_view_model_context_mutations(host_local)
                 }
                 AdvancingComponentKind::ArtboardComponentList => self
                     .advance_component_list_entry(
@@ -6729,6 +6742,16 @@ impl ArtboardInstance {
         self.cache_epoch = self.cache_epoch.wrapping_add(1);
     }
 
+    fn mark_changed_unless_view_model_instance(&mut self, local_id: usize) {
+        if !self
+            .slot(local_id)
+            .and_then(|slot| slot.type_name)
+            .is_some_and(|type_name| type_name.starts_with("ViewModelInstance"))
+        {
+            self.mark_changed();
+        }
+    }
+
     pub(crate) fn mark_artboard_data_bind_work_dirty(&mut self) {
         self.artboard_data_bind_dirty_epoch = self.artboard_data_bind_dirty_epoch.wrapping_add(1);
     }
@@ -6821,13 +6844,44 @@ impl ArtboardInstance {
     }
 
     fn mark_text_changed_for_local(&mut self, local_id: usize) {
-        if self
+        if !self
             .text_affecting_locals
             .get(local_id)
             .copied()
             .unwrap_or(false)
         {
-            self.mark_text_changed();
+            return;
+        }
+        let Some(parent_key) = property_key_for_name("Component", "parentId") else {
+            return;
+        };
+        let mut text_local = local_id;
+        let mut remaining = self.slots.len().saturating_add(1);
+        while remaining != 0 {
+            remaining -= 1;
+            if matches!(
+                self.slot(text_local).and_then(|slot| slot.type_name),
+                Some("Text" | "TextInput")
+            ) {
+                // The concrete Text callback rebuilds only this Text's
+                // render styles. In particular, TextValueRun setters do not
+                // invalidate sibling Text occurrences
+                // (`text_value_run.cpp:90-113`, `text.cpp:534-543`).
+                self.runtime_drawables
+                    .mark_text_render_styles_dirty_for_local(text_local);
+                return;
+            }
+            let Some(parent_local) = self
+                .objects
+                .uint_property(text_local, parent_key)
+                .and_then(|parent| usize::try_from(parent).ok())
+            else {
+                return;
+            };
+            if parent_local == text_local || parent_local >= self.slots.len() {
+                return;
+            }
+            text_local = parent_local;
         }
     }
 
@@ -7127,8 +7181,13 @@ impl ArtboardInstance {
                 | ComponentDirt::PAINT))
             .is_empty()
         {
-            self.runtime_drawables
-                .mark_text_resource_dirty_for_local(local_id);
+            if !(accumulated & (ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT)).is_empty() {
+                self.runtime_drawables
+                    .mark_text_render_styles_dirty_for_local(local_id);
+            } else {
+                self.runtime_drawables
+                    .mark_text_resource_dirty_for_local(local_id);
+            }
         }
         self.runtime_meshes
             .mark_component_dirt(local_id, accumulated);
@@ -7768,8 +7827,8 @@ impl ArtboardInstance {
                     nested
                         .child
                         .reset_retained_components_for_state_machine_settlement();
-                    if let Some(context) = nested.stateful_view_model_context.as_mut() {
-                        context.advanced_data_context();
+                    if let Some(context) = nested.stateful_view_model_context.as_ref() {
+                        context.borrow_mut().advanced_data_context();
                     }
                 }
                 ResettingComponentKind::ArtboardComponentList => {
@@ -7924,10 +7983,18 @@ impl ArtboardInstance {
     }
 
     fn sync_nested_artboard_root_opacity(&mut self, host_local_id: usize) -> bool {
-        let Some(host_opacity) = self
-            .component(host_local_id)
-            .map(|component| component.transform.render_opacity)
-        else {
+        let Some(host_opacity) = self.component(host_local_id).map(|component| {
+            if component.transform.render_opacity == 0.0 && !component.dirt.is_empty() {
+                // During clone construction the retained runtime opacity
+                // has not run its first dependency update. C++
+                // NestedArtboard::onAdded observes the authored host
+                // opacity at this boundary, not Rust's zero-initialized
+                // derived cache.
+                self.authored_transform(host_local_id).opacity
+            } else {
+                component.transform.render_opacity
+            }
+        }) else {
             return false;
         };
         let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
@@ -9973,7 +10040,9 @@ impl RuntimeNestedArtboardInstance {
         let Some(existing_context) = existing.stateful_view_model_context.as_ref() else {
             return false;
         };
-        if replacement_context.view_model_index() != existing_context.view_model_index() {
+        if replacement_context.borrow().view_model_index()
+            != existing_context.borrow().view_model_index()
+        {
             return false;
         }
         self.stateful_view_model_context = Some(existing_context.clone());
@@ -10409,18 +10478,19 @@ fn build_runtime_nested_artboard_instance(
         .and_then(|artboard| artboard.uint_property("viewModelId"))
         .and_then(|view_model_id| usize::try_from(view_model_id).ok())
         .filter(|&view_model_index| file.view_model(view_model_index).is_some());
-    let stateful_view_model_instance_local = is_stateful
-        .then_some(child_view_model_index)
-        .flatten()
+    // onAddedClean retains the first authored standard child VMI as the
+    // active local root; tryScheduleBindStateful then binds that exact pointer
+    // whenever the mounted instance is present (`nested_artboard.cpp:567-621,
+    // 156-180`). `isStateful` controls replacement/default creation, not this
+    // authored-child bind.
+    let stateful_view_model_instance_local = child_view_model_index
         .and_then(|view_model_index| u32::try_from(view_model_index).ok())
         .and_then(|view_model_id| {
             data_bind_view_model_instance_locals_by_id
                 .get(&view_model_id)
                 .copied()
         });
-    let stateful_view_model_context = if !is_stateful {
-        None
-    } else if let Some(local_id) = stateful_view_model_instance_local {
+    let stateful_view_model_context = if let Some(local_id) = stateful_view_model_instance_local {
         let slot = parent_slots.iter().find(|slot| slot.local_id == local_id);
         slot.and_then(|slot| file.object(slot.source_global_id as usize))
             .and_then(|instance| {
@@ -10432,12 +10502,15 @@ fn build_runtime_nested_artboard_instance(
                     instance,
                 )
             })
-    } else {
+    } else if is_stateful {
         child_view_model_index.and_then(|view_model_index| {
             RuntimeOwnedViewModelInstance::from_instance(file, view_model_index, 0)
                 .or_else(|| RuntimeOwnedViewModelInstance::new(file, view_model_index))
         })
-    };
+    } else {
+        None
+    }
+    .map(RuntimeOwnedViewModelHandle::new);
     let stateful_global_view_model_contexts = data_bind_view_model_instance_locals_by_id
         .iter()
         .filter_map(|(&view_model_id, &local_id)| {
@@ -10453,7 +10526,7 @@ fn build_runtime_nested_artboard_instance(
                 view_model_index,
                 instance,
             )?;
-            Some((view_model_index, context))
+            Some((view_model_index, RuntimeOwnedViewModelHandle::new(context)))
         })
         .collect();
     let data_bind_source_locals_by_path = build_nested_host_data_bind_source_locals(
@@ -12938,7 +13011,7 @@ mod tests {
             authored
                 .stateful_view_model_context
                 .as_ref()
-                .map(RuntimeOwnedViewModelInstance::view_model_index),
+                .map(|context| context.borrow().view_model_index()),
             Some(0)
         );
         assert!(authored.stateful_view_model_instance_local.is_some());
@@ -12956,7 +13029,7 @@ mod tests {
             replacement
                 .stateful_view_model_context
                 .as_ref()
-                .map(RuntimeOwnedViewModelInstance::view_model_index),
+                .map(|context| context.borrow().view_model_index()),
             Some(1),
             "a stateful source switch with no matching authored child must create the replacement VM default"
         );
@@ -12965,7 +13038,7 @@ mod tests {
             replacement
                 .stateful_global_view_model_contexts
                 .get(&2)
-                .map(RuntimeOwnedViewModelInstance::view_model_index),
+                .map(|context| context.borrow().view_model_index()),
             Some(2),
             "the replacement local main remains combined with authored global contexts"
         );
@@ -12974,13 +13047,16 @@ mod tests {
             .stateful_view_model_context
             .as_ref()
             .expect("generated replacement context")
+            .borrow()
             .instance_identity();
         assert!(
             parent
                 .nested_artboards
                 .get_mut(&host_local_id)
                 .and_then(|nested| nested.stateful_view_model_context.as_mut())
-                .is_some_and(|context| context.set_number_by_property_index(0, 42.0))
+                .is_some_and(|context| {
+                    context.borrow_mut().set_number_by_property_index(0, 42.0)
+                })
         );
         assert!(parent.set_nested_artboard_artboard_id(host_local_id, 3));
         let same_view_model_replacement = parent
@@ -12991,7 +13067,7 @@ mod tests {
             same_view_model_replacement
                 .stateful_view_model_context
                 .as_ref()
-                .map(RuntimeOwnedViewModelInstance::instance_identity),
+                .map(|context| context.borrow().instance_identity()),
             Some(replacement_context_identity),
             "an owned replacement context survives a source switch to another artboard with the same VM"
         );
@@ -12999,14 +13075,14 @@ mod tests {
             same_view_model_replacement
                 .stateful_view_model_context
                 .as_ref()
-                .and_then(|context| context.number_value_by_slot(0)),
+                .and_then(|context| context.borrow().number_value_by_slot(0)),
             Some(42.0),
             "same-VM reuse preserves runtime mutations"
         );
     }
 
     #[test]
-    fn non_stateful_nested_host_does_not_activate_an_authored_child_view_model() {
+    fn non_stateful_nested_host_activates_an_authored_child_view_model() {
         let bytes = synthetic_riv(9701, |bytes| {
             push_synthetic_object(bytes, "Backboard", &[]);
             push_synthetic_object(bytes, "ViewModel", &[]);
@@ -13038,8 +13114,15 @@ mod tests {
             .get(&host_local_id)
             .expect("authored nested occurrence");
 
-        assert_eq!(nested.stateful_view_model_instance_local, None);
-        assert!(nested.stateful_view_model_context.is_none());
+        assert!(nested.stateful_view_model_instance_local.is_some());
+        assert_eq!(
+            nested
+                .stateful_view_model_context
+                .as_ref()
+                .map(|context| context.borrow().view_model_index()),
+            Some(0),
+            "NestedArtboard::onAddedClean retains the authored standard child VMI even when the host is not stateful"
+        );
         assert!(nested.stateful_global_view_model_contexts.is_empty());
     }
 
@@ -15301,7 +15384,11 @@ mod tests {
 
         assert!(instance.set_keyed_solid_color_property(0, color_key, false, 0xff00_ff00));
 
-        assert!(instance.cache_epoch() > initial_cache_epoch);
+        assert_eq!(
+            instance.cache_epoch(),
+            initial_cache_epoch,
+            "SolidColor::colorChanged mutates the existing RenderPaint synchronously without invalidating draw topology"
+        );
         assert_eq!(instance.prepared_epoch(), initial_prepared_epoch);
         assert_eq!(instance.path_epoch(), initial_path_epoch);
         assert_eq!(instance.layout_epoch(), initial_layout_epoch);

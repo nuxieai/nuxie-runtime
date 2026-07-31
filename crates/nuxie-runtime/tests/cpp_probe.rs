@@ -17191,9 +17191,11 @@ fn read_rust_graph_instance_from_bytes(
         .artboards
         .first()
         .unwrap_or_else(|| panic!("missing Rust artboard for {label}"));
-    let instance = ArtboardInstance::from_graph(&runtime, artboard).unwrap_or_else(|err| {
-        panic!("failed to build Rust artboard instance for {label}: {err:#}");
-    });
+    let instance =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
+            .unwrap_or_else(|err| {
+                panic!("failed to build Rust artboard instance for {label}: {err:#}");
+            });
 
     (runtime, graph, instance)
 }
@@ -20048,7 +20050,6 @@ fn upstream_click_event_fixture_initial_and_first_click_contract() {
 }
 
 #[test]
-#[ignore = "finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-click-up-outside"]
 fn upstream_click_event_fixture_reports_exact_group_click_sequence() {
     let (_, mut artboard, mut machine, _, _) = upstream_click_event_fixture_instance();
     let mut counts = Vec::new();
@@ -24195,7 +24196,7 @@ fn assert_fl_c5_pointer_down_up_fixture_matches_cpp(
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
-    let rust_updated = rust.update_components();
+    let rust_updated = rust.update_pass();
     let after_update = state_machine.clone();
 
     let rust_pointer_down_hit = state_machine.pointer_down(&mut rust, x, y, 0);
@@ -24209,7 +24210,7 @@ fn assert_fl_c5_pointer_down_up_fixture_matches_cpp(
     compare_state_machine_advance(
         &all_cpp_reports[0],
         &after_update,
-        rust_updated.did_update,
+        rust_updated,
         &format!("{label} WP3 initial update"),
     );
     let cpp_reports = &all_cpp_reports[1..];

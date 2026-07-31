@@ -22,6 +22,7 @@ struct PointerData {
     current_hovered: bool,
     previous_hovered: bool,
     phase: PointerPhase,
+    suppress_click: bool,
     previous_position: (f32, f32),
     captured_event_context: Option<StateMachineEventContext>,
 }
@@ -33,6 +34,7 @@ impl PointerData {
             current_hovered: false,
             previous_hovered: false,
             phase: PointerPhase::Out,
+            suppress_click: false,
             previous_position: (0.0, 0.0),
             captured_event_context: None,
         }
@@ -120,6 +122,7 @@ impl ListenerGroup {
         let data = &mut self.pointer_data[index];
         data.previous_hovered = data.current_hovered;
         data.current_hovered = false;
+        data.suppress_click = false;
         if data.phase == PointerPhase::Clicked {
             data.phase = PointerPhase::Out;
         }
@@ -174,7 +177,7 @@ impl ListenerGroup {
         let current_hovered = data.current_hovered;
         let previous_hovered = data.previous_hovered;
         let phase_is_down = data.phase == PointerPhase::Down;
-        let clicked = data.phase == PointerPhase::Clicked;
+        let clicked = data.phase == PointerPhase::Clicked && !data.suppress_click;
         let previous_position = data.previous_position;
         let drag_ended = phase_was_down
             && matches!(data.phase, PointerPhase::Clicked | PointerPhase::Out)
@@ -210,6 +213,10 @@ impl ListenerGroup {
 
     pub(crate) fn has_dragged(&self) -> bool {
         self.has_dragged
+    }
+
+    pub(crate) fn suppress_click_once(&mut self, pointer_id: i32) {
+        self.ensure_pointer_data(pointer_id).suppress_click = true;
     }
 
     pub(crate) fn begin_capture(

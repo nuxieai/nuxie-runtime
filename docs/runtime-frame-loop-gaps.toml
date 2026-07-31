@@ -1129,7 +1129,7 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_hit_three_pass_order_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "for\\s+group\\s+in\\s+&mut\\s+groups\\s*\\{\\s*group\\.reset\\([\\s\\S]{0,500}for\\s+hit\\s+in\\s+&mut\\s+hit_components\\s*\\{\\s*hit\\.prepare_event\\([\\s\\S]{0,200}let\\s+mut\\s+result\\s*=\\s*HitResult::None\\s*;[\\s\\S]{0,3500}for\\s+hit\\s+in\\s+&mut\\s+hit_components\\s*\\{\\s*let\\s+item\\s*=\\s*hit\\.process_event\\("
+pattern = "for\\s+group\\s+in\\s+&mut\\s+groups\\s*\\{\\s*group\\.reset\\([\\s\\S]{0,500}for\\s+hit\\s+in\\s+&mut\\s+hit_components\\s*\\{\\s*hit\\.prepare_event\\([\\s\\S]{0,1600}let\\s+mut\\s+result\\s*=\\s*HitResult::None\\s*;[\\s\\S]{0,3500}for\\s+hit\\s+in\\s+&mut\\s+hit_components\\s*\\{\\s*let\\s+item\\s*=\\s*hit\\.process_event\\("
 min_occurrences = 1
 max_occurrences = 1
 

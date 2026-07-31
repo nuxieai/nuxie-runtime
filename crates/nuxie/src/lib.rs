@@ -4041,6 +4041,24 @@ impl<'a> ArtboardInstance<'a> {
         })
     }
 
+    /// Instantiate this artboard's authored default view-model instance.
+    ///
+    /// Rive stores the model reference on the Artboard as `viewModelId`; the
+    /// authored default for that model is its first serialized
+    /// `ViewModelInstance`. Unlike [`ArtboardInstance::instantiate_view_model`],
+    /// this preserves the authored instance values instead of constructing
+    /// generated field defaults. Returns `None` when the artboard has no view
+    /// model or that model has no authored instance.
+    pub fn instantiate_default_view_model_instance(&self) -> Option<ViewModelInstance> {
+        let view_model_index = self.view_model_index()?;
+        let instance_index = self
+            .file
+            .runtime
+            .view_model_default_instance(view_model_index)?
+            .instance_index;
+        self.instantiate_view_model_instance(instance_index)
+    }
+
     /// Instantiate this artboard's view model from the source instance at
     /// `instance_index` (the order the instances appear in the file), cloning
     /// and completing nested ViewModel/list references like C++
@@ -4732,6 +4750,17 @@ impl OwnedArtboardInstance {
         })
     }
 
+    /// See [`ArtboardInstance::instantiate_default_view_model_instance`].
+    pub fn instantiate_default_view_model_instance(&self) -> Option<ViewModelInstance> {
+        let view_model_index = self.view_model_index()?;
+        let instance_index = self
+            .file
+            .runtime
+            .view_model_default_instance(view_model_index)?
+            .instance_index;
+        self.instantiate_view_model_instance(instance_index)
+    }
+
     /// See [`ArtboardInstance::instantiate_view_model_instance`].
     pub fn instantiate_view_model_instance(
         &self,
@@ -5087,6 +5116,38 @@ impl ViewModelInstance {
         self.raw
             .borrow_mut()
             .set_enum_by_property_name_path(name_path, value)
+    }
+
+    /// Set an ARGB color property by name path. Returns whether the property
+    /// existed and changed.
+    pub fn set_color(&mut self, name_path: &str, argb: u32) -> bool {
+        self.raw
+            .borrow_mut()
+            .set_color_by_property_name_path(name_path, argb)
+    }
+
+    /// Fire a trigger property by name path. This increments the backing
+    /// counter with wrapping arithmetic, matching the low-level scripting
+    /// facade, and returns whether the trigger existed and changed.
+    pub fn fire_trigger(&mut self, name_path: &str) -> bool {
+        let Some(value) = self
+            .raw
+            .borrow()
+            .trigger_value_by_property_name_path(name_path)
+        else {
+            return false;
+        };
+        self.raw
+            .borrow_mut()
+            .set_trigger_by_property_name_path(name_path, value.wrapping_add(1))
+    }
+
+    /// Set an artboard-reference property by name path. Returns whether the
+    /// property existed and changed.
+    pub fn set_artboard(&mut self, name_path: &str, value: u64) -> bool {
+        self.raw
+            .borrow_mut()
+            .set_artboard_by_property_name_path(name_path, value)
     }
 }
 
@@ -5455,10 +5516,8 @@ mod inert_script_import_tests {
 #[cfg(test)]
 mod owned_instance_tests {
     use super::*;
-    #[cfg(feature = "scripting")]
     use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
     use nuxie_render_api::{PersistentFactory, RecordingFactory};
-    #[cfg(not(feature = "scripting"))]
     use nuxie_schema::definition_by_name;
 
     const FIXTURE: &[u8] = include_bytes!("../../../fixtures/graph/dependency_test.riv");
@@ -5494,6 +5553,160 @@ mod owned_instance_tests {
         let mut factory = script_factory();
         draw(&mut factory).expect("draw succeeds");
         factory.borrow().stream()
+    }
+
+    fn authoring_property(
+        type_name: &str,
+        property_name: &str,
+        value: AuthoringValue,
+    ) -> AuthoringProperty {
+        let definition = definition_by_name(type_name).expect("fixture type exists");
+        let key = std::iter::once(definition)
+            .chain(
+                definition
+                    .ancestors
+                    .iter()
+                    .filter_map(|ancestor| definition_by_name(ancestor)),
+            )
+            .flat_map(|owner| owner.properties)
+            .find(|property| property.name == property_name)
+            .expect("fixture property exists")
+            .key
+            .int;
+        AuthoringProperty { key, value }
+    }
+
+    fn authoring_record(
+        type_name: &str,
+        properties: Vec<(&str, AuthoringValue)>,
+    ) -> AuthoringRecord {
+        AuthoringRecord {
+            type_key: definition_by_name(type_name)
+                .expect("fixture type exists")
+                .type_key
+                .int,
+            properties: properties
+                .into_iter()
+                .map(|(name, value)| authoring_property(type_name, name, value))
+                .collect(),
+        }
+    }
+
+    fn facade_view_model_file() -> File {
+        let runtime = RuntimeFile::from_authoring_records(vec![
+            authoring_record("Backboard", Vec::new()),
+            authoring_record(
+                "ViewModel",
+                vec![("name", AuthoringValue::String("Root".to_owned()))],
+            ),
+            authoring_record(
+                "ViewModelPropertyColor",
+                vec![("name", AuthoringValue::String("tint".to_owned()))],
+            ),
+            authoring_record(
+                "ViewModelPropertyTrigger",
+                vec![("name", AuthoringValue::String("submit".to_owned()))],
+            ),
+            authoring_record(
+                "ViewModelPropertyArtboard",
+                vec![("name", AuthoringValue::String("destination".to_owned()))],
+            ),
+            authoring_record(
+                "ViewModelInstance",
+                vec![
+                    (
+                        "name",
+                        AuthoringValue::String("Authored defaults".to_owned()),
+                    ),
+                    ("viewModelId", AuthoringValue::Uint(0)),
+                ],
+            ),
+            authoring_record(
+                "ViewModelInstanceColor",
+                vec![
+                    ("viewModelPropertyId", AuthoringValue::Uint(0)),
+                    ("propertyValue", AuthoringValue::Color(0xff12_3456)),
+                ],
+            ),
+            authoring_record(
+                "ViewModelInstanceTrigger",
+                vec![
+                    ("viewModelPropertyId", AuthoringValue::Uint(1)),
+                    ("propertyValue", AuthoringValue::Uint(3)),
+                ],
+            ),
+            authoring_record(
+                "ViewModelInstanceArtboard",
+                vec![
+                    ("viewModelPropertyId", AuthoringValue::Uint(2)),
+                    ("propertyValue", AuthoringValue::Uint(7)),
+                ],
+            ),
+            authoring_record("Artboard", vec![("viewModelId", AuthoringValue::Uint(0))]),
+        ])
+        .expect("facade view-model fixture imports");
+        File::from_runtime(runtime).expect("facade view-model graph")
+    }
+
+    fn assert_extended_view_model_facade(mut view_model: ViewModelInstance) {
+        assert_eq!(
+            view_model.raw().color_value_by_property_name_path("tint"),
+            Some(0xff12_3456),
+            "default instantiation preserves the authored color"
+        );
+        assert_eq!(
+            view_model
+                .raw()
+                .trigger_value_by_property_name_path("submit"),
+            Some(3),
+            "default instantiation preserves the authored trigger counter"
+        );
+        assert_eq!(
+            view_model
+                .raw()
+                .artboard_value_by_property_name_path("destination"),
+            Some(7),
+            "default instantiation preserves the authored artboard reference"
+        );
+
+        assert!(view_model.set_color("tint", 0xff65_4321));
+        assert!(!view_model.set_color("tint", 0xff65_4321));
+        assert!(view_model.fire_trigger("submit"));
+        assert_eq!(
+            view_model
+                .raw()
+                .trigger_value_by_property_name_path("submit"),
+            Some(4),
+            "firing increments the low-level trigger counter"
+        );
+        assert!(view_model.set_artboard("destination", 11));
+        assert!(!view_model.set_artboard("destination", 11));
+        assert!(!view_model.set_color("missing", 0));
+        assert!(!view_model.fire_trigger("missing"));
+        assert!(!view_model.set_artboard("missing", 0));
+    }
+
+    #[test]
+    fn borrowed_and_owned_artboards_expose_authored_default_view_model_and_extended_setters() {
+        let file = facade_view_model_file();
+        let borrowed = file
+            .default_artboard()
+            .expect("default artboard")
+            .instantiate()
+            .expect("borrowed artboard");
+        assert_extended_view_model_facade(
+            borrowed
+                .instantiate_default_view_model_instance()
+                .expect("borrowed authored default"),
+        );
+
+        let owned = OwnedArtboardInstance::instantiate_default(Arc::new(facade_view_model_file()))
+            .expect("owned artboard");
+        assert_extended_view_model_facade(
+            owned
+                .instantiate_default_view_model_instance()
+                .expect("owned authored default"),
+        );
     }
 
     #[cfg(not(feature = "scripting"))]

@@ -16568,12 +16568,7 @@ fn materialize_view_model_default(
                 EditReason::CapacityExceeded,
             )
         })?;
-        numbers.insert(
-            number.id,
-            MaterializedViewModelNumber {
-                property_index,
-            },
-        );
+        numbers.insert(number.id, MaterializedViewModelNumber { property_index });
     }
     let mut strings = BTreeMap::new();
     for string in &model.strings {
@@ -24697,12 +24692,15 @@ mod tests {
             .list_items_by_property_name_path("items")
             .and_then(|items| items.into_iter().next())
             .context("initial retained list child")?;
-        assert!(root
-            .borrow_mut()
-            .set_trigger_by_property_name_path("fire", 3));
-        assert!(child
-            .borrow_mut()
-            .set_number_by_property_name_path("value", 7.0));
+        assert!(
+            root.borrow_mut()
+                .set_trigger_by_property_name_path("fire", 3)
+        );
+        assert!(
+            child
+                .borrow_mut()
+                .set_number_by_property_name_path("value", 7.0)
+        );
 
         scene.edit(|tx| {
             tx.set_artboard(
@@ -24746,10 +24744,12 @@ mod tests {
                 .number_value_by_property_name("value"),
             Some(7.0)
         );
-        assert!(scene
-            .authored_view_models
-            .get(&defaults)
-            .is_some_and(|retained| retained.handle().ptr_eq(&root)));
+        assert!(
+            scene
+                .authored_view_models
+                .get(&defaults)
+                .is_some_and(|retained| retained.handle().ptr_eq(&root))
+        );
         Ok(())
     }
 
@@ -28036,6 +28036,358 @@ mod tests {
         Ok(factory.borrow().canonical_recording().stream().to_owned())
     }
 
+    fn owned_canonical_draw_with_fresh_factory(
+        instance: &mut OwnedArtboardInstance,
+    ) -> Result<String> {
+        instance.reset_renderer();
+        owned_canonical_draw(instance)
+    }
+
+    #[test]
+    fn post_bind_number_write_refreshes_bound_geometry_on_zero_advance() -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Bound width".into(),
+                width: 200.0,
+                height: 120.0,
+            })?;
+            let shape = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Card".into(),
+                    x: 100.0,
+                    y: 60.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let rectangle = tx.create(
+                Parent::Object(shape),
+                NodeSpec::Rectangle(RectangleSpec::new("Bounds", 10.0, 30.0)),
+            )?;
+            let fill = tx.create(
+                Parent::Object(shape),
+                NodeSpec::Fill(FillSpec {
+                    name: "Fill".into(),
+                }),
+            )?;
+            let color = tx.create(
+                Parent::Object(fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Color".into(),
+                    color: 0xff12_3456,
+                }),
+            )?;
+            let mut view_models = tx.view_models();
+            let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Card values".into(),
+            })?;
+            let width = view_models.create_number(
+                model,
+                ViewModelNumberSpec {
+                    name: "width".into(),
+                },
+            )?;
+            let accent = view_models.create_color(
+                model,
+                ViewModelColorSpec {
+                    name: "accent".into(),
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                model,
+                ViewModelInstanceSpec {
+                    name: Some("Defaults".into()),
+                },
+            )?;
+            view_models.set_number(defaults, width, 10.0)?;
+            view_models.set_color(defaults, accent, 0xff12_3456)?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            view_models.bind_number(
+                rectangle,
+                props::PATH_WIDTH,
+                ViewModelNumberSource::direct(width),
+            )?;
+            view_models.bind_color(
+                color,
+                props::COLOR_VALUE,
+                ViewModelColorSource::direct(accent),
+            )?;
+            Ok(())
+        })?;
+
+        let bytes = encode_authoring_records(scene.export_records().into_authoring_records());
+        let file = Arc::new(File::import(&bytes)?);
+        let mut instance = OwnedArtboardInstance::instantiate(Arc::clone(&file), 0)?;
+        let mut view_model = instance
+            .instantiate_default_view_model_instance()
+            .context("artboard authored default view model")?;
+
+        assert!(view_model.set_number("width", 40.0));
+        assert!(view_model.set_color("accent", 0xff34_5678));
+        assert!(instance.bind_view_model(&view_model));
+        assert!(instance.advance(0.0));
+        let width_40 = owned_canonical_draw_with_fresh_factory(&mut instance)?;
+
+        assert!(view_model.set_number("width", 70.0));
+        assert!(view_model.set_color("accent", 0xff45_6789));
+        assert_eq!(
+            view_model.raw().number_value_by_property_name("width"),
+            Some(70.0)
+        );
+        instance.advance(0.0);
+        let post_bind_without_rebind = owned_canonical_draw_with_fresh_factory(&mut instance)?;
+
+        let mut no_rebind_reference = OwnedArtboardInstance::instantiate(Arc::clone(&file), 0)?;
+        let mut no_rebind_reference_view_model = no_rebind_reference
+            .instantiate_default_view_model_instance()
+            .context("no-rebind reference authored default view model")?;
+        assert!(no_rebind_reference_view_model.set_number("width", 70.0));
+        assert!(no_rebind_reference_view_model.set_color("accent", 0xff45_6789));
+        assert!(no_rebind_reference.bind_view_model(&no_rebind_reference_view_model));
+        assert!(no_rebind_reference.advance(0.0));
+        let no_rebind_pre_bind = owned_canonical_draw_with_fresh_factory(&mut no_rebind_reference)?;
+        assert_eq!(
+            post_bind_without_rebind, no_rebind_pre_bind,
+            "the retained context must deliver post-bind number and color writes without rebinding"
+        );
+
+        assert!(view_model.set_number("width", 90.0));
+        assert!(view_model.set_color("accent", 0xff65_4321));
+        let _ = instance.bind_view_model(&view_model);
+        instance.advance(0.0);
+        let post_bind_width_90 = owned_canonical_draw_with_fresh_factory(&mut instance)?;
+
+        let mut reference = OwnedArtboardInstance::instantiate(file, 0)?;
+        let mut reference_view_model = reference
+            .instantiate_default_view_model_instance()
+            .context("reference authored default view model")?;
+        assert!(reference_view_model.set_number("width", 90.0));
+        assert!(reference_view_model.set_color("accent", 0xff65_4321));
+        assert!(reference.bind_view_model(&reference_view_model));
+        assert!(reference.advance(0.0));
+        let pre_bind_width_90 = owned_canonical_draw_with_fresh_factory(&mut reference)?;
+
+        instance.advance(0.016);
+        let post_bind_width_90_after_nonzero =
+            owned_canonical_draw_with_fresh_factory(&mut instance)?;
+
+        assert_ne!(width_40, pre_bind_width_90);
+        assert_eq!(
+            post_bind_width_90_after_nonzero, pre_bind_width_90,
+            "elapsed time must not gate delivery of a post-bind number write"
+        );
+        assert_eq!(
+            post_bind_width_90, pre_bind_width_90,
+            "rebinding the same retained handle must not prevent a post-bind number write from refreshing bound geometry"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn post_bind_string_boolean_and_enum_writes_refresh_bound_visuals() -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let font = tx.create_font_asset(FontAssetSpec {
+                name: "Roboto A".into(),
+                bytes: fixture_font_bytes(),
+            })?;
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Bound scalars".into(),
+                width: 240.0,
+                height: 120.0,
+            })?;
+            let shape = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Visible card".into(),
+                    x: 200.0,
+                    y: 60.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(shape),
+                NodeSpec::Rectangle(RectangleSpec::new("Card", 40.0, 40.0)),
+            )?;
+            let fill = tx.create(
+                Parent::Object(shape),
+                NodeSpec::Fill(FillSpec {
+                    name: "Card fill".into(),
+                }),
+            )?;
+            tx.create(
+                Parent::Object(fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Card color".into(),
+                    color: 0xff12_3456,
+                }),
+            )?;
+
+            let text = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Text(TextSpec {
+                    name: "Labels".into(),
+                    x: 5.0,
+                    y: 5.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    width: 170.0,
+                    height: 100.0,
+                    sizing: SceneTextSizing::Fixed,
+                    align: SceneTextAlign::Left,
+                    wrap: SceneTextWrap::NoWrap,
+                    overflow: SceneTextOverflow::Visible,
+                }),
+            )?;
+            let style = tx.create(
+                Parent::Object(text),
+                NodeSpec::TextStylePaint(TextStylePaintSpec {
+                    name: "Label style".into(),
+                    font_size: 18.0,
+                    line_height: 22.0,
+                    letter_spacing: 0.0,
+                    font,
+                }),
+            )?;
+            let text_fill = tx.create(
+                Parent::Object(style),
+                NodeSpec::Fill(FillSpec {
+                    name: "Label fill".into(),
+                }),
+            )?;
+            tx.create(
+                Parent::Object(text_fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Label color".into(),
+                    color: 0xffab_cdef,
+                }),
+            )?;
+            let label_run = tx.create(
+                Parent::Object(text),
+                NodeSpec::TextValueRun(TextValueRunSpec {
+                    name: "Label".into(),
+                    text: String::new(),
+                    style,
+                }),
+            )?;
+            let status_run = tx.create(
+                Parent::Object(text),
+                NodeSpec::TextValueRun(TextValueRunSpec {
+                    name: "Status".into(),
+                    text: String::new(),
+                    style,
+                }),
+            )?;
+            let enum_to_string = tx.data_converters().create(DataConverterSpec::ToString {
+                name: "Enum to string".into(),
+                decimals: 0,
+                round: false,
+                trim_zeros: false,
+                commas: false,
+                color_format: String::new(),
+            })?;
+            let mut view_models = tx.view_models();
+            let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Scalar values".into(),
+            })?;
+            let label = view_models.create_string(
+                model,
+                ViewModelStringSpec {
+                    name: "label".into(),
+                },
+            )?;
+            let shown = view_models.create_boolean(
+                model,
+                ViewModelBooleanSpec {
+                    name: "shown".into(),
+                },
+            )?;
+            let status = view_models.create_enum(
+                model,
+                ViewModelEnumSpec {
+                    name: "status".into(),
+                    values: vec!["idle".into(), "ready".into()],
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                model,
+                ViewModelInstanceSpec {
+                    name: Some("Defaults".into()),
+                },
+            )?;
+            view_models.set_string(defaults, label, "before")?;
+            view_models.set_boolean(defaults, shown, true)?;
+            view_models.set_enum(defaults, status, 0)?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            view_models.bind_text(label_run, label)?;
+            view_models.bind_visibility(shape, shown, VisibilityCondition::WhenTrue, 1.0)?;
+            view_models.bind_text_with_converter(
+                status_run,
+                ViewModelValueSource::Enum(ViewModelEnumSource::direct(status)),
+                enum_to_string,
+                ViewModelDataBindingDirection::ToTarget,
+            )?;
+            Ok(())
+        })?;
+
+        let bytes = encode_authoring_records(scene.export_records().into_authoring_records());
+        let file = Arc::new(File::import(&bytes)?);
+        let mut instance = OwnedArtboardInstance::instantiate(Arc::clone(&file), 0)?;
+        let mut view_model = instance
+            .instantiate_default_view_model_instance()
+            .context("artboard authored default view model")?;
+        assert!(instance.bind_view_model(&view_model));
+        assert!(instance.advance(0.0));
+        let before = owned_canonical_draw_with_fresh_factory(&mut instance)?;
+
+        assert!(view_model.set_string("label", "after"));
+        assert!(view_model.set_bool("shown", false));
+        assert!(view_model.set_enum("status", 1));
+        assert_eq!(
+            view_model.raw().string_value_by_property_name("label"),
+            Some(Arc::from(&b"after"[..]))
+        );
+        assert_eq!(
+            view_model.raw().boolean_value_by_property_name("shown"),
+            Some(false)
+        );
+        assert_eq!(
+            view_model.raw().enum_value_by_property_name_path("status"),
+            Some(1)
+        );
+        instance.advance(0.0);
+        let post_bind = owned_canonical_draw_with_fresh_factory(&mut instance)?;
+
+        let mut reference = OwnedArtboardInstance::instantiate(file, 0)?;
+        let mut reference_view_model = reference
+            .instantiate_default_view_model_instance()
+            .context("reference authored default view model")?;
+        assert!(reference_view_model.set_string("label", "after"));
+        assert!(reference_view_model.set_bool("shown", false));
+        assert!(reference_view_model.set_enum("status", 1));
+        assert!(reference.bind_view_model(&reference_view_model));
+        assert!(reference.advance(0.0));
+        let pre_bind = owned_canonical_draw_with_fresh_factory(&mut reference)?;
+
+        assert_ne!(before, pre_bind);
+        assert_eq!(
+            post_bind, pre_bind,
+            "post-bind string, boolean, and enum writes must match pre-bind delivery"
+        );
+        Ok(())
+    }
+
     #[test]
     fn authored_feather_round_trips_exact_riv_and_draws_after_import() -> Result<()> {
         let mut scene = Scene::new();
@@ -28939,6 +29291,92 @@ mod tests {
                 .raw()
                 .string_value_by_property_name("name")
                 .is_some_and(|value| value.as_ref() == "Nuxie Pro".as_bytes())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn authored_default_view_model_values_round_trip_through_borrowed_and_owned_facades()
+    -> Result<()> {
+        let mut scene = Scene::new();
+        scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Authored defaults".into(),
+                width: 120.0,
+                height: 40.0,
+            })?;
+            let mut view_models = tx.view_models();
+            let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Settings".into(),
+            })?;
+            let scale = view_models.create_number(
+                model,
+                ViewModelNumberSpec {
+                    name: "scale".into(),
+                },
+            )?;
+            let enabled = view_models.create_boolean(
+                model,
+                ViewModelBooleanSpec {
+                    name: "enabled".into(),
+                },
+            )?;
+            let title = view_models.create_string(
+                model,
+                ViewModelStringSpec {
+                    name: "title".into(),
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                model,
+                ViewModelInstanceSpec {
+                    name: Some("Settings defaults".into()),
+                },
+            )?;
+            view_models.set_number(defaults, scale, 2.5)?;
+            view_models.set_boolean(defaults, enabled, true)?;
+            view_models.set_string(defaults, title, "authored")?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            Ok(())
+        })?;
+
+        let bytes = encode_authoring_records(scene.export_records().into_authoring_records());
+        let assert_authored_values = |view_model: ViewModelInstance| {
+            assert_eq!(
+                view_model.raw().number_value_by_property_name_path("scale"),
+                Some(2.5)
+            );
+            assert_eq!(
+                view_model
+                    .raw()
+                    .boolean_value_by_property_name_path("enabled"),
+                Some(true)
+            );
+            assert!(
+                view_model
+                    .raw()
+                    .string_value_by_property_name_path("title")
+                    .is_some_and(|value| value.as_ref() == b"authored")
+            );
+        };
+
+        let borrowed_file = File::import(&bytes)?;
+        let borrowed = borrowed_file
+            .default_artboard()
+            .context("borrowed default artboard")?
+            .instantiate()?;
+        assert_authored_values(
+            borrowed
+                .instantiate_default_view_model_instance()
+                .context("borrowed authored default instance")?,
+        );
+
+        let owned = OwnedArtboardInstance::instantiate_default(Arc::new(File::import(&bytes)?))?;
+        assert_authored_values(
+            owned
+                .instantiate_default_view_model_instance()
+                .context("owned authored default instance")?,
         );
         Ok(())
     }

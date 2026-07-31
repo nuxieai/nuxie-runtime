@@ -10,6 +10,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+mod serializing;
+pub use serializing::{SerializingFactory, SerializingRenderer};
+
 pub type ColorInt = u32;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -2976,6 +2979,47 @@ mod tests {
                 "frame\n",
             )
         );
+    }
+
+    #[test]
+    fn sriv_serializer_matches_cpp_smoke_stream() {
+        let mut factory = SerializingFactory::new();
+        let mut renderer = factory.make_renderer();
+        let path = factory.make_empty_render_path();
+        let mut paint = factory.make_render_paint();
+
+        paint.color(0xff336699);
+        factory.frame_size(64, 64);
+        renderer.save();
+        renderer.draw_path(path.as_ref(), paint.as_ref());
+        renderer.restore();
+        factory.add_frame();
+
+        assert_eq!(
+            &*factory.bytes(),
+            &[
+                b'S', b'R', b'I', b'V', 1, // header/version
+                3, 0, // makeRenderPath 0
+                5, 0, // makeRenderPaint 0
+                21, 0, 0x99, 0xcd, 0xcd, 0xf9, 0x0f, // color
+                29, 64, 64, // frameSize
+                7,  // save
+                10, 0, 0,  // drawPath
+                8,  // restore
+                28, // frame
+            ]
+        );
+    }
+
+    #[test]
+    fn sriv_serializer_does_not_emit_constructor_fill_rule() {
+        let mut factory = SerializingFactory::new();
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(1.0, 2.0);
+
+        let _path = factory.make_render_path(raw_path, FillRule::EvenOdd);
+
+        assert_eq!(&factory.bytes()[5..8], &[3, 0, 16]);
     }
 
     #[test]

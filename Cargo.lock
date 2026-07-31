@@ -1606,6 +1606,10 @@ name = "silver-corpus"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "nuxie-binary",
+ "nuxie-graph",
+ "nuxie-render-api",
+ "nuxie-runtime",
  "serde",
  "toml",
 ]

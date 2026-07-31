@@ -4,6 +4,9 @@ use std::fmt::{Display, Formatter};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod action;
+pub use action::{Action, ActionTarget, Execution};
+
 pub const EXPECTED_ENTRIES: usize = 238;
 pub const EXPECTED_RUNTIME: usize = 195;
 pub const EXPECTED_SCRIPTED: usize = 41;
@@ -758,7 +761,7 @@ pub struct Case {
     pub view_model: String,
     #[serde(default)]
     pub sample_times: Vec<f32>,
-    pub actions: String,
+    pub actions: Actions,
     pub verification: String,
     pub status: Status,
     pub producer_class: String,
@@ -766,6 +769,29 @@ pub struct Case {
     pub provenance_test: String,
     pub producer_line: usize,
     pub note: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum Actions {
+    Executable(Vec<Action>),
+    Legacy(String),
+}
+
+impl Actions {
+    pub fn executable(&self) -> Option<&[Action]> {
+        match self {
+            Self::Executable(actions) => Some(actions),
+            Self::Legacy(_) => None,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        match self {
+            Self::Executable(actions) => actions.is_empty(),
+            Self::Legacy(marker) => marker.is_empty(),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -866,14 +892,53 @@ pub fn validate_manifest(manifest: &Manifest, runtime_dir: &Path) -> anyhow::Res
             !case.deterministic.is_empty()
                 && !case.random.is_empty()
                 && !case.view_model.is_empty()
-                && !case.actions.is_empty(),
+                && (!case.actions.is_empty() || case.status == Status::UnsupportedFeature),
             "{} is missing producer settings",
             case.id
         );
 
         match case.lane {
-            Lane::Runtime => summary.runtime += 1,
-            Lane::Scripted => summary.scripted += 1,
+            Lane::Runtime => {
+                summary.runtime += 1;
+                anyhow::ensure!(
+                    case.status != Status::Pending,
+                    "{} runtime entry must be classified after execution",
+                    case.id
+                );
+                anyhow::ensure!(
+                    case.actions.executable().is_some(),
+                    "{} runtime entry must use executable actions",
+                    case.id
+                );
+                if case.status == Status::UnsupportedFeature {
+                    anyhow::ensure!(
+                        case.note.contains("Unsupported feature:"),
+                        "{} unsupported entry must name its blocking subsystem",
+                        case.id
+                    );
+                } else {
+                    anyhow::ensure!(
+                        !case.actions.is_empty(),
+                        "{} executable runtime entry must include at least one action",
+                        case.id
+                    );
+                }
+                if case.status == Status::Diverges {
+                    anyhow::ensure!(
+                        case.note.contains("first difference:"),
+                        "{} divergent entry must record its first difference",
+                        case.id
+                    );
+                }
+            }
+            Lane::Scripted => {
+                summary.scripted += 1;
+                anyhow::ensure!(
+                    case.status == Status::PendingScripted,
+                    "{} scripted entry must remain separately classified pending-scripted",
+                    case.id
+                );
+            }
             Lane::Unknown => {}
         }
         *summary.statuses.entry(case.status).or_default() += 1;
@@ -1189,7 +1254,7 @@ mod tests {
                 let id = format!("case-{index:03}");
                 fs::write(silvers.join(format!("{id}.sriv")), b"SRIV\x01").unwrap();
                 let (lane, status) = if index < EXPECTED_RUNTIME {
-                    (Lane::Runtime, Status::Pending)
+                    (Lane::Runtime, Status::UnsupportedFeature)
                 } else if index < EXPECTED_RUNTIME + EXPECTED_SCRIPTED {
                     (Lane::Scripted, Status::PendingScripted)
                 } else {
@@ -1212,7 +1277,11 @@ mod tests {
                     random: "cpp-test-defined".to_owned(),
                     view_model: "none".to_owned(),
                     sample_times: Vec::new(),
-                    actions: "cpp-test-body".to_owned(),
+                    actions: if lane == Lane::Runtime {
+                        Actions::Executable(Vec::new())
+                    } else {
+                        Actions::Legacy("cpp-test-body".to_owned())
+                    },
                     verification: "sriv-v1-epsilon".to_owned(),
                     status,
                     producer_class: status.to_string(),
@@ -1223,7 +1292,11 @@ mod tests {
                     },
                     provenance_test: "fixture".to_owned(),
                     producer_line: 1,
-                    note: "fixture".to_owned(),
+                    note: if lane == Lane::Runtime {
+                        "Unsupported feature: fixture".to_owned()
+                    } else {
+                        "fixture".to_owned()
+                    },
                 });
             }
             let manifest = Manifest {
@@ -1266,5 +1339,18 @@ mod tests {
         manifest.cases[1].id = manifest.cases[0].id.clone();
         let error = validate_manifest(&manifest, &fixture.root).unwrap_err();
         assert!(error.to_string().contains("duplicate case id"));
+    }
+
+    #[test]
+    fn manifest_validation_rejects_unclassified_runtime_entries() {
+        let (fixture, mut manifest) = TestCorpus::new();
+        manifest.cases[0].status = Status::Pending;
+        manifest.cases[0].actions = Actions::Executable(vec![Action::Draw]);
+        let error = validate_manifest(&manifest, &fixture.root).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("runtime entry must be classified after execution")
+        );
     }
 }

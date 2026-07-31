@@ -8,14 +8,20 @@ The checked-in `silver-corpus.toml` is generated from literal upstream
 layout-scroll cases are explicit generator data. `interpolator.sriv` and
 `multitouch_debug.sriv` remain explicit `provenance-unknown` entries.
 
-This adoption step validates all 238 streams structurally and catalogs the
-runtime producers. Runtime cases remain `pending` until their C++ test bodies
-are translated to the shared action DSL and replayed by Rust; the 41 scripted
-cases are separately `pending-scripted`. Accordingly, `actions =
-"cpp-test-body"` is a deliberate pending marker, not a claim that the C++ body
-is already executable by the corpus runner. The exact-ID ledger and
-`min_cpp_rust_exact` ratchet prevent future exact cases from being silently
-downgraded.
+The runner validates all 238 streams structurally. For the 195 runtime cases,
+the generator translates the replayable portion of each pinned C++ test body
+into a shared action stream. Validation imports the recorded `.riv`, selects
+the requested artboard/state machine/animation, applies those actions to the
+Rust runtime, serializes the Rust render operations as SRIV v1, and compares
+them operation by operation with the upstream baseline.
+
+Every runtime row must be classified. Replayable differences are retained as
+`diverges` findings with their first divergent operation in the note. Bodies
+that cannot yet be represented or require an unported subsystem are
+`unsupported-feature` with the blocker named. The 41 scripted cases remain
+separately `pending-scripted`, and two baselines remain
+`provenance-unknown`. The exact-ID ledger and `min_cpp_rust_exact` ratchet
+prevent exact cases from being silently downgraded.
 
 Run:
 
@@ -24,5 +30,7 @@ make silver-corpus
 cargo run -p silver-corpus -- compare expected.sriv actual.sriv
 ```
 
-An optional `--rust-output-dir` probes `<id>.sriv` files operation by operation.
-Pending differences are reported as findings; exact-entry differences fail.
+Use `--id <id>` to replay one manifest entry. An optional
+`--rust-output-dir` also probes pre-generated `<id>.sriv` files operation by
+operation. Classified divergences keep the suite green but are printed
+prominently; an exact entry that changes fails.

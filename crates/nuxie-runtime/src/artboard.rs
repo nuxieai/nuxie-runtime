@@ -3644,6 +3644,10 @@ impl ArtboardInstance {
         previous: Option<u32>,
         value: u32,
     ) -> bool {
+        // Generated setters run the concrete callback before notifying
+        // listeners (`gradient_stop_base.hpp`, `solid_color_base.hpp`).
+        let mut owner_callback_handled = false;
+        self.apply_color_property_changed(local_id, property_key, &mut owner_callback_handled);
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("SolidColor")
@@ -3670,10 +3674,11 @@ impl ArtboardInstance {
             // The retained paint is shared with the parent renderer
             // occurrence, so neither local nor tree preparation is dirtied.
         } else {
-            self.mark_runtime_shape_property_changed(local_id, false);
+            self.mark_runtime_shape_property_changed(local_id);
         }
-        self.mark_prepared_changed_for_color_property(local_id, property_key, previous, value);
-        self.apply_color_property_changed(local_id, property_key);
+        if !owner_callback_handled {
+            self.mark_prepared_changed_for_color_property(local_id, property_key, previous, value);
+        }
         true
     }
 
@@ -3747,18 +3752,24 @@ impl ArtboardInstance {
         {
             return false;
         }
+        // Generated setter order is backing field, concrete callback, then
+        // property notification.
+        let mut owner_callback_handled = false;
+        self.apply_bool_property_changed(
+            local_id,
+            property_key,
+            value,
+            &mut owner_callback_handled,
+        );
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed();
         self.mark_text_changed_for_local(local_id);
-        self.mark_prepared_changed_for_property(local_id, property_key);
+        if !owner_callback_handled {
+            self.mark_prepared_changed_for_property(local_id, property_key);
+        }
         self.mark_layout_changed_for_property(local_id, property_key);
-        let affects_effect_path = property_affects_effect_path_epoch(
-            self.slot(local_id).and_then(|slot| slot.type_name),
-            property_key,
-        );
-        self.mark_runtime_shape_property_changed(local_id, affects_effect_path);
-        self.apply_bool_property_changed(local_id, property_key, value);
+        self.mark_runtime_shape_property_changed(local_id);
         true
     }
 
@@ -3940,18 +3951,22 @@ impl ArtboardInstance {
         // Generated C++ setters assign backing storage, run the concrete
         // changed callback, then notify property listeners. Transform dirt
         // must therefore be visible before a DataBind observes the write.
-        self.apply_double_property_changed(local_id, property_key, value);
+        let mut owner_callback_handled = false;
+        self.apply_double_property_changed(
+            local_id,
+            property_key,
+            value,
+            &mut owner_callback_handled,
+        );
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed_unless_view_model_instance(local_id);
         self.mark_text_changed_for_local(local_id);
-        self.mark_prepared_changed_for_property(local_id, property_key);
+        if !owner_callback_handled {
+            self.mark_prepared_changed_for_property(local_id, property_key);
+        }
         self.mark_layout_changed_for_property(local_id, property_key);
-        let affects_effect_path = property_affects_effect_path_epoch(
-            self.slot(local_id).and_then(|slot| slot.type_name),
-            property_key,
-        );
-        self.mark_runtime_shape_property_changed(local_id, affects_effect_path);
+        self.mark_runtime_shape_property_changed(local_id);
         true
     }
 
@@ -3969,18 +3984,17 @@ impl ArtboardInstance {
         // Generated uint setters follow the same backing → concrete callback
         // → notification order as doubles. DistanceConstraint::modeValue is
         // the A4 positive callback that makes this ordering observable.
-        self.apply_uint_property_changed(local_id, property_key);
+        let mut owner_callback_handled = false;
+        self.apply_uint_property_changed(local_id, property_key, &mut owner_callback_handled);
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed_unless_view_model_instance(local_id);
         self.mark_text_changed_for_local(local_id);
-        self.mark_prepared_changed_for_property(local_id, property_key);
+        if !owner_callback_handled {
+            self.mark_prepared_changed_for_property(local_id, property_key);
+        }
         self.mark_layout_changed_for_property(local_id, property_key);
-        let affects_effect_path = property_affects_effect_path_epoch(
-            self.slot(local_id).and_then(|slot| slot.type_name),
-            property_key,
-        );
-        self.mark_runtime_shape_property_changed(local_id, affects_effect_path);
+        self.mark_runtime_shape_property_changed(local_id);
         true
     }
 
@@ -6769,28 +6783,37 @@ impl ArtboardInstance {
         self.mark_prepared_changed();
     }
 
-    fn mark_runtime_shape_property_changed(&mut self, local_id: usize, affects_effect_path: bool) {
-        let paint_locals = self
-            .runtime_shapes
-            .mark_property_changed(local_id, affects_effect_path);
-        if !affects_effect_path {
-            return;
-        }
-        self.mark_path_changed();
-        if paint_locals.is_empty() {
-            self.add_dirt(local_id, ComponentDirt::PATH, false);
-        } else {
-            // Preserve the existing RD-1 Trim/Dash/Feather adapter while
-            // FL-A replaces the Component schedule: the sidecar already
-            // resolves each retained ShapePaint owner, and the new schedule
-            // must publish the same PATH dirt on that owner. ParametricPath
-            // and the complete effect owner family remain pending in FL-E
-            // (`dash.cpp:39-48`, `stroke_effect.cpp:13-25`,
-            // `shape_paint.cpp:193-205`).
-            for paint_local in paint_locals {
-                self.add_dirt(paint_local, ComponentDirt::PATH, false);
-            }
-        }
+    fn mark_runtime_shape_property_changed(&mut self, local_id: usize) {
+        self.runtime_shapes.mark_property_changed(local_id);
+    }
+
+    /// Direct `StrokeEffect::invalidateEffectFromLocal` callback. The concrete
+    /// owner rewinds only its provider-local EffectPaths, then invalidates
+    /// downstream effects through its retained parent EffectsContainer.
+    pub(crate) fn invalidate_runtime_stroke_effect_from_local(&mut self, local_id: usize) -> bool {
+        let paint_locals = self.runtime_shapes.invalidate_effect_from_local(local_id);
+        // `StrokeEffect::invalidateEffectFromLocal` first rewinds its concrete
+        // EffectPaths, then `ShapePaint::invalidateEffects` publishes Path
+        // dirt on each owning paint (`stroke_effect.cpp:13-25`,
+        // `shape_paint.cpp:193-205`). An unattached effect has no fallback
+        // global epoch publication.
+        paint_locals
+            .into_iter()
+            .fold(false, |changed, paint_local| {
+                self.add_dirt(paint_local, ComponentDirt::PATH, false) | changed
+            })
+    }
+
+    pub(crate) fn mark_points_path_skin_dirty(&mut self, path_local: usize) -> bool {
+        let Some(path) = self.component_handle(path_local) else {
+            return false;
+        };
+        let skin = self
+            .objects
+            .component(path)
+            .and_then(|component| component.concrete.skinnable.as_ref())
+            .and_then(|skinnable| skinnable.skin);
+        skin.is_some_and(|skin| self.add_component_dirt(skin, ComponentDirt::SKIN, false))
     }
 
     fn mark_text_changed(&mut self) {
@@ -8575,7 +8598,13 @@ impl ArtboardInstance {
         &mut self,
         local_id: usize,
         property_key: u16,
+        owner_callback_handled: &mut bool,
     ) -> bool {
+        let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+        let owner_callback =
+            crate::shapes::uint_property_changed(self, local_id, type_name, property_key);
+        *owner_callback_handled = owner_callback.is_some();
+        let owner_changed = owner_callback.unwrap_or(false);
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("Image")
             && let Some(value) = self.uint_property(local_id, property_key)
         {
@@ -8633,7 +8662,7 @@ impl ArtboardInstance {
             changed |= self.refresh_layout_component_animation_style(local_id);
         }
         changed |= self.apply_nested_trigger_property_changed(local_id, property_key);
-        changed
+        changed | owner_changed
     }
 
     pub(crate) fn apply_keyed_callback(&mut self, callback: RuntimeKeyedCallback) -> bool {
@@ -8666,7 +8695,13 @@ impl ArtboardInstance {
         local_id: usize,
         property_key: u16,
         value: bool,
+        owner_callback_handled: &mut bool,
     ) -> bool {
+        let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+        let owner_callback =
+            crate::shapes::bool_property_changed(self, local_id, type_name, property_key);
+        *owner_callback_handled = owner_callback.is_some();
+        let owner_changed = owner_callback.unwrap_or(false);
         let constraint_kind = self
             .component_handle(local_id)
             .and_then(|handle| self.objects.component(handle))
@@ -8691,17 +8726,10 @@ impl ArtboardInstance {
         match self.slot(local_id).and_then(|slot| slot.type_name) {
             Some("Artboard") if property_key_for_name("Artboard", "clip") == Some(property_key) => {
                 if self.clip == value {
-                    return false;
+                    return owner_changed;
                 }
                 self.clip = value;
                 true
-            }
-            Some("ClippingShape")
-                if property_key_for_name("ClippingShape", "isVisible") == Some(property_key) =>
-            {
-                // C++ `ClippingShape::isVisibleChanged` dirties the owning
-                // Artboard so its update refreshes save-operation elision.
-                self.add_dirt(0, ComponentDirt::CLIPPING, false)
             }
             Some("NestedArtboard")
                 if property_key_for_name("NestedArtboard", "isPaused") == Some(property_key) =>
@@ -8723,7 +8751,7 @@ impl ArtboardInstance {
             {
                 self.set_nested_simple_animation_is_playing(local_id, value)
             }
-            _ => false,
+            _ => owner_changed,
         }
     }
 
@@ -8746,15 +8774,13 @@ impl ArtboardInstance {
         &mut self,
         local_id: usize,
         property_key: u16,
+        owner_callback_handled: &mut bool,
     ) -> bool {
-        match self.slot(local_id).and_then(|slot| slot.type_name) {
-            Some("GradientStop")
-                if property_key_for_name("GradientStop", "colorValue") == Some(property_key) =>
-            {
-                self.mark_parent_gradient_stops_dirty(local_id)
-            }
-            _ => false,
-        }
+        let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+        let owner_callback =
+            crate::shapes::color_property_changed(self, local_id, type_name, property_key);
+        *owner_callback_handled = owner_callback.is_some();
+        owner_callback.unwrap_or(false)
     }
 
     fn mark_text_value_run_shape_dirty(&mut self, run_local_id: usize) -> bool {
@@ -9010,8 +9036,13 @@ impl ArtboardInstance {
         local_id: usize,
         property_key: u16,
         value: f32,
+        owner_callback_handled: &mut bool,
     ) -> bool {
         let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+        let owner_callback =
+            crate::shapes::double_property_changed(self, local_id, type_name, property_key);
+        *owner_callback_handled = owner_callback.is_some();
+        let owner_changed = owner_callback.unwrap_or(false);
         if type_name == Some("Image") {
             // Same generated-field ownership as C++ ImageBase. These setters
             // intentionally do not call updateImageScale themselves.
@@ -9081,29 +9112,6 @@ impl ArtboardInstance {
             }
             return true;
         }
-        if path_vertex_property_affects_geometry(type_name, property_key) {
-            // Direct port of the concrete Vertex callbacks through
-            // PathVertex::markGeometryDirty and Path::markPathDirty. The
-            // vertex never owns path dirt; its parent PointsPath does
-            // (`vertex.cpp:14-15`, `straight_vertex.cpp:5`,
-            // `cubic_{mirrored,asymmetric,detached}_vertex.cpp`,
-            // `path_vertex.cpp:21-30`, `path.cpp:327-334`).
-            if let Some(path_local) = self.component_parent_local(local_id)
-                && let Some(path) = self.component_handle(path_local)
-            {
-                if let Some(skin) = self
-                    .objects
-                    .component(path)
-                    .and_then(|component| component.concrete.skinnable.as_ref())
-                    .and_then(|skinnable| skinnable.skin)
-                {
-                    self.add_component_dirt(skin, ComponentDirt::SKIN, false);
-                }
-                self.add_component_dirt(path, ComponentDirt::PATH, false);
-            }
-            return true;
-        }
-
         if let Some(property) = transform_property_for_key(property_key) {
             match property {
                 TransformProperty::Opacity => {
@@ -9227,24 +9235,6 @@ impl ArtboardInstance {
                 }
                 changed
             }
-            Some("LinearGradient" | "RadialGradient")
-                if property_key_for_name("LinearGradient", "startX") == Some(property_key)
-                    || property_key_for_name("LinearGradient", "startY") == Some(property_key)
-                    || property_key_for_name("LinearGradient", "endX") == Some(property_key)
-                    || property_key_for_name("LinearGradient", "endY") == Some(property_key) =>
-            {
-                self.add_dirt(local_id, ComponentDirt::TRANSFORM, false)
-            }
-            Some("LinearGradient" | "RadialGradient")
-                if property_key_for_name("LinearGradient", "opacity") == Some(property_key) =>
-            {
-                self.add_dirt(local_id, ComponentDirt::PAINT, false)
-            }
-            Some("GradientStop")
-                if property_key_for_name("GradientStop", "position") == Some(property_key) =>
-            {
-                self.mark_parent_gradient_stops_dirty(local_id)
-            }
             Some("NestedArtboard")
                 if property_key_for_name("NestedArtboard", "speed") == Some(property_key) =>
             {
@@ -9296,7 +9286,7 @@ impl ArtboardInstance {
                 apply_scroll_offset_changed(self, local_id, property_key, value)
                     .unwrap_or_else(|| self.mark_constraint_parent_transform_dirty(local_id))
             }
-            _ => false,
+            _ => owner_changed,
         }
     }
 
@@ -9342,7 +9332,11 @@ impl ArtboardInstance {
         changed
     }
 
-    fn mark_parent_gradient_stops_dirty(&mut self, stop_local_id: usize) -> bool {
+    pub(crate) fn mark_parent_gradient_dirty(
+        &mut self,
+        stop_local_id: usize,
+        dirt: ComponentDirt,
+    ) -> bool {
         let Some(parent_key) = property_key_for_name("Component", "parentId") else {
             return false;
         };
@@ -9358,11 +9352,7 @@ impl ArtboardInstance {
         ) {
             return false;
         }
-        self.add_dirt(
-            gradient_local_id,
-            ComponentDirt::PAINT | ComponentDirt::STOPS,
-            false,
-        )
+        self.add_dirt(gradient_local_id, dirt, false)
     }
 
     fn set_nested_artboard_is_paused(&mut self, local_id: usize, value: bool) -> bool {
@@ -10587,54 +10577,6 @@ fn component_dirt_affects_path_epoch(dirt: ComponentDirt) -> bool {
             | ComponentDirt::LAYOUT_STYLE
             | ComponentDirt::N_SLICER))
         .is_empty()
-}
-
-fn path_vertex_property_affects_geometry(type_name: Option<&str>, property_key: u16) -> bool {
-    let Some(
-        type_name @ ("StraightVertex"
-        | "CubicMirroredVertex"
-        | "CubicAsymmetricVertex"
-        | "CubicDetachedVertex"),
-    ) = type_name
-    else {
-        return false;
-    };
-
-    let properties: &[&str] = match type_name {
-        "StraightVertex" => &["x", "y", "radius"],
-        "CubicMirroredVertex" => &["x", "y", "rotation", "distance"],
-        "CubicAsymmetricVertex" => &["x", "y", "rotation", "inDistance", "outDistance"],
-        "CubicDetachedVertex" => &[
-            "x",
-            "y",
-            "inRotation",
-            "inDistance",
-            "outRotation",
-            "outDistance",
-        ],
-        _ => unreachable!("path-vertex type was filtered above"),
-    };
-    properties
-        .iter()
-        .any(|name| property_key_for_name(type_name, name) == Some(property_key))
-}
-
-fn property_affects_effect_path_epoch(type_name: Option<&str>, property_key: u16) -> bool {
-    match type_name {
-        Some("TrimPath") => ["start", "end", "offset", "modeValue"]
-            .iter()
-            .any(|name| property_key_for_name("TrimPath", name) == Some(property_key)),
-        Some("DashPath") => ["offset", "offsetIsPercentage"]
-            .iter()
-            .any(|name| property_key_for_name("DashPath", name) == Some(property_key)),
-        Some("Dash") => ["length", "lengthIsPercentage"]
-            .iter()
-            .any(|name| property_key_for_name("Dash", name) == Some(property_key)),
-        Some("Feather") => ["spaceValue", "strength", "offsetX", "offsetY", "inner"]
-            .iter()
-            .any(|name| property_key_for_name("Feather", name) == Some(property_key)),
-        _ => false,
-    }
 }
 
 fn property_may_affect_prepared_frame(type_name: Option<&str>, property_key: u16) -> bool {
@@ -15232,7 +15174,7 @@ mod tests {
     }
 
     #[test]
-    fn path_epoch_tracks_effect_path_property_changes() {
+    fn effect_callbacks_do_not_publish_synthetic_path_epochs() {
         let mut trim = synthetic_component(0, 0);
         trim.type_name = "TrimPath";
         let mut instance = synthetic_instance(vec![trim], vec![0]);
@@ -15242,13 +15184,12 @@ mod tests {
         let trim_start = property_key_for_name("TrimPath", "start").expect("TrimPath.start");
         let trim_mode = property_key_for_name("TrimPath", "modeValue").expect("TrimPath.modeValue");
 
-        let mut path_epoch = instance.path_epoch();
+        let path_epoch = instance.path_epoch();
         assert!(instance.set_double_property(0, trim_start, 0.25));
-        assert!(instance.path_epoch() > path_epoch);
+        assert_eq!(instance.path_epoch(), path_epoch);
 
-        path_epoch = instance.path_epoch();
         assert!(instance.set_uint_property(0, trim_mode, 2));
-        assert!(instance.path_epoch() > path_epoch);
+        assert_eq!(instance.path_epoch(), path_epoch);
 
         let mut dash_path = synthetic_component(0, 0);
         dash_path.type_name = "DashPath";
@@ -15259,9 +15200,9 @@ mod tests {
         let offset_is_percentage = property_key_for_name("DashPath", "offsetIsPercentage")
             .expect("DashPath.offsetIsPercentage");
 
-        path_epoch = instance.path_epoch();
+        let path_epoch = instance.path_epoch();
         assert!(instance.set_bool_property(0, offset_is_percentage, true));
-        assert!(instance.path_epoch() > path_epoch);
+        assert_eq!(instance.path_epoch(), path_epoch);
 
         let mut dash = synthetic_component(0, 0);
         dash.type_name = "Dash";
@@ -15271,9 +15212,9 @@ mod tests {
         )]);
         let length = property_key_for_name("Dash", "length").expect("Dash.length");
 
-        path_epoch = instance.path_epoch();
+        let path_epoch = instance.path_epoch();
         assert!(instance.set_double_property(0, length, 4.0));
-        assert!(instance.path_epoch() > path_epoch);
+        assert_eq!(instance.path_epoch(), path_epoch);
 
         let mut feather = synthetic_component(0, 0);
         feather.type_name = "Feather";
@@ -15285,13 +15226,15 @@ mod tests {
         let space_value =
             property_key_for_name("Feather", "spaceValue").expect("Feather.spaceValue");
 
-        path_epoch = instance.path_epoch();
+        let path_epoch = instance.path_epoch();
+        let prepared_epoch = instance.prepared_epoch();
         assert!(instance.set_bool_property(0, inner, true));
-        assert!(instance.path_epoch() > path_epoch);
+        assert_eq!(instance.path_epoch(), path_epoch);
+        assert_eq!(instance.prepared_epoch(), prepared_epoch);
 
-        path_epoch = instance.path_epoch();
         assert!(instance.set_uint_property(0, space_value, 1));
-        assert!(instance.path_epoch() > path_epoch);
+        assert_eq!(instance.path_epoch(), path_epoch);
+        assert_eq!(instance.prepared_epoch(), prepared_epoch);
     }
 
     #[test]
@@ -15665,7 +15608,15 @@ mod tests {
                 .component(0)
                 .unwrap()
                 .dirt
-                .contains(ComponentDirt::PAINT | ComponentDirt::STOPS)
+                .contains(ComponentDirt::PAINT)
+        );
+        assert!(
+            !instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::STOPS),
+            "GradientStop::colorValueChanged publishes Paint only; positionChanged adds Stops"
         );
 
         instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
@@ -17106,6 +17057,45 @@ mod tests {
             !instance
                 .component(1)
                 .expect("StraightVertex component")
+                .dirt
+                .contains(ComponentDirt::PATH)
+        );
+    }
+
+    #[test]
+    fn inherited_parametric_and_path_callbacks_dirty_geometry_and_layout_owner() {
+        let layout = synthetic_component_for_type(0, "LayoutComponent");
+        let shape = synthetic_component_for_type(1, "Shape");
+        let rectangle = synthetic_component_for_type(2, "Rectangle");
+        let mut instance = synthetic_instance(vec![layout, shape, rectangle], vec![0, 1, 2]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+
+        let width = property_key_for_name("Rectangle", "width").expect("Rectangle.width");
+        let is_hole = property_key_for_name("Rectangle", "isHole").expect("Rectangle.isHole");
+        instance.clear_component_dirt(0);
+        instance.clear_component_dirt(1);
+        instance.clear_component_dirt(2);
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
+        let layout_epoch = instance.layout_epoch();
+
+        assert!(instance.set_double_property(2, width, 24.0));
+        assert!(
+            instance
+                .component(2)
+                .expect("Rectangle component")
+                .dirt
+                .contains(ComponentDirt::PATH)
+        );
+        assert!(instance.layout_epoch() > layout_epoch);
+
+        instance.clear_component_dirt(2);
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
+        assert!(instance.set_bool_property(2, is_hole, true));
+        assert!(
+            instance
+                .component(2)
+                .expect("Rectangle component")
                 .dirt
                 .contains(ComponentDirt::PATH)
         );

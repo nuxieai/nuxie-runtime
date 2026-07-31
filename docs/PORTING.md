@@ -329,15 +329,13 @@ geometry. A dedicated test enforces it
 (`world_transform_dirt_invalidates_prepared_frame_without_rebuilding_paths`,
 `artboard.rs:3219`).
 
-The write-side gates are deliberately *narrow whitelists / deny-lists*, each
-citing the C++ gate it mirrors:
+The write-side gates are deliberately narrow and cite the C++ gate they mirror:
 
-- `property_affects_effect_path_epoch` (`artboard.rs:2691`) — only
-  TrimPath/DashPath/Feather named keys bump `path_epoch`.
 - `property_may_affect_prepared_frame` (`artboard.rs:2709`) — a deny-list of
-  ~50 animation/state-machine/data-bind/keyframe types that return `false`; plus
-  special cases (`NestedArtboard` only on `artboardId`; `SolidColor` bumps unless
-  it is the color value). Unknown types default `true`.
+  animation/state-machine/data-bind/keyframe types that return `false`.
+  Special cases remain for `NestedArtboard` and `SolidColor`; unknown types
+  default `true`. Shape/paint callback ownership is not encoded in this gate:
+  concrete generated callbacks publish their dirt through `crate::shapes`.
 - `property_affects_layout` (`artboard.rs:1228`) — per-type layout whitelist.
 
 The invariant, stated as a rule:

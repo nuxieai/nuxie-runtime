@@ -3,14 +3,14 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RuntimeNestedLayoutBoundsCacheKey {
     graph_global_id: u32,
-    layout_epoch: u64,
+    layout_revision: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct RuntimeNestedLayoutDataTransferKey {
     parent_layout: RuntimeNestedLayoutBoundsCacheKey,
     assigned_bounds: RuntimeLayoutBounds,
-    child_layout_epoch: u64,
+    child_layout_revision: u64,
 }
 
 #[derive(Debug, Clone)]

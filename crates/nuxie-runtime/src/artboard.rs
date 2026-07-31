@@ -65,8 +65,9 @@ use crate::draw::{
 use crate::joystick::{RuntimeJoystick, build_runtime_joysticks};
 use crate::objects::{ComponentAddress, InstanceObjectArena, InstanceSlot, ObjectHandle};
 use crate::properties::{
-    RuntimeArtboardDimensions, layout_component_style_display_value_property_key,
-    property_key_for_name, solid_color_value_property_key, solo_active_component_id_property_key,
+    RuntimeArtboardDimensions, artboard_index_for_graph,
+    layout_component_style_display_value_property_key, property_key_for_name,
+    solid_color_value_property_key, solo_active_component_id_property_key,
     transform_property_for_key,
 };
 use crate::script_asset::{RuntimeScriptImplementedMethods, RuntimeScriptedObjectOccurrence};
@@ -466,7 +467,7 @@ pub struct ArtboardInstance {
     pub(crate) cache_epoch: u64,
     pub(crate) prepared_epoch: u64,
     pub(crate) path_epoch: u64,
-    pub(crate) layout_epoch: u64,
+    pub(crate) layout_revision: u64,
     text_affecting_locals: Vec<bool>,
     // C++ SolidColor mutates its attached RenderPaint when its property dirt
     // is applied. Renderer resources live outside the Rust instance, so retain
@@ -586,7 +587,7 @@ impl Clone for ArtboardInstance {
             // Artboard-side invalidation generation from the source
             // (`artboard.hpp:548-601`; `artboard.cpp:1038-1057`).
             path_epoch: 1,
-            layout_epoch: self.layout_epoch,
+            layout_revision: self.layout_revision,
             text_affecting_locals: self.text_affecting_locals.clone(),
             solid_color_paint_revisions: self.solid_color_paint_revisions.clone(),
             runtime_drawables: self.runtime_drawables.clone(),
@@ -2244,7 +2245,7 @@ impl ArtboardInstance {
             cache_epoch: 1,
             prepared_epoch: 1,
             path_epoch: 1,
-            layout_epoch: 1,
+            layout_revision: 1,
             text_affecting_locals,
             solid_color_paint_revisions,
             runtime_drawables,
@@ -3501,6 +3502,20 @@ impl ArtboardInstance {
         }
         self.width = width;
         self.height = height;
+        let root_layout = self.component_handle(0);
+        let controlled_text = self
+            .components()
+            .iter()
+            .filter_map(|component| {
+                (component.type_name == "Text"
+                    && root_layout
+                        .is_some_and(|layout| component.layout_ancestors.contains(&layout)))
+                .then_some(component.local_id)
+            })
+            .collect::<Vec<_>>();
+        for text_local in controlled_text {
+            crate::text_owner::mark_shape_dirty_without_layout(self, text_local);
+        }
         self.mark_artboard_data_bind_work_dirty();
         self.mark_changed();
         self.mark_layout_changed();
@@ -3775,7 +3790,6 @@ impl ArtboardInstance {
         if !owner_callback_handled {
             self.mark_prepared_changed_for_property(local_id, property_key);
         }
-        self.mark_layout_changed_for_property(local_id, property_key);
         self.mark_runtime_shape_property_changed(local_id);
         true
     }
@@ -3972,7 +3986,6 @@ impl ArtboardInstance {
         if !owner_callback_handled {
             self.mark_prepared_changed_for_property(local_id, property_key);
         }
-        self.mark_layout_changed_for_property(local_id, property_key);
         self.mark_runtime_shape_property_changed(local_id);
         true
     }
@@ -4000,7 +4013,6 @@ impl ArtboardInstance {
         if !owner_callback_handled {
             self.mark_prepared_changed_for_property(local_id, property_key);
         }
-        self.mark_layout_changed_for_property(local_id, property_key);
         self.mark_runtime_shape_property_changed(local_id);
         true
     }
@@ -4038,7 +4050,6 @@ impl ArtboardInstance {
         self.mark_changed_unless_view_model_instance(local_id);
         self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_property(local_id, property_key);
-        self.mark_layout_changed_for_property(local_id, property_key);
         self.apply_string_property_changed(local_id, property_key);
         true
     }
@@ -5743,8 +5754,9 @@ impl ArtboardInstance {
             // propagates size and marks the exact owner world-transform dirty
             // (`src/layout_component.cpp:1329-1401`).
             self.add_dirt(entry.local_id, ComponentDirt::WORLD_TRANSFORM, true);
-            self.layout_epoch = self.layout_epoch.wrapping_add(1);
-            self.runtime_drawables.mark_layout_resources_dirty();
+            self.layout_revision = self.layout_revision.wrapping_add(1);
+            self.runtime_drawables
+                .mark_layout_resource_dirty_for_local(entry.local_id);
         }
         advance.keep_going
     }
@@ -6106,7 +6118,7 @@ impl ArtboardInstance {
     fn runtime_nested_artboard_layout_bounds_frame(&mut self) -> RuntimeNestedLayoutBoundsFrame {
         let key = RuntimeNestedLayoutBoundsCacheKey {
             graph_global_id: self.graph_global_id,
-            layout_epoch: self.layout_epoch,
+            layout_revision: self.layout_revision,
         };
         if self
             .nested_layout_bounds
@@ -6233,7 +6245,7 @@ impl ArtboardInstance {
         let refresh_constraint_bounds = nested.layout_data_transfer_key.is_none_or(|key| {
             key.parent_layout != parent_layout
                 || key.assigned_bounds != bounds
-                || key.child_layout_epoch != nested.child.layout_epoch
+                || key.child_layout_revision != nested.child.layout_revision
         });
         let mut changed = nested
             .child
@@ -6275,7 +6287,7 @@ impl ArtboardInstance {
         nested.layout_data_transfer_key = Some(RuntimeNestedLayoutDataTransferKey {
             parent_layout,
             assigned_bounds: bounds,
-            child_layout_epoch: nested.child.layout_epoch,
+            child_layout_revision: nested.child.layout_revision,
         });
         changed
     }
@@ -6639,8 +6651,8 @@ impl ArtboardInstance {
         self.path_epoch
     }
 
-    pub(crate) fn layout_epoch(&self) -> u64 {
-        self.layout_epoch
+    pub(crate) fn layout_revision(&self) -> u64 {
+        self.layout_revision
     }
 
     pub(crate) fn solid_color_paint_revision(&self, local_id: usize) -> u64 {
@@ -6761,9 +6773,7 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn mark_layout_changed(&mut self) {
-        self.layout_epoch = self.layout_epoch.wrapping_add(1);
-        self.runtime_drawables.mark_layout_resources_dirty();
-        self.runtime_drawables.mark_text_resources_dirty();
+        self.layout_revision = self.layout_revision.wrapping_add(1);
         self.mark_prepared_changed();
     }
 
@@ -6771,23 +6781,88 @@ impl ArtboardInstance {
     /// only a derived fence for the retained layout solve; renderer resources
     /// outside this exact LayoutComponent are not dirtied.
     pub(crate) fn mark_layout_node_changed(&mut self, local_id: usize) -> bool {
-        if !self
+        let owner_changed = self
             .component(local_id)
-            .is_some_and(|component| component.type_name == "LayoutComponent")
-        {
+            .and_then(|component| component.concrete.layout.as_ref())
+            .is_some_and(|layout| layout.mark_layout_node_dirty());
+        if !owner_changed {
             return false;
         }
-        self.layout_epoch = self.layout_epoch.wrapping_add(1);
-        self.runtime_drawables
-            .mark_layout_resource_dirty_for_local(local_id);
+        self.layout_revision = self.layout_revision.wrapping_add(1);
+        self.mark_components_dirty();
         self.mark_prepared_changed();
         true
     }
 
+    pub(crate) fn mark_layout_component_children_dirty(&mut self, local_id: usize) -> bool {
+        let Some(parent) = self.component_handle(local_id) else {
+            return false;
+        };
+        let child_count = self.component_child_len(parent);
+        let mut changed = false;
+        for index in 0..child_count {
+            let Some(child) = self.component_child_at(parent, index) else {
+                continue;
+            };
+            let Some(child_local) = self.component_local_id(child) else {
+                continue;
+            };
+            if self
+                .component(child_local)
+                .is_some_and(|component| component.concrete.layout.is_some())
+            {
+                changed |= self.mark_layout_node_changed(child_local);
+            }
+        }
+        changed
+    }
+
+    pub(crate) fn mark_component_list_override_changed(&mut self, override_local: usize) -> bool {
+        let Some(list_local) = self.component_parent_local(override_local) else {
+            return false;
+        };
+        if self
+            .component(list_local)
+            .is_none_or(|component| component.type_name != "ArtboardComponentList")
+        {
+            return false;
+        }
+        let artboard_id = property_key_for_name("ArtboardComponentListOverride", "artboardId")
+            .and_then(|key| self.uint_property(override_local, key))
+            .unwrap_or(u64::from(u32::MAX));
+        let matching_items = self
+            .component_list_items(list_local)
+            .map(|items| {
+                items
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, item)| {
+                        let item_artboard_index = item
+                            .child
+                            .runtime_file()
+                            .zip(item.child.runtime_graph())
+                            .and_then(|(file, graph)| artboard_index_for_graph(file, graph));
+                        (artboard_id == u64::from(u32::MAX)
+                            || usize::try_from(artboard_id).ok() == item_artboard_index)
+                            .then_some(index)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        for index in matching_items {
+            if let Some(item) = self
+                .component_list_items_mut(list_local)
+                .and_then(|items| items.get_mut(index))
+            {
+                item.child.mark_layout_node_changed(0);
+            }
+        }
+        self.add_dirt(list_local, ComponentDirt::LAYOUT_STYLE, false)
+            | self.mark_layout_node_changed(list_local)
+    }
+
     pub(crate) fn mark_path_changed(&mut self) {
         self.path_epoch = self.path_epoch.wrapping_add(1);
-        self.runtime_drawables.mark_layout_resources_dirty();
-        self.runtime_drawables.mark_text_resources_dirty();
         self.mark_prepared_changed();
     }
 
@@ -6923,88 +6998,6 @@ impl ArtboardInstance {
         if previous.is_none_or(|previous| ((previous >> 24) != 0) != next_visible) {
             self.mark_prepared_changed();
         }
-    }
-
-    fn mark_layout_changed_for_property(&mut self, local_id: usize, property_key: u16) {
-        if self.property_affects_layout(local_id, property_key) {
-            self.mark_layout_changed();
-        }
-    }
-
-    fn property_affects_layout(&self, local_id: usize, property_key: u16) -> bool {
-        let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
-        if matches!(
-            type_name,
-            Some("LayoutComponentStyle" | "NestedArtboardLayout")
-        ) {
-            return true;
-        }
-
-        if type_name == Some("ArtboardComponentListOverride") {
-            return [
-                "instanceWidth",
-                "instanceHeight",
-                "instanceWidthUnitsValue",
-                "instanceHeightUnitsValue",
-                "instanceWidthScaleType",
-                "instanceHeightScaleType",
-            ]
-            .into_iter()
-            .any(|name| {
-                property_key_for_name("ArtboardComponentListOverride", name) == Some(property_key)
-            });
-        }
-
-        if matches!(type_name, Some("Text")) {
-            return [
-                "alignValue",
-                "sizingValue",
-                "overflowValue",
-                "width",
-                "height",
-                "verticalTrimValue",
-            ]
-            .into_iter()
-            .any(|name| property_key_for_name("Text", name) == Some(property_key));
-        }
-
-        if matches!(type_name, Some("TextStyle" | "TextStylePaint")) {
-            return ["fontSize", "lineHeight", "letterSpacing"]
-                .into_iter()
-                .any(|name| property_key_for_name("TextStyle", name) == Some(property_key));
-        }
-
-        if matches!(type_name, Some("TextValueRun")) {
-            return property_key_for_name("TextValueRun", "text") == Some(property_key)
-                || property_key_for_name("TextValueRun", "styleId") == Some(property_key);
-        }
-
-        if matches!(type_name, Some("TextInput")) {
-            return property_key_for_name("TextInput", "text") == Some(property_key)
-                || property_key_for_name("TextInput", "multiline") == Some(property_key);
-        }
-
-        matches!(
-            type_name,
-            Some("Artboard" | "LayoutComponent" | "NestedArtboard")
-        ) && (property_key_for_name("Artboard", "width") == Some(property_key)
-            || property_key_for_name("Artboard", "height") == Some(property_key)
-            || property_key_for_name("LayoutComponent", "width") == Some(property_key)
-            || property_key_for_name("LayoutComponent", "height") == Some(property_key)
-            || property_key_for_name("LayoutComponent", "styleId") == Some(property_key)
-            || property_key_for_name("LayoutComponent", "fractionalWidth") == Some(property_key)
-            || property_key_for_name("LayoutComponent", "fractionalHeight") == Some(property_key)
-            || property_key_for_name("NestedArtboardLayout", "instanceWidthScaleType")
-                == Some(property_key)
-            || property_key_for_name("NestedArtboardLayout", "instanceHeightScaleType")
-                == Some(property_key)
-            || property_key_for_name("NestedArtboardLayout", "instanceWidthUnitsValue")
-                == Some(property_key)
-            || property_key_for_name("NestedArtboardLayout", "instanceHeightUnitsValue")
-                == Some(property_key)
-            || property_key_for_name("NestedArtboardLayout", "instanceWidth") == Some(property_key)
-            || property_key_for_name("NestedArtboardLayout", "instanceHeight")
-                == Some(property_key))
     }
 
     pub fn clear_component_dirt(&mut self, local_id: usize) {
@@ -7180,6 +7173,9 @@ impl ArtboardInstance {
             self.mark_layout_changed();
         }
         if component_dirt_affects_path_epoch(accumulated) {
+            if let Some(component) = self.component(local_id) {
+                component.bump_path_revision();
+            }
             self.mark_path_changed();
         } else if accumulated.contains(ComponentDirt::WORLD_TRANSFORM) {
             self.mark_world_transform_changed();
@@ -8556,6 +8552,36 @@ impl ArtboardInstance {
         let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
         let owner_callback =
             crate::shapes::uint_property_changed(self, local_id, type_name, property_key);
+        let owner_callback = owner_callback.or_else(|| {
+            crate::layout_component_style::uint_property_changed(
+                self,
+                local_id,
+                type_name,
+                property_key,
+            )
+        });
+        let owner_callback = owner_callback.or_else(|| {
+            crate::layout_component::uint_property_changed(self, local_id, type_name, property_key)
+        });
+        let owner_callback = owner_callback.or_else(|| {
+            crate::artboard_component_list_override::uint_property_changed(
+                self,
+                local_id,
+                type_name,
+                property_key,
+            )
+        });
+        let owner_callback = owner_callback.or_else(|| {
+            crate::text_owner::uint_property_changed(self, local_id, type_name, property_key)
+        });
+        let owner_callback = owner_callback.or_else(|| {
+            crate::text_value_run_owner::uint_property_changed(
+                self,
+                local_id,
+                type_name,
+                property_key,
+            )
+        });
         *owner_callback_handled = owner_callback.is_some();
         let owner_changed = owner_callback.unwrap_or(false);
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("Image")
@@ -8653,6 +8679,17 @@ impl ArtboardInstance {
         let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
         let owner_callback =
             crate::shapes::bool_property_changed(self, local_id, type_name, property_key);
+        let owner_callback = owner_callback.or_else(|| {
+            crate::layout_component_style::bool_property_changed(
+                self,
+                local_id,
+                type_name,
+                property_key,
+            )
+        });
+        let owner_callback = owner_callback.or_else(|| {
+            crate::layout_component::bool_property_changed(self, local_id, type_name, property_key)
+        });
         *owner_callback_handled = owner_callback.is_some();
         let owner_changed = owner_callback.unwrap_or(false);
         let constraint_kind = self
@@ -8713,14 +8750,14 @@ impl ArtboardInstance {
         local_id: usize,
         property_key: u16,
     ) -> bool {
-        match self.slot(local_id).and_then(|slot| slot.type_name) {
-            Some("TextValueRun")
-                if property_key_for_name("TextValueRun", "text") == Some(property_key) =>
-            {
-                self.mark_text_value_run_shape_dirty(local_id)
-            }
-            _ => false,
-        }
+        let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+        crate::text_value_run_owner::string_property_changed(
+            self,
+            local_id,
+            type_name,
+            property_key,
+        )
+        .unwrap_or(false)
     }
 
     pub(crate) fn apply_color_property_changed(
@@ -8734,26 +8771,6 @@ impl ArtboardInstance {
             crate::shapes::color_property_changed(self, local_id, type_name, property_key);
         *owner_callback_handled = owner_callback.is_some();
         owner_callback.unwrap_or(false)
-    }
-
-    fn mark_text_value_run_shape_dirty(&mut self, run_local_id: usize) -> bool {
-        let Some(parent_key) = property_key_for_name("Component", "parentId") else {
-            return false;
-        };
-        let Some(text_local) = self
-            .uint_property(run_local_id, parent_key)
-            .and_then(|parent_id| usize::try_from(parent_id).ok())
-        else {
-            return false;
-        };
-        if self.slot(text_local).and_then(|slot| slot.type_name) != Some("Text") {
-            return false;
-        }
-
-        let mut changed = false;
-        changed |= self.add_dirt(text_local, ComponentDirt::TEXT_SHAPE, false);
-        changed |= self.add_dirt(text_local, ComponentDirt::WORLD_TRANSFORM, true);
-        changed
     }
 
     pub(crate) fn mark_text_style_shape_dirty(&mut self, style_local_id: usize) -> bool {
@@ -8773,11 +8790,8 @@ impl ArtboardInstance {
             return false;
         }
 
-        let mut changed = false;
-        changed |= self.add_dirt(style_local_id, ComponentDirt::TEXT_SHAPE, false);
-        changed |= self.add_dirt(text_local, ComponentDirt::TEXT_SHAPE, false);
-        changed |= self.add_dirt(text_local, ComponentDirt::WORLD_TRANSFORM, true);
-        changed
+        self.add_dirt(style_local_id, ComponentDirt::TEXT_SHAPE, false)
+            | crate::text_owner::mark_shape_dirty(self, text_local)
     }
 
     fn propagate_layout_component_display_changed(&mut self, style_local_id: usize) -> bool {
@@ -8996,6 +9010,54 @@ impl ArtboardInstance {
             crate::shapes::double_property_changed(self, local_id, type_name, property_key)
                 .or_else(|| {
                     crate::joystick::double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                })
+                .or_else(|| {
+                    crate::layout_component_style::double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                })
+                .or_else(|| {
+                    crate::layout_component::double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                })
+                .or_else(|| {
+                    crate::artboard_component_list_override::double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                })
+                .or_else(|| {
+                    crate::text_style_owner::double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                })
+                .or_else(|| {
+                    crate::text_style_paint_owner::double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                })
+                .or_else(|| {
+                    crate::text_owner::double_property_changed(
                         self,
                         local_id,
                         type_name,
@@ -9353,6 +9415,14 @@ impl ArtboardInstance {
         self.set_nested_artboard_artboard_id_with_force(local_id, value, false)
     }
 
+    fn mark_nested_artboard_layout_changed(&mut self, local_id: usize) -> bool {
+        let local_changed = self
+            .component(local_id)
+            .is_some_and(|component| component.concrete.layout.is_some())
+            && self.mark_layout_node_changed(local_id);
+        crate::layout_node_provider::mark_layout_node_dirty(self, local_id) | local_changed
+    }
+
     pub(crate) fn replace_nested_artboard_artboard_id(
         &mut self,
         local_id: usize,
@@ -9376,6 +9446,7 @@ impl ArtboardInstance {
             if changed {
                 self.remove_nested_artboard_local(local_id);
                 self.mark_nested_structure_changed();
+                self.mark_nested_artboard_layout_changed(local_id);
                 self.stateful_nested_view_model_contexts_dirty = true;
                 self.mark_artboard_data_bind_work_dirty();
                 self.mark_changed();
@@ -9408,6 +9479,7 @@ impl ArtboardInstance {
         self.nested_artboards.insert(local_id, nested);
         self.insert_nested_artboard_local(local_id);
         self.mark_nested_structure_changed();
+        self.mark_nested_artboard_layout_changed(local_id);
         if let Some(file) = self.runtime_file_arc() {
             self.rebind_owned_view_model_context_after_nested_artboard_swap(&file, local_id);
         }
@@ -10532,12 +10604,7 @@ fn component_dirt_affects_path_epoch(dirt: ComponentDirt) -> bool {
     // path/nslicer dirt, and only for world-transform dirt when a deformer is
     // present. Plain transform animation is applied at draw time through the
     // shape/world transform and must not churn retained path-command storage.
-    !(dirt
-        & (ComponentDirt::PATH
-            | ComponentDirt::VERTICES
-            | ComponentDirt::LAYOUT_STYLE
-            | ComponentDirt::N_SLICER))
-        .is_empty()
+    !(dirt & (ComponentDirt::PATH | ComponentDirt::VERTICES | ComponentDirt::N_SLICER)).is_empty()
 }
 
 fn property_may_affect_prepared_frame(type_name: Option<&str>, property_key: u16) -> bool {
@@ -11317,7 +11384,7 @@ mod tests {
             cache_epoch: 1,
             prepared_epoch: 1,
             path_epoch: 1,
-            layout_epoch: 1,
+            layout_revision: 1,
             text_affecting_locals,
             solid_color_paint_revisions,
             runtime_drawables: RuntimeDrawableList::default(),
@@ -13030,7 +13097,7 @@ mod tests {
                 layout_data_transfer_key: Some(RuntimeNestedLayoutDataTransferKey {
                     parent_layout: RuntimeNestedLayoutBoundsCacheKey {
                         graph_global_id: 11,
-                        layout_epoch: 3,
+                        layout_revision: 3,
                     },
                     assigned_bounds: RuntimeLayoutBounds {
                         x: 1.0,
@@ -13038,7 +13105,7 @@ mod tests {
                         width: 30.0,
                         height: 40.0,
                     },
-                    child_layout_epoch: 5,
+                    child_layout_revision: 5,
                 }),
                 data_bind_path_ids: None,
                 data_bind_path_is_relative: false,
@@ -13717,6 +13784,7 @@ mod tests {
             constrained_layout_ancestor: None,
             graph_order: None,
             dirt: ComponentDirt::NONE,
+            path_revision: Cell::new(1),
             transform: TransformRuntimeState::default(),
             concrete: crate::components::RuntimeConcreteComponentState::for_type("Node"),
         }
@@ -15011,7 +15079,7 @@ mod tests {
         let layout_bounds = BTreeMap::from([(0, assigned_bounds)]);
         let first_parent_layout = RuntimeNestedLayoutBoundsCacheKey {
             graph_global_id: 3,
-            layout_epoch: 9,
+            layout_revision: 9,
         };
 
         assert!(parent.apply_nested_artboard_layout_bounds(
@@ -15061,7 +15129,7 @@ mod tests {
         );
 
         let next_parent_layout = RuntimeNestedLayoutBoundsCacheKey {
-            layout_epoch: first_parent_layout.layout_epoch + 1,
+            layout_revision: first_parent_layout.layout_revision + 1,
             ..first_parent_layout
         };
         assert!(parent.apply_nested_artboard_layout_bounds(
@@ -15182,24 +15250,132 @@ mod tests {
     }
 
     #[test]
-    fn layout_epoch_tracks_layout_dirt_separately_from_draw_cache_epoch() {
+    fn layout_revision_tracks_layout_dirt_separately_from_draw_cache_epoch() {
         let component = synthetic_component(0, 0);
         let mut instance = synthetic_instance(vec![component], vec![0]);
 
-        let initial_layout_epoch = instance.layout_epoch();
+        let initial_layout_revision = instance.layout_revision();
         let initial_cache_epoch = instance.cache_epoch();
         assert!(instance.add_dirt(0, ComponentDirt::PAINT, false));
-        assert_eq!(instance.layout_epoch(), initial_layout_epoch);
+        assert_eq!(instance.layout_revision(), initial_layout_revision);
         assert!(instance.cache_epoch() > initial_cache_epoch);
 
         let paint_cache_epoch = instance.cache_epoch();
         assert!(instance.add_dirt(0, ComponentDirt::LAYOUT_STYLE, false));
-        assert!(instance.layout_epoch() > initial_layout_epoch);
+        assert!(instance.layout_revision() > initial_layout_revision);
         assert!(instance.cache_epoch() > paint_cache_epoch);
 
-        let layout_epoch = instance.layout_epoch();
+        let layout_revision = instance.layout_revision();
         assert!(!instance.add_dirt(0, ComponentDirt::LAYOUT_STYLE, false));
-        assert_eq!(instance.layout_epoch(), layout_epoch);
+        assert_eq!(instance.layout_revision(), layout_revision);
+    }
+
+    #[test]
+    fn layout_style_padding_write_dirties_only_retained_parent_layout_node() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+                synthetic_component_for_type(2, "LayoutComponentStyle"),
+                synthetic_component_for_type(3, "LayoutComponent"),
+            ],
+            vec![0, 1, 2, 3],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 0);
+        for local_id in 0..4 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        let padding_left = property_key_for_name("LayoutComponentStyle", "paddingLeft")
+            .expect("LayoutComponentStyle.paddingLeft");
+        assert!(instance.set_double_property(2, padding_left, 12.0));
+
+        let parent = instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("parent layout owner");
+        let sibling = instance
+            .component(3)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("sibling layout owner");
+        assert!(parent.layout_node_is_dirty());
+        assert_eq!(parent.layout_node_revision(), 1);
+        assert!(!sibling.layout_node_is_dirty());
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::COMPONENTS)
+        );
+
+        let revision = instance.layout_revision();
+        assert!(!instance.set_double_property(2, padding_left, 12.0));
+        assert_eq!(instance.layout_revision(), revision);
+    }
+
+    #[test]
+    fn fractional_height_write_dirties_retained_layout_node() {
+        let mut instance = synthetic_instance(
+            vec![synthetic_component_for_type(0, "LayoutComponent")],
+            vec![0],
+        );
+        instance.clear_component_dirt(0);
+
+        let fractional_height = property_key_for_name("LayoutComponent", "fractionalHeight")
+            .expect("LayoutComponent.fractionalHeight");
+        assert!(instance.set_double_property(0, fractional_height, 0.75));
+        assert!(
+            instance
+                .component(0)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .is_some_and(|layout| layout.layout_node_is_dirty())
+        );
+    }
+
+    #[test]
+    fn text_style_metrics_follow_owning_text_into_layout_without_sibling_dirt() {
+        let mut instance = synthetic_instance(
+            vec![
+                synthetic_component_for_type(0, "Artboard"),
+                synthetic_component_for_type(1, "LayoutComponent"),
+                synthetic_component_for_type(2, "Text"),
+                synthetic_component_for_type(3, "TextStylePaint"),
+                synthetic_component_for_type(4, "LayoutComponent"),
+            ],
+            vec![0, 1, 2, 3, 4],
+        );
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 2);
+        synthetic_link_parent(&mut instance, 4, 0);
+        for local_id in 0..5 {
+            instance.clear_component_dirt(local_id);
+        }
+
+        let font_size = property_key_for_name("TextStyle", "fontSize").expect("TextStyle.fontSize");
+        assert!(instance.set_double_property(3, font_size, 24.0));
+        let text_dirt = instance.component(2).expect("text").dirt;
+        assert!(text_dirt.contains(ComponentDirt::PATH));
+        assert!(text_dirt.contains(ComponentDirt::WORLD_TRANSFORM));
+        assert!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .is_some_and(|layout| layout.layout_node_is_dirty())
+        );
+        assert!(
+            instance
+                .component(4)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .is_some_and(|layout| !layout.layout_node_is_dirty())
+        );
+
+        let revision = instance.layout_revision();
+        assert!(!instance.set_double_property(3, font_size, 24.0));
+        assert_eq!(instance.layout_revision(), revision);
     }
 
     #[test]
@@ -15273,7 +15449,7 @@ mod tests {
         let initial_cache_epoch = instance.cache_epoch();
         let initial_prepared_epoch = instance.prepared_epoch();
         let initial_path_epoch = instance.path_epoch();
-        let initial_layout_epoch = instance.layout_epoch();
+        let initial_layout_revision = instance.layout_revision();
         let initial_paint_revision = instance.solid_color_paint_revision(0);
 
         assert!(instance.set_keyed_solid_color_property(0, color_key, false, 0xff00_ff00));
@@ -15285,7 +15461,7 @@ mod tests {
         );
         assert_eq!(instance.prepared_epoch(), initial_prepared_epoch);
         assert_eq!(instance.path_epoch(), initial_path_epoch);
-        assert_eq!(instance.layout_epoch(), initial_layout_epoch);
+        assert_eq!(instance.layout_revision(), initial_layout_revision);
         assert!(instance.solid_color_paint_revision(0) > initial_paint_revision);
 
         let settled_cache_epoch = instance.cache_epoch();
@@ -15361,7 +15537,7 @@ mod tests {
     }
 
     #[test]
-    fn nested_layout_bounds_cache_tracks_layout_epoch() {
+    fn nested_layout_bounds_cache_tracks_layout_revision() {
         let mut host = synthetic_component(0, 0);
         host.type_name = "NestedArtboardLayout";
         let mut instance = synthetic_instance(vec![host], vec![0]);
@@ -15399,7 +15575,7 @@ mod tests {
 
         let first_frame = instance.runtime_nested_artboard_layout_bounds_frame();
         let first_bounds = first_frame.bounds.clone();
-        assert_eq!(first_frame.key.layout_epoch, instance.layout_epoch());
+        assert_eq!(first_frame.key.layout_revision, instance.layout_revision());
         assert!(Arc::ptr_eq(&first_bounds, &first_frame.bounds));
 
         assert!(instance.add_dirt(0, ComponentDirt::PAINT, false));
@@ -15410,8 +15586,8 @@ mod tests {
                 .as_ref()
                 .expect("nested layout bounds frame")
                 .key
-                .layout_epoch,
-            instance.layout_epoch()
+                .layout_revision,
+            instance.layout_revision()
         );
         assert!(Arc::ptr_eq(&first_bounds, &after_paint.bounds));
 
@@ -15423,16 +15599,15 @@ mod tests {
                 .as_ref()
                 .expect("nested layout bounds frame")
                 .key
-                .layout_epoch,
-            instance.layout_epoch()
+                .layout_revision,
+            instance.layout_revision()
         );
         assert!(!Arc::ptr_eq(&first_bounds, &after_layout.bounds));
     }
 
     #[test]
-    fn layout_epoch_tracks_cpp_layout_property_changes() {
-        let mut layout = synthetic_component(0, 0);
-        layout.type_name = "LayoutComponent";
+    fn layout_revision_tracks_retained_layout_owners_not_global_text_writes() {
+        let layout = synthetic_component_for_type(0, "LayoutComponent");
         let mut text_run = synthetic_component(1, 1);
         text_run.type_name = "TextValueRun";
         let mut solid = synthetic_component(2, 2);
@@ -15444,17 +15619,17 @@ mod tests {
         let text = property_key_for_name("TextValueRun", "text").expect("text run text");
         let color = property_key_for_name("SolidColor", "colorValue").expect("solid color");
 
-        let mut layout_epoch = instance.layout_epoch();
+        let mut layout_revision = instance.layout_revision();
         assert!(instance.set_double_property(0, fractional_width, 0.5));
-        assert!(instance.layout_epoch() > layout_epoch);
+        assert!(instance.layout_revision() > layout_revision);
 
-        layout_epoch = instance.layout_epoch();
+        layout_revision = instance.layout_revision();
         assert!(instance.set_string_property(1, text, b"hello".to_vec()));
-        assert!(instance.layout_epoch() > layout_epoch);
+        assert_eq!(instance.layout_revision(), layout_revision);
 
-        layout_epoch = instance.layout_epoch();
+        layout_revision = instance.layout_revision();
         assert!(instance.set_color_property(2, color, 0xff00ff00));
-        assert_eq!(instance.layout_epoch(), layout_epoch);
+        assert_eq!(instance.layout_revision(), layout_revision);
     }
 
     #[test]
@@ -17070,7 +17245,7 @@ mod tests {
         instance.clear_component_dirt(1);
         instance.clear_component_dirt(2);
         instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
-        let layout_epoch = instance.layout_epoch();
+        let layout_revision = instance.layout_revision();
 
         assert!(instance.set_double_property(2, width, 24.0));
         assert!(
@@ -17080,7 +17255,7 @@ mod tests {
                 .dirt
                 .contains(ComponentDirt::PATH)
         );
-        assert!(instance.layout_epoch() > layout_epoch);
+        assert!(instance.layout_revision() > layout_revision);
 
         instance.clear_component_dirt(2);
         instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
@@ -19586,7 +19761,7 @@ mod tests {
         let cache_epoch = parent.cache_epoch();
         let prepared_epoch = parent.prepared_epoch();
         let retained_path_generation = parent.path_epoch();
-        let layout_epoch = parent.layout_epoch();
+        let layout_revision = parent.layout_revision();
         assert!(parent.advance_nested_artboards(0.0));
         let context = &parent.component_list_items(1).unwrap()[0].context;
         assert_eq!(
@@ -19605,7 +19780,7 @@ mod tests {
         assert_eq!(parent.cache_epoch(), cache_epoch);
         assert_eq!(parent.prepared_epoch(), prepared_epoch);
         assert_eq!(parent.path_epoch(), retained_path_generation);
-        assert_eq!(parent.layout_epoch(), layout_epoch);
+        assert_eq!(parent.layout_revision(), layout_revision);
     }
 
     #[test]

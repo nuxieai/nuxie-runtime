@@ -88539,3 +88539,49 @@ fn upstream_layout_intrinsic_measure_fixture_is_ported() {
     assert_eq!(bounds.2, 62.48047);
     assert_eq!(bounds.3, 72.62695);
 }
+
+#[test]
+fn upstream_text_local_bounds_fixture_retains_origin_adjusted_bounds() {
+    let label = "local_bounds.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read {label}: {error}"));
+    let runtime = read_runtime_file(&bytes)
+        .unwrap_or_else(|error| panic!("failed to import {label}: {error:#}"));
+    let graph = GraphFile::from_runtime_file(&runtime)
+        .unwrap_or_else(|error| panic!("failed to graph {label}: {error:#}"));
+    let artboard_graph = graph.artboards.first().expect("local-bounds artboard");
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
+            .unwrap_or_else(|error| panic!("failed to instantiate {label}: {error:#}"));
+    artboard.update_pass();
+
+    let text_local = |name: &str| {
+        artboard_graph
+            .components
+            .iter()
+            .find(|component| {
+                component.name.as_deref() == Some(name) && component.type_name == "Text"
+            })
+            .unwrap_or_else(|| panic!("missing Text named {name}"))
+            .local_id
+    };
+    let text1 = artboard
+        .debug_text_local_bounds(&runtime, artboard_graph, text_local("Text1"))
+        .expect("Text1 local bounds");
+    let text2 = artboard
+        .debug_text_local_bounds(&runtime, artboard_graph, text_local("Text2"))
+        .expect("Text2 local bounds");
+
+    for (actual, expected, field) in [
+        (text1.0, 0.0, "Text1.left"),
+        (text1.1, 0.0, "Text1.top"),
+        (text1.2, 159.55078, "Text1.width"),
+        (text1.3, 24.19921, "Text1.height"),
+        (text2.0, -79.77539, "Text2.left"),
+        (text2.1, -12.099609, "Text2.top"),
+        (text2.2, 159.55078, "Text2.width"),
+        (text2.3, 24.199218, "Text2.height"),
+    ] {
+        assert_close(actual, expected, field);
+    }
+}

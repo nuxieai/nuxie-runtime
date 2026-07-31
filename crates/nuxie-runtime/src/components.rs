@@ -921,6 +921,8 @@ pub(crate) enum RuntimeConstraintBoundsKind {
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeLayoutComponentState {
+    layout_node_dirty: Cell<bool>,
+    layout_node_revision: Cell<u64>,
     layout: Cell<RuntimeLayoutRect>,
     animation_a: Cell<RuntimeLayoutAnimationData>,
     animation_b: Cell<RuntimeLayoutAnimationData>,
@@ -936,6 +938,9 @@ pub(crate) struct RuntimeLayoutComponentState {
     inherited_interpolator: Cell<Option<RuntimeInterpolator>>,
     forced_width: Cell<Option<f32>>,
     forced_height: Cell<Option<f32>>,
+    position_left_changed: Cell<bool>,
+    position_top_changed: Cell<bool>,
+    force_update_layout_bounds: Cell<bool>,
     pub(crate) clip_property_key: Option<u16>,
     pub(crate) style_id_property_key: Option<u16>,
     pub(crate) style: Option<ComponentHandle>,
@@ -1005,6 +1010,49 @@ pub(crate) struct RuntimeTextInputState {
     pub(crate) scroll_y: f32,
 }
 
+/// Retained fields owned by one pinned C++ `Text` occurrence.
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeTextState {
+    bounds: Cell<Option<(f32, f32, f32, f32)>>,
+    layout_scale_types: Cell<Option<(u64, u64)>>,
+}
+
+impl RuntimeTextState {
+    fn new() -> Self {
+        Self {
+            bounds: Cell::new(None),
+            layout_scale_types: Cell::new(None),
+        }
+    }
+
+    fn clone_for_occurrence(&self) -> Self {
+        Self::new()
+    }
+
+    pub(crate) fn bounds(&self) -> Option<(f32, f32, f32, f32)> {
+        self.bounds.get()
+    }
+
+    pub(crate) fn retain_bounds(&self, bounds: (f32, f32, f32, f32)) {
+        self.bounds.set(Some(bounds));
+    }
+
+    pub(crate) fn invalidate_bounds(&self) {
+        self.bounds.set(None);
+    }
+
+    pub(crate) fn retain_layout_scale_types(&self, width: u64, height: u64) {
+        self.layout_scale_types.set(Some((width, height)));
+    }
+
+    pub(crate) fn effective_sizing(&self, authored: u64) -> u64 {
+        match self.layout_scale_types.get() {
+            Some((width, height)) if width != 2 && height != 2 => 2,
+            _ => authored,
+        }
+    }
+}
+
 impl Default for RuntimeTextInputState {
     fn default() -> Self {
         Self {
@@ -1031,6 +1079,8 @@ pub(crate) struct RuntimeDrawableComponentState {
 impl RuntimeLayoutComponentState {
     fn new(type_name: &'static str) -> Self {
         Self {
+            layout_node_dirty: Cell::new(false),
+            layout_node_revision: Cell::new(0),
             layout: Cell::new(RuntimeLayoutRect::default()),
             animation_a: Cell::new(RuntimeLayoutAnimationData::default()),
             animation_b: Cell::new(RuntimeLayoutAnimationData::default()),
@@ -1046,11 +1096,32 @@ impl RuntimeLayoutComponentState {
             inherited_interpolator: Cell::new(None),
             forced_width: Cell::new(None),
             forced_height: Cell::new(None),
+            position_left_changed: Cell::new(true),
+            position_top_changed: Cell::new(true),
+            force_update_layout_bounds: Cell::new(false),
             clip_property_key: property_key_for_name(type_name, "clip"),
             style_id_property_key: property_key_for_name(type_name, "styleId"),
             style: None,
             layout_constraints: Vec::new(),
         }
+    }
+
+    pub(crate) fn mark_layout_node_dirty(&self) -> bool {
+        let changed = !self.layout_node_dirty.replace(true);
+        if changed {
+            self.layout_node_revision
+                .set(self.layout_node_revision.get().wrapping_add(1));
+        }
+        changed
+    }
+
+    pub(crate) fn layout_node_is_dirty(&self) -> bool {
+        self.layout_node_dirty.get()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn layout_node_revision(&self) -> u64 {
+        self.layout_node_revision.get()
     }
 
     fn clone_for_occurrence(&self) -> Self {
@@ -1061,13 +1132,25 @@ impl RuntimeLayoutComponentState {
         }
     }
 
-    pub(crate) fn retain_bounds(&self, x: f32, y: f32, width: f32, height: f32) {
+    pub(crate) fn retain_bounds(&self, x: f32, y: f32, width: f32, height: f32) -> bool {
+        // The delegated solve consumed this retained node's dirty bit.
+        self.layout_node_dirty.set(false);
+        self.position_left_changed.set(false);
+        self.position_top_changed.set(false);
+        self.force_update_layout_bounds.set(false);
         let target = RuntimeLayoutRect {
             left: x,
             top: y,
             width,
             height,
         };
+        let previous_draw_bounds = if self.animates() {
+            self.current_animation_data().to
+        } else {
+            self.layout.get()
+        };
+        let draw_bounds_changed = previous_draw_bounds.width != target.width
+            || previous_draw_bounds.height != target.height;
         // `Artboard::host` arms `LayoutComponent::m_justAddedToHost`. The
         // first parent-owned Yoga result becomes both the current layout and
         // animation endpoints instead of animating from the standalone
@@ -1086,7 +1169,7 @@ impl RuntimeLayoutComponentState {
                 to: target,
                 ..RuntimeLayoutAnimationData::default()
             });
-            return;
+            return draw_bounds_changed;
         }
         if !self.animates() {
             self.layout.set(target);
@@ -1095,12 +1178,12 @@ impl RuntimeLayoutComponentState {
             animation.elapsed_seconds = 0.0;
             self.animation_a.set(animation);
             self.is_smoothing_animation.set(false);
-            return;
+            return draw_bounds_changed;
         }
 
         let mut animation = self.current_animation_data();
         if target == animation.to {
-            return;
+            return false;
         }
         if animation.elapsed_seconds != 0.0 {
             if self.is_smoothing_animation.get() {
@@ -1115,6 +1198,7 @@ impl RuntimeLayoutComponentState {
         animation.to = target;
         animation.elapsed_seconds = 0.0;
         self.set_current_animation_data(animation);
+        draw_bounds_changed
     }
 
     pub(crate) fn added_to_host(&self) {
@@ -1134,6 +1218,26 @@ impl RuntimeLayoutComponentState {
     pub(crate) fn position(&self) -> (f32, f32) {
         let layout = self.layout.get();
         (layout.left, layout.top)
+    }
+
+    pub(crate) fn mark_position_left_changed(&self) {
+        self.position_left_changed.set(true);
+    }
+
+    pub(crate) fn mark_position_top_changed(&self) {
+        self.position_top_changed.set(true);
+    }
+
+    pub(crate) fn position_left_changed(&self) -> bool {
+        self.position_left_changed.get()
+    }
+
+    pub(crate) fn position_top_changed(&self) -> bool {
+        self.position_top_changed.get()
+    }
+
+    pub(crate) fn force_update_layout_bounds(&self) {
+        self.force_update_layout_bounds.set(true);
     }
 
     pub(crate) fn set_animation_style(
@@ -1419,6 +1523,7 @@ pub(crate) struct RuntimeConcreteComponentState {
     pub(crate) weight: Option<RuntimeWeightState>,
     pub(crate) vertex: Option<RuntimeVertexState>,
     pub(crate) scripted: Option<RuntimeScriptedComponentState>,
+    pub(crate) text: Option<RuntimeTextState>,
     pub(crate) text_input: Option<RuntimeTextInputState>,
     pub(crate) drawable: Option<RuntimeDrawableComponentState>,
     pub(crate) solo: Option<RuntimeSoloState>,
@@ -1468,6 +1573,7 @@ impl RuntimeConcreteComponentState {
                 "ScriptedDrawable" | "ScriptedLayout" | "ScriptedPathEffect"
             )
             .then(RuntimeScriptedComponentState::default),
+            text: type_is_a(type_name, "Text").then(RuntimeTextState::new),
             text_input: (type_name == "TextInput").then(RuntimeTextInputState::default),
             drawable: (type_is_a(type_name, "Drawable") || type_is_a(type_name, "LayoutComponent"))
                 .then(|| RuntimeDrawableComponentState::new(type_name)),
@@ -1534,6 +1640,10 @@ impl RuntimeConcreteComponentState {
                 .scripted
                 .as_ref()
                 .map(|_| RuntimeScriptedComponentState::default()),
+            text: self
+                .text
+                .as_ref()
+                .map(RuntimeTextState::clone_for_occurrence),
             text_input: self
                 .text_input
                 .as_ref()
@@ -1853,11 +1963,21 @@ pub struct RuntimeComponent {
     pub(crate) constrained_layout_ancestor: Option<ComponentHandle>,
     pub(crate) graph_order: Option<GraphOrder>,
     pub dirt: ComponentDirt,
+    pub(crate) path_revision: Cell<u64>,
     pub transform: TransformRuntimeState,
     pub(crate) concrete: RuntimeConcreteComponentState,
 }
 
 impl RuntimeComponent {
+    pub(crate) fn path_revision(&self) -> u64 {
+        self.path_revision.get()
+    }
+
+    pub(crate) fn bump_path_revision(&self) {
+        self.path_revision
+            .set(self.path_revision.get().wrapping_add(1));
+    }
+
     pub(crate) fn from_graph_component(component: &ComponentNode) -> Self {
         Self {
             local_id: component.local_id,
@@ -1878,6 +1998,7 @@ impl RuntimeComponent {
             constrained_layout_ancestor: None,
             graph_order: None,
             dirt: ComponentDirt::FILTHY,
+            path_revision: Cell::new(1),
             transform: TransformRuntimeState::default(),
             concrete: RuntimeConcreteComponentState::for_type(component.type_name),
         }
@@ -1904,6 +2025,7 @@ impl RuntimeComponent {
             constrained_layout_ancestor: None,
             graph_order: None,
             dirt: ComponentDirt::FILTHY,
+            path_revision: Cell::new(1),
             transform: TransformRuntimeState::default(),
             concrete: RuntimeConcreteComponentState::default(),
         }

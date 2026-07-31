@@ -4877,7 +4877,7 @@ impl ArtboardInstance {
                     return Vec::new();
                 };
                 let Some(parent_layout_local) =
-                    runtime_foreground_layout_parent_local(self, foreground_local)
+                    crate::foreground_layout_drawable::parent_layout_local(self, foreground_local)
                 else {
                     return Vec::new();
                 };
@@ -6266,7 +6266,30 @@ impl ArtboardInstance {
             };
             let x = parent_bounds.map_or(bounds.x, |parent| bounds.x - parent.x);
             let y = parent_bounds.map_or(bounds.y, |parent| bounds.y - parent.y);
-            layout.retain_bounds(x, y, bounds.width, bounds.height);
+            if layout.retain_bounds(x, y, bounds.width, bounds.height) {
+                let layout_handle = self.component_handle(local_id);
+                for text_local in self.components().iter().filter_map(|component| {
+                    (component.type_name == "Text"
+                        && layout_handle
+                            .is_some_and(|layout| component.layout_ancestors.contains(&layout)))
+                    .then_some(component.local_id)
+                }) {
+                    if let Some(text) = self
+                        .component(text_local)
+                        .and_then(|component| component.concrete.text.as_ref())
+                    {
+                        text.invalidate_bounds();
+                    }
+                    self.runtime_drawables
+                        .mark_text_resource_dirty_for_local(text_local);
+                }
+                let has_layout_draw_owner = self
+                    .runtime_drawables
+                    .mark_layout_resource_dirty_for_local(local_id);
+                if has_layout_draw_owner && let Some(component) = self.component(local_id) {
+                    component.bump_path_revision();
+                }
+            }
         }
     }
 
@@ -9288,7 +9311,10 @@ impl RuntimeTextDrawOwner {
 
     fn mark_render_styles_dirty(&self) {
         self.dirty.set(true);
-        self.backend.borrow_mut().paths.clear();
+        self.backend
+            .borrow_mut()
+            .paths
+            .retain(|key, _| key.paint_local.is_some());
     }
 
     fn retained_or_build(
@@ -9314,7 +9340,13 @@ impl RuntimeTextDrawOwner {
                 // Rust's path/layout epochs conservatively invalidate
                 // unrelated Text owners too. Preserve those owners' backend
                 // identity when rebuilding produces the same commands.
-                self.backend.borrow_mut().paths.clear();
+                // `TextStylePaint::m_path` is retained and rewound in place.
+                // Effect/opacity paths carry a concrete paint owner key and
+                // are the only paths replaced by `clearRenderStyles`.
+                self.backend
+                    .borrow_mut()
+                    .paths
+                    .retain(|key, _| key.paint_local.is_some());
             }
             *self.retained.borrow_mut() = Some(retained);
             self.dirty.set(false);
@@ -9753,19 +9785,16 @@ impl RuntimeDrawableList {
         }
     }
 
-    pub(crate) fn mark_layout_resources_dirty(&self) {
-        for owner in self.layout_draw_owners.iter().flatten() {
-            owner.mark_dirty();
-        }
-    }
-
-    pub(crate) fn mark_layout_resource_dirty_for_local(&self, local_id: usize) {
+    pub(crate) fn mark_layout_resource_dirty_for_local(&self, local_id: usize) -> bool {
         if let Some(owner) = self
             .layout_draw_owners
             .get(local_id)
             .and_then(Option::as_ref)
         {
             owner.mark_dirty();
+            true
+        } else {
+            false
         }
     }
 
@@ -10260,7 +10289,7 @@ fn runtime_mounted_component_list_revisions(instance: &ArtboardInstance) -> (u64
 
     fn visit(
         instance: &ArtboardInstance,
-        layout_epoch: &mut u64,
+        layout_revision: &mut u64,
         prepared_epoch: &mut u64,
         visited: &mut BTreeSet<u64>,
     ) {
@@ -10271,12 +10300,12 @@ fn runtime_mounted_component_list_revisions(instance: &ArtboardInstance) -> (u64
             let Some(items) = instance.component_list_items(list_local) else {
                 continue;
             };
-            mix(layout_epoch, list_local as u64);
-            mix(layout_epoch, items.len() as u64);
+            mix(layout_revision, list_local as u64);
+            mix(layout_revision, items.len() as u64);
             mix(prepared_epoch, list_local as u64);
             mix(prepared_epoch, items.len() as u64);
             for item in items {
-                for epoch in [&mut *layout_epoch, &mut *prepared_epoch] {
+                for epoch in [&mut *layout_revision, &mut *prepared_epoch] {
                     mix(epoch, item.context.borrow().instance_identity());
                     mix(epoch, item.occurrence_identity);
                     mix(epoch, item.logical_index as u64);
@@ -10284,14 +10313,14 @@ fn runtime_mounted_component_list_revisions(instance: &ArtboardInstance) -> (u64
                     mix(epoch, u64::from(item.child.graph_global_id));
                     mix(epoch, item.child.instance_identity());
                 }
-                for epoch in [&mut *layout_epoch, &mut *prepared_epoch] {
+                for epoch in [&mut *layout_revision, &mut *prepared_epoch] {
                     for value in item.transform.0 {
                         mix(epoch, u64::from(value.to_bits()));
                     }
                 }
-                mix(layout_epoch, item.child.layout_epoch());
-                mix(layout_epoch, u64::from(item.child.width.to_bits()));
-                mix(layout_epoch, u64::from(item.child.height.to_bits()));
+                mix(layout_revision, item.child.layout_revision());
+                mix(layout_revision, u64::from(item.child.width.to_bits()));
+                mix(layout_revision, u64::from(item.child.height.to_bits()));
                 // The prepared frame owns a transient clone of each mounted
                 // child, so it must track all live instance-property writes,
                 // not only prepared-topology changes. For example SolidColor
@@ -10300,20 +10329,20 @@ fn runtime_mounted_component_list_revisions(instance: &ArtboardInstance) -> (u64
                 // clone's stale paint value.
                 mix(prepared_epoch, item.child.cache_epoch());
                 mix(prepared_epoch, item.child.prepared_epoch());
-                visit(&item.child, layout_epoch, prepared_epoch, visited);
+                visit(&item.child, layout_revision, prepared_epoch, visited);
             }
         }
     }
 
-    let mut layout_epoch = 0xcbf29ce484222325;
+    let mut layout_revision = 0xcbf29ce484222325;
     let mut prepared_epoch = 0xcbf29ce484222325;
     visit(
         instance,
-        &mut layout_epoch,
+        &mut layout_revision,
         &mut prepared_epoch,
         &mut BTreeSet::new(),
     );
-    (layout_epoch, prepared_epoch)
+    (layout_revision, prepared_epoch)
 }
 
 #[derive(Default)]
@@ -13313,7 +13342,7 @@ struct RuntimeLiveTraversalFrame {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RuntimeLayoutBoundsCacheKey {
     graph_global_id: u32,
-    layout_epoch: u64,
+    layout_revision: u64,
     mounted_component_list_layout_revision: u64,
 }
 
@@ -13326,7 +13355,6 @@ struct RuntimeLayoutBoundsFrame {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RuntimePathGeometryCommandsCacheKey {
     path_epoch: u64,
-    layout_epoch: u64,
 }
 
 #[derive(Default)]
@@ -13376,7 +13404,7 @@ struct RuntimeShapePathState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RuntimeWorldTransformCacheKey {
     cache_epoch: u64,
-    layout_epoch: u64,
+    layout_revision: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -13504,7 +13532,6 @@ impl RuntimeCachedDrawRawPath {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RuntimeDrawPathRevision {
     path_epoch: u64,
-    layout_epoch: u64,
     world_epoch: u64,
 }
 
@@ -13518,7 +13545,6 @@ struct RuntimeRetainedRenderPath {
 struct RuntimeRetainedRenderPathCacheKey {
     graph_global_id: u32,
     path_epoch: u64,
-    layout_epoch: u64,
     world_epoch: u64,
     fill_rule: RenderFillRule,
 }
@@ -13817,7 +13843,7 @@ impl RuntimeArtboardPathState {
         }
         let key = RuntimeWorldTransformCacheKey {
             cache_epoch: instance.cache_epoch(),
-            layout_epoch: instance.layout_epoch(),
+            layout_revision: instance.layout_revision(),
         };
         if let Some(transform) = self.world_transforms.get(graph.global_id, local_id, key) {
             return transform;
@@ -13956,7 +13982,7 @@ impl RuntimeArtboardPathState {
     ) -> RuntimeLayoutBoundsFrame {
         let key = RuntimeLayoutBoundsCacheKey {
             graph_global_id: graph.global_id,
-            layout_epoch: instance.layout_epoch(),
+            layout_revision: instance.layout_revision(),
             mounted_component_list_layout_revision,
         };
         if self
@@ -13989,8 +14015,9 @@ impl RuntimeArtboardPathState {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> RuntimeCachedPathGeometryCommands {
         let key = RuntimePathGeometryCommandsCacheKey {
-            path_epoch: instance.path_epoch(),
-            layout_epoch: instance.layout_epoch(),
+            path_epoch: instance
+                .component(path.local_id)
+                .map_or(0, |component| component.path_revision()),
         };
         let slot = self
             .path_geometry_commands
@@ -14082,8 +14109,9 @@ impl RuntimeArtboardPathState {
     ) -> RuntimeRetainedRenderPathCacheKey {
         RuntimeRetainedRenderPathCacheKey {
             graph_global_id: graph.global_id,
-            path_epoch: instance.path_epoch(),
-            layout_epoch: instance.layout_epoch(),
+            path_epoch: instance
+                .component(0)
+                .map_or(0, |component| component.path_revision()),
             world_epoch: 0,
             fill_rule,
         }
@@ -15317,19 +15345,6 @@ fn runtime_shape_paint_container_world_transform(
     }
 }
 
-fn runtime_foreground_layout_parent_local(
-    instance: &ArtboardInstance,
-    foreground_local: usize,
-) -> Option<usize> {
-    instance
-        .component_parent_local(foreground_local)
-        .filter(|parent_local| {
-            instance
-                .component(*parent_local)
-                .is_some_and(|component| component.type_name == "LayoutComponent")
-        })
-}
-
 #[inline]
 fn runtime_text_paint_shape_world(
     draws_text: bool,
@@ -15403,6 +15418,15 @@ fn runtime_retained_text_draw_frame(
                     &runtime_text_clip_path_commands(bounds, world),
                 ))
             });
+        if drawable.type_name == "Text"
+            && let Some(bounds) =
+                static_text_constraint_bounds(runtime, graph, instance, drawable_local)
+            && let Some(text) = instance
+                .component(drawable_local)
+                .and_then(|component| component.concrete.text.as_ref())
+        {
+            text.retain_bounds(bounds);
+        }
         Ok(RuntimeCachedTextShapePaints {
             commands: Arc::new(commands),
             paths,
@@ -15878,9 +15902,11 @@ fn runtime_draw_live_layout_family(
 
     let layout_local = match drawable.kind {
         DrawableOrderKind::LayoutProxy => drawable.layout_local,
-        DrawableOrderKind::Drawable if drawable.type_name == "ForegroundLayoutDrawable" => drawable
-            .local_id
-            .and_then(|local_id| runtime_foreground_layout_parent_local(instance, local_id)),
+        DrawableOrderKind::Drawable if drawable.type_name == "ForegroundLayoutDrawable" => {
+            drawable.local_id.and_then(|local_id| {
+                crate::foreground_layout_drawable::parent_layout_local(instance, local_id)
+            })
+        }
         _ => None,
     }
     .context("live layout drawable is missing its owning LayoutComponent")?;
@@ -16694,7 +16720,7 @@ fn runtime_draw_live_shape_paint(
         }
     }
 
-    let draw_path_revision = runtime_draw_path_revision(instance, paint.path_kind);
+    let draw_path_revision = runtime_draw_path_revision(instance, shape_local, paint);
     let effect_or_shape_path_commands = if paint.has_effect_path {
         paint.effect_path_commands.as_slice()
     } else {
@@ -16871,12 +16897,21 @@ fn runtime_draw_path_cache_path_kind(
 
 fn runtime_draw_path_revision(
     instance: &ArtboardInstance,
-    path_kind: RuntimeShapePaintPathKind,
+    local_id: usize,
+    paint: &RuntimeShapePaintCommand,
 ) -> RuntimeDrawPathRevision {
+    let component_path_revision = instance
+        .component(local_id)
+        .map_or(0, |component| component.path_revision());
+    let prepared_revision = paint
+        .prepared_raw_path
+        .as_ref()
+        .map_or(0, |path| path.mutation_id());
     RuntimeDrawPathRevision {
-        path_epoch: instance.path_epoch(),
-        layout_epoch: instance.layout_epoch(),
-        world_epoch: if path_kind == RuntimeShapePaintPathKind::World {
+        path_epoch: component_path_revision
+            .wrapping_mul(31)
+            .wrapping_add(prepared_revision),
+        world_epoch: if paint.path_kind == RuntimeShapePaintPathKind::World {
             instance.prepared_epoch()
         } else {
             0
@@ -26500,7 +26535,7 @@ mod tests {
         assert_eq!(first.cache_epoch(), second.cache_epoch());
         assert_eq!(first.prepared_epoch(), second.prepared_epoch());
         assert_eq!(first.path_epoch(), second.path_epoch());
-        assert_eq!(first.layout_epoch(), second.layout_epoch());
+        assert_eq!(first.layout_revision(), second.layout_revision());
 
         assert_eq!(
             first.geometry_hit_test_with_context(
@@ -26849,7 +26884,7 @@ mod tests {
     }
 
     #[test]
-    fn layout_shape_paint_render_path_cache_follows_layout_epoch() {
+    fn layout_shape_paint_render_path_cache_follows_layout_revision() {
         let bytes = synthetic_painted_layout_geometry_riv();
         let file = read_runtime_file(&bytes).expect("synthetic painted-layout riv imports");
         let graphs = GraphFile::from_runtime_file(&file).expect("synthetic painted-layout graphs");
@@ -26902,7 +26937,7 @@ mod tests {
             .cloned()
             .expect("painted layout draws a path");
         let path_epoch = instance.path_epoch();
-        let layout_epoch = instance.layout_epoch();
+        let layout_revision = instance.layout_revision();
 
         let width_key = runtime_layout_component_property_key_for_name("width")
             .expect("LayoutComponent width key");
@@ -26912,7 +26947,7 @@ mod tests {
             path_epoch,
             "layout-only writes must not masquerade as path edits"
         );
-        assert!(instance.layout_epoch() > layout_epoch);
+        assert!(instance.layout_revision() > layout_revision);
         instance.update_components();
         instance
             .update_artboard_backend_tree(
@@ -26940,7 +26975,10 @@ mod tests {
             .last()
             .expect("resized painted layout draws a path");
 
-        assert_ne!(resized, &baseline, "retained RawPath ignored layout_epoch");
+        assert_ne!(
+            resized, &baseline,
+            "retained RawPath ignored layout_revision"
+        );
         let baseline_max_x = baseline
             .iter()
             .map(|point| point.0)
@@ -27620,12 +27658,12 @@ mod tests {
         let graph = graphs.artboards.first().expect("fixture has an artboard");
         let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
         instance.update_pass();
-        let layout_epoch = instance.layout_epoch();
+        let layout_revision = instance.layout_revision();
 
         let width_key =
             property_key_for_name("NSlicedNode", "width").expect("NSlicedNode.width key");
         assert!(instance.set_double_property(3, width_key, 250.0));
-        assert!(instance.layout_epoch() > layout_epoch);
+        assert!(instance.layout_revision() > layout_revision);
         assert!(
             instance
                 .component(8)
@@ -29287,7 +29325,6 @@ mod tests {
         };
         let revision = RuntimeDrawPathRevision {
             path_epoch: 10,
-            layout_epoch: 20,
             world_epoch: 0,
         };
         let commands = vec![
@@ -29387,7 +29424,6 @@ mod tests {
         };
         let revision = RuntimeDrawPathRevision {
             path_epoch: 10,
-            layout_epoch: 20,
             world_epoch: 0,
         };
         let commands = vec![
@@ -29470,7 +29506,6 @@ mod tests {
         };
         let revision = RuntimeDrawPathRevision {
             path_epoch: 10,
-            layout_epoch: 20,
             world_epoch: 0,
         };
         let commands = vec![

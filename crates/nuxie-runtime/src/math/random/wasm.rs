@@ -1,6 +1,9 @@
+#[cfg(feature = "js-host-seed")]
 use wasm_bindgen::{JsCast, JsValue};
 
-use super::{emscripten_monotonic_millis_to_seed, emscripten_musl_draw, emscripten_musl_seed};
+#[cfg(feature = "js-host-seed")]
+use super::emscripten_monotonic_millis_to_seed;
+use super::{emscripten_musl_draw, emscripten_musl_seed};
 
 pub(super) fn seed(platform_seed: &mut u64, seed: u32) {
     emscripten_musl_seed(platform_seed, seed);
@@ -10,6 +13,15 @@ pub(super) fn draw(platform_seed: &mut u64) -> f32 {
     emscripten_musl_draw(platform_seed)
 }
 
+#[cfg(not(feature = "js-host-seed"))]
+pub(super) fn nondeterministic_seed() -> u32 {
+    // No JS host, no browser clock to correspond to. Mirror the native
+    // fallback convention: C++'s deterministic srand seed. Host-free wasm
+    // embedders (the cold publisher) want reproducible draws anyway.
+    1
+}
+
+#[cfg(feature = "js-host-seed")]
 pub(super) fn nondeterministic_seed() -> u32 {
     // Pinned C++'s browser build uses Emscripten 3.1.61. libc++ aliases
     // high_resolution_clock to steady_clock, whose CLOCK_MONOTONIC shim

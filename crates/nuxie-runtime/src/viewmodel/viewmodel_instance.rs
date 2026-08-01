@@ -1698,9 +1698,33 @@ impl RuntimeOwnedViewModelInstance {
         self.instance_identity
     }
 
-    #[cfg(test)]
     pub(crate) fn allocation_identity(&self) -> u64 {
         self.allocation_identity
+    }
+
+    /// Last registered numeric value for one C++ `SymbolType` value.
+    ///
+    /// `ViewModelInstance::addValue` walks concrete value occurrences and
+    /// overwrites the symbol table, so duplicate symbols are resolved by
+    /// value creation order rather than by property name.
+    pub(crate) fn number_cell_for_symbol(
+        &self,
+        file: &RuntimeFile,
+        symbol_type: u8,
+    ) -> Option<RuntimeViewModelCell> {
+        let view_model = file.view_model(self.view_model_index)?;
+        self.value_order.iter().rev().find_map(|occurrence| {
+            if occurrence.kind != RuntimeOwnedViewModelValueKind::Number {
+                return None;
+            }
+            let property = view_model.properties.get(occurrence.property_index)?;
+            if property.uint_property("symbolTypeValue") != Some(u64::from(symbol_type)) {
+                return None;
+            }
+            self.numbers
+                .get(occurrence.slot_index)
+                .map(|number| number.cell.clone())
+        })
     }
 
     // Distinguishes separately-created owned instances. C++
@@ -3227,7 +3251,9 @@ impl RuntimeOwnedViewModelInstance {
         let Some(list) = self.list_handle_by_property_path(property_path) else {
             return false;
         };
-        list.value.borrow_mut().insert_instance(index, item);
+        if !list.value.borrow_mut().insert_instance(index, item) {
+            return false;
+        }
         list.notify_value_changed();
         true
     }
@@ -3241,7 +3267,13 @@ impl RuntimeOwnedViewModelInstance {
         let Some(list) = self.list_handle_by_property_path(property_path) else {
             return false;
         };
-        list.value.borrow_mut().insert_runtime_instance(index, item);
+        if !list
+            .value
+            .borrow_mut()
+            .insert_runtime_instance(index, item)
+        {
+            return false;
+        }
         list.notify_value_changed();
         true
     }

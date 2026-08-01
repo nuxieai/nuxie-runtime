@@ -4,13 +4,15 @@ upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 porting_rules_file = "docs/PORTING.md"
 file_correspondence_manifest = "file-correspondence-manifest.toml"
 trace_evidence_file = "docs/runtime-frame-loop-trace.json"
-phase = "fl-e8-wp1-candidate"
+phase = "fl-e8-wave-candidate"
 candidate_pending_verification_files = [
+  "src/shapes/list_path.cpp",
   "src/text/text_modifier.cpp",
   "src/text/text_style.cpp",
   "src/text/text_style_feature.cpp",
   "src/text/text_target_modifier.cpp",
   "src/text/text_variation_modifier.cpp",
+  "src/text/raw_text.cpp",
 ]
 provisional_runtime_base = "95eb04b7cfb847f24ba77872bd8a0ee43da1af41"
 provisional_fl_b_tip = "0b08970fccc42ff3677534d4dcece0f05f69a0bc"
@@ -143,10 +145,10 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 339
+faithful = 341
 adapted = 0
 divergent-by-decision = 1
-pending = 2
+pending = 0
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
@@ -2354,7 +2356,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E8"
 rust_modules = ["crates/nuxie-runtime/src/shapes/list_path.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/shapes/mesh.cpp"
@@ -2688,9 +2690,9 @@ status = "faithful"
 upstream = "src/text/raw_text.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E8"
-rust_modules = ["crates/nuxie-runtime/src/text/raw_text.rs", "crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/text/raw_text.rs", "crates/nuxie-runtime/src/text/font_hb.rs", "crates/nuxie-runtime/src/text/text_engine.rs", "crates/nuxie-runtime/src/text.rs", "crates/nuxie-runtime/src/draw.rs", "crates/nuxie/src/raw_text.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/raw_text_input.cpp"

@@ -86,9 +86,10 @@ pub(crate) fn bool_property_changed(
     property_key: u16,
 ) -> Option<bool> {
     match type_name {
-        Some("Path" | "PointsPath" | "Ellipse" | "Polygon" | "Rectangle" | "Star" | "Triangle") => {
-            path::bool_property_changed(artboard, local_id, property_key)
-        }
+        Some(
+            "Path" | "PointsPath" | "ListPath" | "Ellipse" | "Polygon" | "Rectangle" | "Star"
+            | "Triangle",
+        ) => path::bool_property_changed(artboard, local_id, property_key),
         Some("ClippingShape") => {
             clipping_shape::bool_property_changed(artboard, local_id, property_key)
         }

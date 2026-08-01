@@ -2187,3 +2187,26 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   counts are 339/1/2. The scripted wrapper reuses a complete pinned decoder
   archive set instead of deleting read-only external inputs. The RawText GM
   family remains a nonblocking follow-up lane.
+- 2026-08-01 — FL-E8 WP2 closes `src/shapes/list_path.cpp` and moves the
+  family ledger to faithful 340, divergent-by-decision 1, pending 1. The Rust
+  occurrence now owns positional row listeners and synthetic
+  `CubicDetachedVertex` state, subscribes the twelve numeric symbols in pinned
+  creation order, preserves callback-order last-source-wins semantics, and
+  invalidates retained path/composer geometry after every reconciliation or
+  live write. The eight upstream phases plus 60 live frames are byte-exact in
+  `list_to_path.sriv`; D-LP-EDGE covers remap, duplicates, unsubscribe, shrink,
+  invalid indices, cold clone/drop, and zero/one rendering. C++ null/UB inputs
+  remain precondition ratchets, while Rust clears stale state and fails safely.
+  The exact gate evidence is recorded in `W123-report.md`; standalone RawText
+  landed in the parallel WP3 branch merged the same day (wave counts 341/1/0).
+- 2026-08-01 — FL-E8 WP3 promotes only `src/text/raw_text.cpp`, producing the
+  row-scoped interim ledger state faithful 340, divergent-by-decision 1,
+  pending 1 while the separately owned WP2 ListPath row remains untouched.
+  The public `RawText` facade now preserves constructor/append/clear/setter,
+  lazy bounds/clip/render, paint override, bidi/ellipsis, command-order, and
+  nonfinite behavior proven by D-RT-API. The five pinned U-color cases execute
+  live in both runtimes; shared text-engine COLR/raster extraction feeds both
+  owners, standalone replay remains flat COLR-path-only, and integrated Text
+  retains its decoded bitmap cache. Verification remains
+  `pending-verification`; the RawText GM family is still a documented
+  nonblocking follow-up lane.

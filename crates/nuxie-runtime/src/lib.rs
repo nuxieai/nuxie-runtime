@@ -175,10 +175,11 @@ pub use draw::{
     RuntimeContourMeasure, RuntimeDrawableDispatch, RuntimeDrawableDispatchKind,
     RuntimeDrawableDispatchObjectKind, RuntimeFeatherState, RuntimeGeometryHit,
     RuntimeGeometryHitOccurrence, RuntimeGeometryHitPathSegment, RuntimeGradientStop,
-    RuntimeImageDimensionConflict, RuntimeLayoutBoundsReport, RuntimePathCommand,
-    RuntimePathMeasure, RuntimePathSample, RuntimeRenderPaints, RuntimeSemanticTextHit,
-    RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind,
-    RuntimeShapePaintState, preallocate_source_render_paints, runtime_path_commands_from_raw_path,
+    RuntimeImageDimensionConflict, RuntimeLayoutBounds, RuntimeLayoutBoundsReport,
+    RuntimePathCommand, RuntimePathMeasure, RuntimePathSample, RuntimeRenderPaints,
+    RuntimeSemanticTextHit, RuntimeShapePaintCommand, RuntimeShapePaintKind,
+    RuntimeShapePaintPathKind, RuntimeShapePaintState, preallocate_source_render_paints,
+    runtime_path_commands_from_raw_path,
 };
 pub use focus::{
     FocusBounds, FocusDirection, FocusEdgeBehavior, FocusEvent, FocusEventKind, FocusManager,
@@ -225,6 +226,7 @@ pub use scripting::{
     script_node_for_artboard, script_view_model_from_owned, script_view_model_from_owned_context,
     script_view_model_from_owned_snapshot, script_view_models,
 };
+pub use shapes::list_path::{RuntimeListPathDebugReport, RuntimeListPathDebugVertex};
 #[doc(hidden)]
 pub use state_machine::RuntimeFileStateMachineActionCatalog;
 pub use state_machine::{
@@ -250,6 +252,13 @@ pub(crate) use state_machine::{
     StateMachineBindableNumberInstance, StateMachineBindableStringInstance,
     StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
     StateMachineTransitionDurationInstance,
+};
+pub use text::{
+    RawText as RuntimeRawText, RawTextFont, RawTextFontError, RawTextPaint,
+    RuntimeColorGlyphClassification, RuntimeColorGlyphGradientStop, RuntimeColorGlyphLayer,
+    RuntimeColorGlyphPaint, TextAlign, TextOverflow, TextSizing, runtime_classify_color_glyph,
+    runtime_classify_color_glyph_face, runtime_extract_color_glyph_layers,
+    runtime_extract_color_glyph_layers_face,
 };
 pub use text::{
     RuntimeTextLayoutDebugReport, RuntimeTextModifierDebugReport,

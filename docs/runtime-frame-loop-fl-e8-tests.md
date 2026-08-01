@@ -24,8 +24,13 @@ The seven directive-owned C++ rows are:
   localized variable-font splitting, live dirt/callback behavior,
   `modifyOrigin`, deterministic fixtures, D-ST differentials, and G-ST
   goldens. Exactly five rows promoted; counts `339/1/2`.
-- [ ] WP2 dynamic ListPath: pending.
-- [ ] WP3 standalone RawText and shared color-glyph engine: pending.
+- [x] WP2 dynamic ListPath: occurrence-local synthetic vertices and number
+  subscriptions, positional remap/teardown, safe invalid-input boundaries,
+  exact eight-phase/60-frame renderer parity, and D-LP-EDGE lifecycle coverage.
+- [x] WP3 standalone RawText and shared color-glyph engine: public facade,
+  retained standalone lifecycle, live RawText API/color differentials, shared
+  COLR/raster extraction, and integrated bitmap replay/cache complete.
+  Merged wave counts are `341/1/0`.
 
 ## Ledger transitions
 
@@ -39,6 +44,10 @@ The seven directive-owned C++ rows are:
 The sole divergent row is D3/layout-engine. WP1 promotion records
 implementation acceptance while `verification = "pending-verification"`
 remains an independent orchestrator action.
+
+WP3 was executed before the concurrently owned WP2 worktree landed. Its
+row-scoped promotion therefore records the valid intermediate state `340/1/1`;
+the transition table above remains the planned sequential/final family map.
 
 ## WP0 evidence
 
@@ -115,6 +124,26 @@ remains an independent orchestrator action.
 - Checker: 94/94 unit tests pass; production result 339/1/2 and
   `path_epoch_compensation=64/0..67`.
 
+## WP2 ListPath evidence
+
+- `D-LP-INIT/XY/RD/DETACHED/POINT/INVALID/PARTIAL/LIVE`: the generated
+  `list_to_path` action stream ports `data_binding_test.cpp:1585-1819` and is
+  byte-exact against the pinned `.sriv`, including all 60 live frames.
+- `D-LP-EDGE`: focused live-fixture coverage proves invalid-index no-dirt,
+  identical reconciliation dirt, positional reorder, duplicate rows,
+  same-count replacement, old-source unsubscribe, live replacement writes,
+  cold clone ownership, tail shrink, and zero/one-vertex empty rendering.
+- `R-LP-OWNER`: the direct owner retains one listener, synthetic detached
+  vertex, strong instance reference, and exact number-cell subscriptions per
+  filtered row. Drop/remap clears subscriptions before vertex state is lost.
+- `G-LP` and `S-LP`: the existing `list_to_path` golden row remains singular
+  and exact; its silver row is now `status = "exact"` only after an independent
+  byte-exact validation.
+- Safe divergence is confined to C++ null/UB preconditions: null list/item and
+  wrong converter output clear stale Rust state, unsubscribe, dirty, and return
+  failure. No crash is manufactured.
+- WP2 gates and final counts are recorded in `W123-report.md`.
+
 ## Corrective additive TextModifierGroup work
 
 The `src/text/text_modifier_group.cpp` row remains faithful and was not
@@ -129,6 +158,40 @@ The upstream `gm-rawtext`, `gm-feather`, `gm-atlas`, `gm-dither`, and
 `gm-subpass` fixtures are outside this family's directed corpus reach. They
 remain a nonblocking follow-up and are not claimed as standalone RawText or
 U-color acceptance evidence.
+
+## WP3 differentials and owner ratchets
+
+- `D-RT-API` runs the pinned C++ RawText owner and the public Rust facade over
+  defaults, empty/NUL/multiple append, paint-identity foreground reuse,
+  lazy/equality dirt, negative/nonfinite setters, all 18 sizing/overflow
+  combinations, all alignments, logical and aggregate-path bounds, bidi,
+  ellipsis, null/override paint, clip create/retain/release, clear/stale bounds,
+  retained styles, and first-occurrence/coalesced command streams.
+- `D-RT-COLOR-188`, `402`, `423`, `457`, and `474` are the exact five upstream
+  no-crash scenarios. They compare live logical bounds, total/color/style
+  command counts, and every renderer counter exposed by the no-op ABI; Rust
+  additionally asserts that standalone replay never emits bitmap drawing.
+- `D-RT-ENGINE` directly classifies/extracts a monochrome font, Twemoji COLR
+  layers, and an sbix raster layer. Integrated replay proves per-owner bitmap
+  decode reuse (one decode, two draws), while the standalone branch accepts
+  only solid COLR paths.
+- `R-RT-OWNER` pins the factory-domain borrow, font validation, public exports,
+  shared classifier calls, absence of a standalone support ceiling, integrated
+  bitmap cache ownership, and the live C++ probe mode.
+
+## WP3 gate evidence
+
+Exact per-checkbox evidence is recorded in `W124-report.md`. The C++ probe was
+freshly rebuilt before the three live differential owners passed: full
+`D-RT-API`, all five `D-RT-COLOR-*` cases, and live shared-engine
+monochrome/COLR/sbix metadata. `cargo test -p nuxie-runtime`, `cargo test -p
+nuxie`, the 319-entry/649-segment ordinary golden, the 319-entry/649-segment
+scripted golden, the 70-test C++ binary differential, lint gate, and the WP3
+`340/1/1` checker pass without weakened expectations. `make renderer-golden`
+entered its supported-host lane but this machine exposed no Metal adapter; it
+failed closed on the first `first-light-rectangle-msaa` replay and was not
+substituted. GM-raw, GM-feather, GM-atlas, GM-dither, and GM-subpass remain
+solely in the nonblocking follow-up lane.
 
 ## Ambiguity and safety log
 

@@ -73,7 +73,7 @@ impl Args {
 #[derive(Debug)]
 struct FixtureArgs {
     name: String,
-    font: PathBuf,
+    font: Option<PathBuf>,
     out: PathBuf,
 }
 
@@ -90,7 +90,7 @@ impl FixtureArgs {
                 "--out" => out = args.next().map(PathBuf::from),
                 "--help" | "-h" => {
                     println!(
-                        "usage: nuxie-codegen fixture --name <text-style-feature|text-variation-modifier> --font <font.ttf> --out <fixture.riv>"
+                        "usage: nuxie-codegen fixture --name <text-style-feature|text-variation-modifier|transform-live-write> [--font <font.ttf>] --out <fixture.riv>"
                     );
                     std::process::exit(0);
                 }
@@ -99,18 +99,17 @@ impl FixtureArgs {
         }
         Ok(Self {
             name: name.context("missing --name <fixture-name>")?,
-            font: font.context("missing --font <font-file>")?,
+            font,
             out: out.context("missing --out <fixture.riv>")?,
         })
     }
 }
 
 fn emit_fixture(args: FixtureArgs) -> Result<()> {
-    let font = fs::read(&args.font)
-        .with_context(|| format!("reading fixture font {}", args.font.display()))?;
     let records = match args.name.as_str() {
-        "text-style-feature" => text_style_feature_fixture(font),
-        "text-variation-modifier" => text_variation_modifier_fixture(font),
+        "text-style-feature" => text_style_feature_fixture(read_fixture_font(&args)?),
+        "text-variation-modifier" => text_variation_modifier_fixture(read_fixture_font(&args)?),
+        "transform-live-write" => transform_live_write_fixture(),
         other => bail!("unknown fixture name {other:?}"),
     };
     RuntimeFile::from_authoring_records(records.clone())
@@ -129,6 +128,14 @@ fn emit_fixture(args: FixtureArgs) -> Result<()> {
         args.out.display()
     );
     Ok(())
+}
+
+fn read_fixture_font(args: &FixtureArgs) -> Result<Vec<u8>> {
+    let font = args
+        .font
+        .as_ref()
+        .context("this fixture requires --font <font-file>")?;
+    fs::read(font).with_context(|| format!("reading fixture font {}", font.display()))
 }
 
 fn fixture_record(type_name: &str, properties: Vec<(&str, AuthoringValue)>) -> AuthoringRecord {
@@ -333,6 +340,168 @@ fn text_variation_modifier_fixture(font: Vec<u8>) -> Vec<AuthoringRecord> {
     records
 }
 
+fn transform_live_write_fixture() -> Vec<AuthoringRecord> {
+    vec![
+        fixture_record("Backboard", vec![]),
+        fixture_record(
+            "Artboard",
+            vec![
+                (
+                    "name",
+                    AuthoringValue::String("UNIV-1275 transform live writes".to_owned()),
+                ),
+                ("width", AuthoringValue::Double(320.0)),
+                ("height", AuthoringValue::Double(240.0)),
+            ],
+        ),
+        fixture_record(
+            "Shape",
+            vec![
+                (
+                    "name",
+                    AuthoringValue::String("Transform parent".to_owned()),
+                ),
+                ("parentId", AuthoringValue::Uint(0)),
+                ("x", AuthoringValue::Double(20.0)),
+                ("y", AuthoringValue::Double(30.0)),
+                ("opacity", AuthoringValue::Double(0.8)),
+                ("rotation", AuthoringValue::Double(0.25)),
+                ("scaleX", AuthoringValue::Double(1.5)),
+                ("scaleY", AuthoringValue::Double(0.75)),
+            ],
+        ),
+        fixture_record(
+            "Shape",
+            vec![
+                ("name", AuthoringValue::String("Transform child".to_owned())),
+                ("parentId", AuthoringValue::Uint(1)),
+                ("x", AuthoringValue::Double(5.0)),
+                ("y", AuthoringValue::Double(7.0)),
+                ("opacity", AuthoringValue::Double(0.5)),
+                ("rotation", AuthoringValue::Double(-0.1)),
+                ("scaleX", AuthoringValue::Double(1.2)),
+                ("scaleY", AuthoringValue::Double(0.8)),
+            ],
+        ),
+        fixture_record(
+            "Rectangle",
+            vec![
+                (
+                    "name",
+                    AuthoringValue::String("Transform rectangle".to_owned()),
+                ),
+                ("parentId", AuthoringValue::Uint(2)),
+                ("width", AuthoringValue::Double(20.0)),
+                ("height", AuthoringValue::Double(10.0)),
+            ],
+        ),
+        fixture_record(
+            "Fill",
+            vec![
+                ("name", AuthoringValue::String("Transform fill".to_owned())),
+                ("parentId", AuthoringValue::Uint(2)),
+            ],
+        ),
+        fixture_record(
+            "SolidColor",
+            vec![
+                ("name", AuthoringValue::String("Transform color".to_owned())),
+                ("parentId", AuthoringValue::Uint(4)),
+                ("colorValue", AuthoringValue::Color(0xff33_6699)),
+            ],
+        ),
+        fixture_record(
+            "LayoutComponent",
+            vec![
+                ("name", AuthoringValue::String("Layout root".to_owned())),
+                ("parentId", AuthoringValue::Uint(0)),
+                ("styleId", AuthoringValue::Uint(12)),
+                ("width", AuthoringValue::Double(160.0)),
+                ("height", AuthoringValue::Double(100.0)),
+                ("x", AuthoringValue::Double(40.0)),
+                ("y", AuthoringValue::Double(25.0)),
+                ("rotation", AuthoringValue::Double(0.15)),
+                ("scaleX", AuthoringValue::Double(1.1)),
+                ("scaleY", AuthoringValue::Double(0.9)),
+            ],
+        ),
+        fixture_record(
+            "LayoutComponent",
+            vec![
+                ("name", AuthoringValue::String("Layout nested".to_owned())),
+                ("parentId", AuthoringValue::Uint(6)),
+                ("styleId", AuthoringValue::Uint(13)),
+                ("width", AuthoringValue::Double(80.0)),
+                ("height", AuthoringValue::Double(60.0)),
+                ("x", AuthoringValue::Double(12.0)),
+                ("y", AuthoringValue::Double(8.0)),
+            ],
+        ),
+        fixture_record(
+            "Shape",
+            vec![
+                (
+                    "name",
+                    AuthoringValue::String("Layout descendant".to_owned()),
+                ),
+                ("parentId", AuthoringValue::Uint(7)),
+                ("x", AuthoringValue::Double(3.0)),
+                ("y", AuthoringValue::Double(4.0)),
+                ("rotation", AuthoringValue::Double(-0.2)),
+                ("scaleX", AuthoringValue::Double(0.9)),
+                ("scaleY", AuthoringValue::Double(1.3)),
+            ],
+        ),
+        fixture_record(
+            "Rectangle",
+            vec![
+                (
+                    "name",
+                    AuthoringValue::String("Layout rectangle".to_owned()),
+                ),
+                ("parentId", AuthoringValue::Uint(8)),
+                ("width", AuthoringValue::Double(12.0)),
+                ("height", AuthoringValue::Double(8.0)),
+            ],
+        ),
+        fixture_record(
+            "Fill",
+            vec![
+                ("name", AuthoringValue::String("Layout fill".to_owned())),
+                ("parentId", AuthoringValue::Uint(8)),
+            ],
+        ),
+        fixture_record(
+            "SolidColor",
+            vec![
+                ("name", AuthoringValue::String("Layout color".to_owned())),
+                ("parentId", AuthoringValue::Uint(10)),
+                ("colorValue", AuthoringValue::Color(0xff99_6633)),
+            ],
+        ),
+        fixture_record(
+            "LayoutComponentStyle",
+            vec![
+                (
+                    "name",
+                    AuthoringValue::String("Layout root style".to_owned()),
+                ),
+                ("parentId", AuthoringValue::Uint(6)),
+            ],
+        ),
+        fixture_record(
+            "LayoutComponentStyle",
+            vec![
+                (
+                    "name",
+                    AuthoringValue::String("Layout nested style".to_owned()),
+                ),
+                ("parentId", AuthoringValue::Uint(7)),
+            ],
+        ),
+    ]
+}
+
 fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
     loop {
         let mut byte = (value & 0x7f) as u8;
@@ -409,6 +578,13 @@ mod fixture_tests {
                 .int,
             162
         );
+
+        let transform = transform_live_write_fixture();
+        assert_eq!(
+            encode_authoring_records(&transform),
+            encode_authoring_records(&transform)
+        );
+        assert!(transform.iter().any(|record| record.type_key == 409));
     }
 }
 

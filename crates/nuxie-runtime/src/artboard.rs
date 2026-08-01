@@ -21,17 +21,16 @@ use crate::animation::{
 };
 use crate::artboard_data_bind::{
     RuntimeArtboardAuthoredDataBindStates, RuntimeArtboardContextSourceValue,
-    RuntimeArtboardConverterPropertyBindingInstance, RuntimeArtboardCustomPropertyBindingInstance,
-    RuntimeArtboardDataBindSourceQueues, RuntimeArtboardDataBindTargetQueues,
-    RuntimeArtboardFormulaTokenBindingStates, RuntimeArtboardImageAssetBindingInstance,
-    RuntimeArtboardLayoutComputedBindingInstance, RuntimeArtboardListBindingInstance,
-    RuntimeArtboardNestedHostBindingInstance, RuntimeArtboardNumericSourceBindingInstance,
-    RuntimeArtboardPropertyBindingInstance, RuntimeArtboardRetainedSubordinateConverterOperands,
-    RuntimeArtboardSoloBindingInstance, RuntimeArtboardSoloSourceBindingInstance,
-    RuntimeArtboardTextListBindingInstance, RuntimeNestedChildContextUpdate,
-    RuntimeOwnedDataContext, apply_artboard_name_based_color_data_bind_defaults,
-    build_artboard_authored_data_bind_states, build_artboard_converter_property_bindings,
-    build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
+    RuntimeArtboardConverterPropertyBindingInstance, RuntimeArtboardDataBindSourceQueues,
+    RuntimeArtboardDataBindTargetQueues, RuntimeArtboardFormulaTokenBindingStates,
+    RuntimeArtboardImageAssetBindingInstance, RuntimeArtboardLayoutComputedBindingInstance,
+    RuntimeArtboardListBindingInstance, RuntimeArtboardNestedHostBindingInstance,
+    RuntimeArtboardNumericSourceBindingInstance, RuntimeArtboardPropertyBindingInstance,
+    RuntimeArtboardRetainedSubordinateConverterOperands, RuntimeArtboardSoloBindingInstance,
+    RuntimeArtboardSoloSourceBindingInstance, RuntimeArtboardTextListBindingInstance,
+    RuntimeNestedChildContextUpdate, RuntimeOwnedDataContext,
+    apply_artboard_name_based_color_data_bind_defaults, build_artboard_authored_data_bind_states,
+    build_artboard_converter_property_bindings, build_artboard_default_view_model_values,
     build_artboard_formula_token_bindings, build_artboard_image_asset_bindings,
     build_artboard_layout_computed_bindings, build_artboard_list_bindings,
     build_artboard_nested_host_bindings, build_artboard_numeric_source_bindings,
@@ -52,6 +51,9 @@ use crate::constraints::{
     apply_scroll_offset_changed, component_list_virtualization, retain_runtime_scroll_constraints,
     runtime_scroll_double_property, set_runtime_scroll_double_property,
 };
+use crate::custom_property_container::{
+    RuntimeArtboardCustomPropertyBindingInstance, build_artboard_custom_property_bindings,
+};
 use crate::data_bind_graph::{
     RuntimeDataBindGraphConverterBuildCache, RuntimeDataBindGraphFormulaRandomSource,
     RuntimeDataBindGraphValue,
@@ -70,6 +72,7 @@ use crate::properties::{
     solid_color_value_property_key, solo_active_component_id_property_key,
     transform_property_for_key,
 };
+use crate::scene::select_default_state_machine;
 use crate::script_asset::{RuntimeScriptImplementedMethods, RuntimeScriptedObjectOccurrence};
 use crate::scripting::{
     NoopScriptHost, RuntimeScriptInstanceHandle, ScriptArtboard, ScriptError, ScriptHost,
@@ -458,6 +461,10 @@ pub struct ArtboardInstance {
     text_variation_modifier_tags: RefCell<BTreeMap<usize, (u64, u32)>>,
     pub(crate) runtime_images: crate::draw::image::RuntimeImageList,
     external_font_assets: Arc<BTreeMap<u32, Arc<[u8]>>>,
+    pub(crate) runtime_font_assets: Arc<crate::RuntimeFontAssetOwners>,
+    pub(crate) runtime_font_asset_snapshots: BTreeMap<u32, Arc<[u8]>>,
+    pub(crate) runtime_font_asset_referencer:
+        Rc<crate::font_asset::RuntimeFontAssetReferencerQueue>,
     /// C++ File/ImageAsset ownership projected into the runtime occurrence
     /// tree. Every clone retains the same file-owned owner list; Images borrow
     /// RenderImage from it and never from a facade scene cache.
@@ -601,6 +608,9 @@ impl Clone for ArtboardInstance {
             text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: self.runtime_images.clone(),
             external_font_assets: self.external_font_assets.clone(),
+            runtime_font_assets: Arc::clone(&self.runtime_font_assets),
+            runtime_font_asset_snapshots: self.runtime_font_asset_snapshots.clone(),
+            runtime_font_asset_referencer: Rc::new(Default::default()),
             runtime_image_assets: self.runtime_image_assets.clone(),
             runtime_image_asset_referencer: Rc::new(Default::default()),
             render_resources: self.render_resources.clone(),
@@ -677,55 +687,9 @@ impl Clone for ArtboardInstance {
         if let Some(owners) = image_assets {
             cloned.attach_runtime_image_assets_tree(owners);
         }
+        cloned.refresh_runtime_font_asset_referencers();
         cloned
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum RuntimeEventPropertyValue {
-    Number(f32),
-    Bool(bool),
-    String(Vec<u8>),
-    Color(u32),
-    Enum(u64),
-    Trigger(u64),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RuntimeEventProperty {
-    pub name: Option<String>,
-    pub value: RuntimeEventPropertyValue,
-}
-
-/// The player selected by pinned C++ `Artboard::defaultScene`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RuntimeArtboardDefaultScene {
-    StateMachine(usize),
-    LinearAnimation(usize),
-}
-
-fn select_default_state_machine(
-    authored_index: Option<u64>,
-    state_machine_count: usize,
-) -> Option<usize> {
-    authored_index
-        .and_then(|index| usize::try_from(index).ok())
-        .filter(|index| *index < state_machine_count)
-}
-
-fn select_default_scene(
-    authored_index: Option<u64>,
-    state_machine_count: usize,
-    animation_count: usize,
-) -> Option<RuntimeArtboardDefaultScene> {
-    select_default_state_machine(authored_index, state_machine_count)
-        .map(RuntimeArtboardDefaultScene::StateMachine)
-        .or_else(|| {
-            (state_machine_count != 0).then_some(RuntimeArtboardDefaultScene::StateMachine(0))
-        })
-        .or_else(|| {
-            (animation_count != 0).then_some(RuntimeArtboardDefaultScene::LinearAnimation(0))
-        })
 }
 
 include!("nested_artboard.rs");
@@ -777,6 +741,7 @@ struct RuntimeArtboardBuildContext {
     nested_structure_epoch: Arc<AtomicU64>,
     paint_preparation_epoch: Arc<AtomicU64>,
     external_font_assets: Arc<BTreeMap<u32, Arc<[u8]>>>,
+    runtime_font_assets: Arc<crate::RuntimeFontAssetOwners>,
 }
 
 fn build_artboard_index_by_global(artboards: &[ArtboardGraph]) -> Vec<Option<usize>> {
@@ -1953,6 +1918,7 @@ impl ArtboardInstance {
             nested_structure_epoch: Arc::new(AtomicU64::new(0)),
             paint_preparation_epoch: Arc::new(AtomicU64::new(0)),
             external_font_assets: Arc::new(BTreeMap::new()),
+            runtime_font_assets: Arc::new(crate::RuntimeFontAssetOwners::from_runtime(file)),
         };
         Self::from_graph_inner(
             file,
@@ -2025,6 +1991,12 @@ impl ArtboardInstance {
             nested_structure_epoch: Arc::new(AtomicU64::new(0)),
             paint_preparation_epoch: Arc::new(AtomicU64::new(0)),
             external_font_assets: Arc::new(external_font_assets.clone()),
+            runtime_font_assets: Arc::new(
+                crate::RuntimeFontAssetOwners::from_runtime_with_external_fonts(
+                    file,
+                    external_font_assets,
+                ),
+            ),
         };
         Self::from_graph_inner(
             file,
@@ -2048,6 +2020,20 @@ impl ArtboardInstance {
             .as_ref()
             .map(|context| Arc::clone(&context.external_font_assets))
             .unwrap_or_default();
+        let runtime_font_assets = build_context
+            .as_ref()
+            .map(|context| Arc::clone(&context.runtime_font_assets))
+            .unwrap_or_else(|| Arc::new(crate::RuntimeFontAssetOwners::from_runtime(file)));
+        let runtime_font_asset_snapshots = file
+            .file_assets()
+            .into_iter()
+            .filter(|asset| asset.type_name == "FontAsset")
+            .filter_map(|asset| {
+                runtime_font_assets
+                    .get(asset.id)
+                    .map(|bytes| (asset.id, bytes))
+            })
+            .collect();
         let inserted = visiting.insert(graph.global_id);
         let dimensions =
             RuntimeArtboardDimensions::from_object(file.object(graph.global_id as usize));
@@ -2300,6 +2286,9 @@ impl ArtboardInstance {
             text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: crate::draw::image::RuntimeImageList::from_graph(file, graph),
             external_font_assets,
+            runtime_font_assets,
+            runtime_font_asset_snapshots,
+            runtime_font_asset_referencer: Rc::new(Default::default()),
             runtime_image_assets: RefCell::new(None),
             runtime_image_asset_referencer: Rc::new(Default::default()),
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
@@ -2334,6 +2323,7 @@ impl ArtboardInstance {
         instance.apply_initial_component_collapse_callbacks_in_authored_order();
         instance.initialize_runtime_shape_paint_owners(graph);
         instance.initialize_text_inputs();
+        instance.register_runtime_font_asset_referencers(file, graph);
         let nested_host_locals = instance.nested_artboard_locals.clone();
         for host_local_id in nested_host_locals {
             instance.sync_nested_artboard_root_opacity(host_local_id);
@@ -2475,6 +2465,86 @@ impl ArtboardInstance {
     /// Return the external font bytes visible to this concrete runtime tree.
     pub fn external_font_asset_bytes(&self, asset_id: u32) -> Option<&[u8]> {
         self.external_font_assets.get(&asset_id).map(AsRef::as_ref)
+    }
+
+    pub(crate) fn runtime_font_asset_bytes(&self, asset_global: u32) -> Option<&[u8]> {
+        self.runtime_font_asset_snapshots
+            .get(&asset_global)
+            .map(AsRef::as_ref)
+    }
+
+    fn register_runtime_font_asset_referencers(&self, file: &RuntimeFile, graph: &ArtboardGraph) {
+        let styles = graph.local_objects.iter().filter_map(|local| {
+            let object = file.object(local.global_id as usize)?;
+            if !matches!(object.type_name, "TextStyle" | "TextStylePaint") {
+                return None;
+            }
+            let asset_index = object
+                .uint_property("fontAssetId")
+                .and_then(|index| usize::try_from(index).ok())?;
+            let asset = file.file_asset(asset_index)?;
+            (asset.type_name == "FontAsset").then_some((asset.id, local.local_id))
+        });
+        self.runtime_font_asset_referencer.replace_styles(styles);
+        self.runtime_font_assets
+            .register_referencer(&self.runtime_font_asset_referencer);
+    }
+
+    fn refresh_runtime_font_asset_referencers(&self) {
+        let Some((file, graph)) = self.build_context.as_ref().and_then(|context| {
+            let graph_index = context
+                .artboard_index_by_global
+                .get(usize::try_from(self.graph_global_id).ok()?)
+                .copied()
+                .flatten()?;
+            Some((context.file.as_ref(), context.artboards.get(graph_index)?))
+        }) else {
+            return;
+        };
+        self.register_runtime_font_asset_referencers(file, graph);
+    }
+
+    /// Attach the file-owned ImageAsset/FontAsset owner set to this complete
+    /// occurrence tree and to contexts that may materialize children later.
+    pub fn attach_runtime_file_asset_owners(&mut self, owners: &crate::RuntimeFileAssetOwners) {
+        if let Some(images) = owners.loader_image_assets() {
+            self.attach_runtime_image_assets_tree(images);
+        }
+        self.attach_runtime_font_assets_tree(owners.font_assets());
+    }
+
+    fn attach_runtime_font_assets_tree(&mut self, owners: Arc<crate::RuntimeFontAssetOwners>) {
+        self.runtime_font_assets = Arc::clone(&owners);
+        self.runtime_font_asset_snapshots.clear();
+        if let Some(context) = self.build_context.as_ref() {
+            for asset in context.file.file_assets() {
+                if asset.type_name == "FontAsset"
+                    && let Some(bytes) = owners.get(asset.id)
+                {
+                    self.runtime_font_asset_snapshots.insert(asset.id, bytes);
+                }
+            }
+        }
+        if let Some(context) = self.build_context.as_mut() {
+            context.runtime_font_assets = Arc::clone(&owners);
+        }
+        self.refresh_runtime_font_asset_referencers();
+        for nested in self.nested_artboards.values_mut() {
+            nested
+                .child
+                .attach_runtime_font_assets_tree(Arc::clone(&owners));
+        }
+        for list_index in 0..self.component_list_count() {
+            let Some(local_id) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            if let Some(items) = self.component_list_items_mut(local_id) {
+                for item in items {
+                    item.child
+                        .attach_runtime_font_assets_tree(Arc::clone(&owners));
+                }
+            }
+        }
     }
 
     /// Replace the validated external-font snapshot for this complete runtime
@@ -3152,50 +3222,6 @@ impl ArtboardInstance {
         &self.slots
     }
 
-    /// Snapshot authored custom properties attached to one event, preserving
-    /// their component/local order.
-    pub fn event_properties(&self, event_local_id: usize) -> Vec<RuntimeEventProperty> {
-        let Some(event) = self.component_handle(event_local_id) else {
-            return Vec::new();
-        };
-        (0..self.component_child_len(event))
-            .filter_map(|index| self.component_child_at(event, index))
-            .filter_map(|handle| self.objects.component(handle))
-            .filter_map(|component| {
-                let key = property_key_for_name(component.type_name, "propertyValue")?;
-                let value = match component.type_name {
-                    "CustomPropertyNumber" => RuntimeEventPropertyValue::Number(
-                        self.double_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyBoolean" => RuntimeEventPropertyValue::Bool(
-                        self.bool_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyString" => RuntimeEventPropertyValue::String(
-                        self.string_property(component.local_id, key)?.to_vec(),
-                    ),
-                    "CustomPropertyColor" => RuntimeEventPropertyValue::Color(
-                        self.color_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyEnum" => RuntimeEventPropertyValue::Enum(
-                        self.uint_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyTrigger" => RuntimeEventPropertyValue::Trigger(
-                        self.uint_property(component.local_id, key)?,
-                    ),
-                    _ => return None,
-                };
-                let name_key = property_key_for_name(component.type_name, "name")?;
-                Some(RuntimeEventProperty {
-                    name: self
-                        .string_property(component.local_id, name_key)
-                        .map(|value| String::from_utf8_lossy(value).into_owned())
-                        .filter(|name| !name.is_empty()),
-                    value,
-                })
-            })
-            .collect()
-    }
-
     pub(crate) fn component_mut(&mut self, local_id: usize) -> Option<&mut RuntimeComponent> {
         self.objects.component_for_local_mut(local_id)
     }
@@ -3688,17 +3714,6 @@ impl ArtboardInstance {
     /// falls back to state machine zero.
     pub fn default_state_machine(&self) -> Option<&RuntimeStateMachine> {
         self.state_machine(self.default_state_machine_index()?)
-    }
-
-    /// Pinned C++ selection order: explicit default state machine, state
-    /// machine zero, linear animation zero, then null.
-    pub fn default_scene(&self) -> Option<RuntimeArtboardDefaultScene> {
-        select_default_scene(
-            property_key_for_name("Artboard", "defaultStateMachineId")
-                .and_then(|key| self.uint_property(0, key)),
-            self.state_machines.len(),
-            self.linear_animations.len(),
-        )
     }
 
     pub fn set_artboard_dimensions(&mut self, width: f32, height: f32) -> bool {
@@ -5791,17 +5806,7 @@ impl ArtboardInstance {
     /// Rust decoders are synchronously resolved by the owning host/File seam,
     /// so this occurrence has no additional async queue to poll.
     pub fn advance(&mut self, elapsed_seconds: f32) -> Result<bool, ScriptError> {
-        let component_result = self.advance_frame_components(elapsed_seconds);
-        let mut changed = component_result.as_ref().copied().unwrap_or(false);
-        let update_result = self.update_pass_with_script_errors();
-        changed |= update_result.as_ref().copied().unwrap_or(false);
-        if let Err(error) = component_result {
-            return Err(error);
-        }
-        if let Err(error) = update_result {
-            return Err(error);
-        }
-        Ok(changed || self.has_dirt(ComponentDirt::COMPONENTS))
+        crate::scene::advance(self, elapsed_seconds)
     }
 
     /// Factory-aware form of [`Self::advance_frame_components`].
@@ -7726,6 +7731,7 @@ impl ArtboardInstance {
 
     pub fn update_components(&mut self) -> UpdateComponentsReport {
         self.settle_runtime_image_asset_updates();
+        self.settle_runtime_font_asset_updates();
         let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
         self.update_components_with_hook_recording(
             true,
@@ -7770,6 +7776,7 @@ impl ArtboardInstance {
         root_transform: Mat2D,
     ) -> bool {
         let image_assets_did_update = self.settle_runtime_image_asset_updates();
+        let font_assets_did_update = self.settle_runtime_font_asset_updates();
         // Mirrors C++ src/artboard.cpp Artboard::updatePass: data binds run
         // before components, with artboard-host children publishing first.
         self.update_data_binds_for_update_pass(root_transform);
@@ -7778,8 +7785,9 @@ impl ArtboardInstance {
         // parent Yoga graph reports a new layout. The transfer key keeps later
         // precise child-local writes from causing a second solve in the same
         // outer update while still refreshing genuine parent assignments.
-        let mut did_update =
-            image_assets_did_update | self.apply_nested_artboard_layout_bounds_after_parent_solve();
+        let mut did_update = image_assets_did_update
+            | font_assets_did_update
+            | self.apply_nested_artboard_layout_bounds_after_parent_solve();
         if self.joysticks_apply_before_update {
             did_update |= self.apply_joysticks(true);
         }
@@ -11892,6 +11900,9 @@ mod tests {
             text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: crate::draw::image::RuntimeImageList::default(),
             external_font_assets: Arc::new(BTreeMap::new()),
+            runtime_font_assets: Arc::new(crate::RuntimeFontAssetOwners::default()),
+            runtime_font_asset_snapshots: BTreeMap::new(),
+            runtime_font_asset_referencer: Rc::new(Default::default()),
             runtime_image_assets: RefCell::new(None),
             runtime_image_asset_referencer: Rc::new(Default::default()),
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
@@ -15204,26 +15215,6 @@ mod tests {
             (1, 1, false),
             "advanceInternal precedes updatePass; root advance returns the union of work and any dirt retained after settlement"
         );
-    }
-
-    #[test]
-    fn default_scene_selection_covers_explicit_fallback_and_null_branches() {
-        assert_eq!(select_default_state_machine(Some(1), 2), Some(1));
-        assert_eq!(select_default_state_machine(None, 2), None);
-        assert_eq!(select_default_state_machine(Some(2), 2), None);
-        assert_eq!(
-            select_default_scene(Some(1), 2, 1),
-            Some(RuntimeArtboardDefaultScene::StateMachine(1))
-        );
-        assert_eq!(
-            select_default_scene(Some(9), 2, 1),
-            Some(RuntimeArtboardDefaultScene::StateMachine(0))
-        );
-        assert_eq!(
-            select_default_scene(None, 0, 1),
-            Some(RuntimeArtboardDefaultScene::LinearAnimation(0))
-        );
-        assert_eq!(select_default_scene(None, 0, 0), None);
     }
 
     #[test]

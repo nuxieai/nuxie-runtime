@@ -1609,9 +1609,9 @@ note = "Consolidated Rust port for lua."
 
 [[file]]
 upstream = "src/lua/lua_promise.cpp"
-status = "absent"
-rust_module = ""
-note = "F7: Lua promise binding is absent."
+status = "ported"
+rust_module = "crates/nuxie-scripting/src/vm/promise.rs; crates/nuxie-scripting/src/vm.rs"
+note = "P1-i: all 47 pinned Promise scenarios plus 2 invalid-yield cases pass exact live C++/Rust VM differentials; image decode is a separate lane."
 
 [[file]]
 upstream = "src/lua/lua_properties.cpp"

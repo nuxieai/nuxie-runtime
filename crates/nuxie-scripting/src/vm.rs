@@ -22,6 +22,7 @@ mod lua_mat4;
 mod lua_math;
 mod lua_rive_base;
 mod lua_vec2d;
+mod promise;
 mod renderer;
 mod resource_limits;
 mod view_model;
@@ -1127,6 +1128,7 @@ impl ScriptVm {
         install_math_globals(&self.lua)?;
         install_data_value_global(&self.lua)?;
         buffer_ext::install_buffer_extensions(&self.lua)?;
+        promise::install_promise_globals(&self.lua)?;
 
         let late = self
             .lua

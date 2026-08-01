@@ -21,17 +21,82 @@ pub enum ActionTarget {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum PointerCoordinate {
+    Literal(f32),
+    Expression(String),
+}
+
+impl PointerCoordinate {
+    fn resolve(&self, width: f32, height: f32) -> anyhow::Result<f32> {
+        match self {
+            Self::Literal(value) => Ok(*value),
+            Self::Expression(expression) => Ok(match expression.as_str() {
+                "artboard-width/2" => width / 2.0,
+                "artboard-height/2" => height / 2.0,
+                "artboard-width*0.8" => width * 0.8,
+                "artboard-height-20" => height - 20.0,
+                _ => bail!("unsupported pointer coordinate expression {expression}"),
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Action {
     BindDefaultViewModel,
     BindFreshViewModel,
+    BindNamedDefaultViewModel {
+        view_model: String,
+    },
     CreateDefaultViewModel,
     BindPreparedViewModel,
     SetViewModelNumber {
         property: String,
         value: f32,
     },
+    SetViewModelBoolean {
+        property: String,
+        value: bool,
+    },
+    SetViewModelString {
+        property: String,
+        value: String,
+    },
+    SetViewModelEnum {
+        property: String,
+        value: u64,
+    },
     SetViewModelColor {
+        property: String,
+        value: u32,
+    },
+    FireViewModelTrigger {
+        property: String,
+    },
+    SetViewModelArtboard {
+        property: String,
+        value: u64,
+    },
+    SetViewModelArtboardByName {
+        property: String,
+        artboard: String,
+    },
+    SetViewModelAsset {
+        property: String,
+        value: i64,
+    },
+    SetViewModelAssetByName {
+        property: String,
+        asset: String,
+    },
+    SetViewModelFontBytes {
+        property: String,
+        source: String,
+    },
+    SetGlobalViewModelColor {
+        global: String,
         property: String,
         value: u32,
     },
@@ -69,27 +134,36 @@ pub enum Action {
     Draw,
     Frame,
     PointerDown {
-        x: f32,
-        y: f32,
+        x: PointerCoordinate,
+        y: PointerCoordinate,
         #[serde(default)]
         pointer_id: i32,
     },
     PointerMove {
-        x: f32,
-        y: f32,
+        x: PointerCoordinate,
+        y: PointerCoordinate,
         seconds: f32,
         #[serde(default)]
         pointer_id: i32,
     },
     PointerUp {
-        x: f32,
-        y: f32,
+        x: PointerCoordinate,
+        y: PointerCoordinate,
         #[serde(default)]
         pointer_id: i32,
     },
     PointerExit {
-        x: f32,
-        y: f32,
+        x: PointerCoordinate,
+        y: PointerCoordinate,
+        #[serde(default)]
+        pointer_id: i32,
+    },
+    VerticalPointerDrag {
+        x: PointerCoordinate,
+        start_y: PointerCoordinate,
+        end_y_exclusive: f32,
+        step: f32,
+        advance_seconds: f32,
         #[serde(default)]
         pointer_id: i32,
     },
@@ -106,6 +180,14 @@ pub enum Action {
     },
     TextInput {
         text: String,
+    },
+    FocusNext,
+    FocusPrevious,
+    KeyInput {
+        key: u32,
+        modifiers: u32,
+        pressed: bool,
+        repeat: bool,
     },
     SetArtboardSize {
         width: f32,
@@ -191,6 +273,20 @@ impl Execution {
                         machine.bind_owned_view_model_contexts(&context);
                         machine.advance_data_context();
                     }
+                    owned_context = Some(context);
+                }
+                Action::BindNamedDefaultViewModel { view_model } => {
+                    let context =
+                        named_default_view_model_context(&runtime, artboard_index, view_model)
+                            .with_context(|| {
+                                format!("missing default view-model instance {view_model}")
+                            })?;
+                    instance.bind_owned_view_model_artboard_contexts(&runtime, &context);
+                    if let Some(machine) = state_machine.as_mut() {
+                        machine.bind_owned_view_model_contexts(&context);
+                        machine.advance_data_context();
+                    }
+                    owned_context = Some(context);
                 }
                 Action::CreateDefaultViewModel => {
                     owned_context =
@@ -224,6 +320,51 @@ impl Execution {
                     }
                     main.set_number_by_property_name_path(property, *value);
                 }
+                Action::SetViewModelBoolean { property, value } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let mut main = context
+                        .main_mut()
+                        .context("prepared context has no main instance")?;
+                    if main
+                        .boolean_source_handle_by_property_name_path(property)
+                        .is_none()
+                    {
+                        bail!("missing boolean view-model property {property}");
+                    }
+                    main.set_boolean_by_property_name_path(property, *value);
+                }
+                Action::SetViewModelString { property, value } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let mut main = context
+                        .main_mut()
+                        .context("prepared context has no main instance")?;
+                    if main
+                        .string_source_handle_by_property_name_path(property)
+                        .is_none()
+                    {
+                        bail!("missing string view-model property {property}");
+                    }
+                    main.set_string_by_property_name_path(property, value.as_bytes());
+                }
+                Action::SetViewModelEnum { property, value } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let mut main = context
+                        .main_mut()
+                        .context("prepared context has no main instance")?;
+                    if main
+                        .enum_source_handle_by_property_name_path(property)
+                        .is_none()
+                    {
+                        bail!("missing enum view-model property {property}");
+                    }
+                    main.set_enum_by_property_name_path(property, *value);
+                }
                 Action::SetViewModelColor { property, value } => {
                     let context = owned_context
                         .as_ref()
@@ -238,6 +379,118 @@ impl Execution {
                         bail!("missing color view-model property {property}");
                     }
                     main.set_color_by_property_name_path(property, *value);
+                }
+                Action::FireViewModelTrigger { property } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let mut main = context
+                        .main_mut()
+                        .context("prepared context has no main instance")?;
+                    let next = main
+                        .trigger_value_by_property_name_path(property)
+                        .with_context(|| format!("missing trigger view-model property {property}"))?
+                        .wrapping_add(1);
+                    main.set_trigger_by_property_name_path(property, next);
+                }
+                Action::SetViewModelArtboard { property, value } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let mut main = context
+                        .main_mut()
+                        .context("prepared context has no main instance")?;
+                    if main
+                        .artboard_source_handle_by_property_name_path(property)
+                        .is_none()
+                    {
+                        bail!("missing artboard view-model property {property}");
+                    }
+                    main.set_artboard_by_property_name_path(property, *value);
+                }
+                Action::SetViewModelArtboardByName { property, artboard } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let mut main = context
+                        .main_mut()
+                        .context("prepared context has no main instance")?;
+                    let value = graph
+                        .artboards
+                        .iter()
+                        .position(|candidate| candidate.name.as_deref() == Some(artboard))
+                        .with_context(|| format!("missing artboard {artboard}"))?;
+                    if !main.set_artboard_by_property_name_path(property, value as u64) {
+                        bail!("missing artboard view-model property {property}");
+                    }
+                }
+                Action::SetViewModelAsset { property, value } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let mut main = context
+                        .main_mut()
+                        .context("prepared context has no main instance")?;
+                    if main
+                        .asset_source_handle_by_property_name_path(property)
+                        .is_none()
+                    {
+                        bail!("missing asset view-model property {property}");
+                    }
+                    main.set_asset_by_property_name_path(property, *value as u64);
+                }
+                Action::SetViewModelAssetByName { property, asset } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let mut main = context
+                        .main_mut()
+                        .context("prepared context has no main instance")?;
+                    let value = runtime
+                        .file_assets()
+                        .iter()
+                        .position(|candidate| candidate.string_property("name") == Some(asset))
+                        .with_context(|| format!("missing file asset {asset}"))?;
+                    if !main.set_asset_by_property_name_path(property, value as u64) {
+                        bail!("missing asset view-model property {property}");
+                    }
+                }
+                Action::SetViewModelFontBytes { property, source } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let mut main = context
+                        .main_mut()
+                        .context("prepared context has no main instance")?;
+                    if main
+                        .font_asset_source_handle_by_property_name_path(property)
+                        .is_none()
+                    {
+                        bail!("missing font view-model property {property}");
+                    }
+                    let source_path = runtime_dir.join("tests/unit_tests/assets").join(source);
+                    let font_bytes = std::fs::read(&source_path).with_context(|| {
+                        format!("failed to read font fixture {}", source_path.display())
+                    })?;
+                    main.set_live_font_bytes_by_property_name_path(
+                        property,
+                        Some(Arc::from(font_bytes)),
+                    );
+                }
+                Action::SetGlobalViewModelColor {
+                    global,
+                    property,
+                    value,
+                } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let mut global_instance = context
+                        .global_named_mut(&runtime, global)
+                        .with_context(|| format!("missing global view model {global}"))?;
+                    if !global_instance.set_color_by_property_name_path(property, *value) {
+                        bail!("missing color property {global}.{property}");
+                    }
                 }
                 Action::FireViewModelListItemTrigger {
                     list,
@@ -413,10 +666,11 @@ impl Execution {
                 }
                 Action::Frame => factory.add_frame(),
                 Action::PointerDown { x, y, pointer_id } => {
+                    let (x, y) = pointer_position(x, y, &instance)?;
                     state_machine
                         .as_mut()
                         .context("no selected state machine")?
-                        .pointer_down(&mut instance, *x, *y, *pointer_id);
+                        .pointer_down(&mut instance, x, y, *pointer_id);
                 }
                 Action::PointerMove {
                     x,
@@ -424,22 +678,133 @@ impl Execution {
                     seconds,
                     pointer_id,
                 } => {
+                    let (x, y) = pointer_position(x, y, &instance)?;
                     state_machine
                         .as_mut()
                         .context("no selected state machine")?
-                        .pointer_move(&mut instance, *x, *y, *seconds, *pointer_id);
+                        .pointer_move(&mut instance, x, y, *seconds, *pointer_id);
                 }
                 Action::PointerUp { x, y, pointer_id } => {
+                    let (x, y) = pointer_position(x, y, &instance)?;
                     state_machine
                         .as_mut()
                         .context("no selected state machine")?
-                        .pointer_up(&mut instance, *x, *y, *pointer_id);
+                        .pointer_up(&mut instance, x, y, *pointer_id);
                 }
                 Action::PointerExit { x, y, pointer_id } => {
+                    let (x, y) = pointer_position(x, y, &instance)?;
                     state_machine
                         .as_mut()
                         .context("no selected state machine")?
-                        .pointer_exit(&mut instance, *x, *y, *pointer_id);
+                        .pointer_exit(&mut instance, x, y, *pointer_id);
+                }
+                Action::VerticalPointerDrag {
+                    x,
+                    start_y,
+                    end_y_exclusive,
+                    step,
+                    advance_seconds,
+                    pointer_id,
+                } => {
+                    let (width, height) = instance.artboard_dimensions();
+                    let x = x.resolve(width, height)?;
+                    let mut y = start_y.resolve(width, height)?;
+                    factory.add_frame();
+                    state_machine
+                        .as_mut()
+                        .context("no selected state machine")?
+                        .pointer_down(&mut instance, x, y, *pointer_id);
+                    advance_state_machine(
+                        &mut instance,
+                        state_machine
+                            .as_mut()
+                            .context("no selected state machine")?,
+                        *advance_seconds,
+                        &mut factory,
+                    )?;
+                    instance.synchronize_artboard_renderer(
+                        &runtime,
+                        artboard,
+                        &graph.artboards,
+                        &external_images,
+                        &mut factory,
+                        None,
+                    )?;
+                    instance.draw_artboard(
+                        &runtime,
+                        artboard,
+                        &graph.artboards,
+                        &mut factory,
+                        &mut renderer,
+                        &external_images,
+                        None,
+                        true,
+                    )?;
+                    while y > *end_y_exclusive {
+                        factory.add_frame();
+                        state_machine
+                            .as_mut()
+                            .context("no selected state machine")?
+                            .pointer_move(&mut instance, x, y, 0.0, *pointer_id);
+                        advance_state_machine(
+                            &mut instance,
+                            state_machine
+                                .as_mut()
+                                .context("no selected state machine")?,
+                            *advance_seconds,
+                            &mut factory,
+                        )?;
+                        instance.synchronize_artboard_renderer(
+                            &runtime,
+                            artboard,
+                            &graph.artboards,
+                            &external_images,
+                            &mut factory,
+                            None,
+                        )?;
+                        instance.draw_artboard(
+                            &runtime,
+                            artboard,
+                            &graph.artboards,
+                            &mut factory,
+                            &mut renderer,
+                            &external_images,
+                            None,
+                            true,
+                        )?;
+                        y -= *step;
+                    }
+                    factory.add_frame();
+                    state_machine
+                        .as_mut()
+                        .context("no selected state machine")?
+                        .pointer_up(&mut instance, x, y, *pointer_id);
+                    advance_state_machine(
+                        &mut instance,
+                        state_machine
+                            .as_mut()
+                            .context("no selected state machine")?,
+                        *advance_seconds,
+                        &mut factory,
+                    )?;
+                    instance.synchronize_artboard_renderer(
+                        &runtime,
+                        artboard,
+                        &graph.artboards,
+                        &external_images,
+                        &mut factory,
+                        None,
+                    )?;
+                    instance.draw_artboard(
+                        &runtime,
+                        artboard,
+                        &graph.artboards,
+                        &mut factory,
+                        &mut renderer,
+                        &external_images,
+                        None,
+                        true,
+                    )?;
                 }
                 Action::SetBool { input, value } => {
                     let machine = state_machine
@@ -482,6 +847,29 @@ impl Execution {
                     {
                         bail!("text input was not handled");
                     }
+                }
+                Action::FocusNext => {
+                    state_machine
+                        .as_mut()
+                        .context("no selected state machine")?
+                        .focus_next();
+                }
+                Action::FocusPrevious => {
+                    state_machine
+                        .as_mut()
+                        .context("no selected state machine")?
+                        .focus_previous();
+                }
+                Action::KeyInput {
+                    key,
+                    modifiers,
+                    pressed,
+                    repeat,
+                } => {
+                    state_machine
+                        .as_mut()
+                        .context("no selected state machine")?
+                        .key_input(&mut instance, *key, *modifiers, *pressed, *repeat);
                 }
                 Action::SetArtboardSize { width, height } => {
                     instance.set_artboard_dimensions(*width, *height);
@@ -607,6 +995,284 @@ fn selected_artboard_fresh_view_model_context(
     Some(context)
 }
 
+fn named_default_view_model_context(
+    runtime: &RuntimeFile,
+    artboard_index: usize,
+    view_model: &str,
+) -> Option<RuntimeOwnedViewModelContext> {
+    let view_model_index = runtime
+        .view_models()
+        .iter()
+        .position(|candidate| candidate.object.string_property("name") == Some(view_model))?;
+    let main = RuntimeOwnedViewModelInstance::from_instance(runtime, view_model_index, 0)
+        .or_else(|| RuntimeOwnedViewModelInstance::new(runtime, view_model_index))?;
+    let mut context = RuntimeOwnedViewModelContext::from_main(main);
+    context.complete_for_artboard(runtime, artboard_index);
+    Some(context)
+}
+
 fn frame_dimension(value: f32) -> u32 {
     value.ceil().max(1.0) as u32
+}
+
+fn pointer_position(
+    x: &PointerCoordinate,
+    y: &PointerCoordinate,
+    instance: &ArtboardInstance,
+) -> anyhow::Result<(f32, f32)> {
+    let (width, height) = instance.artboard_dimensions();
+    Ok((x.resolve(width, height)?, y.resolve(width, height)?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Action, ActionTarget, Execution, PointerCoordinate};
+    use crate::{Actions, Case, Lane, Status, read_manifest};
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn deserializes_focus_and_keyboard_actions() {
+        let focus: Action = toml::from_str(r#"kind = "focus-next""#).unwrap();
+        let key: Action = toml::from_str(
+            r#"kind = "key-input"
+key = 65
+modifiers = 1
+pressed = true
+repeat = false
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(focus, Action::FocusNext);
+        assert_eq!(
+            key,
+            Action::KeyInput {
+                key: 65,
+                modifiers: 1,
+                pressed: true,
+                repeat: false,
+            }
+        );
+    }
+
+    #[test]
+    fn resolves_pointer_coordinate_expressions_against_artboard_size() {
+        assert_eq!(
+            PointerCoordinate::Expression("artboard-width/2".to_owned())
+                .resolve(640.0, 480.0)
+                .unwrap(),
+            320.0
+        );
+        assert_eq!(
+            PointerCoordinate::Expression("artboard-height-20".to_owned())
+                .resolve(640.0, 480.0)
+                .unwrap(),
+            460.0
+        );
+    }
+
+    #[test]
+    fn deserializes_boolean_view_model_mutation() {
+        let action: Action = toml::from_str(
+            r#"kind = "set-view-model-boolean"
+property = "enabled"
+value = true
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            action,
+            Action::SetViewModelBoolean {
+                property: "enabled".to_owned(),
+                value: true,
+            }
+        );
+    }
+
+    #[test]
+    fn deserializes_string_view_model_mutation() {
+        let action: Action = toml::from_str(
+            r#"kind = "set-view-model-string"
+property = "label"
+value = "ready"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            action,
+            Action::SetViewModelString {
+                property: "label".to_owned(),
+                value: "ready".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn deserializes_enum_view_model_mutation() {
+        let action: Action = toml::from_str(
+            r#"kind = "set-view-model-enum"
+property = "display"
+value = 2
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            action,
+            Action::SetViewModelEnum {
+                property: "display".to_owned(),
+                value: 2,
+            }
+        );
+    }
+
+    #[test]
+    fn deserializes_view_model_trigger_mutation() {
+        let action: Action = toml::from_str(
+            r#"kind = "fire-view-model-trigger"
+property = "pressed"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            action,
+            Action::FireViewModelTrigger {
+                property: "pressed".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn deserializes_artboard_view_model_mutation() {
+        let action: Action = toml::from_str(
+            r#"kind = "set-view-model-artboard"
+property = "nested"
+value = 3
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            action,
+            Action::SetViewModelArtboard {
+                property: "nested".to_owned(),
+                value: 3,
+            }
+        );
+    }
+
+    #[test]
+    fn deserializes_asset_view_model_mutation() {
+        let action: Action = toml::from_str(
+            r#"kind = "set-view-model-asset"
+property = "image"
+value = -1
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            action,
+            Action::SetViewModelAsset {
+                property: "image".to_owned(),
+                value: -1,
+            }
+        );
+    }
+
+    #[test]
+    fn deserializes_font_bytes_view_model_mutation() {
+        let action: Action = toml::from_str(
+            r#"kind = "set-view-model-font-bytes"
+property = "font"
+source = "custom.ttf"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            action,
+            Action::SetViewModelFontBytes {
+                property: "font".to_owned(),
+                source: "custom.ttf".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn executes_each_new_view_model_mutation_kind_against_pinned_fixtures() {
+        let runtime_dir = Path::new("/Users/levi/dev/oss/rive-runtime");
+        if !runtime_dir.is_dir() {
+            return;
+        }
+        let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("silver-corpus crate is nested under the workspace")
+            .to_owned();
+        let manifest = read_manifest(&workspace.join("silver-corpus.toml")).unwrap();
+
+        for id in [
+            "component_based_conditions-Artboard2",
+            "zero_width_space_line_break",
+            "collapse_data_binds-test_3",
+            "fit_font_size_test",
+            "viewmodel_image_reset",
+            "data_bind_font_test",
+            "focusable_element",
+            "keyboard_listener-KeyboardInput",
+            "relative_data_bind_path",
+            "component_list_grouped",
+            "data_binding_artboards_test_recursive",
+            "global_viewmodels_test-set_instance",
+            "image_fit_alignment",
+            "interactive_scrolling",
+        ] {
+            let case = manifest
+                .cases
+                .iter()
+                .find(|case| case.id == id)
+                .unwrap_or_else(|| panic!("missing pinned case {id}"));
+            Execution::run(case, runtime_dir)
+                .unwrap_or_else(|error| panic!("{id} action execution failed: {error:#}"));
+        }
+
+        let artboard_case = Case {
+            id: "set-view-model-artboard-unit".to_owned(),
+            expected: String::new(),
+            source: "data_bind_artboard_input.riv".to_owned(),
+            dependencies: Vec::new(),
+            artboard: "default".to_owned(),
+            animation: "none".to_owned(),
+            state_machine: "none".to_owned(),
+            lane: Lane::Runtime,
+            deterministic: "enabled".to_owned(),
+            random: "deterministic".to_owned(),
+            view_model: "cpp-test-defined".to_owned(),
+            sample_times: Vec::new(),
+            actions: Actions::Executable(vec![
+                Action::BindFreshViewModel,
+                Action::SetViewModelArtboard {
+                    property: "artboardProperty".to_owned(),
+                    value: 1,
+                },
+                Action::Advance {
+                    target: ActionTarget::Artboard,
+                    seconds: 0.0,
+                },
+            ]),
+            verification: "sriv-v1-epsilon".to_owned(),
+            status: Status::Diverges,
+            producer_class: "unit-test".to_owned(),
+            provenance_file: String::new(),
+            provenance_test: String::new(),
+            producer_line: 0,
+            note: String::new(),
+        };
+        Execution::run(&artboard_case, runtime_dir)
+            .expect("raw artboard-value mutation action should execute");
+    }
 }

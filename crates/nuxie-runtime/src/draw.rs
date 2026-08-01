@@ -664,7 +664,7 @@ impl ArtboardInstance {
         point: RenderVec2D,
         cache: &mut RuntimeGeometryState,
     ) -> Vec<usize> {
-        self.update_pass();
+        self.settle_state_machine_update_passes();
         let Some(runtime) = self.runtime_file() else {
             return Vec::new();
         };
@@ -717,7 +717,7 @@ impl ArtboardInstance {
         point: RenderVec2D,
         cache: &mut RuntimeGeometryState,
     ) -> Vec<RuntimeGeometryHit> {
-        self.update_pass();
+        self.settle_state_machine_update_passes();
         let Some(runtime) = self.runtime_file() else {
             return Vec::new();
         };
@@ -737,7 +737,7 @@ impl ArtboardInstance {
         &mut self,
         cache: &mut RuntimeGeometryState,
     ) -> Vec<RuntimeGeometryHit> {
-        self.update_pass();
+        self.settle_state_machine_update_passes();
         let Some(runtime) = self.runtime_file() else {
             return Vec::new();
         };
@@ -768,7 +768,7 @@ impl ArtboardInstance {
         &mut self,
         cache: &mut RuntimeGeometryState,
     ) -> Vec<RuntimeGeometryHit> {
-        self.update_pass();
+        self.settle_state_machine_update_passes();
         let Some(runtime) = self.runtime_file() else {
             return Vec::new();
         };
@@ -798,7 +798,7 @@ impl ArtboardInstance {
         &mut self,
         cache: &mut RuntimeGeometryState,
     ) -> Vec<RuntimeSemanticTextHit> {
-        self.update_pass();
+        self.settle_state_machine_update_passes();
         let Some(runtime) = self.runtime_file() else {
             return Vec::new();
         };
@@ -991,6 +991,13 @@ impl ArtboardInstance {
                 let Some(host_local_id) = command.local_id else {
                     continue;
                 };
+                let host_render_opacity = self
+                    .component(host_local_id)
+                    .map(|component| component.transform.render_opacity)
+                    .unwrap_or(0.0);
+                if !include_invisible && host_render_opacity == 0.0 {
+                    continue;
+                }
                 let Some(nested) = self.nested_artboards.get(&host_local_id) else {
                     continue;
                 };
@@ -1125,6 +1132,13 @@ impl ArtboardInstance {
                 let Some(host_local_id) = command.local_id else {
                     continue;
                 };
+                let host_render_opacity = self
+                    .component(host_local_id)
+                    .map(|component| component.transform.render_opacity)
+                    .unwrap_or(0.0);
+                if !include_invisible && host_render_opacity == 0.0 {
+                    continue;
+                }
                 let Some(items) = self.component_list_items(host_local_id) else {
                     continue;
                 };
@@ -1330,6 +1344,13 @@ impl ArtboardInstance {
             let Some(local_id) = command.local_id else {
                 continue;
             };
+            let render_opacity = self
+                .component(local_id)
+                .map(|component| component.transform.render_opacity)
+                .unwrap_or(0.0);
+            if !include_invisible && render_opacity == 0.0 {
+                continue;
+            }
             let shape_world =
                 self.runtime_component_world_transform_with_bounds(local_id, graph, layout_bounds);
             let Some(shape) = self.runtime_shapes.get(local_id) else {

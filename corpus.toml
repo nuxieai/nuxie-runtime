@@ -2297,3 +2297,11 @@ samples = [0.0]
 status = "exact"
 milestone = "FL-E8"
 features = ["type-key:162:TextVariationModifier", "fl-e8-static-text-variation"]
+
+[[file]]
+id = "parent_child_opacity_univ_1278"
+path = "fixtures/univ-1278/parent_child_opacity.riv"
+samples = [0.0, 0.5, 1.0]
+status = "exact"
+milestone = "UNIV-1278"
+features = ["type-key:31:LinearAnimation", "type-key:3:Shape", "parent-child-render-opacity"]

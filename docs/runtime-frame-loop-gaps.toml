@@ -21,27 +21,6 @@ rule = "FLR-20"
 ceiling = "layout-engine"
 approved = "FLR-20 layout-engine ceiling: Taffy remains the supported layout engine instead of Yoga; known edge and interpolation differences are declared rather than patched behavior-by-behavior."
 
-[[decision]]
-id = "D13"
-source = "docs/parity-gap-register.md#d--deliberate-divergence-register-declare-dont-fix"
-rule = "FLR-20"
-ceiling = "dynamic-list-path"
-approved = "FLR-20 dynamic-list-path ceiling: retain scalar vertex conversion while live ViewModel list-item subscription/remap and CubicDetachedVertex occurrence ownership remain unsupported."
-
-[[decision]]
-id = "D14"
-source = "docs/parity-gap-register.md#d--deliberate-divergence-register-declare-dont-fix"
-rule = "FLR-20"
-ceiling = "standalone-raw-text"
-approved = "FLR-20 standalone-raw-text ceiling: authored Text/TextInput integration is supported; the separate RawText builder/update/bounds/render object API is not."
-
-[[decision]]
-id = "D15"
-source = "docs/parity-gap-register.md#d--deliberate-divergence-register-declare-dont-fix"
-rule = "FLR-20"
-ceiling = "static-text-extensions"
-approved = "FLR-20 static-text-extensions ceiling: TextModifier base registration, TextStyleFeature children, TextTargetModifier, and TextVariationModifier remain explicitly unsupported."
-
 [[gap]]
 id = "FL-G01"
 status = "closed"

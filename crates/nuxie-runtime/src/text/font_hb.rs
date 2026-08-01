@@ -89,11 +89,24 @@ fn shape_text_glyphs(
     text: &str,
     disable_legacy_kern: bool,
 ) -> Vec<TextGlyph> {
+    shape_text_glyphs_with_features(shaper, text, disable_legacy_kern, &[])
+}
+fn shape_text_glyphs_with_features(
+    shaper: &harfrust::Shaper<'_>,
+    text: &str,
+    disable_legacy_kern: bool,
+    features: &[Feature],
+) -> Vec<TextGlyph> {
     let mut glyphs = Vec::new();
     for run in cxx_script_runs(text) {
         let cluster_offset = u32::try_from(run.byte_start).unwrap_or(u32::MAX);
-        let mut run_glyphs =
-            shape_cxx_script_run_glyphs(shaper, run.text, run.script, disable_legacy_kern);
+        let mut run_glyphs = shape_cxx_script_run_glyphs_with_features(
+            shaper,
+            run.text,
+            run.script,
+            disable_legacy_kern,
+            features,
+        );
         for glyph in &mut run_glyphs {
             glyph.cluster = glyph.cluster.saturating_add(cluster_offset);
         }
@@ -105,6 +118,14 @@ fn shape_bidi_text_glyphs(
     shaper: &harfrust::Shaper<'_>,
     text: &str,
     disable_legacy_kern: bool,
+) -> Vec<TextGlyph> {
+    shape_bidi_text_glyphs_with_features(shaper, text, disable_legacy_kern, &[])
+}
+fn shape_bidi_text_glyphs_with_features(
+    shaper: &harfrust::Shaper<'_>,
+    text: &str,
+    disable_legacy_kern: bool,
+    features: &[Feature],
 ) -> Vec<TextGlyph> {
     let bidi = unicode_bidi::BidiInfo::new(text, None);
     let mut glyphs = Vec::new();
@@ -125,6 +146,7 @@ fn shape_bidi_text_glyphs(
                     script_run.script,
                     direction,
                     disable_legacy_kern,
+                    features,
                 );
                 for glyph in &mut run_glyphs {
                     glyph.cluster = glyph.cluster.saturating_add(cluster_offset);
@@ -144,12 +166,22 @@ fn shape_cxx_script_run_glyphs(
     script: HarfScript,
     disable_legacy_kern: bool,
 ) -> Vec<TextGlyph> {
+    shape_cxx_script_run_glyphs_with_features(shaper, text, script, disable_legacy_kern, &[])
+}
+fn shape_cxx_script_run_glyphs_with_features(
+    shaper: &harfrust::Shaper<'_>,
+    text: &str,
+    script: HarfScript,
+    disable_legacy_kern: bool,
+    features: &[Feature],
+) -> Vec<TextGlyph> {
     shape_cxx_script_run_glyphs_in_direction(
         shaper,
         text,
         script,
         Direction::LeftToRight,
         disable_legacy_kern,
+        features,
     )
 }
 fn shape_cxx_script_run_glyphs_in_direction(
@@ -158,18 +190,22 @@ fn shape_cxx_script_run_glyphs_in_direction(
     script: HarfScript,
     direction: Direction,
     disable_legacy_kern: bool,
+    features: &[Feature],
 ) -> Vec<TextGlyph> {
     let mut buffer = UnicodeBuffer::new();
     buffer.push_str(text);
     buffer.set_direction(direction);
     buffer.set_script(script);
     buffer.guess_segment_properties();
-    let kern_off = [Feature::new(HarfTag::new(b"kern"), 0, ..)];
+    let mut shape_features = features.to_vec();
+    if disable_legacy_kern {
+        shape_features.push(Feature::new(HarfTag::new(b"kern"), 0, ..));
+    }
     let shape_options = ShapeOptions::new().scale(Some(TEXT_SHAPE_SCALE));
-    let shape_options = if disable_legacy_kern {
-        shape_options.features(&kern_off)
-    } else {
+    let shape_options = if shape_features.is_empty() {
         shape_options
+    } else {
+        shape_options.features(&shape_features)
     };
     let glyphs = shaper.shape(buffer, shape_options);
     glyphs

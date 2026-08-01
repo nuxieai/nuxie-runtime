@@ -28,6 +28,7 @@ void addRandomProviderValue(float value);
 size_t randomProviderTotalCalls();
 } // namespace rive_probe
 
+#define TESTING
 #define private public
 #define protected public
 #include "rive/component.hpp"
@@ -246,11 +247,25 @@ size_t randomProviderTotalCalls();
 #include "rive/shapes/points_path.hpp"
 #include "rive/shapes/shape.hpp"
 #include "rive/static_scene.hpp"
+#define private public
+#define protected public
+#include "rive/text/text.hpp"
+#include "rive/text/font_hb.hpp"
 #include "rive/text/text_input_cursor.hpp"
 #include "rive/text/text_input_selected_text.hpp"
 #include "rive/text/text_input_selection.hpp"
 #include "rive/text/text_input_text.hpp"
+#include "rive/text/text_modifier.hpp"
+#include "rive/text/text_modifier_group.hpp"
+#include "rive/text/text_modifier_range.hpp"
+#include "rive/text/text_style.hpp"
+#include "rive/text/text_style_axis.hpp"
+#include "rive/text/text_style_feature.hpp"
 #include "rive/text/text_style_paint.hpp"
+#include "rive/text/text_target_modifier.hpp"
+#include "rive/text/text_variation_modifier.hpp"
+#undef protected
+#undef private
 #include "rive/viewmodel/data_enum.hpp"
 #include "rive/viewmodel/data_enum_value.hpp"
 #include "rive/viewmodel/viewmodel.hpp"
@@ -317,6 +332,13 @@ struct RuntimeDoubleMutation
     size_t localId;
     uint32_t propertyKey;
     float value;
+};
+
+struct RuntimeUintMutation
+{
+    size_t localId;
+    uint32_t propertyKey;
+    uint32_t value;
 };
 
 struct RuntimeCollapseMutation
@@ -1006,10 +1028,15 @@ struct ProbeOptions
     bool runtimeGoldenSceneAdvance = false;
     float runtimeGoldenSceneSeconds = 0.0f;
     bool runtimeLayoutBounds = false;
+    bool runtimeFlE8StaticText = false;
+    bool runtimeFlE8FeatureCycle = false;
+    bool runtimeFlE8VariationCycle = false;
+    std::string runtimeFlE8FontSwapPath;
     bool runtimeBindDefaultViewModelArtboardContext = false;
     bool runtimeUpdateArtboardDataBinds = false;
     bool runtimeAdvanceArtboardAfterBind = false;
     std::vector<RuntimeDoubleMutation> runtimeDoubleMutations;
+    std::vector<RuntimeUintMutation> runtimeUintMutations;
     std::vector<RuntimeCollapseMutation> runtimeCollapseMutations;
     std::vector<RuntimeArtboardSizeMutation> runtimeArtboardSizeMutations;
     std::vector<RuntimeAnimationApplication> runtimeAnimationApplications;
@@ -1492,6 +1519,607 @@ void write_runtime_layout_bounds(std::ostream& out,
     out << ']';
 }
 
+std::vector<uint16_t> fl_e8_text_glyphs(
+    const std::vector<rive::Core*>& objects);
+
+void write_fl_e8_static_text_report(
+    std::ostream& out,
+    const std::vector<rive::Core*>& objects)
+{
+    size_t textCount = 0;
+    size_t abstractModifierCount = 0;
+    size_t interpolatorCount = 0;
+    for (auto* object : objects)
+    {
+        if (object == nullptr)
+        {
+            continue;
+        }
+        textCount += object->coreType() == rive::Text::typeKey ? 1 : 0;
+        abstractModifierCount +=
+            object->coreType() == rive::TextModifier::typeKey ? 1 : 0;
+        interpolatorCount +=
+            object->coreType() == rive::CubicInterpolatorComponent::typeKey
+                ? 1
+                : 0;
+    }
+
+    out << "{\"textCount\":" << textCount;
+    out << ",\"abstractModifierCount\":" << abstractModifierCount;
+    out << ",\"interpolatorCount\":" << interpolatorCount;
+
+    out << ",\"groups\":[";
+    bool first = true;
+    for (auto* object : objects)
+    {
+        if (object == nullptr ||
+            !object->isTypeOf(rive::TextModifierGroup::typeKey))
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        auto* group = object->as<rive::TextModifierGroup>();
+        size_t rangeCount = 0;
+        size_t modifierCount = 0;
+        size_t shapeModifierCount = 0;
+        size_t followPathModifierCount = 0;
+        for (auto* child : objects)
+        {
+            if (child == nullptr || !child->is<rive::Component>() ||
+                child->as<rive::Component>()->parent() != group)
+            {
+                continue;
+            }
+            rangeCount +=
+                child->isTypeOf(rive::TextModifierRange::typeKey) ? 1 : 0;
+            modifierCount += child->isTypeOf(rive::TextModifier::typeKey) ? 1 : 0;
+            shapeModifierCount +=
+                child->isTypeOf(rive::TextVariationModifier::typeKey) ? 1 : 0;
+            followPathModifierCount +=
+                child->isTypeOf(rive::TextTargetModifier::typeKey) &&
+                        child->coreType() != rive::TextTargetModifier::typeKey
+                    ? 1
+                    : 0;
+        }
+        out << "{\"rangeCount\":" << rangeCount;
+        out << ",\"modifierCount\":" << modifierCount;
+        out << ",\"shapeModifierCount\":" << shapeModifierCount;
+        out << ",\"followPathModifierCount\":" << followPathModifierCount;
+        out << ",\"directText\":"
+            << (group->textComponent() != nullptr ? "true" : "false");
+        out << ",\"modifiesOrigin\":"
+            << (group->modifiesOrigin() ? "true" : "false");
+        out << '}';
+    }
+    out << ']';
+
+    out << ",\"styles\":[";
+    first = true;
+    for (auto* object : objects)
+    {
+        if (object == nullptr || !object->isTypeOf(rive::TextStyle::typeKey))
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        auto* style = object->as<rive::TextStyle>();
+        size_t variationCount = 0;
+        size_t featureCount = 0;
+        for (auto* child : objects)
+        {
+            if (child == nullptr || !child->is<rive::Component>() ||
+                child->as<rive::Component>()->parent() != style)
+            {
+                continue;
+            }
+            variationCount += child->isTypeOf(rive::TextStyleAxis::typeKey) ? 1 : 0;
+            featureCount +=
+                child->isTypeOf(rive::TextStyleFeature::typeKey) ? 1 : 0;
+        }
+        out << "{\"variationCount\":" << variationCount;
+        out << ",\"featureCount\":" << featureCount;
+        out << ",\"hasOwningText\":"
+            << (style->parent() != nullptr &&
+                        style->parent()->isTypeOf(rive::Text::typeKey)
+                    ? "true"
+                    : "false");
+        out << '}';
+    }
+    out << ']';
+
+    out << ",\"features\":[";
+    first = true;
+    for (auto* object : objects)
+    {
+        if (object == nullptr ||
+            !object->isTypeOf(rive::TextStyleFeature::typeKey))
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        auto* feature = object->as<rive::TextStyleFeature>();
+        out << "{\"tag\":" << feature->tag();
+        out << ",\"value\":" << feature->featureValue();
+        out << '}';
+    }
+    out << ']';
+
+    out << ",\"variations\":[";
+    first = true;
+    for (auto* object : objects)
+    {
+        if (object == nullptr ||
+            !object->isTypeOf(rive::TextVariationModifier::typeKey))
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        auto* variation = object->as<rive::TextVariationModifier>();
+        out << "{\"tag\":" << variation->axisTag();
+        out << ",\"value\":" << variation->axisValue();
+        out << '}';
+    }
+    out << ']';
+
+    out << ",\"targets\":[";
+    first = true;
+    for (auto* object : objects)
+    {
+        if (object == nullptr ||
+            !object->isTypeOf(rive::TextTargetModifier::typeKey))
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        auto* target = object->as<rive::TextTargetModifier>();
+        const size_t targetId = static_cast<size_t>(target->targetId());
+        const bool resolved = targetId < objects.size() &&
+                              objects[targetId] != nullptr &&
+                              objects[targetId]->is<rive::TransformComponent>();
+        out << "{\"targetId\":" << target->targetId();
+        out << ",\"resolved\":"
+            << (resolved ? "true" : "false");
+        out << ",\"hasTextComponent\":"
+            << (target->textComponent() != nullptr ? "true" : "false");
+        out << '}';
+    }
+    out << ']';
+    out << ",\"glyphs\":[";
+    auto glyphs = fl_e8_text_glyphs(objects);
+    for (size_t i = 0; i < glyphs.size(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        out << glyphs[i];
+    }
+    out << ']';
+    std::vector<uint32_t> variationTags;
+    for (auto* object : objects)
+    {
+        if (object == nullptr ||
+            !object->isTypeOf(rive::TextVariationModifier::typeKey))
+        {
+            continue;
+        }
+        auto tag = object->as<rive::TextVariationModifier>()->axisTag();
+        if (std::find(variationTags.begin(), variationTags.end(), tag) ==
+            variationTags.end())
+        {
+            variationTags.push_back(tag);
+        }
+    }
+    out << ",\"glyphVariations\":[";
+    bool firstGlyph = true;
+    for (auto* object : objects)
+    {
+        if (object == nullptr || !object->isTypeOf(rive::Text::typeKey))
+        {
+            continue;
+        }
+        for (const auto& paragraph : object->as<rive::Text>()->shape())
+        {
+            for (const auto& run : paragraph.runs)
+            {
+                for (size_t glyph = 0; glyph < run.glyphs.size(); ++glyph)
+                {
+                    if (!firstGlyph)
+                    {
+                        out << ',';
+                    }
+                    firstGlyph = false;
+                    out << '[';
+                    for (size_t tag = 0; tag < variationTags.size(); ++tag)
+                    {
+                        if (tag != 0)
+                        {
+                            out << ',';
+                        }
+                        out << "{\"tag\":" << variationTags[tag];
+                        out << ",\"value\":"
+                            << (run.font != nullptr
+                                    ? run.font->getAxisValue(variationTags[tag])
+                                    : 0.0f);
+                        out << '}';
+                    }
+                    out << ']';
+                }
+            }
+        }
+    }
+    out << "]}";
+}
+
+struct FlE8FontSwapReport
+{
+    bool available = false;
+    std::vector<std::vector<uint16_t>> glyphPhases;
+};
+
+struct FlE8FeatureCycleReport
+{
+    bool available = false;
+    std::vector<std::vector<uint16_t>> glyphPhases;
+};
+
+struct FlE8VariationCycleReport
+{
+    bool available = false;
+    std::vector<std::vector<uint16_t>> glyphPhases;
+    std::vector<uint32_t> axisTags;
+    std::vector<std::vector<std::optional<float>>> axisValuePhases;
+};
+
+std::vector<uint16_t> fl_e8_text_glyphs(
+    const std::vector<rive::Core*>& objects)
+{
+    std::vector<uint16_t> glyphs;
+    for (auto* object : objects)
+    {
+        if (object == nullptr || !object->isTypeOf(rive::Text::typeKey))
+        {
+            continue;
+        }
+        for (const auto& paragraph : object->as<rive::Text>()->shape())
+        {
+            for (const auto& run : paragraph.runs)
+            {
+                for (auto glyph : run.glyphs)
+                {
+                    glyphs.push_back(glyph);
+                }
+            }
+        }
+    }
+    return glyphs;
+}
+
+FlE8FeatureCycleReport run_fl_e8_feature_cycle(
+    rive::Artboard* artboard)
+{
+    FlE8FeatureCycleReport report;
+    if (artboard == nullptr)
+    {
+        return report;
+    }
+    auto& objects = artboard->objects();
+    rive::TextStyleFeature* feature = nullptr;
+    rive::TextStylePaint* style = nullptr;
+    for (auto* object : objects)
+    {
+        if (object != nullptr &&
+            object->isTypeOf(rive::TextStyleFeature::typeKey))
+        {
+            feature = object->as<rive::TextStyleFeature>();
+        }
+        if (object != nullptr &&
+            object->isTypeOf(rive::TextStylePaint::typeKey))
+        {
+            style = object->as<rive::TextStylePaint>();
+        }
+    }
+    if (feature == nullptr || style == nullptr)
+    {
+        return report;
+    }
+    artboard->updateComponents();
+    report.glyphPhases.push_back(fl_e8_text_glyphs(objects));
+    feature->featureValue(0);
+    report.glyphPhases.push_back(fl_e8_text_glyphs(objects));
+    auto clone = artboard->instance();
+    clone->updateComponents();
+    report.glyphPhases.push_back(fl_e8_text_glyphs(clone->objects()));
+    style->fontSize(style->fontSize() + 1.0f);
+    style->addDirt(rive::ComponentDirt::TextShape);
+    artboard->updateComponents();
+    report.glyphPhases.push_back(fl_e8_text_glyphs(objects));
+    report.available = true;
+    return report;
+}
+
+void write_fl_e8_feature_cycle_report(
+    std::ostream& out,
+    const FlE8FeatureCycleReport& report)
+{
+    out << "{\"available\":" << (report.available ? "true" : "false");
+    out << ",\"glyphPhases\":[";
+    for (size_t phase = 0; phase < report.glyphPhases.size(); ++phase)
+    {
+        if (phase != 0)
+        {
+            out << ',';
+        }
+        out << '[';
+        for (size_t glyph = 0; glyph < report.glyphPhases[phase].size(); ++glyph)
+        {
+            if (glyph != 0)
+            {
+                out << ',';
+            }
+            out << report.glyphPhases[phase][glyph];
+        }
+        out << ']';
+    }
+    out << "]}";
+}
+
+std::vector<std::optional<float>> fl_e8_text_axis_values(
+    const std::vector<rive::Core*>& objects,
+    uint32_t axisTag)
+{
+    std::vector<std::optional<float>> values;
+    for (auto* object : objects)
+    {
+        if (object == nullptr || !object->isTypeOf(rive::Text::typeKey))
+        {
+            continue;
+        }
+        for (const auto& paragraph : object->as<rive::Text>()->shape())
+        {
+            for (const auto& run : paragraph.runs)
+            {
+                for (size_t glyph = 0; glyph < run.glyphs.size(); ++glyph)
+                {
+                    auto* font = run.font != nullptr
+                                     ? static_cast<HBFont*>(run.font.get())
+                                     : nullptr;
+                    if (font == nullptr)
+                    {
+                        values.push_back(std::nullopt);
+                    }
+                    else
+                    {
+                        auto value = font->m_axisValues.find(axisTag);
+                        values.push_back(value != font->m_axisValues.end()
+                                             ? std::optional<float>(value->second)
+                                             : std::nullopt);
+                    }
+                }
+            }
+        }
+    }
+    return values;
+}
+
+FlE8VariationCycleReport run_fl_e8_variation_cycle(
+    rive::Artboard* artboard)
+{
+    FlE8VariationCycleReport report;
+    if (artboard == nullptr)
+    {
+        return report;
+    }
+    auto& objects = artboard->objects();
+    rive::TextVariationModifier* variation = nullptr;
+    rive::TextModifierRange* range = nullptr;
+    for (auto* object : objects)
+    {
+        if (object != nullptr &&
+            object->isTypeOf(rive::TextVariationModifier::typeKey))
+        {
+            variation = object->as<rive::TextVariationModifier>();
+        }
+        if (object != nullptr &&
+            object->isTypeOf(rive::TextModifierRange::typeKey))
+        {
+            range = object->as<rive::TextModifierRange>();
+        }
+    }
+    if (variation == nullptr || range == nullptr)
+    {
+        return report;
+    }
+    const uint32_t wght = (uint32_t('w') << 24) | (uint32_t('g') << 16) |
+                          (uint32_t('h') << 8) | uint32_t('t');
+    const uint32_t wdth = (uint32_t('w') << 24) | (uint32_t('d') << 16) |
+                          (uint32_t('t') << 8) | uint32_t('h');
+    auto capture = [&](rive::Artboard* source, uint32_t tag) {
+        report.glyphPhases.push_back(fl_e8_text_glyphs(source->objects()));
+        report.axisTags.push_back(tag);
+        report.axisValuePhases.push_back(
+            fl_e8_text_axis_values(source->objects(), tag));
+    };
+    artboard->updateComponents();
+    capture(artboard, wght);
+    variation->axisValue(900.0f);
+    artboard->updateComponents();
+    capture(artboard, wght);
+    range->strength(-1.0f);
+    artboard->updateComponents();
+    capture(artboard, wght);
+    range->strength(2.0f);
+    artboard->updateComponents();
+    capture(artboard, wght);
+    auto clone = artboard->instance();
+    clone->updateComponents();
+    capture(clone.get(), wght);
+    variation->axisTag(wdth);
+    capture(artboard, wght);
+    range->strength(1.5f);
+    artboard->updateComponents();
+    capture(artboard, wdth);
+    report.available = true;
+    return report;
+}
+
+void write_fl_e8_variation_cycle_report(
+    std::ostream& out,
+    const FlE8VariationCycleReport& report)
+{
+    out << "{\"available\":" << (report.available ? "true" : "false");
+    out << ",\"glyphPhases\":[";
+    for (size_t phase = 0; phase < report.glyphPhases.size(); ++phase)
+    {
+        if (phase != 0)
+        {
+            out << ',';
+        }
+        out << '[';
+        for (size_t glyph = 0; glyph < report.glyphPhases[phase].size(); ++glyph)
+        {
+            if (glyph != 0)
+            {
+                out << ',';
+            }
+            out << report.glyphPhases[phase][glyph];
+        }
+        out << ']';
+    }
+    out << "]";
+    out << ",\"axisTags\":[";
+    for (size_t phase = 0; phase < report.axisTags.size(); ++phase)
+    {
+        if (phase != 0)
+        {
+            out << ',';
+        }
+        out << report.axisTags[phase];
+    }
+    out << "]";
+    out << ",\"axisValuePhases\":[";
+    for (size_t phase = 0; phase < report.axisValuePhases.size(); ++phase)
+    {
+        if (phase != 0)
+        {
+            out << ',';
+        }
+        out << '[';
+        for (size_t value = 0; value < report.axisValuePhases[phase].size(); ++value)
+        {
+            if (value != 0)
+            {
+                out << ',';
+            }
+            if (report.axisValuePhases[phase][value].has_value())
+            {
+                out << *report.axisValuePhases[phase][value];
+            }
+            else
+            {
+                out << "null";
+            }
+        }
+        out << ']';
+    }
+    out << "]}";
+}
+
+FlE8FontSwapReport run_fl_e8_font_swap(
+    rive::File* file,
+    rive::ArtboardInstance* artboard,
+    const ProbeOptions& options)
+{
+    FlE8FontSwapReport report;
+    if (file == nullptr || artboard == nullptr ||
+        options.runtimeFlE8FontSwapPath.empty())
+    {
+        return report;
+    }
+    auto machine = artboard->stateMachineAt(0);
+    auto viewModelInstance = file->createDefaultViewModelInstance(artboard);
+    if (machine == nullptr || viewModelInstance == nullptr)
+    {
+        return report;
+    }
+    machine->bindViewModelInstance(viewModelInstance);
+    machine->advanceAndApply(0.0f);
+    artboard->updateComponents();
+    report.glyphPhases.push_back(fl_e8_text_glyphs(artboard->objects()));
+
+    auto font = HBFont::Decode(read_bytes(
+        options.runtimeFlE8FontSwapPath.c_str()));
+    auto fontProperty = viewModelInstance->propertyValue("fontProperty");
+    if (font == nullptr || fontProperty == nullptr ||
+        !fontProperty->is<rive::ViewModelInstanceAssetFont>())
+    {
+        return report;
+    }
+    fontProperty->as<rive::ViewModelInstanceAssetFont>()->value(font.get());
+    machine->advanceAndApply(0.016f);
+    artboard->updateComponents();
+    report.glyphPhases.push_back(fl_e8_text_glyphs(artboard->objects()));
+
+    machine->pointerDown(rive::Vec2D(490.0f, 490.0f));
+    machine->pointerUp(rive::Vec2D(490.0f, 490.0f));
+    machine->advanceAndApply(0.016f);
+    artboard->updateComponents();
+    report.glyphPhases.push_back(fl_e8_text_glyphs(artboard->objects()));
+
+    machine->pointerDown(rive::Vec2D(490.0f, 20.0f));
+    machine->pointerUp(rive::Vec2D(490.0f, 20.0f));
+    machine->advanceAndApply(0.016f);
+    artboard->updateComponents();
+    report.glyphPhases.push_back(fl_e8_text_glyphs(artboard->objects()));
+    report.available = true;
+    return report;
+}
+
+void write_fl_e8_font_swap_report(std::ostream& out,
+                                  const FlE8FontSwapReport& report)
+{
+    out << "{\"available\":" << (report.available ? "true" : "false");
+    out << ",\"glyphPhases\":[";
+    for (size_t phase = 0; phase < report.glyphPhases.size(); ++phase)
+    {
+        if (phase != 0)
+        {
+            out << ',';
+        }
+        out << '[';
+        for (size_t glyph = 0; glyph < report.glyphPhases[phase].size(); ++glyph)
+        {
+            if (glyph != 0)
+            {
+                out << ',';
+            }
+            out << report.glyphPhases[phase][glyph];
+        }
+        out << ']';
+    }
+    out << "]}";
+}
+
 void apply_runtime_golden_scene_advance(rive::File* file,
                                         rive::ArtboardInstance* artboard,
                                         const ProbeOptions& options)
@@ -1540,6 +2168,30 @@ void apply_runtime_double_mutations(const std::vector<rive::Core*>& objects,
             continue;
         }
         rive::CoreRegistry::setDouble(
+            object, mutation.propertyKey, mutation.value);
+    }
+}
+
+void apply_runtime_uint_mutations(const std::vector<rive::Core*>& objects,
+                                  const ProbeOptions& options)
+{
+    for (const auto& mutation : options.runtimeUintMutations)
+    {
+        if (mutation.localId >= objects.size())
+        {
+            continue;
+        }
+        auto* object = objects[mutation.localId];
+        if (object == nullptr ||
+            !rive::CoreRegistry::objectSupportsProperty(
+                object, mutation.propertyKey) ||
+            rive::CoreRegistry::propertyFieldId(
+                static_cast<int>(mutation.propertyKey)) !=
+                rive::CoreUintType::id)
+        {
+            continue;
+        }
+        rive::CoreRegistry::setUint(
             object, mutation.propertyKey, mutation.value);
     }
 }
@@ -13804,6 +14456,7 @@ void write_artboard(std::ostream& out,
     }
 
     apply_runtime_double_mutations(objects, options);
+    apply_runtime_uint_mutations(objects, options);
     apply_runtime_collapse_mutations(objects, options);
     apply_runtime_artboard_size_mutations(artboard, options);
     if (options.runtimeBindDefaultViewModelArtboardContext && file != nullptr)
@@ -13834,6 +14487,14 @@ void write_artboard(std::ostream& out,
     auto runtimeStateMachineAdvanceReports =
         apply_runtime_state_machine_advances(
             file, instanceArtboard, options, localIds);
+    auto flE8FontSwapReport =
+        run_fl_e8_font_swap(file, instanceArtboard, options);
+    auto flE8FeatureCycleReport = options.runtimeFlE8FeatureCycle
+                                      ? run_fl_e8_feature_cycle(artboard)
+                                      : FlE8FeatureCycleReport{};
+    auto flE8VariationCycleReport = options.runtimeFlE8VariationCycle
+                                        ? run_fl_e8_variation_cycle(artboard)
+                                        : FlE8VariationCycleReport{};
 
     bool runtimeUpdateDidUpdate = false;
     if (options.runtimeUpdate)
@@ -13875,6 +14536,26 @@ void write_artboard(std::ostream& out,
     {
         out << ",\"runtimeLayoutBounds\":";
         write_runtime_layout_bounds(out, localIds, objects);
+    }
+    if (options.runtimeFlE8StaticText)
+    {
+        out << ",\"flE8StaticText\":";
+        write_fl_e8_static_text_report(out, objects);
+    }
+    if (options.runtimeFlE8FeatureCycle)
+    {
+        out << ",\"flE8FeatureCycle\":";
+        write_fl_e8_feature_cycle_report(out, flE8FeatureCycleReport);
+    }
+    if (options.runtimeFlE8VariationCycle)
+    {
+        out << ",\"flE8VariationCycle\":";
+        write_fl_e8_variation_cycle_report(out, flE8VariationCycleReport);
+    }
+    if (!options.runtimeFlE8FontSwapPath.empty())
+    {
+        out << ",\"flE8FontSwap\":";
+        write_fl_e8_font_swap_report(out, flE8FontSwapReport);
     }
     if (!options.runtimeAnimationAdvances.empty())
     {
@@ -15577,6 +16258,34 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-fl-e8-static-text"))
+        {
+            options.runtimeFlE8StaticText = true;
+            continue;
+        }
+        if (is_arg(argv[i], "--runtime-fl-e8-feature-cycle"))
+        {
+            options.runtimeFlE8FeatureCycle = true;
+            continue;
+        }
+        if (is_arg(argv[i], "--runtime-fl-e8-variation-cycle"))
+        {
+            options.runtimeFlE8VariationCycle = true;
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-fl-e8-font-swap"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-fl-e8-font-swap requires a font path\n";
+                return 2;
+            }
+            options.runtimeFlE8FontSwapPath = argv[++i];
+            options.instanceArtboards = true;
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-golden-scene-advance"))
         {
             if (i + 1 >= argc)
@@ -15648,6 +16357,25 @@ int main(int argc, const char* argv[])
                 static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
             mutation.value = std::strtof(argv[++i], nullptr);
             options.runtimeDoubleMutations.push_back(mutation);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-set-uint"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr
+                    << "--runtime-set-uint requires localId propertyKey value\n";
+                return 2;
+            }
+            RuntimeUintMutation mutation;
+            mutation.localId =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            mutation.propertyKey =
+                static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
+            mutation.value =
+                static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
+            options.runtimeUintMutations.push_back(mutation);
             continue;
         }
 

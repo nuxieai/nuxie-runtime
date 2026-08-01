@@ -130,21 +130,6 @@ ship this list as documentation; each row needs to stay true under Phase S.
 10. 108 renderer rows contract-exact under the reviewed 2/32 Metal-vs-WebGPU subpixel budget (not byte-exact).
 11. **Bounded host decoded-image policy (2026-07-21).** The high-level `nuxie::File` import path caps the aggregate decoded RGBA bytes retained by one artboard-tree render cache at 64 MiB by default (`FileImportLimits::max_retained_decoded_image_bytes`); pinned C++ has no aggregate ceiling. The low-level compatibility/golden paths and `FileImportLimits::unbounded()` retain every image exactly like C++, so the exact-corpus floor is unaffected. No C ABI change.
 12. **[SUPERSEDED same day by #RD-1 — see map Phase RD.] Retained-renderer invalidation epochs (briefly user-approved 2026-07-21, #B-6 Family B).** The pure-Rust renderer retains replay caches (prepared paints/paths, draw command lists, text layout) that C++ has no counterpart for — C++ redraws through live objects each frame. The instance-to-cache version counters (cache/prepared/command/path/layout/text/draw-order/tree-paint epochs) are the invalidation bridge that retained design requires, validated by the 1,468/1,468 pixel gate and both golden gates. Guardrail: any epoch later found compensating for a missed PORT (lost C++ information) rather than bridging to the renderer is a defect and gets fixed individually — the distinction is "our design keeps more than C++" (feature cost, accepted) vs "our port lost what C++ had" (defect, rebuild).
-13. **Dynamic ListPath support ceiling.** Nuxie retains the pinned scalar
-    distance/rotation conversion but does not implement ListPath's live
-    ViewModel list-item subscription/remap or CubicDetachedVertex occurrence
-    lifecycle. Files requiring it are explicitly unsupported under FLR-20
-    **dynamic-list-path**, not silently treated as static paths.
-14. **Standalone RawText support ceiling.** Nuxie supports retained authored
-    Text and TextInput integration, but does not expose the separate C++
-    RawText append/clear/setter/update/bounds/render object API. This is the
-    FLR-20 **standalone-raw-text** ceiling.
-15. **Advanced static-text extension ceiling.** Nuxie's supported static-text
-    subset excludes the abstract TextModifier registration hook, OpenType
-    TextStyleFeature children, TextTargetModifier, and TextVariationModifier.
-    These objects fail explicitly instead of being ignored and are classified
-    under FLR-20 **static-text-extensions** (the former C1/F13 ceilings).
-
 ## H — Drift & housekeeping
 
 | id | item |

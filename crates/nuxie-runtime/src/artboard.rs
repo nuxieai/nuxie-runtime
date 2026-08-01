@@ -333,6 +333,13 @@ impl<'a> RuntimeComponents<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct RuntimeTextStyleFeatureOption {
+    shape_revision: u64,
+    tag: u32,
+    value: u32,
+}
+
 #[derive(Debug)]
 pub struct ArtboardInstance {
     instance_identity: RuntimeArtboardInstanceIdentity,
@@ -443,6 +450,8 @@ pub struct ArtboardInstance {
     pub(crate) artboard_data_bind_processed_epoch: u64,
     pub(crate) image_asset_overrides: BTreeMap<usize, Option<u32>>,
     text_style_font_overrides: BTreeMap<usize, RuntimeFontAssetValue>,
+    text_style_feature_options: RefCell<BTreeMap<usize, RuntimeTextStyleFeatureOption>>,
+    text_variation_modifier_tags: RefCell<BTreeMap<usize, (u64, u32)>>,
     pub(crate) runtime_images: crate::draw::image::RuntimeImageList,
     external_font_assets: Arc<BTreeMap<u32, Arc<[u8]>>>,
     /// C++ File/ImageAsset ownership projected into the runtime occurrence
@@ -468,6 +477,7 @@ pub struct ArtboardInstance {
     pub(crate) prepared_epoch: u64,
     pub(crate) path_epoch: u64,
     pub(crate) layout_revision: u64,
+    text_shape_revision: u64,
     text_affecting_locals: Vec<bool>,
     // C++ SolidColor mutates its attached RenderPaint when its property dirt
     // is applied. Renderer resources live outside the Rust instance, so retain
@@ -573,6 +583,10 @@ impl Clone for ArtboardInstance {
             artboard_data_bind_processed_epoch: self.artboard_data_bind_processed_epoch,
             image_asset_overrides: self.image_asset_overrides.clone(),
             text_style_font_overrides: self.text_style_font_overrides.clone(),
+            // C++ clones generated feature fields, then builds a fresh
+            // occurrence-local optioned-font cache during clean/add.
+            text_style_feature_options: RefCell::new(BTreeMap::new()),
+            text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: self.runtime_images.clone(),
             external_font_assets: self.external_font_assets.clone(),
             runtime_image_assets: self.runtime_image_assets.clone(),
@@ -588,6 +602,7 @@ impl Clone for ArtboardInstance {
             // (`artboard.hpp:548-601`; `artboard.cpp:1038-1057`).
             path_epoch: 1,
             layout_revision: self.layout_revision,
+            text_shape_revision: self.text_shape_revision,
             text_affecting_locals: self.text_affecting_locals.clone(),
             solid_color_paint_revisions: self.solid_color_paint_revisions.clone(),
             runtime_drawables: self.runtime_drawables.clone(),
@@ -2256,6 +2271,8 @@ impl ArtboardInstance {
             artboard_data_bind_processed_epoch: 0,
             image_asset_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
+            text_style_feature_options: RefCell::new(BTreeMap::new()),
+            text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: crate::draw::image::RuntimeImageList::from_graph(file, graph),
             external_font_assets,
             runtime_image_assets: RefCell::new(None),
@@ -2267,6 +2284,7 @@ impl ArtboardInstance {
             prepared_epoch: 1,
             path_epoch: 1,
             layout_revision: 1,
+            text_shape_revision: 1,
             text_affecting_locals,
             solid_color_paint_revisions,
             runtime_drawables,
@@ -3465,6 +3483,34 @@ impl ArtboardInstance {
         self.runtime_graph_for_global(self.graph_global_id)
     }
 
+    #[cfg(feature = "tools")]
+    #[doc(hidden)]
+    pub fn debug_static_text_layout_report(
+        &self,
+        text_local: usize,
+    ) -> Option<crate::RuntimeTextLayoutDebugReport> {
+        crate::text::static_text_layout_debug_report(
+            self.runtime_file()?,
+            self.runtime_graph()?,
+            self,
+            text_local,
+            None,
+        )
+    }
+
+    #[cfg(feature = "tools")]
+    #[doc(hidden)]
+    pub fn debug_static_text_target_report(
+        &self,
+        text_local: usize,
+    ) -> Option<Vec<crate::RuntimeTextTargetModifierDebugReport>> {
+        Some(crate::text::static_text_target_debug_report(
+            self.runtime_file()?,
+            self.runtime_graph()?,
+            text_local,
+        ))
+    }
+
     pub(crate) fn runtime_graph_for_global(&self, graph_global_id: u32) -> Option<&ArtboardGraph> {
         let context = self.build_context.as_ref()?;
         let index = context
@@ -3857,6 +3903,63 @@ impl ArtboardInstance {
         local_id: usize,
     ) -> Option<&RuntimeFontAssetValue> {
         self.text_style_font_overrides.get(&local_id)
+    }
+
+    pub(crate) fn text_style_feature_option(
+        &self,
+        local_id: usize,
+        authored_tag: u32,
+        authored_value: u32,
+    ) -> (u32, u32) {
+        let shape_revision = self.text_shape_revision;
+        let mut options = self.text_style_feature_options.borrow_mut();
+        let option = options
+            .entry(local_id)
+            .or_insert_with(|| RuntimeTextStyleFeatureOption {
+                shape_revision,
+                tag: property_key_for_name("TextStyleFeature", "tag")
+                    .and_then(|key| self.uint_property(local_id, key))
+                    .and_then(|value| u32::try_from(value).ok())
+                    .unwrap_or(authored_tag),
+                value: property_key_for_name("TextStyleFeature", "featureValue")
+                    .and_then(|key| self.uint_property(local_id, key))
+                    .and_then(|value| u32::try_from(value).ok())
+                    .unwrap_or(authored_value),
+            });
+        if option.shape_revision != shape_revision {
+            option.tag = property_key_for_name("TextStyleFeature", "tag")
+                .and_then(|key| self.uint_property(local_id, key))
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(authored_tag);
+            option.value = property_key_for_name("TextStyleFeature", "featureValue")
+                .and_then(|key| self.uint_property(local_id, key))
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(authored_value);
+            option.shape_revision = shape_revision;
+        }
+        (option.tag, option.value)
+    }
+
+    pub(crate) fn text_variation_modifier_tag(&self, local_id: usize, authored_tag: u32) -> u32 {
+        let shape_revision = self.text_shape_revision;
+        let mut tags = self.text_variation_modifier_tags.borrow_mut();
+        let (revision, tag) = tags.entry(local_id).or_insert_with(|| {
+            (
+                shape_revision,
+                property_key_for_name("TextVariationModifier", "axisTag")
+                    .and_then(|key| self.uint_property(local_id, key))
+                    .and_then(|value| u32::try_from(value).ok())
+                    .unwrap_or(authored_tag),
+            )
+        });
+        if *revision != shape_revision {
+            *tag = property_key_for_name("TextVariationModifier", "axisTag")
+                .and_then(|key| self.uint_property(local_id, key))
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(authored_tag);
+            *revision = shape_revision;
+        }
+        *tag
     }
 
     pub(crate) fn set_text_style_font_override(
@@ -6772,6 +6875,10 @@ impl ArtboardInstance {
         self.layout_revision
     }
 
+    pub(crate) fn mark_text_shape_changed(&mut self) {
+        self.text_shape_revision = self.text_shape_revision.wrapping_add(1);
+    }
+
     pub(crate) fn solid_color_paint_revision(&self, local_id: usize) -> u64 {
         self.solid_color_paint_revisions
             .get(local_id)
@@ -8730,6 +8837,22 @@ impl ArtboardInstance {
             crate::text_owner::uint_property_changed(self, local_id, type_name, property_key)
         });
         let owner_callback = owner_callback.or_else(|| {
+            crate::text::text_style_axis_uint_property_changed(
+                self,
+                local_id,
+                type_name,
+                property_key,
+            )
+        });
+        let owner_callback = owner_callback.or_else(|| {
+            crate::text::text_modifier_group_uint_property_changed(
+                self,
+                local_id,
+                type_name,
+                property_key,
+            )
+        });
+        let owner_callback = owner_callback.or_else(|| {
             crate::text_value_run_owner::uint_property_changed(
                 self,
                 local_id,
@@ -9215,6 +9338,22 @@ impl ArtboardInstance {
                 })
                 .or_else(|| {
                     crate::text::text_style_axis_double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                })
+                .or_else(|| {
+                    crate::text::text_variation_modifier_double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                })
+                .or_else(|| {
+                    crate::text::text_modifier_group_double_property_changed(
                         self,
                         local_id,
                         type_name,
@@ -11535,6 +11674,8 @@ mod tests {
             artboard_data_bind_processed_epoch: 0,
             image_asset_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
+            text_style_feature_options: RefCell::new(BTreeMap::new()),
+            text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: crate::draw::image::RuntimeImageList::default(),
             external_font_assets: Arc::new(BTreeMap::new()),
             runtime_image_assets: RefCell::new(None),
@@ -11546,6 +11687,7 @@ mod tests {
             prepared_epoch: 1,
             path_epoch: 1,
             layout_revision: 1,
+            text_shape_revision: 1,
             text_affecting_locals,
             solid_color_paint_revisions,
             runtime_drawables: RuntimeDrawableList::default(),

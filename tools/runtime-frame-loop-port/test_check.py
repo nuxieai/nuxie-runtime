@@ -22,10 +22,13 @@ if str(TOOL_DIR) not in sys.path:
     sys.path.insert(0, str(TOOL_DIR))
 
 from check import (
+    FL_E8_FILES,
     FL_B_FROZEN_SCOPE_FILES,
     FL_B_FROZEN_SCOPE_REF,
     check_status,
     nested_event_owner_boundary_matches,
+    validate_fl_e8_policy,
+    validate_fl_e8_wp1_artifacts,
     validate_frozen_wave_scopes,
 )
 
@@ -738,6 +741,154 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         self.assertIn(
             "file fixture.cpp cites ceiling 'standalone-raw-text', but decision D13 binds "
             "'dynamic-list-path'",
+            errors,
+        )
+
+    def fl_e8_policy_errors(
+        self,
+        *,
+        decisions: list[dict[str, object]] | None = None,
+        depends_on: list[str] | None = None,
+        paths: set[str] | None = None,
+        statuses: dict[str, str] | None = None,
+        expected_counts: dict[str, int] | None = None,
+        porting_rules: str | None = None,
+        parity_register: str = "12. retained history\n",
+    ) -> list[str]:
+        paths = FL_E8_FILES if paths is None else paths
+        statuses = statuses or {}
+        errors: list[str] = []
+        validate_fl_e8_policy(
+            phase="fl-e8-implementation",
+            waves=[
+                {
+                    "id": "FL-E8",
+                    "sequence": 6,
+                    "depends_on": ["FL-E"] if depends_on is None else depends_on,
+                }
+            ],
+            file_rows=[
+                {
+                    "upstream": path,
+                    "wave": "FL-E8",
+                    "status": statuses.get(path, "pending"),
+                }
+                for path in sorted(paths)
+            ],
+            expected_counts=expected_counts
+            or {"faithful": 334, "divergent-by-decision": 1, "pending": 7},
+            decisions=decisions
+            or [
+                {
+                    "id": "D3",
+                    "rule": "FLR-20",
+                    "ceiling": "layout-engine",
+                }
+            ],
+            porting_rules=porting_rules
+            or (
+                "- **FLR-20 Declare support ceilings.** The only approved "
+                "**layout-engine** ceiling is D3; a new ceiling requires an "
+                "explicit user-approved D-row.\n- **FLR-21 Next.** fixture\n"
+            ),
+            parity_register=parity_register,
+            candidate_paths=set(),
+            errors=errors,
+        )
+        return errors
+
+    def test_fl_e8_rejects_d13_reappearance(self) -> None:
+        errors = self.fl_e8_policy_errors(
+            decisions=[{"id": "D13", "rule": "FLR-20", "ceiling": "layout-engine"}]
+        )
+        self.assertIn("rejected FL-E8 decision D13 must not reappear", errors)
+
+    def test_fl_e8_rejects_d14_reappearance(self) -> None:
+        errors = self.fl_e8_policy_errors(
+            decisions=[{"id": "D14", "rule": "FLR-20", "ceiling": "layout-engine"}]
+        )
+        self.assertIn("rejected FL-E8 decision D14 must not reappear", errors)
+
+    def test_fl_e8_rejects_d15_reappearance(self) -> None:
+        errors = self.fl_e8_policy_errors(
+            decisions=[{"id": "D15", "rule": "FLR-20", "ceiling": "layout-engine"}]
+        )
+        self.assertIn("rejected FL-E8 decision D15 must not reappear", errors)
+
+    def test_fl_e8_requires_exact_wave_dependency_and_seven_rows(self) -> None:
+        errors = self.fl_e8_policy_errors(
+            depends_on=["FL-D"], paths=set(FL_E8_FILES) - {"src/text/text_style.cpp"}
+        )
+        self.assertIn("FL-E8 must depend exactly on FL-E", errors)
+        self.assertTrue(
+            any("FL-E8 wave must contain exactly seven" in error for error in errors)
+        )
+
+    def test_fl_e8_requires_wp0_counts(self) -> None:
+        errors = self.fl_e8_policy_errors(
+            expected_counts={"faithful": 335, "divergent-by-decision": 1, "pending": 6}
+        )
+        self.assertIn(
+            "FL-E8 fl-e8-implementation requires faithful=334, got 335", errors
+        )
+        self.assertIn(
+            "FL-E8 fl-e8-implementation requires pending=7, got 6", errors
+        )
+
+    def test_fl_e8_allows_only_d3_layout_engine_divergence(self) -> None:
+        self.assertEqual(self.fl_e8_policy_errors(), [])
+        errors = self.fl_e8_policy_errors(
+            decisions=[{"id": "D3", "rule": "FLR-20", "ceiling": "other"}]
+        )
+        self.assertIn("FLR-20 may bind only D3/layout-engine", errors)
+
+    def test_fl_e8_wp1_artifacts_pin_predicates_fixtures_corpus_and_probes(self) -> None:
+        owners = {
+            "text_modifier.rs": "enum StaticTextModifier {}\n",
+            "text_style_feature.rs": "struct StaticTextStyleFeature;\n",
+            "text_target_modifier.rs": "struct StaticTextTargetModifier;\n",
+            "text_variation_modifier.rs": "struct StaticTextVariationModifier;\n",
+        }
+        owner_dir = self.repo / "crates/nuxie-runtime/src/text"
+        owner_dir.mkdir(parents=True, exist_ok=True)
+        for name, source in owners.items():
+            (owner_dir / name).write_text(source)
+        fixture_dir = self.repo / "fixtures"
+        fixture_dir.mkdir(parents=True, exist_ok=True)
+        fl_e8_dir = fixture_dir / "fl-e8"
+        fl_e8_dir.mkdir()
+        (fl_e8_dir / "text_style_feature.riv").write_bytes(b"feature")
+        (fl_e8_dir / "text_variation_modifier.riv").write_bytes(b"variation")
+        (self.repo / "corpus.toml").write_text(
+            '[[file]]\nid="text_style_feature_fl_e8"\npath="fixtures/fl-e8/text_style_feature.riv"\nstatus="exact"\n'
+            '[[file]]\nid="text_variation_modifier_fl_e8"\npath="fixtures/fl-e8/text_variation_modifier.riv"\nstatus="exact"\n'
+        )
+        probe = self.repo / "crates/nuxie-runtime/tests/cpp_probe.rs"
+        probe.parent.mkdir(parents=True, exist_ok=True)
+        probe.write_text("D-ST-STRUCT D-ST-FONT D-ST-FEATURE D-ST-VARIATION D-ST-TARGET")
+        cpp_probe = self.repo / "tools/cpp-probe/main.cpp"
+        cpp_probe.parent.mkdir(parents=True, exist_ok=True)
+        cpp_probe.write_text(
+            "--runtime-fl-e8-static-text --runtime-fl-e8-font-swap "
+            "--runtime-fl-e8-feature-cycle --runtime-fl-e8-variation-cycle"
+        )
+        codegen = self.repo / "tools/nuxie-codegen/src/main.rs"
+        codegen.parent.mkdir(parents=True, exist_ok=True)
+        codegen.write_text("text-style-feature text-variation-modifier")
+        fixture_test = self.repo / "tools/nuxie-codegen/tests/fl_e8_fixtures.rs"
+        fixture_test.parent.mkdir(parents=True, exist_ok=True)
+        fixture_test.write_text("deterministic")
+        errors: list[str] = []
+        validate_fl_e8_wp1_artifacts(self.repo, errors)
+        self.assertEqual(errors, [])
+
+        (owner_dir / "text_modifier.rs").write_text(
+            "fn static_text_modifier_is_unsupported() {}\n"
+        )
+        errors = []
+        validate_fl_e8_wp1_artifacts(self.repo, errors)
+        self.assertIn(
+            "FL-E8 WP1 old static rejection predicate remains: static_text_modifier_is_unsupported",
             errors,
         )
 

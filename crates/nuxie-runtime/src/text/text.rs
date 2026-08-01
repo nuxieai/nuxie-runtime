@@ -27,6 +27,7 @@ fn mark_shape_dirty_with_layout(
     ) {
         return false;
     }
+    instance.mark_text_shape_changed();
     if let Some(text) = instance
         .component(text_local_id)
         .and_then(|component| component.concrete.text.as_ref())

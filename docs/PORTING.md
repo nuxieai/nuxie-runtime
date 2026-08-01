@@ -1396,15 +1396,11 @@ lifecycle. They apply to the complete runtime frame loop through the existing
 - **FLR-20 Declare support ceilings as decisions; never call them faithful.**
   A direct Rust owner can close a file-correspondence row even when the product
   intentionally stops below the complete pinned C++ surface, but only as
-  `divergent-by-decision`. The row must cite a user-approved D-row and one of
-  these named ceilings: **layout-engine** (D3: Taffy replaces Yoga, including
-  its known edge/interpolation differences), **dynamic-list-path** (D13:
-  ListPath keeps the scalar vertex conversion helper but does not subscribe,
-  remap, or retain dynamic ViewModel list-item vertices), **standalone-raw-text**
-  (D14: integrated Text/TextInput remains supported while the separate RawText
-  builder/update/bounds/render API is not), or **static-text-extensions** (D15:
-  the supported static-text subset excludes the abstract TextModifier hook,
-  OpenType feature children, TextTargetModifier, and TextVariationModifier).
+  `divergent-by-decision`. The only approved named support ceiling is
+  **layout-engine**, bound to D3: Taffy replaces Yoga, including its known
+  edge/interpolation differences. A new ceiling requires an explicit,
+  user-approved D-row before any manifest row may use
+  `divergent-by-decision`.
   The supported portion must still live in its direct filename owner and cite
   the exact pinned and Rust anchors. A corpus absence (C1), latent backlog label
   (F13), or a passing golden alone is not a decision and cannot promote a row.

@@ -2,6 +2,8 @@
 struct StaticTextFollowPathModifier {
     local_id: usize,
     global_id: u32,
+    target_id: u32,
+    resolved_transform_local: Option<usize>,
     paths: Vec<StaticTextFollowPathPath>,
 }
 #[derive(Debug, Clone)]
@@ -21,9 +23,14 @@ impl StaticTextFollowPathModifier {
         let object = runtime
             .object(global_id as usize)
             .with_context(|| format!("missing TextFollowPathModifier global {global_id}"))?;
-        let target_local = object
-            .uint_property("targetId")
-            .and_then(|target| usize::try_from(target).ok());
+        let target_id = object.uint_property("targetId").unwrap_or(u32::MAX as u64) as u32;
+        let target_local = usize::try_from(target_id).ok();
+        let resolved_transform_local = target_local.filter(|target| {
+            component_for_local(graph, *target).is_some_and(|component| {
+                nuxie_schema::definition_by_name(component.type_name)
+                    .is_some_and(|definition| definition.is_a("TransformComponent"))
+            })
+        });
         let paths = match target_local {
             Some(target_local) if type_for_local(graph, target_local) == Some("Shape") => graph
                 .path_composers
@@ -65,6 +72,8 @@ impl StaticTextFollowPathModifier {
         Ok(Self {
             local_id,
             global_id,
+            target_id,
+            resolved_transform_local,
             paths,
         })
     }

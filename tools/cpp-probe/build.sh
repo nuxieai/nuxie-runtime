@@ -99,17 +99,34 @@ if [[ "$with_scripting" == "1" ]]; then
         decoders_libdir="$rive_runtime/decoders/$decoders_out"
         decoders_build_out="$decoders_out"
     fi
-    (
-        cd "$rive_runtime/decoders"
-        PREMAKE_PATH="$rive_runtime/build${PREMAKE_PATH:+:$PREMAKE_PATH}" \
-            premake5 gmake2 \
-            --file=premake5_v2.lua \
-            --config="$config" \
-            --out="$decoders_build_out"
-        make -C "$decoders_build_out" clean
-        make -C "$decoders_build_out" -j"$jobs" \
-            rive_decoders libpng zlib libjpeg libwebp
+    decoder_archives=(
+        "$decoders_libdir/librive_decoders.a"
+        "$decoders_libdir/liblibpng.a"
+        "$decoders_libdir/libzlib.a"
+        "$decoders_libdir/liblibjpeg.a"
+        "$decoders_libdir/liblibwebp.a"
     )
+    decoder_set_complete=1
+    for archive in "${decoder_archives[@]}"; do
+        if [[ ! -s "$archive" ]]; then
+            decoder_set_complete=0
+            break
+        fi
+    done
+    if [[ "$decoder_set_complete" == "1" ]]; then
+        echo "reusing complete scripted decoder archive set: $decoders_libdir"
+    else
+        (
+            cd "$rive_runtime/decoders"
+            PREMAKE_PATH="$rive_runtime/build${PREMAKE_PATH:+:$PREMAKE_PATH}" \
+                premake5 gmake2 \
+                --file=premake5_v2.lua \
+                --config="$config" \
+                --out="$decoders_build_out"
+            make -C "$decoders_build_out" -j"$jobs" \
+                rive_decoders libpng zlib libjpeg libwebp
+        )
+    fi
     export RIVE_CPP_PROBE_DECODERS_LIBDIR="$decoders_libdir"
 fi
 

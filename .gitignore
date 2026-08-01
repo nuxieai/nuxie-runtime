@@ -1,6 +1,9 @@
 /target/
 /vendor/*/target/
 /fixtures/**/*.riv
+!/fixtures/fl-e8/
+!/fixtures/fl-e8/text_style_feature.riv
+!/fixtures/fl-e8/text_variation_modifier.riv
 /fuzz/seeds/**/*.riv
 /tools/cpp-probe/build/Makefile
 /tools/cpp-probe/build/*.make
@@ -21,3 +24,16 @@
 /tools/gm-stream-capture/generated-gates.txt
 /tools/gm-stream-capture/generated_registry.inc
 /tools/cpp-atlas-mask-oracle/out/
+
+# Session worker artifacts — never track (1.2GB logs broke push 2026-08-01)
+/W[0-9]*.log
+/W[0-9]*-report.md
+/W[0-9]*-resume*.log
+/renderer-golden-*.log
+/P1[QR]*.log
+/P1[QR]*-report.md
+/wp3-setup.log
+/E8-inv-*
+/.fle8/
+/.parity-decomp/
+/*.log

@@ -3,6 +3,8 @@ struct StaticTextModifierGroup {
     local_id: usize,
     global_id: u32,
     ranges: Vec<StaticTextModifierRange>,
+    modifiers: Vec<StaticTextModifier>,
+    shape_modifier_indices: Vec<usize>,
     follow_path_modifiers: Vec<StaticTextFollowPathModifier>,
 }
 impl StaticTextModifierGroup {
@@ -12,13 +14,15 @@ impl StaticTextModifierGroup {
             .object(global_id as usize)
             .with_context(|| format!("missing TextModifierGroup global {global_id}"))?;
         let flags = object.uint_property("modifierFlags").unwrap_or(0);
+        const MODIFY_ORIGIN: u64 = 1 << 0;
         const MODIFY_TRANSLATION: u64 = 1 << 2;
         const MODIFY_ROTATION: u64 = 1 << 3;
         const MODIFY_SCALE: u64 = 1 << 4;
         const MODIFY_OPACITY: u64 = 1 << 5;
         const INVERT_OPACITY: u64 = 1 << 6;
         if flags
-            & !(MODIFY_TRANSLATION
+            & !(MODIFY_ORIGIN
+                | MODIFY_TRANSLATION
                 | MODIFY_ROTATION
                 | MODIFY_SCALE
                 | MODIFY_OPACITY
@@ -26,13 +30,15 @@ impl StaticTextModifierGroup {
             != 0
         {
             bail!(
-                "static text subset only supports translation/rotation/scale/opacity TextModifierGroup flags, found {flags}"
+                "TextModifierGroup has unsupported modifier flags {flags}"
             );
         }
 
         let component = component_for_local(graph, local_id)
             .with_context(|| format!("TextModifierGroup local {local_id} component is missing"))?;
         let mut ranges = Vec::new();
+        let mut modifiers = Vec::new();
+        let mut shape_modifier_indices = Vec::new();
         let mut follow_path_modifiers = Vec::new();
         for child_local in &component.children {
             match type_for_local(graph, *child_local) {
@@ -44,11 +50,38 @@ impl StaticTextModifierGroup {
                     )?);
                 }
                 Some("TextFollowPathModifier") => {
-                    follow_path_modifiers.push(StaticTextFollowPathModifier::from_graph(
+                    let modifier = StaticTextFollowPathModifier::from_graph(
                         runtime,
                         graph,
                         *child_local,
-                    )?);
+                    )?;
+                    follow_path_modifiers.push(modifier.clone());
+                    modifiers.push(StaticTextModifier::FollowPath(modifier));
+                }
+                Some("TextVariationModifier") => {
+                    let modifier = StaticTextVariationModifier::from_graph(
+                        runtime,
+                        graph,
+                        *child_local,
+                    )?;
+                    shape_modifier_indices.push(modifiers.len());
+                    modifiers.push(StaticTextModifier::Variation(modifier));
+                }
+                Some("TextTargetModifier") => {
+                    modifiers.push(StaticTextModifier::Target(
+                        StaticTextTargetModifier::from_graph(
+                            runtime,
+                            graph,
+                            *child_local,
+                            local_id,
+                        )?,
+                    ));
+                }
+                Some("TextModifier" | "TextShapeModifier") => {
+                    modifiers.push(StaticTextModifier::Abstract {
+                        local_id: *child_local,
+                        global_id: global_for_local(graph, *child_local)?,
+                    });
                 }
                 Some(type_name) => {
                     bail!("static text subset does not support TextModifierGroup child {type_name}")
@@ -63,6 +96,8 @@ impl StaticTextModifierGroup {
             local_id,
             global_id,
             ranges,
+            modifiers,
+            shape_modifier_indices,
             follow_path_modifiers,
         })
     }
@@ -86,6 +121,7 @@ impl StaticTextModifierGroup {
         const MODIFY_TRANSLATION: u64 = 1 << 2;
         const MODIFY_ROTATION: u64 = 1 << 3;
         const MODIFY_SCALE: u64 = 1 << 4;
+        const MODIFY_ORIGIN: u64 = 1 << 0;
         let follows_path = !self.follow_path_modifiers.is_empty();
         if amount == 0.0 && !follows_path {
             return Ok(Mat2D::IDENTITY);
@@ -194,6 +230,30 @@ impl StaticTextModifierGroup {
         transform.0[4] = x;
         transform.0[5] = y;
         transform.scale_by_values(scale_x, scale_y);
+        if flags & MODIFY_ORIGIN != 0 {
+            let origin_x = runtime_double_property(
+                runtime,
+                instance,
+                "TextModifierGroup",
+                self.local_id,
+                self.global_id,
+                "originX",
+                0.0,
+            )?;
+            let origin_y = runtime_double_property(
+                runtime,
+                instance,
+                "TextModifierGroup",
+                self.local_id,
+                self.global_id,
+                "originY",
+                0.0,
+            )?;
+            // C++ adds the pivot to the incoming CTM, pre-multiplies the
+            // modifier transform, then subtracts it from the result.
+            transform.0[4] += transform.0[0] * origin_x + transform.0[2] * origin_y - origin_x;
+            transform.0[5] += transform.0[1] * origin_x + transform.0[3] * origin_y - origin_y;
+        }
         Ok(transform)
     }
 
@@ -258,6 +318,113 @@ impl StaticTextModifierGroup {
         }
         Ok(coverage)
     }
+
+    fn variation_map(
+        &self,
+        instance: &ArtboardInstance,
+        font: &SkrifaFontRef<'_>,
+        strength: f32,
+        inherited: &BTreeMap<u32, f32>,
+    ) -> BTreeMap<u32, f32> {
+        let mut variations = BTreeMap::new();
+        for index in &self.shape_modifier_indices {
+            if let Some(StaticTextModifier::Variation(modifier)) = self.modifiers.get(*index) {
+                modifier.modify(instance, font, inherited, &mut variations, strength);
+            }
+        }
+        variations
+    }
+
+    fn has_shape_modifiers(&self) -> bool {
+        !self.shape_modifier_indices.is_empty()
+    }
+}
+
+fn modifier_group_text(instance: &ArtboardInstance, group_local: usize) -> Option<usize> {
+    let text = instance.component_parent_local(group_local)?;
+    matches!(
+        instance.component(text).map(|component| component.type_name),
+        Some("Text")
+    )
+    .then_some(text)
+}
+
+fn group_has_shape_modifier(instance: &ArtboardInstance, group_local: usize) -> bool {
+    let Some(group) = instance.component(group_local) else {
+        return false;
+    };
+    group.children.iter().any(|child| {
+        instance
+            .component_local_id(*child)
+            .and_then(|local| instance.component(local))
+            .is_some_and(|component| {
+                nuxie_schema::definition_by_name(component.type_name)
+                    .is_some_and(|definition| definition.is_a("TextShapeModifier"))
+            })
+    })
+}
+
+fn range_changed(instance: &mut ArtboardInstance, range_local: usize, path_only: bool) -> bool {
+    let Some(group) = instance.component_parent_local(range_local) else {
+        return false;
+    };
+    let Some(text) = modifier_group_text(instance, group) else {
+        return false;
+    };
+    let mut changed = instance.add_dirt(
+        group,
+        crate::components::ComponentDirt::TEXT_COVERAGE,
+        false,
+    );
+    if path_only {
+        changed |= crate::text_owner::mark_shape_dirty_without_layout(instance, text);
+    } else if group_has_shape_modifier(instance, group) {
+        changed |= crate::text_owner::mark_shape_dirty(instance, text);
+    } else {
+        changed |= instance.add_dirt(text, crate::components::ComponentDirt::PAINT, false);
+    }
+    changed
+}
+
+pub(crate) fn text_modifier_group_double_property_changed(
+    instance: &mut ArtboardInstance,
+    local_id: usize,
+    type_name: Option<&str>,
+    property_key: u16,
+) -> Option<bool> {
+    if type_name == Some("TextModifierGroup") {
+        let is_paint = [
+            "originX", "originY", "opacity", "x", "y", "rotation", "scaleX", "scaleY",
+        ]
+        .into_iter()
+        .any(|name| property_key_for_name("TextModifierGroup", name) == Some(property_key));
+        return is_paint.then(|| {
+            modifier_group_text(instance, local_id).is_some_and(|text| {
+                instance.add_dirt(text, crate::components::ComponentDirt::PAINT, false)
+            })
+        });
+    }
+    (type_name == Some("TextModifierRange")).then(|| range_changed(instance, local_id, false))
+}
+
+pub(crate) fn text_modifier_group_uint_property_changed(
+    instance: &mut ArtboardInstance,
+    local_id: usize,
+    type_name: Option<&str>,
+    property_key: u16,
+) -> Option<bool> {
+    if type_name == Some("TextModifierGroup")
+        && property_key_for_name("TextModifierGroup", "modifierFlags") == Some(property_key)
+    {
+        return Some(modifier_group_text(instance, local_id).is_some_and(|text| {
+            instance.add_dirt(text, crate::components::ComponentDirt::PAINT, false)
+        }));
+    }
+    if type_name != Some("TextModifierRange") {
+        return None;
+    }
+    let path_only = property_key_for_name("TextModifierRange", "typeValue") == Some(property_key);
+    Some(range_changed(instance, local_id, path_only))
 }
 
 #[derive(Debug, Clone)]

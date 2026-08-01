@@ -253,8 +253,9 @@ pub(crate) use state_machine::{
 };
 pub use text::{
     RuntimeTextLayoutDebugReport, RuntimeTextModifierDebugReport,
-    RuntimeTextSelectedRunDebugReport, debug_text_word_unit_count, embedded_font_is_parseable,
-    embedded_fonts_are_parseable, static_text_support_error,
+    RuntimeTextSelectedRunDebugReport, RuntimeTextTargetModifierDebugReport,
+    debug_text_word_unit_count, embedded_font_is_parseable, embedded_fonts_are_parseable,
+    static_text_support_error,
 };
 pub use view_model::{
     RuntimeBindableArtboard, RuntimeDataContext, RuntimeDataContextInstanceRef,

@@ -110,6 +110,53 @@ FL_B_FROZEN_SCOPE_FILES = frozenset(
         "src/importers/keyed_property_importer.cpp",
     }
 )
+FL_E8_FILES = frozenset(
+    {
+        "src/shapes/list_path.cpp",
+        "src/text/raw_text.cpp",
+        "src/text/text_modifier.cpp",
+        "src/text/text_style.cpp",
+        "src/text/text_style_feature.cpp",
+        "src/text/text_target_modifier.cpp",
+        "src/text/text_variation_modifier.cpp",
+    }
+)
+FL_E8_WP1_FILES = frozenset(
+    {
+        "src/text/text_modifier.cpp",
+        "src/text/text_style.cpp",
+        "src/text/text_style_feature.cpp",
+        "src/text/text_target_modifier.cpp",
+        "src/text/text_variation_modifier.cpp",
+    }
+)
+FL_E8_FORBIDDEN_DECISIONS = frozenset({"D13", "D14", "D15"})
+FL_E8_FORBIDDEN_CEILINGS = (
+    "dynamic-list-path",
+    "standalone-raw-text",
+    "static-text-extensions",
+)
+FL_E_W120_PENDING_VERIFICATION_FILES = frozenset(
+    {
+        "src/layout.cpp",
+        "src/layout/artboard_component_list_override.cpp",
+        "src/layout_component.cpp",
+        "src/math/random.cpp",
+        "src/solo.cpp",
+        "src/text/font_hb.cpp",
+        "src/text/fully_shaped_text.cpp",
+        "src/text/glyph_lookup.cpp",
+        "src/text/line_breaker.cpp",
+        "src/text/text.cpp",
+        "src/text/text_engine.cpp",
+        "src/text/text_follow_path_modifier.cpp",
+        "src/text/text_modifier_group.cpp",
+        "src/text/text_modifier_range.cpp",
+        "src/text/text_style_axis.cpp",
+        "src/text/text_variation_helper.cpp",
+        "src/text/utf.cpp",
+    }
+)
 
 
 class CheckFailure(Exception):
@@ -951,7 +998,9 @@ def validate_file_rows(
                 f"file {path} names source_set {source_set!r}, "
                 f"expected {assignments[path]!r}"
             )
-        expected_wave = source_set_waves.get(source_set)
+        expected_wave = (
+            "FL-E8" if path in FL_E8_FILES else source_set_waves.get(source_set)
+        )
         if wave != expected_wave:
             errors.append(
                 f"file {path} names wave {wave!r}, expected {expected_wave!r}"
@@ -1020,6 +1069,176 @@ def validate_file_rows(
                 "pending-verification"
             )
     return by_path, status_counts
+
+
+def validate_fl_e8_policy(
+    *,
+    phase: str,
+    waves: list[dict[str, Any]],
+    file_rows: list[dict[str, Any]],
+    expected_counts: dict[str, Any],
+    decisions: list[dict[str, Any]],
+    porting_rules: str,
+    parity_register: str,
+    candidate_paths: set[str],
+    errors: list[str],
+) -> None:
+    """Ratchet the user-approved FL-E8 ledger and sole FLR-20 ceiling."""
+    if phase not in {"fl-e8-implementation", "fl-e8-wp1-candidate"}:
+        return
+
+    decision_ids = {str(row.get("id", "")) for row in decisions}
+    for decision_id in sorted(FL_E8_FORBIDDEN_DECISIONS & decision_ids):
+        errors.append(f"rejected FL-E8 decision {decision_id} must not reappear")
+    for decision in decisions:
+        if str(decision.get("rule", "")) == "FLR-20" and (
+            str(decision.get("id", "")) != "D3"
+            or str(decision.get("ceiling", "")) != "layout-engine"
+        ):
+            errors.append("FLR-20 may bind only D3/layout-engine")
+
+    for number in (13, 14, 15):
+        if re.search(rf"(?m)^\s*{number}\.\s", parity_register):
+            errors.append(f"parity gap register must not contain D{number}")
+
+    flr20 = porting_rules.partition("- **FLR-20 ")[2].partition("\n- **")[0]
+    if not flr20:
+        errors.append("PORTING.md is missing FLR-20")
+    else:
+        if "**layout-engine**" not in flr20 or "D3" not in flr20:
+            errors.append("FLR-20 must name D3/layout-engine")
+        if "user-approved D-row" not in flr20:
+            errors.append("FLR-20 must require an explicit user-approved D-row")
+        for ceiling in FL_E8_FORBIDDEN_CEILINGS:
+            if ceiling in flr20:
+                errors.append(f"FLR-20 must not name rejected ceiling {ceiling!r}")
+
+    fl_e8_waves = [row for row in waves if str(row.get("id", "")) == "FL-E8"]
+    if len(fl_e8_waves) != 1:
+        errors.append("FL-E8 must have exactly one wave row")
+    else:
+        wave = fl_e8_waves[0]
+        if wave.get("sequence") != 6:
+            errors.append("FL-E8 wave sequence must be 6")
+        if wave.get("depends_on") != ["FL-E"]:
+            errors.append("FL-E8 must depend exactly on FL-E")
+
+    rows = {
+        str(row.get("upstream", "")): row
+        for row in file_rows
+        if str(row.get("wave", "")) == "FL-E8"
+    }
+    actual_paths = set(rows)
+    if actual_paths != FL_E8_FILES:
+        errors.append(
+            "FL-E8 wave must contain exactly seven directive-owned rows: "
+            f"missing={sorted(FL_E8_FILES - actual_paths)!r}, "
+            f"unexpected={sorted(actual_paths - FL_E8_FILES)!r}"
+        )
+
+    if phase == "fl-e8-implementation":
+        wrong = sorted(
+            path for path, row in rows.items() if row.get("status") != "pending"
+        )
+        if wrong:
+            errors.append(f"FL-E8 WP0 rows must all be pending: {wrong!r}")
+        required_counts = {"faithful": 334, "divergent-by-decision": 1, "pending": 7}
+        if candidate_paths:
+            errors.append("FL-E8 WP0 must not have a candidate allowlist")
+    else:
+        wrong_faithful = sorted(
+            path
+            for path in FL_E8_WP1_FILES
+            if rows.get(path, {}).get("status") != "faithful"
+        )
+        wrong_pending = sorted(
+            path
+            for path in FL_E8_FILES - FL_E8_WP1_FILES
+            if rows.get(path, {}).get("status") != "pending"
+        )
+        if wrong_faithful or wrong_pending:
+            errors.append(
+                "FL-E8 WP1 statuses are incoherent: "
+                f"faithful={wrong_faithful!r}, pending={wrong_pending!r}"
+            )
+        required_counts = {"faithful": 339, "divergent-by-decision": 1, "pending": 2}
+        if candidate_paths != FL_E8_WP1_FILES:
+            errors.append("FL-E8 WP1 candidate allowlist must be exactly the five promoted rows")
+
+    for status, expected in required_counts.items():
+        if expected_counts.get(status) != expected:
+            errors.append(
+                f"FL-E8 {phase} requires {status}={expected}, "
+                f"got {expected_counts.get(status)!r}"
+            )
+
+
+def validate_fl_e8_wp1_artifacts(repo_root: pathlib.Path, errors: list[str]) -> None:
+    """R-ST-OWNER: pin WP1 source boundaries, fixtures, corpus, and probes."""
+    owner_predicates = {
+        "crates/nuxie-runtime/src/text/text_modifier.rs": "static_text_modifier_is_unsupported",
+        "crates/nuxie-runtime/src/text/text_style_feature.rs": "static_text_style_feature_is_unsupported",
+        "crates/nuxie-runtime/src/text/text_target_modifier.rs": "static_text_target_modifier_is_unsupported",
+        "crates/nuxie-runtime/src/text/text_variation_modifier.rs": "static_text_variation_modifier_is_unsupported",
+    }
+    for relative, predicate in owner_predicates.items():
+        path = repo_root / relative
+        source = path.read_text(encoding="utf-8") if path.is_file() else ""
+        if predicate in source:
+            errors.append(f"FL-E8 WP1 old static rejection predicate remains: {predicate}")
+        if not source:
+            errors.append(f"FL-E8 WP1 direct owner is missing: {relative}")
+
+    for relative in (
+        "fixtures/fl-e8/text_style_feature.riv",
+        "fixtures/fl-e8/text_variation_modifier.riv",
+    ):
+        path = repo_root / relative
+        if not path.is_file() or path.stat().st_size == 0:
+            errors.append(f"FL-E8 WP1 fixture is missing or empty: {relative}")
+
+    corpus_path = repo_root / "corpus.toml"
+    try:
+        corpus = tomllib.loads(corpus_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        corpus = {}
+    rows = list(corpus.get("file", []))
+    expected_corpus = {
+        "text_style_feature_fl_e8": "fixtures/fl-e8/text_style_feature.riv",
+        "text_variation_modifier_fl_e8": "fixtures/fl-e8/text_variation_modifier.riv",
+    }
+    for corpus_id, expected_path in expected_corpus.items():
+        matches = [row for row in rows if row.get("id") == corpus_id]
+        if len(matches) != 1 or matches[0].get("path") != expected_path or matches[0].get("status") != "exact":
+            errors.append(
+                f"FL-E8 WP1 corpus entry {corpus_id} must occur once as exact path {expected_path}"
+            )
+
+    probe_path = repo_root / "crates/nuxie-runtime/tests/cpp_probe.rs"
+    probe = probe_path.read_text(encoding="utf-8") if probe_path.is_file() else ""
+    for artifact in ("D-ST-STRUCT", "D-ST-FONT", "D-ST-FEATURE", "D-ST-VARIATION", "D-ST-TARGET"):
+        if artifact not in probe:
+            errors.append(f"FL-E8 WP1 live differential marker is missing: {artifact}")
+
+    cpp_probe_path = repo_root / "tools/cpp-probe/main.cpp"
+    cpp_probe = cpp_probe_path.read_text(encoding="utf-8") if cpp_probe_path.is_file() else ""
+    for mode in (
+        "--runtime-fl-e8-static-text",
+        "--runtime-fl-e8-font-swap",
+        "--runtime-fl-e8-feature-cycle",
+        "--runtime-fl-e8-variation-cycle",
+    ):
+        if mode not in cpp_probe:
+            errors.append(f"FL-E8 WP1 C++ probe mode is missing: {mode}")
+
+    codegen_path = repo_root / "tools/nuxie-codegen/src/main.rs"
+    codegen = codegen_path.read_text(encoding="utf-8") if codegen_path.is_file() else ""
+    for fixture_name in ("text-style-feature", "text-variation-modifier"):
+        if fixture_name not in codegen:
+            errors.append(f"FL-E8 WP1 fixture emitter is missing: {fixture_name}")
+    fixture_test = repo_root / "tools/nuxie-codegen/tests/fl_e8_fixtures.rs"
+    if not fixture_test.is_file():
+        errors.append("FL-E8 WP1 deterministic fixture-emission integration test is missing")
 
 
 def check(
@@ -1189,18 +1408,26 @@ def check(
             "duplicate candidate pending-verification paths: "
             + ", ".join(candidate_path_duplicates)
         )
-    if phase == "fl-e-wave-acceptance-candidate":
+    if phase in {"fl-e-wave-acceptance-candidate", "fl-e8-wp1-candidate"}:
         if not candidate_paths:
             errors.append(
-                "fl-e-wave-acceptance-candidate requires an explicit "
+                f"{phase} requires an explicit "
                 "candidate_pending_verification_files allowlist"
             )
         pending_verification_paths = set(candidate_paths)
+        if phase == "fl-e8-wp1-candidate":
+            pending_verification_paths.update(FL_E_W120_PENDING_VERIFICATION_FILES)
+    elif phase == "fl-e8-implementation":
+        if candidate_paths:
+            errors.append(
+                "candidate_pending_verification_files is not used during FL-E8 WP0"
+            )
+        pending_verification_paths = set(FL_E_W120_PENDING_VERIFICATION_FILES)
     else:
         if candidate_paths:
             errors.append(
                 "candidate_pending_verification_files is only valid in phase "
-                "fl-e-wave-acceptance-candidate"
+                "fl-e-wave-acceptance-candidate or fl-e8-wp1-candidate"
             )
         pending_verification_paths = set()
 
@@ -1217,6 +1444,26 @@ def check(
         require_closed=require_closed,
         errors=errors,
     )
+
+    parity_register_path = repo_root / "docs/parity-gap-register.md"
+    parity_register = (
+        parity_register_path.read_text(encoding="utf-8")
+        if parity_register_path.is_file()
+        else ""
+    )
+    validate_fl_e8_policy(
+        phase=phase,
+        waves=waves,
+        file_rows=list(ledger.get("file", [])),
+        expected_counts=dict(ledger.get("expected_file_status_counts", {})),
+        decisions=decisions,
+        porting_rules=porting_rules,
+        parity_register=parity_register,
+        candidate_paths=set(candidate_paths),
+        errors=errors,
+    )
+    if phase == "fl-e8-wp1-candidate":
+        validate_fl_e8_wp1_artifacts(repo_root, errors)
 
     trace_path = repo_root / str(
         ledger.get("trace_evidence_file", "docs/runtime-frame-loop-trace.json")

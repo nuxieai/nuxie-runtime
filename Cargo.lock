@@ -1005,6 +1005,8 @@ name = "nuxie-codegen"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "nuxie-binary",
+ "nuxie-schema",
  "serde",
  "serde_json",
 ]

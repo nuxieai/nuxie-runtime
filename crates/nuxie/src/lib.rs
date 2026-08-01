@@ -4574,6 +4574,9 @@ impl OwnedArtboardInstance {
                     ExternalFontAssetError::InvalidFont { asset_id }
                 }
             })?;
+        let external_font_assets = self.file.external_font_assets.snapshot();
+        self.raw
+            .replace_external_font_asset_snapshot(&external_font_assets);
         Ok(())
     }
 
@@ -6472,6 +6475,32 @@ mod owned_instance_tests {
                 .get(&font_id)
                 .expect("cloned font")
         ));
+    }
+
+    #[test]
+    fn idempotent_owned_font_attachment_refreshes_a_stale_sibling() {
+        let file = Arc::new(
+            File::import(&external_fixture("hosted_font_file.riv")).expect("import font file"),
+        );
+        let font_id = first_semantic_asset_id(&file, "FontAsset");
+        let mut first = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+            .expect("instantiate first sibling");
+        let mut stale =
+            OwnedArtboardInstance::instantiate_default(file).expect("instantiate stale sibling");
+        let font_bytes = external_fixture("fonts/Inter_18pt-Regular.ttf");
+
+        first
+            .attach_font_asset_bytes(font_id, font_bytes.clone())
+            .expect("attach font to shared File and first instance");
+        assert_eq!(stale.raw().external_font_asset_bytes(font_id), None);
+
+        stale
+            .attach_font_asset_bytes(font_id, font_bytes.clone())
+            .expect("refresh stale sibling from idempotent File attachment");
+        assert_eq!(
+            stale.raw().external_font_asset_bytes(font_id),
+            Some(font_bytes.as_slice())
+        );
     }
 
     #[cfg(feature = "scripting")]

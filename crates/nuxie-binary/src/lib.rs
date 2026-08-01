@@ -11,6 +11,17 @@ use std::{
     ops::{BitOr, BitOrAssign},
 };
 
+mod assets;
+
+pub use assets::{RuntimeFileAssetContents, RuntimeManifest};
+use assets::{
+    cpp_file_assets_contains, normalize_file_asset_ids, validate_cpp_manifest_assets_with_budget,
+};
+#[cfg(test)]
+use assets::{
+    cpp_manifest_key, cpp_manifest_resolver_key, validate_cpp_manifest_asset_with_budget,
+};
+
 pub const SUPPORTED_MAJOR_VERSION: u64 = 7;
 pub const SUPPORTED_MINOR_VERSION: u64 = 2;
 pub const VIEW_MODEL_SYMBOL_ITEM_INDEX: u8 = 15;
@@ -427,28 +438,6 @@ pub struct RuntimeFile {
     pub header: RuntimeHeader,
     pub objects: Vec<Option<RuntimeObject>>,
     pub import_statuses: Vec<RuntimeImportStatus>,
-}
-
-/// One dense, file-global FileAsset entry and the in-band contents imported
-/// for it by a scripting-enabled FileAsset importer.
-#[derive(Debug, Clone, Copy)]
-pub struct RuntimeFileAssetContents<'a> {
-    pub ordinal: usize,
-    pub asset: &'a RuntimeObject,
-    /// Whether the importer observed at least one `FileAssetContents` record,
-    /// independent of whether the selected record carried a bytes property.
-    pub has_contents_record: bool,
-    /// Payload selected by the last imported contents record for this asset.
-    pub contents: Option<&'a [u8]>,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum ImportedFileAssetRecord<'a> {
-    Asset {
-        asset: &'a RuntimeObject,
-        creates_importer: bool,
-    },
-    Contents(Option<&'a [u8]>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -4835,268 +4824,6 @@ impl RuntimeFile {
             .nth(asset_index)
     }
 
-    pub fn file_assets(&self) -> Vec<&RuntimeObject> {
-        self.cpp_file_assets().collect()
-    }
-
-    pub fn file_asset(&self, index: usize) -> Option<&RuntimeObject> {
-        self.cpp_file_assets().nth(index)
-    }
-
-    /// Dense FileAsset catalog with `FileAssetContents` associated by the
-    /// scripting-enabled importer stack rather than by record adjacency.
-    ///
-    /// This is the extraction profile used by script-executing hosts. It scans
-    /// the object stream once, tracks the latest imported FileAsset that
-    /// creates an importer in a WITH_RIVE_SCRIPTING build, and attaches only
-    /// imported `FileAssetContents` records to that entry.
-    pub fn scripting_file_assets_with_contents(&self) -> Vec<RuntimeFileAssetContents<'_>> {
-        let assets = self.file_assets();
-        self.file_assets_with_contents(assets)
-    }
-
-    /// Every imported `FileAsset`, including importer-owning `ManifestAsset`
-    /// records, with in-band contents associated by the scripting-enabled
-    /// importer stack.
-    ///
-    /// Unlike [`Self::scripting_file_assets_with_contents`], this catalog is
-    /// for validation and inspection rather than Rive's dense public asset
-    /// ordinals. Consumers must identify entries by serialized `assetId`.
-    pub fn imported_file_assets_with_contents(&self) -> Vec<RuntimeFileAssetContents<'_>> {
-        self.imported_file_assets_with_contents_bounded(usize::MAX)
-            .expect("usize::MAX cannot be exceeded by a Vec")
-    }
-
-    /// Bounded form of [`Self::imported_file_assets_with_contents`]. The scan
-    /// stops before allocating an entry beyond `max_assets`.
-    pub fn imported_file_assets_with_contents_bounded(
-        &self,
-        max_assets: usize,
-    ) -> Option<Vec<RuntimeFileAssetContents<'_>>> {
-        let mut assets = Vec::<RuntimeFileAssetContents<'_>>::new();
-        let mut latest_ordinal = None;
-        for record in self.imported_file_asset_records() {
-            match record {
-                ImportedFileAssetRecord::Asset {
-                    asset,
-                    creates_importer,
-                } => {
-                    if assets.len() == max_assets {
-                        return None;
-                    }
-                    let ordinal = assets.len();
-                    assets.push(RuntimeFileAssetContents {
-                        ordinal,
-                        asset,
-                        has_contents_record: false,
-                        contents: None,
-                    });
-                    if creates_importer {
-                        latest_ordinal = Some(ordinal);
-                    }
-                }
-                ImportedFileAssetRecord::Contents(contents) => {
-                    if let Some(entry) = latest_ordinal.and_then(|ordinal| assets.get_mut(ordinal))
-                    {
-                        entry.has_contents_record = true;
-                        entry.contents = contents;
-                    }
-                }
-            }
-        }
-        Some(assets)
-    }
-
-    /// Embedded bytes owned by one imported FileAsset under the
-    /// scripting-enabled importer stack. Importer-owning assets excluded from
-    /// the dense public catalog, including ManifestAsset, still delimit
-    /// ownership and can never donate their contents to the preceding asset.
-    pub fn imported_file_asset_contents(&self, asset_global_id: u32) -> Option<&[u8]> {
-        let mut selected_asset_is_latest_importer = false;
-        let mut selected_contents = None;
-        for record in self.imported_file_asset_records() {
-            match record {
-                ImportedFileAssetRecord::Asset {
-                    asset,
-                    creates_importer: true,
-                } => {
-                    selected_asset_is_latest_importer = asset.id == asset_global_id;
-                    if selected_asset_is_latest_importer {
-                        selected_contents = None;
-                    }
-                }
-                ImportedFileAssetRecord::Asset {
-                    creates_importer: false,
-                    ..
-                } => {}
-                ImportedFileAssetRecord::Contents(contents)
-                    if selected_asset_is_latest_importer =>
-                {
-                    selected_contents = contents;
-                }
-                ImportedFileAssetRecord::Contents(_) => {}
-            }
-        }
-        selected_contents
-    }
-
-    fn imported_file_asset_records(&self) -> impl Iterator<Item = ImportedFileAssetRecord<'_>> {
-        self.objects
-            .iter()
-            .enumerate()
-            .filter_map(|(index, object)| {
-                if self.import_status(index) != Some(RuntimeImportStatus::Imported) {
-                    return None;
-                }
-                let object = object.as_ref()?;
-                let definition = definition_by_type_key(object.type_key)?;
-                if definition.is_a("FileAsset") {
-                    return Some(ImportedFileAssetRecord::Asset {
-                        asset: object,
-                        creates_importer: file_asset_creates_importer(object.type_name, true),
-                    });
-                }
-                (object.type_name == "FileAssetContents")
-                    .then(|| ImportedFileAssetRecord::Contents(object.bytes_property("bytes")))
-            })
-    }
-
-    fn file_assets_with_contents<'a>(
-        &'a self,
-        assets: Vec<&'a RuntimeObject>,
-    ) -> Vec<RuntimeFileAssetContents<'a>> {
-        let ordinals_by_global = assets
-            .iter()
-            .enumerate()
-            .map(|(ordinal, asset)| (asset.id, ordinal))
-            .collect::<BTreeMap<_, _>>();
-        let mut contents = vec![None; assets.len()];
-        let mut has_contents_record = vec![false; assets.len()];
-        let mut latest_ordinal = None;
-
-        for record in self.imported_file_asset_records() {
-            match record {
-                ImportedFileAssetRecord::Asset {
-                    asset,
-                    creates_importer: true,
-                } => {
-                    // Importer-owning FileAsset kinds such as ManifestAsset are
-                    // intentionally absent from the public dense catalog. They
-                    // still delimit contents ownership, so reset the candidate
-                    // even when there is no ordinal to publish.
-                    latest_ordinal = ordinals_by_global.get(&asset.id).copied();
-                }
-                ImportedFileAssetRecord::Asset {
-                    creates_importer: false,
-                    ..
-                } => {}
-                ImportedFileAssetRecord::Contents(asset_contents) => {
-                    if let Some(ordinal) = latest_ordinal
-                        && let Some(slot) = contents.get_mut(ordinal)
-                        && let Some(has_record) = has_contents_record.get_mut(ordinal)
-                    {
-                        *has_record = true;
-                        *slot = asset_contents;
-                    }
-                }
-            }
-        }
-
-        assets
-            .into_iter()
-            .enumerate()
-            .map(|(ordinal, asset)| RuntimeFileAssetContents {
-                ordinal,
-                asset,
-                has_contents_record: has_contents_record.get(ordinal).copied().unwrap_or(false),
-                contents: contents.get(ordinal).copied().flatten(),
-            })
-            .collect()
-    }
-
-    pub fn resolved_file_asset_for_object(&self, object_id: usize) -> Option<&RuntimeObject> {
-        let object = self.object(object_id)?;
-        self.resolved_file_asset_for_referencer(object)
-    }
-
-    pub fn resolved_file_asset_for_referencer(
-        &self,
-        referencer: &RuntimeObject,
-    ) -> Option<&RuntimeObject> {
-        let object_id = usize::try_from(referencer.id).ok()?;
-        if self.import_status(object_id) != Some(RuntimeImportStatus::Imported) {
-            return None;
-        }
-
-        let asset_index = usize::try_from(cpp_file_asset_referencer_index(referencer)?).ok()?;
-        let asset = self.file_asset(asset_index)?;
-        if cpp_file_asset_matches_referencer(referencer, asset) {
-            Some(asset)
-        } else {
-            None
-        }
-    }
-
-    pub fn manifest(&self) -> Option<RuntimeManifest> {
-        self.manifest_with_script_assets(false)
-    }
-
-    pub fn scripting_manifest(&self) -> Option<RuntimeManifest> {
-        self.manifest_with_script_assets(true)
-    }
-
-    fn manifest_with_script_assets(
-        &self,
-        script_assets_create_importers: bool,
-    ) -> Option<RuntimeManifest> {
-        let mut latest_file_asset = None;
-        let mut manifest = None;
-
-        for (index, object) in self.objects.iter().enumerate() {
-            if self.import_status(index) != Some(RuntimeImportStatus::Imported) {
-                continue;
-            }
-
-            let Some(object) = object.as_ref() else {
-                continue;
-            };
-            let Some(definition) = definition_by_type_key(object.type_key) else {
-                continue;
-            };
-
-            if file_asset_creates_importer(definition.name, script_assets_create_importers) {
-                latest_file_asset = Some(object);
-                if definition.name == "ManifestAsset" {
-                    manifest = Some(RuntimeManifest::default());
-                }
-            }
-
-            if definition.name == "FileAssetContents"
-                && latest_file_asset.is_some_and(|asset| asset.type_name == "ManifestAsset")
-            {
-                manifest = Some(parse_cpp_manifest_asset(
-                    object.bytes_property("bytes").unwrap_or(&[]),
-                ));
-            }
-        }
-
-        manifest
-    }
-
-    fn cpp_file_assets(&self) -> impl Iterator<Item = &RuntimeObject> {
-        self.objects
-            .iter()
-            .enumerate()
-            .filter_map(|(index, object)| {
-                if self.import_status(index) != Some(RuntimeImportStatus::Imported) {
-                    return None;
-                }
-
-                let object = object.as_ref()?;
-                cpp_file_assets_contains(object).then_some(object)
-            })
-    }
-
     fn cpp_view_model_instance_asset_file_assets<'a>(
         &'a self,
         value: &RuntimeObject,
@@ -7958,12 +7685,6 @@ fn cpp_owner_view_model_instance_indices(
         })
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct RuntimeManifest {
-    pub names: BTreeMap<i32, StringValue>,
-    pub paths: BTreeMap<i32, Vec<u32>>,
-}
-
 #[derive(Debug, Clone)]
 pub struct RuntimeDataEnum<'a> {
     pub object: &'a RuntimeObject,
@@ -8801,26 +8522,6 @@ pub struct RuntimeKeyedProperty<'a> {
     pub first_key_frame: Option<&'a RuntimeObject>,
 }
 
-impl RuntimeManifest {
-    pub fn resolve_name(&self, id: u32) -> Option<&str> {
-        self.names
-            .get(&cpp_manifest_resolver_key(id))
-            .and_then(StringValue::as_str)
-    }
-
-    pub fn resolve_name_bytes(&self, id: u32) -> Option<&[u8]> {
-        self.names
-            .get(&cpp_manifest_resolver_key(id))
-            .map(StringValue::as_bytes)
-    }
-
-    pub fn resolve_path(&self, id: u32) -> Option<&[u32]> {
-        self.paths
-            .get(&cpp_manifest_resolver_key(id))
-            .map(Vec::as_slice)
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(tag = "state", rename_all = "camelCase")]
 pub enum RuntimeImportStatus {
@@ -9000,55 +8701,6 @@ impl RuntimeObject {
 
         self.bytes_property("triangleIndexBytes")
             .map(decode_cpp_mesh_triangle_indices)
-    }
-
-    pub fn file_asset_cdn_uuid_string(&self) -> Option<String> {
-        let definition = definition_by_type_key(self.type_key)?;
-        if !definition.is_a("FileAsset") {
-            return None;
-        }
-
-        Some(format_cpp_file_asset_cdn_uuid(
-            self.bytes_property("cdnUuid").unwrap_or(&[]),
-        ))
-    }
-
-    pub fn file_asset_extension(&self) -> Option<&'static str> {
-        cpp_file_asset_extension(self.type_name)
-    }
-
-    pub fn file_asset_unique_name(&self) -> Option<String> {
-        String::from_utf8(self.file_asset_unique_name_bytes()?).ok()
-    }
-
-    pub fn file_asset_unique_name_bytes(&self) -> Option<Vec<u8>> {
-        self.file_asset_extension()?;
-        let name = self.string_property_bytes("name").unwrap_or_default();
-        let stem_end = name
-            .iter()
-            .rposition(|byte| *byte == b'.')
-            .unwrap_or(name.len());
-        let mut unique_name = name[..stem_end].to_vec();
-        unique_name.extend_from_slice(b"-");
-        unique_name.extend_from_slice(
-            self.uint_property("assetId")
-                .unwrap_or(0)
-                .to_string()
-                .as_bytes(),
-        );
-        Some(unique_name)
-    }
-
-    pub fn file_asset_unique_filename(&self) -> Option<String> {
-        String::from_utf8(self.file_asset_unique_filename_bytes()?).ok()
-    }
-
-    pub fn file_asset_unique_filename_bytes(&self) -> Option<Vec<u8>> {
-        let extension = self.file_asset_extension()?;
-        let mut filename = self.file_asset_unique_name_bytes()?;
-        filename.extend_from_slice(b".");
-        filename.extend_from_slice(extension.as_bytes());
-        Some(filename)
     }
 
     pub fn uint_property(&self, name: &str) -> Option<u64> {
@@ -10155,12 +9807,6 @@ fn file_asset_creates_importer(type_name: &str, script_assets_create_importers: 
         type_name,
         "ImageAsset" | "FontAsset" | "AudioAsset" | "BlobAsset" | "ManifestAsset"
     ) || (script_assets_create_importers && matches!(type_name, "ScriptAsset" | "ShaderAsset"))
-}
-
-fn cpp_file_assets_contains(object: &RuntimeObject) -> bool {
-    definition_by_type_key(object.type_key).is_some_and(|definition| {
-        definition.is_a("FileAsset") && definition.name != "ManifestAsset"
-    })
 }
 
 fn cpp_artboard_referencer_index(object: &RuntimeObject) -> Option<u64> {
@@ -12054,44 +11700,6 @@ fn cpp_inline_data_bind_path_property(object: &RuntimeObject) -> Option<&'static
     .then_some("viewModelPathIds")
 }
 
-fn cpp_file_asset_extension(type_name: &str) -> Option<&'static str> {
-    match type_name {
-        "ImageAsset" => Some("png"),
-        "FontAsset" => Some("ttf"),
-        "AudioAsset" => Some("wav"),
-        "BlobAsset" => Some("blob"),
-        "ScriptAsset" => Some("lua"),
-        "ShaderAsset" => Some("rstb"),
-        "ManifestAsset" => Some("man"),
-        "LibraryAsset" => Some("library"),
-        _ => None,
-    }
-}
-
-fn cpp_file_asset_referencer_index(object: &RuntimeObject) -> Option<u64> {
-    let definition = definition_by_type_key(object.type_key)?;
-    match definition.name {
-        "Image" | "AudioEvent" => object.uint_property("assetId"),
-        "TextStyle" => object.uint_property("fontAssetId"),
-        _ if definition_is_cpp_scripted_object(definition) => object.uint_property("scriptAssetId"),
-        _ => None,
-    }
-}
-
-fn cpp_file_asset_matches_referencer(referencer: &RuntimeObject, asset: &RuntimeObject) -> bool {
-    let Some(definition) = definition_by_type_key(referencer.type_key) else {
-        return false;
-    };
-
-    match definition.name {
-        "Image" => asset.type_name == "ImageAsset",
-        "AudioEvent" => asset.type_name == "AudioAsset",
-        "TextStyle" => asset.type_name == "FontAsset",
-        _ if definition_is_cpp_scripted_object(definition) => asset.type_name == "ScriptAsset",
-        _ => false,
-    }
-}
-
 fn cpp_resolved_state_transition_interpolator<'a>(
     transition: &RuntimeObject,
     artboard_range: (usize, usize),
@@ -13772,77 +13380,6 @@ fn apply_cpp_import_mutations(
     normalize_file_asset_ids(objects, import_statuses);
 }
 
-fn normalize_file_asset_ids(
-    objects: &mut [Option<RuntimeObject>],
-    import_statuses: &[RuntimeImportStatus],
-) {
-    let mut file_asset_ids = Vec::new();
-    for index in 0..objects.len() {
-        if import_statuses.get(index) != Some(&RuntimeImportStatus::Imported) {
-            continue;
-        }
-
-        let Some(object) = objects[index].as_ref() else {
-            continue;
-        };
-        // C++ dedupes through BackboardImporter::addFileAsset, which
-        // FileAsset::import only reaches when addsToBackboard() is true;
-        // LibraryAsset and ManifestAsset opt out.
-        let is_backboard_file_asset =
-            definition_by_type_key(object.type_key).is_some_and(|definition| {
-                definition.is_a("FileAsset")
-                    && !matches!(definition.name, "LibraryAsset" | "ManifestAsset")
-            });
-        if !is_backboard_file_asset {
-            continue;
-        }
-
-        file_asset_ids.push(index);
-        normalize_file_asset_ids_for_imported_assets(objects, &file_asset_ids);
-    }
-}
-
-fn normalize_file_asset_ids_for_imported_assets(
-    objects: &mut [Option<RuntimeObject>],
-    file_asset_ids: &[usize],
-) {
-    let mut ids = std::collections::BTreeSet::new();
-    let mut next_id = 1u32;
-
-    for object_id in file_asset_ids {
-        let object = objects[*object_id]
-            .as_mut()
-            .expect("file_asset_ids only contains present objects");
-        let asset_id = object.uint_property("assetId").unwrap_or(0) as u32;
-        if ids.contains(&asset_id) {
-            set_runtime_uint_property(object, 204, "assetId", "FileAsset", u64::from(next_id));
-        } else {
-            ids.insert(asset_id);
-            if asset_id >= next_id {
-                next_id = asset_id.wrapping_add(1);
-            }
-        }
-    }
-}
-
-fn set_runtime_uint_property(
-    object: &mut RuntimeObject,
-    key: u16,
-    name: &'static str,
-    owner: &'static str,
-    value: u64,
-) {
-    upsert_runtime_property(
-        &mut object.properties,
-        RuntimeProperty {
-            key,
-            name,
-            owner,
-            value: FieldValue::Uint(value),
-        },
-    );
-}
-
 fn read_runtime_object(
     reader: &mut BinaryReader<'_>,
     header: &RuntimeHeader,
@@ -14252,228 +13789,6 @@ fn read_cpp_embedded_var_uint64(bytes: &[u8]) -> (u64, usize) {
     }
 
     (0, 0)
-}
-
-fn format_cpp_file_asset_cdn_uuid(bytes: &[u8]) -> String {
-    if bytes.len() != 16 {
-        return String::new();
-    }
-
-    const INDICES: [usize; 16] = [3, 2, 1, 0, 5, 4, 7, 6, 9, 8, 15, 14, 13, 12, 11, 10];
-
-    let mut uuid = String::with_capacity(36);
-    for index in INDICES {
-        uuid.push_str(&format!("{:02x}", bytes[index]));
-        if matches!(index, 0 | 4 | 6 | 8) {
-            uuid.push('-');
-        }
-    }
-    uuid
-}
-
-fn validate_cpp_manifest_assets_with_budget(
-    file: &RuntimeFile,
-    script_assets_create_importers: bool,
-    property_budget: &mut RuntimePropertyBudget,
-) -> Result<()> {
-    if property_budget.maximum.is_none() {
-        return Ok(());
-    }
-
-    let mut latest_file_asset_is_manifest = false;
-    for (index, object) in file.objects.iter().enumerate() {
-        if file.import_status(index) != Some(RuntimeImportStatus::Imported) {
-            continue;
-        }
-        let Some(object) = object.as_ref() else {
-            continue;
-        };
-        let Some(definition) = definition_by_type_key(object.type_key) else {
-            continue;
-        };
-
-        if file_asset_creates_importer(definition.name, script_assets_create_importers) {
-            latest_file_asset_is_manifest = definition.name == "ManifestAsset";
-            continue;
-        }
-        if definition.name == "FileAssetContents" && latest_file_asset_is_manifest {
-            validate_cpp_manifest_asset_with_budget(
-                object.bytes_property("bytes").unwrap_or(&[]),
-                property_budget,
-            )?;
-        }
-    }
-    Ok(())
-}
-
-/// Validate every count that the lazy manifest decoder will later use to
-/// allocate map entries or path vectors. Malformed manifests intentionally
-/// remain a soft failure, matching `parse_cpp_manifest_asset`; declared work
-/// above the import budget is the only error promoted to the file boundary.
-fn validate_cpp_manifest_asset_with_budget(
-    bytes: &[u8],
-    property_budget: &mut RuntimePropertyBudget,
-) -> Result<()> {
-    let mut reader = BinaryReader::new(bytes);
-    while !reader.reached_end() {
-        let Ok(section) = reader.read_var_uint() else {
-            return Ok(());
-        };
-        let Some(section_size) = reader
-            .read_var_uint()
-            .ok()
-            .and_then(|value| usize::try_from(value).ok())
-        else {
-            return Ok(());
-        };
-        let Ok(section_bytes) = reader.read_bytes_exact(section_size) else {
-            return Ok(());
-        };
-        let mut section_reader = BinaryReader::new(section_bytes);
-
-        match section {
-            0 => {
-                let Ok(count) = section_reader.read_var_uint() else {
-                    return Ok(());
-                };
-                let count = property_budget.reserve_declared(count, "manifest name entries")?;
-                for _ in 0..count {
-                    if section_reader.read_var_uint().is_err()
-                        || section_reader.read_length_prefixed_bytes().is_err()
-                    {
-                        return Ok(());
-                    }
-                }
-            }
-            1 => {
-                let Ok(count) = section_reader.read_var_uint() else {
-                    return Ok(());
-                };
-                let count = property_budget.reserve_declared(count, "manifest path entries")?;
-                for _ in 0..count {
-                    if section_reader.read_var_uint().is_err() {
-                        return Ok(());
-                    }
-                    let Ok(path_len) = section_reader.read_var_uint() else {
-                        return Ok(());
-                    };
-                    let path_len =
-                        property_budget.reserve_declared(path_len, "manifest path components")?;
-                    for _ in 0..path_len {
-                        if section_reader.read_var_uint().is_err() {
-                            return Ok(());
-                        }
-                    }
-                }
-            }
-            _ => continue,
-        }
-
-        if !section_reader.reached_end() {
-            return Ok(());
-        }
-    }
-    Ok(())
-}
-
-fn parse_cpp_manifest_asset(bytes: &[u8]) -> RuntimeManifest {
-    let mut manifest = RuntimeManifest::default();
-    if bytes.is_empty() {
-        return manifest;
-    }
-
-    let mut reader = BinaryReader::new(bytes);
-    while !reader.reached_end() {
-        let Ok(section) = reader.read_var_uint() else {
-            return manifest;
-        };
-        let section_size = match reader
-            .read_var_uint()
-            .ok()
-            .and_then(|value| usize::try_from(value).ok())
-        {
-            Some(value) => value,
-            None => return manifest,
-        };
-        let section_bytes = match reader.read_bytes_exact(section_size) {
-            Ok(bytes) => bytes,
-            Err(_) => return manifest,
-        };
-        let mut section_reader = BinaryReader::new(section_bytes);
-
-        let decoded = match section {
-            0 => decode_cpp_manifest_names(&mut section_reader, &mut manifest),
-            1 => decode_cpp_manifest_paths(&mut section_reader, &mut manifest),
-            _ => continue,
-        };
-
-        if decoded.is_err() {
-            return manifest;
-        }
-
-        if !section_reader.reached_end() {
-            return manifest;
-        }
-    }
-
-    manifest
-}
-
-fn decode_cpp_manifest_names(
-    reader: &mut BinaryReader<'_>,
-    manifest: &mut RuntimeManifest,
-) -> Result<()> {
-    let count = reader.read_var_uint()?;
-    for _ in 0..count {
-        let id = cpp_manifest_key(reader.read_var_uint()?);
-        let value = reader.read_string()?;
-        manifest.names.insert(id, value);
-    }
-    Ok(())
-}
-
-fn decode_cpp_manifest_paths(
-    reader: &mut BinaryReader<'_>,
-    manifest: &mut RuntimeManifest,
-) -> Result<()> {
-    let count = reader.read_var_uint()?;
-    for _ in 0..count {
-        let id = cpp_manifest_key(reader.read_var_uint()?);
-        let path_len = reader.read_var_uint()?;
-        let mut path = Vec::new();
-        for _ in 0..path_len {
-            path.push(read_cpp_manifest_path_id(reader));
-        }
-        manifest.paths.insert(id, path);
-    }
-    Ok(())
-}
-
-// Manifest name/path maps are keyed by a *signed* int in C++
-// (`DataResolver::resolveName(int id)`, include/rive/data_resolver.hpp). The
-// runtime id arrives as an unsigned var-uint, so we deliberately reinterpret the
-// low 32 bits as i32 (`as i32` is a bit-preserving truncate/reinterpret in Rust,
-// NOT saturating) to match C++'s key space exactly -- an id above i32::MAX must
-// wrap to the same negative key on both insert and lookup. Insert path.
-fn cpp_manifest_key(value: u64) -> i32 {
-    value as i32
-}
-
-// Lookup counterpart to cpp_manifest_key: same intentional u32->i32
-// reinterpret, so `resolve_*` finds keys inserted by decode_cpp_manifest_*.
-// See cpp_manifest_key above and the pinning test cpp_manifest_key_reinterpret.
-fn cpp_manifest_resolver_key(value: u32) -> i32 {
-    value as i32
-}
-
-fn read_cpp_manifest_path_id(reader: &mut BinaryReader<'_>) -> u32 {
-    match reader.read_var_uint() {
-        Ok(value) => value as u32,
-        Err(_) => {
-            reader.offset = reader.bytes.len();
-            0
-        }
-    }
 }
 
 fn core_registry_field_name(kind: CoreRegistryFieldKind) -> &'static str {

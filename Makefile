@@ -9,8 +9,10 @@ RUNTIME_DRAWING_PORT_TOOL ?= $(CURDIR)/tools/runtime-drawing-port/check.py
 RUNTIME_DRAWING_OWNERSHIP ?= $(CURDIR)/docs/runtime-drawing-ownership.toml
 RUNTIME_DRAWING_GAPS ?= $(CURDIR)/docs/runtime-drawing-gaps.toml
 RUNTIME_FRAME_LOOP_PORT_TOOL ?= $(CURDIR)/tools/runtime-frame-loop-port/check.py
+TEST_CORRESPONDENCE_TOOL ?= $(CURDIR)/tools/runtime-frame-loop-port/check_test_correspondence.py
 RUNTIME_FRAME_LOOP_OWNERSHIP ?= $(CURDIR)/docs/runtime-frame-loop-ownership.toml
 RUNTIME_FRAME_LOOP_GAPS ?= $(CURDIR)/docs/runtime-frame-loop-gaps.toml
+TEST_CORRESPONDENCE_MANIFEST ?= $(CURDIR)/test-correspondence-manifest.toml
 RUNTIME_FRAME_LOOP_TRACE_DIR ?= $(CURDIR)/target/runtime-frame-loop-trace/$(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 RUNTIME_FRAME_LOOP_TRACE_EVIDENCE ?= $(CURDIR)/docs/runtime-frame-loop-trace.json
 SILVER_CORPUS_MANIFEST ?= $(CURDIR)/silver-corpus.toml
@@ -157,9 +159,11 @@ runtime-frame-loop-trace: runtime-frame-loop-trace-runners
 		--output "$(RUNTIME_FRAME_LOOP_TRACE_EVIDENCE)"
 
 runtime-frame-loop-port-check: runtime-frame-loop-port-test
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(TEST_CORRESPONDENCE_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --manifest "$(TEST_CORRESPONDENCE_MANIFEST)"
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_FRAME_LOOP_PORT_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --ledger "$(RUNTIME_FRAME_LOOP_OWNERSHIP)" --gaps "$(RUNTIME_FRAME_LOOP_GAPS)" --file-manifest "$(FILE_CORRESPONDENCE_MANIFEST)"
 
 runtime-frame-loop-port-closed: runtime-frame-loop-port-test
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(TEST_CORRESPONDENCE_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --manifest "$(TEST_CORRESPONDENCE_MANIFEST)"
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_FRAME_LOOP_PORT_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --ledger "$(RUNTIME_FRAME_LOOP_OWNERSHIP)" --gaps "$(RUNTIME_FRAME_LOOP_GAPS)" --file-manifest "$(FILE_CORRESPONDENCE_MANIFEST)" --require-closed
 
 # --- Clippy lint gate (panic-freedom discipline, v2-status item 20 #6) -------

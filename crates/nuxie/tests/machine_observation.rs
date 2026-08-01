@@ -157,8 +157,28 @@ fn snapshot_tracks_state_change_and_active_animation_across_a_trigger() -> Resul
         "entry routes into the Idle animation state",
     );
 
+    // Settle one unchanged frame so the next count has an unambiguous
+    // before/after meaning: changed_state_count describes the latest outer
+    // advance rather than accumulating forever.
+    let _ = scene.frame().advance(instance, 0.0, &mut events);
+    let idle = scene.state_machine_snapshot(instance, machine)?;
+    assert_eq!(
+        idle.changed_state_count, 0,
+        "a clean advance reports no state changes",
+    );
+
     let go = scene.machine_input(instance, machine, "Go")?;
     scene.frame().fire(go)?;
+    let fired = scene.state_machine_snapshot(instance, machine)?;
+    assert_eq!(
+        input_value(&fired, "Go"),
+        Some(SceneMachineInputValue::Trigger { fired: true }),
+        "snapshot observes a trigger's fired state before it is consumed",
+    );
+    assert_eq!(
+        fired.changed_state_count, 0,
+        "firing an input alone does not report a state change",
+    );
     let _ = scene.frame().advance(instance, 0.0, &mut events);
 
     let active = scene.state_machine_snapshot(instance, machine)?;
@@ -167,9 +187,9 @@ fn snapshot_tracks_state_change_and_active_animation_across_a_trigger() -> Resul
         vec!["Active".to_string()],
         "the fired trigger must route the layer into Active",
     );
-    assert!(
-        active.changed_state_count > 0,
-        "the transitioning advance reports its state changes",
+    assert_eq!(
+        active.changed_state_count, 1,
+        "the one transitioning layer reports one changed state on that advance",
     );
     assert_eq!(
         input_value(&active, "Go"),

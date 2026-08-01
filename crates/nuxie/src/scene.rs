@@ -8456,6 +8456,64 @@ impl Scene {
         })
     }
 
+    /// Read one authored layout view's retained solved border box.
+    ///
+    /// The returned bounds are in artboard-local coordinates and use the
+    /// solved dimensions exposed by pinned C++
+    /// `LayoutComponent::layoutBounds/layoutWidth/layoutHeight`. Observation
+    /// never runs a new layout solve or substitutes descendant content
+    /// geometry.
+    pub fn solved_layout_bounds(
+        &self,
+        instance: InstanceId,
+        object: ObjectId,
+    ) -> std::result::Result<crate::Aabb, ResolveError> {
+        let live = self
+            .instances
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|candidate| candidate.id == instance)
+            .ok_or(ResolveError::UnknownInstance)?;
+        let slot = self
+            .materialized
+            .iter()
+            .find_map(|(artboard, materialized)| {
+                materialized
+                    .objects
+                    .get(&object)
+                    .map(|slot| (*artboard, slot))
+            });
+        let Some((slot_artboard, slot)) = slot else {
+            let known_nonvisual = self.definitions.artboards.iter().any(|artboard| {
+                artboard.records.iter().any(|record| {
+                    record.id == object && !matches!(record.spec, RecordSpec::Visual { .. })
+                })
+            });
+            return Err(if known_nonvisual {
+                ResolveError::NonVisualObject
+            } else {
+                ResolveError::UnknownObject
+            });
+        };
+        if live.artboard != slot_artboard {
+            return Err(ResolveError::DifferentArtboard);
+        }
+        if slot.kind != NodeKind::LayoutComponent {
+            return Err(ResolveError::UnsupportedProperty);
+        }
+        let bounds = live
+            .runtime
+            .raw()
+            .layout_bounds(slot.local_id)
+            .ok_or(ResolveError::UnsupportedProperty)?;
+        Ok(crate::Aabb::new(
+            bounds.x,
+            bounds.y,
+            bounds.x + bounds.width,
+            bounds.y + bounds.height,
+        ))
+    }
+
     /// Create a host identity token for one authored instance mount.
     pub fn new_draw_token(
         &self,

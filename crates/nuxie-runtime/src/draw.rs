@@ -10358,12 +10358,18 @@ pub struct RuntimeLayoutBoundsReport {
     pub world_transform: [f32; 6],
 }
 
+/// Solved border box retained by one runtime `LayoutComponent` occurrence.
+///
+/// Coordinates are artboard-local. Width and height are the solved dimensions
+/// exposed by pinned C++
+/// `LayoutComponent::layoutBounds/layoutWidth/layoutHeight`
+/// (`include/rive/layout_component.hpp:190-217`).
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct RuntimeLayoutBounds {
-    pub(crate) x: f32,
-    pub(crate) y: f32,
-    pub(crate) width: f32,
-    pub(crate) height: f32,
+pub struct RuntimeLayoutBounds {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
 }
 
 trait RuntimeLayoutEngine {
@@ -27780,6 +27786,28 @@ mod tests {
                 .is_empty(),
             "the authored transform must not be used in place of the settled layout transform"
         );
+    }
+
+    #[test]
+    fn public_layout_bounds_reads_the_retained_solved_box_by_local_id() {
+        let bytes = synthetic_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic layout riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic layout riv graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+
+        assert_eq!(
+            instance.layout_bounds(3),
+            Some(RuntimeLayoutBounds {
+                x: 100.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            }),
+        );
+        assert_eq!(instance.layout_bounds(5), None, "Path is not a layout node");
+        assert_eq!(instance.layout_bounds(usize::MAX), None);
     }
 
     #[test]

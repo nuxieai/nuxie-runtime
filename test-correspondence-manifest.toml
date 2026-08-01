@@ -12,13 +12,13 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 
 [expected_status_counts]
 ported-differential = 4
-ported-direct = 31
+ported-direct = 33
 partial = 17
-pending = 94
+pending = 92
 n-a = 2
 
 [ratchet]
-max_pending = 94
+max_pending = 92
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -1062,13 +1062,13 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/work_pool_test.cpp"
 test_case_count = 13
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/work_pool.rs", "P1L-report.md"]
+note = "The suite directly ports all 13 pinned TEST_CASE scenarios: 11 applicable cases run non-threaded and all 13 run with the threading feature. Barriers deterministically establish queued and in-flight states. Classified direct because the pinned C++ probe ABI exposes no WorkPool commands."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/work_task_test.cpp"
 test_case_count = 6
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/work_task.rs", "P1L-report.md"]
+note = "All 6 pinned WorkTask state and execute-contract TEST_CASE scenarios are direct public-interface Rust ports. Classified direct because the pinned C++ probe ABI exposes no WorkTask commands."

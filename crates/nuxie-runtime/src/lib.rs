@@ -146,6 +146,7 @@ mod text_style_paint_owner;
 #[path = "text/text_value_run.rs"]
 mod text_value_run_owner;
 mod view_model;
+mod work_pool;
 // #RB-1: retained-identity view-model core (map Phase RB). Additive while
 // consumers migrate; the compensation family deletes when migration ends.
 #[path = "data_bind/data_bind_list_item_consumer.rs"]
@@ -341,6 +342,10 @@ pub(crate) use view_model::{
 };
 #[doc(hidden)]
 pub use view_model_cell::RuntimeFileViewModelInstanceCatalog;
+pub use work_pool::{
+    WorkPool, WorkStatus, WorkTask, WorkTaskRef, WorkTaskState, global_work_pool_exists,
+    next_work_owner_id, poll_async_work, with_global_work_pool, with_global_work_pool_if_exists,
+};
 
 #[cfg(test)]
 #[test]

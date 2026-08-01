@@ -1309,15 +1309,15 @@ note = "P1-b faithful candidate: pinned ShaderAsset SignedContent/RSTB header, d
 
 [[file]]
 upstream = "src/async/work_pool.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "absent"
+rust_module = "crates/nuxie-runtime/src/work_pool.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0108"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F12: async work pool is absent."
+note = "P1-l faithful candidate: WorkTask status/error/owner state, null-submit rejection, point-in-time owner cancellation generations, single polling-thread callback delivery, bounded polling, in-flight accounting, shutdown joins, and cancelled-task destruction callbacks are ported. The opt-in threading feature mirrors WITH_RIVE_THREADING; without it, work executes during polling. Both modes share one safely synchronized process-global pool; Rust requires Send + Sync tasks so that global identity does not reproduce C++'s unsynchronized cross-thread data races. Every root Artboard advance facade polls the existing global pool before advancing components; advanceInternal counterparts remain unpolled. All 13 work_pool_test.cpp and 6 work_task_test.cpp cases are direct public-interface ports with deterministic barriers for queued/in-flight states; the pinned probe ABI has no async-work commands. Lua image.decode remains deliberately out of scope. Final status awaits orchestrator verification."
 
 [[file]]
 upstream = "src/audio/audio_engine.cpp"

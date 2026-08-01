@@ -48,6 +48,7 @@ pub(crate) fn advance(
     artboard: &mut ArtboardInstance,
     elapsed_seconds: f32,
 ) -> Result<bool, ScriptError> {
+    crate::poll_async_work();
     let component_result = artboard.advance_frame_components(elapsed_seconds);
     let mut changed = component_result.as_ref().copied().unwrap_or(false);
     let update_result = artboard.update_pass_with_script_errors();

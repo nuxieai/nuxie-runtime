@@ -3989,6 +3989,7 @@ impl<'a> ArtboardInstance<'a> {
         factory: &mut dyn Factory,
         elapsed_seconds: f32,
     ) -> Result<bool> {
+        nuxie_runtime::poll_async_work();
         #[cfg(feature = "scripting")]
         {
             let changed = advance_scripted_artboard_frame_with_factory(
@@ -4241,6 +4242,7 @@ impl<'a> ArtboardInstance<'a> {
         if state_machines.is_empty() {
             return self.advance(elapsed_seconds);
         }
+        nuxie_runtime::poll_async_work();
         let changed = false;
         #[cfg(feature = "scripting")]
         for state_machine in state_machines.iter_mut() {
@@ -4285,6 +4287,7 @@ impl<'a> ArtboardInstance<'a> {
         if state_machines.is_empty() {
             return self.bind_view_model(view_model) | self.advance(elapsed_seconds);
         }
+        nuxie_runtime::poll_async_work();
         let mut changed = false;
         changed |= self
             .raw
@@ -4349,6 +4352,7 @@ impl<'a> ArtboardInstance<'a> {
         if state_machines.is_empty() {
             return self.try_advance_with_factory(factory, elapsed_seconds);
         }
+        nuxie_runtime::poll_async_work();
         let mut changed = false;
         #[cfg(feature = "scripting")]
         {
@@ -4394,6 +4398,7 @@ impl<'a> ArtboardInstance<'a> {
                 .try_advance_with_factory(factory, elapsed_seconds)
                 .map(|advanced| changed | advanced);
         }
+        nuxie_runtime::poll_async_work();
         let mut changed = false;
         #[cfg(not(feature = "scripting"))]
         for state_machine in state_machines.iter_mut() {
@@ -4587,6 +4592,7 @@ impl OwnedArtboardInstance {
         factory: &mut dyn Factory,
         elapsed_seconds: f32,
     ) -> Result<bool> {
+        nuxie_runtime::poll_async_work();
         #[cfg(feature = "scripting")]
         let artboard = self
             .file
@@ -4920,6 +4926,7 @@ impl OwnedArtboardInstance {
         if state_machines.is_empty() {
             return self.advance(elapsed_seconds);
         }
+        nuxie_runtime::poll_async_work();
         let changed = false;
         #[cfg(feature = "scripting")]
         for state_machine in state_machines.iter_mut() {
@@ -4964,6 +4971,7 @@ impl OwnedArtboardInstance {
         if state_machines.is_empty() {
             return self.bind_view_model(view_model) | self.advance(elapsed_seconds);
         }
+        nuxie_runtime::poll_async_work();
         let mut changed = false;
         changed |= self
             .raw
@@ -5030,6 +5038,7 @@ impl OwnedArtboardInstance {
         if state_machines.is_empty() {
             return self.try_advance_with_factory(factory, elapsed_seconds);
         }
+        nuxie_runtime::poll_async_work();
         let mut changed = false;
         #[cfg(feature = "scripting")]
         let artboard = self
@@ -5082,6 +5091,7 @@ impl OwnedArtboardInstance {
                 .try_advance_with_factory(factory, elapsed_seconds)
                 .map(|advanced| changed | advanced);
         }
+        nuxie_runtime::poll_async_work();
         let mut changed = false;
         #[cfg(feature = "scripting")]
         let artboard = self
@@ -5658,6 +5668,8 @@ mod owned_instance_tests {
     use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
     use nuxie_render_api::{PersistentFactory, RecordingFactory};
     use nuxie_schema::definition_by_name;
+    #[cfg(feature = "scripting")]
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     const FIXTURE: &[u8] = include_bytes!("../../../fixtures/graph/dependency_test.riv");
 
@@ -6004,6 +6016,65 @@ mod owned_instance_tests {
         assert!(!view_model.set_color("missing", 0));
         assert!(!view_model.fire_trigger("missing"));
         assert!(!view_model.set_artboard("missing", 0));
+    }
+
+    #[cfg(feature = "scripting")]
+    struct ScriptArtboardPollTask {
+        state: nuxie_runtime::WorkTaskState,
+        completed: Arc<AtomicBool>,
+    }
+
+    #[cfg(feature = "scripting")]
+    impl nuxie_runtime::WorkTask for ScriptArtboardPollTask {
+        fn state(&self) -> &nuxie_runtime::WorkTaskState {
+            &self.state
+        }
+
+        fn execute(&self) -> bool {
+            true
+        }
+
+        fn on_complete(&self) {
+            self.completed.store(true, Ordering::Release);
+        }
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn scripted_artboard_without_state_machine_polls_global_async_work() {
+        let file = Arc::new(facade_view_model_file());
+        let mut scripted = FileScriptArtboard::new(file, 0, None)
+            .expect("scripted artboard without a state machine");
+        assert!(scripted.state_machine.is_none());
+
+        let completed = Arc::new(AtomicBool::new(false));
+        let task = Arc::new(ScriptArtboardPollTask {
+            state: nuxie_runtime::WorkTaskState::default(),
+            completed: Arc::clone(&completed),
+        });
+        nuxie_runtime::with_global_work_pool(|pool| {
+            assert_ne!(pool.submit(Some(task)), 0);
+        });
+        assert!(!completed.load(Ordering::Acquire));
+
+        #[cfg(not(feature = "threading"))]
+        nuxie_runtime::ScriptArtboard::advance(&mut scripted, 0.0)
+            .expect("scripted artboard advances");
+
+        #[cfg(feature = "threading")]
+        {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while !completed.load(Ordering::Acquire) {
+                nuxie_runtime::ScriptArtboard::advance(&mut scripted, 0.0)
+                    .expect("scripted artboard advances");
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "worker completion was not delivered by scripted-artboard polling"
+                );
+                std::thread::yield_now();
+            }
+        }
+        assert!(completed.load(Ordering::Acquire));
     }
 
     #[test]

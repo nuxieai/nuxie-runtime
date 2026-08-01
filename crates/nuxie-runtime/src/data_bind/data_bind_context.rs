@@ -20,6 +20,10 @@ use crate::data_bind_graph::{
     runtime_data_bind_graph_refresh_operation_view_model_number_converter_for_path,
     runtime_graph_value_from_cell_value,
 };
+use crate::data_bind_list_item_consumer::{
+    RuntimeDataBindListItemConsumer as RuntimeArtboardListTarget,
+    from_target as list_item_consumer_from_target,
+};
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     RuntimeLayoutComputedProperty, artboard_index_for_graph, cached_property_key_for_name,
@@ -2739,6 +2743,7 @@ impl<'a> RuntimeOwnedViewModelContextPathStorage<'a> {
 pub(super) struct RuntimeArtboardListBindingInstance {
     data_bind_index: usize,
     target_local_id: usize,
+    target: RuntimeArtboardListTarget,
     path: Vec<u32>,
     converter: Option<RuntimeDataBindGraphConverter>,
     default_value: RuntimeDataBindGraphValue,
@@ -2758,8 +2763,10 @@ enum RuntimeArtboardListResolvedSource {
 
 struct RuntimeArtboardListResolvedUpdate {
     target_local_id: usize,
+    target: RuntimeArtboardListTarget,
     source: Option<RuntimeOwnedViewModelListHandle>,
     items: Option<Vec<RuntimeOwnedViewModelHandle>>,
+    list_value_valid: bool,
     binding_changed: bool,
 }
 
@@ -2880,8 +2887,11 @@ impl RuntimeArtboardListBindingInstance {
         ) || cache_changed;
         RuntimeArtboardListResolvedUpdate {
             target_local_id: self.target_local_id,
+            target: self.target,
             source: None,
-            items: cache_changed.then(|| self.generated_items.clone()),
+            items: (cache_changed || self.target == RuntimeArtboardListTarget::ListPath)
+                .then(|| self.generated_items.clone()),
+            list_value_valid: true,
             binding_changed,
         }
     }
@@ -2947,8 +2957,10 @@ impl RuntimeArtboardListBindingInstance {
             );
             return RuntimeArtboardListResolvedUpdate {
                 target_local_id: self.target_local_id,
+                target: self.target,
                 source: Some(source),
                 items: Some(items),
+                list_value_valid: true,
                 binding_changed,
             };
         }
@@ -2973,10 +2985,54 @@ impl RuntimeArtboardListBindingInstance {
         ) || cache_changed;
         RuntimeArtboardListResolvedUpdate {
             target_local_id: self.target_local_id,
+            target: self.target,
             source: None,
             items: Some(Vec::new()),
+            list_value_valid: false,
             binding_changed,
         }
+    }
+}
+
+impl ArtboardInstance {
+    fn apply_runtime_artboard_list_update(
+        &mut self,
+        file: &RuntimeFile,
+        update: RuntimeArtboardListResolvedUpdate,
+    ) -> bool {
+        let mut changed = update.binding_changed;
+        match update.target {
+            RuntimeArtboardListTarget::ArtboardComponentList => {
+                self.set_component_list_source(update.target_local_id, update.source);
+                // Preserve the pre-ListPath component-list boundary: a
+                // converter leaving the list domain clears mounted rows.
+                if let Some(items) = update.items {
+                    changed |= self.sync_component_list_items(file, update.target_local_id, items);
+                }
+            }
+            RuntimeArtboardListTarget::ListPath => {
+                let delivered = update.list_value_valid.then_some(update.items).flatten();
+                match crate::context_value_list::apply_to_consumer(delivered) {
+                    Ok(items) => {
+                        // Valid list delivery, including an empty list, always
+                        // reconciles and invalidates the target path.
+                        self.reconcile_runtime_list_path(file, update.target_local_id, items);
+                        changed = true;
+                    }
+                    Err(()) => {
+                        // A converter that leaves the list domain is the safe
+                        // Rust side of C++'s null DataValueList precondition. Do
+                        // not preserve stale geometry while claiming success.
+                        self.reject_runtime_list_path_input(
+                            update.target_local_id,
+                            crate::shapes::list_path::RuntimeListPathInputError::WrongConverterType,
+                        );
+                        changed = true;
+                    }
+                }
+            }
+        }
+        changed
     }
 }
 
@@ -3053,9 +3109,10 @@ pub(super) fn build_artboard_list_bindings<'a>(
         .enumerate()
         .filter_map(|(data_bind_index, data_bind)| {
             let target = data_bind.target?;
-            if target.type_name != "ArtboardComponentList" {
-                return None;
-            }
+            let target_kind = list_item_consumer_from_target(
+                target.type_name,
+                data_bind.object.uint_property("propertyKey"),
+            )?;
             let target_local_id = data_bind.target_local_id?;
             let path_is_name_based = file
                 .data_bind_is_name_based_for_object(data_bind.object)
@@ -3098,6 +3155,7 @@ pub(super) fn build_artboard_list_bindings<'a>(
             Some(RuntimeArtboardListBindingInstance {
                 data_bind_index,
                 target_local_id,
+                target: target_kind,
                 path: path.to_vec(),
                 converter,
                 default_value,
@@ -3142,7 +3200,10 @@ pub(super) fn build_artboard_property_bindings<'a>(
                 return None;
             }
             let target = data_bind.target?;
-            if matches!(target.type_name, "ArtboardComponentList" | "Solo") {
+            if matches!(
+                target.type_name,
+                "ArtboardComponentList" | "ListPath" | "Solo"
+            ) {
                 return None;
             }
             let target_local_id = data_bind.target_local_id?;
@@ -5189,11 +5250,26 @@ impl ArtboardInstance {
             });
             let mut list_adapter_changed = false;
             if let Some(update) = list_update {
-                list_adapter_changed = update.binding_changed;
-                self.set_component_list_source(update.target_local_id, update.source);
-                if let (Some(file), Some(items)) = (runtime_file.as_deref(), update.items) {
-                    list_adapter_changed |=
-                        self.sync_component_list_items(file, update.target_local_id, items);
+                if let Some(file) = runtime_file.as_deref() {
+                    list_adapter_changed = self.apply_runtime_artboard_list_update(file, update);
+                } else {
+                    // Preserve the existing component-list source update when
+                    // this compatibility path has no retained RuntimeFile.
+                    // ListPath cannot discover symbol cells without the file,
+                    // so its corresponding safe boundary clears stale rows.
+                    list_adapter_changed = update.binding_changed;
+                    match update.target {
+                        RuntimeArtboardListTarget::ArtboardComponentList => {
+                            self.set_component_list_source(update.target_local_id, update.source);
+                        }
+                        RuntimeArtboardListTarget::ListPath => {
+                            self.reject_runtime_list_path_input(
+                                update.target_local_id,
+                                crate::shapes::list_path::RuntimeListPathInputError::NullList,
+                            );
+                            list_adapter_changed = true;
+                        }
+                    }
                 }
             }
             let font_changed = font_value.as_ref().is_some_and(|font_value| {
@@ -5906,11 +5982,7 @@ impl ArtboardInstance {
             }
         }
         for update in component_list_updates {
-            changed |= update.binding_changed;
-            self.set_component_list_source(update.target_local_id, update.source);
-            if let Some(items) = update.items {
-                changed |= self.sync_component_list_items(file, update.target_local_id, items);
-            }
+            changed |= self.apply_runtime_artboard_list_update(file, update);
         }
         let mut text_lists_changed = false;
         for binding in &mut self.artboard_text_list_bindings {
@@ -6121,11 +6193,7 @@ impl ArtboardInstance {
             }
         }
         for update in component_list_updates {
-            changed |= update.binding_changed;
-            self.set_component_list_source(update.target_local_id, update.source);
-            if let Some(items) = update.items {
-                changed |= self.sync_component_list_items(file, update.target_local_id, items);
-            }
+            changed |= self.apply_runtime_artboard_list_update(file, update);
         }
 
         let mut text_lists_changed = false;
@@ -6729,6 +6797,10 @@ impl ArtboardInstance {
         root_transform: Mat2D,
         elapsed_seconds: f32,
     ) -> bool {
+        // PropertySymbolDependent callbacks are delivered in retained cell
+        // mutation order before list reconciliation. This preserves C++'s
+        // old-source-write-then-remap behavior within one advance turn.
+        let list_path_property_changed = self.flush_runtime_list_path_changes();
         // Match C++'s cheap clean `DataBindContainer::updateDataBinds` return
         // before entering the active reconciliation routine. Source cells,
         // converter operands, and structural owners enroll their retained
@@ -6740,7 +6812,7 @@ impl ArtboardInstance {
             && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
             && self.artboard_list_bindings.is_empty();
         if clean_identity_pass && !self.has_retained_owned_view_model_artboard_work() {
-            return false;
+            return list_path_property_changed;
         }
         // Subordinate converter-property/formula operands push their own
         // authored occurrence dirt. Drain them beside the unified outer-bind
@@ -6749,8 +6821,9 @@ impl ArtboardInstance {
         // before applying the bind
         // (`data_bind_container.cpp:115-147,156-203`).
         let retained_converter_dirt = self.collect_artboard_owned_converter_operand_dirt();
-        let refreshed_owned_context =
-            self.refresh_retained_owned_view_model_artboard_sources() || retained_converter_dirt;
+        let refreshed_owned_context = self.refresh_retained_owned_view_model_artboard_sources()
+            || retained_converter_dirt
+            || list_path_property_changed;
         if elapsed_seconds == 0.0
             && root_transform == Mat2D::IDENTITY
             && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
@@ -6877,10 +6950,24 @@ impl ArtboardInstance {
             }
         }
         for update in generated_list_updates {
-            changed |= update.binding_changed;
-            self.set_component_list_source(update.target_local_id, None);
-            if let (Some(file), Some(items)) = (runtime_file.as_deref(), update.items) {
-                changed |= self.sync_component_list_items(file, update.target_local_id, items);
+            if let Some(file) = runtime_file.as_deref() {
+                changed |= self.apply_runtime_artboard_list_update(file, update);
+            } else {
+                changed |= update.binding_changed;
+                match update.target {
+                    RuntimeArtboardListTarget::ArtboardComponentList => {
+                        // Preserve the pre-ListPath generated-list behavior:
+                        // the synthetic source is not a retained authored list.
+                        self.set_component_list_source(update.target_local_id, None);
+                    }
+                    RuntimeArtboardListTarget::ListPath => {
+                        self.reject_runtime_list_path_input(
+                            update.target_local_id,
+                            crate::shapes::list_path::RuntimeListPathInputError::NullList,
+                        );
+                        changed = true;
+                    }
+                }
             }
         }
         changed |= self.apply_artboard_solo_bindings();
@@ -9664,6 +9751,7 @@ mod tests {
         let lists = vec![RuntimeArtboardListBindingInstance {
             data_bind_index: 7,
             target_local_id: 11,
+            target: RuntimeArtboardListTarget::ArtboardComponentList,
             path: vec![3, 2],
             converter: None,
             default_value: RuntimeDataBindGraphValue::List { item_count: 0 },
@@ -11207,6 +11295,7 @@ mod tests {
         RuntimeArtboardListBindingInstance {
             data_bind_index: 0,
             target_local_id: 1,
+            target: RuntimeArtboardListTarget::ArtboardComponentList,
             path: vec![0, 0],
             converter: Some(converter),
             default_value: RuntimeDataBindGraphValue::List { item_count: 0 },

@@ -24,7 +24,9 @@ The seven directive-owned C++ rows are:
   localized variable-font splitting, live dirt/callback behavior,
   `modifyOrigin`, deterministic fixtures, D-ST differentials, and G-ST
   goldens. Exactly five rows promoted; counts `339/1/2`.
-- [ ] WP2 dynamic ListPath: pending.
+- [x] WP2 dynamic ListPath: occurrence-local synthetic vertices and number
+  subscriptions, positional remap/teardown, safe invalid-input boundaries,
+  exact eight-phase/60-frame renderer parity, and D-LP-EDGE lifecycle coverage.
 - [ ] WP3 standalone RawText and shared color-glyph engine: pending.
 
 ## Ledger transitions
@@ -114,6 +116,26 @@ remains an independent orchestrator action.
 - Binary differential: 70/70 pass.
 - Checker: 94/94 unit tests pass; production result 339/1/2 and
   `path_epoch_compensation=64/0..67`.
+
+## WP2 ListPath evidence
+
+- `D-LP-INIT/XY/RD/DETACHED/POINT/INVALID/PARTIAL/LIVE`: the generated
+  `list_to_path` action stream ports `data_binding_test.cpp:1585-1819` and is
+  byte-exact against the pinned `.sriv`, including all 60 live frames.
+- `D-LP-EDGE`: focused live-fixture coverage proves invalid-index no-dirt,
+  identical reconciliation dirt, positional reorder, duplicate rows,
+  same-count replacement, old-source unsubscribe, live replacement writes,
+  cold clone ownership, tail shrink, and zero/one-vertex empty rendering.
+- `R-LP-OWNER`: the direct owner retains one listener, synthetic detached
+  vertex, strong instance reference, and exact number-cell subscriptions per
+  filtered row. Drop/remap clears subscriptions before vertex state is lost.
+- `G-LP` and `S-LP`: the existing `list_to_path` golden row remains singular
+  and exact; its silver row is now `status = "exact"` only after an independent
+  byte-exact validation.
+- Safe divergence is confined to C++ null/UB preconditions: null list/item and
+  wrong converter output clear stale Rust state, unsubscribe, dirty, and return
+  failure. No crash is manufactured.
+- WP2 gates and final counts are recorded in `W123-report.md`.
 
 ## Corrective additive TextModifierGroup work
 

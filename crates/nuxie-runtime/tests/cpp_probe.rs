@@ -87307,6 +87307,8 @@ struct CppArtboard {
     fl_e8_feature_cycle: Option<CppFlE8FeatureCycleReport>,
     #[serde(default, rename = "flE8VariationCycle")]
     fl_e8_variation_cycle: Option<CppFlE8VariationCycleReport>,
+    #[serde(default, rename = "flE8ListPath")]
+    fl_e8_list_path: Option<Vec<CppFlE8ListPathReport>>,
     #[serde(default, rename = "nestedStateMachines")]
     nested_state_machines: Vec<CppNestedStateMachine>,
     #[serde(default, rename = "nestedRemapAnimations")]
@@ -87334,6 +87336,17 @@ struct CppFlE8VariationCycleReport {
     glyph_phases: Vec<Vec<u32>>,
     axis_tags: Vec<u32>,
     axis_value_phases: Vec<Vec<Option<f32>>>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct CppFlE8ListPathReport {
+    local_id: usize,
+    core_type: u16,
+    list_source: u32,
+    listener_count: usize,
+    vertex_count: usize,
+    raw_verb_count: usize,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -89349,6 +89362,305 @@ fn upstream_raw_path_coarse_and_precise_bounds_are_ported() {
     ] {
         assert_close(actual, expected, field);
     }
+}
+
+#[test]
+fn fl_e8_list_path_xy_phase_retains_four_live_synthetic_vertices() {
+    // D-LP-INIT and D-LP-EDGE supplement the eight-phase renderer
+    // differential with occurrence/remap/lifetime assertions that are not in
+    // the upstream silver body.
+    let label = "list_to_path.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read {label}: {error}"));
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe_path().expect("D-LP-INIT requires the freshly built pinned C++ probe"),
+        "D-LP-INIT",
+        &bytes,
+        &["--runtime-fl-e8-list-path".to_owned()],
+    );
+    assert_eq!(
+        cpp.artboards[0].fl_e8_list_path.as_deref(),
+        Some(
+            [CppFlE8ListPathReport {
+                local_id: 2,
+                core_type: 619,
+                list_source: u32::MAX,
+                listener_count: 0,
+                vertex_count: 0,
+                raw_verb_count: 0,
+            }]
+            .as_slice()
+        )
+    );
+    let runtime = read_runtime_file(&bytes)
+        .unwrap_or_else(|error| panic!("failed to import {label}: {error:#}"));
+    let graph = GraphFile::from_runtime_file(&runtime)
+        .unwrap_or_else(|error| panic!("failed to graph {label}: {error:#}"));
+    let (artboard_index, artboard_graph) = graph
+        .artboards
+        .iter()
+        .enumerate()
+        .find(|(_, artboard)| artboard.name.as_deref() == Some("main"))
+        .expect("main artboard");
+    let path_local = artboard_graph
+        .components
+        .iter()
+        .find(|component| component.type_name == "ListPath")
+        .expect("ListPath component")
+        .local_id;
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
+            .unwrap_or_else(|error| panic!("failed to instantiate {label}: {error:#}"));
+    let mut state_machine = artboard
+        .state_machine_instance(0)
+        .expect("default state machine");
+    let view_model_index = runtime
+        .artboard(artboard_index)
+        .and_then(|artboard| artboard.uint_property("viewModelId"))
+        .and_then(|index| usize::try_from(index).ok())
+        .expect("main view model");
+    let main = RuntimeOwnedViewModelInstance::from_instance(&runtime, view_model_index, 0)
+        .or_else(|| RuntimeOwnedViewModelInstance::new(&runtime, view_model_index))
+        .expect("main view-model instance");
+    let mut context = RuntimeOwnedViewModelContext::from_main(main);
+    context.complete_for_artboard(&runtime, artboard_index);
+    artboard.bind_owned_view_model_artboard_contexts(&runtime, &context);
+    assert!(state_machine.bind_owned_view_model_contexts(&context));
+    state_machine.advance_data_context();
+    StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+        &mut artboard,
+        std::slice::from_mut(&mut state_machine),
+        0.0,
+        true,
+        || false,
+    )
+    .expect("initial advance");
+    StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+        &mut artboard,
+        std::slice::from_mut(&mut state_machine),
+        0.016,
+        true,
+        || false,
+    )
+    .expect("initial settle");
+
+    let main = context.main_handle().expect("main handle");
+    let mut children = Vec::new();
+    for numbers in [
+        Vec::new(),
+        vec![("x", 100.0)],
+        vec![("x", 100.0), ("y", 100.0)],
+        vec![("y", 100.0)],
+    ] {
+        let view_model_index = runtime
+            .view_models()
+            .iter()
+            .position(|candidate| candidate.object.string_property("name") == Some("vertex-x-y"))
+            .expect("vertex-x-y schema");
+        let mut child = RuntimeOwnedViewModelInstance::new(&runtime, view_model_index)
+            .expect("vertex-x-y instance");
+        for (property, value) in numbers {
+            assert!(child.set_number_by_property_name(property, value));
+        }
+        let child = RuntimeOwnedViewModelHandle::new(child);
+        let index = main
+            .list_item_count_by_property_name_path("lis")
+            .expect("lis list");
+        assert!(main.insert_list_item_by_property_name_path("lis", index, &child));
+        children.push(child);
+    }
+    StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+        &mut artboard,
+        std::slice::from_mut(&mut state_machine),
+        0.0,
+        true,
+        || false,
+    )
+    .expect("XY advance");
+    StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+        &mut artboard,
+        std::slice::from_mut(&mut state_machine),
+        0.016,
+        true,
+        || false,
+    )
+    .expect("XY settle");
+
+    let report = artboard
+        .runtime_list_path_debug_report(path_local)
+        .expect("ListPath report");
+    assert_eq!(report.vertices.len(), 4);
+    assert_eq!(
+        report
+            .vertices
+            .iter()
+            .map(|vertex| (vertex.x, vertex.y))
+            .collect::<Vec<_>>(),
+        vec![(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)]
+    );
+    assert_eq!(report.subscription_count, 8);
+
+    // Clone owns a cold dynamic ListPath and never aliases listeners or
+    // synthetic vertices from its source occurrence.
+    let cloned = artboard.clone();
+    let cloned_report = cloned
+        .runtime_list_path_debug_report(path_local)
+        .expect("cloned ListPath report");
+    assert_eq!(cloned_report.reconciliation_generation, 0);
+    assert!(cloned_report.vertices.is_empty());
+    drop(cloned);
+
+    let settle =
+        |artboard: &mut ArtboardInstance, state_machine: &mut StateMachineInstance, label: &str| {
+            StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+                artboard,
+                std::slice::from_mut(state_machine),
+                0.0,
+                true,
+                || false,
+            )
+            .unwrap_or_else(|error| panic!("{label} advance: {error:#}"));
+            StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+                artboard,
+                std::slice::from_mut(state_machine),
+                0.016,
+                true,
+                || false,
+            )
+            .unwrap_or_else(|error| panic!("{label} settle: {error:#}"));
+        };
+
+    let initial_generation = report.reconciliation_generation;
+    assert!(!main.insert_list_item_by_property_name_path("lis", 99, &children[0]));
+    assert!(!main.remove_list_item_by_property_name_path("lis", 99));
+    assert!(!main.swap_list_items_by_property_name_path("lis", 0, 99));
+    assert_eq!(
+        artboard
+            .runtime_list_path_debug_report(path_local)
+            .expect("unchanged report")
+            .reconciliation_generation,
+        initial_generation,
+        "invalid indices must not manufacture list dirt"
+    );
+
+    // A valid self-swap notifies, then identical positional remaps no-op the
+    // listener identities while reconciliation still dirties unconditionally.
+    assert!(main.swap_list_items_by_property_name_path("lis", 0, 0));
+    settle(&mut artboard, &mut state_machine, "self swap");
+    let same = artboard
+        .runtime_list_path_debug_report(path_local)
+        .expect("same-identity report");
+    assert_eq!(same.instance_identities, report.instance_identities);
+    assert!(same.reconciliation_generation > initial_generation);
+
+    // Reorder is positional: row occurrences remain in place and remap every
+    // moved source, yielding the new list order.
+    assert!(main.swap_list_items_by_property_name_path("lis", 0, 1));
+    settle(&mut artboard, &mut state_machine, "swap");
+    let swapped = artboard
+        .runtime_list_path_debug_report(path_local)
+        .expect("swapped report");
+    assert_eq!((swapped.vertices[0].x, swapped.vertices[1].x), (100.0, 0.0));
+    assert!(main.swap_list_items_by_property_name_path("lis", 0, 1));
+    settle(&mut artboard, &mut state_machine, "swap restore");
+
+    // Duplicate instances retain two distinct rows and two independent
+    // synthetic vertices, even though their source occurrence identities are
+    // equal.
+    assert!(main.insert_list_item_by_property_name_path("lis", 1, &children[0]));
+    settle(&mut artboard, &mut state_machine, "duplicate insert");
+    let duplicate = artboard
+        .runtime_list_path_debug_report(path_local)
+        .expect("duplicate report");
+    assert_eq!(duplicate.vertices.len(), 5);
+    assert_eq!(
+        duplicate.instance_identities[0],
+        duplicate.instance_identities[1]
+    );
+    assert!(main.remove_list_item_by_property_name_path("lis", 1));
+    settle(&mut artboard, &mut state_machine, "duplicate remove");
+
+    // Same-count replacement unsubscribes the old source and immediately
+    // initializes from the replacement. Later old-source changes are inert;
+    // replacement-source changes remain live.
+    let replacement_schema = runtime
+        .view_models()
+        .iter()
+        .position(|candidate| candidate.object.string_property("name") == Some("vertex-x-y"))
+        .expect("vertex-x-y schema");
+    let mut replacement = RuntimeOwnedViewModelInstance::new(&runtime, replacement_schema)
+        .expect("replacement instance");
+    assert!(replacement.set_number_by_property_name("x", 42.0));
+    assert!(replacement.set_number_by_property_name("y", 24.0));
+    let replacement = RuntimeOwnedViewModelHandle::new(replacement);
+    assert!(main.set_list_item_by_property_name_path("lis", 1, &replacement));
+    settle(&mut artboard, &mut state_machine, "replacement");
+    let replaced = artboard
+        .runtime_list_path_debug_report(path_local)
+        .expect("replacement report");
+    assert_eq!(
+        (replaced.vertices[1].x, replaced.vertices[1].y),
+        (42.0, 24.0)
+    );
+    let replacement_generation = replaced.reconciliation_generation;
+
+    assert!(
+        children[1]
+            .borrow_mut()
+            .set_number_by_property_name("x", -999.0)
+    );
+    settle(&mut artboard, &mut state_machine, "old source mutation");
+    let old_source = artboard
+        .runtime_list_path_debug_report(path_local)
+        .expect("old-source report");
+    assert_eq!(old_source.reconciliation_generation, replacement_generation);
+    assert_eq!(old_source.vertices[1].x, 42.0);
+
+    assert!(
+        replacement
+            .borrow_mut()
+            .set_number_by_property_name("x", 43.0)
+    );
+    settle(&mut artboard, &mut state_machine, "replacement mutation");
+    let live = artboard
+        .runtime_list_path_debug_report(path_local)
+        .expect("live replacement report");
+    assert!(live.reconciliation_generation > replacement_generation);
+    assert_eq!(live.vertices[1].x, 43.0);
+
+    // Tail shrink drops subscriptions. One and zero vertices are retained as
+    // state but have the Path::<2 empty-render boundary.
+    while main
+        .list_item_count_by_property_name_path("lis")
+        .expect("lis count")
+        > 1
+    {
+        let last = main
+            .list_item_count_by_property_name_path("lis")
+            .expect("lis count")
+            - 1;
+        assert!(main.remove_list_item_by_property_name_path("lis", last));
+    }
+    settle(&mut artboard, &mut state_machine, "shrink to one");
+    assert_eq!(
+        artboard
+            .runtime_list_path_debug_report(path_local)
+            .expect("one-row report")
+            .vertices
+            .len(),
+        1
+    );
+    assert!(artboard.object_world_bounds(path_local).is_none());
+    assert!(main.clear_list_items_by_property_name_path("lis"));
+    settle(&mut artboard, &mut state_machine, "clear");
+    assert!(
+        artboard
+            .runtime_list_path_debug_report(path_local)
+            .expect("empty report")
+            .vertices
+            .is_empty()
+    );
+    assert!(artboard.object_world_bounds(path_local).is_none());
 }
 
 #[test]

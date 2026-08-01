@@ -29,6 +29,7 @@ from check import (
     nested_event_owner_boundary_matches,
     validate_fl_e8_policy,
     validate_fl_e8_wp1_artifacts,
+    validate_fl_e8_wp2_artifacts,
     validate_frozen_wave_scopes,
 )
 
@@ -835,6 +836,44 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "FL-E8 fl-e8-implementation requires pending=7, got 6", errors
         )
 
+    def test_fl_e8_wp2_requires_only_list_path_plus_wp1_promotions(self) -> None:
+        promoted = {
+            "src/shapes/list_path.cpp",
+            "src/text/text_modifier.cpp",
+            "src/text/text_style.cpp",
+            "src/text/text_style_feature.cpp",
+            "src/text/text_target_modifier.cpp",
+            "src/text/text_variation_modifier.cpp",
+        }
+        errors: list[str] = []
+        validate_fl_e8_policy(
+            phase="fl-e8-wp2-candidate",
+            waves=[{"id": "FL-E8", "sequence": 6, "depends_on": ["FL-E"]}],
+            file_rows=[
+                {
+                    "upstream": path,
+                    "wave": "FL-E8",
+                    "status": "faithful" if path in promoted else "pending",
+                }
+                for path in sorted(FL_E8_FILES)
+            ],
+            expected_counts={
+                "faithful": 340,
+                "divergent-by-decision": 1,
+                "pending": 1,
+            },
+            decisions=[{"id": "D3", "rule": "FLR-20", "ceiling": "layout-engine"}],
+            porting_rules=(
+                "- **FLR-20 Declare support ceilings.** The only approved "
+                "**layout-engine** ceiling is D3; a new ceiling requires an "
+                "explicit user-approved D-row.\n- **FLR-21 Next.** fixture\n"
+            ),
+            parity_register="12. retained history\n",
+            candidate_paths=promoted,
+            errors=errors,
+        )
+        self.assertEqual(errors, [])
+
     def test_fl_e8_allows_only_d3_layout_engine_divergence(self) -> None:
         self.assertEqual(self.fl_e8_policy_errors(), [])
         errors = self.fl_e8_policy_errors(
@@ -889,6 +928,51 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         validate_fl_e8_wp1_artifacts(self.repo, errors)
         self.assertIn(
             "FL-E8 WP1 old static rejection predicate remains: static_text_modifier_is_unsupported",
+            errors,
+        )
+
+    def test_fl_e8_wp2_artifacts_pin_owner_differentials_and_exact_rows(self) -> None:
+        owner = self.repo / "crates/nuxie-runtime/src/shapes/list_path.rs"
+        owner.parent.mkdir(parents=True, exist_ok=True)
+        owner.write_text(
+            "RuntimeListPathState RuntimeListPathVertexListener "
+            "RuntimeListPathSubscription RuntimeCubicDetachedVertex clear_invalid"
+        )
+        bind = self.repo / "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
+        bind.parent.mkdir(parents=True, exist_ok=True)
+        bind.write_text("RuntimeArtboardListTarget::ListPath")
+        probe = self.repo / "crates/nuxie-runtime/tests/cpp_probe.rs"
+        probe.parent.mkdir(parents=True, exist_ok=True)
+        probe.write_text("D-LP-INIT D-LP-EDGE")
+        silver_test = self.repo / "tools/silver-corpus/tests/fl_e8_list_path.rs"
+        silver_test.parent.mkdir(parents=True, exist_ok=True)
+        silver_test.write_text(
+            "D-LP-XY D-LP-RD D-LP-DETACHED D-LP-POINT "
+            "D-LP-INVALID D-LP-PARTIAL D-LP-LIVE"
+        )
+        cpp_probe = self.repo / "tools/cpp-probe/main.cpp"
+        cpp_probe.parent.mkdir(parents=True, exist_ok=True)
+        cpp_probe.write_text("--runtime-fl-e8-list-path")
+        (self.repo / "corpus.toml").write_text(
+            '[[file]]\nid="list_to_path"\nstatus="exact"\n'
+        )
+        (self.repo / "silver-corpus.toml").write_text(
+            '[[case]]\nid="list_to_path"\nstatus="exact"\n'
+        )
+        generator = self.repo / "tools/silver-corpus/generate_manifest.py"
+        generator.parent.mkdir(parents=True, exist_ok=True)
+        generator.write_text("def fl_e8_list_path_actions():\n    return range(60)\n")
+        errors: list[str] = []
+        validate_fl_e8_wp2_artifacts(self.repo, errors)
+        self.assertEqual(errors, [])
+
+        (self.repo / "silver-corpus.toml").write_text(
+            '[[case]]\nid="list_to_path"\nstatus="unsupported-feature"\n'
+        )
+        errors = []
+        validate_fl_e8_wp2_artifacts(self.repo, errors)
+        self.assertIn(
+            "FL-E8 WP2 silver-corpus.toml list_to_path must occur once with status=exact",
             errors,
         )
 

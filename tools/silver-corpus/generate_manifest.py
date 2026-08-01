@@ -140,6 +140,7 @@ EXACT = (
     "image_fit_alignment_updated_test",
     "list_items",
     "list_to_length_test",
+    "list_to_path",
     "multitouch",
     "multitouch_enter",
     "n_slice_triangle",
@@ -168,6 +169,147 @@ EXACT = (
     "viewmodel_list_trigger",
     "viewmodel_based_condition",
 )
+
+
+def fl_e8_list_path_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
+    """The eight named phases from data_binding_test.cpp's ListPath producer."""
+
+    if silver_id != "list_to_path":
+        return None
+
+    def advance_draw(frame: bool = True) -> list[dict[str, object]]:
+        actions: list[dict[str, object]] = [
+            {"kind": "advance", "target": "state-machine", "seconds": 0.0},
+            {"kind": "advance", "target": "state-machine", "seconds": 0.016},
+            {"kind": "draw"},
+        ]
+        if frame:
+            actions.append({"kind": "frame"})
+        return actions
+
+    def append(
+        view_model: str,
+        numbers: dict[str, float],
+        index: int | None = None,
+    ) -> dict[str, object]:
+        action: dict[str, object] = {
+            "kind": "append-view-model-list-item",
+            "list": "lis",
+            "view_model": view_model,
+            "number_properties": numbers,
+        }
+        if index is not None:
+            action["index"] = index
+        return action
+
+    actions: list[dict[str, object]] = [
+        {"kind": "create-default-view-model"},
+        {"kind": "bind-prepared-view-model"},
+    ]
+    actions += advance_draw()
+
+    # D-LP-XY
+    actions += [
+        append("vertex-x-y", {}),
+        append("vertex-x-y", {"x": 100.0}),
+        append("vertex-x-y", {"x": 100.0, "y": 100.0}),
+        append("vertex-x-y", {"y": 100.0}),
+    ]
+    actions += advance_draw()
+
+    # D-LP-RD
+    actions.append(
+        append(
+            "vertex-rotation-distance",
+            {"x": 200.0, "rotation": 1.5, "distance": 20.0},
+            2,
+        )
+    )
+    actions += advance_draw()
+
+    # D-LP-DETACHED
+    actions.append(
+        append(
+            "vertex-detached",
+            {
+                "x": 200.0,
+                "y": 100.0,
+                "inRotation": 1.0,
+                "outRotation": 2.0,
+                "inDistance": 10.0,
+                "outDistance": 30.0,
+            },
+            3,
+        )
+    )
+    actions += advance_draw()
+
+    # D-LP-POINT
+    actions.append(
+        append(
+            "vertex-in-out",
+            {
+                "x": 100.0,
+                "y": 200.0,
+                "inX": 40.0,
+                "inY": 20.0,
+                "outX": 10.0,
+                "outY": 30.0,
+            },
+            4,
+        )
+    )
+    actions += advance_draw()
+
+    # D-LP-INVALID
+    actions.append(append("non-vertex", {}, 5))
+    actions += advance_draw()
+
+    # D-LP-PARTIAL
+    actions.append(
+        append(
+            "vertex-incomplete",
+            {
+                "x": 100.0,
+                "y": 300.0,
+                "inDistance": 60.0,
+                "inRotation": -1.0,
+                "outX": 30.0,
+                "inX": -30.0,
+            },
+            4,
+        )
+    )
+    actions += advance_draw()
+
+    def set_item(index: int, property_name: str, value: float) -> dict[str, object]:
+        return {
+            "kind": "set-view-model-list-item-number",
+            "list": "lis",
+            "index": index,
+            "property": property_name,
+            "value": value,
+        }
+
+    # D-LP-LIVE: the equality no-op plus five overlapping live sources.
+    actions += [
+        set_item(4, "inX", -30.0),
+        set_item(0, "x", 50.0),
+        set_item(2, "rotation", 1.0),
+        set_item(3, "inDistance", 30.0),
+        set_item(5, "outY", 40.0),
+    ]
+    actions += advance_draw(frame=False)
+    for frame in range(60):
+        actions += [
+            {"kind": "frame"},
+            set_item(4, "inRotation", float(frame * 6)),
+            set_item(2, "rotation", float(frame * 6)),
+            {"kind": "advance", "target": "state-machine", "seconds": 0.01},
+            {"kind": "advance", "target": "state-machine", "seconds": 0.0},
+            {"kind": "draw"},
+        ]
+    return tuple(actions)
 
 
 def fl_d4_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
@@ -694,6 +836,8 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                     actions, blocker = executable_actions(chunk, state_machine, animation)
                     if (ported_actions := fl_d4_actions(silver_id)) is not None:
                         actions, blocker = ported_actions, None
+                    if (ported_actions := fl_e8_list_path_actions(silver_id)) is not None:
+                        actions, blocker = ported_actions, None
                     if silver_id == "sorted_listeners":
                         # The C++ producer calls
                         # `file->createViewModelInstance(artboard.get())`
@@ -875,6 +1019,12 @@ def render_action_value(value: object) -> str:
         if value.is_integer():
             return f"{value:.1f}"
         return format(value, ".9g")
+    if isinstance(value, dict):
+        fields = ", ".join(
+            f"{quoted(str(key))} = {render_action_value(item)}"
+            for key, item in value.items()
+        )
+        return "{ " + fields + " }"
     raise TypeError(f"unsupported action value {value!r}")
 
 

@@ -44,6 +44,10 @@ pub enum Action {
         list: String,
         view_model: String,
         #[serde(default)]
+        index: Option<usize>,
+        #[serde(default)]
+        number_properties: BTreeMap<String, f32>,
+        #[serde(default)]
         string_property: Option<String>,
         #[serde(default)]
         string_value: Option<String>,
@@ -51,6 +55,12 @@ pub enum Action {
     RemoveViewModelListItem {
         list: String,
         index: usize,
+    },
+    SetViewModelListItemNumber {
+        list: String,
+        index: usize,
+        property: String,
+        value: f32,
     },
     Advance {
         target: ActionTarget,
@@ -261,6 +271,8 @@ impl Execution {
                 Action::AppendViewModelListItem {
                     list,
                     view_model,
+                    index,
+                    number_properties,
                     string_property,
                     string_value,
                 } => {
@@ -279,6 +291,15 @@ impl Execution {
                         .with_context(|| format!("missing view model {view_model}"))?;
                     let mut child = RuntimeOwnedViewModelInstance::new(&runtime, view_model_index)
                         .with_context(|| format!("cannot create view model {view_model}"))?;
+                    for (property, value) in number_properties {
+                        if child
+                            .number_source_handle_by_property_name_path(property)
+                            .is_none()
+                        {
+                            bail!("missing numeric property {view_model}.{property}");
+                        }
+                        child.set_number_by_property_name_path(property, *value);
+                    }
                     if let (Some(property), Some(value)) = (string_property, string_value) {
                         if child
                             .string_source_handle_by_property_name_path(property)
@@ -289,10 +310,13 @@ impl Execution {
                         child.set_string_by_property_name_path(property, value.as_bytes());
                     }
                     let child = nuxie_runtime::RuntimeOwnedViewModelHandle::new(child);
-                    let index = main
-                        .list_item_count_by_property_name_path(list)
-                        .with_context(|| format!("missing list property {list}"))?;
-                    if !main.insert_list_item_by_property_name_path(list, index, &child) {
+                    let insertion_index = match index {
+                        Some(index) => *index,
+                        None => main
+                            .list_item_count_by_property_name_path(list)
+                            .with_context(|| format!("missing list property {list}"))?,
+                    };
+                    if !main.insert_list_item_by_property_name_path(list, insertion_index, &child) {
                         bail!("failed to append {view_model} to {list}");
                     }
                 }
@@ -306,6 +330,31 @@ impl Execution {
                     if !main.remove_list_item_by_property_name_path(list, *index) {
                         bail!("failed to remove {list}[{index}]");
                     }
+                }
+                Action::SetViewModelListItemNumber {
+                    list,
+                    index,
+                    property,
+                    value,
+                } => {
+                    let context = owned_context
+                        .as_ref()
+                        .context("no prepared view-model instance")?;
+                    let main = context
+                        .main_handle()
+                        .context("prepared context has no main instance")?;
+                    let item = main
+                        .list_items_by_property_name_path(list)
+                        .and_then(|items| items.get(*index).cloned())
+                        .with_context(|| format!("missing list item {list}[{index}]"))?;
+                    let mut item = item.borrow_mut();
+                    if item
+                        .number_source_handle_by_property_name_path(property)
+                        .is_none()
+                    {
+                        bail!("missing numeric property {list}[{index}].{property}");
+                    }
+                    item.set_number_by_property_name_path(property, *value);
                 }
                 Action::Advance { target, seconds } => match target {
                     StateMachine => {

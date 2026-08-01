@@ -22954,7 +22954,9 @@ fn path_commands(
 ) -> Vec<RuntimePathCommand> {
     match path.type_name {
         "Ellipse" => ellipse_path_commands(path, path_kind, transform),
-        "PointsPath" => points_path_commands(path, path_kind, transform, weighted_context),
+        "PointsPath" | "ListPath" => {
+            points_path_commands(path, path_kind, transform, weighted_context)
+        }
         "Polygon" => polygon_path_commands(path, path_kind, transform),
         "Rectangle" => rectangle_path_commands(path, path_kind, transform),
         "Star" => star_path_commands(path, path_kind, transform),
@@ -23140,6 +23142,9 @@ fn runtime_retained_path_vertices(
     artboard: &ArtboardInstance,
     path_local: usize,
 ) -> Option<Vec<PathVertexNode>> {
+    if let Some(vertices) = artboard.runtime_list_path_vertices(path_local) {
+        return Some(vertices);
+    }
     let vertices = &artboard
         .component(path_local)?
         .concrete
@@ -23824,7 +23829,7 @@ fn points_path_commands(
     transform: Mat2D,
     weighted_context: Option<&WeightedPathContext<'_>>,
 ) -> Vec<RuntimePathCommand> {
-    if path.type_name != "PointsPath" || path.vertices.len() < 2 {
+    if !matches!(path.type_name, "PointsPath" | "ListPath") || path.vertices.len() < 2 {
         return Vec::new();
     }
     if path

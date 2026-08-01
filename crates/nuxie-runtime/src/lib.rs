@@ -225,6 +225,7 @@ pub use scripting::{
     script_node_for_artboard, script_view_model_from_owned, script_view_model_from_owned_context,
     script_view_model_from_owned_snapshot, script_view_models,
 };
+pub use shapes::list_path::{RuntimeListPathDebugReport, RuntimeListPathDebugVertex};
 #[doc(hidden)]
 pub use state_machine::RuntimeFileStateMachineActionCatalog;
 pub use state_machine::{

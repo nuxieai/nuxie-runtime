@@ -2187,3 +2187,15 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   counts are 339/1/2. The scripted wrapper reuses a complete pinned decoder
   archive set instead of deleting read-only external inputs. The RawText GM
   family remains a nonblocking follow-up lane.
+- 2026-08-01 — FL-E8 WP2 closes `src/shapes/list_path.cpp` and moves the
+  family ledger to faithful 340, divergent-by-decision 1, pending 1. The Rust
+  occurrence now owns positional row listeners and synthetic
+  `CubicDetachedVertex` state, subscribes the twelve numeric symbols in pinned
+  creation order, preserves callback-order last-source-wins semantics, and
+  invalidates retained path/composer geometry after every reconciliation or
+  live write. The eight upstream phases plus 60 live frames are byte-exact in
+  `list_to_path.sriv`; D-LP-EDGE covers remap, duplicates, unsubscribe, shrink,
+  invalid indices, cold clone/drop, and zero/one rendering. C++ null/UB inputs
+  remain precondition ratchets, while Rust clears stale state and fails safely.
+  The exact gate evidence is recorded in `W123-report.md`; standalone RawText
+  remains the sole FL-E8 pending row.

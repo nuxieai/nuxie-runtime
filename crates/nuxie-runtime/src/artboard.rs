@@ -440,6 +440,10 @@ pub struct ArtboardInstance {
     pub(crate) artboard_nested_host_bindings: Vec<RuntimeArtboardNestedHostBindingInstance>,
     pub(crate) artboard_list_bindings: Vec<RuntimeArtboardListBindingInstance>,
     pub(crate) artboard_text_list_bindings: Vec<RuntimeArtboardTextListBindingInstance>,
+    /// `ListPath::m_vertexListeners` projected into the cloned Artboard
+    /// occurrence. Rows own their synthetic vertices and exact cell
+    /// subscriptions; drawing only borrows the ordered projection.
+    runtime_list_paths: RefCell<Vec<crate::shapes::list_path::RuntimeListPathState>>,
     pub(crate) artboard_context_source_values_scratch: Vec<RuntimeArtboardContextSourceValue>,
     pub(crate) artboard_nested_child_context_updates_scratch: Vec<RuntimeNestedChildContextUpdate>,
     /// C++ nested artboards retain authored view-model instances by pointer,
@@ -571,6 +575,13 @@ impl Clone for ArtboardInstance {
             artboard_nested_host_bindings: self.artboard_nested_host_bindings.clone(),
             artboard_list_bindings: self.artboard_list_bindings.clone(),
             artboard_text_list_bindings: self.artboard_text_list_bindings.clone(),
+            runtime_list_paths: RefCell::new(
+                self.runtime_list_paths
+                    .borrow()
+                    .iter()
+                    .map(crate::shapes::list_path::RuntimeListPathState::cold_clone)
+                    .collect(),
+            ),
             artboard_context_source_values_scratch: self
                 .artboard_context_source_values_scratch
                 .clone(),
@@ -2264,6 +2275,16 @@ impl ArtboardInstance {
             artboard_nested_host_bindings,
             artboard_list_bindings,
             artboard_text_list_bindings,
+            runtime_list_paths: RefCell::new(
+                graph
+                    .components
+                    .iter()
+                    .filter(|component| component.type_name == "ListPath")
+                    .map(|component| {
+                        crate::shapes::list_path::RuntimeListPathState::new(component.local_id)
+                    })
+                    .collect(),
+            ),
             artboard_context_source_values_scratch: Vec::new(),
             artboard_nested_child_context_updates_scratch: Vec::new(),
             stateful_nested_view_model_contexts_dirty: true,
@@ -3228,6 +3249,112 @@ impl ArtboardInstance {
         if let Some(list) = self.component_list_state_mut(local_id) {
             list.source = source;
         }
+    }
+
+    pub(crate) fn reconcile_runtime_list_path(
+        &mut self,
+        file: &RuntimeFile,
+        path_local: usize,
+        items: Vec<RuntimeOwnedViewModelHandle>,
+    ) -> bool {
+        let rows = items.into_iter().map(Some).collect::<Vec<_>>();
+        let reconciled = {
+            let states = self.runtime_list_paths.get_mut();
+            let Some(state) = states
+                .iter_mut()
+                .find(|state| state.path_local() == path_local)
+            else {
+                return false;
+            };
+            state.reconcile(file, Some(&rows)).is_ok()
+        };
+        // C++ marks Path dirt even for an identity-only reconciliation. The
+        // occurrence-wide epoch covers composer/bounds/length caches while
+        // the component dirt follows the ordinary Path dependency schedule.
+        self.mark_runtime_list_path_dirty(path_local);
+        reconciled
+    }
+
+    pub(crate) fn reject_runtime_list_path_input(
+        &mut self,
+        path_local: usize,
+        error: crate::shapes::list_path::RuntimeListPathInputError,
+    ) -> bool {
+        let rejected = {
+            let states = self.runtime_list_paths.get_mut();
+            let Some(state) = states
+                .iter_mut()
+                .find(|state| state.path_local() == path_local)
+            else {
+                return false;
+            };
+            state.reject_invalid(error).is_err()
+        };
+        self.mark_runtime_list_path_dirty(path_local);
+        rejected
+    }
+
+    pub(crate) fn flush_runtime_list_path_changes(&mut self) -> bool {
+        let dirty_paths = self
+            .runtime_list_paths
+            .get_mut()
+            .iter_mut()
+            .filter_map(|state| (state.flush_live_changes() != 0).then_some(state.path_local()))
+            .collect::<Vec<_>>();
+        if dirty_paths.is_empty() {
+            return false;
+        }
+        for path_local in dirty_paths {
+            self.mark_runtime_list_path_dirty(path_local);
+        }
+        true
+    }
+
+    fn mark_runtime_list_path_dirty(&mut self, path_local: usize) {
+        if !self.add_dirt(path_local, ComponentDirt::PATH, false)
+            && let Some(component) = self.component(path_local)
+        {
+            component.bump_path_revision();
+        }
+        // `Path::markPathDirty` explicitly calls the containing Shape's
+        // `pathChanged`; the synthetic vertices have no parent through which
+        // ordinary vertex dirt could reach that render-path cache.
+        let mut parent = self
+            .component(path_local)
+            .and_then(|component| component.parent);
+        while let Some(handle) = parent {
+            let Some(component) = self.objects.component(handle) else {
+                break;
+            };
+            if component.type_name == "Shape" {
+                component.bump_path_revision();
+                break;
+            }
+            parent = component.parent;
+        }
+        self.mark_path_changed();
+    }
+
+    pub(crate) fn runtime_list_path_vertices(
+        &self,
+        path_local: usize,
+    ) -> Option<Vec<nuxie_graph::PathVertexNode>> {
+        self.runtime_list_paths
+            .borrow_mut()
+            .iter_mut()
+            .find(|state| state.path_local() == path_local)
+            .map(crate::shapes::list_path::RuntimeListPathState::projected_vertices)
+    }
+
+    pub fn runtime_list_path_debug_report(
+        &self,
+        path_local: usize,
+    ) -> Option<crate::shapes::list_path::RuntimeListPathDebugReport> {
+        self.runtime_list_paths
+            .borrow()
+            .iter()
+            .find(|state| state.path_local() == path_local)
+            .map(crate::shapes::list_path::RuntimeListPathState::debug_report)
     }
 
     pub fn components(&self) -> RuntimeComponents<'_> {
@@ -11667,6 +11794,7 @@ mod tests {
             artboard_nested_host_bindings: Vec::new(),
             artboard_list_bindings: Vec::new(),
             artboard_text_list_bindings: Vec::new(),
+            runtime_list_paths: RefCell::new(Vec::new()),
             artboard_context_source_values_scratch: Vec::new(),
             artboard_nested_child_context_updates_scratch: Vec::new(),
             stateful_nested_view_model_contexts_dirty: true,

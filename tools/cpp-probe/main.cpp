@@ -49,6 +49,9 @@ size_t randomProviderTotalCalls();
 #include "rive/shapes/shape_paint_container.hpp"
 #undef protected
 #define private public
+#include "rive/shapes/list_path.hpp"
+#undef private
+#define private public
 #include "rive/shapes/paint/linear_gradient.hpp"
 #include "rive/shapes/paint/target_effect.hpp"
 #undef private
@@ -1031,6 +1034,7 @@ struct ProbeOptions
     bool runtimeFlE8StaticText = false;
     bool runtimeFlE8FeatureCycle = false;
     bool runtimeFlE8VariationCycle = false;
+    bool runtimeFlE8ListPath = false;
     std::string runtimeFlE8FontSwapPath;
     bool runtimeBindDefaultViewModelArtboardContext = false;
     bool runtimeUpdateArtboardDataBinds = false;
@@ -1769,6 +1773,39 @@ void write_fl_e8_static_text_report(
         }
     }
     out << "]}";
+}
+
+// D-LP-INIT / R-LP-OWNER probe surface. The phased renderer differential is
+// the pinned `List to path` SerializingFactory scenario; this owner report
+// exposes the matching C++ occurrence-local listener/vertex cardinalities
+// without attempting any null-pointer precondition violations.
+void write_fl_e8_list_path_report(std::ostream& out,
+                                  const std::vector<rive::Core*>& objects)
+{
+    out << '[';
+    bool first = true;
+    for (size_t localId = 0; localId < objects.size(); ++localId)
+    {
+        auto object = objects[localId];
+        if (object == nullptr || !object->is<rive::ListPath>())
+        {
+            continue;
+        }
+        auto path = object->as<rive::ListPath>();
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        out << "{\"localId\":" << localId;
+        out << ",\"coreType\":" << path->coreType();
+        out << ",\"listSource\":" << path->listSource();
+        out << ",\"listenerCount\":" << path->m_vertexListeners.size();
+        out << ",\"vertexCount\":" << path->vertices().size();
+        out << ",\"rawVerbCount\":" << path->rawPath().verbs().size();
+        out << '}';
+    }
+    out << ']';
 }
 
 struct FlE8FontSwapReport
@@ -14542,6 +14579,11 @@ void write_artboard(std::ostream& out,
         out << ",\"flE8StaticText\":";
         write_fl_e8_static_text_report(out, objects);
     }
+    if (options.runtimeFlE8ListPath)
+    {
+        out << ",\"flE8ListPath\":";
+        write_fl_e8_list_path_report(out, objects);
+    }
     if (options.runtimeFlE8FeatureCycle)
     {
         out << ",\"flE8FeatureCycle\":";
@@ -16261,6 +16303,11 @@ int main(int argc, const char* argv[])
         if (is_arg(argv[i], "--runtime-fl-e8-static-text"))
         {
             options.runtimeFlE8StaticText = true;
+            continue;
+        }
+        if (is_arg(argv[i], "--runtime-fl-e8-list-path"))
+        {
+            options.runtimeFlE8ListPath = true;
             continue;
         }
         if (is_arg(argv[i], "--runtime-fl-e8-feature-cycle"))

@@ -40,13 +40,14 @@ use crate::properties::{
 };
 use crate::scripting::{ScriptNode, script_paint_for_shape};
 use crate::text::{
-    RuntimeTextLayoutConstraint, RuntimeTextLayoutDebugReport, StaticTextClipBounds,
-    build_static_text_constraint_bounds, runtime_text_input_shape_paint_commands,
-    runtime_text_shape_paint_commands, static_fixed_text_constraint_bounds,
-    static_text_caret_geometry, static_text_clip_bounds, static_text_constraint_bounds,
-    static_text_controlled_layout_bounds, static_text_hit, static_text_layout_debug_report,
-    static_text_layout_measure_bounds, static_text_selection_rects, static_text_value,
-    static_text_value_run_hit, text_input_layout_measure_bounds,
+    RuntimeIntegratedColorGlyphCommand, RuntimeTextDrawOrder, RuntimeTextLayoutConstraint,
+    RuntimeTextLayoutDebugReport, StaticTextClipBounds, build_static_text_constraint_bounds,
+    runtime_text_draw_data, runtime_text_input_shape_paint_commands,
+    static_fixed_text_constraint_bounds, static_text_caret_geometry, static_text_clip_bounds,
+    static_text_constraint_bounds, static_text_controlled_layout_bounds, static_text_hit,
+    static_text_layout_debug_report, static_text_layout_measure_bounds,
+    static_text_selection_rects, static_text_value, static_text_value_run_hit,
+    text_input_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, TransformProperty};
 use std::cell::{Cell, RefCell};
@@ -9705,6 +9706,8 @@ struct RuntimeTextBackendResources {
     pooled_paints: BTreeMap<(usize, usize), RuntimeTextPooledPaintBackend>,
     paths: BTreeMap<RuntimeTextPathOwnerKey, RuntimeTextPathBackend>,
     clip_path: Option<RuntimeTextPathBackend>,
+    color_paths: BTreeMap<(usize, usize), RuntimeTextPathBackend>,
+    emoji_images: BTreeMap<(usize, u32), Option<Box<dyn RenderImage>>>,
 }
 
 impl std::fmt::Debug for RuntimeTextBackendResources {
@@ -9716,6 +9719,8 @@ impl std::fmt::Debug for RuntimeTextBackendResources {
             .field("pooled_paints", &self.pooled_paints.len())
             .field("paths", &self.paths.len())
             .field("clip_path", &self.clip_path.is_some())
+            .field("color_paths", &self.color_paths.len())
+            .field("emoji_images", &self.emoji_images.len())
             .finish()
     }
 }
@@ -13921,9 +13926,24 @@ impl RuntimeWorldTransformSlots {
 #[derive(Debug, Clone)]
 struct RuntimeCachedTextShapePaints {
     commands: Arc<Vec<RuntimeShapePaintCommand>>,
+    replay: Arc<Vec<RuntimeTextReplay>>,
     paths: Arc<BTreeMap<RuntimeTextPathOwnerKey, Arc<RawPath>>>,
     clip_path: Option<Arc<RawPath>>,
+    color: Option<Arc<RuntimeRetainedColorGlyphs>>,
     publishes_layout_dirty: bool,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeRetainedColorGlyphs {
+    glyphs: Vec<RuntimeIntegratedColorGlyphCommand>,
+    order: Vec<RuntimeTextDrawOrder>,
+    shape_world: Mat2D,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeTextReplay {
+    Paint(usize),
+    ColorGlyph(usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15897,25 +15917,35 @@ fn runtime_build_text_draw_frame(
             }
             return Ok(RuntimeCachedTextShapePaints {
                 commands: Arc::new(Vec::new()),
+                replay: Arc::new(Vec::new()),
                 paths: Arc::new(BTreeMap::new()),
                 clip_path: None,
+                color: None,
                 publishes_layout_dirty: false,
             });
         }
     }
-    let (mut commands, clip_bounds) = if drawable.type_name == "Text" {
+    let (mut commands, clip_bounds, color) = if drawable.type_name == "Text" {
         let layout_constraint =
             instance.runtime_text_layout_constraint(drawable_local, layout_bounds);
+        let draw_data = runtime_text_draw_data(
+            runtime,
+            instance,
+            graph,
+            drawable_local,
+            layout_bounds,
+            layout_constraint,
+        )?;
         (
-            runtime_text_shape_paint_commands(
-                runtime,
-                instance,
-                graph,
-                drawable_local,
-                layout_bounds,
-                layout_constraint,
-            )?,
+            draw_data.commands,
             static_text_clip_bounds(runtime, graph, instance, drawable_local, layout_constraint)?,
+            (!draw_data.color_glyphs.is_empty()).then(|| {
+                Arc::new(RuntimeRetainedColorGlyphs {
+                    glyphs: draw_data.color_glyphs,
+                    order: draw_data.order,
+                    shape_world: draw_data.shape_world,
+                })
+            }),
         )
     } else {
         (
@@ -15927,15 +15957,17 @@ fn runtime_build_text_draw_frame(
                 layout_bounds,
             )?,
             None,
+            None,
         )
     };
     assign_shape_paint_path_slot_indices(&mut commands);
+    let replay = runtime_text_replay_order(&commands, color.as_deref());
     let paths = Arc::new(runtime_text_owned_raw_paths(&commands));
     let clip_path = clip_bounds
         // C++ `Text::buildRenderStyles` returns before rebuilding
         // `m_clipRect` when shaping produced no renderable frame
         // (`src/text/text.cpp:534-543`).
-        .filter(|_| !commands.is_empty())
+        .filter(|_| !commands.is_empty() || color.is_some())
         .map(|bounds| {
             let world = instance.runtime_component_world_transform_with_bounds(
                 drawable_local,
@@ -15962,10 +15994,55 @@ fn runtime_build_text_draw_frame(
     }
     Ok(RuntimeCachedTextShapePaints {
         commands: Arc::new(commands),
+        replay: Arc::new(replay),
         paths,
         clip_path,
+        color,
         publishes_layout_dirty: true,
     })
+}
+
+fn runtime_text_replay_order(
+    commands: &[RuntimeShapePaintCommand],
+    color: Option<&RuntimeRetainedColorGlyphs>,
+) -> Vec<RuntimeTextReplay> {
+    let Some(color) = color else {
+        return (0..commands.len()).map(RuntimeTextReplay::Paint).collect();
+    };
+    let mut replay = Vec::with_capacity(commands.len() + color.glyphs.len());
+    let mut ordered_styles = BTreeSet::new();
+    for item in &color.order {
+        match *item {
+            RuntimeTextDrawOrder::Style(style_local) => {
+                ordered_styles.insert(style_local);
+                replay.extend(
+                    commands
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, paint)| {
+                            runtime_text_style_path_owner_local(paint) == Some(style_local)
+                        })
+                        .map(|(index, _)| RuntimeTextReplay::Paint(index)),
+                );
+            }
+            RuntimeTextDrawOrder::ColorGlyph(index) => {
+                if color.glyphs.get(index).is_some() {
+                    replay.push(RuntimeTextReplay::ColorGlyph(index));
+                }
+            }
+        }
+    }
+    replay.extend(
+        commands
+            .iter()
+            .enumerate()
+            .filter(|(_, paint)| {
+                runtime_text_style_path_owner_local(paint)
+                    .is_none_or(|style| !ordered_styles.contains(&style))
+            })
+            .map(|(index, _)| RuntimeTextReplay::Paint(index)),
+    );
+    replay
 }
 
 impl ArtboardInstance {
@@ -16226,6 +16303,89 @@ fn runtime_configure_text_pooled_paint(
 /// `src/text/text_style_paint.cpp:42-127`,
 /// `src/text/text_input_drawable.cpp:24-41`). Each drawable owns its retained
 /// CPU draw frame; this path never constructs a `RuntimeDrawableDispatch`.
+fn runtime_draw_integrated_color_glyph(
+    glyph_index: usize,
+    command: &RuntimeIntegratedColorGlyphCommand,
+    shape_world: Mat2D,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    color_paths: &mut BTreeMap<(usize, usize), RuntimeTextPathBackend>,
+    emoji_images: &mut BTreeMap<(usize, u32), Option<Box<dyn RenderImage>>>,
+) {
+    renderer.save();
+    renderer.transform(runtime_render_mat(shape_world.multiply(command.transform)));
+    for (layer_index, layer) in command.layers.iter().enumerate() {
+        match &layer.paint {
+            crate::text::RuntimeColorGlyphPaint::Image {
+                bytes,
+                width,
+                height,
+                bearing_x,
+                bearing_y,
+                extent_x,
+                extent_y,
+            } => {
+                let image = emoji_images
+                    .entry((command.font_identity, command.glyph_id))
+                    .or_insert_with(|| factory.decode_image(bytes).ok());
+                if let Some(image) = image.as_deref() {
+                    renderer.save();
+                    renderer.transform(runtime_render_mat(Mat2D([
+                        *extent_x / *width as f32,
+                        0.0,
+                        0.0,
+                        *extent_y / *height as f32,
+                        *bearing_x,
+                        *bearing_y,
+                    ])));
+                    renderer.draw_image(
+                        Some(image),
+                        RenderImageSampler::LINEAR_CLAMP,
+                        RenderBlendMode::SrcOver,
+                        command.opacity,
+                    );
+                    renderer.restore();
+                }
+            }
+            paint_kind @ (crate::text::RuntimeColorGlyphPaint::Solid { .. }
+            | crate::text::RuntimeColorGlyphPaint::LinearGradient { .. }
+            | crate::text::RuntimeColorGlyphPaint::RadialGradient { .. }
+            | crate::text::RuntimeColorGlyphPaint::SweepGradient { .. }) => {
+                if layer.path.verbs().is_empty() {
+                    continue;
+                }
+                let color = match paint_kind {
+                    crate::text::RuntimeColorGlyphPaint::Solid { color } => *color,
+                    _ => 0xff00_0000,
+                };
+                let path_backend = color_paths
+                    .entry((glyph_index, layer_index))
+                    .or_insert_with(|| RuntimeTextPathBackend {
+                        path: runtime_make_path_from_raw_path(
+                            factory,
+                            &layer.path,
+                            RenderFillRule::NonZero,
+                        ),
+                        raw_mutation_id: layer.path.mutation_id(),
+                    });
+                if path_backend.raw_mutation_id != layer.path.mutation_id() {
+                    runtime_rebuild_path_from_raw_path(
+                        path_backend.path.as_mut(),
+                        &layer.path,
+                        RenderFillRule::NonZero,
+                    );
+                    path_backend.raw_mutation_id = layer.path.mutation_id();
+                }
+                let mut paint = factory.make_render_paint();
+                paint.style(RenderPaintStyle::Fill);
+                paint.color(color_modulate_opacity(color, command.opacity));
+                renderer.draw_path(path_backend.path.as_ref(), paint.as_ref());
+            }
+        }
+    }
+    renderer.restore();
+}
+
 #[allow(clippy::too_many_arguments)]
 fn runtime_draw_live_text_family(
     runtime: &RuntimeFile,
@@ -16279,7 +16439,38 @@ fn runtime_draw_live_text_family(
         renderer.clip_path(path);
     }
 
-    for paint in retained.commands.iter() {
+    for item in retained.replay.iter().copied() {
+        let paint = match item {
+            RuntimeTextReplay::Paint(index) => retained
+                .commands
+                .get(index)
+                .context("retained Text replay references a missing paint")?,
+            RuntimeTextReplay::ColorGlyph(index) => {
+                let color = retained
+                    .color
+                    .as_deref()
+                    .context("retained Text replay references missing color data")?;
+                let glyph = color
+                    .glyphs
+                    .get(index)
+                    .context("retained Text replay references a missing color glyph")?;
+                let RuntimeTextBackendResources {
+                    color_paths,
+                    emoji_images,
+                    ..
+                } = &mut *backend;
+                runtime_draw_integrated_color_glyph(
+                    index,
+                    glyph,
+                    color.shape_world,
+                    factory,
+                    renderer,
+                    color_paths,
+                    emoji_images,
+                );
+                continue;
+            }
+        };
         let global_id = paint.paint_global_id;
         let object = runtime
             .object(global_id as usize)
@@ -18884,7 +19075,7 @@ fn record_runtime_draw_path_command_replay() {
     RUNTIME_DRAW_PATH_COMMAND_REPLAYS.with(|calls| calls.set(calls.get() + 1));
 }
 
-fn runtime_raw_path_from_commands(commands: &[RuntimePathCommand]) -> RawPath {
+pub(crate) fn runtime_raw_path_from_commands(commands: &[RuntimePathCommand]) -> RawPath {
     let mut raw_path = RawPath::new();
     runtime_rebuild_raw_path_from_commands(&mut raw_path, commands);
     raw_path
@@ -25463,8 +25654,10 @@ mod tests {
             builds.set(builds.get() + 1);
             Ok(RuntimeCachedTextShapePaints {
                 commands: Arc::new(Vec::new()),
+                replay: Arc::new(Vec::new()),
                 paths: Arc::new(BTreeMap::new()),
                 clip_path: None,
+                color: None,
                 publishes_layout_dirty: true,
             })
         };
@@ -25489,8 +25682,10 @@ mod tests {
         let owner = RuntimeTextDrawOwner::default();
         let frame = RuntimeCachedTextShapePaints {
             commands: Arc::new(Vec::new()),
+            replay: Arc::new(Vec::new()),
             paths: Arc::new(BTreeMap::new()),
             clip_path: None,
+            color: None,
             publishes_layout_dirty: true,
         };
         owner
@@ -25600,8 +25795,10 @@ mod tests {
         let owner = RuntimeTextDrawOwner::default();
         let empty_frame = RuntimeCachedTextShapePaints {
             commands: Arc::new(Vec::new()),
+            replay: Arc::new(Vec::new()),
             paths: Arc::new(BTreeMap::new()),
             clip_path: None,
+            color: None,
             publishes_layout_dirty: true,
         };
         owner
@@ -25656,8 +25853,10 @@ mod tests {
                 ensure_text_paint_pool_after_draw: None,
                 prepared_raw_path: None,
             }]),
+            replay: Arc::new(vec![RuntimeTextReplay::Paint(0)]),
             paths: Arc::new(BTreeMap::new()),
             clip_path: None,
+            color: None,
             publishes_layout_dirty: true,
         };
         owner.mark_render_styles_dirty();
@@ -25683,8 +25882,10 @@ mod tests {
             .retained_or_build(|| {
                 Ok(RuntimeCachedTextShapePaints {
                     commands: Arc::new(Vec::new()),
+                    replay: Arc::new(Vec::new()),
                     paths: Arc::new(BTreeMap::new()),
                     clip_path: None,
+                    color: None,
                     publishes_layout_dirty: true,
                 })
             })
@@ -32766,5 +32967,54 @@ mod tests {
             "world-space gradient endpoints did not follow the shape world transform: \
              baseline {baseline:?}, moved {moved:?}"
         );
+    }
+
+    #[test]
+    fn d_rt_engine_integrated_bitmap_replay_reuses_owner_cache() {
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        let command = RuntimeIntegratedColorGlyphCommand {
+            font_identity: 7,
+            glyph_id: 9,
+            transform: Mat2D::IDENTITY,
+            opacity: 0.5,
+            layers: vec![crate::text::RuntimeColorGlyphLayer {
+                path: RawPath::new(),
+                paint: crate::text::RuntimeColorGlyphPaint::Image {
+                    bytes: Arc::from(&b"not-a-real-image"[..]),
+                    width: 1,
+                    height: 1,
+                    bearing_x: 2.0,
+                    bearing_y: 3.0,
+                    extent_x: 4.0,
+                    extent_y: 5.0,
+                },
+                uses_foreground: false,
+            }],
+        };
+        let mut path_cache = BTreeMap::new();
+        let mut image_cache = BTreeMap::new();
+        runtime_draw_integrated_color_glyph(
+            0,
+            &command,
+            Mat2D::IDENTITY,
+            &mut factory,
+            &mut renderer,
+            &mut path_cache,
+            &mut image_cache,
+        );
+        runtime_draw_integrated_color_glyph(
+            0,
+            &command,
+            Mat2D::IDENTITY,
+            &mut factory,
+            &mut renderer,
+            &mut path_cache,
+            &mut image_cache,
+        );
+        let stream = factory.stream();
+        assert_eq!(stream.matches("decodeImage").count(), 1);
+        assert_eq!(stream.matches("drawImage").count(), 2);
+        assert_eq!(image_cache.len(), 1);
     }
 }

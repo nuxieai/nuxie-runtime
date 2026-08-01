@@ -2187,3 +2187,14 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   counts are 339/1/2. The scripted wrapper reuses a complete pinned decoder
   archive set instead of deleting read-only external inputs. The RawText GM
   family remains a nonblocking follow-up lane.
+- 2026-08-01 — FL-E8 WP3 promotes only `src/text/raw_text.cpp`, producing the
+  row-scoped interim ledger state faithful 340, divergent-by-decision 1,
+  pending 1 while the separately owned WP2 ListPath row remains untouched.
+  The public `RawText` facade now preserves constructor/append/clear/setter,
+  lazy bounds/clip/render, paint override, bidi/ellipsis, command-order, and
+  nonfinite behavior proven by D-RT-API. The five pinned U-color cases execute
+  live in both runtimes; shared text-engine COLR/raster extraction feeds both
+  owners, standalone replay remains flat COLR-path-only, and integrated Text
+  retains its decoded bitmap cache. Verification remains
+  `pending-verification`; the RawText GM family is still a documented
+  nonblocking follow-up lane.

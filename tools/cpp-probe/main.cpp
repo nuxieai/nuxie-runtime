@@ -251,6 +251,7 @@ size_t randomProviderTotalCalls();
 #define protected public
 #include "rive/text/text.hpp"
 #include "rive/text/font_hb.hpp"
+#include "rive/text/raw_text.hpp"
 #include "rive/text/text_input_cursor.hpp"
 #include "rive/text/text_input_selected_text.hpp"
 #include "rive/text/text_input_selection.hpp"
@@ -305,6 +306,20 @@ size_t randomProviderTotalCalls();
 #include "rive/lua/rive_lua_libs.hpp"
 #endif
 #include "utils/no_op_factory.hpp"
+#include "utils/no_op_renderer.hpp"
+
+namespace rive::SimpleArrayTesting
+{
+int mallocCount = 0;
+int reallocCount = 0;
+int freeCount = 0;
+void resetCounters()
+{
+    mallocCount = 0;
+    reallocCount = 0;
+    freeCount = 0;
+}
+} // namespace rive::SimpleArrayTesting
 
 namespace
 {
@@ -16163,6 +16178,421 @@ void write_state_machine_definition_null_hole_sample(std::ostream& out)
     }
     out << "]}\n";
 }
+
+class RawTextCountingRenderer final : public rive::NoOpRenderer
+{
+public:
+    size_t saves = 0;
+    size_t restores = 0;
+    size_t transforms = 0;
+    size_t drawPaths = 0;
+    size_t clips = 0;
+    size_t drawImages = 0;
+
+    void save() override { ++saves; }
+    void restore() override { ++restores; }
+    void transform(const rive::Mat2D&) override { ++transforms; }
+    void drawPath(rive::RenderPath*, rive::RenderPaint*) override
+    {
+        ++drawPaths;
+    }
+    void clipPath(rive::RenderPath*) override { ++clips; }
+    void drawImage(const rive::RenderImage*,
+                   rive::ImageSampler,
+                   rive::BlendMode,
+                   float) override
+    {
+        ++drawImages;
+    }
+};
+
+rive::rcp<rive::Font> g_raw_text_probe_fallback;
+
+void write_raw_text_bounds(std::ostream& out, const rive::AABB& bounds)
+{
+    out << '[' << bounds.minX << ',' << bounds.minY << ',' << bounds.maxX
+        << ',' << bounds.maxY << ']';
+}
+
+void write_raw_text_command_kinds(std::ostream& out,
+                                  const rive::RawText& rawText)
+{
+    out << '[';
+    for (size_t index = 0; index < rawText.m_drawCommands.size(); ++index)
+    {
+        if (index != 0)
+        {
+            out << ',';
+        }
+        write_json_string(
+            out,
+            rawText.m_drawCommands[index].type ==
+                    rive::RawText::RawTextDrawCommand::kStylePath
+                ? "style"
+                : "color");
+    }
+    out << ']';
+}
+
+void write_raw_text_observation(std::ostream& out,
+                                rive::RawText& rawText,
+                                rive::rcp<rive::RenderPaint> overridePaint = nullptr)
+{
+    const auto bounds = rawText.bounds();
+    RawTextCountingRenderer renderer;
+    rawText.render(&renderer, overridePaint);
+    out << "{\"bounds\":";
+    write_raw_text_bounds(out, bounds);
+    out << ",\"order\":";
+    write_raw_text_command_kinds(out, rawText);
+    out << ",\"styleBounds\":[";
+    bool first = true;
+    for (const auto& style : rawText.m_styles)
+    {
+        if (style.isEmpty)
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        write_raw_text_bounds(out, style.path.rawPath()->bounds());
+    }
+    out << "],\"clip\":" << (rawText.m_clipRenderPath ? "true" : "false")
+        << ",\"saves\":" << renderer.saves
+        << ",\"restores\":" << renderer.restores
+        << ",\"clips\":" << renderer.clips
+        << ",\"drawPaths\":" << renderer.drawPaths
+        << ",\"drawImages\":" << renderer.drawImages << '}';
+}
+
+void write_raw_text_color_case(std::ostream& out,
+                               rive::NoOpFactory& factory,
+                               rive::rcp<rive::Font> font,
+                               const char* text,
+                               float size,
+                               float width)
+{
+    rive::RawText rawText(&factory);
+    rawText.maxWidth(width);
+    rawText.sizing(rive::TextSizing::autoHeight);
+    rawText.append(text, nullptr, font, size);
+    RawTextCountingRenderer renderer;
+    rawText.render(&renderer);
+    size_t colorCount = 0;
+    size_t styleCount = 0;
+    for (const auto& command : rawText.m_drawCommands)
+    {
+        if (command.type == rive::RawText::RawTextDrawCommand::kColorGlyph)
+        {
+            ++colorCount;
+        }
+        else
+        {
+            ++styleCount;
+        }
+    }
+    out << "{\"bounds\":";
+    write_raw_text_bounds(out, rawText.m_bounds);
+    out << ",\"commands\":" << rawText.m_drawCommands.size()
+        << ",\"colorCommands\":" << colorCount
+        << ",\"styleCommands\":" << styleCount
+        << ",\"drawPaths\":" << renderer.drawPaths
+        << ",\"drawImages\":" << renderer.drawImages << '}';
+}
+
+void write_raw_text_probe(std::ostream& out,
+                          const char* regularFontPath,
+                          const char* emojiFontPath,
+                          const char* rasterFontPath)
+{
+    auto regularFont = HBFont::Decode(read_bytes(regularFontPath));
+    auto emojiFont = HBFont::Decode(read_bytes(emojiFontPath));
+    auto rasterFont = HBFont::Decode(read_bytes(rasterFontPath));
+    if (regularFont == nullptr || emojiFont == nullptr || rasterFont == nullptr)
+    {
+        throw std::runtime_error("RawText probe failed to decode fonts");
+    }
+
+    rive::NoOpFactory factory;
+    rive::RawText rawText(&factory);
+    const auto initialBounds = rawText.bounds();
+    out << "{\"api\":{\"defaults\":{\"empty\":"
+        << (rawText.empty() ? "true" : "false")
+        << ",\"dirty\":" << (rawText.m_dirty ? "true" : "false")
+        << ",\"sizing\":" << static_cast<int>(rawText.sizing())
+        << ",\"overflow\":" << static_cast<int>(rawText.overflow())
+        << ",\"align\":" << static_cast<int>(rawText.align())
+        << ",\"maxWidth\":" << rawText.maxWidth()
+        << ",\"maxHeight\":" << rawText.maxHeight()
+        << ",\"paragraphSpacing\":" << rawText.paragraphSpacing()
+        << ",\"bounds\":";
+    write_raw_text_bounds(out, initialBounds);
+    out << "}";
+
+    auto paint = static_cast<rive::Factory&>(factory).makeRenderPaint();
+    rive::RawText emptyRunRawText(&factory);
+    emptyRunRawText.append("", paint, regularFont);
+    const bool emptyRunMakesNonempty = !emptyRunRawText.empty();
+    const bool emptyRunDirty = emptyRunRawText.m_dirty;
+    rawText.append(std::string("A\0ignored", 9), paint, regularFont, 24.0f, -1.0f, 0.0f, 0xff123456);
+    rawText.append("B", paint, regularFont, 12.0f, 40.0f, 3.0f, 0xffabcdef);
+    const auto populatedBounds = rawText.bounds();
+    out << ",\"append\":{\"emptyRunMakesNonempty\":"
+        << (emptyRunMakesNonempty ? "true" : "false")
+        << ",\"emptyRunDirty\":"
+        << (emptyRunDirty ? "true" : "false")
+        << ",\"styleCount\":" << rawText.m_styles.size()
+        << ",\"foreground\":" << rawText.m_styles.front().foregroundColor
+        << ",\"bounds\":";
+    write_raw_text_bounds(out, populatedBounds);
+    out << ",\"order\":";
+    write_raw_text_command_kinds(out, rawText);
+    out << '}';
+
+    rawText.sizing(rawText.sizing());
+    rawText.overflow(rawText.overflow());
+    rawText.align(rawText.align());
+    rawText.maxWidth(rawText.maxWidth());
+    rawText.maxHeight(rawText.maxHeight());
+    rawText.paragraphSpacing(rawText.paragraphSpacing());
+    const bool equalSettersClean = !rawText.m_dirty;
+    rawText.maxWidth(std::numeric_limits<float>::quiet_NaN());
+    const bool firstNanDirty = rawText.m_dirty;
+    rawText.m_dirty = false;
+    rawText.maxWidth(std::numeric_limits<float>::quiet_NaN());
+    const bool secondNanDirty = rawText.m_dirty;
+    out << ",\"setters\":{\"equalClean\":"
+        << (equalSettersClean ? "true" : "false")
+        << ",\"firstNanDirty\":" << (firstNanDirty ? "true" : "false")
+        << ",\"secondNanDirty\":" << (secondNanDirty ? "true" : "false")
+        << '}';
+
+    rawText.maxWidth(80.0f);
+    rawText.maxHeight(30.0f);
+    rawText.sizing(rive::TextSizing::fixed);
+    rawText.overflow(rive::TextOverflow::clipped);
+    const auto fixedBounds = rawText.bounds();
+    const bool clipCreated = rawText.m_clipRenderPath != nullptr;
+    RawTextCountingRenderer clippedRenderer;
+    rawText.render(&clippedRenderer);
+    rawText.overflow(rive::TextOverflow::visible);
+    rawText.bounds();
+    const bool clipReleased = rawText.m_clipRenderPath == nullptr;
+    out << ",\"clip\":{\"bounds\":";
+    write_raw_text_bounds(out, fixedBounds);
+    out << ",\"created\":" << (clipCreated ? "true" : "false")
+        << ",\"clipCalls\":" << clippedRenderer.clips
+        << ",\"released\":" << (clipReleased ? "true" : "false")
+        << '}';
+
+    const auto staleBounds = rawText.m_bounds;
+    rawText.clear();
+    const auto clearedBounds = rawText.bounds();
+    out << ",\"clear\":{\"empty\":"
+        << (rawText.empty() ? "true" : "false")
+        << ",\"stylesRetained\":" << rawText.m_styles.size()
+        << ",\"commands\":" << rawText.m_drawCommands.size()
+        << ",\"stale\":" << (clearedBounds == staleBounds ? "true" : "false")
+        << '}';
+
+    out << ",\"layout\":[";
+    bool firstLayout = true;
+    for (auto sizing : {rive::TextSizing::autoWidth,
+                        rive::TextSizing::autoHeight,
+                        rive::TextSizing::fixed})
+    {
+        for (auto overflow : {rive::TextOverflow::visible,
+                              rive::TextOverflow::hidden,
+                              rive::TextOverflow::clipped,
+                              rive::TextOverflow::ellipsis,
+                              rive::TextOverflow::fit,
+                              rive::TextOverflow::fitFontSize})
+        {
+            if (!firstLayout)
+            {
+                out << ',';
+            }
+            firstLayout = false;
+            rive::RawText value(&factory);
+            value.maxWidth(70.0f);
+            value.maxHeight(22.0f);
+            value.paragraphSpacing(7.0f);
+            value.sizing(sizing);
+            value.overflow(overflow);
+            value.append("one two three\nfour five", paint, regularFont, 16.0f);
+            out << "{\"sizing\":" << static_cast<int>(sizing)
+                << ",\"overflow\":" << static_cast<int>(overflow)
+                << ",\"value\":";
+            write_raw_text_observation(out, value);
+            out << '}';
+        }
+    }
+    out << ']';
+
+    out << ",\"align\":[";
+    for (auto align : {rive::TextAlign::left,
+                       rive::TextAlign::right,
+                       rive::TextAlign::center})
+    {
+        if (align != rive::TextAlign::left)
+        {
+            out << ',';
+        }
+        rive::RawText value(&factory);
+        value.maxWidth(160.0f);
+        value.sizing(rive::TextSizing::autoHeight);
+        value.align(align);
+        value.append("ABC", paint, regularFont, 20.0f);
+        out << "{\"align\":" << static_cast<int>(align) << ",\"value\":";
+        write_raw_text_observation(out, value);
+        out << '}';
+    }
+    out << ']';
+
+    rive::RawText bidi(&factory);
+    bidi.maxWidth(180.0f);
+    bidi.sizing(rive::TextSizing::autoHeight);
+    bidi.append("abc \xd7\x90\xd7\x91\xd7\x92", paint, regularFont, 20.0f);
+    out << ",\"bidi\":";
+    write_raw_text_observation(out, bidi);
+
+    rive::RawText ellipsis(&factory);
+    ellipsis.maxWidth(45.0f);
+    ellipsis.maxHeight(20.0f);
+    ellipsis.sizing(rive::TextSizing::fixed);
+    ellipsis.overflow(rive::TextOverflow::ellipsis);
+    ellipsis.append("one two three four", paint, regularFont, 16.0f);
+    out << ",\"ellipsis\":";
+    write_raw_text_observation(out, ellipsis);
+
+    rive::RawText nullable(&factory);
+    nullable.append("A", nullptr, regularFont, 16.0f);
+    out << ",\"nullPaint\":{";
+    out << "\"plain\":";
+    write_raw_text_observation(out, nullable);
+    out << ",\"override\":";
+    write_raw_text_observation(out, nullable, paint);
+    out << '}';
+
+    auto secondPaint = static_cast<rive::Factory&>(factory).makeRenderPaint();
+    rive::RawText order(&factory);
+    order.append("A", paint, regularFont, 16.0f);
+    order.append("B", secondPaint, regularFont, 20.0f);
+    order.append("C", paint, regularFont, 12.0f);
+    out << ",\"coalescing\":";
+    write_raw_text_observation(out, order);
+
+    rive::RawText retainedClip(&factory);
+    retainedClip.maxWidth(50.0f);
+    retainedClip.maxHeight(20.0f);
+    retainedClip.sizing(rive::TextSizing::fixed);
+    retainedClip.overflow(rive::TextOverflow::clipped);
+    retainedClip.append("A", paint, regularFont, 16.0f);
+    retainedClip.bounds();
+    retainedClip.clear();
+    out << ",\"emptyClipRetained\":";
+    write_raw_text_observation(out, retainedClip);
+
+    rive::RawText values(&factory);
+    values.sizing(rive::TextSizing::fixed);
+    values.overflow(rive::TextOverflow::fitFontSize);
+    values.align(rive::TextAlign::center);
+    values.maxWidth(-13.0f);
+    values.maxHeight(-17.0f);
+    values.paragraphSpacing(-19.0f);
+    out << ",\"stored\":{\"sizing\":" << static_cast<int>(values.sizing())
+        << ",\"overflow\":" << static_cast<int>(values.overflow())
+        << ",\"align\":" << static_cast<int>(values.align())
+        << ",\"maxWidth\":" << values.maxWidth()
+        << ",\"maxHeight\":" << values.maxHeight()
+        << ",\"paragraphSpacing\":" << values.paragraphSpacing();
+    values.maxHeight(std::numeric_limits<float>::infinity());
+    values.paragraphSpacing(std::numeric_limits<float>::quiet_NaN());
+    out << ",\"infiniteHeight\":" << (std::isinf(values.maxHeight()) ? "true" : "false")
+        << ",\"nanSpacing\":" << (std::isnan(values.paragraphSpacing()) ? "true" : "false")
+        << "}}";
+
+    g_raw_text_probe_fallback = emojiFont;
+    rive::Font::gFallbackProc = [](const rive::Unichar,
+                                   const uint32_t fallbackIndex,
+                                   const rive::Font*) -> rive::rcp<rive::Font> {
+        return fallbackIndex == 0 ? g_raw_text_probe_fallback : nullptr;
+    };
+    out << ",\"colors\":[";
+    write_raw_text_color_case(out, factory, emojiFont, "A", 32.0f, 200.0f);
+    out << ',';
+    write_raw_text_color_case(out,
+                              factory,
+                              emojiFont,
+                              "\xe2\x9d\xa4\xe2\x9d\xa4\xe2\x9d\xa4",
+                              32.0f,
+                              400.0f);
+    out << ',';
+    write_raw_text_color_case(out,
+                              factory,
+                              regularFont,
+                              "Hello \xe2\x9d\xa4 World",
+                              32.0f,
+                              400.0f);
+    out << ',';
+    write_raw_text_color_case(
+        out, factory, emojiFont, "\xe2\x9d\xa4", 1.0f, 100.0f);
+    out << ',';
+    write_raw_text_color_case(
+        out, factory, emojiFont, "\xe2\x9d\xa4", 200.0f, 2000.0f);
+    out << ']';
+    auto writeEngineFont = [&out](rive::rcp<rive::Font> font) {
+        rive::GlyphID glyphId = 0;
+        bool found = false;
+        for (uint32_t candidate = 0; candidate < 65536; ++candidate)
+        {
+            if (font->isColorGlyph(candidate))
+            {
+                glyphId = candidate;
+                found = true;
+                break;
+            }
+        }
+        std::vector<rive::Font::ColorGlyphLayer> layers;
+        if (found)
+        {
+            font->getColorLayers(glyphId, layers, 0xff123456);
+        }
+        size_t solids = 0, gradients = 0, images = 0, imageBytes = 0;
+        for (const auto& layer : layers)
+        {
+            if (layer.paintType == rive::Font::ColorGlyphPaintType::solid)
+            {
+                ++solids;
+            }
+            else if (layer.paintType == rive::Font::ColorGlyphPaintType::image)
+            {
+                ++images;
+                imageBytes += layer.imageBytes.size();
+            }
+            else
+            {
+                ++gradients;
+            }
+        }
+        out << "{\"found\":" << (found ? "true" : "false")
+            << ",\"glyphId\":" << glyphId << ",\"layers\":" << layers.size()
+            << ",\"solids\":" << solids << ",\"gradients\":" << gradients
+            << ",\"images\":" << images << ",\"imageBytes\":" << imageBytes << '}';
+    };
+    out << ",\"engine\":{\"regular\":";
+    writeEngineFont(regularFont);
+    out << ",\"colr\":";
+    writeEngineFont(emojiFont);
+    out << ",\"raster\":";
+    writeEngineFont(rasterFont);
+    out << "}}\n";
+    rive::Font::gFallbackProc = nullptr;
+    g_raw_text_probe_fallback = nullptr;
+}
 } // namespace
 
 int main(int argc, const char* argv[])
@@ -16174,10 +16604,25 @@ int main(int argc, const char* argv[])
     bool animationResetColorRoundtrip = false;
     bool transitionIntegerComparisonSamples = false;
     bool stateMachineDefinitionNullHoleSample = false;
+    const char* rawTextRegularFont = nullptr;
+    const char* rawTextEmojiFont = nullptr;
+    const char* rawTextRasterFont = nullptr;
     uint32_t animationResetColor = 0;
 
     for (int i = 1; i < argc; ++i)
     {
+        if (is_arg(argv[i], "--raw-text-probe"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--raw-text-probe requires regularFont emojiFont rasterFont\n";
+                return 2;
+            }
+            rawTextRegularFont = argv[++i];
+            rawTextEmojiFont = argv[++i];
+            rawTextRasterFont = argv[++i];
+            continue;
+        }
         if (is_arg(argv[i], "--converter-samples"))
         {
             converterSamples = true;
@@ -19903,6 +20348,23 @@ int main(int argc, const char* argv[])
     {
         write_state_machine_definition_null_hole_sample(std::cout);
         return 0;
+    }
+
+    if (rawTextRegularFont != nullptr)
+    {
+        try
+        {
+            write_raw_text_probe(std::cout,
+                                 rawTextRegularFont,
+                                 rawTextEmojiFont,
+                                 rawTextRasterFont);
+            return 0;
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << error.what() << "\n";
+            return 1;
+        }
     }
 
     if (filename == nullptr)

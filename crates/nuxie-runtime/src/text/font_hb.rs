@@ -57,6 +57,8 @@ struct TextGlyph {
     glyph_id: u32,
     cluster: u32,
     advance: f32,
+    offset_x: f32,
+    offset_y: f32,
 }
 fn harfrust_script_for_unicode_script(script: UnicodeScript) -> HarfScript {
     HarfScript::from_iso15924_tag(HarfTag::from_u32(script.as_iso15924_tag()))
@@ -216,6 +218,8 @@ fn shape_cxx_script_run_glyphs_in_direction(
             glyph_id: info.glyph_id,
             cluster: info.cluster,
             advance: position.x_advance as f32,
+            offset_x: position.x_offset as f32,
+            offset_y: -position.y_offset as f32,
         })
         .collect()
 }

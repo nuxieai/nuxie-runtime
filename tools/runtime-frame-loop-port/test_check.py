@@ -23,12 +23,14 @@ if str(TOOL_DIR) not in sys.path:
 
 from check import (
     FL_E8_FILES,
+    FL_E8_WP3_FILES,
     FL_B_FROZEN_SCOPE_FILES,
     FL_B_FROZEN_SCOPE_REF,
     check_status,
     nested_event_owner_boundary_matches,
     validate_fl_e8_policy,
     validate_fl_e8_wp1_artifacts,
+    validate_fl_e8_wp3_artifacts,
     validate_frozen_wave_scopes,
 )
 
@@ -754,12 +756,14 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         expected_counts: dict[str, int] | None = None,
         porting_rules: str | None = None,
         parity_register: str = "12. retained history\n",
+        phase: str = "fl-e8-implementation",
+        candidate_paths: set[str] | None = None,
     ) -> list[str]:
         paths = FL_E8_FILES if paths is None else paths
         statuses = statuses or {}
         errors: list[str] = []
         validate_fl_e8_policy(
-            phase="fl-e8-implementation",
+            phase=phase,
             waves=[
                 {
                     "id": "FL-E8",
@@ -792,7 +796,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 "explicit user-approved D-row.\n- **FLR-21 Next.** fixture\n"
             ),
             parity_register=parity_register,
-            candidate_paths=set(),
+            candidate_paths=candidate_paths or set(),
             errors=errors,
         )
         return errors
@@ -834,6 +838,16 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         self.assertIn(
             "FL-E8 fl-e8-implementation requires pending=7, got 6", errors
         )
+
+    def test_fl_e8_wp3_allows_raw_text_promotion_before_list_path(self) -> None:
+        statuses = {path: "faithful" for path in FL_E8_WP3_FILES}
+        errors = self.fl_e8_policy_errors(
+            phase="fl-e8-wp3-candidate",
+            statuses=statuses,
+            expected_counts={"faithful": 340, "divergent-by-decision": 1, "pending": 1},
+            candidate_paths=set(FL_E8_WP3_FILES),
+        )
+        self.assertEqual(errors, [])
 
     def test_fl_e8_allows_only_d3_layout_engine_divergence(self) -> None:
         self.assertEqual(self.fl_e8_policy_errors(), [])
@@ -891,6 +905,38 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "FL-E8 WP1 old static rejection predicate remains: static_text_modifier_is_unsupported",
             errors,
         )
+
+    def test_fl_e8_wp3_artifacts_pin_facade_engine_bitmap_and_probe(self) -> None:
+        files = {
+            "crates/nuxie/src/lib.rs": "mod raw_text; pub use raw_text::RawText;",
+            "crates/nuxie/src/raw_text.rs": "pub struct RawText; pub struct RawTextFont;",
+            "crates/nuxie-runtime/src/text/raw_text.rs": (
+                "pub struct RawText; runtime_classify_color_glyph"
+            ),
+            "crates/nuxie-runtime/src/text/text_engine.rs": (
+                "runtime_classify_color_glyph runtime_extract_color_glyph_layers"
+            ),
+            "crates/nuxie-runtime/src/text.rs": "RuntimeIntegratedColorGlyphCommand",
+            "crates/nuxie-runtime/src/draw.rs": "emoji_images draw_image",
+            "crates/nuxie/tests/raw_text_differential.rs": (
+                "D-RT-API D-RT-COLOR-188 D-RT-COLOR-474"
+            ),
+            "tools/cpp-probe/main.cpp": "--raw-text-probe",
+        }
+        for relative, source in files.items():
+            path = self.repo / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(source)
+        errors: list[str] = []
+        validate_fl_e8_wp3_artifacts(self.repo, errors)
+        self.assertEqual(errors, [])
+
+        (self.repo / "crates/nuxie-runtime/src/text/raw_text.rs").write_text(
+            "pub struct RawText; standalone_raw_text_is_unsupported"
+        )
+        errors = []
+        validate_fl_e8_wp3_artifacts(self.repo, errors)
+        self.assertIn("FL-E8 WP3 standalone RawText rejection predicate remains", errors)
 
     def test_untracked_trace_counter_mismatch_fails(self) -> None:
         trace = json.loads((self.repo / "docs/trace.json").read_text())

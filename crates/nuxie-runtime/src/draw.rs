@@ -3869,6 +3869,61 @@ impl ArtboardInstance {
         max_retained_decoded_image_bytes: Option<usize>,
         apply_origin_transform: bool,
     ) -> Result<()> {
+        self.draw_artboard_entry(
+            runtime,
+            graph,
+            artboards,
+            factory,
+            renderer,
+            external_images,
+            max_retained_decoded_image_bytes,
+            apply_origin_transform,
+            true,
+        )
+    }
+
+    /// Draw from Lua `ScriptedArtboard::draw`, which calls the pinned C++
+    /// `Artboard::drawInternal` entry and therefore does not advance the global
+    /// `Artboard::frameId`.
+    #[doc(hidden)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_script_artboard(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+        external_images: &BTreeMap<u32, Arc<[u8]>>,
+        max_retained_decoded_image_bytes: Option<usize>,
+        apply_origin_transform: bool,
+    ) -> Result<()> {
+        self.draw_artboard_entry(
+            runtime,
+            graph,
+            artboards,
+            factory,
+            renderer,
+            external_images,
+            max_retained_decoded_image_bytes,
+            apply_origin_transform,
+            false,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw_artboard_entry(
+        &self,
+        runtime: &RuntimeFile,
+        graph: &ArtboardGraph,
+        artboards: &[ArtboardGraph],
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+        external_images: &BTreeMap<u32, Arc<[u8]>>,
+        max_retained_decoded_image_bytes: Option<usize>,
+        apply_origin_transform: bool,
+        begin_draw_frame: bool,
+    ) -> Result<()> {
         self.set_frame_origin(apply_origin_transform);
         let needs_renderer_sync = {
             let resources = self.render_resources.borrow();
@@ -3893,7 +3948,9 @@ impl ArtboardInstance {
         }
         let mut resources = self.render_resources.borrow_mut();
 
-        self.begin_draw_frame();
+        if begin_draw_frame {
+            self.begin_draw_frame();
+        }
         let nested_ancestors = [graph.global_id];
         let RuntimeOccurrenceRenderResources {
             paints,

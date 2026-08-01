@@ -2585,7 +2585,7 @@ impl nuxie_runtime::ScriptArtboard for FileScriptArtboard {
                 ))
             })?;
         self.instance
-            .draw_artboard(
+            .draw_script_artboard(
                 &self.file.runtime,
                 graph,
                 &self.file.graph.artboards,
@@ -6251,6 +6251,21 @@ mod owned_instance_tests {
             owned_stream, borrowed_stream,
             "owned and borrowed instances must draw the identical stream"
         );
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn lua_scripted_artboard_draw_uses_the_internal_frame_boundary() {
+        let file = Arc::new(File::import(FIXTURE).expect("fixture imports"));
+        let mut artboard = FileScriptArtboard::new(file, 0, None).expect("script artboard");
+        let frame_id = artboard.instance.frame_id();
+        let mut factory = script_factory();
+        let mut renderer = factory.borrow().make_renderer();
+
+        nuxie_runtime::ScriptArtboard::draw(&mut artboard, &mut factory, &mut renderer)
+            .expect("script artboard draws");
+
+        assert_eq!(artboard.instance.frame_id(), frame_id);
     }
 
     #[test]

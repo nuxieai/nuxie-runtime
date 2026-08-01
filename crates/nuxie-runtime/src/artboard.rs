@@ -94,6 +94,16 @@ use crate::{
     RuntimeOwnedViewModelInstance,
 };
 
+// C++ `Artboard::sm_frameId` is global across artboards and advances at each
+// public `Artboard::draw` entry. Scripted paths use it to distinguish a second
+// rebuild in the current frame from a reusable rebuild in a later frame.
+static ARTBOARD_DRAW_FRAME_ID: AtomicU64 = AtomicU64::new(0);
+
+#[doc(hidden)]
+pub fn artboard_draw_frame_id() -> u64 {
+    ARTBOARD_DRAW_FRAME_ID.load(Ordering::Relaxed)
+}
+
 fn generated_mat2d(
     objects: &InstanceObjectArena,
     local_id: usize,
@@ -7012,6 +7022,7 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn begin_draw_frame(&self) {
+        ARTBOARD_DRAW_FRAME_ID.fetch_add(1, Ordering::Relaxed);
         self.frame_id.set(self.frame_id.get().wrapping_add(1));
     }
 

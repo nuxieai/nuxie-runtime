@@ -2553,7 +2553,7 @@ impl ScriptArtboard for RunnerScriptArtboard {
             )
             .map_err(|error| ScriptError::new(error.to_string()))?;
         instance
-            .draw_artboard(
+            .draw_script_artboard(
                 &self.runtime,
                 graph,
                 &self.artboards,

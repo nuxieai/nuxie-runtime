@@ -14865,8 +14865,16 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         &image_assets,
         scripting_file_assets,
     );
-    let images =
-        RuntimeImageAssetOwners::with_max_retained_decoded_bytes(max_retained_decoded_image_bytes);
+    let images = instance
+        .runtime_image_assets
+        .borrow()
+        .as_ref()
+        .map(Arc::clone)
+        .unwrap_or_else(|| {
+            Arc::new(RuntimeImageAssetOwners::with_max_retained_decoded_bytes(
+                max_retained_decoded_image_bytes,
+            ))
+        });
     let mut image_decode_error = None;
     for asset_global in image_assets
         .globals
@@ -14881,7 +14889,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
                 asset_global,
                 external_images,
                 factory,
-                &images,
+                images.as_ref(),
             )
             .err();
         }
@@ -14901,7 +14909,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
                 asset_global,
                 external_images,
                 factory,
-                &images,
+                images.as_ref(),
             )
             .err();
         }
@@ -14913,16 +14921,15 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         runtime,
         artboards,
         factory,
-        &images,
+        images.as_ref(),
         images.backend_context_id(),
     );
     if let Some(register_file_scripts) = file_registration {
         register_file_scripts(factory);
     }
     let mut cache = RuntimeArtboardResourceBundle::default();
-    let image_assets = Arc::new(images);
-    cache.image_assets = Arc::clone(&image_assets);
-    instance.attach_runtime_image_assets_tree(Arc::clone(&image_assets));
+    cache.image_assets = Arc::clone(&images);
+    instance.attach_runtime_image_assets_tree(Arc::clone(&images));
     cache.requires_nested_layout_prepass =
         runtime_artboard_set_contains_nested_layout(graph, artboards);
     cache.paint_preparation_is_noop = runtime_artboard_paint_preparation_is_noop(graph);
@@ -14934,7 +14941,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         graph,
         artboards,
         factory,
-        &image_assets,
+        &images,
         &mut BTreeSet::new(),
         include_script_input_artboards,
     );

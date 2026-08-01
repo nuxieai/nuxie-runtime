@@ -92,7 +92,11 @@ mod draw;
 mod draw_rules;
 mod draw_target;
 mod event;
+#[path = "assets/file_asset_loader.rs"]
+mod file_asset_loader;
 mod focus;
+#[path = "assets/font_asset.rs"]
+mod font_asset;
 mod foreground_layout_drawable;
 #[path = "data_bind/converters/formula/formula_token.rs"]
 mod formula_token;
@@ -181,10 +185,14 @@ pub use draw::{
     RuntimeShapePaintPathKind, RuntimeShapePaintState, preallocate_source_render_paints,
     runtime_path_commands_from_raw_path,
 };
+pub use file_asset_loader::{
+    RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetLoader, RuntimeFileAssetOwners,
+};
 pub use focus::{
     FocusBounds, FocusDirection, FocusEdgeBehavior, FocusEvent, FocusEventKind, FocusManager,
     FocusNode, FocusNodeId, FocusPoint,
 };
+pub use font_asset::RuntimeFontAssetOwners;
 pub use math::random::{
     RuntimeRandomTestValuesGuard, runtime_random_call_count, set_runtime_deterministic_mode,
     set_runtime_random_test_values,

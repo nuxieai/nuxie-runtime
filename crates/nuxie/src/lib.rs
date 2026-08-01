@@ -90,11 +90,11 @@ pub use nuxie_runtime::{
     ProjectDataConverterReverseResult, ProjectDataConverterRuntimeError, ProjectDataConverterSpec,
     ProjectDataConverterState, ProjectDataConverterStringPadSide,
     ProjectDataConverterStringTrimMode, ProjectDataConverterValidationRule, ProjectDataValue,
-    ProjectDataValuePath, RuntimeLayerState, RuntimeOwnedViewModelContext,
-    RuntimeStateMachineInput, ScriptCoreString, ScriptError, ScriptHost, ScriptInstance,
-    ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue, ScriptingVm,
-    StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
-    StateMachineReportedEvent,
+    ProjectDataValuePath, RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetLoader,
+    RuntimeLayerState, RuntimeOwnedViewModelContext, RuntimeStateMachineInput, ScriptCoreString,
+    ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure,
+    ScriptValue, ScriptingVm, StateMachineInputInstance, StateMachineInputKind,
+    StateMachineInstance, StateMachineReportedEvent,
 };
 use nuxie_runtime::{RuntimeFileStateMachineActionCatalog, RuntimeFileViewModelInstanceCatalog};
 
@@ -3006,6 +3006,7 @@ pub struct File {
     graph: Arc<GraphFile>,
     external_image_assets: BTreeMap<u32, Arc<[u8]>>,
     external_font_assets: ExternalFontAssetStore,
+    file_asset_owners: Arc<nuxie_runtime::RuntimeFileAssetOwners>,
     // The decoded-image admission policy chosen at import time. Unlike the
     // other `FileImportLimits` knobs this one applies at draw time, when the
     // artboard-tree render cache decodes retained images.
@@ -3344,6 +3345,7 @@ impl Clone for File {
             graph,
             external_image_assets: self.external_image_assets.clone(),
             external_font_assets: self.external_font_assets.clone(),
+            file_asset_owners: Arc::clone(&self.file_asset_owners),
             max_retained_decoded_image_bytes: self.max_retained_decoded_image_bytes,
             #[cfg(feature = "scripting")]
             scripts,
@@ -3369,6 +3371,7 @@ impl File {
             graph: Arc::clone(&self.graph),
             external_image_assets: self.external_image_assets.clone(),
             external_font_assets: self.external_font_assets.clone(),
+            file_asset_owners: Arc::clone(&self.file_asset_owners),
             max_retained_decoded_image_bytes: self.max_retained_decoded_image_bytes,
             scripts: Rc::clone(&self.scripts),
         })
@@ -3394,7 +3397,40 @@ impl File {
             ScriptExecutionAuthorization::VisualOnly,
             inert_script_policy(),
             limits,
+            true,
         )
+    }
+
+    /// Import a file through the C++-equivalent FileAssetLoader seam.
+    ///
+    /// The callback runs once for each supported imported ImageAsset and
+    /// FontAsset. Returning `true` claims loading responsibility; returning
+    /// `false` decodes any in-band payload as the fallback. A loader may clone
+    /// the supplied [`RuntimeFileAsset`] and complete decoding later.
+    pub fn import_with_asset_loader(
+        bytes: &[u8],
+        factory: &mut dyn Factory,
+        loader: &mut dyn RuntimeFileAssetLoader,
+    ) -> Result<Self> {
+        let limits = FileImportLimits::new();
+        limits.validate_input(bytes)?;
+        let runtime = read_runtime_file_for_facade_with_limits(bytes, limits)
+            .context("failed to import Rive file")?;
+        let owners = Arc::new(nuxie_runtime::RuntimeFileAssetOwners::import_with_loader(
+            &runtime,
+            limits.max_retained_decoded_image_bytes(),
+            factory,
+            loader,
+        ));
+        let mut file = Self::from_runtime_with_script_policy_and_limits(
+            runtime,
+            ScriptExecutionAuthorization::VisualOnly,
+            inert_script_policy(),
+            limits,
+            false,
+        )?;
+        file.file_asset_owners = owners;
+        Ok(file)
     }
 
     /// Import host-authenticated `.riv` bytes with explicit, non-zero Luau
@@ -3430,6 +3466,7 @@ impl File {
             ScriptExecutionAuthorization::Authenticated,
             Some(execution_limits),
             import_limits,
+            true,
         )
     }
 
@@ -3455,6 +3492,7 @@ impl File {
             authorization,
             trusted_script_policy(authorization == ScriptExecutionAuthorization::Authenticated),
             import_limits,
+            true,
         )
     }
 
@@ -3488,6 +3526,7 @@ impl File {
             authorization,
             trusted_script_policy(authorization == ScriptExecutionAuthorization::Authenticated),
             FileImportLimits::new(),
+            true,
         )
     }
 
@@ -3496,6 +3535,7 @@ impl File {
         authorization: ScriptExecutionAuthorization,
         execution_limits: FileScriptPolicy,
         limits: FileImportLimits,
+        validate_embedded_fonts: bool,
     ) -> Result<Self> {
         #[cfg(not(feature = "scripting"))]
         let _ = (authorization, execution_limits);
@@ -3542,13 +3582,19 @@ impl File {
                 bail!("Rive FileAssets contain more than {maximum} aggregate content bytes");
             }
         }
-        anyhow::ensure!(
-            embedded_fonts_are_parseable(&runtime),
-            "embedded FontAsset bytes are not a valid font"
-        );
+        if validate_embedded_fonts {
+            anyhow::ensure!(
+                embedded_fonts_are_parseable(&runtime),
+                "embedded FontAsset bytes are not a valid font"
+            );
+        }
         let graph = GraphFile::from_runtime_file(&runtime).context("failed to build Rive graph")?;
         let file_view_model_instances = RuntimeFileViewModelInstanceCatalog::new(&runtime);
         let state_machine_actions = RuntimeFileStateMachineActionCatalog::new(&runtime);
+        let file_asset_owners = Arc::new(nuxie_runtime::RuntimeFileAssetOwners::from_runtime(
+            &runtime,
+            limits.max_retained_decoded_image_bytes(),
+        ));
         Ok(Self {
             #[cfg(feature = "scripting")]
             scripts: Rc::new(RefCell::new(FileScriptRuntime::import(
@@ -3562,6 +3608,7 @@ impl File {
             graph: Arc::new(graph),
             external_image_assets: BTreeMap::new(),
             external_font_assets: ExternalFontAssetStore::default(),
+            file_asset_owners,
             max_retained_decoded_image_bytes: limits.max_retained_decoded_image_bytes(),
         })
     }
@@ -3592,10 +3639,9 @@ impl File {
     /// Attach validated bytes to an external `FontAsset` identity.
     ///
     /// This performs no I/O. `asset_id` is the serialized
-    /// `FileAsset.assetId`, not an asset-list ordinal. Call this before sharing
-    /// the file through [`Arc`]; every subsequently instantiated root and
-    /// child artboard receives the same immutable snapshot. Embedded file
-    /// contents remain authoritative during text layout.
+    /// `FileAsset.assetId`, not an asset-list ordinal. The decoded font replaces
+    /// that asset's current owner; existing live `TextStyle` referencers are
+    /// dirtied for reshaping and future instances receive the replacement.
     pub fn attach_external_font_asset_bytes(
         &mut self,
         asset_id: u32,
@@ -3615,7 +3661,26 @@ impl File {
             return Err(ExternalAssetError::InvalidFont { asset_id });
         }
         let bytes = Arc::<[u8]>::from(bytes);
-        Ok(self.external_font_assets.insert_if_changed(asset_id, bytes))
+        let changed = self
+            .external_font_assets
+            .insert_if_changed(asset_id, Arc::clone(&bytes));
+        if changed
+            && let Some(asset_global) = self
+                .runtime
+                .file_assets()
+                .into_iter()
+                .find(|asset| {
+                    asset.type_name == "FontAsset"
+                        && asset.uint_property("assetId") == Some(u64::from(asset_id))
+                })
+                .map(|asset| asset.id)
+        {
+            let _ = self
+                .file_asset_owners
+                .font_assets()
+                .decode(asset_global, &bytes);
+        }
+        Ok(changed)
     }
 
     fn validate_external_asset_kind(
@@ -3803,7 +3868,7 @@ impl<'a> Artboard<'a> {
 
     pub fn instantiate(self) -> Result<ArtboardInstance<'a>> {
         let external_font_assets = self.file.external_font_assets.snapshot();
-        let raw =
+        let mut raw =
             RuntimeArtboardInstance::from_graph_with_artboards_external_fonts_and_file_catalogs(
                 &self.file.runtime,
                 self.graph(),
@@ -3818,6 +3883,7 @@ impl<'a> Artboard<'a> {
                     self.name().unwrap_or("<unnamed>")
                 )
             })?;
+        raw.attach_runtime_file_asset_owners(&self.file.file_asset_owners);
         Ok(ArtboardInstance {
             file: self.file,
             #[cfg(feature = "scripting")]
@@ -4375,7 +4441,7 @@ impl OwnedArtboardInstance {
     /// Instantiate `artboard_index` of `file` as an owning instance.
     pub fn instantiate(file: Arc<File>, artboard_index: usize) -> Result<Self> {
         let external_font_assets = file.external_font_assets.snapshot();
-        let raw = {
+        let mut raw = {
             let artboard = file
                 .artboard(artboard_index)
                 .with_context(|| format!("artboard index {artboard_index} out of range"))?;
@@ -4394,6 +4460,7 @@ impl OwnedArtboardInstance {
                 )
             })?
         };
+        raw.attach_runtime_file_asset_owners(&file.file_asset_owners);
         Ok(Self {
             raw,
             file,
@@ -4461,9 +4528,6 @@ impl OwnedArtboardInstance {
                     ExternalFontAssetError::InvalidFont { asset_id }
                 }
             })?;
-        let external_font_assets = self.file.external_font_assets.snapshot();
-        self.raw
-            .replace_external_font_asset_snapshot(&external_font_assets);
         Ok(())
     }
 
@@ -5551,6 +5615,187 @@ mod owned_instance_tests {
             .and_then(|asset| asset.uint_property("assetId"))
             .unwrap_or_else(|| panic!("fixture has no semantic {kind} id"));
         u32::try_from(value).expect("semantic asset id fits u32")
+    }
+
+    #[test]
+    fn general_loader_claims_in_band_image_and_suppresses_fallback() {
+        let mut attempted = None;
+        let mut loader = |asset: &RuntimeFileAsset, in_band: &[u8], _factory: &mut dyn Factory| {
+            attempted = Some((
+                asset.kind(),
+                asset.descriptor().file_asset_unique_filename(),
+                in_band.len(),
+            ));
+            true
+        };
+        let mut factory = RecordingFactory::new();
+        let file = File::import_with_asset_loader(
+            &external_fixture("in_band_asset.riv"),
+            &mut factory,
+            &mut loader,
+        )
+        .expect("claimed in-band image imports");
+        let image_global = file.runtime().file_assets()[0].id;
+
+        assert_eq!(
+            attempted,
+            Some((
+                RuntimeFileAssetKind::Image,
+                Some("1x1-45022.png".to_owned()),
+                308,
+            ))
+        );
+        assert!(
+            file.file_asset_owners
+                .image_assets()
+                .get(image_global)
+                .is_none(),
+            "a claiming loader suppresses in-band image decode"
+        );
+    }
+
+    #[test]
+    fn general_loader_rejection_decodes_in_band_image_fallback() {
+        let mut loader =
+            |_asset: &RuntimeFileAsset, _in_band: &[u8], _factory: &mut dyn Factory| false;
+        let mut factory = RecordingFactory::new();
+        let file = File::import_with_asset_loader(
+            &external_fixture("in_band_asset.riv"),
+            &mut factory,
+            &mut loader,
+        )
+        .expect("rejected loader uses image fallback");
+        let image_global = file.runtime().file_assets()[0].id;
+        assert!(
+            file.file_asset_owners
+                .image_assets()
+                .get(image_global)
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn hosted_image_cdn_descriptor_matches_pinned_cpp() {
+        let file =
+            File::import(&external_fixture("hosted_image_file.riv")).expect("hosted image imports");
+        let asset = file.runtime().file_assets()[0];
+        assert_eq!(asset.type_name, "ImageAsset");
+        assert_eq!(
+            asset.file_asset_cdn_uuid_string().as_deref(),
+            Some("edcb1816-8405-4983-acd2-16db48d85df4")
+        );
+        assert_eq!(
+            asset.string_property("cdnBaseUrl"),
+            Some("https://public.uat.rive.app/cdn/uuid")
+        );
+        assert_eq!(
+            asset.file_asset_unique_filename().as_deref(),
+            Some("one-45008.png")
+        );
+    }
+
+    #[test]
+    fn hosted_font_cdn_descriptor_matches_pinned_cpp() {
+        let file =
+            File::import(&external_fixture("hosted_font_file.riv")).expect("hosted font imports");
+        let asset = file.runtime().file_assets()[0];
+        assert_eq!(asset.type_name, "FontAsset");
+        assert_eq!(asset.bytes_property("cdnUuid").map(<[u8]>::len), Some(16));
+        assert_eq!(
+            asset.string_property("cdnBaseUrl"),
+            Some("https://public.uat.rive.app/cdn/uuid")
+        );
+        assert_eq!(
+            asset.file_asset_unique_filename().as_deref(),
+            Some("Inter-43276.ttf")
+        );
+    }
+
+    #[test]
+    fn data_bind_font_fixture_applies_a_live_font_on_advance_and_draw() {
+        let file = File::import(&external_fixture("data_bind_font_test.riv"))
+            .expect("data-bind font fixture imports");
+        let mut instance = file
+            .default_artboard()
+            .expect("default artboard")
+            .instantiate()
+            .expect("artboard instantiates");
+        let mut view_model = instance
+            .instantiate_default_view_model_instance()
+            .expect("default view model");
+        let kablammo = Arc::<[u8]>::from(external_fixture("kablammo.ttf"));
+        assert!(
+            view_model
+                .raw_mut()
+                .set_live_font_bytes_by_property_name("fontProperty", Some(kablammo))
+        );
+        let mut machine = instance
+            .state_machine_instance(0)
+            .expect("fixture state machine");
+        let _ = instance.advance_with_state_machines_and_view_model(
+            std::slice::from_mut(&mut machine),
+            0.0,
+            &mut view_model,
+        );
+        let mut factory = RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        instance
+            .draw(&mut factory, &mut renderer)
+            .expect("live font shapes and draws");
+    }
+
+    #[test]
+    fn font_data_bind_stores_replaces_and_clears_its_private_font() {
+        let file = File::import(&external_fixture("data_bind_font_test.riv"))
+            .expect("data-bind font fixture imports");
+        let instance = file
+            .default_artboard()
+            .expect("default artboard")
+            .instantiate()
+            .expect("artboard instantiates");
+        let view_model = instance
+            .instantiate_default_view_model_instance()
+            .expect("default view model");
+
+        let kablammo = Arc::<[u8]>::from(external_fixture("kablammo.ttf"));
+        assert!(
+            view_model
+                .raw_mut()
+                .set_live_font_bytes_by_property_name("fontProperty", Some(Arc::clone(&kablammo)),)
+        );
+        assert_eq!(
+            view_model
+                .raw()
+                .font_asset_value_by_property_name("fontProperty")
+                .and_then(|value| value.live_font_bytes().map(<[u8]>::to_vec)),
+            Some(kablammo.to_vec())
+        );
+
+        let nabla = Arc::<[u8]>::from(external_fixture("nabla.ttf"));
+        assert!(
+            view_model
+                .raw_mut()
+                .set_live_font_bytes_by_property_name("fontProperty", Some(Arc::clone(&nabla)),)
+        );
+        assert_eq!(
+            view_model
+                .raw()
+                .font_asset_value_by_property_name("fontProperty")
+                .and_then(|value| value.live_font_bytes().map(<[u8]>::to_vec)),
+            Some(nabla.to_vec())
+        );
+
+        assert!(
+            view_model
+                .raw_mut()
+                .set_live_font_bytes_by_property_name("fontProperty", None)
+        );
+        assert!(
+            view_model
+                .raw()
+                .font_asset_value_by_property_name("fontProperty")
+                .is_some_and(|value| value.live_font_bytes().is_none())
+        );
     }
 
     fn stream_of(draw: impl FnOnce(&mut ScriptFactory) -> Result<()>) -> String {

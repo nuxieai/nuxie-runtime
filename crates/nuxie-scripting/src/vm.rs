@@ -11,6 +11,7 @@
 //! exposed because luaur ships the Luau *compiler* too, which the C++
 //! runtime does not embed — useful for tests and future editor-style flows.
 
+mod buffer_ext;
 mod bytecode;
 mod command_server;
 mod host_commands;
@@ -1091,6 +1092,7 @@ impl ScriptVm {
         install_mat4_global(&self.lua)?;
         install_math_fround(&self.lua)?;
         install_data_value_global(&self.lua)?;
+        buffer_ext::install_buffer_extensions(&self.lua)?;
 
         let late = self
             .lua

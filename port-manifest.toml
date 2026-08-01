@@ -1658,20 +1658,20 @@ note = "Consolidated Rust port for lua."
 [[file]]
 upstream = "src/lua/math/lua_mat4.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "Consolidated Rust port for lua."
+rust_module = "crates/nuxie-scripting/src/vm/lua_mat4.rs"
+note = "P1-e direct filename owner; the unchanged Mat4 binding is anchored by the mat4_bindings suite."
 
 [[file]]
 upstream = "src/lua/math/lua_math.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "Consolidated Rust port for lua."
+rust_module = "crates/nuxie-scripting/src/vm/lua_math.rs"
+note = "P1-e direct C5 owner for the previously vm.rs-owned Vector/Mat4 registration and existing luaur math.fround compatibility hook; C4 retains its unchanged Mat2D/Color registration."
 
 [[file]]
 upstream = "src/lua/math/lua_vec2d.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "Consolidated Rust port for lua."
+rust_module = "crates/nuxie-scripting/src/vm/lua_vec2d.rs"
+note = "P1-e direct filename owner; the unchanged Vector binding is anchored by the vm_boot rive_vector_* tests."
 
 [[file]]
 upstream = "src/lua/renderer/lua_blob.cpp"

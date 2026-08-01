@@ -108,12 +108,25 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     ),
 }
 EXACT = (
+    "hittest_ab_text_parent",
+    "lock_icon_demo",
+    "text_listener_simpler",
+    "collapse_data_binds-test_3",
+    "databind_solo_to_enum",
+    "listener_view_model",
+    "viewmodel_image_reset",
+    "zero_width_space_line_break",
     "advance_blend_mode-inputs",
     "advance_blend_mode-vms",
     "animated_clipping-layout",
     "artboard_list_map_rules",
     "artboard_width_test",
+    "bidirectional_precedence-source_first",
+    "component_based_conditions",
+    "component_based_conditions-Artboard2",
     "component_list_follow_path_distance",
+    "component_list_follow_path",
+    "data_bind_font_test",
     "component_stateful",
     "computed_root_transform-nested_artboard",
     "custom_property_enum",
@@ -329,29 +342,609 @@ def fl_d4_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
     return None
 
 
+def repeated_frames(count: int, seconds: float) -> list[dict[str, object]]:
+    return [
+        item
+        for _ in range(count)
+        for item in (
+            action("frame"),
+            action("advance", target="state-machine", seconds=seconds),
+            action("draw"),
+        )
+    ]
+
+
+def p1q_view_model_actions(
+    silver_id: str,
+) -> tuple[dict[str, object], ...] | None:
+    """Literal action ports for P1-q view-model mutation producers."""
+
+    bind = action("bind-default-view-model")
+    advance = lambda seconds: action(
+        "advance", target="state-machine", seconds=seconds
+    )
+    draw = action("draw")
+
+    if silver_id == "component_stateful_vm_instance":
+        actions = [bind, advance(0.1), draw]
+        actions.append(action("set-view-model-number", property="h", value=200.0))
+        actions += repeated_frames(30, 0.016)
+        actions.append(action("set-view-model-number", property="h", value=50.0))
+        actions += repeated_frames(30, 0.016)
+        return tuple(actions)
+
+    if silver_id == "component_stateful_vm_instance_2":
+        actions = [bind, advance(0.1), draw]
+        actions += repeated_frames(30, 0.016)
+        actions.append(
+            action("set-view-model-string", property="label", value="Override")
+        )
+        actions += repeated_frames(30, 0.016)
+        return tuple(actions)
+
+    if silver_id == "stateful_multi_property":
+        actions = [bind, advance(0.1), draw]
+        mutations = (
+            ("set-view-model-number", "btn1Count", 180.0),
+            ("set-view-model-color", "btn1Tint", 0xFFFF3344),
+            ("set-view-model-string", "btn1Label", "One"),
+            ("set-view-model-boolean", "btn1Clip", True),
+            ("set-view-model-enum", "btn1Display", 1),
+            ("set-view-model-number", "btn2Count", 60.0),
+            ("set-view-model-color", "btn2Tint", 0xFF33AAFF),
+            ("set-view-model-string", "btn2Label", "Two"),
+            ("set-view-model-boolean", "btn2Clip", True),
+            ("set-view-model-enum", "btn2Display", 1),
+        )
+        for kind, property_name, value in mutations:
+            actions.append(action(kind, property=property_name, value=value))
+            actions += repeated_frames(5, 0.016)
+        return tuple(actions)
+
+    if silver_id == "stateful_nested":
+        actions = [bind, advance(0.1), draw]
+        for kind, property_name, value in (
+            ("set-view-model-string", "btn1Label", "One"),
+            ("set-view-model-color", "btn1Tint", 0xFFFF3344),
+            ("set-view-model-string", "btn2Label", "Two"),
+            ("set-view-model-color", "btn2Tint", 0xFF33AAFF),
+        ):
+            actions.append(action(kind, property=property_name, value=value))
+            actions += repeated_frames(5, 0.016)
+        return tuple(actions)
+
+    if silver_id in {
+        "component_based_conditions",
+        "component_based_conditions-Artboard2",
+    }:
+        actions = [action("bind-fresh-view-model"), advance(0.1), draw, action("frame")]
+        if silver_id == "component_based_conditions":
+            actions.append(
+                action(
+                    "set-view-model-number",
+                    property="numberProperty",
+                    value=1.5,
+                )
+            )
+        else:
+            actions.append(
+                action("set-view-model-boolean", property="vmBool", value=True)
+            )
+        actions += [advance(0.016), draw]
+        actions += repeated_frames(25, 0.1)
+        return tuple(actions)
+
+    if silver_id == "collapsable_data_binding":
+        return (
+            bind,
+            advance(0.1),
+            draw,
+            action("frame"),
+            action("set-view-model-color", property="col", value=0xFFFF0000),
+            advance(0.1),
+            draw,
+            action("frame"),
+            action("set-view-model-number", property="soloIndex", value=1.0),
+            advance(0.1),
+            draw,
+            action("frame"),
+            action("set-view-model-color", property="col", value=0xFF00FF00),
+            action("set-view-model-number", property="soloIndex", value=0.0),
+            advance(0.1),
+            draw,
+            action("frame"),
+            action("set-view-model-number", property="soloIndex", value=1.0),
+            advance(0.1),
+            draw,
+        )
+
+    if silver_id == "data_bind_keyframes_test":
+        actions = [bind, advance(0.016), draw]
+        actions += repeated_frames(5, 0.2)
+        actions += [
+            action(
+                "set-view-model-string",
+                property="keyfTextStart",
+                value="updated--text",
+            ),
+            action("set-view-model-color", property="colorStart", value=0xFFFFFF00),
+            action("set-view-model-number", property="startX", value=100.0),
+        ]
+        actions += repeated_frames(5, 0.2)
+        return tuple(actions)
+
+    if silver_id in {
+        "bidirectional_precedence-source_first",
+        "bidirectional_precedence-target_first",
+    }:
+        return (
+            action("create-default-view-model"),
+            action("set-view-model-number", property="x", value=100.0),
+            action("set-view-model-number", property="y", value=100.0),
+            action("bind-prepared-view-model"),
+            advance(0.0),
+            advance(0.016),
+            draw,
+        )
+
+    if silver_id == "component_list_follow_path":
+        actions = [bind, advance(0.1), draw]
+        actions += repeated_frames(30, 0.016)
+        actions.append(
+            action("set-view-model-number", property="ItemCount", value=5.0)
+        )
+        actions += repeated_frames(30, 0.016)
+        return tuple(actions)
+
+    if silver_id == "ai_assitant":
+        actions = [bind, advance(0.1), draw]
+        for index in range(3):
+            actions += [
+                action("frame"),
+                action("set-view-model-number", property="left", value=index * 10.0),
+                action("set-view-model-number", property="bottom", value=index * 5.0),
+                action("set-view-model-number", property="top", value=index * 3.0),
+                action("set-view-model-number", property="right", value=index * 2.0),
+                advance(0.1),
+                draw,
+            ]
+        return tuple(actions)
+
+    if silver_id == "collapse_data_binds-test_3":
+        return (
+            advance(0.0),
+            bind,
+            advance(0.016),
+            draw,
+            action("frame"),
+            action("set-view-model-enum", property="display_2", value=1),
+            advance(0.016),
+            draw,
+            action("frame"),
+            action("set-view-model-enum", property="display_1", value=1),
+            advance(0.016),
+            draw,
+            action("frame"),
+            action("set-view-model-enum", property="display_2", value=0),
+            advance(0.016),
+            draw,
+            action("frame"),
+            action("set-view-model-enum", property="display_1", value=0),
+            advance(0.016),
+            draw,
+        )
+
+    if silver_id == "databind_solo_to_enum":
+        return (
+            bind,
+            advance(0.0),
+            draw,
+            action("frame"),
+            action("pointer-down", x=425.0, y=70.0, pointer_id=0),
+            action("pointer-up", x=425.0, y=70.0, pointer_id=0),
+            advance(0.016),
+            draw,
+        )
+
+    if silver_id == "fit_font_size_test":
+        actions = [bind, advance(0.1), draw]
+        for _ in range(6):
+            actions += [
+                action("frame"),
+                action("fire-view-model-trigger", property="trigger"),
+                advance(0.1),
+                draw,
+            ]
+        return tuple(actions)
+
+    if silver_id == "layout_fixed_fill":
+        actions = [bind, advance(0.0), draw]
+        actions.append(
+            action("set-view-model-boolean", property="booleanProperty", value=True)
+        )
+        actions += repeated_frames(15, 0.016)
+        return tuple(actions)
+
+    if silver_id == "listener_view_model":
+        return (
+            bind,
+            advance(0.0),
+            draw,
+            action("frame"),
+            action("set-view-model-color", property="col", value=0x64000A0F),
+            advance(0.016),
+            draw,
+            action("frame"),
+            action("fire-view-model-trigger", property="tri"),
+            advance(0.016),
+            draw,
+            action("frame"),
+            action("set-view-model-number", property="num1", value=55.0),
+            advance(0.016),
+            draw,
+        )
+
+    if silver_id == "nested_artboard_quantize_and_speed":
+        actions = [bind, advance(0.1), draw]
+        actions += repeated_frames(62, 0.016)
+        actions += [
+            action("set-view-model-number", property="speed", value=4.0),
+            action("set-view-model-number", property="quant", value=7.0),
+            advance(0.016),
+        ]
+        actions += repeated_frames(62, 0.016)
+        return tuple(actions)
+
+    if silver_id == "viewmodel_image_reset":
+        return (
+            bind,
+            advance(0.1),
+            draw,
+            action("set-view-model-asset", property="img", value=-1),
+            action("frame"),
+            advance(0.1),
+            advance(0.1),
+            draw,
+        )
+
+    if silver_id == "data_bind_font_test":
+        return (
+            bind,
+            advance(0.0),
+            draw,
+            action("frame"),
+            advance(0.016),
+            draw,
+            action("frame"),
+            action(
+                "set-view-model-font-bytes",
+                property="fontProperty",
+                source="kablammo.ttf",
+            ),
+            advance(0.016),
+            draw,
+            action("frame"),
+            action("pointer-down", x=490.0, y=490.0, pointer_id=0),
+            action("pointer-up", x=490.0, y=490.0, pointer_id=0),
+            advance(0.016),
+            draw,
+            action("frame"),
+            action("pointer-down", x=490.0, y=20.0, pointer_id=0),
+            action("pointer-up", x=490.0, y=20.0, pointer_id=0),
+            advance(0.016),
+            draw,
+        )
+
+    if silver_id == "car_widgets_v01":
+        actions = [
+            bind,
+            advance(0.1),
+            draw,
+            action(
+                "set-view-model-number",
+                property="COMPASS/Rotation",
+                value=20.0,
+            ),
+            action(
+                "set-view-model-number",
+                property="TIRE PSI/FL Tyre",
+                value=10.0,
+            ),
+        ]
+        actions += repeated_frames(62, 0.016)
+        return tuple(actions)
+
+    if silver_id == "rewards_demo":
+        actions = [
+            bind,
+            advance(0.1),
+            draw,
+            action("fire-view-model-trigger", property="Button/Pressed"),
+        ]
+        actions += repeated_frames(20, 0.1)
+        return tuple(actions)
+
+    if silver_id == "group_effect":
+        actions = [
+            bind,
+            advance(0.0),
+            draw,
+            action("frame"),
+            action("set-view-model-number", property="dashValue", value=10.0),
+            action("advance", target="artboard", seconds=0.0),
+            advance(0.0),
+            draw,
+        ]
+        actions += repeated_frames(15, 0.064)
+        return tuple(actions)
+
+    if silver_id == "word_joiner_test":
+        def insert_joiners(text: str, positions: range, copies: int = 1) -> str:
+            for position in positions:
+                text = text[:position] + "\u2060" * copies + text[position:]
+            return text
+
+        def set_all_text(text: str) -> list[dict[str, object]]:
+            return [
+                action("set-view-model-string", property=property_name, value=text)
+                for property_name in ("txt1", "txt2", "txt3", "txt4")
+            ]
+
+        text = "123456789012345678901234567890"
+        values = [text]
+        text = insert_joiners(text, range(29, 20, -1))
+        values.append(text)
+        text = insert_joiners(text, range(20, 10, -1))
+        values.append(text)
+
+        long_lines = "1234567890" * 6 + "|\n" + "1234567890" * 6 + "\n"
+        values.append(long_lines)
+        values.append(insert_joiners(long_lines, range(50, 20, -1)))
+        values.append(long_lines)
+        values.append(insert_joiners(long_lines, range(50, 20, -1), copies=3))
+
+        spaced_lines = (
+            "1234567890 " * 5
+            + "1234567890|\n"
+            + "1234567890 " * 5
+            + "1234567890\n"
+        )
+        values.append(spaced_lines)
+        values.append(insert_joiners(spaced_lines, range(50, 20, -1), copies=3))
+
+        actions = [bind, advance(0.1), draw]
+        for value in values:
+            actions.append(action("frame"))
+            actions += set_all_text(value)
+            actions += [advance(0.1), draw]
+        return tuple(actions)
+
+    if silver_id == "zero_width_space_line_break":
+        return (
+            bind,
+            advance(0.1),
+            draw,
+            action("frame"),
+            action(
+                "set-view-model-string",
+                property="txt",
+                value="12345678901234567890",
+            ),
+            advance(0.1),
+            draw,
+            action("frame"),
+            action(
+                "set-view-model-string",
+                property="txt",
+                # C++ narrows 8203 to a single char before insertion.
+                value="1234567890\u000b1234567890",
+            ),
+            advance(0.1),
+            draw,
+        )
+
+    return None
+
+
+def p1q_pointer_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
+    """Expand pointer variables and loops from pinned C++ producers."""
+
+    bind = action("bind-default-view-model")
+    draw = action("draw")
+    frame = action("frame")
+    advance = lambda seconds: action(
+        "advance", target="state-machine", seconds=seconds
+    )
+    pointer = lambda kind, x, y, pointer_id=0: action(
+        kind,
+        x=x,
+        y=y,
+        **(
+            {"seconds": 0.0, "pointer_id": pointer_id}
+            if kind == "pointer-move"
+            else {"pointer_id": pointer_id}
+        ),
+    )
+
+    if silver_id == "drag_event":
+        actions = [
+            bind,
+            advance(0.1),
+            draw,
+            frame,
+            pointer("pointer-down", 250.0, 250.0),
+            pointer("pointer-up", 250.0, 250.0),
+            advance(0.1),
+            draw,
+            frame,
+            pointer("pointer-down", 250.0, 250.0),
+            advance(0.1),
+            draw,
+        ]
+        for coordinate in range(250, 50, -10):
+            actions += [
+                frame,
+                pointer("pointer-move", float(coordinate), float(coordinate)),
+                advance(0.1),
+                draw,
+            ]
+        actions += [
+            pointer("pointer-up", 50.0, 50.0),
+            frame,
+            pointer("pointer-down", 50.0, 50.0),
+            advance(0.1),
+            pointer("pointer-up", 50.0, 50.0),
+            advance(0.1),
+            draw,
+        ]
+        return tuple(actions)
+
+    if silver_id == "pointer_exit":
+        actions = [bind, advance(0.1), draw]
+        for x, y in (
+            [(float(value), 250.0) for value in range(100, 401, 30)]
+            + [(float(value), 250.0) for value in range(500, 100, -30)]
+            + [(240.0, float(value)) for value in range(500, 100, -30)]
+        ):
+            actions += [frame, pointer("pointer-move", x, y), advance(0.016), draw]
+        return tuple(actions)
+
+    if silver_id in {"hittest_ab_text_parent", "hittest_ab_shape_parent"}:
+        actions = [bind, advance(0.1), draw]
+        positions = (
+            (
+                [(float(value), 320.0) for value in range(400, 550, 10)]
+                + [(500.0, float(value)) for value in range(200, 450, 10)]
+            )
+            if silver_id == "hittest_ab_text_parent"
+            else (
+                [(310.0, float(value)) for value in range(0, 550, 20)]
+                + [(float(value), 420.0) for value in range(220, 530, 20)]
+            )
+        )
+        for x, y in positions:
+            actions += [frame, pointer("pointer-move", x, y), advance(0.016), draw]
+        return tuple(actions)
+
+    if silver_id == "virtualized_artboard_databound_children":
+        actions = [
+            bind,
+            advance(0.1),
+            draw,
+            pointer("pointer-move", 60.0, 200.0),
+            advance(0.016),
+            draw,
+            frame,
+            pointer("pointer-down", 60.0, 200.0),
+            advance(0.016),
+            draw,
+        ]
+        for y in range(200, -500, -20):
+            actions += [
+                frame,
+                pointer("pointer-move", 60.0, float(y)),
+                advance(0.016),
+                draw,
+            ]
+        actions += [
+            frame,
+            pointer("pointer-up", 60.0, -500.0),
+            advance(0.016),
+            draw,
+        ]
+        return tuple(actions)
+
+    if silver_id == "multitouch_enter-MultiScroll":
+        actions = [
+            advance(0.1),
+            draw,
+            frame,
+            advance(0.016),
+            draw,
+            pointer("pointer-down", 50.0, 400.0, 7),
+            pointer("pointer-down", 350.0, 400.0, 8),
+        ]
+        for y in range(380, -1, -20):
+            actions += [
+                frame,
+                pointer("pointer-move", 50.0, float(y), 7),
+                pointer("pointer-move", 350.0, float(y), 8),
+                advance(0.016),
+                draw,
+            ]
+        actions += [
+            pointer("pointer-up", 50.0, 0.0, 7),
+            pointer("pointer-up", 350.0, 0.0, 8),
+        ]
+        return tuple(actions)
+
+    if silver_id in {
+        "scroll_threshold-vertical-scroll",
+        "scroll_threshold-horizontal-scroll",
+        "scroll_threshold-all-scroll",
+    }:
+        def coordinates(position: float) -> tuple[float | str, float | str]:
+            if silver_id == "scroll_threshold-vertical-scroll":
+                return "artboard-width/2", position
+            if silver_id == "scroll_threshold-horizontal-scroll":
+                return position, "artboard-height/2"
+            return position, position
+
+        actions = [bind, advance(0.1), draw, frame]
+        thresholds = (
+            (40.0, 10.0)
+            if silver_id != "scroll_threshold-all-scroll"
+            else (50.0, 32.0)
+        )
+        for threshold in thresholds:
+            x, y = coordinates(70.0)
+            actions += [pointer("pointer-down", x, y), advance(0.1), draw]
+            position = 70.0
+            while position > threshold:
+                x, y = coordinates(position)
+                actions += [frame, pointer("pointer-move", x, y), advance(0.1), draw]
+                position -= 8.0
+            x, y = coordinates(position)
+            actions += [frame, pointer("pointer-up", x, y), advance(0.1), draw]
+        return tuple(actions)
+
+    return None
+
+
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
 animated_clipping-nodes|frame 10, op 328 (drawPath): expected drawPath, got makeRenderPath
+ai_assitant|frame 0, op 82 (makeLinearGradient): expected makeLinearGradient, got feather
 artboard_list_overrides_horizontal|frame 1, op 303 (rewind): expected rewind, got drawPath
 artboard_list_overrides_vertical|frame 1, op 303 (rewind): expected rewind, got drawPath
 bankcard|frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint
+bidirectional_precedence-target_first|frame 0, op 24 (transform), field tx: expected 252.5, got 100
+car_widgets_v01|frame 0, op 222 (blendMode): expected blendMode, got makeRenderPaint
 clear_viewmodel_list|frame 0, op 10 (makeRenderPaint): expected makeRenderPaint, got save
 clipping_and_draw_order|frame 2, op 161 (transform), field tx: expected 0, got 1121
+collapsable_data_binding|frame 0, op 14 (save): expected save, got color
 collapse_data_binds-test_1|frame 10, op 760 (rewind): expected rewind, got drawPath
 collapse_data_binds-test_2|frame 15, op 315 (addRawPath): expected 151 fields, got 256
 collapsing_elements|frame 2, op 943 (rewind): expected rewind, got drawPath
 component_list_child_origin|frame 0, op 315 (transform), field xy: expected -0.0 (0x80000000), got 0
+component_stateful_vm_instance|frame 2, op 109 (addRawPath), field point: expected (0, -100), got (0, -50)
+component_stateful_vm_instance_2|frame 2, op 96 (transform), field xx: expected 0.97985506, got 0.994951
 computed_root_transform-list|frame 1, op 255 (rewind): expected rewind, got drawPath
 computed_values_test|frame 0, op 54 (addRawPath), field point: expected (256.2, -0.0 (0x80000000)), got (245, -0.0 (0x80000000))
 data_bind_solo-solos-to-values|frame 0, op 81 (addRawPath): expected 752 fields, got 669
+data_bind_keyframes_test|frame 4, op 159 (save): expected save, got restore
 data_converter_interpolator_reset|frame 1, op 30 (save): expected save, got color
+drag_event|frame 23, op 602 (save): expected save, got color
 focus_traversal|frame 0, op 95 (color): expected color, got save
+fit_font_size_test|frame 2, op 199 (makeRenderPath): expected makeRenderPath, got rewind
 global_viewmodels_test-auto_instance|frame 0, op 27 (color): expected color, got save
+group_effect|frame 0, op 46 (addRawPath): expected 163 fields, got 3
 hide_test|frame 0, op 50 (color), field paint_id: expected 14, got 10
 hittest_ab1|frame 1, op 153 (color): expected color, got save
 hittest_ab1_grand_parent|frame 2, op 304 (color): expected color, got save
 hittest_ab1_parent|frame 1, op 192 (color): expected color, got save
+hittest_ab_shape_parent|frame 3, op 353 (save): expected save, got color
 hittest_nested|frame 1, op 155 (save): expected save, got color
 hunter_x_demo|frame 0, op 488 (blendMode): expected blendMode, got makeRenderPaint
 image_fit_alignment_2|frame 1, op 95 (setVertexBufferData): expected setVertexBufferData, got save
@@ -361,14 +954,24 @@ layout_anim_component_list|frame 1, op 89 (addRawPath), field point: expected (5
 layout_anim_nested|frame 1, op 86 (addRawPath), field point: expected (500, 0), got (495.2, 0)
 layout_aspect_ratio|frame 0, op 42 (addRawPath), field point: expected (142, 71), got (142, 133)
 layout_display|frame 3, op 188 (makeRenderPath): expected makeRenderPath, got rewind
+layout_fixed_fill|frame 1, op 57 (addRawPath), field point: expected (300, 0), got (150, 0)
 layout_paint|frame 0, op 77 (drawPath): expected drawPath, got makeRenderPath
 multi_listeners|frame 2, op 253 (makeRenderPath): expected makeRenderPath, got rewind
+multitouch_enter-MultiScroll|frame 0, op 95 (transform), field xy: expected -0.0 (0x80000000), got 0
+nested_artboard_quantize_and_speed|frame 0, op 75 (transform), field xx: expected 0.95105654, got 1
 nested_events|frame 1, op 166 (makeRenderPath): expected makeRenderPath, got rewind
 number_to_list_nested_children|frame 0, op 141 (color): expected color, got save
 path_effect_with_feathers|frame 0, op 21 (feather), field paint_id: expected 8, got 5
+pointer_exit|frame 31, op 1173 (save): expected save, got color
 reset_phase_multi_main|frame 0, op 25 (color): expected color, got makeRenderPaint
+rewards_demo|frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint
+scroll_threshold-all-scroll|frame 0, op 82 (transform), field xy: expected -0.0 (0x80000000), got 0
+scroll_threshold-horizontal-scroll|frame 0, op 79 (transform), field xy: expected -0.0 (0x80000000), got 0
+scroll_threshold-vertical-scroll|frame 0, op 69 (transform), field xy: expected -0.0 (0x80000000), got 0
 spotify_kids_demo|frame 0, op 200 (blendMode): expected blendMode, got makeRenderPaint
 stateful_keyed_trigger|frame 1, op 30 (color): expected color, got save
+stateful_multi_property|frame 1, op 134 (rewind): expected rewind, got drawPath
+stateful_nested|frame 0, op 39 (color), field paint_id: expected 15, got 10
 superbowl|frame 0, op 2825 (color), field paint_id: expected 220, got 208
 text_input|frame 0, op 25 (transform), field xy: expected -0.0 (0x80000000), got 0
 text_vertical_trim_test|frame 3, op 219 (transform), field ty: expected 177.93579, got 182.76001
@@ -376,16 +979,23 @@ time_based_interpolation|frame 1, op 65 (transform), field tx: expected 250.0730
 transition_artboard_condition_test|frame 0, op 16 (frameSize), field width: expected 983, got 984
 unbound_stateful_component|frame 0, op 9 (color), field value: expected 4278255360, got 4278190080
 virtualize_blendmode|frame 0, op 33 (color): expected color, got save
+virtualized_artboard_databound_children|frame 5, op 365 (makeRenderPaint): expected makeRenderPaint, got save
+word_joiner_test|frame 2, op 262 (transform), field ty: expected -39.996094, got -15.796875
 """.strip().splitlines()
 )
 
 CPP_NUMBER = r"[-+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:f)?"
+POINTER_COORDINATE = (
+    r"(?:"
+    + CPP_NUMBER
+    + r"|artboard->(?:width|height)\s*\(\s*\)\s*(?:/\s*2(?:\.0)?f?|\*\s*0\.8|\-\s*20))"
+)
 POINTER_CALL_PATTERN = (
     r"(?P<pointer>\b\w+->(?P<pointer_method>pointerDown|pointerMove|pointerUp|pointerExit)"
     r"\s*\(\s*(?:rive::)?Vec2D\s*\(\s*(?P<pointer_x>"
-    + CPP_NUMBER
+    + POINTER_COORDINATE
     + r")\s*,\s*(?P<pointer_y>"
-    + CPP_NUMBER
+    + POINTER_COORDINATE
     + r")\s*\)\s*(?:,\s*(?P<pointer_arg1>"
     + CPP_NUMBER
     + r")\s*)?(?:,\s*(?P<pointer_arg2>"
@@ -420,6 +1030,21 @@ def action(kind: str, **values: object) -> dict[str, object]:
     return {"kind": kind, **values}
 
 
+def pointer_coordinate(value: str) -> float | str:
+    compact = re.sub(r"\s+", "", value).removesuffix("f")
+    try:
+        return float(compact)
+    except ValueError:
+        return {
+            "artboard->width()/2.0": "artboard-width/2",
+            "artboard->width()/2": "artboard-width/2",
+            "artboard->height()/2.0": "artboard-height/2",
+            "artboard->height()/2": "artboard-height/2",
+            "artboard->width()*0.8": "artboard-width*0.8",
+            "artboard->height()-20": "artboard-height-20",
+        }[compact]
+
+
 def strip_cpp_comments(source: str) -> str:
     source = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
     return re.sub(r"//[^\n]*", "", source)
@@ -448,8 +1073,8 @@ def flat_actions(source: str, state_machine: str, animation: str) -> list[dict[s
             actions.append(action("draw"))
         elif match.group("pointer"):
             method = match.group("pointer_method")
-            x = float(match.group("pointer_x").removesuffix("f"))
-            y = float(match.group("pointer_y").removesuffix("f"))
+            x = pointer_coordinate(match.group("pointer_x"))
+            y = pointer_coordinate(match.group("pointer_y"))
             arg1 = match.group("pointer_arg1")
             arg2 = match.group("pointer_arg2")
             if method == "pointerMove":
@@ -693,6 +1318,10 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                 if lane == "runtime":
                     actions, blocker = executable_actions(chunk, state_machine, animation)
                     if (ported_actions := fl_d4_actions(silver_id)) is not None:
+                        actions, blocker = ported_actions, None
+                    if (ported_actions := p1q_view_model_actions(silver_id)) is not None:
+                        actions, blocker = ported_actions, None
+                    if (ported_actions := p1q_pointer_actions(silver_id)) is not None:
                         actions, blocker = ported_actions, None
                     if silver_id == "sorted_listeners":
                         # The C++ producer calls

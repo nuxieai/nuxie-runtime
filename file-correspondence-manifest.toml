@@ -3889,15 +3889,15 @@ note = "AF-1/AF-5: retained per-artboard scripted converter VMs are invoked by t
 
 [[file]]
 upstream = "src/scripted/scripted_drawable.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/scripting.rs"
+rust_module = "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/scripting.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0322"
-b6_verdict = "DIVERGENT"
+b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-3: RD-1 live traversal is complete, but the deferred script-advance queue remains divergent."
+note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. This reconciliation completes scripted-drawable lifecycle parity: protected-call failure preserves pinned C++ clear-before-call parking, while Rust additionally surfaces typed ScriptError to the host without rearming the owner."
 
 [[file]]
 upstream = "src/scripted/scripted_interpolator.cpp"
@@ -3925,27 +3925,27 @@ note = "F7: RD-1 ported live traversal, but ScriptedLayout measure/resize/layout
 
 [[file]]
 upstream = "src/scripted/scripted_object.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/scripted_object.rs; crates/nuxie-runtime/src/scripting.rs"
+rust_module = "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/scripted_object.rs; crates/nuxie-runtime/src/scripting.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0325"
-b6_verdict = "DIVERGENT"
+b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-3: retained VM ownership is adapted, but the deferred script-advance queue remains divergent."
+note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. This reconciliation completes the remaining scripted-object error lifecycle: failed protected calls park the owner exactly like C++ false, while Rust's typed ScriptError remains only an additive host signal and performs no automatic rearm."
 
 [[file]]
 upstream = "src/scripted/scripted_path_effect.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/scripting.rs"
+rust_module = "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/scripting.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0326"
-b6_verdict = "DIVERGENT"
+b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-3: retained path-effect VM ownership is adapted, but deferred advance remains divergent."
+note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. This reconciliation completes scripted-path-effect lifecycle parity: protected-call failure preserves pinned C++ clear-before-call parking, while typed ScriptError is surfaced additively without rearming the owner."
 
 [[file]]
 upstream = "src/semantic/semantic_data.cpp"

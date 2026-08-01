@@ -48,8 +48,16 @@ pub(crate) fn advance(
     artboard: &mut ArtboardInstance,
     elapsed_seconds: f32,
 ) -> Result<bool, ScriptError> {
-    let mut changed = artboard.advance_frame_components(elapsed_seconds)?;
-    changed |= artboard.update_pass_with_script_errors()?;
+    let component_result = artboard.advance_frame_components(elapsed_seconds);
+    let mut changed = component_result.as_ref().copied().unwrap_or(false);
+    let update_result = artboard.update_pass_with_script_errors();
+    changed |= update_result.as_ref().copied().unwrap_or(false);
+    if let Err(error) = component_result {
+        return Err(error);
+    }
+    if let Err(error) = update_result {
+        return Err(error);
+    }
     Ok(changed || artboard.has_dirt(ComponentDirt::COMPONENTS))
 }
 

@@ -221,6 +221,8 @@ size_t randomProviderTotalCalls();
 #include "rive/layout/n_slicer_tile_mode.hpp"
 #include "rive/nested_artboard.hpp"
 #include "rive/refcnt.hpp"
+#include "rive/assets/script_asset.hpp"
+#include "rive/scripted/scripted_drawable.hpp"
 #include "rive/scripted/scripted_object.hpp"
 #include "rive/scripted/scripted_data_converter.hpp"
 #include "rive/scripted/scripted_path_effect.hpp"
@@ -1068,6 +1070,7 @@ struct ProbeOptions
     bool instanceArtboards = false;
     bool runtimeGoldenSceneAdvance = false;
     float runtimeGoldenSceneSeconds = 0.0f;
+    std::vector<float> runtimeArtboardAdvances;
     bool runtimeLayoutBounds = false;
     bool runtimeFlE8StaticText = false;
     bool runtimeFlE8FeatureCycle = false;
@@ -1136,6 +1139,54 @@ rive::rcp<rive::File> open_file(const char* path, rive::ImportResult* result)
         bytes, &factory, result, nullptr, scripting_vm.get());
 #else
     return rive::File::import(bytes, &factory, result);
+#endif
+}
+
+void register_runtime_probe_scripts(rive::File* file,
+                                    const ProbeOptions& options)
+{
+#ifdef WITH_RIVE_SCRIPTING
+    if (file == nullptr || options.runtimeArtboardAdvances.empty() ||
+        file->scriptingVM() == nullptr)
+    {
+        return;
+    }
+    auto state = file->scriptingVM()->state();
+    for (auto asset : file->assets())
+    {
+        if (asset == nullptr || !asset->is<rive::ScriptAsset>())
+        {
+            continue;
+        }
+        auto script = asset->as<rive::ScriptAsset>();
+        if (script->generatorFunctionRef() != 0 || script->isModule())
+        {
+            continue;
+        }
+        auto name = script->moduleName();
+        if (!rive::ScriptingVM::registerScript(state,
+                                               name.c_str(),
+                                               script->moduleBytecode(),
+                                               name.c_str()))
+        {
+            continue;
+        }
+        int functionRef = 0;
+        if (static_cast<lua_Type>(lua_type(state, -1)) == LUA_TFUNCTION)
+        {
+            functionRef = lua_ref(state, -1);
+        }
+        lua_pop(state, 1);
+        script->registrationComplete(functionRef);
+        // This probe synthesizes an unsigned fixture after the editor pass
+        // that normally records the method bitfield. Bind the fixture's sole
+        // `advance` capability explicitly before its artboard is instanced.
+        script->serializedImplementedMethods(1u);
+        script->implementedMethods(1u);
+    }
+#else
+    (void)file;
+    (void)options;
 #endif
 }
 
@@ -2222,6 +2273,75 @@ void apply_runtime_golden_scene_advance(rive::File* file,
         scene->bindViewModelInstance(viewModelInstance);
     }
     scene->advanceAndApply(options.runtimeGoldenSceneSeconds);
+}
+
+void apply_runtime_artboard_advances(rive::ArtboardInstance* artboard,
+                                     const ProbeOptions& options)
+{
+    if (artboard == nullptr || options.runtimeArtboardAdvances.empty())
+    {
+        return;
+    }
+#ifdef WITH_RIVE_SCRIPTING
+    // Settle attachment/update dirt before the positive-time failure sample,
+    // then begin from the ordinary active owner state. This mirrors the Rust
+    // differential's initial draw without counting a user advance callback.
+    artboard->advance(0.0f);
+    for (auto object : artboard->objects())
+    {
+        if (object != nullptr && object->is<rive::ScriptedDrawable>())
+        {
+            auto drawable = object->as<rive::ScriptedDrawable>();
+            drawable->wakeAdvance();
+            for (auto seconds : options.runtimeArtboardAdvances)
+            {
+                drawable->advanceComponent(
+                    seconds, rive::AdvanceFlags::AdvanceNested);
+            }
+            return;
+        }
+    }
+#endif
+    std::unique_ptr<rive::Scene> scene = artboard->defaultStateMachine();
+    if (scene == nullptr)
+    {
+        scene = std::make_unique<rive::StaticScene>(artboard);
+    }
+    for (auto seconds : options.runtimeArtboardAdvances)
+    {
+        scene->advanceAndApply(seconds);
+    }
+}
+
+std::vector<size_t> runtime_script_advance_attempts(
+    rive::ArtboardInstance* artboard)
+{
+    std::vector<size_t> attempts;
+#ifdef WITH_RIVE_SCRIPTING
+    if (artboard == nullptr)
+    {
+        return attempts;
+    }
+    for (auto object : artboard->objects())
+    {
+        auto scripted = rive::ScriptedObject::from(object);
+        if (scripted == nullptr || scripted->state() == nullptr ||
+            scripted->self() == 0)
+        {
+            continue;
+        }
+        auto state = scripted->state();
+        rive::rive_lua_pushRef(state, scripted->self());
+        lua_getfield(state, -1, "_nuxieProbeAdvanceAttempts");
+        attempts.push_back(lua_isnumber(state, -1)
+                               ? static_cast<size_t>(lua_tointeger(state, -1))
+                               : 0);
+        rive::rive_lua_pop(state, 2);
+    }
+#else
+    (void)artboard;
+#endif
+    return attempts;
 }
 
 void apply_runtime_double_mutations(const std::vector<rive::Core*>& objects,
@@ -10343,6 +10463,40 @@ void write_sorted_drawable_order(std::ostream& out,
     out << ']';
 }
 
+void write_advancing_component_order(std::ostream& out,
+                                     const std::vector<rive::Core*>& objects,
+                                     rive::Artboard* artboard)
+{
+    out << ",\"advancingComponents\":[";
+    bool first = true;
+    for (auto advancing : artboard->m_advancingComponents)
+    {
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+
+        bool found = false;
+        for (size_t localId = 0; localId < objects.size(); ++localId)
+        {
+            auto object = objects[localId];
+            if (object != nullptr &&
+                rive::AdvancingComponent::from(object) == advancing)
+            {
+                out << localId;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+        {
+            out << "null";
+        }
+    }
+    out << ']';
+}
+
 const char* shape_paint_type_name(rive::ShapePaint* paint)
 {
     if (paint->paintType() == rive::ShapePaintType::fill)
@@ -14703,6 +14857,9 @@ void write_artboard(std::ostream& out,
     {
         artboard->advance(0.0f);
     }
+    apply_runtime_artboard_advances(instanceArtboard, options);
+    auto runtimeScriptAdvanceAttempts =
+        runtime_script_advance_attempts(instanceArtboard);
     apply_runtime_golden_scene_advance(file, instanceArtboard, options);
     apply_runtime_animation_applications(instanceArtboard, options);
     auto runtimeAnimationAdvanceReports =
@@ -14730,6 +14887,8 @@ void write_artboard(std::ostream& out,
     out << ",\"width\":" << artboard->width();
     out << ",\"height\":" << artboard->height();
     out << ",\"objectCount\":" << objects.size();
+    out << ",\"runtimeScriptAdvanceAttempts\":";
+    write_size_vector(out, runtimeScriptAdvanceAttempts);
     out << ",\"viewModel\":";
     auto viewModelIndex = static_cast<size_t>(artboard->viewModelId());
     auto viewModel = file != nullptr && viewModelIndex < file->viewModelCount()
@@ -14931,6 +15090,7 @@ void write_artboard(std::ostream& out,
     out << ']';
 
     write_sorted_drawable_order(out, localIds, artboard);
+    write_advancing_component_order(out, objects, artboard);
     write_draw_command_stream(out, localIds, artboard);
 
     out << ",\"clippingShapes\":[";
@@ -16964,6 +17124,19 @@ int main(int argc, const char* argv[])
             options.runtimeGoldenSceneAdvance = true;
             options.instanceArtboards = true;
             options.runtimeGoldenSceneSeconds = std::strtof(argv[++i], nullptr);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-advance-artboard"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-advance-artboard requires seconds\n";
+                return 2;
+            }
+            options.instanceArtboards = true;
+            options.runtimeArtboardAdvances.push_back(
+                std::strtof(argv[++i], nullptr));
             continue;
         }
 
@@ -20706,6 +20879,7 @@ int main(int argc, const char* argv[])
                       << " result=" << import_result_name(result) << "\n";
             return 1;
         }
+        register_runtime_probe_scripts(file.get(), options);
 
         if (options.completeViewModelProperties || options.dataContextLookups)
         {

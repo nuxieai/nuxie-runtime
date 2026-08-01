@@ -100,12 +100,35 @@ PROVENANCE_UNKNOWN = ("interpolator", "multitouch_debug")
 FORCED_BLOCKERS = {
     "db_health_tracker": "runtime-frame-loop-nontermination",
     "echo_show_demo": "renderer-paint-allocation",
+    "bidirectional_binding_source": "external-bindable-artboard-registration",
+    "data_bind_artboard_input": "external-bindable-artboard-registration",
+    "data_viz_demo": "runtime-frame-loop-nontermination-after-nested-view-model-mutation",
+    "global_variables_test": "runtime-frame-loop-nontermination-with-global-view-models",
 }
 CLASSIFIED_RUNTIME_BLOCKERS = {
     "multi_listeners": (
-        "post-FL-D runner gap: raw nuxie-runtime replay does not create a nuxie-scripting VM "
-        "or attach the fixture ScriptAsset occurrence, so performAction remains inert"
+        "runtime-script-asset-vm-instantiation-and-occurrence-attachment"
     ),
+    "bindable_artboard_nesty": "external-bindable-artboard-with-bound-view-model-injection",
+    "data_binding_artboards_default_test": "external-bindable-artboard-registration",
+    "data_binding_artboards_test": "external-bindable-artboard-registration",
+    "databind_external_artboard_main": "external-bindable-artboard-and-view-model-graph-registration",
+    "databind_viewmodel": "runtime-owned-view-model-reference-replacement-by-instance-handle",
+    "image_binding_with_listener": "live-decoded-image-view-model-payload-injection",
+    "list_to_path": "runtime-owned-heterogeneous-list-path-item-graph-construction",
+    "multi_listeners-rebind": "runtime-owned-nested-view-model-reference-replacement-by-handle",
+    "replace_vm_instance": "runtime-owned-shared-view-model-graph-reparenting",
+    "replace_vm_instance-double-nest": "runtime-owned-nested-list-view-model-reference-replacement",
+    "replace_vm_instance-list": "runtime-owned-list-view-model-reference-replacement",
+    "stateful_artboard_swap": "live-bindable-artboard-value-and-bound-view-model-swap",
+    "stateful_list_props": "stateful-component-list-bridge-observation-for-dynamic-items",
+    "stateful_list_props_lifecycle": "stateful-component-list-bridge-detach-and-rebind-lifecycle",
+    "stateful_source_switch": "live-bindable-artboard-source-swap-with-stateful-child-borrowing",
+    "transition_self_comparator_test": "runtime-owned-composite-list-and-view-model-comparator-mutation",
+    "rebind_with_nested_viewmodel": "runtime-owned-nested-view-model-reference-replacement-by-handle",
+    "gamepad_test": "serialized-gamepad-buffer-ingestion-and-device-state-tracking",
+    "layout_hug_artboard": "top-level-computed-layout-width-height-exposure",
+    "layout_scroll_snap_carousel": "scroll-constraint-physics-running-state-exposure",
 }
 EXACT = (
     "hittest_ab_text_parent",
@@ -128,6 +151,7 @@ EXACT = (
     "component_list_follow_path",
     "data_bind_font_test",
     "component_stateful",
+    "custom_property_trigger_bind",
     "computed_root_transform-nested_artboard",
     "custom_property_enum",
     "data_converter_to_number",
@@ -137,6 +161,7 @@ EXACT = (
     "fill_trim_path",
     "focus_test",
     "focus_traversal",
+    "focusable_element",
     "follow_path_animate_shape",
     "follow_path_animate_solo",
     "follow_path_animate_target",
@@ -162,6 +187,7 @@ EXACT = (
     "nested_needs_advance",
     "pause_nested_artboard",
     "recursive_data_bind",
+    "relative_data_bind_path",
     "relative_data_binding",
     "saturation",
     "sorted_listeners",
@@ -911,10 +937,632 @@ def p1q_pointer_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
     return None
 
 
+def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
+    """Faithful action ports for the second P1-q unsupported sweep."""
+
+    bind = action("bind-default-view-model")
+    frame = action("frame")
+    draw = action("draw")
+    advance = lambda seconds: action(
+        "advance", target="state-machine", seconds=seconds
+    )
+    pointer = lambda kind, x, y, pointer_id=0, seconds=0.0: action(
+        kind,
+        x=x,
+        y=y,
+        **(
+            {"seconds": seconds, "pointer_id": pointer_id}
+            if kind == "pointer-move"
+            else {"pointer_id": pointer_id}
+        ),
+    )
+
+    if silver_id in {"hittest_ab_2_non_virtualized", "hittest_ab_2_virtualized"}:
+        actions = [
+            bind,
+            advance(0.1),
+            draw,
+            frame,
+            action("set-view-model-number", property="scroll-offset", value=-100.0),
+            advance(0.1),
+            draw,
+        ]
+        coordinate = 200.0
+        while coordinate > 100.0:
+            actions += [
+                frame,
+                pointer("pointer-move", 50.0, coordinate),
+                advance(0.016),
+                draw,
+            ]
+            coordinate -= 10.0
+        coordinate = 75.0
+        actions += [
+            frame,
+            pointer("pointer-down", 50.0, coordinate),
+            advance(0.1),
+            draw,
+        ]
+        while coordinate > -500.0:
+            actions += [
+                frame,
+                pointer("pointer-move", 50.0, coordinate),
+                advance(0.016),
+                draw,
+            ]
+            coordinate -= 20.0
+        actions += [
+            frame,
+            pointer("pointer-up", 50.0, coordinate),
+            advance(0.016),
+            draw,
+        ]
+        coordinate = 110.0
+        while coordinate > -5.0:
+            actions += [
+                frame,
+                pointer("pointer-move", 50.0, coordinate),
+                advance(0.016),
+                draw,
+            ]
+            coordinate -= 4.0
+        return tuple(actions)
+
+    if silver_id == "deterministic_mode":
+        actions = [
+            bind,
+            advance(0.016),
+            draw,
+            pointer("pointer-down", "artboard-width/2", 400.0),
+            advance(0.016),
+            draw,
+        ]
+        y = 400.0
+        for _ in range(int(0.25 / 0.016)):
+            actions += [
+                frame,
+                pointer("pointer-move", "artboard-width/2", y, seconds=0.016),
+                advance(0.016),
+                draw,
+            ]
+            y -= 40.0
+        actions += [
+            frame,
+            pointer("pointer-move", "artboard-width/2", y, seconds=0.016),
+            pointer("pointer-up", "artboard-width/2", y),
+            advance(0.016),
+            draw,
+        ]
+        actions += repeated_frames(int(1.0 / 0.016), 0.016)
+        return tuple(actions)
+
+    if silver_id == "draw_index_list":
+        y = 90.0
+        actions = [bind, advance(0.1), pointer("pointer-down", 30.0, y), draw]
+        for _ in range(41):
+            actions += [
+                frame,
+                advance(0.016),
+                draw,
+                pointer("pointer-move", 30.0, y),
+            ]
+            y -= 10.0
+        actions += [frame, advance(0.016), draw, pointer("pointer-up", 30.0, y)]
+        for x, y in ((100.0, 45.0), (100.0, 51.0), (100.0, 91.0)):
+            actions += [
+                frame,
+                pointer("pointer-down", x, y),
+                pointer("pointer-up", x, y),
+                advance(0.016),
+                draw,
+            ]
+        for index, click_y in enumerate((45.0, 85.0, 45.0)):
+            if index in (0, 2):
+                actions += [
+                    frame,
+                    pointer("pointer-down", 30.0, 90.0),
+                    pointer("pointer-move", 30.0, 10.0),
+                    pointer("pointer-up", 30.0, 10.0),
+                    advance(0.016),
+                    draw,
+                ]
+            actions += [
+                frame,
+                pointer("pointer-down", 100.0, click_y),
+                pointer("pointer-up", 100.0, click_y),
+                advance(0.016),
+                draw,
+            ]
+        return tuple(actions)
+
+    if silver_id == "multitouch_enter-MainList":
+        actions = [bind, advance(0.1), draw, frame]
+        actions += [pointer("pointer-down", 122.5845, 443.8406, 9), advance(0.016), draw, frame]
+        actions += [
+            pointer("pointer-down", 459.5410, 188.4058, 8),
+            pointer("pointer-down", 333.3333, 248.1884, 7),
+            advance(0.016),
+            draw,
+            frame,
+        ]
+        for x, y, pointer_id in (
+            (459.5410, 188.4058, 8),
+            (123.7923, 444.4445, 9),
+            (333.3333, 248.1884, 7),
+        ):
+            actions += [pointer("pointer-up", x, y, pointer_id), pointer("pointer-exit", x, y, pointer_id)]
+        actions += [advance(0.016), draw, frame]
+        actions += [
+            pointer("pointer-down", 118.9613, 439.6135, 7),
+            pointer("pointer-down", 346.6183, 269.9276, 9),
+            pointer("pointer-down", 459.5410, 194.4444, 8),
+            advance(0.016),
+            draw,
+            frame,
+        ]
+        for x, y, pointer_id in (
+            (346.6183, 269.9276, 9),
+            (122.5845, 440.8212, 7),
+            (459.5410, 194.4444, 8),
+        ):
+            actions += [pointer("pointer-up", x, y, pointer_id), pointer("pointer-exit", x, y, pointer_id)]
+        actions += [advance(0.016), draw, frame]
+        actions += [
+            pointer("pointer-move", 50.0, 300.0, 7),
+            pointer("pointer-move", 250.0, 200.0, 8),
+            advance(0.016),
+            draw,
+        ]
+        for offset in range(20, 301, 20):
+            actions += [
+                frame,
+                pointer("pointer-move", 50.0 + offset, 300.0, 7),
+                pointer("pointer-move", 250.0 + offset, 200.0, 8),
+                advance(0.016),
+                draw,
+            ]
+        return tuple(actions)
+
+    if silver_id == "component_list_hit_order":
+        actions = [bind, advance(0.1), draw]
+        for x in (175.0, 325.0, 100.0):
+            actions += [
+                frame,
+                pointer("pointer-move", x, 50.0),
+                pointer("pointer-down", x, 50.0),
+                pointer("pointer-up", x, 50.0),
+                advance(0.1),
+                draw,
+            ]
+        return tuple(actions)
+
+    if silver_id == "component_list_virtualized_scroll_manual":
+        return (
+            bind,
+            advance(0.1),
+            draw,
+            frame,
+            pointer("pointer-move", 250.0, 50.0),
+            pointer("pointer-down", 250.0, 50.0),
+            advance(0.1),
+            draw,
+            frame,
+            pointer("pointer-move", 50.0, 50.0),
+            advance(0.1),
+            draw,
+            pointer("pointer-up", 50.0, 50.0),
+        )
+
+    if silver_id == "scroll_test":
+        actions = [advance(0.1), draw, frame]
+        actions += [
+            pointer("pointer-down", "artboard-width/2", "artboard-height/2"),
+            advance(0.1),
+            advance(1.0),
+            draw,
+            frame,
+            pointer("pointer-down", 260.0, 500.0),
+            advance(0.1),
+            advance(1.0),
+            draw,
+        ]
+        frames = int(1.0 / 0.016)
+        for index in range(frames):
+            actions += [
+                frame,
+                pointer(
+                    "pointer-move",
+                    260.0 - index * 100.0 / frames,
+                    500.0 - index * 400.0 / frames,
+                ),
+                advance(0.1),
+                advance(0.016),
+                draw,
+            ]
+        actions += [
+            frame,
+            pointer("pointer-up", 160.0, 100.0),
+            advance(0.1),
+            advance(0.016),
+            draw,
+            frame,
+            pointer("pointer-down", 50.0, 500.0),
+            advance(0.1),
+            advance(1.0),
+            draw,
+        ]
+        for index in range(frames):
+            actions += [
+                frame,
+                pointer(
+                    "pointer-move",
+                    50.0 + index * 100.0 / frames,
+                    500.0 - index * 400.0 / frames,
+                ),
+                advance(0.1),
+                advance(0.016),
+                draw,
+            ]
+        actions += [
+            frame,
+            pointer("pointer-up", 150.0, 100.0),
+            advance(0.1),
+            advance(0.016),
+            draw,
+        ]
+        return tuple(actions)
+
+    if silver_id == "interactive_scrolling":
+        drag = action(
+            "vertical-pointer-drag",
+            x="artboard-width/2",
+            start_y="artboard-height-20",
+            end_y_exclusive=120.0,
+            step=20.0,
+            advance_seconds=0.1,
+            pointer_id=0,
+        )
+        return (
+            bind,
+            advance(0.1),
+            draw,
+            drag,
+            action("set-view-model-boolean", property="isInteractive", value=True),
+            advance(0.1),
+            drag,
+        )
+
+    if silver_id == "focusable_element":
+        actions = [bind, advance(0.1), draw]
+        for _ in range(7):
+            actions += [frame, action("focus-next"), advance(0.1), draw]
+        return tuple(actions)
+
+    if silver_id == "keyboard_listener":
+        actions = [bind, advance(0.016), draw, frame]
+        actions += [action("focus-previous"), advance(0.016), draw, frame]
+        actions += [action("key-input", key=32, modifiers=0, pressed=False, repeat=False), advance(0.016), draw, frame]
+        actions += [action("focus-previous") for _ in range(3)]
+        actions += [advance(0.016), draw, frame, action("key-input", key=32, modifiers=0, pressed=False, repeat=False), advance(0.016), draw, frame]
+        actions += [action("focus-previous") for _ in range(2)]
+        actions += [advance(0.016), draw, frame, action("key-input", key=32, modifiers=0, pressed=False, repeat=False), advance(0.016), draw, frame]
+        actions += [action("focus-previous"), advance(0.016), draw, frame, action("key-input", key=32, modifiers=0, pressed=False, repeat=False), advance(0.016), draw]
+        return tuple(actions)
+
+    if silver_id == "keyboard_listener-KeyboardInput":
+        k = lambda key, modifiers, pressed, repeat: action(
+            "key-input", key=key, modifiers=modifiers, pressed=pressed, repeat=repeat
+        )
+        return (
+            bind, advance(0.016), draw, frame, action("focus-next"), advance(0.016), draw, frame,
+            k(65, 0, True, False), advance(0.016), draw, frame,
+            k(65, 0, True, True), advance(0.016), k(65, 0, False, False), advance(0.016),
+            k(65, 1, True, False), advance(0.016),
+            k(69, 0, False, False), k(69, 0, True, True), k(69, 0, True, False), advance(0.016),
+            k(66, 0, True, False), advance(0.016), k(66, 0, False, False), advance(0.016),
+            k(66, 0, True, True), advance(0.016), k(68, 0, True, False), advance(0.016),
+            k(68, 9, True, False), advance(0.016), k(67, 9, True, False), advance(0.016),
+            k(67, 1, True, False), advance(0.016), k(88, 1, True, False), advance(0.016), draw,
+        )
+
+    if silver_id == "list_focus_order":
+        actions = [bind, advance(0.016), draw, frame, action("focus-next"), advance(0.016), draw, frame]
+        actions += [action("focus-next") for _ in range(3)] + [advance(0.016), draw, frame]
+        for processed, count, focus in ((False, 1.0, True), (False, 2.0, False), (False, 3.0, False)):
+            actions += [
+                action("set-view-model-boolean", property="stageProcessed", value=processed),
+                action("set-view-model-number", property="stageCount", value=count),
+                advance(0.016), draw, frame,
+            ]
+            if focus:
+                actions += [action("focus-next"), advance(0.016), draw, frame]
+        actions += [action("focus-next"), advance(0.016), draw, frame, action("focus-next"), advance(0.016), draw]
+        return tuple(actions)
+
+    if silver_id == "focus_collapsing":
+        actions = [bind, advance(0.016), draw, frame, action("focus-next"), advance(0.016), draw, frame]
+        actions += [action("focus-next"), advance(0.016), draw, frame]
+        actions += [action("set-view-model-number", property="opacity", value=0.0), advance(0.016), advance(0.016), draw, frame]
+        actions += [action("set-view-model-number", property="opacity", value=1.0), advance(0.016), draw, frame]
+        actions += [action("focus-next"), action("focus-next"), advance(0.016), draw, frame]
+        actions += [action("set-view-model-boolean", property="isMainLayout2Visible", value=False), advance(0.016), action("focus-next"), advance(0.016), draw, frame]
+        actions += [action("focus-next"), advance(0.016), draw, frame]
+        actions += [action("focus-next"), action("focus-next"), advance(0.016), draw, frame]
+        actions += [action("set-view-model-boolean", property="isMainLayout2Visible", value=True), advance(0.016), action("focus-next"), draw, frame]
+        actions += [advance(0.016), action("focus-next"), advance(0.016), draw, frame]
+        actions += [action("focus-next"), advance(0.016), action("focus-next"), draw, frame]
+        actions += [action("focus-next"), advance(0.016), draw, frame]
+        actions += [action("focus-next"), advance(0.016), draw]
+        return tuple(actions)
+
+    named = {
+        "relative_data_bind_path": "ViewModel1",
+        "relative_data_bind_path-listener": "SML_VM2",
+        "relative_data_bind_path-fire-trigger": "SMFT-VM2",
+        "relative_data_bind_path-scripted-input": "SI-VM2",
+    }
+    if silver_id in named:
+        actions = [bind, advance(0.1), draw, frame]
+        if silver_id == "relative_data_bind_path-listener":
+            actions += [action("set-view-model-number", property="num", value=100.0), advance(0.1), draw, frame]
+        elif silver_id == "relative_data_bind_path-fire-trigger":
+            actions += [advance(0.1), draw, frame, action("fire-view-model-trigger", property="reset"), advance(0.1), draw, frame]
+        elif silver_id == "relative_data_bind_path-scripted-input":
+            actions += [action("set-view-model-boolean", property="child/paused", value=False), advance(1.0), draw, frame, action("set-view-model-boolean", property="child/paused", value=True), action("set-view-model-boolean", property="child/boo", value=False), advance(1.0), draw, frame]
+        actions += [action("bind-named-default-view-model", view_model=named[silver_id]), advance(0.1), draw]
+        if silver_id == "relative_data_bind_path":
+            actions += [frame, action("bind-named-default-view-model", view_model="ViewModel2"), advance(0.1), draw]
+        elif silver_id == "relative_data_bind_path-listener":
+            actions += [frame, action("set-view-model-number", property="num", value=100.0), advance(0.1), draw]
+        elif silver_id == "relative_data_bind_path-fire-trigger":
+            actions += [frame, advance(0.1), draw]
+        elif silver_id == "relative_data_bind_path-scripted-input":
+            actions += [frame, action("set-view-model-boolean", property="child/paused", value=False), advance(1.0), draw, frame, action("set-view-model-boolean", property="child/paused", value=True), action("set-view-model-boolean", property="child/boo", value=False), advance(1.0), draw]
+        return tuple(actions)
+
+    if silver_id in {"formula_random-source_change", "formula_random-once", "formula_random-always"}:
+        return (bind, advance(0.1), draw, frame, action("set-view-model-number", property="n1", value=500.0), advance(0.1), draw, frame, advance(0.016), draw)
+
+    if silver_id == "data_viz_demo":
+        actions = [bind, advance(0.1), draw, action("set-view-model-number", property="item1/value", value=20.0)]
+        actions += repeated_frames(30, 0.064)
+        return tuple(actions)
+
+    if silver_id == "data_bind_artboard_input":
+        return (
+            action("bind-fresh-view-model"), draw, advance(0.1), draw,
+            frame, advance(0.1), draw, frame, advance(0.1), draw,
+            frame, advance(0.1), draw,
+            action("set-view-model-artboard", property="artboardProperty", value=1),
+            frame, advance(0.1), draw,
+            action("set-view-model-artboard", property="artboardProperty", value=10),
+            frame, advance(0.1), draw,
+        )
+
+    if silver_id == "bidirectional_binding_source":
+        actions = [action("create-default-view-model"), action("set-view-model-boolean", property="costume_db_bool", value=True), action("bind-prepared-view-model"), advance(0.0), draw]
+        actions += repeated_frames(9, 0.016)
+        return tuple(actions)
+
+    if silver_id == "global_variables_test":
+        actions = [bind, advance(0.1), draw]
+        actions += repeated_frames(int(1.0 / 0.016), 0.016)
+        return tuple(actions)
+
+    if silver_id == "global_viewmodels_test-set_instance":
+        return (
+            action("create-default-view-model"),
+            action(
+                "set-global-view-model-color",
+                **{"global": "GlobalColors"},
+                property="c1",
+                value=0xFFFFFF00,
+            ),
+            action("bind-prepared-view-model"),
+            advance(0.0),
+            draw,
+            frame,
+            advance(0.016),
+            draw,
+            action("create-default-view-model"),
+            action("set-view-model-string", property="label", value="label updated"),
+            action(
+                "set-global-view-model-color",
+                **{"global": "GlobalColors"},
+                property="c1",
+                value=0xFF00FFFF,
+            ),
+            action("bind-prepared-view-model"),
+            frame,
+            advance(0.016),
+            draw,
+        )
+
+    if silver_id == "layout_scroll_visibility":
+        actions = [bind, advance(0.0), draw]
+        for index in range(300):
+            if index == 30:
+                actions.append(action("set-view-model-enum", property="vis2", value=1))
+            elif index == 90:
+                actions.append(action("set-view-model-enum", property="vis3", value=1))
+            elif index == 150:
+                actions.append(action("set-view-model-enum", property="vis2", value=0))
+            elif index == 210:
+                actions.append(action("set-view-model-enum", property="vis4", value=1))
+            elif index == 270:
+                actions += [
+                    action("set-view-model-enum", property="vis2", value=0),
+                    action("set-view-model-enum", property="vis3", value=0),
+                    action("set-view-model-enum", property="vis4", value=0),
+                ]
+            actions += [frame, advance(1.0 / 60.0), draw]
+        return tuple(actions)
+
+    if silver_id == "scroll_intent":
+        actions = [bind, advance(0.0), draw]
+        for index in range(35):
+            if index == 5:
+                actions.append(action("set-view-model-number", property="scrollIndex", value=2.0))
+            elif index == 10:
+                actions.append(action("set-view-model-enum", property="display", value=1))
+            elif index == 15:
+                actions.append(action("set-view-model-number", property="scrollIndex", value=4.0))
+            elif index == 20:
+                actions.append(action("set-view-model-enum", property="display", value=0))
+            elif index == 25:
+                actions.append(action("set-view-model-number", property="scrollIndex", value=100.0))
+            elif index == 30:
+                actions.append(action("set-view-model-number", property="scrollIndex", value=0.0))
+            actions += [frame, advance(1.0 / 60.0), draw]
+        return tuple(actions)
+
+    if silver_id == "data_binding_artboards_test_recursive":
+        actions = [bind, advance(0.1), draw, frame, advance(0.1), draw]
+        for artboard_name in (
+            "recursive-grand-child-1",
+            "recursive-parent",
+            "recursive-grand-parent",
+            "recursive-grand-child-2",
+        ):
+            actions += [
+                frame,
+                action(
+                    "set-view-model-artboard-by-name",
+                    property="ab",
+                    artboard=artboard_name,
+                ),
+                advance(0.1),
+                draw,
+            ]
+        return tuple(actions)
+
+    if silver_id == "component_list_grouped":
+        actions = [bind, advance(0.1), draw]
+        actions += repeated_frames(int(1.0 / 0.16), 0.16)
+        for index, property_name, value in (
+            (0, "x", -90.0),
+            (1, "x", 25.0),
+            (2, "x", 150.0),
+            (0, "y", -50.0),
+            (1, "y", 100.0),
+            (2, "y", -200.0),
+        ):
+            actions += [
+                action(
+                    "set-view-model-list-item-number",
+                    list="List property",
+                    index=index,
+                    property=property_name,
+                    value=value,
+                ),
+                advance(0.1),
+                draw,
+                frame,
+            ]
+        for x, y in ((210.0, 250.0), (325.0, 400.0), (450.0, 100.0)):
+            for _ in range(int(1.0 / 0.16)):
+                actions += [pointer("pointer-move", x, y), advance(0.16), draw, frame]
+        return tuple(actions)
+
+    if silver_id == "custom_property_trigger_bind":
+        actions = [bind, advance(0.0), draw]
+        actions += repeated_frames(int(1.0 / 0.16), 0.16)
+        return tuple(actions)
+
+    if silver_id == "text_feather_falloff":
+        actions = [action("advance", target="animation", seconds=0.0), draw]
+        for _ in range(60):
+            actions += [
+                frame,
+                action("advance", target="animation", seconds=1.0 / 60.0),
+                draw,
+            ]
+        return tuple(actions)
+
+    if silver_id == "juice":
+        actions = [action("advance", target="animation", seconds=0.0), draw]
+        for _ in range(int(3.0 / 0.016)):
+            actions += [
+                frame,
+                action("advance", target="animation", seconds=0.016),
+                draw,
+            ]
+        return tuple(actions)
+
+    if silver_id == "interpolate_to_end":
+        actions = [
+            bind,
+            advance(0.1),
+            draw,
+            action("set-view-model-number", property="num", value=1000.0),
+            advance(0.001),
+        ]
+        actions += repeated_frames(5, 0.25)
+        return tuple(actions)
+
+    if silver_id == "image_fit_alignment":
+        return (
+            bind,
+            advance(0.1),
+            draw,
+            frame,
+            advance(0.016),
+            draw,
+            action(
+                "set-view-model-asset-by-name",
+                property="imageProperty",
+                asset="image2",
+            ),
+            advance(0.0),
+            frame,
+            advance(0.016),
+            draw,
+            action(
+                "set-view-model-asset-by-name",
+                property="imageProperty",
+                asset="image3",
+            ),
+            advance(0.0),
+            frame,
+            advance(0.016),
+            draw,
+        )
+
+    return None
+
+
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
 animated_clipping-nodes|frame 10, op 328 (drawPath): expected drawPath, got makeRenderPath
+component_list_hit_order|frame 1, op 106 (color): expected color, got save
+component_list_grouped|frame 13, op 746 (color): expected color, got save
+component_list_virtualized_scroll_manual|frame 2, op 384 (color): expected color, got makeRenderPaint
+data_binding_artboards_test_recursive|frame 1, op 118 (makeRenderPaint): expected makeRenderPaint, got frame
+deterministic_mode|frame 0, op 25 (transform), field xy: expected -0.0 (0x80000000), got 0
+draw_index_list|frame 0, op 35 (color): expected color, got makeRenderPaint
+focus_collapsing|frame 3, op 192 (color), field paint_id: expected 6, got 11
+formula_random-always|frame 1, op 44 (transform), field tx: expected 10, got 521.8384
+formula_random-once|frame 1, op 44 (transform), field tx: expected 10, got 510.0007
+formula_random-source_change|frame 1, op 44 (transform), field tx: expected 10, got 521.8384
+global_viewmodels_test-set_instance|frame 1, op 163 (frame): expected frame, got color
+hittest_ab_2_non_virtualized|frame 0, op 198 (color): expected color, got save
+hittest_ab_2_virtualized|frame 0, op 132 (color): expected color, got save
+image_fit_alignment|frame 2, op 115 (transform), field tx: expected 462.03198, got -197.96802
+interactive_scrolling|frame 0, op 42 (transform), field xy: expected -0.0 (0x80000000), got 0
+interpolate_to_end|frame 1, op 63 (addRawPath): expected 954 fields, got 975
+keyboard_listener|frame 0, op 85 (color): expected color, got save
+keyboard_listener-KeyboardInput|frame 1, op 214 (color): expected color, got save
+juice|frame 0, op 40 (blendMode): expected blendMode, got makeRenderPaint
+list_focus_order|frame 0, op 78 (addRawPath), field point: expected (-0.0 (0x80000000), 137.20052), got (-0.0 (0x80000000), 137.20053)
+layout_scroll_visibility|frame 0, op 130 (transform), field xy: expected -0.0 (0x80000000), got 0
+multitouch_enter-MainList|frame 1, op 179 (color): expected color, got save
+relative_data_bind_path-fire-trigger|frame 1, op 48 (color): expected color, got save
+relative_data_bind_path-listener|frame 1, op 72 (makeRenderPath): expected makeRenderPath, got drawPath
+relative_data_bind_path-scripted-input|frame 0, op 39 (transform), field tx: expected 115.56351, got 250
+scroll_intent|frame 0, op 69 (transform), field xy: expected -0.0 (0x80000000), got 0
+scroll_test|frame 0, op 56 (transform), field xy: expected -0.0 (0x80000000), got 0
+text_feather_falloff|frame 0, op 29 (feather): expected feather, got save
 ai_assitant|frame 0, op 82 (makeLinearGradient): expected makeLinearGradient, got feather
 artboard_list_overrides_horizontal|frame 1, op 303 (rewind): expected rewind, got drawPath
 artboard_list_overrides_vertical|frame 1, op 303 (rewind): expected rewind, got drawPath
@@ -1296,6 +1944,8 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                     chunk,
                     "default" if "defaultAnimation" in chunk else "none",
                 )
+                if silver_id == "text_feather_falloff":
+                    animation = "default"
                 state_machine = infer_selector(
                     STATE_MACHINE_NAME,
                     chunk,
@@ -1323,6 +1973,8 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                         actions, blocker = ported_actions, None
                     if (ported_actions := p1q_pointer_actions(silver_id)) is not None:
                         actions, blocker = ported_actions, None
+                    if (ported_actions := p1q_round2_actions(silver_id)) is not None:
+                        actions, blocker = ported_actions, None
                     if silver_id == "sorted_listeners":
                         # The C++ producer calls
                         # `file->createViewModelInstance(artboard.get())`
@@ -1334,9 +1986,9 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             else action
                             for action in actions
                         )
-                    blocker = FORCED_BLOCKERS.get(silver_id, blocker)
-                    if blocker is None:
-                        blocker = CLASSIFIED_RUNTIME_BLOCKERS.get(silver_id)
+                    blocker = FORCED_BLOCKERS.get(
+                        silver_id, CLASSIFIED_RUNTIME_BLOCKERS.get(silver_id, blocker)
+                    )
                     if blocker in FORCED_BLOCKERS.values():
                         actions = ()
                     if blocker is not None:
@@ -1356,8 +2008,8 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                     )
                 elif blocker is not None:
                     note = (
-                        f"Unsupported feature: {blocker}; the upstream C++ body cannot yet be "
-                        "replayed faithfully by the Rust action interpreter."
+                        f"Unsupported feature: missing runtime surface {blocker}; the pinned "
+                        "C++ action stream requires that unported runtime surface."
                     )
                 elif silver_id in EXACT:
                     status = "exact"
@@ -1424,8 +2076,9 @@ def dynamic_producers() -> list[Producer]:
             provenance_test=test_name,
             producer_line=line,
             note=(
-                "Unsupported feature: layout-scroll-physics; helper-local coordinates and "
-                "physics-settlement control flow are not yet executable by the interpreter."
+                "Unsupported feature: scroll-constraint-physics-running-state-exposure; "
+                "the pinned helper terminates from ScrollConstraint::physics()->isRunning(), "
+                "which has no public Rust runtime surface."
             ),
         )
         for silver_id, source, artboard, test_name, line in DYNAMIC_LAYOUT_SCROLL

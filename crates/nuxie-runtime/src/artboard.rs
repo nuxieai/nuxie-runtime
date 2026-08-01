@@ -5782,10 +5782,10 @@ impl ArtboardInstance {
 
     /// Root C++ `Artboard::advance` settlement boundary.
     ///
-    /// C++ polls retained decoder promises immediately before this call.
-    /// Rust decoders are synchronously resolved by the owning host/File seam,
-    /// so this occurrence has no additional async queue to poll.
+    /// Like C++, this polls completed async work before any scripted or
+    /// retained advancing component runs.
     pub fn advance(&mut self, elapsed_seconds: f32) -> Result<bool, ScriptError> {
+        crate::poll_async_work();
         let mut changed = self.advance_frame_components(elapsed_seconds)?;
         changed |= self.update_pass_with_script_errors()?;
         Ok(changed || self.has_dirt(ComponentDirt::COMPONENTS))
@@ -11217,6 +11217,67 @@ mod tests {
     use std::cell::{Cell, RefCell};
     use std::path::PathBuf;
     use std::rc::Rc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    struct ArtboardPollTask {
+        state: crate::WorkTaskState,
+        completed: AtomicBool,
+        callback_thread: std::sync::Mutex<Option<std::thread::ThreadId>>,
+    }
+
+    impl crate::WorkTask for ArtboardPollTask {
+        fn state(&self) -> &crate::WorkTaskState {
+            &self.state
+        }
+
+        fn execute(&self) -> bool {
+            true
+        }
+
+        fn on_complete(&self) {
+            *self
+                .callback_thread
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+                Some(std::thread::current().id());
+            self.completed.store(true, Ordering::Release);
+        }
+    }
+
+    #[test]
+    fn root_artboard_advance_polls_global_async_work_before_advancing() {
+        let task = ArtboardPollTask {
+            state: crate::WorkTaskState::default(),
+            completed: AtomicBool::new(false),
+            callback_thread: std::sync::Mutex::new(None),
+        };
+        let task = std::sync::Arc::new(task);
+        crate::with_global_work_pool(|pool| {
+            pool.submit(Some(task.clone()));
+        });
+
+        #[cfg(feature = "threading")]
+        while matches!(
+            task.state.status(),
+            crate::WorkStatus::Pending | crate::WorkStatus::Running
+        ) {
+            std::thread::yield_now();
+        }
+        assert!(!task.completed.load(Ordering::Acquire));
+
+        let mut artboard = synthetic_instance(Vec::new(), Vec::new());
+        let polling_thread = std::thread::current().id();
+        let _ = artboard.advance(0.0).expect("advance empty artboard");
+
+        assert!(task.completed.load(Ordering::Acquire));
+        assert_eq!(
+            *task
+                .callback_thread
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+            Some(polling_thread)
+        );
+    }
 
     struct UpdateScriptInstance {
         inits: Rc<Cell<usize>>,

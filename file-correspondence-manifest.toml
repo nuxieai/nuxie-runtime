@@ -3241,15 +3241,15 @@ note = "F5/F7: the complete keyboard/text/focus/gamepad/view-model invocation wr
 
 [[file]]
 upstream = "src/lua/lua_promise.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "absent"
+rust_module = "crates/nuxie-scripting/src/vm/promise.rs; crates/nuxie-scripting/src/vm.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0268"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F7: Lua promise binding is absent."
+note = "P1-i faithful candidate: all 47 pinned upstream Promise scenarios pass exact live C++/Rust VM differentials, plus 2 supplemental invalid-yield differentials. Direct Rust API-contract tests cover userdata type, pending registry retention and terminal cleanup, and pending-await resume/cancellation ownership. Image decode remains intentionally out of scope."
 
 [[file]]
 upstream = "src/lua/lua_properties.cpp"

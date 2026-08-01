@@ -257,13 +257,13 @@ class PortManifestCliTest(unittest.TestCase):
             "src/constraints/scrolling/elastic_scroll_physics.cpp": ("absent", "F4"),
             "src/animation/keyboard_listener_group.cpp": ("absent", "F5"),
             "src/semantic/semantic_manager.cpp": ("absent", "F6"),
-            "src/lua/lua_promise.cpp": ("absent", "F7"),
+            "src/lua/lua_promise.cpp": ("ported", "P1-i"),
             "src/lua/renderer/lua_gpu.cpp": ("absent", "F8"),
             "src/joystick.cpp": ("ported", "FL-E4"),
             "src/shapes/list_path.cpp": ("partial", "F10"),
             "src/async/work_pool.cpp": ("absent", "F12"),
             "src/listener_group.cpp": ("partial", "F13"),
-            "src/core/binary_writer.cpp": ("not-applicable", "F14"),
+            "src/core/binary_writer.cpp": ("ported", "F14"),
         }
         self.write_upstream(*expected)
         output = self.repo / "generated.toml"
@@ -438,7 +438,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/lua/lua_data_context.cpp": ("partial", "F7"),
             "src/lua/lua_data_value.cpp": ("partial", "F7"),
             "src/lua/lua_image_decode.cpp": ("absent", "F7"),
-            "src/lua/lua_promise.cpp": ("absent", "F7"),
+            "src/lua/lua_promise.cpp": ("ported", "P1-i"),
             "src/lua/lua_scripted_context.cpp": ("absent", "F7"),
             "src/lua/lua_state.cpp": ("partial", "F7"),
             "src/lua/math/lua_color.cpp": ("ported", "F7"),
@@ -457,10 +457,10 @@ class PortManifestCliTest(unittest.TestCase):
             "src/nested_artboard.cpp": ("partial", "F13"),
             "src/data_bind/context/context_value_artboard.cpp": ("partial", "F13"),
             "src/text/text_modifier.cpp": ("partial", "F13"),
-            "src/core/binary_writer.cpp": ("not-applicable", "F14"),
-            "src/core/binary_data_reader.cpp": ("not-applicable", "F14"),
-            "src/static_scene.cpp": ("not-applicable", "F14"),
-            "src/hittest_command_path.cpp": ("not-applicable", "F14"),
+            "src/core/binary_writer.cpp": ("ported", "F14"),
+            "src/core/binary_data_reader.cpp": ("ported", "F14"),
+            "src/static_scene.cpp": ("ported", "F14"),
+            "src/hittest_command_path.cpp": ("ported", "F14"),
             "src/intrinsically_sizeable.cpp": ("ported", "FL-E4"),
         }
         self.write_upstream(*expected)

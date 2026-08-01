@@ -4803,7 +4803,7 @@ impl StateMachineInstance {
         self.script_error.get_or_insert(error);
     }
 
-    pub(super) fn retain_script_result<T: Default>(&mut self, result: Result<T, ScriptError>) -> T {
+    pub(crate) fn retain_script_result<T: Default>(&mut self, result: Result<T, ScriptError>) -> T {
         match result {
             Ok(value) => value,
             Err(error) => {
@@ -6395,9 +6395,7 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
-        let result =
-            self.try_pointer_down_with_script_host(artboard, x, y, pointer_id, &mut NoopScriptHost);
-        self.retain_script_result(result)
+        crate::scene::pointer_down(self, artboard, x, y, pointer_id)
     }
 
     pub(crate) fn hit_test(&self, artboard: &ArtboardInstance, x: f32, y: f32) -> bool {
@@ -6556,15 +6554,7 @@ impl StateMachineInstance {
         seconds: f32,
         pointer_id: i32,
     ) -> bool {
-        let result = self.try_pointer_move_with_timestamp_and_script_host(
-            artboard,
-            x,
-            y,
-            pointer_id,
-            seconds,
-            &mut NoopScriptHost,
-        );
-        self.retain_script_result(result)
+        crate::scene::pointer_move(self, artboard, x, y, seconds, pointer_id)
     }
 
     pub fn pointer_move_with_owned_view_model_context(
@@ -6651,9 +6641,7 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
-        let result =
-            self.try_pointer_up_with_script_host(artboard, x, y, pointer_id, &mut NoopScriptHost);
-        self.retain_script_result(result)
+        crate::scene::pointer_up(self, artboard, x, y, pointer_id)
     }
 
     pub fn pointer_up_with_event_context(
@@ -6804,9 +6792,7 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
-        let result =
-            self.try_pointer_exit_with_script_host(artboard, x, y, pointer_id, &mut NoopScriptHost);
-        self.retain_script_result(result)
+        crate::scene::pointer_exit(self, artboard, x, y, pointer_id)
     }
 
     pub(crate) fn drag_start(
@@ -13060,20 +13046,28 @@ impl StateMachineInstance {
         advance_view_models: bool,
         advance_detached_view_models: impl FnOnce() -> bool,
     ) -> Result<bool, ScriptError> {
-        let mut changed =
-            Self::advance_artboard_frame_components(artboard, state_machines, elapsed_seconds)?;
-        changed |= if advance_view_models {
+        let component_result =
+            Self::advance_artboard_frame_components(artboard, state_machines, elapsed_seconds);
+        let mut changed = component_result.as_ref().copied().unwrap_or(false);
+        let settlement_result = if advance_view_models {
             artboard.settle_state_machine_update_passes_after_main_advance_with_script_errors(
                 state_machines,
-            )?
+            )
         } else {
             artboard
                 .settle_state_machine_update_passes_after_main_advance_without_root_view_model_reset_with_script_errors(
                     state_machines,
-                )?
+                )
         };
+        changed |= settlement_result.as_ref().copied().unwrap_or(false);
         if advance_view_models {
             changed |= advance_detached_view_models();
+        }
+        if let Err(error) = component_result {
+            return Err(error);
+        }
+        if let Err(error) = settlement_result {
+            return Err(error);
         }
         Ok(Self::advance_and_apply_return(
             changed,
@@ -13090,25 +13084,33 @@ impl StateMachineInstance {
         advance_view_models: bool,
         advance_detached_view_models: impl FnOnce() -> bool,
     ) -> Result<bool, ScriptError> {
-        let mut changed = Self::advance_artboard_frame_components_with_factory(
+        let component_result = Self::advance_artboard_frame_components_with_factory(
             artboard,
             state_machines,
             elapsed_seconds,
             factory,
-        )?;
-        changed |= if advance_view_models {
+        );
+        let mut changed = component_result.as_ref().copied().unwrap_or(false);
+        let settlement_result = if advance_view_models {
             artboard.settle_state_machine_update_passes_after_main_advance_with_factory(
                 state_machines,
                 factory,
-            )?
+            )
         } else {
             artboard
                 .settle_state_machine_update_passes_after_main_advance_without_root_view_model_reset_with_script_errors(
                     state_machines,
-                )?
+                )
         };
+        changed |= settlement_result.as_ref().copied().unwrap_or(false);
         if advance_view_models {
             changed |= advance_detached_view_models();
+        }
+        if let Err(error) = component_result {
+            return Err(error);
+        }
+        if let Err(error) = settlement_result {
+            return Err(error);
         }
         Ok(Self::advance_and_apply_return(
             changed,

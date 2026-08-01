@@ -21,17 +21,16 @@ use crate::animation::{
 };
 use crate::artboard_data_bind::{
     RuntimeArtboardAuthoredDataBindStates, RuntimeArtboardContextSourceValue,
-    RuntimeArtboardConverterPropertyBindingInstance, RuntimeArtboardCustomPropertyBindingInstance,
-    RuntimeArtboardDataBindSourceQueues, RuntimeArtboardDataBindTargetQueues,
-    RuntimeArtboardFormulaTokenBindingStates, RuntimeArtboardImageAssetBindingInstance,
-    RuntimeArtboardLayoutComputedBindingInstance, RuntimeArtboardListBindingInstance,
-    RuntimeArtboardNestedHostBindingInstance, RuntimeArtboardNumericSourceBindingInstance,
-    RuntimeArtboardPropertyBindingInstance, RuntimeArtboardRetainedSubordinateConverterOperands,
-    RuntimeArtboardSoloBindingInstance, RuntimeArtboardSoloSourceBindingInstance,
-    RuntimeArtboardTextListBindingInstance, RuntimeNestedChildContextUpdate,
-    RuntimeOwnedDataContext, apply_artboard_name_based_color_data_bind_defaults,
-    build_artboard_authored_data_bind_states, build_artboard_converter_property_bindings,
-    build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
+    RuntimeArtboardConverterPropertyBindingInstance, RuntimeArtboardDataBindSourceQueues,
+    RuntimeArtboardDataBindTargetQueues, RuntimeArtboardFormulaTokenBindingStates,
+    RuntimeArtboardImageAssetBindingInstance, RuntimeArtboardLayoutComputedBindingInstance,
+    RuntimeArtboardListBindingInstance, RuntimeArtboardNestedHostBindingInstance,
+    RuntimeArtboardNumericSourceBindingInstance, RuntimeArtboardPropertyBindingInstance,
+    RuntimeArtboardRetainedSubordinateConverterOperands, RuntimeArtboardSoloBindingInstance,
+    RuntimeArtboardSoloSourceBindingInstance, RuntimeArtboardTextListBindingInstance,
+    RuntimeNestedChildContextUpdate, RuntimeOwnedDataContext,
+    apply_artboard_name_based_color_data_bind_defaults, build_artboard_authored_data_bind_states,
+    build_artboard_converter_property_bindings, build_artboard_default_view_model_values,
     build_artboard_formula_token_bindings, build_artboard_image_asset_bindings,
     build_artboard_layout_computed_bindings, build_artboard_list_bindings,
     build_artboard_nested_host_bindings, build_artboard_numeric_source_bindings,
@@ -52,6 +51,9 @@ use crate::constraints::{
     apply_scroll_offset_changed, component_list_virtualization, retain_runtime_scroll_constraints,
     runtime_scroll_double_property, set_runtime_scroll_double_property,
 };
+use crate::custom_property_container::{
+    RuntimeArtboardCustomPropertyBindingInstance, build_artboard_custom_property_bindings,
+};
 use crate::data_bind_graph::{
     RuntimeDataBindGraphConverterBuildCache, RuntimeDataBindGraphFormulaRandomSource,
     RuntimeDataBindGraphValue,
@@ -70,6 +72,7 @@ use crate::properties::{
     solid_color_value_property_key, solo_active_component_id_property_key,
     transform_property_for_key,
 };
+use crate::scene::select_default_state_machine;
 use crate::script_asset::{RuntimeScriptImplementedMethods, RuntimeScriptedObjectOccurrence};
 use crate::scripting::{
     NoopScriptHost, RuntimeScriptInstanceHandle, ScriptArtboard, ScriptError, ScriptHost,
@@ -458,6 +461,10 @@ pub struct ArtboardInstance {
     text_variation_modifier_tags: RefCell<BTreeMap<usize, (u64, u32)>>,
     pub(crate) runtime_images: crate::draw::image::RuntimeImageList,
     external_font_assets: Arc<BTreeMap<u32, Arc<[u8]>>>,
+    pub(crate) runtime_font_assets: Arc<crate::RuntimeFontAssetOwners>,
+    pub(crate) runtime_font_asset_snapshots: BTreeMap<u32, Arc<[u8]>>,
+    pub(crate) runtime_font_asset_referencer:
+        Rc<crate::font_asset::RuntimeFontAssetReferencerQueue>,
     /// C++ File/ImageAsset ownership projected into the runtime occurrence
     /// tree. Every clone retains the same file-owned owner list; Images borrow
     /// RenderImage from it and never from a facade scene cache.
@@ -601,6 +608,9 @@ impl Clone for ArtboardInstance {
             text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: self.runtime_images.clone(),
             external_font_assets: self.external_font_assets.clone(),
+            runtime_font_assets: Arc::clone(&self.runtime_font_assets),
+            runtime_font_asset_snapshots: self.runtime_font_asset_snapshots.clone(),
+            runtime_font_asset_referencer: Rc::new(Default::default()),
             runtime_image_assets: self.runtime_image_assets.clone(),
             runtime_image_asset_referencer: Rc::new(Default::default()),
             render_resources: self.render_resources.clone(),
@@ -677,55 +687,9 @@ impl Clone for ArtboardInstance {
         if let Some(owners) = image_assets {
             cloned.attach_runtime_image_assets_tree(owners);
         }
+        cloned.refresh_runtime_font_asset_referencers();
         cloned
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum RuntimeEventPropertyValue {
-    Number(f32),
-    Bool(bool),
-    String(Vec<u8>),
-    Color(u32),
-    Enum(u64),
-    Trigger(u64),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RuntimeEventProperty {
-    pub name: Option<String>,
-    pub value: RuntimeEventPropertyValue,
-}
-
-/// The player selected by pinned C++ `Artboard::defaultScene`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RuntimeArtboardDefaultScene {
-    StateMachine(usize),
-    LinearAnimation(usize),
-}
-
-fn select_default_state_machine(
-    authored_index: Option<u64>,
-    state_machine_count: usize,
-) -> Option<usize> {
-    authored_index
-        .and_then(|index| usize::try_from(index).ok())
-        .filter(|index| *index < state_machine_count)
-}
-
-fn select_default_scene(
-    authored_index: Option<u64>,
-    state_machine_count: usize,
-    animation_count: usize,
-) -> Option<RuntimeArtboardDefaultScene> {
-    select_default_state_machine(authored_index, state_machine_count)
-        .map(RuntimeArtboardDefaultScene::StateMachine)
-        .or_else(|| {
-            (state_machine_count != 0).then_some(RuntimeArtboardDefaultScene::StateMachine(0))
-        })
-        .or_else(|| {
-            (animation_count != 0).then_some(RuntimeArtboardDefaultScene::LinearAnimation(0))
-        })
 }
 
 include!("nested_artboard.rs");
@@ -777,6 +741,7 @@ struct RuntimeArtboardBuildContext {
     nested_structure_epoch: Arc<AtomicU64>,
     paint_preparation_epoch: Arc<AtomicU64>,
     external_font_assets: Arc<BTreeMap<u32, Arc<[u8]>>>,
+    runtime_font_assets: Arc<crate::RuntimeFontAssetOwners>,
 }
 
 fn build_artboard_index_by_global(artboards: &[ArtboardGraph]) -> Vec<Option<usize>> {
@@ -1953,6 +1918,7 @@ impl ArtboardInstance {
             nested_structure_epoch: Arc::new(AtomicU64::new(0)),
             paint_preparation_epoch: Arc::new(AtomicU64::new(0)),
             external_font_assets: Arc::new(BTreeMap::new()),
+            runtime_font_assets: Arc::new(crate::RuntimeFontAssetOwners::from_runtime(file)),
         };
         Self::from_graph_inner(
             file,
@@ -2025,6 +1991,12 @@ impl ArtboardInstance {
             nested_structure_epoch: Arc::new(AtomicU64::new(0)),
             paint_preparation_epoch: Arc::new(AtomicU64::new(0)),
             external_font_assets: Arc::new(external_font_assets.clone()),
+            runtime_font_assets: Arc::new(
+                crate::RuntimeFontAssetOwners::from_runtime_with_external_fonts(
+                    file,
+                    external_font_assets,
+                ),
+            ),
         };
         Self::from_graph_inner(
             file,
@@ -2048,6 +2020,20 @@ impl ArtboardInstance {
             .as_ref()
             .map(|context| Arc::clone(&context.external_font_assets))
             .unwrap_or_default();
+        let runtime_font_assets = build_context
+            .as_ref()
+            .map(|context| Arc::clone(&context.runtime_font_assets))
+            .unwrap_or_else(|| Arc::new(crate::RuntimeFontAssetOwners::from_runtime(file)));
+        let runtime_font_asset_snapshots = file
+            .file_assets()
+            .into_iter()
+            .filter(|asset| asset.type_name == "FontAsset")
+            .filter_map(|asset| {
+                runtime_font_assets
+                    .get(asset.id)
+                    .map(|bytes| (asset.id, bytes))
+            })
+            .collect();
         let inserted = visiting.insert(graph.global_id);
         let dimensions =
             RuntimeArtboardDimensions::from_object(file.object(graph.global_id as usize));
@@ -2300,6 +2286,9 @@ impl ArtboardInstance {
             text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: crate::draw::image::RuntimeImageList::from_graph(file, graph),
             external_font_assets,
+            runtime_font_assets,
+            runtime_font_asset_snapshots,
+            runtime_font_asset_referencer: Rc::new(Default::default()),
             runtime_image_assets: RefCell::new(None),
             runtime_image_asset_referencer: Rc::new(Default::default()),
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
@@ -2334,6 +2323,7 @@ impl ArtboardInstance {
         instance.apply_initial_component_collapse_callbacks_in_authored_order();
         instance.initialize_runtime_shape_paint_owners(graph);
         instance.initialize_text_inputs();
+        instance.register_runtime_font_asset_referencers(file, graph);
         let nested_host_locals = instance.nested_artboard_locals.clone();
         for host_local_id in nested_host_locals {
             instance.sync_nested_artboard_root_opacity(host_local_id);
@@ -2475,6 +2465,86 @@ impl ArtboardInstance {
     /// Return the external font bytes visible to this concrete runtime tree.
     pub fn external_font_asset_bytes(&self, asset_id: u32) -> Option<&[u8]> {
         self.external_font_assets.get(&asset_id).map(AsRef::as_ref)
+    }
+
+    pub(crate) fn runtime_font_asset_bytes(&self, asset_global: u32) -> Option<&[u8]> {
+        self.runtime_font_asset_snapshots
+            .get(&asset_global)
+            .map(AsRef::as_ref)
+    }
+
+    fn register_runtime_font_asset_referencers(&self, file: &RuntimeFile, graph: &ArtboardGraph) {
+        let styles = graph.local_objects.iter().filter_map(|local| {
+            let object = file.object(local.global_id as usize)?;
+            if !matches!(object.type_name, "TextStyle" | "TextStylePaint") {
+                return None;
+            }
+            let asset_index = object
+                .uint_property("fontAssetId")
+                .and_then(|index| usize::try_from(index).ok())?;
+            let asset = file.file_asset(asset_index)?;
+            (asset.type_name == "FontAsset").then_some((asset.id, local.local_id))
+        });
+        self.runtime_font_asset_referencer.replace_styles(styles);
+        self.runtime_font_assets
+            .register_referencer(&self.runtime_font_asset_referencer);
+    }
+
+    fn refresh_runtime_font_asset_referencers(&self) {
+        let Some((file, graph)) = self.build_context.as_ref().and_then(|context| {
+            let graph_index = context
+                .artboard_index_by_global
+                .get(usize::try_from(self.graph_global_id).ok()?)
+                .copied()
+                .flatten()?;
+            Some((context.file.as_ref(), context.artboards.get(graph_index)?))
+        }) else {
+            return;
+        };
+        self.register_runtime_font_asset_referencers(file, graph);
+    }
+
+    /// Attach the file-owned ImageAsset/FontAsset owner set to this complete
+    /// occurrence tree and to contexts that may materialize children later.
+    pub fn attach_runtime_file_asset_owners(&mut self, owners: &crate::RuntimeFileAssetOwners) {
+        if let Some(images) = owners.loader_image_assets() {
+            self.attach_runtime_image_assets_tree(images);
+        }
+        self.attach_runtime_font_assets_tree(owners.font_assets());
+    }
+
+    fn attach_runtime_font_assets_tree(&mut self, owners: Arc<crate::RuntimeFontAssetOwners>) {
+        self.runtime_font_assets = Arc::clone(&owners);
+        self.runtime_font_asset_snapshots.clear();
+        if let Some(context) = self.build_context.as_ref() {
+            for asset in context.file.file_assets() {
+                if asset.type_name == "FontAsset"
+                    && let Some(bytes) = owners.get(asset.id)
+                {
+                    self.runtime_font_asset_snapshots.insert(asset.id, bytes);
+                }
+            }
+        }
+        if let Some(context) = self.build_context.as_mut() {
+            context.runtime_font_assets = Arc::clone(&owners);
+        }
+        self.refresh_runtime_font_asset_referencers();
+        for nested in self.nested_artboards.values_mut() {
+            nested
+                .child
+                .attach_runtime_font_assets_tree(Arc::clone(&owners));
+        }
+        for list_index in 0..self.component_list_count() {
+            let Some(local_id) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            if let Some(items) = self.component_list_items_mut(local_id) {
+                for item in items {
+                    item.child
+                        .attach_runtime_font_assets_tree(Arc::clone(&owners));
+                }
+            }
+        }
     }
 
     /// Replace the validated external-font snapshot for this complete runtime
@@ -2765,6 +2835,7 @@ impl ArtboardInstance {
         // `scripted_drawable.cpp:376-397`;
         // `scripted_path_effect.cpp:111-130`).
         let mut did_advance = false;
+        let mut first_error = None;
         let mut host = NoopScriptHost;
         for index in 0..self.advancing_components.len() {
             let entry = self.advancing_components[index];
@@ -2776,8 +2847,15 @@ impl ArtboardInstance {
             ) {
                 continue;
             }
-            did_advance |=
-                self.advance_script_component_with(entry, seconds, &mut host, &mut call_advance)?;
+            match self.advance_script_component_with(entry, seconds, &mut host, &mut call_advance) {
+                Ok(advanced) => did_advance |= advanced,
+                Err(error) => {
+                    first_error.get_or_insert(error);
+                }
+            }
+        }
+        if let Some(error) = first_error {
+            return Err(error);
         }
         Ok(did_advance)
     }
@@ -2815,24 +2893,21 @@ impl ArtboardInstance {
         }
 
         // C++ clears m_isAdvanceActive before entering user code. A true
-        // result rearms the same owner; false parks it until wakeAdvance
-        // (`scripted_drawable.cpp:376-397`;
+        // result rearms the same owner; false parks it until wakeAdvance.
+        // ScriptedObject::scriptAdvance also converts a protected-call error
+        // to false, so surfacing Rust's typed error must not rearm the owner
+        // (`scripted_object.cpp:178-203`;
+        // `scripted_drawable.cpp:376-397`;
         // `scripted_path_effect.cpp:111-130`).
         self.set_script_owner_advance_active_handle(component, false);
         let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
             return Ok(false);
         };
-        let result = match call_advance(
+        let result = call_advance(
             handle.borrow_mut().as_mut(),
             &[ScriptValue::Number(f64::from(seconds))],
             host,
-        ) {
-            Ok(result) => result,
-            Err(error) => {
-                self.set_script_owner_advance_active_handle(component, true);
-                return Err(error);
-            }
-        };
+        )?;
         if result != ScriptValue::Bool(true) {
             return Ok(false);
         }
@@ -3145,50 +3220,6 @@ impl ArtboardInstance {
 
     pub fn slots(&self) -> &[InstanceSlot] {
         &self.slots
-    }
-
-    /// Snapshot authored custom properties attached to one event, preserving
-    /// their component/local order.
-    pub fn event_properties(&self, event_local_id: usize) -> Vec<RuntimeEventProperty> {
-        let Some(event) = self.component_handle(event_local_id) else {
-            return Vec::new();
-        };
-        (0..self.component_child_len(event))
-            .filter_map(|index| self.component_child_at(event, index))
-            .filter_map(|handle| self.objects.component(handle))
-            .filter_map(|component| {
-                let key = property_key_for_name(component.type_name, "propertyValue")?;
-                let value = match component.type_name {
-                    "CustomPropertyNumber" => RuntimeEventPropertyValue::Number(
-                        self.double_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyBoolean" => RuntimeEventPropertyValue::Bool(
-                        self.bool_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyString" => RuntimeEventPropertyValue::String(
-                        self.string_property(component.local_id, key)?.to_vec(),
-                    ),
-                    "CustomPropertyColor" => RuntimeEventPropertyValue::Color(
-                        self.color_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyEnum" => RuntimeEventPropertyValue::Enum(
-                        self.uint_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyTrigger" => RuntimeEventPropertyValue::Trigger(
-                        self.uint_property(component.local_id, key)?,
-                    ),
-                    _ => return None,
-                };
-                let name_key = property_key_for_name(component.type_name, "name")?;
-                Some(RuntimeEventProperty {
-                    name: self
-                        .string_property(component.local_id, name_key)
-                        .map(|value| String::from_utf8_lossy(value).into_owned())
-                        .filter(|name| !name.is_empty()),
-                    value,
-                })
-            })
-            .collect()
     }
 
     pub(crate) fn component_mut(&mut self, local_id: usize) -> Option<&mut RuntimeComponent> {
@@ -3683,17 +3714,6 @@ impl ArtboardInstance {
     /// falls back to state machine zero.
     pub fn default_state_machine(&self) -> Option<&RuntimeStateMachine> {
         self.state_machine(self.default_state_machine_index()?)
-    }
-
-    /// Pinned C++ selection order: explicit default state machine, state
-    /// machine zero, linear animation zero, then null.
-    pub fn default_scene(&self) -> Option<RuntimeArtboardDefaultScene> {
-        select_default_scene(
-            property_key_for_name("Artboard", "defaultStateMachineId")
-                .and_then(|key| self.uint_property(0, key)),
-            self.state_machines.len(),
-            self.linear_animations.len(),
-        )
     }
 
     pub fn set_artboard_dimensions(&mut self, width: f32, height: f32) -> bool {
@@ -5785,10 +5805,7 @@ impl ArtboardInstance {
     /// Like C++, this polls completed async work before any scripted or
     /// retained advancing component runs.
     pub fn advance(&mut self, elapsed_seconds: f32) -> Result<bool, ScriptError> {
-        crate::poll_async_work();
-        let mut changed = self.advance_frame_components(elapsed_seconds)?;
-        changed |= self.update_pass_with_script_errors()?;
-        Ok(changed || self.has_dirt(ComponentDirt::COMPONENTS))
+        crate::scene::advance(self, elapsed_seconds)
     }
 
     /// Factory-aware form of [`Self::advance_frame_components`].
@@ -5909,14 +5926,18 @@ impl ArtboardInstance {
             &mut dyn FnMut(&mut ArtboardInstance, usize, &[StateMachineReportedEvent]) -> bool,
         >,
     ) -> Result<bool, ScriptError> {
-        let mut changed = self.advance_retained_components_collect_events_with_scripts(
+        let retained_result = self.advance_retained_components_collect_events_with_scripts(
             elapsed_seconds,
             true,
             script_mode,
             nested_events,
             nested_event_dispatch,
-        )?;
+        );
+        let mut changed = retained_result.as_ref().copied().unwrap_or(false);
         changed |= self.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        if let Err(error) = retained_result {
+            return Err(error);
+        }
         Ok(changed)
     }
 
@@ -5956,6 +5977,7 @@ impl ArtboardInstance {
         >,
     ) -> Result<bool, ScriptError> {
         let mut changed = false;
+        let mut first_script_error = None;
         if self.advancing_components.is_empty() {
             return Ok(changed);
         }
@@ -6018,7 +6040,7 @@ impl ArtboardInstance {
                                 .as_mut()
                                 .is_some_and(|dispatch| (**dispatch)(artboard, host_local, events))
                         };
-                    let advanced = self.advance_nested_artboard_entry(
+                    let advance_result = self.advance_nested_artboard_entry(
                         host_local,
                         elapsed_seconds,
                         new_frame,
@@ -6034,16 +6056,30 @@ impl ArtboardInstance {
                                     &[StateMachineReportedEvent],
                                 ) -> bool,
                         ),
-                    )?;
-                    advanced | self.publish_nested_view_model_context_mutations(host_local)
+                    );
+                    let published = self.publish_nested_view_model_context_mutations(host_local);
+                    match advance_result {
+                        Ok(advanced) => advanced | published,
+                        Err(error) => {
+                            first_script_error.get_or_insert(error);
+                            published
+                        }
+                    }
                 }
-                AdvancingComponentKind::ArtboardComponentList => self
-                    .advance_component_list_entry(
+                AdvancingComponentKind::ArtboardComponentList => {
+                    match self.advance_component_list_entry(
                         entry.local_id,
                         elapsed_seconds,
                         new_frame,
                         script_mode,
-                    )?,
+                    ) {
+                        Ok(advanced) => advanced,
+                        Err(error) => {
+                            first_script_error.get_or_insert(error);
+                            false
+                        }
+                    }
+                }
                 AdvancingComponentKind::ScrollConstraint => {
                     entry.component.is_some_and(|constraint| {
                         crate::constraints::advance_scroll_constraint(
@@ -6068,12 +6104,18 @@ impl ArtboardInstance {
                 | AdvancingComponentKind::ScriptedPathEffect
                     if script_mode.is_enabled() =>
                 {
-                    self.advance_script_component_with(
+                    match self.advance_script_component_with(
                         entry,
                         elapsed_seconds,
                         &mut script_host,
                         &mut |instance, args, host| script_mode.call(instance, args, host),
-                    )?
+                    ) {
+                        Ok(advanced) => advanced,
+                        Err(error) => {
+                            first_script_error.get_or_insert(error);
+                            false
+                        }
+                    }
                 }
                 // Root Artboard participates in the C++ advancing interface
                 // only when a concrete root owner adds work; ordinary roots
@@ -6092,6 +6134,9 @@ impl ArtboardInstance {
                 | AdvancingComponentKind::ScriptedLayout
                 | AdvancingComponentKind::ScriptedPathEffect => false,
             };
+        }
+        if let Some(error) = first_script_error {
+            return Err(error);
         }
         Ok(changed)
     }
@@ -6294,7 +6339,7 @@ impl ArtboardInstance {
             }
         }
 
-        let keep_going = if new_frame {
+        let (keep_going, first_script_error) = if new_frame {
             let Some(mut nested) = self.nested_artboards.remove(&host_local) else {
                 return Ok(false);
             };
@@ -6351,11 +6396,17 @@ impl ArtboardInstance {
             };
             self.restore_active_nested_state_machines(&mut nested);
             self.nested_artboards.insert(host_local, nested);
-            result?
+            match result {
+                Ok(changed) => (changed, None),
+                Err(error) => (false, Some(error)),
+            }
         } else {
-            self.nested_artboards
-                .get_mut(&host_local)
-                .is_some_and(RuntimeNestedArtboardInstance::advance_outer_update)
+            (
+                self.nested_artboards
+                    .get_mut(&host_local)
+                    .is_some_and(RuntimeNestedArtboardInstance::advance_outer_update),
+                None,
+            )
         };
         let child_dirty = self
             .nested_artboards
@@ -6363,6 +6414,9 @@ impl ArtboardInstance {
             .is_some_and(|nested| nested.child.has_dirt(ComponentDirt::COMPONENTS));
         if child_dirty {
             self.add_dirt(host_local, ComponentDirt::COMPONENTS, false);
+        }
+        if let Some(error) = first_script_error {
+            return Err(error);
         }
         Ok(keep_going)
     }
@@ -6387,6 +6441,7 @@ impl ArtboardInstance {
         let mut source_changed = false;
         let mut child_dirty = false;
         let mut keep_going = false;
+        let mut first_script_error = None;
         let Some(items) = self.component_list_items_mut(list_local) else {
             return Ok(false);
         };
@@ -6438,7 +6493,7 @@ impl ArtboardInstance {
                     );
                 }
             }
-            row_changed |= if new_frame {
+            let child_result = if new_frame {
                 item.child
                     .advance_retained_components_collect_events_with_scripts(
                         elapsed_seconds,
@@ -6446,7 +6501,7 @@ impl ArtboardInstance {
                         script_mode,
                         None,
                         None,
-                    )?
+                    )
             } else {
                 item.child
                     .advance_retained_components_collect_events_with_scripts(
@@ -6455,8 +6510,14 @@ impl ArtboardInstance {
                         script_mode,
                         None,
                         None,
-                    )?
+                    )
             };
+            match child_result {
+                Ok(changed) => row_changed |= changed,
+                Err(error) => {
+                    first_script_error.get_or_insert(error);
+                }
+            }
             row_changed |= item
                 .child
                 .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
@@ -6478,6 +6539,9 @@ impl ArtboardInstance {
         }
         if child_dirty {
             self.add_dirt(list_local, ComponentDirt::COMPONENTS, false);
+        }
+        if let Some(error) = first_script_error {
+            return Err(error);
         }
         Ok(keep_going)
     }
@@ -7666,6 +7730,7 @@ impl ArtboardInstance {
 
     pub fn update_components(&mut self) -> UpdateComponentsReport {
         self.settle_runtime_image_asset_updates();
+        self.settle_runtime_font_asset_updates();
         let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
         self.update_components_with_hook_recording(
             true,
@@ -7710,6 +7775,7 @@ impl ArtboardInstance {
         root_transform: Mat2D,
     ) -> bool {
         let image_assets_did_update = self.settle_runtime_image_asset_updates();
+        let font_assets_did_update = self.settle_runtime_font_asset_updates();
         // Mirrors C++ src/artboard.cpp Artboard::updatePass: data binds run
         // before components, with artboard-host children publishing first.
         self.update_data_binds_for_update_pass(root_transform);
@@ -7718,8 +7784,9 @@ impl ArtboardInstance {
         // parent Yoga graph reports a new layout. The transfer key keeps later
         // precise child-local writes from causing a second solve in the same
         // outer update while still refreshing genuine parent assignments.
-        let mut did_update =
-            image_assets_did_update | self.apply_nested_artboard_layout_bounds_after_parent_solve();
+        let mut did_update = image_assets_did_update
+            | font_assets_did_update
+            | self.apply_nested_artboard_layout_bounds_after_parent_solve();
         if self.joysticks_apply_before_update {
             did_update |= self.apply_joysticks(true);
         }
@@ -10586,7 +10653,7 @@ impl RuntimeNestedArtboardInstance {
                     ),
                 }
             };
-        let mut changed = self
+        let child_result = self
             .child
             .advance_retained_components_collect_events_with_scripts(
                 local_elapsed_seconds,
@@ -10594,12 +10661,16 @@ impl RuntimeNestedArtboardInstance {
                 script_mode,
                 None,
                 Some(&mut dispatch_nested_source),
-            )?;
+            );
+        let mut changed = child_result.as_ref().copied().unwrap_or(false);
         drop(dispatch_nested_source);
         // Mirrors C++ src/nested_artboard.cpp NestedArtboard::updateDataBinds.
         changed |= self
             .child
             .advance_artboard_data_binds_with_elapsed(local_elapsed_seconds);
+        if let Err(error) = child_result {
+            return Err(error);
+        }
         Ok(changed)
     }
 
@@ -11889,6 +11960,9 @@ mod tests {
             text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: crate::draw::image::RuntimeImageList::default(),
             external_font_assets: Arc::new(BTreeMap::new()),
+            runtime_font_assets: Arc::new(crate::RuntimeFontAssetOwners::default()),
+            runtime_font_asset_snapshots: BTreeMap::new(),
+            runtime_font_asset_referencer: Rc::new(Default::default()),
             runtime_image_assets: RefCell::new(None),
             runtime_image_asset_referencer: Rc::new(Default::default()),
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
@@ -13961,33 +14035,153 @@ mod tests {
     }
 
     #[test]
-    fn failed_script_advance_preserves_active_state_for_exact_retry() {
+    fn failed_script_advance_parks_each_owner_while_surfacing_the_error() {
+        for type_name in ["ScriptedDrawable", "ScriptedLayout", "ScriptedPathEffect"] {
+            let attempts = Rc::new(RefCell::new(Vec::new()));
+            let should_fail = Rc::new(Cell::new(true));
+            let mut instance =
+                synthetic_instance(vec![synthetic_component_for_type(0, type_name)], vec![0]);
+            instance.set_script_instance_for_global(
+                0,
+                Box::new(FailOnceAdvanceScriptInstance {
+                    attempts: Rc::clone(&attempts),
+                    should_fail: Rc::clone(&should_fail),
+                }),
+            );
+            let mut factory = RecordingFactory::new();
+
+            let error = instance
+                .advance_frame_components_with_factory(0.5, &mut factory)
+                .expect_err("the protected script failure remains a typed host signal");
+            assert_eq!(error.to_string(), "fail once");
+            assert!(
+                !instance
+                    .advance_frame_components_with_factory(0.5, &mut factory)
+                    .expect("a parked owner does not call the script again")
+            );
+            assert!(
+                !instance
+                    .advance_frame_components_with_factory(0.25, &mut factory)
+                    .expect("the owner remains parked on later frames")
+            );
+
+            assert_eq!(
+                attempts.borrow().as_slice(),
+                [0.5],
+                "{type_name} must retain C++ clear-before-call park semantics"
+            );
+        }
+    }
+
+    #[test]
+    fn failed_script_advance_surfaces_after_later_retained_slots_run() {
         let attempts = Rc::new(RefCell::new(Vec::new()));
         let should_fail = Rc::new(Cell::new(true));
-        let mut instance = synthetic_instance(
-            vec![synthetic_component_for_type(0, "ScriptedDrawable")],
-            vec![0],
-        );
+        let later_calls = Rc::new(RefCell::new(Vec::new()));
+        let mut failing = synthetic_component_for_type(0, "ScriptedDrawable");
+        failing.global_id = 10;
+        let mut later = synthetic_component_for_type(1, "ScriptedPathEffect");
+        later.global_id = 20;
+        let mut instance = synthetic_instance(vec![failing, later], vec![0, 1]);
         instance.set_script_instance_for_global(
-            0,
+            10,
             Box::new(FailOnceAdvanceScriptInstance {
                 attempts: Rc::clone(&attempts),
-                should_fail: Rc::clone(&should_fail),
+                should_fail,
+            }),
+        );
+        instance.set_script_instance_for_global(
+            20,
+            Box::new(OrderedAdvanceScriptInstance {
+                label: 20,
+                calls: Rc::clone(&later_calls),
             }),
         );
         let mut factory = RecordingFactory::new();
 
-        instance
+        let error = instance
             .advance_frame_components_with_factory(0.5, &mut factory)
-            .expect_err("first advance fails");
-        instance
-            .advance_frame_components_with_factory(0.5, &mut factory)
-            .expect("the exact owner is retryable");
-        instance
-            .advance_frame_components_with_factory(0.25, &mut factory)
-            .expect("the following frame remains independent");
+            .expect_err("the first typed error is surfaced after retained scheduling completes");
 
-        assert_eq!(attempts.borrow().as_slice(), [0.5, 0.5, 0.25]);
+        assert_eq!(error.to_string(), "fail once");
+        assert_eq!(attempts.borrow().as_slice(), [0.5]);
+        assert_eq!(
+            later_calls.borrow().as_slice(),
+            [20],
+            "C++ converts the failed call to false and continues the m_advancingComponents loop"
+        );
+    }
+
+    #[test]
+    fn nested_failed_script_advance_surfaces_after_later_parent_slots_run() {
+        let attempts = Rc::new(RefCell::new(Vec::new()));
+        let later_calls = Rc::new(RefCell::new(Vec::new()));
+        let mut child_script = synthetic_component_for_type(0, "ScriptedDrawable");
+        child_script.global_id = 101;
+        let mut child = synthetic_instance(vec![child_script], vec![0]);
+        child.set_script_instance_for_global(
+            101,
+            Box::new(FailOnceAdvanceScriptInstance {
+                attempts: Rc::clone(&attempts),
+                should_fail: Rc::new(Cell::new(true)),
+            }),
+        );
+        let mut nested = synthetic_nested_artboard_instance(101);
+        nested.child = Box::new(child);
+
+        let nested_host = synthetic_component_for_type(0, "NestedArtboard");
+        let mut later = synthetic_component_for_type(1, "ScriptedDrawable");
+        later.global_id = 20;
+        let mut parent = synthetic_instance(vec![nested_host, later], vec![0, 1]);
+        parent.nested_artboards.insert(0, nested);
+        parent.set_script_instance_for_global(
+            20,
+            Box::new(OrderedAdvanceScriptInstance {
+                label: 20,
+                calls: Rc::clone(&later_calls),
+            }),
+        );
+        let mut factory = RecordingFactory::new();
+
+        let error = parent
+            .advance_frame_components_with_factory(0.5, &mut factory)
+            .expect_err("the nested typed error is surfaced after the parent schedule completes");
+
+        assert_eq!(error.to_string(), "fail once");
+        assert_eq!(attempts.borrow().as_slice(), [0.5]);
+        assert_eq!(later_calls.borrow().as_slice(), [20]);
+    }
+
+    #[test]
+    fn root_advance_runs_update_pass_before_surfacing_script_advance_error() {
+        let attempts = Rc::new(RefCell::new(Vec::new()));
+        let root = synthetic_component_for_type(0, "Artboard");
+        let mut scripted = synthetic_component_for_type(1, "ScriptedDrawable");
+        scripted.global_id = 10;
+        let mut instance = synthetic_instance(vec![root, scripted], vec![0, 1]);
+        instance.set_script_instance_for_global(
+            10,
+            Box::new(FailOnceAdvanceScriptInstance {
+                attempts: Rc::clone(&attempts),
+                should_fail: Rc::new(Cell::new(true)),
+            }),
+        );
+        instance
+            .update_pass_with_script_errors()
+            .expect("initial ScriptUpdate settles before the error probe");
+        instance.install_persistent_dirt_component_fixture();
+
+        let error = instance
+            .advance(0.5)
+            .expect_err("the typed error is surfaced after root settlement");
+
+        assert_eq!(error.to_string(), "fail once");
+        assert_eq!(attempts.borrow().as_slice(), [0.5]);
+        assert_eq!(
+            instance.persistent_dirt_component_fixture_receipt(),
+            (1, 1, false),
+            "the C++ update pass still consumes earlier component dirt before Rust surfaces the additive error"
+        );
     }
 
     #[test]
@@ -14057,6 +14251,64 @@ mod tests {
             "the complete frame entry point walks Artboard::m_advancingComponents insertion \
              order, not a late global-id script sweep (`artboard.cpp:1463-1480`; \
              `advancing_component.cpp:17-44`)"
+        );
+    }
+
+    #[test]
+    fn mixed_scripted_component_advances_run_at_their_retained_cpp_slots() {
+        let calls = Rc::new(RefCell::new(Vec::new()));
+
+        let mut nested_script = synthetic_component_for_type(0, "ScriptedDrawable");
+        nested_script.global_id = 101;
+        let mut child = synthetic_instance(vec![nested_script], vec![0]);
+        child.set_script_instance_for_global(
+            101,
+            Box::new(OrderedAdvanceScriptInstance {
+                label: 101,
+                calls: Rc::clone(&calls),
+            }),
+        );
+        let mut nested = synthetic_nested_artboard_instance(101);
+        nested.child = Box::new(child);
+
+        let mut drawable = synthetic_component_for_type(0, "ScriptedDrawable");
+        drawable.global_id = 90;
+        let nested_host = synthetic_component_for_type(1, "NestedArtboard");
+        let mut path_effect = synthetic_component_for_type(2, "ScriptedPathEffect");
+        path_effect.global_id = 20;
+        let mut layout = synthetic_component_for_type(3, "ScriptedLayout");
+        layout.global_id = 70;
+        let mut instance = synthetic_instance(
+            vec![drawable, nested_host, path_effect, layout],
+            vec![0, 1, 2, 3],
+        );
+        instance.nested_artboards.insert(1, nested);
+        for global_id in [90, 20, 70] {
+            instance.set_script_instance_for_global(
+                global_id,
+                Box::new(OrderedAdvanceScriptInstance {
+                    label: global_id,
+                    calls: Rc::clone(&calls),
+                }),
+            );
+        }
+
+        let mut factory = RecordingFactory::new();
+        assert!(
+            instance
+                .advance_frame_components_with_factory(0.1, &mut factory)
+                .expect("mixed retained component advance succeeds")
+        );
+        assert_eq!(
+            calls.borrow().as_slice(),
+            [90, 101, 20, 70],
+            concat!(
+                "ScriptedDrawable, nested-artboard work, ScriptedPathEffect, and ScriptedLayout ",
+                "run from their interleaved m_advancingComponents slots; the removed deferred ",
+                "queue would have moved the root scripted calls after the nested slot ",
+                "(`artboard.cpp:1463-1480`; `scripted_drawable.cpp:376-399`; ",
+                "`scripted_path_effect.cpp:111-133`)"
+            )
         );
     }
 
@@ -15023,26 +15275,6 @@ mod tests {
             (1, 1, false),
             "advanceInternal precedes updatePass; root advance returns the union of work and any dirt retained after settlement"
         );
-    }
-
-    #[test]
-    fn default_scene_selection_covers_explicit_fallback_and_null_branches() {
-        assert_eq!(select_default_state_machine(Some(1), 2), Some(1));
-        assert_eq!(select_default_state_machine(None, 2), None);
-        assert_eq!(select_default_state_machine(Some(2), 2), None);
-        assert_eq!(
-            select_default_scene(Some(1), 2, 1),
-            Some(RuntimeArtboardDefaultScene::StateMachine(1))
-        );
-        assert_eq!(
-            select_default_scene(Some(9), 2, 1),
-            Some(RuntimeArtboardDefaultScene::StateMachine(0))
-        );
-        assert_eq!(
-            select_default_scene(None, 0, 1),
-            Some(RuntimeArtboardDefaultScene::LinearAnimation(0))
-        );
-        assert_eq!(select_default_scene(None, 0, 0), None);
     }
 
     #[test]

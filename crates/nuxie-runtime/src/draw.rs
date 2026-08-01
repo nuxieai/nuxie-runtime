@@ -14865,8 +14865,16 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         &image_assets,
         scripting_file_assets,
     );
-    let images =
-        RuntimeImageAssetOwners::with_max_retained_decoded_bytes(max_retained_decoded_image_bytes);
+    let images = instance
+        .runtime_image_assets
+        .borrow()
+        .as_ref()
+        .map(Arc::clone)
+        .unwrap_or_else(|| {
+            Arc::new(RuntimeImageAssetOwners::with_max_retained_decoded_bytes(
+                max_retained_decoded_image_bytes,
+            ))
+        });
     let mut image_decode_error = None;
     for asset_global in image_assets
         .globals
@@ -14881,7 +14889,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
                 asset_global,
                 external_images,
                 factory,
-                &images,
+                images.as_ref(),
             )
             .err();
         }
@@ -14901,7 +14909,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
                 asset_global,
                 external_images,
                 factory,
-                &images,
+                images.as_ref(),
             )
             .err();
         }
@@ -14913,16 +14921,15 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         runtime,
         artboards,
         factory,
-        &images,
+        images.as_ref(),
         images.backend_context_id(),
     );
     if let Some(register_file_scripts) = file_registration {
         register_file_scripts(factory);
     }
     let mut cache = RuntimeArtboardResourceBundle::default();
-    let image_assets = Arc::new(images);
-    cache.image_assets = Arc::clone(&image_assets);
-    instance.attach_runtime_image_assets_tree(Arc::clone(&image_assets));
+    cache.image_assets = Arc::clone(&images);
+    instance.attach_runtime_image_assets_tree(Arc::clone(&images));
     cache.requires_nested_layout_prepass =
         runtime_artboard_set_contains_nested_layout(graph, artboards);
     cache.paint_preparation_is_noop = runtime_artboard_paint_preparation_is_noop(graph);
@@ -14934,7 +14941,7 @@ fn preallocate_render_paint_cache_for_artboard_tree_internal(
         graph,
         artboards,
         factory,
-        &image_assets,
+        &images,
         &mut BTreeSet::new(),
         include_script_input_artboards,
     );
@@ -19608,6 +19615,48 @@ fn runtime_shape_paint_state_is_effectively_visible(
     }
 }
 
+impl ArtboardInstance {
+    /// Direct counterpart of C++ `Artboard::isTranslucent`, consumed by
+    /// `StaticScene::isTranslucent`.
+    pub(crate) fn runtime_is_translucent(&self) -> bool {
+        self.runtime_shapes
+            .paint_owner_refs
+            .iter()
+            .all(|owner_ref| {
+                let Some(owner) = self
+                    .runtime_shapes
+                    .get(owner_ref.shape_local)
+                    .and_then(|shape| shape.paint_owners.get(owner_ref.owner_index))
+                else {
+                    return true;
+                };
+                // ShapePaint::isTranslucent calls the concrete virtual
+                // Fill/Stroke::isVisible implementation. In particular,
+                // Stroke::isVisible also requires positive thickness.
+                if !runtime_owned_shape_paint_is_visible(self, owner) {
+                    return true;
+                }
+                match owner.paint_state.borrow().as_ref() {
+                    // This deliberately preserves pinned SolidColor's `if` /
+                    // `else if` flag update: every nonzero solid is classified as
+                    // opaque, including a partially transparent one.
+                    Some(RuntimeShapePaintState::SolidColor { render_color, .. }) => {
+                        (render_color >> 24) == 0
+                    }
+                    Some(RuntimeShapePaintState::LinearGradient { stops, .. })
+                    | Some(RuntimeShapePaintState::RadialGradient { stops, .. }) => {
+                        let visible = stops.iter().any(|stop| (stop.render_color >> 24) != 0);
+                        let translucent = stops
+                            .iter()
+                            .any(|stop| (stop.render_color >> 24) != u32::from(u8::MAX));
+                        !visible || translucent
+                    }
+                    None => true,
+                }
+            })
+    }
+}
+
 fn runtime_shape_paint_blend_mode_value(
     paint_blend_mode_value: u32,
     container_blend_mode_value: u32,
@@ -23189,8 +23238,7 @@ pub(crate) fn runtime_path_geometry_commands(
 /// C++ `Shape::hitTestHiFi` equivalent for one authored path.
 ///
 /// The pinned implementation feeds the path into a `HitTestCommandPath` with
-/// a two-pixel query radius. Filled containment covers the interior, while a
-/// four-pixel round stroke covers the same two-pixel boundary neighborhood.
+/// a two-pixel query radius and tests the resulting integer-cell windings.
 pub(crate) fn runtime_path_geometry_hit_test(
     artboard: &ArtboardInstance,
     path: &PathGeometryNode,
@@ -23198,15 +23246,10 @@ pub(crate) fn runtime_path_geometry_hit_test(
     point: (f32, f32),
 ) -> bool {
     let commands = runtime_path_geometry_commands(artboard, path, transform);
-    let point = RenderVec2D::new(point.0, point.1);
-    runtime_path_contains(&commands, point, RuntimeGeometryFillRule::NonZero)
-        || runtime_stroked_path_contains(
-            &commands,
-            point,
-            4.0,
-            RenderStrokeCap::Round,
-            RenderStrokeJoin::Round,
-        )
+    let mut tester =
+        crate::HitTestCommandPath::new(crate::HitTestArea::around(point.0, point.1, 2.0));
+    tester.add_runtime_commands(&commands);
+    tester.was_hit()
 }
 
 pub(crate) fn runtime_text_value_run_hit_test(
@@ -27031,6 +27074,37 @@ mod tests {
             "C++ SolidColor::colorValueChanged calls renderOpacityChanged \
              synchronously; no dependency update is required \
              (solid_color.cpp:23-54)"
+        );
+    }
+
+    #[test]
+    fn static_scene_translucency_treats_a_zero_width_stroke_as_invisible() {
+        let bytes = synthetic_zero_width_opaque_stroke_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic riv graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+
+        assert!(
+            instance
+                .runtime_shapes
+                .get(1)
+                .and_then(|shape| shape.paint_owners.first())
+                .is_some_and(|paint| { instance.stroke_thickness(paint.paint_local) == Some(0.0) }),
+            "fixture must retain its authored zero-width stroke"
+        );
+        assert!(
+            instance.runtime_is_translucent(),
+            "pinned ShapePaint::isTranslucent dispatches to Stroke::isVisible, which requires positive thickness"
+        );
+        let scene = crate::StaticScene::new(&mut instance);
+        assert!(
+            scene.is_translucent(),
+            "StaticScene delegates the production ArtboardInstance translucency contract"
         );
     }
 
@@ -31535,6 +31609,37 @@ mod tests {
             push_uint(bytes, "Node", "parentId", 1);
             push_f32(bytes, "ParametricPath", "width", 40.0);
             push_f32(bytes, "ParametricPath", "height", 40.0);
+        });
+        bytes
+    }
+
+    fn synthetic_zero_width_opaque_stroke_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9661);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "Stroke", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+            push_f32(bytes, "Stroke", "thickness", 0.0);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Component", "parentId", 2);
+            push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_f32(bytes, "ParametricPath", "width", 80.0);
+            push_f32(bytes, "ParametricPath", "height", 80.0);
         });
         bytes
     }

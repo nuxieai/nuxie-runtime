@@ -35,6 +35,7 @@ mod context_value_symbol_list_index;
 mod context_value_trigger;
 #[path = "data_bind/context/context_value_viewmodel.rs"]
 mod context_value_viewmodel;
+mod custom_property_container;
 mod data_bind_container;
 #[path = "data_bind/data_bind_container.rs"]
 mod data_bind_container_owner;
@@ -92,10 +93,15 @@ mod draw;
 mod draw_rules;
 mod draw_target;
 mod event;
+#[path = "assets/file_asset_loader.rs"]
+mod file_asset_loader;
 mod focus;
+#[path = "assets/font_asset.rs"]
+mod font_asset;
 mod foreground_layout_drawable;
 #[path = "data_bind/converters/formula/formula_token.rs"]
 mod formula_token;
+mod hittest_command_path;
 mod intrinsically_sizeable;
 mod joystick;
 mod layout;
@@ -114,6 +120,7 @@ mod parent_traversal;
 mod project_data_converter;
 mod properties;
 mod rectangles_to_contour;
+mod scene;
 mod script_asset;
 mod script_input_artboard;
 mod script_input_boolean;
@@ -127,6 +134,7 @@ mod scripted_object;
 mod scripting;
 mod shapes;
 mod state_machine;
+mod static_scene;
 mod text;
 mod text_input;
 #[path = "text/text.rs"]
@@ -158,14 +166,13 @@ pub use animation::{
 #[cfg(feature = "tools")]
 pub use artboard::RuntimeNestedRemapAnimationReport;
 pub use artboard::{
-    ArtboardInstance, ExternalFontAssetError, RuntimeArtboardDefaultScene,
-    RuntimeArtboardOccurrenceSegment, RuntimeComponents, RuntimeEventProperty,
-    RuntimeEventPropertyValue,
+    ArtboardInstance, ExternalFontAssetError, RuntimeArtboardOccurrenceSegment, RuntimeComponents,
 };
 pub use components::{
     ComponentDirt, Mat2D, RuntimeComponent, RuntimeComponentCapabilities, TransformProperty,
     TransformRuntimeState, UpdateComponentsReport,
 };
+pub use custom_property_container::{RuntimeEventProperty, RuntimeEventPropertyValue};
 pub(crate) use data_bind_graph::{
     RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase, RuntimeDataBindGraphConverter,
     RuntimeDataBindGraphTargetsMut, RuntimeDataBindGraphValue,
@@ -182,10 +189,15 @@ pub use draw::{
     RuntimeShapePaintPathKind, RuntimeShapePaintState, preallocate_source_render_paints,
     runtime_path_commands_from_raw_path,
 };
+pub use file_asset_loader::{
+    RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetLoader, RuntimeFileAssetOwners,
+};
 pub use focus::{
     FocusBounds, FocusDirection, FocusEdgeBehavior, FocusEvent, FocusEventKind, FocusManager,
     FocusNode, FocusNodeId, FocusPoint,
 };
+pub use font_asset::RuntimeFontAssetOwners;
+pub use hittest_command_path::{HitTestArea, HitTestCommandPath};
 pub use math::random::{
     RuntimeRandomTestValuesGuard, runtime_random_call_count, set_runtime_deterministic_mode,
     set_runtime_random_test_values,
@@ -202,6 +214,7 @@ pub use project_data_converter::{
     ProjectDataConverterValidationRule, ProjectDataValue, ProjectDataValuePath,
     ProjectDataViewModelReference,
 };
+pub use scene::RuntimeArtboardDefaultScene;
 #[doc(hidden)]
 pub use script_asset::scripted_object_inits;
 pub use script_input_viewmodel_property::{
@@ -254,6 +267,7 @@ pub(crate) use state_machine::{
     StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
     StateMachineTransitionDurationInstance,
 };
+pub use static_scene::{SceneLoop, StaticScene, StaticSceneArtboard};
 pub use text::{
     RawText as RuntimeRawText, RawTextFont, RawTextFontError, RawTextPaint,
     RuntimeColorGlyphClassification, RuntimeColorGlyphGradientStop, RuntimeColorGlyphLayer,

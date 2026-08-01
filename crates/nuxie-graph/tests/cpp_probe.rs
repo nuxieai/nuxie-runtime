@@ -3772,6 +3772,26 @@ fn graph_projects_resetting_and_advancing_component_registrations() {
             .any(|node| matches!(node.local_id, 5 | 11 | 12 | 14)),
         "CustomPropertyTrigger, shape paint objects, and plain Node are not C++ AdvancingComponent matches"
     );
+
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping live C++ advancing-component comparison; set RIVE_CPP_PROBE");
+        return;
+    };
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe,
+        "synthetic/lifecycle_registries.riv",
+        &bytes,
+        &["--no-advance"],
+    );
+    assert_eq!(
+        cpp.artboards[0].advancing_components,
+        artboard
+            .advancing_components
+            .iter()
+            .map(|entry| Some(entry.local_id))
+            .collect::<Vec<_>>(),
+        "the retained mixed-family advance schedule differs from pinned C++"
+    );
 }
 
 #[test]
@@ -6221,9 +6241,14 @@ fn compare_reference_fixture(probe: &Path, fixture_path: &str) {
 }
 
 fn read_cpp_probe(probe: &Path, path: &Path, label: &str) -> CppProbeFile {
+    read_cpp_probe_with_args(probe, path, label, &[])
+}
+
+fn read_cpp_probe_with_args(probe: &Path, path: &Path, label: &str, args: &[&str]) -> CppProbeFile {
     let output = Command::new(probe)
+        .args(args)
         .arg("--file")
-        .arg(&path)
+        .arg(path)
         .output()
         .unwrap_or_else(|err| panic!("failed to run {}: {err}", probe.display()));
 
@@ -6241,6 +6266,15 @@ fn read_cpp_probe(probe: &Path, path: &Path, label: &str) -> CppProbeFile {
 }
 
 fn read_cpp_probe_bytes(probe: &Path, label: &str, bytes: &[u8]) -> CppProbeFile {
+    read_cpp_probe_bytes_with_args(probe, label, bytes, &[])
+}
+
+fn read_cpp_probe_bytes_with_args(
+    probe: &Path,
+    label: &str,
+    bytes: &[u8],
+    args: &[&str],
+) -> CppProbeFile {
     let path = std::env::temp_dir().join(format!(
         "rive-rust-graph-{}-{}.riv",
         std::process::id(),
@@ -6248,7 +6282,7 @@ fn read_cpp_probe_bytes(probe: &Path, label: &str, bytes: &[u8]) -> CppProbeFile
     ));
     std::fs::write(&path, bytes)
         .unwrap_or_else(|err| panic!("failed to write {}: {err}", path.display()));
-    let cpp = read_cpp_probe(probe, &path, label);
+    let cpp = read_cpp_probe_with_args(probe, &path, label, args);
     let _ = std::fs::remove_file(&path);
     cpp
 }
@@ -7402,6 +7436,8 @@ struct CppArtboard {
     draw_rules: Vec<CppDrawRules>,
     #[serde(default, rename = "sortedDrawableOrder")]
     sorted_drawable_order: Vec<CppSortedDrawable>,
+    #[serde(default, rename = "advancingComponents")]
+    advancing_components: Vec<Option<usize>>,
     #[serde(default, rename = "clippingShapes")]
     clipping_shapes: Vec<CppClippingShape>,
     #[serde(default)]

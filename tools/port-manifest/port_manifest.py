@@ -40,7 +40,11 @@ FEATURE_ROWS = {
         "",
         "F6: semantics runtime is absent.",
     ),
-    "src/lua/lua_promise.cpp": ("absent", "", "F7: Lua promise binding is absent."),
+    "src/lua/lua_promise.cpp": (
+        "ported",
+        "crates/nuxie-scripting/src/vm/promise.rs; crates/nuxie-scripting/src/vm.rs",
+        "P1-i: all 47 pinned Promise scenarios plus 2 invalid-yield cases pass exact live C++/Rust VM differentials; image decode is a separate lane.",
+    ),
     "src/lua/renderer/lua_gpu.cpp": (
         "absent",
         "",
@@ -63,9 +67,14 @@ FEATURE_ROWS = {
         "F13: advanced ListenerGroup behavior remains latent.",
     ),
     "src/core/binary_writer.cpp": (
-        "not-applicable",
-        "",
-        "F14: binary writing is outside the read-only runtime contract.",
+        "ported",
+        "crates/nuxie-binary/src/binary_writer.rs",
+        "P1-p/F14: direct exact-wire BinaryWriter owner with pinned C++ differential coverage.",
+    ),
+    "src/math/hit_test.cpp": (
+        "ported",
+        "crates/nuxie-runtime/src/math/hit_test.rs",
+        "P1-p: direct integer-cell HitTester owner consumed by HitTestCommandPath.",
     ),
 }
 FEATURE_ROWS.update(
@@ -175,19 +184,19 @@ FEATURE_ROWS.update(
             "F13: static text modifiers are ported with richer modifier ceilings.",
         ),
         "src/core/binary_data_reader.cpp": (
-            "not-applicable",
-            "",
-            "F14: C++ binary data reader plumbing is outside the Rust importer shape.",
+            "ported",
+            "crates/nuxie-binary/src/binary_data_reader.rs",
+            "P1-p/F14: direct BinaryDataReader owner with contract and pinned C++ differential coverage.",
         ),
         "src/static_scene.cpp": (
-            "not-applicable",
-            "",
-            "F14: static scene helper is outside the supported runtime contract.",
+            "ported",
+            "crates/nuxie-runtime/src/static_scene.rs",
+            "P1-p/F14: direct StaticScene owner with pinned C++ API-contract coverage.",
         ),
         "src/hittest_command_path.cpp": (
-            "not-applicable",
-            "",
-            "F14: command-path helper is outside the supported runtime architecture.",
+            "ported",
+            "crates/nuxie-runtime/src/hittest_command_path.rs",
+            "P1-p/F14: direct HitTestCommandPath owner with upstream fixture differentials.",
         ),
         "src/intrinsically_sizeable.cpp": (
             "ported",

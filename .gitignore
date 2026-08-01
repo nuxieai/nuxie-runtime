@@ -4,6 +4,8 @@
 !/fixtures/fl-e8/
 !/fixtures/fl-e8/text_style_feature.riv
 !/fixtures/fl-e8/text_variation_modifier.riv
+!/fixtures/univ-1275/
+!/fixtures/univ-1275/transform_live_write.riv
 /fuzz/seeds/**/*.riv
 /tools/cpp-probe/build/Makefile
 /tools/cpp-probe/build/*.make

@@ -27,7 +27,7 @@ use crate::draw::{
     runtime_shape_paint_command,
 };
 use crate::joystick::{joystick_x_property_key, joystick_y_property_key};
-use crate::properties::property_key_for_name;
+use crate::properties::{property_key_for_name, solid_color_value_property_key};
 use crate::view_model::RuntimeFontAssetValue;
 use crate::{ArtboardInstance, Mat2D, RuntimePathCommand};
 use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind};
@@ -537,6 +537,25 @@ pub(crate) fn runtime_text_shape_paint_commands(
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     layout_constraint: Option<RuntimeTextLayoutConstraint>,
 ) -> Result<Vec<RuntimeShapePaintCommand>> {
+    Ok(runtime_text_draw_data(
+        runtime,
+        instance,
+        graph,
+        text_local,
+        layout_bounds,
+        layout_constraint,
+    )?
+    .commands)
+}
+
+pub(crate) fn runtime_text_draw_data(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    text_local: usize,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    layout_constraint: Option<RuntimeTextLayoutConstraint>,
+) -> Result<RuntimeTextDrawData> {
     let slice = StaticTextSlice::from_graph(runtime, graph, text_local)?;
     let render_opacity = instance
         .component(text_local)
@@ -549,8 +568,9 @@ pub(crate) fn runtime_text_shape_paint_commands(
         .path_buckets_by_style
         .iter()
         .all(|buckets| buckets.is_empty())
+        && render_data.color_glyphs.is_empty()
     {
-        return Ok(Vec::new());
+        return Ok(RuntimeTextDrawData::default());
     }
     let shape_world = text_world.multiply(render_data.local_transform);
     // C++ text draw isolates the glyph path transform even when clipping
@@ -650,7 +670,12 @@ pub(crate) fn runtime_text_shape_paint_commands(
             }
         }
     }
-    Ok(commands)
+    Ok(RuntimeTextDrawData {
+        commands,
+        color_glyphs: render_data.color_glyphs,
+        order: render_data.order,
+        shape_world,
+    })
 }
 
 pub(crate) fn runtime_text_input_shape_paint_commands(
@@ -854,7 +879,43 @@ struct StaticVerticalTrim {
 #[derive(Debug, Clone)]
 struct StaticTextRenderData {
     path_buckets_by_style: Vec<Vec<StaticTextPathBucket>>,
+    color_glyphs: Vec<RuntimeIntegratedColorGlyphCommand>,
+    order: Vec<RuntimeTextDrawOrder>,
     local_transform: Mat2D,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeTextDrawData {
+    pub(crate) commands: Vec<RuntimeShapePaintCommand>,
+    pub(crate) color_glyphs: Vec<RuntimeIntegratedColorGlyphCommand>,
+    pub(crate) order: Vec<RuntimeTextDrawOrder>,
+    pub(crate) shape_world: Mat2D,
+}
+
+impl Default for RuntimeTextDrawData {
+    fn default() -> Self {
+        Self {
+            commands: Vec::new(),
+            color_glyphs: Vec::new(),
+            order: Vec::new(),
+            shape_world: Mat2D::IDENTITY,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimeTextDrawOrder {
+    Style(usize),
+    ColorGlyph(usize),
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeIntegratedColorGlyphCommand {
+    pub(crate) font_identity: usize,
+    pub(crate) glyph_id: u32,
+    pub(crate) transform: Mat2D,
+    pub(crate) opacity: f32,
+    pub(crate) layers: Vec<RuntimeColorGlyphLayer>,
 }
 
 include!("text/fully_shaped_text.rs");
@@ -2340,6 +2401,8 @@ impl<'a> StaticTextSlice<'a> {
         if resolved_runs.iter().all(|run| run.text.is_empty()) {
             return Ok(StaticTextRenderData {
                 path_buckets_by_style: vec![Vec::new(); self.styles.len()],
+                color_glyphs: Vec::new(),
+                order: Vec::new(),
                 local_transform: Mat2D::IDENTITY,
             });
         }
@@ -2354,10 +2417,15 @@ impl<'a> StaticTextSlice<'a> {
         else {
             return Ok(StaticTextRenderData {
                 path_buckets_by_style: vec![Vec::new(); self.styles.len()],
+                color_glyphs: Vec::new(),
+                order: Vec::new(),
                 local_transform: Mat2D::IDENTITY,
             });
         };
         let mut commands_by_style = vec![Vec::new(); self.styles.len()];
+        let mut color_glyphs = Vec::new();
+        let mut order = Vec::new();
+        let mut established_styles = vec![false; self.styles.len()];
         for line in &layout.lines {
             for positioned in &line.glyphs {
                 let glyph = &positioned.glyph;
@@ -2372,6 +2440,30 @@ impl<'a> StaticTextSlice<'a> {
                 let glyph_id = GlyphId::new(glyph.glyph_id);
                 let style = &self.styles[glyph.style_index];
                 if let Some(style_font_bytes) = style.font_bytes(runtime, instance) {
+                    if runtime_classify_color_glyph(style_font_bytes, glyph.glyph_id)
+                        != RuntimeColorGlyphClassification::Monochrome
+                    {
+                        let layers = runtime_extract_color_glyph_layers(
+                            style_font_bytes,
+                            glyph.glyph_id,
+                            style.foreground_color(instance),
+                        );
+                        if !layers.is_empty() {
+                            let color_index = color_glyphs.len();
+                            color_glyphs.push(RuntimeIntegratedColorGlyphCommand {
+                                font_identity: style_font_bytes.as_ptr() as usize,
+                                glyph_id: glyph.glyph_id,
+                                transform: runtime_positioned_color_glyph_transform(
+                                    positioned,
+                                    line.baseline,
+                                ),
+                                opacity: positioned.modifier_opacity,
+                                layers,
+                            });
+                            order.push(RuntimeTextDrawOrder::ColorGlyph(color_index));
+                        }
+                        continue;
+                    }
                     let style_font = SkrifaFontRef::new(style_font_bytes)
                         .context("failed to parse font for outlines")?;
                     let outlines = style_font.outline_glyphs();
@@ -2414,6 +2506,12 @@ impl<'a> StaticTextSlice<'a> {
                             positioned.modifier_opacity,
                             pen.commands,
                         );
+                        if positioned.modifier_opacity > 0.0
+                            && !established_styles[glyph.style_index]
+                        {
+                            established_styles[glyph.style_index] = true;
+                            order.push(RuntimeTextDrawOrder::Style(style.local_id));
+                        }
                     }
                 }
             }
@@ -2421,6 +2519,8 @@ impl<'a> StaticTextSlice<'a> {
 
         Ok(StaticTextRenderData {
             path_buckets_by_style: commands_by_style,
+            color_glyphs,
+            order,
             local_transform: layout.local_transform,
         })
     }
@@ -4336,6 +4436,30 @@ impl<'a> StaticTextSlice<'a> {
 }
 
 impl<'a> StaticTextStyle<'a> {
+    fn foreground_color(&self, instance: &ArtboardInstance) -> u32 {
+        self.container
+            .into_iter()
+            .flat_map(|container| container.paints.iter())
+            .find(|paint| {
+                paint.paint_type == ShapePaintKind::Fill
+                    && matches!(
+                        paint.paint_state,
+                        Some(ShapePaintStateNode::SolidColor { .. })
+                    )
+            })
+            .and_then(|paint| match paint.paint_state {
+                Some(ShapePaintStateNode::SolidColor { color }) => Some(
+                    paint
+                        .mutator_local
+                        .zip(solid_color_value_property_key())
+                        .and_then(|(local, key)| instance.color_property(local, key))
+                        .unwrap_or(color),
+                ),
+                _ => None,
+            })
+            .unwrap_or(0xff00_0000)
+    }
+
     fn variation_values(&self, instance: &ArtboardInstance) -> Vec<(u32, f32)> {
         let tag_key = property_key_for_name("TextStyleAxis", "tag");
         let axis_value_key = property_key_for_name("TextStyleAxis", "axisValue");
@@ -4513,6 +4637,24 @@ impl<'a> StaticTextStyle<'a> {
                 .and_then(|asset_id| instance.external_font_asset_bytes(asset_id))
         })
     }
+}
+
+fn runtime_positioned_color_glyph_transform(
+    positioned: &StaticPositionedTextGlyph,
+    baseline: f32,
+) -> Mat2D {
+    let size = positioned.glyph.scale * TEXT_SHAPE_SCALE_F32;
+    let base = Mat2D([size, 0.0, 0.0, size, positioned.x, baseline]);
+    if positioned.modifier_transform == Mat2D::IDENTITY {
+        return base;
+    }
+    let center_x = positioned.x + positioned.glyph.advance * 0.5;
+    let center = Mat2D([1.0, 0.0, 0.0, 1.0, center_x, baseline]);
+    let inverse_center = Mat2D([1.0, 0.0, 0.0, 1.0, -center_x, -baseline]);
+    center
+        .multiply(positioned.modifier_transform)
+        .multiply(inverse_center)
+        .multiply(base)
 }
 
 // Mirrors the static coverage/translation subset from C++
@@ -5852,6 +5994,42 @@ mod tests {
             error
                 .to_string()
                 .contains("direct TextModifierGroup parent")
+        );
+    }
+
+    #[test]
+    fn d_rt_engine_shared_classifier_extracts_colr_and_raster_layers() {
+        let root = std::path::PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        );
+        let colr_bytes =
+            std::fs::read(root.join("tests/unit_tests/assets/TwemojiMozilla.subset.ttf"))
+                .expect("read COLR differential font");
+        let colr_font = SkrifaFontRef::new(&colr_bytes).expect("parse COLR font");
+        let heart = (0..4096)
+            .find(|glyph| colr_font.color_glyphs().get(GlyphId::new(*glyph)).is_some())
+            .expect("Twemoji contains a COLR glyph");
+        assert_eq!(
+            runtime_classify_color_glyph(&colr_bytes, heart),
+            RuntimeColorGlyphClassification::Colr
+        );
+        assert!(!runtime_extract_color_glyph_layers(&colr_bytes, heart, 0xff12_3456).is_empty());
+
+        let raster_bytes =
+            std::fs::read(root.join("skia/dependencies/skia/resources/fonts/sbix.ttf"))
+                .expect("read raster differential font");
+        let raster_glyph = (0..256)
+            .find(|glyph| {
+                runtime_classify_color_glyph(&raster_bytes, *glyph)
+                    == RuntimeColorGlyphClassification::Raster
+            })
+            .expect("sbix fixture contains a raster glyph");
+        let layers = runtime_extract_color_glyph_layers(&raster_bytes, raster_glyph, 0xff00_0000);
+        assert!(
+            layers
+                .iter()
+                .any(|layer| { matches!(layer.paint, RuntimeColorGlyphPaint::Image { .. }) })
         );
     }
 }

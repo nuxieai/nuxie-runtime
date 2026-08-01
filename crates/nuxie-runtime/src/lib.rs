@@ -253,6 +253,13 @@ pub(crate) use state_machine::{
     StateMachineTransitionDurationInstance,
 };
 pub use text::{
+    RawText as RuntimeRawText, RawTextFont, RawTextFontError, RawTextPaint,
+    RuntimeColorGlyphClassification, RuntimeColorGlyphGradientStop, RuntimeColorGlyphLayer,
+    RuntimeColorGlyphPaint, TextAlign, TextOverflow, TextSizing, runtime_classify_color_glyph,
+    runtime_classify_color_glyph_face, runtime_extract_color_glyph_layers,
+    runtime_extract_color_glyph_layers_face,
+};
+pub use text::{
     RuntimeTextLayoutDebugReport, RuntimeTextModifierDebugReport,
     RuntimeTextSelectedRunDebugReport, RuntimeTextTargetModifierDebugReport,
     debug_text_word_unit_count, embedded_font_is_parseable, embedded_fonts_are_parseable,

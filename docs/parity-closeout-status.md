@@ -2198,4 +2198,15 @@ ARCHIVED EVIDENCE for the four scripted entries (was queue item 1;
   invalid indices, cold clone/drop, and zero/one rendering. C++ null/UB inputs
   remain precondition ratchets, while Rust clears stale state and fails safely.
   The exact gate evidence is recorded in `W123-report.md`; standalone RawText
-  remains the sole FL-E8 pending row.
+  landed in the parallel WP3 branch merged the same day (wave counts 341/1/0).
+- 2026-08-01 — FL-E8 WP3 promotes only `src/text/raw_text.cpp`, producing the
+  row-scoped interim ledger state faithful 340, divergent-by-decision 1,
+  pending 1 while the separately owned WP2 ListPath row remains untouched.
+  The public `RawText` facade now preserves constructor/append/clear/setter,
+  lazy bounds/clip/render, paint override, bidi/ellipsis, command-order, and
+  nonfinite behavior proven by D-RT-API. The five pinned U-color cases execute
+  live in both runtimes; shared text-engine COLR/raster extraction feeds both
+  owners, standalone replay remains flat COLR-path-only, and integrated Text
+  retains its decoded bitmap cache. Verification remains
+  `pending-verification`; the RawText GM family is still a documented
+  nonblocking follow-up lane.

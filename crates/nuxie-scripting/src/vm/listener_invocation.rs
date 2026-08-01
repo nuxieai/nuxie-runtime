@@ -1,15 +1,40 @@
 use luaur_rt::{
-    AnyUserData, Lua, Result, UserData, UserDataFields, UserDataMethods, Vector as LuaVector,
+    AnyUserData, Lua, Result, UserData, UserDataFields, UserDataMethods, Value, Vector as LuaVector,
 };
 use nuxie_runtime::{
     ScriptGamepadInputChange, ScriptGamepadMappingKind, ScriptGamepadSnapshot,
     ScriptListenerActionMethod, ScriptListenerInvocation, ScriptPointerEventKind,
 };
+use std::{cell::Cell, rc::Rc};
+
+pub(super) fn install_pointer_event_global(lua: &Lua) -> Result<()> {
+    let pointer_event = lua.create_table();
+    pointer_event.set(
+        "new",
+        lua.create_function(|lua, (id, position): (i64, LuaVector)| {
+            lua.create_userdata(ScriptedPointerEvent::new(
+                id as u8,
+                position.x(),
+                position.y(),
+            ))
+        })?,
+    )?;
+    lua.globals().set("PointerEvent", pointer_event)
+}
 
 #[derive(Clone)]
 struct ScriptedInvocation(ScriptListenerInvocation);
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ScriptedPointerHitResult {
+    None,
+    Hit,
+    HitOpaque,
+}
+
+pub(super) type ScriptedPointerHitResultHandle = Rc<Cell<ScriptedPointerHitResult>>;
+
+#[derive(Clone)]
 struct ScriptedPointerEvent {
     id: u8,
     x: f32,
@@ -18,6 +43,7 @@ struct ScriptedPointerEvent {
     previous_y: f32,
     timestamp_seconds: f32,
     event: Option<ScriptPointerEventKind>,
+    hit_result: ScriptedPointerHitResultHandle,
 }
 
 #[derive(Clone, Copy)]
@@ -67,10 +93,33 @@ pub(super) fn listener_action_argument(
         ScriptListenerActionMethod::PerformAction => {
             lua.create_userdata(ScriptedInvocation(invocation.clone()))
         }
-        ScriptListenerActionMethod::Perform => {
-            lua.create_userdata(ScriptedPointerEvent::from_invocation(invocation))
-        }
+        ScriptListenerActionMethod::Perform => pointer_event_argument(lua, invocation).map(|v| v.0),
     }
+}
+
+/// Create the exact pointer userdata plus the result cell that the native
+/// callback owner reads after Lua returns. The listener-action caller drops
+/// the cell (matching C++, which ignores `hit()` there). A pointer-dispatch
+/// caller can retain the cell through the callback and fold the resulting
+/// tri-state into its hit traversal, as `HitScriptedDrawable` does natively.
+pub(super) fn pointer_event_argument(
+    lua: &Lua,
+    invocation: &ScriptListenerInvocation,
+) -> Result<(AnyUserData, ScriptedPointerHitResultHandle)> {
+    let event = ScriptedPointerEvent::from_invocation(invocation);
+    let result = event.hit_result.clone();
+    Ok((lua.create_userdata(event)?, result))
+}
+
+pub(super) fn scripted_drawable_pointer_argument(
+    lua: &Lua,
+    pointer_id: i32,
+    local_x: f32,
+    local_y: f32,
+) -> Result<(AnyUserData, ScriptedPointerHitResultHandle)> {
+    let event = ScriptedPointerEvent::new(pointer_id as u8, local_x, local_y);
+    let result = event.hit_result.clone();
+    Ok((lua.create_userdata(event)?, result))
 }
 
 pub(super) fn scripted_drawable_input_argument(
@@ -123,6 +172,22 @@ pub(super) fn scripted_drawable_input_argument(
 }
 
 impl ScriptedPointerEvent {
+    fn new(id: u8, x: f32, y: f32) -> Self {
+        Self {
+            id,
+            x,
+            y,
+            previous_x: 0.0,
+            previous_y: 0.0,
+            timestamp_seconds: 0.0,
+            // `ScriptedPointerEvent`'s C++ constructor defaults the raw
+            // ListenerType to `enter` (0). The non-pointer legacy listener
+            // placeholder explicitly passes -1 and remains `unknown`.
+            event: Some(ScriptPointerEventKind::Enter),
+            hit_result: Rc::new(Cell::new(ScriptedPointerHitResult::None)),
+        }
+    }
+
     fn from_invocation(invocation: &ScriptListenerInvocation) -> Self {
         match invocation {
             ScriptListenerInvocation::Pointer {
@@ -144,6 +209,7 @@ impl ScriptedPointerEvent {
                 previous_y: *previous_y,
                 timestamp_seconds: *timestamp_seconds,
                 event: Some(*event),
+                hit_result: Rc::new(Cell::new(ScriptedPointerHitResult::None)),
             },
             ScriptListenerInvocation::ReportedEvent { .. }
             | ScriptListenerInvocation::Keyboard { .. }
@@ -162,11 +228,12 @@ impl ScriptedPointerEvent {
                 previous_y: 0.0,
                 timestamp_seconds: 0.0,
                 event: None,
+                hit_result: Rc::new(Cell::new(ScriptedPointerHitResult::None)),
             },
         }
     }
 
-    fn event_name(self) -> &'static str {
+    fn event_name(&self) -> &'static str {
         match self.event {
             Some(ScriptPointerEventKind::Enter) => "pointerEnter",
             Some(ScriptPointerEventKind::Exit) => "pointerExit",
@@ -196,7 +263,16 @@ impl UserData for ScriptedPointerEvent {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method_mut("hit", |_, _, _: Option<bool>| Ok(()));
+        methods.add_method("hit", |_, this, value: Value| {
+            // Pinned `pointer_event_hit` distinguishes an actual Lua boolean
+            // from every other value. `true` is a transparent hit; `false`,
+            // nil/missing, and non-booleans are opaque.
+            this.hit_result.set(match value {
+                Value::Boolean(true) => ScriptedPointerHitResult::Hit,
+                _ => ScriptedPointerHitResult::HitOpaque,
+            });
+            Ok(())
+        });
     }
 }
 
@@ -230,7 +306,12 @@ impl UserData for ScriptedKeyboardInvocation {
 
 impl UserData for ScriptedTextInputInvocation {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("text", |_, this| Ok(this.0.clone()));
+        fields.add_field_method_get("text", |_, this| {
+            // Pinned C++ stores the owned std::string but exposes it through
+            // `lua_pushstring(text.c_str())`, so Lua observes only the prefix
+            // before an embedded NUL.
+            Ok(this.0.split('\0').next().unwrap_or_default().to_owned())
+        });
     }
 }
 
@@ -278,10 +359,10 @@ impl UserData for ScriptedGamepadEvent {
             Ok(this.standard_axis_intent.is_some())
         });
         fields.add_field_method_get("intentButton", |_, this| {
-            Ok(this.standard_button_intent.and_then(standard_button_label))
+            Ok(this.standard_button_intent.map(standard_button_label))
         });
         fields.add_field_method_get("intentAxis", |_, this| {
-            Ok(this.standard_axis_intent.and_then(standard_axis_label))
+            Ok(this.standard_axis_intent.map(standard_axis_label))
         });
     }
 
@@ -405,15 +486,17 @@ where
         Ok(snapshot(this).button_mask & (1_u64 << (index - 1)) != 0)
     });
     methods.add_method("buttonValue", move |_, this, index: i64| {
-        Ok(usize::try_from(index - 1)
-            .ok()
+        Ok(index
+            .checked_sub(1)
+            .and_then(|index| usize::try_from(index).ok())
             .and_then(|index| snapshot(this).button_values.get(index))
             .copied()
             .unwrap_or(0.0))
     });
     methods.add_method("axis", move |_, this, index: i64| {
-        Ok(usize::try_from(index - 1)
-            .ok()
+        Ok(index
+            .checked_sub(1)
+            .and_then(|index| usize::try_from(index).ok())
             .and_then(|index| snapshot(this).axes.get(index))
             .copied()
             .unwrap_or(0.0))
@@ -429,7 +512,7 @@ fn axis_value(snapshot: &ScriptGamepadSnapshot, index: usize) -> f32 {
     snapshot.axes.get(index).copied().unwrap_or(0.0)
 }
 
-fn standard_button_label(value: u32) -> Option<&'static str> {
+fn standard_button_label(value: u32) -> &'static str {
     [
         "south",
         "east",
@@ -451,9 +534,10 @@ fn standard_button_label(value: u32) -> Option<&'static str> {
     ]
     .get(value as usize)
     .copied()
+    .unwrap_or("unknown")
 }
 
-fn standard_axis_label(value: u32) -> Option<&'static str> {
+fn standard_axis_label(value: u32) -> &'static str {
     [
         "leftX",
         "leftY",
@@ -464,6 +548,7 @@ fn standard_axis_label(value: u32) -> Option<&'static str> {
     ]
     .get(value as usize)
     .copied()
+    .unwrap_or("unknown")
 }
 
 impl UserData for ScriptedInvocation {
@@ -649,6 +734,43 @@ mod tests {
         assert_eq!(id, 44);
         assert_eq!(event, "pointerMove");
         assert_eq!(timestamp, 7.5);
+    }
+
+    #[test]
+    fn pointer_hit_propagates_the_cpp_tristate_out_of_the_lua_callback() {
+        let lua = Lua::new();
+        let event = ScriptedPointerEvent::from_invocation(&ScriptListenerInvocation::Pointer {
+            pointer_id: 1,
+            x: 10.0,
+            y: 20.0,
+            previous_x: 0.0,
+            previous_y: 0.0,
+            event: ScriptPointerEventKind::Down,
+            timestamp_seconds: 0.0,
+        });
+        let hit_result = event.hit_result.clone();
+        lua.globals()
+            .set(
+                "event",
+                lua.create_userdata(event).expect("pointer userdata"),
+            )
+            .expect("pointer global");
+
+        lua.load("event:hit(true)").exec().expect("transparent hit");
+        assert_eq!(hit_result.get(), ScriptedPointerHitResult::Hit);
+
+        lua.load("event:hit(false)").exec().expect("opaque hit");
+        assert_eq!(hit_result.get(), ScriptedPointerHitResult::HitOpaque);
+
+        lua.load("event:hit()")
+            .exec()
+            .expect("missing argument defaults opaque");
+        assert_eq!(hit_result.get(), ScriptedPointerHitResult::HitOpaque);
+
+        lua.load("event:hit('not a boolean')")
+            .exec()
+            .expect("non-boolean argument defaults opaque");
+        assert_eq!(hit_result.get(), ScriptedPointerHitResult::HitOpaque);
     }
 
     #[test]

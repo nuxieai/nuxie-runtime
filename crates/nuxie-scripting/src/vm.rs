@@ -1133,6 +1133,7 @@ impl ScriptVm {
 
         install_host_print(&self.lua, self.logging.clone())?;
         install_math_globals(&self.lua)?;
+        listener_invocation::install_pointer_event_global(&self.lua)?;
         install_data_value_global(&self.lua)?;
         buffer_ext::install_buffer_extensions(&self.lua)?;
         promise::install_promise_globals(&self.lua)?;
@@ -1987,6 +1988,51 @@ impl ScriptInstance for LuaScriptInstance {
                 }
             }
         }
+    }
+
+    fn call_scripted_drawable_pointer(
+        &mut self,
+        method: nuxie_runtime::ScriptMethod,
+        pointer_id: i32,
+        local_x: f32,
+        local_y: f32,
+        _host: &mut dyn ScriptHost,
+    ) -> std::result::Result<nuxie_runtime::ScriptedDrawablePointerResult, ScriptError> {
+        self.reset_execution_budget();
+        let Some(table) = self.table.clone() else {
+            return Ok(nuxie_runtime::ScriptedDrawablePointerResult::default());
+        };
+        let value: Value = table
+            .get(method.as_str())
+            .map_err(|error| self.script_error(error))?;
+        let Value::Function(function) = value else {
+            return Ok(nuxie_runtime::ScriptedDrawablePointerResult::default());
+        };
+        let lua = table.lua();
+        let (argument, hit_result) = listener_invocation::scripted_drawable_pointer_argument(
+            &lua, pointer_id, local_x, local_y,
+        )
+        .map_err(|error| self.script_error(error))?;
+
+        let call_result = function.call::<()>((table, argument));
+        let hit = match hit_result.get() {
+            listener_invocation::ScriptedPointerHitResult::None => {
+                nuxie_runtime::ScriptedDrawablePointerHit::None
+            }
+            listener_invocation::ScriptedPointerHitResult::Hit => {
+                nuxie_runtime::ScriptedDrawablePointerHit::Hit
+            }
+            listener_invocation::ScriptedPointerHitResult::HitOpaque => {
+                nuxie_runtime::ScriptedDrawablePointerHit::HitOpaque
+            }
+        };
+        if let Err(error) = call_result {
+            let error = self.script_error(error);
+            if error.resource_code().is_some() {
+                return Err(error);
+            }
+        }
+        Ok(nuxie_runtime::ScriptedDrawablePointerResult { invoked: true, hit })
     }
 
     fn call_input_trigger(

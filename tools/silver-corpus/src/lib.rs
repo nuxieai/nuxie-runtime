@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 mod action;
-pub use action::{Action, ActionTarget, Execution};
+pub use action::{Action, ActionTarget, Execution, PointerCoordinate};
 
 pub const EXPECTED_ENTRIES: usize = 238;
 pub const EXPECTED_RUNTIME: usize = 195;

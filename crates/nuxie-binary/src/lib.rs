@@ -22,6 +22,13 @@ use assets::{
     cpp_manifest_key, cpp_manifest_resolver_key, validate_cpp_manifest_asset_with_budget,
 };
 
+mod core;
+
+use core::{
+    binary_reader::BinaryReader,
+    field_types::{read_field_value, read_known_uint_field, read_string_or_bytes_value},
+};
+
 pub const SUPPORTED_MAJOR_VERSION: u64 = 7;
 pub const SUPPORTED_MINOR_VERSION: u64 = 2;
 pub const VIEW_MODEL_SYMBOL_ITEM_INDEX: u8 = 15;
@@ -13686,33 +13693,6 @@ fn read_header_fallback_value(
     })
 }
 
-fn read_string_or_bytes_value(
-    reader: &mut BinaryReader<'_>,
-    property: &Property,
-) -> Result<FieldValue> {
-    if property.runtime_type == FieldKind::Bytes {
-        let bytes = reader.read_length_prefixed_bytes()?;
-        Ok(FieldValue::Bytes(BytesValue::new(bytes.to_vec())))
-    } else {
-        Ok(FieldValue::String(reader.read_string()?))
-    }
-}
-
-fn read_field_value(reader: &mut BinaryReader<'_>, property: &Property) -> Result<FieldValue> {
-    Ok(match property.runtime_type {
-        FieldKind::Bool => FieldValue::Bool(reader.read_byte()? == 1),
-        FieldKind::Bytes => {
-            let bytes = reader.read_length_prefixed_bytes()?;
-            FieldValue::Bytes(BytesValue::new(bytes.to_vec()))
-        }
-        FieldKind::Callback => FieldValue::Callback,
-        FieldKind::Color => FieldValue::Color(reader.read_u32()?),
-        FieldKind::Double => FieldValue::Double(reader.read_f32()?),
-        FieldKind::String => FieldValue::String(reader.read_string()?),
-        FieldKind::Uint => FieldValue::Uint(read_known_uint_field(reader, property, "uint field")?),
-    })
-}
-
 fn skip_header_value(reader: &mut BinaryReader<'_>, kind: HeaderFieldKind) -> Result<()> {
     match kind {
         HeaderFieldKind::Uint => {
@@ -13820,104 +13800,6 @@ fn read_cpp_int_var_uint(reader: &mut BinaryReader<'_>, label: &str) -> Result<u
         bail!("{label} {value} does not fit in C++ int");
     }
     Ok(value)
-}
-
-fn read_cpp_unsigned_int_var_uint(reader: &mut BinaryReader<'_>, label: &str) -> Result<u64> {
-    let value = reader.read_var_uint()?;
-    if value > u32::MAX as u64 {
-        bail!("{label} {value} does not fit in C++ unsigned int");
-    }
-    Ok(value)
-}
-
-fn read_known_uint_field(
-    reader: &mut BinaryReader<'_>,
-    property: &Property,
-    label: &str,
-) -> Result<u64> {
-    match property.uint_storage() {
-        Some(UintStorage::Uint64) => reader.read_var_uint(),
-        Some(UintStorage::Uint8) => {
-            read_cpp_unsigned_int_var_uint(reader, label).map(|value| u64::from(value as u8))
-        }
-        Some(UintStorage::Uint32) => read_cpp_unsigned_int_var_uint(reader, label),
-        None => bail!("{label} schema property is not uint-like"),
-    }
-}
-
-struct BinaryReader<'a> {
-    bytes: &'a [u8],
-    offset: usize,
-}
-
-impl<'a> BinaryReader<'a> {
-    fn new(bytes: &'a [u8]) -> Self {
-        Self { bytes, offset: 0 }
-    }
-
-    fn reached_end(&self) -> bool {
-        self.offset == self.bytes.len()
-    }
-
-    fn read_byte(&mut self) -> Result<u8> {
-        let byte = *self
-            .bytes
-            .get(self.offset)
-            .with_context(|| format!("read past end at byte {}", self.offset))?;
-        self.offset += 1;
-        Ok(byte)
-    }
-
-    fn read_bytes_exact(&mut self, len: usize) -> Result<&'a [u8]> {
-        let end = self
-            .offset
-            .checked_add(len)
-            .context("byte offset overflow")?;
-        let bytes = self
-            .bytes
-            .get(self.offset..end)
-            .with_context(|| format!("read {len} bytes past end at byte {}", self.offset))?;
-        self.offset = end;
-        Ok(bytes)
-    }
-
-    fn read_length_prefixed_bytes(&mut self) -> Result<&'a [u8]> {
-        let len = usize::try_from(self.read_var_uint()?).context("length does not fit in usize")?;
-        self.read_bytes_exact(len)
-    }
-
-    fn read_string(&mut self) -> Result<StringValue> {
-        let bytes = self.read_length_prefixed_bytes()?;
-        let raw = bytes.to_vec();
-        let value = String::from_utf8(raw.clone()).ok();
-        Ok(StringValue { value, raw })
-    }
-
-    fn read_f32(&mut self) -> Result<f32> {
-        let bytes: [u8; 4] = self.read_bytes_exact(4)?.try_into().unwrap();
-        Ok(f32::from_le_bytes(bytes))
-    }
-
-    fn read_u32(&mut self) -> Result<u32> {
-        let bytes: [u8; 4] = self.read_bytes_exact(4)?.try_into().unwrap();
-        Ok(u32::from_le_bytes(bytes))
-    }
-
-    fn read_var_uint(&mut self) -> Result<u64> {
-        let mut result = 0u64;
-        let mut shift = 0u8;
-
-        loop {
-            let byte = self.read_byte()?;
-            result |= u64::from(byte & 0x7f).wrapping_shl(u32::from(shift));
-
-            if byte & 0x80 == 0 {
-                return Ok(result);
-            }
-
-            shift = shift.wrapping_add(7);
-        }
-    }
 }
 
 #[cfg(test)]

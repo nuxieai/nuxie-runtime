@@ -215,7 +215,7 @@ TEST_CASE("renders selected board", "[silver]")
             ),
         )
 
-    def test_rejects_pointer_expressions_that_cannot_be_evaluated(self):
+    def test_encodes_artboard_relative_pointer_expressions(self):
         actions, blocker = generate_manifest.executable_actions(
             """
             stateMachine->pointerDown(rive::Vec2D(artboard->width() / 2, 10));
@@ -224,8 +224,120 @@ TEST_CASE("renders selected board", "[silver]")
             "default",
             "none",
         )
+        self.assertIsNone(blocker)
+        self.assertEqual(
+            actions,
+            (
+                {
+                    "kind": "pointer-down",
+                    "x": "artboard-width/2",
+                    "y": 10.0,
+                    "pointer_id": 0,
+                },
+                {"kind": "draw"},
+            ),
+        )
+
+    def test_rejects_pointer_variables_until_the_body_is_expanded(self):
+        actions, blocker = generate_manifest.executable_actions(
+            """
+            stateMachine->pointerDown(rive::Vec2D(xPos, 10));
+            artboard->draw(renderer.get());
+            """,
+            "default",
+            "none",
+        )
         self.assertEqual(actions, ())
         self.assertEqual(blocker, "pointer-expression-encoding")
+
+    def test_ports_typed_view_model_mutations_in_cpp_order(self):
+        actions = generate_manifest.p1q_view_model_actions("stateful_nested")
+        self.assertIsNotNone(actions)
+        mutations = [
+            item
+            for item in actions
+            if item["kind"].startswith("set-view-model-")
+        ]
+        self.assertEqual(
+            mutations,
+            [
+                {
+                    "kind": "set-view-model-string",
+                    "property": "btn1Label",
+                    "value": "One",
+                },
+                {
+                    "kind": "set-view-model-color",
+                    "property": "btn1Tint",
+                    "value": 0xFFFF3344,
+                },
+                {
+                    "kind": "set-view-model-string",
+                    "property": "btn2Label",
+                    "value": "Two",
+                },
+                {
+                    "kind": "set-view-model-color",
+                    "property": "btn2Tint",
+                    "value": 0xFF33AAFF,
+                },
+            ],
+        )
+
+    def test_ports_nested_view_model_paths_and_live_font_bytes(self):
+        car_actions = generate_manifest.p1q_view_model_actions("car_widgets_v01")
+        self.assertIn(
+            {
+                "kind": "set-view-model-number",
+                "property": "COMPASS/Rotation",
+                "value": 20.0,
+            },
+            car_actions,
+        )
+        self.assertIn(
+            {
+                "kind": "fire-view-model-trigger",
+                "property": "Button/Pressed",
+            },
+            generate_manifest.p1q_view_model_actions("rewards_demo"),
+        )
+        self.assertIn(
+            {
+                "kind": "set-view-model-font-bytes",
+                "property": "fontProperty",
+                "source": "kablammo.ttf",
+            },
+            generate_manifest.p1q_view_model_actions("data_bind_font_test"),
+        )
+
+    def test_ports_word_joiner_mutations_as_utf8_strings(self):
+        actions = generate_manifest.p1q_view_model_actions("word_joiner_test")
+        text_values = [
+            item["value"]
+            for item in actions
+            if item["kind"] == "set-view-model-string"
+            and item["property"] == "txt1"
+        ]
+        self.assertEqual(len(text_values), 9)
+        self.assertEqual(text_values[0], "123456789012345678901234567890")
+        self.assertEqual(text_values[1].count("\u2060"), 9)
+        self.assertEqual(text_values[2].count("\u2060"), 19)
+        self.assertEqual(text_values[-1].count("\u2060"), 90)
+
+    def test_expands_pointer_loop_variables_with_cpp_update_order(self):
+        actions = generate_manifest.p1q_pointer_actions(
+            "scroll_threshold-vertical-scroll"
+        )
+        pointer_actions = [
+            item for item in actions if item["kind"].startswith("pointer-")
+        ]
+        self.assertEqual(pointer_actions[0]["y"], 70.0)
+        self.assertEqual(pointer_actions[1]["y"], 70.0)
+        self.assertEqual(pointer_actions[4]["y"], 46.0)
+        self.assertEqual(pointer_actions[5]["y"], 38.0)
+        self.assertTrue(
+            all(item["x"] == "artboard-width/2" for item in pointer_actions)
+        )
 
     def test_render_pins_lane_and_provenance_ratchets(self):
         producer = generate_manifest.Producer(

@@ -20,9 +20,9 @@ FEATURE_ROWS = {
         "F1: core artboard behavior is ported; Artboard::volume remains absent.",
     ),
     "src/text/cursor.cpp": (
-        "partial",
-        "crates/nuxie-runtime/src/text.rs",
-        "F2: TextInput rendering is ported; cursor editing behavior is partial.",
+        "ported",
+        "crates/nuxie-runtime/src/text/cursor.rs",
+        "FL-E6: retained cursor editing and selection behavior is ported.",
     ),
     "src/command_queue.cpp": ("absent", "", "F3: command queue is absent."),
     "src/constraints/scrolling/elastic_scroll_physics.cpp": (
@@ -118,9 +118,9 @@ FEATURE_ROWS.update(
             "F5/F6: semantic listener runtime is absent.",
         ),
         "src/animation/text_input_listener_group.cpp": (
-            "absent",
-            "",
-            "F5: text-input listener runtime is absent.",
+            "ported",
+            "crates/nuxie-runtime/src/state_machine/text_input_listener_group.rs",
+            "FL-E6: direct TextInput pointer, drag, multi-click, and focus bridge.",
         ),
         "src/animation/listener_types/listener_input_type_gamepad.cpp": (
             "absent",
@@ -197,20 +197,21 @@ FEATURE_ROWS.update(
     }
 )
 
-for _path in {
-    "src/text/raw_text_input.cpp",
-    "src/text/text_input.cpp",
-    "src/text/text_input_cursor.cpp",
-    "src/text/text_input_drawable.cpp",
-    "src/text/text_input_selected_text.cpp",
-    "src/text/text_input_selection.cpp",
-    "src/text/text_input_text.cpp",
-    "src/text/text_selection_path.cpp",
-}:
+for _path, _module in {
+    "src/text/raw_text_input.cpp": "crates/nuxie-runtime/src/text/raw_text_input.rs",
+    "src/text/text_input.cpp": "crates/nuxie-runtime/src/text_input.rs",
+    "src/text/text_input_cursor.cpp": "crates/nuxie-runtime/src/text/text_input_cursor.rs",
+    "src/text/text_input_drawable.cpp": "crates/nuxie-runtime/src/text/text_input_drawable.rs",
+    "src/text/text_input_selected_text.cpp": "crates/nuxie-runtime/src/text/text_input_selected_text.rs",
+    "src/text/text_input_selection.cpp": "crates/nuxie-runtime/src/text/text_input_selection.rs",
+    "src/text/text_input_text.cpp": "crates/nuxie-runtime/src/text/text_input_text.rs",
+    "src/text/text_interface.cpp": "crates/nuxie-runtime/src/text/text_interface.rs",
+    "src/text/text_selection_path.cpp": "crates/nuxie-runtime/src/text/text_selection_path.rs",
+}.items():
     FEATURE_ROWS[_path] = (
-        "partial",
-        "crates/nuxie-runtime/src/text.rs",
-        "F2: TextInput rendering is ported; editing behavior remains partial.",
+        "ported",
+        _module,
+        "FL-E6: direct TextInput owner family and W65 behavior are ported.",
     )
 
 for _path in {

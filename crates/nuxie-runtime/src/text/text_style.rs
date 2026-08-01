@@ -3,11 +3,10 @@ use crate::{artboard::ArtboardInstance, properties::property_key_for_name, text_
 pub(super) fn owning_text(instance: &ArtboardInstance, mut local_id: usize) -> Option<usize> {
     loop {
         local_id = instance.component_parent_local(local_id)?;
-        if matches!(
+        if crate::text::text_interface::is_text_interface(
             instance
                 .component(local_id)
                 .map(|component| component.type_name),
-            Some("Text" | "TextInput")
         ) {
             return Some(local_id);
         }

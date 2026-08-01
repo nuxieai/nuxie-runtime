@@ -32,6 +32,16 @@ use crate::{ArtboardInstance, Mat2D, RuntimePathCommand};
 use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind};
 use std::collections::BTreeMap;
 
+pub(crate) mod cursor;
+pub(crate) mod raw_text_input;
+mod text_input_cursor;
+mod text_input_drawable;
+pub(crate) mod text_input_selected_text;
+mod text_input_selection;
+mod text_input_text;
+pub(crate) mod text_interface;
+pub(crate) mod text_selection_path;
+
 const TEXT_SHAPE_SCALE: i32 = 2048;
 const TEXT_SHAPE_SCALE_F32: f32 = TEXT_SHAPE_SCALE as f32;
 const TEXT_SIZING_AUTO_WIDTH: u64 = 0;
@@ -375,11 +385,29 @@ pub(crate) fn text_input_layout_measure_bounds(
     text_input_local: usize,
     layout_constraint: RuntimeTextLayoutConstraint,
 ) -> Option<(f32, f32, f32, f32)> {
-    StaticTextSlice::from_text_input_graph(runtime, graph, text_input_local)
+    let state = instance
+        .component(text_input_local)?
+        .concrete
+        .text_input
+        .as_ref()?;
+    if let Some(bounds) = state
+        .raw
+        .borrow()
+        .cached_measure(layout_constraint.width, layout_constraint.height)
+    {
+        return Some(bounds);
+    }
+    let bounds = StaticTextSlice::from_text_input_graph(runtime, graph, text_input_local)
         .ok()?
         .measure_bounds_with_layout_constraint(runtime, instance, layout_constraint)
         .ok()
-        .flatten()
+        .flatten()?;
+    state.raw.borrow_mut().retain_measure(
+        layout_constraint.width,
+        layout_constraint.height,
+        bounds,
+    );
+    Some(bounds)
 }
 
 pub(crate) fn runtime_text_shape_paint_commands(
@@ -519,7 +547,9 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
     let text_input_local = drawable_component
         .parent_local
         .context("TextInputDrawable missing TextInput parent")?;
-    if type_for_local(graph, text_input_local) != Some("TextInput") {
+    if !text_input_drawable::is_concrete(drawable_component.type_name)
+        || !text_input_drawable::valid_parent(type_for_local(graph, text_input_local))
+    {
         bail!("TextInputDrawable parent is not TextInput");
     }
     let container = graph
@@ -541,12 +571,30 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
         .component(drawable_local)
         .map(|component| component.transform.render_opacity)
         .unwrap_or(1.0);
+    if !text_input_drawable::will_draw(true, render_opacity) {
+        return Ok(Vec::new());
+    }
     let needs_save_operation = true;
 
     let path_buckets = match container.type_name {
-        "TextInputText" | "TextInputSelectedText" => {
-            let render_data =
-                slice.render_data(runtime, instance, layout_constraint, text_input_world)?;
+        text_input_text::TYPE_NAME | "TextInputSelectedText" => {
+            let selection = instance.text_input_selection_range(text_input_local);
+            let filter = match container.type_name {
+                "TextInputSelectedText" => Some((selection.unwrap_or(0..0), true)),
+                text_input_text::TYPE_NAME
+                    if instance.text_input_separates_selection_text(text_input_local) =>
+                {
+                    selection.map(|range| (range, false))
+                }
+                _ => None,
+            };
+            let render_data = slice.render_data_filtered(
+                runtime,
+                instance,
+                layout_constraint,
+                text_input_world,
+                filter,
+            )?;
             let shape_world = text_input_world.multiply(render_data.local_transform);
             return slice.text_input_paint_commands(
                 instance,
@@ -563,11 +611,15 @@ pub(crate) fn runtime_text_input_shape_paint_commands(
         }
         "TextInputCursor" => vec![StaticTextPathBucket {
             opacity: 1.0,
-            commands: slice.text_input_cursor_path(runtime, instance)?,
+            commands: text_input_cursor::local_clockwise_path(
+                instance,
+                text_input_local,
+                slice.text_input_fallback_cursor_height(runtime, instance)?,
+            ),
         }],
         "TextInputSelection" => vec![StaticTextPathBucket {
             opacity: 1.0,
-            commands: Vec::new(),
+            commands: text_input_selection::local_clockwise_path(instance, text_input_local),
         }],
         type_name => bail!("unsupported TextInputDrawable type {type_name}"),
     };
@@ -683,6 +735,237 @@ struct StaticTextRenderData {
 
 include!("text/fully_shaped_text.rs");
 
+#[derive(Clone)]
+pub(crate) struct TextInputGeometry {
+    layout: StaticShapedTextLayout,
+    local_bounds: Option<(f32, f32, f32, f32)>,
+}
+
+impl std::fmt::Debug for TextInputGeometry {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TextInputGeometry")
+            .field("text_len", &self.layout.text.len())
+            .field("line_count", &self.layout.lines.len())
+            .field("local_bounds", &self.local_bounds)
+            .finish()
+    }
+}
+
+impl TextInputGeometry {
+    pub(crate) fn caret(&self, byte_offset: usize) -> Option<(RenderVec2D, RenderVec2D)> {
+        self.layout.caret(byte_offset)
+    }
+
+    pub(crate) fn hit(&self, point: RenderVec2D) -> Option<usize> {
+        let inverse = self.layout.shape_world.invert_or_identity();
+        let (x, y) = inverse.transform_point(point.x, point.y);
+        let line = self
+            .layout
+            .lines
+            .iter()
+            .find(|line| y <= line.bottom)
+            .or_else(|| self.layout.lines.last())?;
+        if x <= line.start_x.min(line.end_x) {
+            let first = line.glyphs.first()?;
+            let index = if first.glyph.rtl {
+                first.glyph.char_index.saturating_add(first.glyph.char_len)
+            } else {
+                first.glyph.char_index
+            };
+            return Some(char_byte_index(&self.layout.text, index));
+        }
+        if x >= line.start_x.max(line.end_x) {
+            let last = line.glyphs.last()?;
+            let index = if last.glyph.rtl {
+                last.glyph.char_index
+            } else {
+                last.glyph.char_index.saturating_add(last.glyph.char_len)
+            };
+            return Some(char_byte_index(&self.layout.text, index));
+        }
+        self.layout.hit(point)
+    }
+
+    pub(crate) fn selection_rects(&self, range: std::ops::Range<usize>) -> Vec<RenderAabb> {
+        self.layout.selection_rects(range)
+    }
+
+    pub(crate) fn local_bounds(&self) -> Option<(f32, f32, f32, f32)> {
+        self.local_bounds
+    }
+
+    pub(crate) fn line_metrics(&self) -> Vec<(usize, usize, f32, f32)> {
+        self.layout
+            .lines
+            .iter()
+            .map(|line| (line.char_start, line.char_end, line.top, line.bottom))
+            .collect()
+    }
+
+    pub(crate) fn line_directions(&self) -> Vec<bool> {
+        self.layout
+            .lines
+            .iter()
+            .map(|line| self.line_is_rtl(line))
+            .collect()
+    }
+
+    fn line_is_rtl(&self, line: &StaticShapedTextLine) -> bool {
+        paragraph_base_is_rtl(&self.layout.text, line.char_start)
+    }
+
+    pub(crate) fn line_range(&self, codepoint_index: usize) -> Option<std::ops::Range<usize>> {
+        let line =
+            self.layout.lines.iter().find(|line| {
+                codepoint_index >= line.char_start && codepoint_index <= line.char_end
+            })?;
+        Some(line.char_start..line.char_end)
+    }
+
+    pub(crate) fn vertical_cursor(
+        &self,
+        codepoint_index: usize,
+        direction: i32,
+        ideal_x: Option<f32>,
+    ) -> Option<(usize, f32)> {
+        let current = self.layout.lines.iter().position(|line| {
+            codepoint_index >= line.char_start && codepoint_index <= line.char_end
+        })?;
+        let target = if direction < 0 {
+            current.checked_sub(1)
+        } else {
+            current
+                .checked_add(1)
+                .filter(|index| *index < self.layout.lines.len())
+        };
+        let byte = char_byte_index(
+            &self.layout.text,
+            codepoint_index.min(self.layout.text.chars().count()),
+        );
+        let (top, bottom) = self.layout.caret(byte)?;
+        let x = ideal_x.unwrap_or((top.x + bottom.x) * 0.5);
+        let Some(target) = target else {
+            return Some((
+                if direction < 0 {
+                    0
+                } else {
+                    self.layout.text.chars().count()
+                },
+                x,
+            ));
+        };
+        let target_line = &self.layout.lines[target];
+        let target_y = (target_line.top + target_line.bottom) * 0.5;
+        let hit_byte = self.layout.hit(RenderVec2D::new(x, target_y))?;
+        Some((self.layout.char_index_at_byte(hit_byte)?, x))
+    }
+}
+
+fn paragraph_char_range(chars: &[char], at: usize) -> std::ops::Range<usize> {
+    let at = at.min(chars.len());
+    let start = chars[..at]
+        .iter()
+        .rposition(|character| *character == '\n')
+        .map_or(0, |index| index + 1);
+    let end = chars[at..]
+        .iter()
+        .position(|character| *character == '\n')
+        .map_or(chars.len(), |index| at + index);
+    start..end
+}
+
+fn paragraph_base_is_rtl(text: &str, at: usize) -> bool {
+    let chars = text.chars().collect::<Vec<_>>();
+    let range = paragraph_char_range(&chars, at);
+    let paragraph = chars[range].iter().collect::<String>();
+    unicode_bidi::BidiInfo::new(&paragraph, None)
+        .paragraphs
+        .first()
+        .is_some_and(|paragraph| paragraph.level.is_rtl())
+}
+
+fn text_has_rtl(text: &str) -> bool {
+    unicode_bidi::BidiInfo::new(text, None).has_rtl()
+}
+
+fn reorder_text_input_bidi_geometry(text: &str, lines: &mut [StaticShapedTextLine]) {
+    let bidi = unicode_bidi::BidiInfo::new(text, None);
+    for line in lines {
+        let mut clusters: Vec<Vec<StaticPositionedTextGlyph>> = Vec::new();
+        for glyph in std::mem::take(&mut line.glyphs) {
+            if let Some(cluster) = clusters.last_mut()
+                && cluster.last().is_some_and(|previous| {
+                    previous.glyph.char_index == glyph.glyph.char_index
+                        && previous.glyph.char_len == glyph.glyph.char_len
+                })
+            {
+                cluster.push(glyph);
+            } else {
+                clusters.push(vec![glyph]);
+            }
+        }
+        let line_byte_start = char_byte_index(text, line.char_start);
+        let line_byte_end = char_byte_index(text, line.char_end);
+        let Some(paragraph) = bidi.paragraphs.iter().find(|paragraph| {
+            paragraph.range.start <= line_byte_start && line_byte_end <= paragraph.range.end
+        }) else {
+            line.glyphs = clusters.into_iter().flatten().collect();
+            continue;
+        };
+        let (levels, visual_runs) = bidi.visual_runs(paragraph, line_byte_start..line_byte_end);
+        let mut visual_clusters = Vec::with_capacity(clusters.len());
+        for run in visual_runs {
+            let mut matching = clusters
+                .iter_mut()
+                .filter(|cluster| {
+                    cluster.first().is_some_and(|glyph| {
+                        let byte = char_byte_index(text, glyph.glyph.char_index);
+                        run.contains(&byte)
+                    })
+                })
+                .collect::<Vec<_>>();
+            if levels[run.start].is_rtl() {
+                matching.reverse();
+            }
+            for cluster in matching {
+                visual_clusters.append(cluster);
+            }
+        }
+        let mut cursor_x = line.start_x;
+        for glyph in &mut visual_clusters {
+            glyph.x = cursor_x;
+            cursor_x += glyph.glyph.advance;
+        }
+        line.end_x = cursor_x;
+        line.glyphs = visual_clusters;
+    }
+}
+
+pub(crate) fn build_text_input_geometry(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    instance: &ArtboardInstance,
+    text_local: usize,
+    layout_constraint: Option<RuntimeTextLayoutConstraint>,
+) -> Option<TextInputGeometry> {
+    let slice = StaticTextSlice::from_text_input_graph(runtime, graph, text_local).ok()?;
+    let local_bounds = match layout_constraint {
+        Some(constraint) => slice
+            .local_bounds_with_layout_constraint(runtime, instance, constraint)
+            .ok()
+            .flatten(),
+        None => slice.local_bounds(runtime, instance).ok().flatten(),
+    };
+    let layout = slice
+        .shaped_layout(runtime, instance, layout_constraint, Mat2D::IDENTITY)
+        .ok()??;
+    Some(TextInputGeometry {
+        layout,
+        local_bounds,
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum StaticCaretAffinity {
     Upstream,
@@ -716,6 +999,7 @@ struct StaticPositionedTextCluster {
     end_x: f32,
     first_glyph: usize,
     last_glyph: usize,
+    rtl: bool,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -1539,11 +1823,13 @@ impl<'a> StaticTextSlice<'a> {
         {
             bail!("TextInput subset currently supports exactly one TextStyle child");
         }
-        if text_input_component.children.iter().copied().any(|local| {
-            static_text_style_feature_is_unsupported(child_type(local))
-                || child_type(local) == Some("TextInputSelectedText")
-        }) {
-            bail!("TextInput subset does not support style features or selected-text draws");
+        if text_input_component
+            .children
+            .iter()
+            .copied()
+            .any(|local| static_text_style_feature_is_unsupported(child_type(local)))
+        {
+            bail!("TextInput subset does not support style features");
         }
 
         let text_input_global = global_for_local(graph, text_input_local)?;
@@ -1650,6 +1936,7 @@ impl<'a> StaticTextSlice<'a> {
         let scale = scaled_font_size / TEXT_SHAPE_SCALE_F32;
         let apply_ellipsis =
             self.should_apply_static_ellipsis(runtime, instance, layout_constraint)?;
+        let text_input_bidi = self.kind == StaticTextKind::TextInput && text_has_rtl(&text);
         let lines = self.layout_static_text_lines(
             runtime,
             instance,
@@ -1659,11 +1946,15 @@ impl<'a> StaticTextSlice<'a> {
             disable_legacy_kern,
             scale,
             letter_spacing,
+            text_input_bidi,
         )?;
         let line_metrics =
             self.static_line_metrics(runtime, instance, &lines, resolved_runs, font_scale)?;
-        let contextual_glyphs =
-            self.styled_resolved_run_glyphs(runtime, instance, resolved_runs, font_scale)?;
+        let contextual_glyphs = if text_input_bidi {
+            self.styled_resolved_run_glyphs_bidi(runtime, instance, resolved_runs, font_scale)?
+        } else {
+            self.styled_resolved_run_glyphs(runtime, instance, resolved_runs, font_scale)?
+        };
         let line_widths = lines
             .iter()
             .map(|line| Self::styled_line_width(line, &contextual_glyphs))
@@ -1815,10 +2106,18 @@ impl<'a> StaticTextSlice<'a> {
             });
         }
 
+        if text_input_bidi {
+            reorder_text_input_bidi_geometry(&text, &mut shaped_lines);
+        }
+
         let text_world_inverse = text_world.invert_or_identity();
         let mut has_geometric_modifiers = false;
         let mut has_non_monotone_advances = false;
         for line in &mut shaped_lines {
+            has_non_monotone_advances |= line
+                .glyphs
+                .windows(2)
+                .any(|glyphs| glyphs[1].glyph.char_index < glyphs[0].glyph.char_index);
             for positioned in &mut line.glyphs {
                 let glyph = &positioned.glyph;
                 let glyph_context = StaticTextGlyphContext {
@@ -1873,6 +2172,17 @@ impl<'a> StaticTextSlice<'a> {
         layout_constraint: Option<RuntimeTextLayoutConstraint>,
         text_world: Mat2D,
     ) -> Result<StaticTextRenderData> {
+        self.render_data_filtered(runtime, instance, layout_constraint, text_world, None)
+    }
+
+    fn render_data_filtered(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        layout_constraint: Option<RuntimeTextLayoutConstraint>,
+        text_world: Mat2D,
+        selection_filter: Option<(std::ops::Range<usize>, bool)>,
+    ) -> Result<StaticTextRenderData> {
         let resolved_runs = self.resolved_runs(runtime, instance)?;
         if resolved_runs.iter().all(|run| run.text.is_empty()) {
             return Ok(StaticTextRenderData {
@@ -1898,6 +2208,13 @@ impl<'a> StaticTextSlice<'a> {
         for line in &layout.lines {
             for positioned in &line.glyphs {
                 let glyph = &positioned.glyph;
+                if let Some((selection, include_selected)) = &selection_filter {
+                    let selected = glyph.char_index < selection.end
+                        && glyph.char_index.saturating_add(glyph.char_len) > selection.start;
+                    if selected != *include_selected {
+                        continue;
+                    }
+                }
                 let center_x = positioned.x + glyph.advance * 0.5;
                 let glyph_id = GlyphId::new(glyph.glyph_id);
                 let style = &self.styles[glyph.style_index];
@@ -2144,11 +2461,15 @@ impl<'a> StaticTextSlice<'a> {
             disable_legacy_kern,
             scale,
             letter_spacing,
+            self.kind == StaticTextKind::TextInput && text_has_rtl(&text),
         )?;
         let line_metrics =
             self.static_line_metrics(runtime, instance, &lines, &resolved_runs, font_scale)?;
-        let contextual_glyphs =
-            self.styled_resolved_run_glyphs(runtime, instance, &resolved_runs, font_scale)?;
+        let contextual_glyphs = if self.kind == StaticTextKind::TextInput && text_has_rtl(&text) {
+            self.styled_resolved_run_glyphs_bidi(runtime, instance, &resolved_runs, font_scale)?
+        } else {
+            self.styled_resolved_run_glyphs(runtime, instance, &resolved_runs, font_scale)?
+        };
         let measured_width = lines
             .iter()
             .map(|line| Self::styled_line_width(line, &contextual_glyphs))
@@ -2160,6 +2481,11 @@ impl<'a> StaticTextSlice<'a> {
             }
         };
         let width = match (purpose, sizing) {
+            (StaticTextLayoutBoundsPurpose::Measure, _)
+                if self.kind == StaticTextKind::TextInput =>
+            {
+                measured_width.min(layout_constraint.width)
+            }
             (
                 StaticTextLayoutBoundsPurpose::Measure,
                 TEXT_SIZING_AUTO_HEIGHT | TEXT_SIZING_FIXED,
@@ -2226,17 +2552,36 @@ impl<'a> StaticTextSlice<'a> {
         for run in &self.runs {
             let property_key = property_key_for_name(run.text_property_owner, "text")
                 .with_context(|| format!("missing {}.text key", run.text_property_owner))?;
-            let bytes = instance
-                .string_property(run.local_id, property_key)
-                .or_else(|| {
-                    runtime
-                        .object(run.global_id as usize)
-                        .and_then(|object| object.string_property_bytes("text"))
-                })
-                .context("TextValueRun missing text")?;
-            let text = std::str::from_utf8(bytes)
-                .with_context(|| format!("{}.text is not UTF-8", run.text_property_owner))?
-                .to_owned();
+            let text = if run.text_property_owner == "TextInput" {
+                instance
+                    .text_input_display_text(run.local_id)
+                    .or_else(|| {
+                        instance
+                            .string_property(run.local_id, property_key)
+                            .and_then(|bytes| std::str::from_utf8(bytes).ok())
+                            .map(str::to_owned)
+                    })
+                    .or_else(|| {
+                        runtime
+                            .object(run.global_id as usize)
+                            .and_then(|object| object.string_property_bytes("text"))
+                            .and_then(|bytes| std::str::from_utf8(bytes).ok())
+                            .map(str::to_owned)
+                    })
+                    .context("TextInput missing text")?
+            } else {
+                let bytes = instance
+                    .string_property(run.local_id, property_key)
+                    .or_else(|| {
+                        runtime
+                            .object(run.global_id as usize)
+                            .and_then(|object| object.string_property_bytes("text"))
+                    })
+                    .context("TextValueRun missing text")?;
+                std::str::from_utf8(bytes)
+                    .with_context(|| format!("{}.text is not UTF-8", run.text_property_owner))?
+                    .to_owned()
+            };
             let char_len = text.chars().count();
             runs.push(StaticResolvedRun {
                 local_id: run.local_id,
@@ -2675,9 +3020,14 @@ impl<'a> StaticTextSlice<'a> {
                 disable_legacy_kern,
                 scale,
                 letter_spacing,
+                self.kind == StaticTextKind::TextInput && text_has_rtl(text),
             )?;
-            let contextual_glyphs =
-                self.styled_resolved_run_glyphs(runtime, instance, runs, font_scale)?;
+            let contextual_glyphs = if self.kind == StaticTextKind::TextInput && text_has_rtl(text)
+            {
+                self.styled_resolved_run_glyphs_bidi(runtime, instance, runs, font_scale)?
+            } else {
+                self.styled_resolved_run_glyphs(runtime, instance, runs, font_scale)?
+            };
             let max_width = lines
                 .iter()
                 .map(|line| Self::styled_line_width(line, &contextual_glyphs))
@@ -2740,6 +3090,31 @@ impl<'a> StaticTextSlice<'a> {
         Ok(glyphs)
     }
 
+    fn styled_resolved_run_glyphs_bidi(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        runs: &[StaticResolvedRun],
+        font_scale: f32,
+    ) -> Result<Vec<StyledTextGlyph>> {
+        let mut glyphs = Vec::new();
+        for run in runs {
+            let style_index = self.style_index_for_local(run.style_local)?;
+            for paragraph in split_static_text_lines(&run.text) {
+                glyphs.extend(self.styled_text_glyphs_for_style_bidi(
+                    runtime,
+                    instance,
+                    paragraph.text,
+                    run.char_start + paragraph.char_start,
+                    style_index,
+                    font_scale,
+                )?);
+            }
+        }
+        glyphs.sort_by_key(|glyph| glyph.char_index);
+        Ok(glyphs)
+    }
+
     fn styled_line_glyphs(
         line: &StaticTextLine<'_>,
         contextual_glyphs: &[StyledTextGlyph],
@@ -2797,6 +3172,67 @@ impl<'a> StaticTextSlice<'a> {
                 style_index,
                 advance: glyph.advance * scale + letter_spacing,
                 scale,
+                rtl: false,
+            })
+            .collect())
+    }
+
+    fn styled_text_glyphs_for_style_bidi(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        text: &str,
+        char_start: usize,
+        style_index: usize,
+        font_scale: f32,
+    ) -> Result<Vec<StyledTextGlyph>> {
+        let style = self
+            .styles
+            .get(style_index)
+            .with_context(|| format!("missing TextStylePaint index {style_index}"))?;
+        let Some(font_bytes) = style.font_bytes(runtime, instance) else {
+            return Ok(Vec::new());
+        };
+        let font_size = self.style_font_size(runtime, instance, style)?;
+        let scale = font_size * font_scale / TEXT_SHAPE_SCALE_F32;
+        let letter_spacing = self.style_letter_spacing(runtime, instance, style);
+        let harf_font = HarfFontRef::new(font_bytes).context("failed to parse font for shaping")?;
+        let harf_variations = style.harf_variations(instance);
+        let shaper_instance = if harf_variations.is_empty() {
+            None
+        } else {
+            Some(ShaperInstance::from_variations(
+                &harf_font,
+                harf_variations.iter().copied(),
+            ))
+        };
+        let shaper_data = ShaperData::new(&harf_font);
+        let shaper = shaper_data
+            .shaper(&harf_font)
+            .instance(shaper_instance.as_ref())
+            .build();
+        let skrifa_font =
+            SkrifaFontRef::new(font_bytes).context("failed to parse font for metrics")?;
+        let raw_glyphs = shape_bidi_text_glyphs(
+            &shaper,
+            text,
+            disable_legacy_kern_for_advances(&skrifa_font),
+        );
+        let bidi = unicode_bidi::BidiInfo::new(text, None);
+        Ok(raw_glyphs
+            .iter()
+            .enumerate()
+            .map(|(glyph_index, glyph)| StyledTextGlyph {
+                glyph_id: glyph.glyph_id,
+                char_index: char_start + character_index_for_cluster(text, glyph.cluster),
+                char_len: glyph_character_len(text, &raw_glyphs, glyph_index),
+                style_index,
+                advance: glyph.advance * scale + letter_spacing,
+                scale,
+                rtl: bidi
+                    .levels
+                    .get(glyph.cluster as usize)
+                    .is_some_and(|level| level.is_rtl()),
             })
             .collect())
     }
@@ -2971,11 +3407,16 @@ impl<'a> StaticTextSlice<'a> {
                 disable_legacy_kern,
                 scale,
                 self.letter_spacing(runtime, instance),
+                self.kind == StaticTextKind::TextInput && text_has_rtl(&text),
             )?;
             line_metrics =
                 self.static_line_metrics(runtime, instance, &lines, &resolved_runs, font_scale)?;
-            let contextual_glyphs =
-                self.styled_resolved_run_glyphs(runtime, instance, &resolved_runs, font_scale)?;
+            let contextual_glyphs = if self.kind == StaticTextKind::TextInput && text_has_rtl(&text)
+            {
+                self.styled_resolved_run_glyphs_bidi(runtime, instance, &resolved_runs, font_scale)?
+            } else {
+                self.styled_resolved_run_glyphs(runtime, instance, &resolved_runs, font_scale)?
+            };
             measured_width = lines
                 .iter()
                 .map(|line| Self::styled_line_width(line, &contextual_glyphs))
@@ -3231,6 +3672,7 @@ impl<'a> StaticTextSlice<'a> {
         disable_legacy_kern: bool,
         scale: f32,
         letter_spacing: f32,
+        bidi: bool,
     ) -> Result<Vec<StaticTextLine<'text>>> {
         let authored_lines = split_static_text_lines(text);
         let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
@@ -3263,7 +3705,11 @@ impl<'a> StaticTextSlice<'a> {
             let mut char_start = authored_line.char_start;
             let mut soft_wrap_skipped_start = None;
             while !remaining.is_empty() {
-                let glyphs = shape_text_glyphs(shaper, remaining, disable_legacy_kern);
+                let glyphs = if bidi {
+                    shape_bidi_text_glyphs(shaper, remaining, disable_legacy_kern)
+                } else {
+                    shape_text_glyphs(shaper, remaining, disable_legacy_kern)
+                };
                 let glyph_end = self.first_static_wrapped_line_end(
                     runtime,
                     instance,
@@ -3544,11 +3990,11 @@ impl<'a> StaticTextSlice<'a> {
             .unwrap_or(true))
     }
 
-    fn text_input_cursor_path(
+    fn text_input_fallback_cursor_height(
         &self,
         runtime: &RuntimeFile,
         instance: &ArtboardInstance,
-    ) -> Result<Vec<RuntimePathCommand>> {
+    ) -> Result<f32> {
         let runs = self.resolved_runs(runtime, instance)?;
         let text = runs.iter().map(|run| run.text.as_str()).collect::<String>();
         let lines = split_static_text_lines(&text);
@@ -3557,19 +4003,7 @@ impl<'a> StaticTextSlice<'a> {
             .first()
             .map(|metrics| metrics.bottom - metrics.top)
             .unwrap_or(0.0);
-        Ok(vec![
-            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
-            RuntimePathCommand::Line { x: 1.0, y: 0.0 },
-            RuntimePathCommand::Line {
-                x: 1.0,
-                y: line_height,
-            },
-            RuntimePathCommand::Line {
-                x: 0.0,
-                y: line_height,
-            },
-            RuntimePathCommand::Close,
-        ])
+        Ok(line_height)
     }
 
     fn text_input_paint_commands(
@@ -4526,6 +4960,7 @@ mod tests {
                 style_index: 0,
                 advance: 650.0,
                 scale: 1.0,
+                rtl: false,
             },
             StyledTextGlyph {
                 glyph_id: 2,
@@ -4534,6 +4969,7 @@ mod tests {
                 style_index: 0,
                 advance: 1_194.0,
                 scale: 1.0,
+                rtl: false,
             },
         ];
         let first_line = StaticTextLine {
@@ -4567,6 +5003,7 @@ mod tests {
                     style_index: 0,
                     advance: 1.0,
                     scale: 1.0,
+                    rtl: false,
                 },
                 x: char_index as f32,
                 modifier_transform: Mat2D::IDENTITY,
@@ -4608,6 +5045,7 @@ mod tests {
                 style_index: 0,
                 advance,
                 scale: 1.0,
+                rtl: false,
             },
             x,
             modifier_transform: Mat2D::IDENTITY,
@@ -4644,6 +5082,106 @@ mod tests {
             .expect("the cluster end has a caret");
         assert_close(internal.top.x, 9.0);
         assert_eq!(internal, end);
+    }
+
+    #[test]
+    fn upstream_ltr_rtl_and_mixed_bidi_hit_boundaries_are_ported() {
+        let glyph = |char_index, x, advance| StaticPositionedTextGlyph {
+            glyph: StyledTextGlyph {
+                glyph_id: 1,
+                char_index,
+                char_len: 1,
+                style_index: 0,
+                advance,
+                scale: 1.0,
+                rtl: false,
+            },
+            x,
+            modifier_transform: Mat2D::IDENTITY,
+            modifier_opacity: 1.0,
+        };
+        let layout = |text: &str, glyphs: Vec<StaticPositionedTextGlyph>, boundary_x: &[f32]| {
+            let char_end = text.chars().count();
+            let line = StaticShapedTextLine {
+                line_index: 0,
+                char_start: 0,
+                char_end,
+                soft_wrap_skipped_start: None,
+                terminal_soft_wrap_skipped_end: None,
+                start_x: 0.0,
+                end_x: 40.0,
+                top: 0.0,
+                baseline: 10.0,
+                bottom: 12.0,
+                glyphs,
+            };
+            let lines = vec![line];
+            let boundaries = text
+                .char_indices()
+                .map(|(byte, _)| byte)
+                .chain(std::iter::once(text.len()))
+                .zip(boundary_x.iter().copied())
+                .map(|(byte_offset, x)| {
+                    let segment = StaticCaretSegment {
+                        top: RenderVec2D::new(x, 0.0),
+                        bottom: RenderVec2D::new(x, 12.0),
+                    };
+                    StaticCaretBoundary {
+                        byte_offset,
+                        upstream: Some(segment),
+                        downstream: Some(segment),
+                    }
+                })
+                .collect();
+            StaticShapedTextLayout {
+                text: text.to_owned(),
+                lines,
+                caret_boundaries: Some(boundaries),
+                local_transform: Mat2D::IDENTITY,
+                shape_world: Mat2D::IDENTITY,
+                has_geometric_modifiers: false,
+                has_non_monotone_advances: true,
+            }
+        };
+
+        let ltr = layout(
+            "abcd",
+            vec![
+                glyph(0, 0.0, 10.0),
+                glyph(1, 10.0, 10.0),
+                glyph(2, 20.0, 10.0),
+                glyph(3, 30.0, 10.0),
+            ],
+            &[0.0, 10.0, 20.0, 30.0, 40.0],
+        );
+        assert_eq!(ltr.hit(RenderVec2D::new(-20.0, 6.0)), Some(0));
+        assert_eq!(ltr.hit(RenderVec2D::new(60.0, 6.0)), Some(4));
+
+        let rtl = layout(
+            "اربك",
+            vec![
+                glyph(0, 40.0, -10.0),
+                glyph(1, 30.0, -10.0),
+                glyph(2, 20.0, -10.0),
+                glyph(3, 10.0, -10.0),
+            ],
+            &[40.0, 30.0, 20.0, 10.0, 0.0],
+        );
+        assert_eq!(rtl.hit(RenderVec2D::new(-20.0, 6.0)), Some(8));
+        assert_eq!(rtl.hit(RenderVec2D::new(60.0, 6.0)), Some(0));
+
+        let mixed = layout(
+            "abرب",
+            vec![
+                glyph(0, 0.0, 10.0),
+                glyph(1, 10.0, 10.0),
+                glyph(2, 40.0, -10.0),
+                glyph(3, 30.0, -10.0),
+            ],
+            &[0.0, 10.0, 40.0, 30.0, 20.0],
+        );
+        assert_eq!(mixed.hit(RenderVec2D::new(-20.0, 6.0)), Some(0));
+        assert_eq!(mixed.hit(RenderVec2D::new(60.0, 6.0)), Some(2));
     }
 
     #[test]

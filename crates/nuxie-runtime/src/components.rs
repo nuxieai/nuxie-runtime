@@ -1001,13 +1001,18 @@ pub(crate) struct RuntimeScriptedComponentState {
 }
 
 /// Runtime-only fields owned by one C++ `TextInput` occurrence.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct RuntimeTextInputState {
+    pub(crate) world_bounds: Cell<Option<(f32, f32, f32, f32)>>,
+    pub(crate) text_style: Cell<Option<ComponentHandle>>,
+    pub(crate) layout_width: Cell<f32>,
     pub(crate) scroll_constraint: Option<ComponentHandle>,
     pub(crate) is_dragging: bool,
     pub(crate) last_drag_world_position: (f32, f32),
     pub(crate) scroll_x: f32,
     pub(crate) scroll_y: f32,
+    pub(crate) source_text: RefCell<Option<String>>,
+    pub(crate) raw: RefCell<crate::text::raw_text_input::RawTextInput>,
 }
 
 /// Retained fields owned by one pinned C++ `Text` occurrence.
@@ -1056,11 +1061,16 @@ impl RuntimeTextState {
 impl Default for RuntimeTextInputState {
     fn default() -> Self {
         Self {
+            world_bounds: Cell::new(None),
+            text_style: Cell::new(None),
+            layout_width: Cell::new(f32::NAN),
             scroll_constraint: None,
             is_dragging: false,
             last_drag_world_position: (f32::NAN, f32::NAN),
             scroll_x: 0.0,
             scroll_y: 0.0,
+            source_text: RefCell::new(None),
+            raw: RefCell::new(crate::text::raw_text_input::RawTextInput::default()),
         }
     }
 }

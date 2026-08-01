@@ -536,6 +536,13 @@ impl HitDrawable {
         true
     }
 
+    fn add_text_input_listener(&mut self, group_index: usize) {
+        self.can_early_out = false;
+        self.needs_down_listener = true;
+        self.needs_up_listener = true;
+        self.listeners.push(group_index);
+    }
+
     fn enable_groups(&mut self, groups: &mut [ListenerGroup], pointer_id: i32) {
         for &group_index in &self.listeners {
             if let Some(group) = groups.get_mut(group_index) {
@@ -3043,9 +3050,13 @@ impl StateMachineInstance {
             let Some(handle) = artboard.component_handle(component.local_id) else {
                 continue;
             };
-            self.hit_components.push(Box::new(HitExpandable {
-                drawable: HitDrawable::new(artboard, Some(handle), Some(handle), true),
-            }));
+            let group_index = self.listener_groups.len();
+            self.listener_groups
+                .push(ListenerGroup::text_input(component.local_id));
+            let mut drawable = HitDrawable::new(artboard, Some(handle), Some(handle), true);
+            drawable.add_text_input_listener(group_index);
+            self.hit_components
+                .push(Box::new(HitExpandable { drawable }));
         }
     }
 
@@ -5657,6 +5668,28 @@ impl StateMachineInstance {
             return artboard.component_hit_test_point(component, position, true, true)
                 && runtime_text_value_run_hit_test(artboard, owner.local_id, position);
         }
+        if owner.type_name == "TextInput" {
+            let Some((min_x, min_y, width, height)) =
+                artboard.text_input_local_bounds_retained(owner.local_id)
+            else {
+                return false;
+            };
+            let Some(graph) = artboard.runtime_graph() else {
+                return false;
+            };
+            let world = artboard.runtime_component_world_transform(owner.local_id, graph);
+            if world.determinant() == 0.0 {
+                return false;
+            }
+            let local = world
+                .invert_or_identity()
+                .transform_point(position.0, position.1);
+            return local.0 >= min_x
+                && local.0 <= min_x + width
+                && local.1 >= min_y
+                && local.1 <= min_y + height
+                && artboard.component_hit_test_point(component, position, true, true);
+        }
         if owner.type_name != "Shape" {
             return artboard.component_hit_test_point(component, position, true, true);
         }
@@ -5858,6 +5891,44 @@ impl StateMachineInstance {
                 }
                 group.record_position(pointer_id, position);
                 Ok(captured_drag || pointer_state.drag_ended)
+            }
+            ListenerGroupKind::TextInput => {
+                let pointer_state = group.process(
+                    pointer_id,
+                    position,
+                    can_hit,
+                    hit_type == RuntimeListenerType::Down,
+                    hit_type == RuntimeListenerType::Up,
+                );
+                let Some(mut text_input) = group.text_input.take() else {
+                    return Ok(false);
+                };
+                let result = text_input.process_event(
+                    artboard,
+                    pointer_state,
+                    position,
+                    hit_type,
+                    timestamp_seconds,
+                );
+                if result.focus_requested {
+                    let focus_data = artboard
+                        .component_handle(text_input.text_input_local_id)
+                        .and_then(|owner| {
+                            (0..artboard.component_child_len(owner)).find_map(|index| {
+                                let child = artboard.component_child_at(owner, index)?;
+                                let local = artboard.component_local_id(child)?;
+                                (artboard.runtime_object_type_name(local) == Some("FocusData"))
+                                    .then_some(local)
+                            })
+                        });
+                    if let Some(focus_data) = focus_data {
+                        self.set_focus(Some(focus_data));
+                    }
+                }
+                group.text_input = Some(text_input);
+                group.record_position(pointer_id, position);
+                group.is_consumed |= result.blocks;
+                Ok(result.blocks)
             }
         }
     }
@@ -16502,11 +16573,16 @@ mod scripted_listener_action_tests {
         ];
         machine.listener_definitions = Arc::new(vec![listener]);
 
-        assert!(!machine.key_input(&mut artboard, 259, 0, true, false));
+        assert!(machine.key_input(&mut artboard, 259, 0, true, false));
+        assert_eq!(artboard.text_input_display_text(1).as_deref(), Some("seed"));
         assert!(!machine.focus.focused_listener_chain().is_empty());
         assert!(!machine.key_input(&mut artboard, 66, 0, true, false));
         assert!(!machine.focus.focused_listener_chain().is_empty());
         assert!(machine.text_input(&mut artboard, "owned"));
+        assert_eq!(
+            artboard.text_input_display_text(1).as_deref(),
+            Some("ownedseed")
+        );
         assert!(!machine.focus.focused_listener_chain().is_empty());
     }
 

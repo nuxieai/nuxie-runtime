@@ -639,6 +639,7 @@ impl Clone for ArtboardInstance {
             cloned.initialize_component_data_bind_collapsables(&file, &graph);
         }
         cloned.initialize_root_layout_bounds();
+        cloned.initialize_text_inputs();
 
         // Generated C++ clones start with `ComponentDirt::Filthy` and clear
         // custom DataBind flags. Re-run authored Solo/Layout collapse only
@@ -2288,6 +2289,7 @@ impl ArtboardInstance {
         instance.initialize_component_data_bind_collapsables(file, graph);
         instance.apply_initial_component_collapse_callbacks_in_authored_order();
         instance.initialize_runtime_shape_paint_owners(graph);
+        instance.initialize_text_inputs();
         let nested_host_locals = instance.nested_artboard_locals.clone();
         for host_local_id in nested_host_locals {
             instance.sync_nested_artboard_root_opacity(host_local_id);
@@ -3882,6 +3884,57 @@ impl ArtboardInstance {
         self.mark_text_style_shape_dirty(local_id);
         self.mark_path_changed();
         self.mark_layout_changed();
+        true
+    }
+
+    #[cfg(any(test, feature = "tools"))]
+    pub fn debug_set_text_style_font_bytes(&mut self, local_id: usize, bytes: Vec<u8>) -> bool {
+        let mut value = RuntimeFontAssetValue::default();
+        value.set_live_font_bytes(Some(Arc::from(bytes)));
+        self.set_text_style_font_override(local_id, value)
+    }
+
+    #[cfg(any(test, feature = "tools"))]
+    pub fn debug_set_text_input_layout_size(
+        &mut self,
+        text_input_local: usize,
+        width: f32,
+        height: f32,
+    ) -> bool {
+        let Some(parent_local) = self
+            .runtime_graph()
+            .and_then(|graph| {
+                graph.components.iter().find(|component| {
+                    component.local_id == text_input_local && component.type_name == "TextInput"
+                })
+            })
+            .and_then(|component| component.parent_local)
+        else {
+            return false;
+        };
+        let mut bounds = self
+            .layout_constraint_bounds
+            .as_deref()
+            .cloned()
+            .unwrap_or_default();
+        let authored = self.runtime_authored_layout_component_bounds(parent_local);
+        bounds.insert(
+            parent_local,
+            crate::draw::RuntimeLayoutBounds {
+                x: authored.x,
+                y: authored.y,
+                width,
+                height,
+            },
+        );
+        self.layout_constraint_bounds = Some(Arc::new(bounds));
+        if let Some(text_input) = self
+            .component(text_input_local)
+            .and_then(|component| component.concrete.text_input.as_ref())
+        {
+            text_input.raw.borrow_mut().mark_geometry_dirty();
+        }
+        self.add_dirt(text_input_local, ComponentDirt::TEXT_SHAPE, false);
         true
     }
 
@@ -5876,10 +5929,7 @@ impl ArtboardInstance {
             elapsed_seconds,
         );
         if last_position.0.is_finite() && last_position.1.is_finite() {
-            // RawTextInput selection placement is retained by the text owner;
-            // the Paint dirt is the frame-loop-visible side effect after
-            // `moveCursorTo` (`src/text/text_input.cpp:751-760`).
-            self.add_dirt(entry.local_id, ComponentDirt::PAINT, false);
+            self.text_input_drag(entry.local_id, last_position);
         }
         true
     }
@@ -8220,6 +8270,28 @@ impl ArtboardInstance {
                                 &graphs[*graph_index],
                                 layout_bounds.as_deref(),
                             );
+                            if self
+                                .component(local_id)
+                                .is_some_and(|component| component.type_name == "TextInput")
+                            {
+                                if !(dirt
+                                    & (ComponentDirt::TEXT_SHAPE
+                                        | ComponentDirt::WORLD_TRANSFORM
+                                        | ComponentDirt::LAYOUT_STYLE))
+                                    .is_empty()
+                                {
+                                    self.refresh_text_input_geometry(local_id);
+                                }
+                                if !(dirt
+                                    & (ComponentDirt::TEXT_SHAPE
+                                        | ComponentDirt::WORLD_TRANSFORM
+                                        | ComponentDirt::LAYOUT_STYLE
+                                        | ComponentDirt::PAINT))
+                                    .is_empty()
+                                {
+                                    self.adjust_text_input_scroll_to_caret(local_id);
+                                }
+                            }
                             if self.update_runtime_text_render_styles(
                                 local_id,
                                 dirt,
@@ -8788,6 +8860,11 @@ impl ArtboardInstance {
         let owner_callback = owner_callback.or_else(|| {
             crate::layout_component::bool_property_changed(self, local_id, type_name, property_key)
         });
+        let owner_callback = owner_callback.or_else(|| {
+            (type_name == Some("TextInput")
+                && property_key_for_name("TextInput", "multiline") == Some(property_key))
+            .then(|| self.text_input_multiline_changed(local_id))
+        });
         *owner_callback_handled = owner_callback.is_some();
         let owner_changed = owner_callback.unwrap_or(false);
         let constraint_kind = self
@@ -8849,6 +8926,11 @@ impl ArtboardInstance {
         property_key: u16,
     ) -> bool {
         let type_name = self.slot(local_id).and_then(|slot| slot.type_name);
+        if type_name == Some("TextInput")
+            && property_key_for_name("TextInput", "text") == Some(property_key)
+        {
+            return self.text_input_property_changed(local_id);
+        }
         crate::text_value_run_owner::string_property_changed(
             self,
             local_id,
@@ -9169,6 +9251,12 @@ impl ArtboardInstance {
                         type_name,
                         property_key,
                     )
+                })
+                .or_else(|| {
+                    (type_name == Some("TextInput")
+                        && property_key_for_name("TextInput", "selectionRadius")
+                            == Some(property_key))
+                    .then(|| self.text_input_selection_radius_changed(local_id))
                 });
         *owner_callback_handled = owner_callback.is_some();
         let owner_changed = owner_callback.unwrap_or(false);

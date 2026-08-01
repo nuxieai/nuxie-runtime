@@ -89075,10 +89075,538 @@ fn upstream_first_local(graph: &nuxie_graph::ArtboardGraph, type_name: &str) -> 
         .local_id
 }
 
+fn upstream_text_input_fixture() -> (RuntimeFile, GraphFile, usize, ArtboardInstance, usize) {
+    let (runtime, graph, index, artboard) =
+        upstream_layout_fixture("text_input.riv", Some("Text Input - Multiline"));
+    let local = upstream_first_local(&graph.artboards[index], "TextInput");
+    (runtime, graph, index, artboard, local)
+}
+
+#[test]
+fn upstream_text_input_load_and_drawable_children_are_ported() {
+    let (runtime, graph, index, mut artboard, text_input) = upstream_text_input_fixture();
+    let graph = &graph.artboards[index];
+    assert_eq!(upstream_object_count(&artboard, "TextInput"), 1);
+    let child_count = |type_name: &str| {
+        graph
+            .components
+            .iter()
+            .filter(|component| {
+                component.parent_local == Some(text_input) && component.type_name == type_name
+            })
+            .count()
+    };
+    assert_eq!(child_count("TextInputText"), 1);
+    assert_eq!(child_count("TextInputSelection"), 1);
+    assert_eq!(child_count("TextInputCursor"), 1);
+    assert_eq!(child_count("TextInputSelectedText"), 0);
+    assert_eq!(
+        graph
+            .components
+            .iter()
+            .filter(|component| {
+                component.parent_local == Some(text_input)
+                    && definition_by_name(&component.type_name)
+                        .is_some_and(|definition| definition.is_a("TextInputDrawable"))
+            })
+            .count(),
+        3
+    );
+    artboard.update_pass();
+    let layout = artboard
+        .debug_taffy_layout_bounds_report(&runtime, graph)
+        .expect("TextInput fixture layout solves without re-entering intrinsic measurement");
+    let layout_parent = graph
+        .components
+        .iter()
+        .find(|component| component.local_id == text_input)
+        .and_then(|component| component.parent_local)
+        .expect("TextInput has its authored layout parent");
+    assert!(layout.iter().any(|bounds| bounds.local_id == layout_parent));
+}
+
+#[test]
+fn upstream_text_input_key_editing_and_selection_cases_are_ported() {
+    const A: u32 = 65;
+    const Z: u32 = 90;
+    const ESCAPE: u32 = 256;
+    const BACKSPACE: u32 = 259;
+    const DELETE: u32 = 261;
+    const RIGHT: u32 = 262;
+    const LEFT: u32 = 263;
+    const HOME: u32 = 268;
+    const END: u32 = 269;
+    const SHIFT: u32 = 1;
+    const CTRL: u32 = 2;
+    const ALT: u32 = 4;
+    const META: u32 = 8;
+
+    let (_runtime, _graph, _index, mut artboard, text_input) = upstream_text_input_fixture();
+    let text_key = property_key_for_name("TextInput", "text");
+    assert!(artboard.set_string_property(text_input, text_key, b"hello world".to_vec()));
+    artboard.debug_set_text_input_cursor(text_input, 0, 0);
+    assert!(artboard.debug_text_input_key_input(text_input, RIGHT, 0, true, false));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((1, 1)));
+    assert!(artboard.debug_text_input_key_input(text_input, LEFT, 0, true, false));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((0, 0)));
+
+    artboard.debug_set_text_input_cursor(text_input, 3, 3);
+    assert!(artboard.debug_text_input_key_input(text_input, BACKSPACE, 0, true, false));
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("helo world")
+    );
+    artboard.debug_set_text_input_cursor(text_input, 2, 2);
+    assert!(artboard.debug_text_input_key_input(text_input, DELETE, 0, true, false));
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("heo world")
+    );
+
+    assert!(artboard.set_string_property(text_input, text_key, Vec::new()));
+    artboard.debug_set_text_input_cursor(text_input, 0, 0);
+    assert!(artboard.debug_text_input_text_input(text_input, "hello"));
+    assert!(artboard.debug_text_input_key_input(text_input, Z, META, true, false));
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("")
+    );
+    assert!(artboard.debug_text_input_key_input(text_input, Z, META | SHIFT, true, false));
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("hello")
+    );
+    assert!(!artboard.debug_text_input_key_input(text_input, ESCAPE, 0, true, false));
+    assert!(!artboard.debug_text_input_key_input(text_input, RIGHT, 0, false, false));
+
+    assert!(artboard.set_string_property(text_input, text_key, b"one two three".to_vec()));
+    artboard.debug_set_text_input_cursor(text_input, 0, 0);
+    assert!(artboard.debug_text_input_key_input(text_input, RIGHT, ALT, true, false));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((3, 3)));
+    artboard.debug_set_text_input_cursor(text_input, 0, 0);
+    assert!(artboard.debug_text_input_key_input(text_input, RIGHT, META, true, false));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((13, 13)));
+    assert!(artboard.set_string_property(text_input, text_key, b"oneTwo threeF".to_vec()));
+    artboard.debug_set_text_input_cursor(text_input, 0, 0);
+    assert!(artboard.debug_text_input_key_input(text_input, RIGHT, ALT | CTRL, true, false));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((3, 3)));
+
+    assert!(artboard.set_string_property(text_input, text_key, b"hello world".to_vec()));
+    artboard.debug_set_text_input_cursor(text_input, 0, 0);
+    assert!(artboard.debug_text_input_key_input(text_input, RIGHT, SHIFT, true, false));
+    assert!(artboard.debug_text_input_key_input(text_input, RIGHT, SHIFT, true, false));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((0, 2)));
+    artboard.debug_set_text_input_cursor(text_input, 0, 0);
+    assert!(artboard.debug_text_input_key_input(text_input, A, META, true, false));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((0, 11)));
+    assert!(!artboard.debug_text_input_key_input(text_input, A, 0, true, false));
+    artboard.debug_set_text_input_cursor(text_input, 5, 5);
+    assert!(artboard.debug_text_input_key_input(text_input, END, 0, true, false));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((11, 11)));
+    assert!(artboard.debug_text_input_key_input(text_input, HOME, 0, true, false));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((0, 0)));
+    assert!(artboard.debug_text_input_key_input(text_input, END, SHIFT, true, false));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((0, 11)));
+}
+
+#[test]
+fn upstream_text_input_text_multiline_wrapper_and_radius_cases_are_ported() {
+    const ENTER: u32 = 257;
+    let (_runtime, _graph, _index, mut artboard, text_input) = upstream_text_input_fixture();
+    let text_key = property_key_for_name("TextInput", "text");
+    let multiline_key = property_key_for_name("TextInput", "multiline");
+    let radius_key = property_key_for_name("TextInput", "selectionRadius");
+
+    assert!(artboard.set_string_property(text_input, text_key, b"line1\nline2".to_vec()));
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("line1\nline2")
+    );
+    assert!(artboard.set_bool_property(text_input, multiline_key, false));
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("line1 line2")
+    );
+    assert!(artboard.set_bool_property(text_input, multiline_key, true));
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("line1\nline2")
+    );
+
+    assert!(artboard.set_string_property(text_input, text_key, Vec::new()));
+    assert!(artboard.set_bool_property(text_input, multiline_key, false));
+    assert!(artboard.debug_text_input_text_input(text_input, "a\nb\r\nc\rd"));
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("a b c d")
+    );
+    assert!(artboard.set_bool_property(text_input, multiline_key, true));
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("a b c d")
+    );
+
+    assert!(artboard.set_string_property(text_input, text_key, b"hello".to_vec()));
+    artboard.debug_set_text_input_cursor(text_input, 3, 3);
+    assert!(artboard.debug_text_input_key_input(text_input, ENTER, 0, true, false));
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("hel\nlo")
+    );
+    assert!(artboard.set_string_property(text_input, text_key, b"hello".to_vec()));
+    assert!(artboard.set_bool_property(text_input, multiline_key, false));
+    artboard.debug_set_text_input_cursor(text_input, 3, 3);
+    assert!(!artboard.debug_text_input_key_input(text_input, ENTER, 0, true, false));
+    assert_eq!(
+        artboard
+            .debug_text_input_display_text(text_input)
+            .as_deref(),
+        Some("hello")
+    );
+
+    assert!(artboard.set_bool_property(text_input, multiline_key, true));
+    artboard.debug_set_text_input_cursor(text_input, 2, 2);
+    assert!(artboard.debug_text_input_select_word(text_input));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((0, 5)));
+    artboard.debug_set_text_input_cursor(text_input, 3, 3);
+    assert!(artboard.debug_text_input_select_line(text_input));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((0, 5)));
+
+    assert!(artboard.set_double_property(text_input, radius_key, 7.0));
+    assert_eq!(
+        artboard.debug_text_input_selection_radius(text_input),
+        Some(7.0)
+    );
+}
+
+#[test]
+fn upstream_text_input_vertical_cursor_retains_the_ideal_column() {
+    const DOWN: u32 = 264;
+    let (_runtime, _graph, _index, mut artboard, text_input) = upstream_text_input_fixture();
+    let text_key = property_key_for_name("TextInput", "text");
+    assert!(artboard.set_string_property(
+        text_input,
+        text_key,
+        b"abcdefghij\nx\nabcdefghij".to_vec(),
+    ));
+    artboard.debug_set_text_input_cursor(text_input, 8, 8);
+    assert!(artboard.debug_text_input_key_input(text_input, DOWN, 0, true, false));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((12, 12)));
+    assert!(artboard.debug_text_input_key_input(text_input, DOWN, 0, true, false));
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((21, 21)));
+}
+
+#[test]
+fn upstream_text_input_visual_cursor_fixture_values_are_ported() {
+    let (_runtime, graph, index, mut artboard, text_input) = upstream_text_input_fixture();
+    let graph = &graph.artboards[index];
+    let style = graph
+        .components
+        .iter()
+        .find(|component| {
+            component.parent_local == Some(text_input) && component.type_name == "TextStyle"
+        })
+        .map(|component| component.local_id)
+        .expect("TextInput owns a TextStyle");
+    let font = std::fs::read(cpp_runtime_fixture("fonts/Inter_18pt-Regular.ttf"))
+        .expect("read pinned Inter font");
+    assert!(artboard.debug_set_text_style_font_bytes(style, font));
+    assert!(artboard.set_double_property(
+        style,
+        property_key_for_name("TextStyle", "fontSize"),
+        72.0,
+    ));
+    assert!(artboard.set_string_property(
+        text_input,
+        property_key_for_name("TextInput", "text"),
+        b"this is some\nmultiline text input\nwith one final line\n".to_vec(),
+    ));
+    artboard.update_pass();
+    assert_eq!(
+        artboard.debug_text_input_line_metrics(text_input),
+        Some(vec![
+            (0, 12, 0.0, 87.11719),
+            (13, 33, 87.11719, 174.23438),
+            (34, 53, 174.23438, 261.35156),
+        ])
+    );
+    for (index, expected_x) in [(0, 0.0), (1, 23.30859), (2, 65.17969), (12, 396.0)] {
+        artboard.debug_set_text_input_cursor(text_input, index, index);
+        let (top, bottom) = artboard
+            .debug_text_input_cursor_geometry(text_input)
+            .expect("retained caret geometry");
+        assert!((top.0 - expected_x).abs() < 1.0e-5);
+        assert_eq!(top.1, 0.0);
+        assert!((bottom.0 - expected_x).abs() < 1.0e-5);
+        assert_eq!(bottom.1, 87.11719);
+    }
+}
+
+#[test]
+fn upstream_text_input_ltr_rtl_and_mixed_bidi_hits_are_ported() {
+    for (text, expected_metrics, expected_left, expected_right, expected_rtl) in [
+        (
+            "one two three four five",
+            vec![(0, 13, 0.0, 108.0), (14, 23, 108.0, 216.0)],
+            14,
+            23,
+            false,
+        ),
+        (
+            "اربك تكست هو اول موقع يسمح لزواره",
+            vec![
+                (0, 12, 0.0, 108.0),
+                (13, 26, 108.0, 216.0),
+                (27, 33, 216.0, 324.0),
+            ],
+            26,
+            13,
+            true,
+        ),
+        (
+            "one two three four اربك تكست هو اول موقع يسمح لزواره الكرام بتحويل",
+            vec![
+                (0, 13, 0.0, 108.0),
+                (14, 28, 108.0, 216.0),
+                (29, 40, 216.0, 324.0),
+                (41, 59, 324.0, 432.0),
+                (60, 66, 432.0, 540.0),
+            ],
+            14,
+            19,
+            false,
+        ),
+    ] {
+        let (_runtime, graph, index, mut artboard, text_input) = upstream_text_input_fixture();
+        let graph = &graph.artboards[index];
+        let style = graph
+            .components
+            .iter()
+            .find(|component| {
+                component.parent_local == Some(text_input) && component.type_name == "TextStyle"
+            })
+            .map(|component| component.local_id)
+            .expect("TextInput owns a TextStyle");
+        let font = std::fs::read(cpp_runtime_fixture("fonts/IBMPlexSansArabic-Regular.ttf"))
+            .expect("read pinned Arabic font");
+        assert!(artboard.debug_set_text_style_font_bytes(style, font));
+        assert!(artboard.set_double_property(
+            style,
+            property_key_for_name("TextStyle", "fontSize"),
+            72.0,
+        ));
+        assert!(artboard.debug_set_text_input_layout_size(text_input, 500.0, 400.0));
+        assert!(artboard.set_string_property(
+            text_input,
+            property_key_for_name("TextInput", "text"),
+            text.as_bytes().to_vec(),
+        ));
+        artboard.update_pass();
+        let metrics = artboard.debug_text_input_line_metrics(text_input).unwrap();
+        assert_eq!(metrics, expected_metrics);
+        assert!(
+            artboard
+                .debug_text_input_line_directions(text_input)
+                .unwrap()
+                .iter()
+                .all(|rtl| *rtl == expected_rtl)
+        );
+        let line = metrics[1];
+        let y = (line.2 + line.3) * 0.5;
+        artboard.debug_text_input_move_cursor_to_local(text_input, -20.0, y);
+        let left_cursor = artboard.debug_text_input_cursor(text_input).unwrap();
+        artboard.debug_text_input_move_cursor_to_local(text_input, 520.0, y);
+        let right_cursor = artboard.debug_text_input_cursor(text_input).unwrap();
+        assert_eq!(left_cursor, (expected_left, expected_left));
+        assert_eq!(right_cursor, (expected_right, expected_right));
+        let interior_samples: &[(f32, usize, f32)] = if text.starts_with("اربك") {
+            &[
+                (125.0, 23, 143.50781),
+                (250.0, 19, 252.35156),
+                (375.0, 15, 383.66016),
+            ]
+        } else if text.starts_with("one two three four اربك") {
+            &[
+                (125.0, 18, 130.71094),
+                (250.0, 26, 273.41016),
+                (375.0, 22, 407.3203),
+            ]
+        } else {
+            &[]
+        };
+        for &(x, expected_cursor, expected_caret_x) in interior_samples {
+            artboard.debug_text_input_move_cursor_to_local(text_input, x, y);
+            assert_eq!(
+                artboard.debug_text_input_cursor(text_input),
+                Some((expected_cursor, expected_cursor))
+            );
+            let (top, bottom) = artboard
+                .debug_text_input_cursor_geometry(text_input)
+                .expect("retained bidi caret geometry");
+            assert!((top.0 - expected_caret_x).abs() < 1.0e-4);
+            assert!((bottom.0 - expected_caret_x).abs() < 1.0e-4);
+        }
+    }
+}
+
+#[test]
+fn upstream_text_input_measurement_cache_is_ported() {
+    let (_runtime, graph, index, mut artboard, text_input) = upstream_text_input_fixture();
+    let graph = &graph.artboards[index];
+    let style = graph
+        .components
+        .iter()
+        .find(|component| {
+            component.parent_local == Some(text_input) && component.type_name == "TextStyle"
+        })
+        .map(|component| component.local_id)
+        .expect("TextInput owns a TextStyle");
+    let font = std::fs::read(cpp_runtime_fixture("fonts/IBMPlexSansArabic-Regular.ttf"))
+        .expect("read pinned Arabic font");
+    assert!(artboard.debug_set_text_style_font_bytes(style, font));
+    assert!(artboard.set_double_property(
+        style,
+        property_key_for_name("TextStyle", "fontSize"),
+        72.0,
+    ));
+    assert!(artboard.set_string_property(
+        text_input,
+        property_key_for_name("TextInput", "text"),
+        b"one two three four five".to_vec(),
+    ));
+    let bounds = artboard
+        .debug_text_input_measure(text_input, 500.0, 400.0)
+        .expect("measure TextInput");
+    assert_eq!(bounds, (0.0, 0.0, 446.51953, 216.0));
+    let count = artboard.debug_text_input_measure_count(text_input).unwrap();
+    assert_eq!(
+        artboard.debug_text_input_measure(text_input, 500.0, 400.0),
+        Some(bounds)
+    );
+    assert_eq!(
+        artboard.debug_text_input_measure_count(text_input),
+        Some(count)
+    );
+    assert_eq!(
+        artboard.debug_text_input_measure(text_input, 400.0, 400.0),
+        Some((0.0, 0.0, 318.97266, 324.0))
+    );
+    assert_eq!(
+        artboard.debug_text_input_measure_count(text_input),
+        Some(count + 1)
+    );
+    assert!(artboard.set_string_property(
+        text_input,
+        property_key_for_name("TextInput", "text"),
+        b"one two three four five six".to_vec(),
+    ));
+    assert_eq!(
+        artboard.debug_text_input_measure(text_input, 400.0, 400.0),
+        Some((0.0, 0.0, 318.97266, 324.0))
+    );
+    assert_eq!(
+        artboard.debug_text_input_measure_count(text_input),
+        Some(count + 2)
+    );
+}
+
+#[test]
+fn upstream_text_input_multiline_cursor_sequence_is_ported() {
+    const LEFT: u32 = 263;
+    const RIGHT: u32 = 262;
+    const UP: u32 = 265;
+    const DOWN: u32 = 264;
+    let (_runtime, _graph, _index, mut artboard, text_input) = upstream_text_input_fixture();
+    assert!(artboard.set_string_property(
+        text_input,
+        property_key_for_name("TextInput", "text"),
+        b"this is some\nmultiline text input\nwith one final line".to_vec(),
+    ));
+    artboard.update_pass();
+    artboard.debug_text_input_key_input(text_input, RIGHT, 0, true, false);
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((1, 1)));
+    for _ in 0..14 {
+        artboard.debug_text_input_key_input(text_input, RIGHT, 0, true, false);
+    }
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((15, 15)));
+    artboard.debug_text_input_key_input(text_input, UP, 0, true, false);
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((4, 4)));
+    artboard.debug_text_input_key_input(text_input, UP, 0, true, false);
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((0, 0)));
+    for _ in 0..3 {
+        artboard.debug_text_input_key_input(text_input, RIGHT, 0, true, false);
+    }
+    artboard.debug_text_input_key_input(text_input, DOWN, 0, true, false);
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((14, 14)));
+    artboard.debug_text_input_key_input(text_input, DOWN, 0, true, false);
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((36, 36)));
+    artboard.debug_text_input_key_input(text_input, DOWN, 0, true, false);
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((53, 53)));
+    artboard.debug_text_input_key_input(text_input, LEFT, 0, true, false);
+    assert_eq!(artboard.debug_text_input_cursor(text_input), Some((52, 52)));
+}
+
+#[test]
+fn upstream_text_input_double_and_triple_click_selection_is_ported() {
+    let (_runtime, _graph, _index, mut artboard, text_input) = upstream_text_input_fixture();
+    let text_key = property_key_for_name("TextInput", "text");
+    assert!(artboard.set_string_property(text_input, text_key, b"hello world".to_vec()));
+    let mut machine = artboard
+        .state_machine_instance(0)
+        .expect("authored TextInput fixture has state machine 0");
+    artboard.advance_state_machine_instance(&mut machine, 0.0);
+    let click = artboard
+        .debug_text_input_world_point(text_input, 8.0, 8.0)
+        .expect("TextInput has a finite world transform");
+    let press_release = |machine: &mut StateMachineInstance, artboard: &mut ArtboardInstance| {
+        machine.pointer_down(artboard, click.0, click.1, 0);
+        machine.pointer_up(artboard, click.0, click.1, 0);
+    };
+    press_release(&mut machine, &mut artboard);
+    press_release(&mut machine, &mut artboard);
+    artboard.advance_state_machine_instance(&mut machine, 0.0);
+    let (word_start, word_end) = artboard
+        .debug_text_input_cursor(text_input)
+        .expect("TextInput cursor after double click");
+    if word_start == word_end {
+        // Pinned C++ carries this exact asset-layout guard: this fixture's
+        // authored pointer can miss the TextInput hit area. Deterministic
+        // selectWord/selectLine assertions above cover the selection result.
+        return;
+    }
+    assert!(word_end > word_start);
+    press_release(&mut machine, &mut artboard);
+    artboard.advance_state_machine_instance(&mut machine, 0.0);
+    let (line_start, line_end) = artboard
+        .debug_text_input_cursor(text_input)
+        .expect("TextInput cursor");
+    assert!(line_end > line_start);
+    assert!(line_end >= word_end);
+}
+
 #[test]
 fn upstream_new_text_load_body_is_ported() {
-    let (_runtime, graph, index, mut artboard) = upstream_layout_fixture("new_text.riv", None);
-    let graph = &graph.artboards[index];
+    let (_runtime, _graph, _index, mut artboard) = upstream_layout_fixture("new_text.riv", None);
     assert_eq!(upstream_object_count(&artboard, "Text"), 5);
     assert_eq!(upstream_object_count(&artboard, "TextStyle"), 13);
     assert_eq!(upstream_object_count(&artboard, "TextValueRun"), 22);

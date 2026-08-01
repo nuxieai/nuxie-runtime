@@ -149,11 +149,7 @@ impl StaticShapedTextLayout {
                 selected_end,
                 self.shape_world,
                 self.has_geometric_modifiers,
-                self.has_non_monotone_advances
-                    && line
-                        .glyphs
-                        .iter()
-                        .any(|positioned| positioned.glyph.advance < 0.0),
+                self.has_non_monotone_advances,
             ) {
                 rects.push(rect);
             }
@@ -222,6 +218,32 @@ impl StaticShapedTextLine {
         work: &mut StaticCaretBuildWork,
     ) {
         let clusters = self.positioned_clusters(work);
+        if clusters.iter().any(|cluster| cluster.rtl) {
+            for cluster in &clusters {
+                let character_count = cluster.char_end.saturating_sub(cluster.char_start);
+                for char_index in cluster.char_start..=cluster.char_end {
+                    work.boundary_visits = work.boundary_visits.saturating_add(1);
+                    let logical_ratio = if character_count == 0 {
+                        0.0
+                    } else {
+                        (char_index - cluster.char_start) as f32 / character_count as f32
+                    };
+                    let ratio = if cluster.rtl {
+                        1.0 - logical_ratio
+                    } else {
+                        logical_ratio
+                    };
+                    let x = cluster.start_x + (cluster.end_x - cluster.start_x) * ratio;
+                    let glyph = self.glyphs.get(cluster.last_glyph);
+                    let segment = self.caret_segment(x, glyph, shape_world);
+                    if let Some(boundary) = boundaries.get_mut(char_index) {
+                        boundary.upstream.get_or_insert(segment);
+                        boundary.downstream = Some(segment);
+                    }
+                }
+            }
+            return;
+        }
         let mut x_cluster = 0;
         let mut previous_cluster = None;
         let mut previous_cursor = 0;
@@ -331,6 +353,7 @@ impl StaticShapedTextLine {
                 end_x,
                 first_glyph,
                 last_glyph,
+                rtl: first.glyph.rtl,
             });
         }
         clusters

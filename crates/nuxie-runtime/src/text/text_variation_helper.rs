@@ -6,6 +6,7 @@ struct StyledTextGlyph {
     style_index: usize,
     advance: f32,
     scale: f32,
+    rtl: bool,
 }
 fn shape_text_glyphs_for_style(
     font_bytes: &[u8],

@@ -415,6 +415,27 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "ratchet required_shape decreased to 0 < 1",
             result.stderr,
         )
+
+    def test_fl_e7_sort_ratchet_rejects_lookup_but_stops_at_setter(self) -> None:
+        self.assert_production_ratchet_case(
+            "fl_e7_sort_serialized_owner_rediscovery_absent",
+            "crates/nuxie-runtime/src/draw.rs",
+            """
+            fn sort_draw_order(&self) {
+                let target_local = self.draw_target_order[0];
+                let _ = self.draw_target_index_by_local.get(&target_local);
+            }
+            """,
+            """
+            fn sort_draw_order(&self) {
+                let target_index = self.draw_target_order[0];
+                let _ = self.draw_targets.get(target_index);
+            }
+            fn set_draw_rules_active_target(&self, target_local: usize) {
+                let _ = self.draw_target_index_by_local.get(&target_local);
+            }
+            """,
+        )
         (self.repo / "crates/runtime/src/animation.rs").write_text(
             "struct RuntimeAnimation;\nstruct RuntimeRequiredShape;\n"
         )

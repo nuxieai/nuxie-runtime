@@ -2458,27 +2458,27 @@ note = "Consolidated runtime port."
 
 [[file]]
 upstream = "src/draw_rules.cpp"
-status = "pending"
-verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/artboard.rs"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/draw_rules.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/artboard.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0203"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "RD-C1 implemented and executor-gate-green pending independent orchestrator verification: active target resolution is live object state and drawTargetIdChanged dirties the owning Artboard exactly as C++."
+note = "FL-E7 direct retained owner: construction resolves the active DrawTarget once, drawTargetIdChanged refreshes that sidecar and publishes root DrawOrder dirt, and sorting never re-reads the serialized id."
 
 [[file]]
 upstream = "src/draw_target.cpp"
-status = "pending"
-verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/artboard.rs"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/draw_target.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/artboard.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0204"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "RD-C1 implemented and executor-gate-green pending independent orchestrator verification: retained target identity/placement relinks the live drawable objects and placementValueChanged dirties the owning Artboard."
+note = "FL-E7 direct retained owner: resolved Drawable identity and placement drive dirt-gated relink; placementValueChanged refreshes the sidecar and publishes root DrawOrder dirt. Explicit Rust import adaptation: unlike C++ MissingObject, an unresolved graph diagnostic is retained as an inert target with no drawable index and cannot detach or splice a group."
 
 [[file]]
 upstream = "src/drawable.cpp"
@@ -4450,15 +4450,15 @@ note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/ef
 
 [[file]]
 upstream = "src/shapes/shape_paint_container.cpp"
-status = "pending"
-verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/shapes/shape_paint_container.rs; crates/nuxie-runtime/src/draw.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0369"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "Consolidated Rust port for shapes."
+note = "FL-E7 direct polymorphic owner contains the exact nine-branch Shape/Layout/Text/TextInput switch plus production addPaint, aggregate live pathFlags, invalidateStrokeEffects, and propagateOpacity operations; aggregate flags authoritatively gate deferred updates as in C++, while Rust deliberately keeps its three renderer-neutral geometry/hit-query slots eager because those public query APIs share them; draw.rs is the retained-occurrence integration client."
 
 [[file]]
 upstream = "src/shapes/slice_mesh.cpp"

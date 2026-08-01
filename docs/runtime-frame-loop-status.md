@@ -4,6 +4,38 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
+- FL-E7 is closed by mechanism correspondence, including FL-G08. DrawRules
+  retains its active target, DrawTarget retains its Drawable and placement,
+  retained Drawable allocations own the final `prev`/`next` links and
+  clone-local clipping proxies, and live draw walks those links without
+  serialized owner rediscovery. DrawOrder sorting is entered only at
+  construction and root DrawOrder dirt; Clipping retains the pinned internal
+  sort clear plus explicit root Clipping clear. The centralized callbacks and
+  sort-time DrawRules/DrawTarget property refreshes displaced by those owners
+  are deleted. `ShapePaintContainer::from` implements and retains the exact
+  nine pinned polymorphic branches; its live path choice, gradient shader
+  space, and paint-configuration epoch remain synchronized after non-Shape
+  Stroke mutation. Runtime is 871 passed with one ignored; `nuxie --lib`
+  is 154 / 154; the pinned-C++ probe is 889 passed with five ignored; ordinary
+  and scripted goldens are each 317 / 317 entries and 647 / 647 exact segments
+  with zero divergence; binary comparison is 70 / 70. Silver remains honestly
+  at 59 exact (49 byte-exact plus 10 epsilon), 36 divergent, and 100 explicitly
+  unsupported selected runtime cases. The final path-owner split keeps direct
+  TextStylePaint opacity buckets on C++'s replace lifecycle while retained
+  DashPath/effect/feather outputs rewind. Layout-origin Path dirt keeps those
+  owners, while dependency Path dirt replaces only opacity buckets; this
+  preserves the exact text-stroke, listener, and follow-path cases without
+  changing any silver classification. `animated_clipping-nodes` remains at
+  expected `drawPath`, got `makeRenderPath`; `layout_display` remains at
+  expected `makeRenderPath`, got `rewind`. The canonical trace records the explicit
+  occurrence-materialization adaptation (`draw_order_sort` C++ 24 / Rust 607;
+  `clipping_redundancy_clear` C++ 48 / Rust 1214), while the steady trace is
+  exact 0 / 0 for both and retained-pointer/handle `drawable_owner_lookup` is
+  structurally 0 / 0. Renderer golden could not run because
+  this environment exposes no Metal or other suitable graphics adapter.
+  FL-E7 closes its family, not the FL-E wave: 23 earlier FL-E file rows remain
+  pending, including explicit unsupported behavior in the E5 text/list-path
+  territory. Therefore FL-E and the mapped FL series remain open.
 - FL-E1 is closed by mechanism correspondence. Each `ScriptVm` now owns one
   safe, stable-identity `PersistentFactoryContext`, installed by the file runtime immediately
   after VM construction and before script import. Listener, input,
@@ -112,26 +144,21 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   listener/action family is independently accepted at
   `0eb48976755d759c078f1f1a032bd88590e223f7` and its exact mapped rows are
   promoted.
-- Active production branch: `levi/fl-c`. The former `levi/fl-b` branch name
-  described the provisional stack base, not the active wave, and is no longer
-  used for FL-C publication. There is no PR.
+- Active production branch: `levi/fl-e7`. There is no PR.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
 - FL-B scope correction restores the frozen 45th owner,
   `src/importers/keyed_property_importer.cpp`, to the executable FL-B ledger.
   `src/animation/scripted_listener_action.cpp` remains deliberately assigned
   to FL-C; it is not a substitute FL-B row. The checker pins the exact
   45-file FL-B membership so either omission or reassignment fails.
-- File closure: 247 / 342. FL-D is closed by the dependency-ordered D1–D7
-  landings and FL-E1 promotes `src/command_server.cpp`; 95 FL-E/later rows
-  remain pending.
-- Member closure: 73 / 75 owner/member rows (33 faithful plus 40 accepted
-  adaptations); two FL-E rows remain pending.
-- Open mechanism gaps: 4 / 10. FL-G02, FL-G05, FL-G06, and FL-G09 are closed;
-  FL-G10 records
-  the user-approved D2 saturation choice for AnimationReset's otherwise
-  undefined float-to-int edge.
-- Current dependency wave: FL-D and FL-E1 are closed; FL-E2 is next. FL-C is closed
-  56 / 56. FL-B's frozen
+- File closure: 318 / 342. FL-E is 72 / 95 faithful with 23 earlier-family
+  rows pending; `src/math/random.cpp` is the one remaining non-FL-E file row.
+- Member closure: 75 / 75 owner/member rows (35 faithful plus 40 accepted
+  adaptations).
+- Open mechanism gaps: 2 / 10. FL-G01 and FL-G03 remain open; FL-G08 is closed
+  by E7's retained Drawable mechanism.
+- Current dependency wave: FL-E7 is closed, but FL-E wave acceptance remains
+  open on 23 earlier-family rows. FL-C is closed 56 / 56. FL-B's frozen
   45-file/eight-member mini-map is reaccepted and promoted with FL-C5 at
   `14b18765`. After the accepted-candidate complete floor and the PR to main,
   work advances through FL-D as per-family PRs. FL-C2 is independently
@@ -873,9 +900,7 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 ## Next
 
-1. Run the single complete floor on accepted candidate
-   `14b187659a1eafadd3e425d75f516b7080c3b021`, with browser, size,
-   pixel-same, and pixel-static legs in parallel under the 2026-07-30
-   coordinator floor policy. There is no Apple leg.
-2. Open the joint FL-B/FL-C5 PR to main.
-3. Execute FL-E2 as the next dependency-ordered family.
+1. Resolve and verify the 23 pending earlier FL-E file rows; E7 cannot promote
+   them merely by being the last scheduled family.
+2. Close the remaining FL-G01 and FL-G03 mechanism gaps.
+3. Rerun renderer golden on a host with a usable GPU adapter.

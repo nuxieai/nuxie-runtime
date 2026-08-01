@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import subprocess
 from typing import Any
 
@@ -20,6 +21,12 @@ RUST_RUNNER_PROVENANCE_SUFFIX = ".frame-loop-trace-provenance"
 CANONICAL_TRACE_PATH = pathlib.PurePosixPath(
     "docs/runtime-frame-loop-trace.json"
 )
+OWNERSHIP_LEDGER_PATH = pathlib.PurePosixPath(
+    "docs/runtime-frame-loop-ownership.toml"
+)
+EXPECTED_TRACE_ARTIFACTS_SECTION = re.compile(
+    rb"(?ms)^\[expected_trace_artifacts\]\r?\n.*?(?=^\[|\Z)"
+)
 LOCAL_FIXTURE_LINKS = {
     pathlib.PurePosixPath(f"fixtures/{name}")
     for name in ("animation", "flow", "graph", "minimal")
@@ -27,6 +34,9 @@ LOCAL_FIXTURE_LINKS = {
 # FL-C5 work-package plans, salvage patches, and logs are local orchestration
 # inputs rather than candidate source, even when the directory is untracked.
 LOCAL_ORCHESTRATION_DIRS = {".flc5"}
+LOCAL_WAVE_ARTIFACT = re.compile(
+    r"W\d+(?:-resume\d*)?\.log|W\d+-report\.md"
+)
 
 
 class SourceFingerprintError(RuntimeError):
@@ -78,6 +88,10 @@ def _is_excluded(
         return True
     if (
         (relative.parts and relative.parts[0] in LOCAL_ORCHESTRATION_DIRS)
+        or (
+            len(relative.parts) == 1
+            and LOCAL_WAVE_ARTIFACT.fullmatch(relative.name) is not None
+        )
         or "__pycache__" in relative.parts
         or relative.suffix in {".pyc", ".pyo", ".profraw", ".profdata"}
         or relative.name == ".DS_Store"
@@ -88,6 +102,20 @@ def _is_excluded(
         len(relative.parts) > 1
         and relative.parts[0] == "docs"
         and relative.name.endswith("-status.md")
+    )
+
+
+def _candidate_payload(
+    relative: pathlib.PurePosixPath, payload: bytes
+) -> bytes:
+    """Remove generated receipts that would make the source hash recursive."""
+
+    if relative != OWNERSHIP_LEDGER_PATH:
+        return payload
+    return EXPECTED_TRACE_ARTIFACTS_SECTION.sub(
+        b"[expected_trace_artifacts]\n<generated-trace-receipts>\n\n",
+        payload,
+        count=1,
     )
 
 
@@ -120,7 +148,7 @@ def candidate_source_fingerprint(
             executable = b"0"
         elif path.is_file():
             kind = b"file"
-            payload = path.read_bytes()
+            payload = _candidate_payload(relative, path.read_bytes())
             executable = b"1" if path.stat().st_mode & 0o111 else b"0"
         elif path.exists():
             kind = b"other"

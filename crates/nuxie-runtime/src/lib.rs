@@ -89,6 +89,8 @@ mod data_converter_trigger;
 #[path = "data_bind/converters/data_converter_trigger.rs"]
 mod data_converter_trigger_owner;
 mod draw;
+mod draw_rules;
+mod draw_target;
 mod event;
 mod focus;
 mod foreground_layout_drawable;

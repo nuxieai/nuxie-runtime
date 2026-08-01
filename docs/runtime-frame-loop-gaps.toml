@@ -102,7 +102,7 @@ closure = "FL-D4 closes the owner boundary: every authored Artboard DataBind is 
 [[gap]]
 id = "FL-G05"
 status = "closed"
-mechanism = "FL-D7 classifies Artboard update epochs and nested layout-transfer keys as owner-local adaptations. DataBind dirty/processed epochs coalesce pushed occurrence dirt without polling the ViewModel graph; layout/path/prepared epochs fence retained derived state owned by the same Artboard occurrence; nested transfer keys represent Yoga's `hasNewLayout` handoff to one mounted child. FL-E4 deletes the joystick instance of the former broad prepared-frame fallback: the six generated double callbacks now publish only root Components dirt from the direct Joystick owner, while cache_epoch remains the Artboard's derived-observation fence. None substitutes for a missing Component or DataBind owner."
+mechanism = "FL-D7 classifies Artboard update epochs and nested layout-transfer keys as owner-local adaptations. DataBind dirty/processed epochs coalesce pushed occurrence dirt without polling the ViewModel graph; layout/path/prepared revisions fence retained derived state owned by the same Artboard occurrence; nested transfer keys represent Yoga's `hasNewLayout` handoff to one mounted child. FL-E4 deletes the joystick instance of the former broad prepared-frame fallback. FL-E7 completes the classification in live-draw territory: DrawOrder and Clipping have no epoch authority, their generated callbacks publish root dirt, and the Artboard consumes those bits to mutate retained links/proxies. prepared_epoch is only a derived late-renderer/query observation after owner-local publication. No setter uses an epoch instead of the direct owner chain."
 citations = [
   "cpp:src/artboard.cpp:1417-1460",
   "cpp:src/joystick.cpp:131-142",
@@ -112,8 +112,12 @@ citations = [
   "rust:crates/nuxie-runtime/src/joystick.rs:149-170",
   "rust:crates/nuxie-runtime/src/artboard.rs:15206-15252",
   "rust:crates/nuxie-runtime/src/nested_artboard_layout.rs:3-20",
+  "rust:crates/nuxie-runtime/src/artboard.rs:6750-7125",
+  "rust:crates/nuxie-runtime/src/artboard.rs:8638-8650",
+  "rust:crates/nuxie-runtime/src/draw_rules.rs:18-43",
+  "rust:crates/nuxie-runtime/src/draw_target.rs:20-38",
 ]
-closure = "Closed by FL-A/FL-D and preserved by FL-E4: every retained epoch/key belongs to the Artboard or mounted nested occurrence whose derived state it fences; joystick dirty propagation now remains on the direct Joystick/Component owners. The focused unit test proves the exact dirt mask, while structural ratchets reject the former central fallback shapes and keep the global path-epoch compensation ceiling unchanged."
+closure = "Closed by FL-A/FL-D and preserved through FL-E7: every retained revision/key belongs to the Artboard or mounted nested occurrence whose derived state it fences. Joystick, Layout/Text, DrawRules, DrawTarget, and Clipping work remains on direct owners and dirt; prepared_epoch only invalidates renderer/query observations. Focused tests prove the exact masks and adversarial backing-storage tests prove DrawOrder cannot fall back to epoch/local-id rediscovery."
 
 [[gap]]
 id = "FL-G06"
@@ -167,20 +171,26 @@ closure = "Closed by FL-E5 stage 2 mechanism correspondence. The mutable update 
 
 [[gap]]
 id = "FL-G08"
-status = "open"
+status = "closed"
 counters = [
   "draw_order_sort",
   "clipping_redundancy_clear",
   "drawable_owner_lookup",
 ]
-mechanism = "The Rust Artboard update integration repeatedly refreshes drawable ordering, clipping proxies, and local-id owner lookups where C++ retains linked Drawable ownership and dirt-gates sort/clear work."
+mechanism = "RuntimeDrawableList retains every Drawable allocation, prev/next link, DrawRules active target, DrawTarget drawable/placement, clipping membership, and proxy pool. Construction performs the initial sort. Thereafter only root DrawOrder dirt calls sort_draw_order; sort performs C++'s internal clear, and a simultaneous root Clipping bit performs C++'s second explicit clear. Live draw walks first_drawable through prev and dispatches the retained family/ComponentHandle. ComponentHandle is the safe generational-pointer adaptation for C++ Drawable*, so drawable_owner_lookup is 0/0 serialized local-id resolutions; it is not counted as an owner lookup. C++ rejects an unresolved DrawTarget drawable with MissingObject; Rust preserves graph diagnostics and makes that target inert, with no drawable index or group splice."
 citations = [
-  "cpp:src/artboard.cpp:1161",
-  "cpp:src/artboard.cpp:1652",
-  "rust:crates/nuxie-runtime/src/artboard.rs:4816",
-  "rust:crates/nuxie-runtime/src/draw.rs:9290",
+  "cpp:src/draw_rules.cpp:8-39",
+  "cpp:src/draw_target.cpp:8-31",
+  "cpp:src/artboard.cpp:574-746",
+  "cpp:src/artboard.cpp:1153-1170",
+  "cpp:src/artboard.cpp:1652-1750",
+  "rust:crates/nuxie-runtime/src/draw_rules.rs:1-43",
+  "rust:crates/nuxie-runtime/src/draw_target.rs:1-38",
+  "rust:crates/nuxie-runtime/src/artboard.rs:8638-8650",
+  "rust:crates/nuxie-runtime/src/draw.rs:9670-10240",
+  "rust:crates/nuxie-runtime/src/draw.rs:24900-25020",
 ]
-closure = "FL-A/FL-E ports the retained Drawable link and exact DrawOrder/Clipping dirt lifecycle; the three counters match C++ or cite a binding adaptation."
+closure = "FL-E7 closes the retained Drawable lifecycle. The fresh source-bound canonical trace records draw_order_sort at C++ 24 versus Rust 607 and clipping_redundancy_clear at C++ 48 versus Rust 1214. This is an explicit construction/materialization adaptation: C++ sorts each traced Artboard instance once, while Rust eagerly constructs an occurrence-local RuntimeDrawableList for every resolved runtime graph occurrence; every Rust construction invokes sort once and its internal clear once. The second Rust clear is reachable only through root Clipping dirt, exactly like C++. The decisive steady trace is exact at 0/0 for both counters, proving neither lifecycle runs per frame. The source-bound structural drawable_owner_lookup landmark is exact at 0/0: C++ dereferences retained Drawable pointers and Rust dereferences retained indices. Permanent ratchets reject the deleted sort-time property reads and local-id map lookups, centralized callbacks, draw-time family rediscovery, and any additional sort/clear entry point. The final live-draw stream also rejects the deleted eager unchanged text-style backend-path clear: renderer paths rewind only after a materially changed retained command set."
 
 [[gap]]
 id = "FL-G09"
@@ -2230,3 +2240,120 @@ id = "fl_e4_displaced_joystick_behavior_absent"
 globs = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/intrinsically_sizeable.rs"]
 pattern = "fn\\s+(?:apply_joystick_at|joystick_axis_seconds|measure_joystick_layout|control_runtime_joystick_size)\\b"
 max_occurrences = 0
+
+[[ratchet]]
+id = "fl_e7_draw_rules_retained_owner_required"
+globs = ["crates/nuxie-runtime/src/draw_rules.rs"]
+pattern = "\\A(?=[\\s\\S]*struct\\s+RuntimeDrawRules\\s*\\{[\\s\\S]{0,220}active_target_index:\\s*Option<usize>)(?=[\\s\\S]*fn\\s+uint_property_changed\\b[\\s\\S]{0,1500}set_draw_rules_active_target\\([\\s\\S]{0,500}ComponentDirt::DRAW_ORDER)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_draw_target_retained_owner_required"
+globs = ["crates/nuxie-runtime/src/draw_target.rs"]
+pattern = "\\A(?=[\\s\\S]*struct\\s+RuntimeDrawTarget\\s*\\{[\\s\\S]{0,700}drawable_index:\\s*Option<usize>[\\s\\S]{0,220}placement_value:\\s*u64[\\s\\S]{0,220}first:\\s*Option<usize>[\\s\\S]{0,220}last:\\s*Option<usize>)(?=[\\s\\S]*fn\\s+uint_property_changed\\b[\\s\\S]{0,1500}set_draw_target_placement\\([\\s\\S]{0,500}ComponentDirt::DRAW_ORDER)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_switch_required"
+globs = ["crates/nuxie-runtime/src/shapes/shape_paint_container.rs"]
+pattern = "\\A(?=[\\s\\S]*\\\"Artboard\\\"\\s*=>\\s*Self::Artboard)(?=[\\s\\S]*\\\"LayoutComponent\\\"\\s*=>\\s*Self::LayoutComponent)(?=[\\s\\S]*\\\"Shape\\\"\\s*=>\\s*Self::Shape)(?=[\\s\\S]*\\\"TextStylePaint\\\"\\s*=>\\s*Self::TextStylePaint)(?=[\\s\\S]*\\\"ForegroundLayoutDrawable\\\"\\s*=>\\s*Self::ForegroundLayoutDrawable)(?=[\\s\\S]*\\\"TextInputCursor\\\"\\s*=>\\s*Self::TextInputCursor)(?=[\\s\\S]*\\\"TextInputSelection\\\"\\s*=>\\s*Self::TextInputSelection)(?=[\\s\\S]*\\\"TextInputText\\\"\\s*=>\\s*Self::TextInputText)(?=[\\s\\S]*\\\"TextInputSelectedText\\\"\\s*=>\\s*Self::TextInputSelectedText)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_operations_required"
+globs = ["crates/nuxie-runtime/src/shapes/shape_paint_container.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+add_paint\\b)(?=[\\s\\S]*fn\\s+path_flags\\b)(?=[\\s\\S]*fn\\s+invalidate_stroke_effects\\b)(?=[\\s\\S]*fn\\s+propagate_opacity\\b)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_path_flags_production_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "shape_paint_container::path_flags\\s*\\("
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_add_paint_production_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "shape_paint_container::add_paint\\s*\\("
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_propagate_opacity_production_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "shape_paint_container::propagate_opacity\\s*\\("
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_invalidate_effects_production_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "shape_paint_container::invalidate_stroke_effects\\s*\\("
+min_occurrences = 4
+max_occurrences = 4
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_all_families_retained_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "fn\\s+retain_paint_containers\\b[\\s\\S]{0,500}for\\s+\\(container_index,\\s*container\\)\\s+in\\s+containers\\.iter\\(\\)\\.enumerate\\(\\)\\s*\\{\\s*let\\s+Some\\(family\\)\\s*=\\s*crate::shapes::shape_paint_container::family\\(container\\.type_name\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_non_shape_invalidation_callbacks_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "fn\\s+invalidate_runtime_non_shape_paint_container_effects\\b(?=[\\s\\S]{0,4000}\\\"ForegroundLayoutDrawable\\\")(?=[\\s\\S]{0,4000}\\\"Text\\\")(?=[\\s\\S]{0,4000}\\\"TextInput\\\")(?=[\\s\\S]{0,4000}invalidate_container_stroke_effects)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_unchanged_text_style_paths_retained_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "paths\\s*\\.retain\\(\\|key,\\s*_\\|\\s*!key\\.replace_on_render_style_rebuild\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_central_draw_owner_callback_absent"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "type_name\\s*\\)\\s*==\\s*Some\\(\\\"(?:DrawRules|DrawTarget)\\\"\\)[\\s\\S]{0,500}ComponentDirt::DRAW_ORDER"
+max_occurrences = 0
+
+[[ratchet]]
+id = "fl_e7_sort_serialized_owner_rediscovery_absent"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "(?:fn\\s+sort_draw_order\\b[\\s\\S]{0,8000}(?:objects\\s*\\.\\s*uint_property|runtime_draw_property_key_for_name\\(\\\"(?:DrawRules|DrawTarget)\\\"\\)))|(?:let\\s+target_local\\s*=\\s*self\\s*\\.\\s*draw_target_order\\s*\\[[^]]+\\][\\s\\S]{0,300}self\\s*\\.\\s*draw_target_index_by_local\\s*\\.\\s*get)|(?:flattened_draw_rules_(?:local|index)[\\s\\S]{0,300}self\\s*\\.\\s*draw_rules_index_by_local\\s*\\.\\s*get)|(?:for\\s+drawable_index[\\s\\S]{0,1000}self\\s*\\.\\s*drawable_by_local\\s*\\.\\s*get)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "fl_e7_drawable_retained_rules_index_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "struct\\s+RuntimeDrawable\\s*\\{[\\s\\S]{0,800}flattened_draw_rules_index:\\s*Option<usize>"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_draw_order_sort_entry_points_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "\\.sort_draw_order\\s*\\("
+min_occurrences = 2
+max_occurrences = 2
+
+[[ratchet]]
+id = "fl_e7_clipping_clear_entry_points_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "\\.clear_redundant_operations\\s*\\("
+min_occurrences = 2
+max_occurrences = 2
+
+[[ratchet]]
+id = "fl_e7_drawable_family_resolution_construction_only"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "RuntimeDrawableFamily::from_type_name\\s*\\("
+min_occurrences = 1
+max_occurrences = 1

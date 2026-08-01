@@ -1272,6 +1272,7 @@ def check(
         "clipping_redundancy_clear",
         "layout_compute",
         "internal_owner_rediscovery",
+        "drawable_owner_lookup",
     }
     for name in sorted(
         required_steady_zero

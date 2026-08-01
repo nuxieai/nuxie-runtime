@@ -46,7 +46,13 @@ else
     runtime_targets=(rive rive_harfbuzz rive_sheenbidi rive_yoga)
 fi
 
-runtime_libdir="$rive_runtime/$runtime_out"
+if [[ "$runtime_out" = /* ]]; then
+    runtime_libdir="$runtime_out"
+    runtime_build_out="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$runtime_libdir" "$rive_runtime")"
+else
+    runtime_libdir="$rive_runtime/$runtime_out"
+    runtime_build_out="$runtime_out"
+fi
 runtime_archive="$runtime_libdir/librive.a"
 runtime_makefile="$runtime_libdir/rive.make"
 runtime_stamp="$runtime_archive.provenance"
@@ -59,10 +65,10 @@ if ! "$provenance" verify "$rive_runtime" "$runtime_archive" "$runtime_makefile"
             premake5 gmake2 \
             --file=premake5_v2.lua \
             --config="$config" \
-            --out="$runtime_out" \
+            --out="$runtime_build_out" \
             "${runtime_premake_flags[@]}"
-        make -C "$runtime_out" clean
-        make -C "$runtime_out" -j"$jobs" "${runtime_targets[@]}"
+        make -C "$runtime_build_out" clean
+        make -C "$runtime_build_out" -j"$jobs" "${runtime_targets[@]}"
     )
     "$provenance" write "$rive_runtime" "$runtime_archive" "$runtime_makefile" "$runtime_stamp" "$config" "$runtime_mode"
 fi
@@ -72,21 +78,28 @@ echo "golden runner librive provenance: $runtime_stamp"
 
 if [[ "$runtime_mode" == "scripted" ]]; then
     echo "==== Building scripted rive_decoders ($config) ===="
+    if [[ "$decoders_out" = /* ]]; then
+        decoders_libdir="$decoders_out"
+        decoders_build_out="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$decoders_libdir" "$rive_runtime/decoders")"
+    else
+        decoders_libdir="$rive_runtime/decoders/$decoders_out"
+        decoders_build_out="$decoders_out"
+    fi
     (
         cd "$rive_runtime/decoders"
         PREMAKE_PATH="$rive_runtime/build${PREMAKE_PATH:+:$PREMAKE_PATH}" \
             premake5 gmake2 \
             --file=premake5_v2.lua \
             --config="$config" \
-            --out="$decoders_out"
+            --out="$decoders_build_out"
         # The decoder output has no independent provenance stamp. Premake
         # dependency files do not notice a compiler switch, so rebuild rather
         # than allowing incompatible bitcode objects to survive.
-        make -C "$decoders_out" clean
-        make -C "$decoders_out" -j"$jobs" \
+        make -C "$decoders_build_out" clean
+        make -C "$decoders_build_out" -j"$jobs" \
             rive_decoders libpng zlib libjpeg libwebp
     )
-    export RIVE_GOLDEN_DECODERS_LIBDIR="$rive_runtime/decoders/$decoders_out"
+    export RIVE_GOLDEN_DECODERS_LIBDIR="$decoders_libdir"
 fi
 
 cd "$script_dir/build"

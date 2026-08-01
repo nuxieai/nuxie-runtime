@@ -6,7 +6,7 @@ use harfrust::{
 use nuxie_binary::RuntimeFile;
 use nuxie_graph::{
     ArtboardGraph, DataBindNode, PathGeometryNode, ShapePaintContainerNode, ShapePaintKind,
-    ShapePaintPathKind, ShapePaintStateNode,
+    ShapePaintStateNode,
 };
 use nuxie_render_api::{Aabb as RenderAabb, Vec2D as RenderVec2D};
 use nuxie_schema::definition_by_name;
@@ -23,7 +23,8 @@ use unicode_script::{Script as UnicodeScript, UnicodeScript as UnicodeScriptProp
 use crate::data_bind_flags_apply_source_to_target;
 use crate::draw::{
     RuntimeLayoutBounds, RuntimePathMeasure, RuntimeTextPaintPoolSpec, RuntimeTextPaintPoolUse,
-    runtime_path_geometry_commands, runtime_shape_paint_command,
+    runtime_live_shape_paint_path_kind, runtime_path_geometry_commands,
+    runtime_shape_paint_command,
 };
 use crate::joystick::{joystick_x_property_key, joystick_y_property_key};
 use crate::properties::property_key_for_name;
@@ -464,7 +465,9 @@ pub(crate) fn runtime_text_shape_paint_commands(
         for paint in &container.paints {
             if let Some((bucket_index, path_bucket)) = opaque_bucket {
                 let mut path_commands = path_bucket.commands.clone();
-                if paint.path_kind == Some(ShapePaintPathKind::World) {
+                if runtime_live_shape_paint_path_kind(instance, paint)
+                    == Some(RuntimeShapePaintPathKind::World)
+                {
                     transform_path_commands(&mut path_commands, shape_world);
                 }
                 if let Some(mut command) = runtime_shape_paint_command(
@@ -496,7 +499,9 @@ pub(crate) fn runtime_text_shape_paint_commands(
                 .enumerate()
             {
                 let mut path_commands = path_bucket.commands.clone();
-                if paint.path_kind == Some(ShapePaintPathKind::World) {
+                if runtime_live_shape_paint_path_kind(instance, paint)
+                    == Some(RuntimeShapePaintPathKind::World)
+                {
                     transform_path_commands(&mut path_commands, shape_world);
                 }
                 let Some(mut command) = runtime_shape_paint_command(
@@ -4019,7 +4024,9 @@ impl<'a> StaticTextSlice<'a> {
         for path_bucket in order_opacity_buckets_like_cpp(path_buckets) {
             for paint in &container.paints {
                 let mut path_commands = path_bucket.commands.clone();
-                if paint.path_kind == Some(ShapePaintPathKind::World) {
+                if runtime_live_shape_paint_path_kind(instance, paint)
+                    == Some(RuntimeShapePaintPathKind::World)
+                {
                     transform_path_commands(&mut path_commands, shape_world);
                 }
                 let Some(mut command) = runtime_shape_paint_command(

@@ -150,6 +150,12 @@ LANDMARKS = {
         "cpp": 0,
         "rust": 0,
     },
+    # Drawable links are retained pointers in C++ and retained indices in
+    # Rust. This structural landmark is guarded by the FL-E7 source ratchets.
+    "drawable_owner_lookup": {
+        "cpp": 0,
+        "rust": 0,
+    },
     "layout_compute": {
         "cpp": "rive::Artboard::calculateLayout()",
         "rust": (
@@ -328,6 +334,7 @@ MECHANISM_LANDMARKS = {
         },
     },
     "internal_owner_rediscovery": LANDMARKS["internal_owner_rediscovery"],
+    "drawable_owner_lookup": LANDMARKS["drawable_owner_lookup"],
 }
 
 
@@ -358,6 +365,7 @@ STEADY_LANDMARKS = {
     "clipping_redundancy_clear": LANDMARKS["clipping_redundancy_clear"],
     "layout_compute": LANDMARKS["layout_compute"],
     "internal_owner_rediscovery": LANDMARKS["internal_owner_rediscovery"],
+    "drawable_owner_lookup": LANDMARKS["drawable_owner_lookup"],
 }
 
 

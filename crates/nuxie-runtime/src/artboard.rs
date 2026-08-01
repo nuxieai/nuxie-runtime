@@ -7045,8 +7045,8 @@ impl ArtboardInstance {
                 self.slot(text_local).and_then(|slot| slot.type_name),
                 Some("Text" | "TextInput")
             ) {
-                // The concrete Text callback rebuilds only this Text's
-                // render styles. In particular, TextValueRun setters do not
+                // The concrete Text callback rebuilds only this Text's render
+                // styles. In particular, TextValueRun setters do not
                 // invalidate sibling Text occurrences
                 // (`text_value_run.cpp:90-113`, `text.cpp:534-543`).
                 self.runtime_drawables
@@ -7274,21 +7274,6 @@ impl ArtboardInstance {
             .and_then(|_| self.objects.component(handle))
             .and_then(|component| component.parent);
 
-        if !(accumulated
-            & (ComponentDirt::TEXT_SHAPE
-                | ComponentDirt::WORLD_TRANSFORM
-                | ComponentDirt::RENDER_OPACITY
-                | ComponentDirt::PAINT))
-            .is_empty()
-        {
-            if !(accumulated & (ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT)).is_empty() {
-                self.runtime_drawables
-                    .mark_text_render_styles_dirty_for_local(local_id);
-            } else {
-                self.runtime_drawables
-                    .mark_text_resource_dirty_for_local(local_id);
-            }
-        }
         self.runtime_meshes
             .mark_component_dirt(local_id, accumulated);
         if accumulated.contains(ComponentDirt::LAYOUT_STYLE) {
@@ -8752,6 +8737,12 @@ impl ArtboardInstance {
                 property_key,
             )
         });
+        let owner_callback = owner_callback.or_else(|| {
+            crate::draw_rules::uint_property_changed(self, local_id, type_name, property_key)
+        });
+        let owner_callback = owner_callback.or_else(|| {
+            crate::draw_target::uint_property_changed(self, local_id, type_name, property_key)
+        });
         *owner_callback_handled = owner_callback.is_some();
         let owner_changed = owner_callback.unwrap_or(false);
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("Image")
@@ -8777,20 +8768,6 @@ impl ArtboardInstance {
             && let Some(value) = self.uint_property(local_id, property_key)
         {
             changed |= self.set_nested_artboard_artboard_id(local_id, value);
-        }
-        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("DrawRules")
-            && property_key_for_name("DrawRules", "drawTargetId") == Some(property_key)
-        {
-            // C++ `DrawRules::drawTargetIdChanged` dirties the owning
-            // Artboard, not the non-Component DrawRules object.
-            changed |= self.add_dirt(0, ComponentDirt::DRAW_ORDER, false);
-        }
-        if self.slot(local_id).and_then(|slot| slot.type_name) == Some("DrawTarget")
-            && property_key_for_name("DrawTarget", "placementValue") == Some(property_key)
-        {
-            // C++ `DrawTarget::placementValueChanged` dirties the owning
-            // Artboard, not the non-Component DrawTarget object.
-            changed |= self.add_dirt(0, ComponentDirt::DRAW_ORDER, false);
         }
         if solo_active_component_id_property_key() == Some(property_key) {
             if let Some(solo) = self.component_handle(local_id) {

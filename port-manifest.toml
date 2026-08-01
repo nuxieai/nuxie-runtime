@@ -499,9 +499,9 @@ note = "Consolidated Rust port for animation."
 
 [[file]]
 upstream = "src/animation/text_input_listener_group.cpp"
-status = "absent"
-rust_module = ""
-note = "F5: text-input listener runtime is absent."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/state_machine/text_input_listener_group.rs"
+note = "FL-E6: direct TextInput pointer, drag, multi-click, and focus bridge."
 
 [[file]]
 upstream = "src/animation/transition_bool_condition.cpp"
@@ -1220,14 +1220,14 @@ note = "Consolidated runtime port."
 [[file]]
 upstream = "src/draw_rules.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
-note = "Consolidated runtime port."
+rust_module = "crates/nuxie-runtime/src/draw_rules.rs"
+note = "Direct FL-E7 retained DrawRules target owner and generated callback."
 
 [[file]]
 upstream = "src/draw_target.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
-note = "Consolidated runtime port."
+rust_module = "crates/nuxie-runtime/src/draw_target.rs"
+note = "Direct FL-E7 retained DrawTarget drawable/placement owner and generated callback; unresolved graph diagnostics are explicitly inert instead of C++ MissingObject import failure."
 
 [[file]]
 upstream = "src/drawable.cpp"
@@ -2216,8 +2216,8 @@ note = "FL-E3 direct file owner for pinned callback dirt and retained path/paint
 [[file]]
 upstream = "src/shapes/shape_paint_container.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/draw.rs"
-note = "Consolidated Rust port for shapes."
+rust_module = "crates/nuxie-runtime/src/shapes/shape_paint_container.rs"
+note = "Direct FL-E7 nine-branch ShapePaintContainer owner with production addPaint/pathFlags/invalidation/opacity operations."
 
 [[file]]
 upstream = "src/shapes/slice_mesh.cpp"
@@ -2269,9 +2269,9 @@ note = "F14: static scene helper is outside the supported runtime contract."
 
 [[file]]
 upstream = "src/text/cursor.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/text.rs"
-note = "F2: TextInput rendering is ported; cursor editing behavior is partial."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/text/cursor.rs"
+note = "FL-E6: direct cursor endpoint, selection, and ordering owner."
 
 [[file]]
 upstream = "src/text/font_hb.cpp"
@@ -2305,9 +2305,9 @@ note = "Consolidated Rust port for text."
 
 [[file]]
 upstream = "src/text/raw_text_input.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/text.rs"
-note = "F2: TextInput rendering is ported; editing behavior remains partial."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/text/raw_text_input.rs"
+note = "FL-E6: direct editable-buffer, cluster navigation, selection, and undo/redo owner."
 
 [[file]]
 upstream = "src/text/text.cpp"
@@ -2329,45 +2329,45 @@ note = "Consolidated Rust port for text."
 
 [[file]]
 upstream = "src/text/text_input.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/text.rs"
-note = "F2: TextInput rendering is ported; editing behavior remains partial."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/text_input.rs"
+note = "FL-E6: direct TextInput owner, key/commit dispatch, geometry, scrolling, and property synchronization."
 
 [[file]]
 upstream = "src/text/text_input_cursor.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/text.rs"
-note = "F2: TextInput rendering is ported; editing behavior remains partial."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/text/text_input_cursor.rs"
+note = "FL-E6: direct cursor drawable bridge."
 
 [[file]]
 upstream = "src/text/text_input_drawable.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/text.rs"
-note = "F2: TextInput rendering is ported; editing behavior remains partial."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/text/text_input_drawable.rs"
+note = "FL-E6: direct TextInput drawable type bridge."
 
 [[file]]
 upstream = "src/text/text_input_selected_text.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/text.rs"
-note = "F2: TextInput rendering is ported; editing behavior remains partial."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/text/text_input_selected_text.rs"
+note = "FL-E6: direct selected-text split owner."
 
 [[file]]
 upstream = "src/text/text_input_selection.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/text.rs"
-note = "F2: TextInput rendering is ported; editing behavior remains partial."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/text/text_input_selection.rs"
+note = "FL-E6: direct selection drawable bridge."
 
 [[file]]
 upstream = "src/text/text_input_text.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/text.rs"
-note = "F2: TextInput rendering is ported; editing behavior remains partial."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/text/text_input_text.rs"
+note = "FL-E6: direct editable-text drawable bridge."
 
 [[file]]
 upstream = "src/text/text_interface.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/text.rs"
-note = "Consolidated Rust port for text."
+rust_module = "crates/nuxie-runtime/src/text/text_interface.rs"
+note = "FL-E6: direct TextInterface bridge."
 
 [[file]]
 upstream = "src/text/text_modifier.cpp"
@@ -2389,9 +2389,9 @@ note = "Consolidated Rust port for text."
 
 [[file]]
 upstream = "src/text/text_selection_path.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/text.rs"
-note = "F2: TextInput rendering is ported; editing behavior remains partial."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/text/text_selection_path.rs"
+note = "FL-E6: direct selection contour and rounded-corner path owner."
 
 [[file]]
 upstream = "src/text/text_style.cpp"

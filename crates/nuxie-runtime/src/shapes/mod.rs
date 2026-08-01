@@ -23,6 +23,7 @@ pub(crate) mod points_path;
 pub(crate) mod polygon;
 pub(crate) mod rectangle;
 pub(crate) mod shape;
+pub(crate) mod shape_paint_container;
 pub(crate) mod star;
 pub(crate) mod straight_vertex;
 pub(crate) mod triangle;

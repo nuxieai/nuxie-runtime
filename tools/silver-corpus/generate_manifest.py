@@ -360,7 +360,7 @@ layout_anim_bound|frame 2, op 146 (addRawPath), field point: expected (450, 0), 
 layout_anim_component_list|frame 1, op 89 (addRawPath), field point: expected (500, 0), got (495.2, 0)
 layout_anim_nested|frame 1, op 86 (addRawPath), field point: expected (500, 0), got (495.2, 0)
 layout_aspect_ratio|frame 0, op 42 (addRawPath), field point: expected (142, 71), got (142, 133)
-layout_display|frame 35, op 667 (drawPath): expected drawPath, got makeRenderPath
+layout_display|frame 3, op 188 (makeRenderPath): expected makeRenderPath, got rewind
 layout_paint|frame 0, op 77 (drawPath): expected drawPath, got makeRenderPath
 multi_listeners|frame 2, op 253 (makeRenderPath): expected makeRenderPath, got rewind
 nested_events|frame 1, op 166 (makeRenderPath): expected makeRenderPath, got rewind

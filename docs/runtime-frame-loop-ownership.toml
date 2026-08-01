@@ -4,9 +4,36 @@ upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 porting_rules_file = "docs/PORTING.md"
 file_correspondence_manifest = "file-correspondence-manifest.toml"
 trace_evidence_file = "docs/runtime-frame-loop-trace.json"
-phase = "fl-e7-closed-wave-open"
-# FL-E7 is family-closed, but FL-E wave acceptance remains open on 23 earlier
-# file rows; check.py does not constrain phase vocabulary.
+phase = "fl-e-wave-acceptance-candidate"
+candidate_pending_verification_files = [
+  "src/layout.cpp",
+  "src/layout/artboard_component_list_override.cpp",
+  "src/layout_component.cpp",
+  "src/math/random.cpp",
+  "src/shapes/list_path.cpp",
+  "src/solo.cpp",
+  "src/text/font_hb.cpp",
+  "src/text/fully_shaped_text.cpp",
+  "src/text/glyph_lookup.cpp",
+  "src/text/line_breaker.cpp",
+  "src/text/raw_text.cpp",
+  "src/text/text.cpp",
+  "src/text/text_engine.cpp",
+  "src/text/text_follow_path_modifier.cpp",
+  "src/text/text_modifier.cpp",
+  "src/text/text_modifier_group.cpp",
+  "src/text/text_modifier_range.cpp",
+  "src/text/text_style.cpp",
+  "src/text/text_style_axis.cpp",
+  "src/text/text_style_feature.cpp",
+  "src/text/text_target_modifier.cpp",
+  "src/text/text_variation_helper.cpp",
+  "src/text/text_variation_modifier.cpp",
+  "src/text/utf.cpp",
+]
+# All mapped file rows have a candidate disposition. The 24 rows dispositioned
+# by W120 intentionally retain pending-verification until the orchestrator
+# accepts their evidence and flips verification independently.
 provisional_runtime_base = "95eb04b7cfb847f24ba77872bd8a0ee43da1af41"
 provisional_fl_b_tip = "0b08970fccc42ff3677534d4dcece0f05f69a0bc"
 fl_b_verification = "reaccepted"
@@ -139,10 +166,10 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 318
+faithful = 334
 adapted = 0
-divergent-by-decision = 0
-pending = 24
+divergent-by-decision = 8
+pending = 0
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
@@ -1946,7 +1973,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/layout.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/layout/artboard_component_list_override.cpp"
@@ -1954,7 +1981,9 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/layout/artboard_component_list_override.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = false
-status = "pending"
+status = "divergent-by-decision"
+decision = "D3"
+ceiling = "layout-engine"
 
 [[file]]
 upstream = "src/layout/axis.cpp"
@@ -2034,7 +2063,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/layout_component.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/listener_group.cpp"
@@ -2126,7 +2155,7 @@ rust_modules = [
   "crates/nuxie-runtime/src/math/random/wasm.rs",
 ]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/raw_path.cpp"
@@ -2342,7 +2371,9 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/shapes/list_path.rs"]
 dynamically_reached = false
-status = "pending"
+status = "divergent-by-decision"
+decision = "D13"
+ceiling = "dynamic-list-path"
 
 [[file]]
 upstream = "src/shapes/mesh.cpp"
@@ -2630,7 +2661,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/solo.rs", "crates/nuxie-runtime/src/artboard.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/cursor.cpp"
@@ -2646,7 +2677,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/font_hb.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/fully_shaped_text.cpp"
@@ -2654,7 +2685,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/fully_shaped_text.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/glyph_lookup.cpp"
@@ -2662,7 +2693,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/glyph_lookup.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/line_breaker.cpp"
@@ -2670,7 +2701,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/line_breaker.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/raw_text.cpp"
@@ -2678,7 +2709,9 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/raw_text.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = false
-status = "pending"
+status = "divergent-by-decision"
+decision = "D14"
+ceiling = "standalone-raw-text"
 
 [[file]]
 upstream = "src/text/raw_text_input.cpp"
@@ -2694,7 +2727,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text.rs", "crates/nuxie-runtime/src/text.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_engine.cpp"
@@ -2702,7 +2735,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_engine.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_follow_path_modifier.cpp"
@@ -2710,7 +2743,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_follow_path_modifier.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_input.cpp"
@@ -2774,7 +2807,9 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_modifier.rs"]
 dynamically_reached = false
-status = "pending"
+status = "divergent-by-decision"
+decision = "D15"
+ceiling = "static-text-extensions"
 
 [[file]]
 upstream = "src/text/text_modifier_group.cpp"
@@ -2782,7 +2817,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_modifier_group.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_modifier_range.cpp"
@@ -2790,7 +2825,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_modifier_range.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_selection_path.cpp"
@@ -2806,7 +2841,9 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_style.rs", "crates/nuxie-runtime/src/text.rs"]
 dynamically_reached = true
-status = "pending"
+status = "divergent-by-decision"
+decision = "D15"
+ceiling = "static-text-extensions"
 
 [[file]]
 upstream = "src/text/text_style_axis.cpp"
@@ -2814,7 +2851,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_style_axis.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_style_feature.cpp"
@@ -2822,7 +2859,9 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_style_feature.rs"]
 dynamically_reached = false
-status = "pending"
+status = "divergent-by-decision"
+decision = "D15"
+ceiling = "static-text-extensions"
 
 [[file]]
 upstream = "src/text/text_style_paint.cpp"
@@ -2838,7 +2877,9 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_target_modifier.rs"]
 dynamically_reached = false
-status = "pending"
+status = "divergent-by-decision"
+decision = "D15"
+ceiling = "static-text-extensions"
 
 [[file]]
 upstream = "src/text/text_value_run.cpp"
@@ -2854,7 +2895,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_variation_helper.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_variation_modifier.cpp"
@@ -2862,7 +2903,9 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_variation_modifier.rs"]
 dynamically_reached = false
-status = "pending"
+status = "divergent-by-decision"
+decision = "D15"
+ceiling = "static-text-extensions"
 
 [[file]]
 upstream = "src/text/utf.cpp"
@@ -2870,7 +2913,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/utf.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/transform_component.cpp"

@@ -33,9 +33,13 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   exact 0 / 0 for both and retained-pointer/handle `drawable_owner_lookup` is
   structurally 0 / 0. Renderer golden could not run because
   this environment exposes no Metal or other suitable graphics adapter.
-  FL-E7 closes its family, not the FL-E wave: 23 earlier FL-E file rows remain
-  pending, including explicit unsupported behavior in the E5 text/list-path
-  territory. Therefore FL-E and the mapped FL series remain open.
+  FL-E7 closes its family. W120 has now assigned a candidate disposition to
+  every earlier FL-E row: 15 faithful and eight divergent-by-decision under
+  the named FLR-20 ceilings. The supporting FL-A RandomProvider row is also a
+  faithful candidate. No mapped file row remains pending, but all 24 W120
+  manifest verifications intentionally remain pending until orchestrator
+  adjudication, so this is the FL-E wave-acceptance candidate rather than its
+  final promotion.
 - FL-E1 is closed by mechanism correspondence. Each `ScriptVm` now owns one
   safe, stable-identity `PersistentFactoryContext`, installed by the file runtime immediately
   after VM construction and before script import. Listener, input,
@@ -151,14 +155,16 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `src/animation/scripted_listener_action.cpp` remains deliberately assigned
   to FL-C; it is not a substitute FL-B row. The checker pins the exact
   45-file FL-B membership so either omission or reassignment fails.
-- File closure: 318 / 342. FL-E is 72 / 95 faithful with 23 earlier-family
-  rows pending; `src/math/random.cpp` is the one remaining non-FL-E file row.
+- File disposition: 342 / 342. FL-E is 87 / 95 faithful plus eight declared
+  FLR-20 divergences; the former supporting `src/math/random.cpp` row is a
+  faithful candidate. The 24 W120 rows remain `pending-verification` only.
 - Member closure: 75 / 75 owner/member rows (35 faithful plus 40 accepted
   adaptations).
 - Open mechanism gaps: 2 / 10. FL-G01 and FL-G03 remain open; FL-G08 is closed
   by E7's retained Drawable mechanism.
-- Current dependency wave: FL-E7 is closed, but FL-E wave acceptance remains
-  open on 23 earlier-family rows. FL-C is closed 56 / 56. FL-B's frozen
+- Current dependency wave: every FL-E file row has a wave-acceptance
+  disposition; orchestrator verification of the 24 W120 rows is the only
+  remaining file-ledger action. FL-C is closed 56 / 56. FL-B's frozen
   45-file/eight-member mini-map is reaccepted and promoted with FL-C5 at
   `14b18765`. After the accepted-candidate complete floor and the PR to main,
   work advances through FL-D as per-family PRs. FL-C2 is independently
@@ -194,8 +200,9 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   review passed focus, random-wait, DataBind-order, RNG, nullable nested-owner,
   and family-boundary fidelity. The five public file rows and
   `state_machine.layer` are promoted only by the dedicated reconciliation
-  commit. The supporting `src/math/random.cpp` row remains pending for its
-  later FL-D formula consumer.
+  commit. W120 reverified the supporting `src/math/random.cpp` row after FL-D:
+  both the transition and formula consumers now use its one FLR-18 provider,
+  so the row is a faithful candidate pending orchestrator verification.
 - FL-C3's fresh once-per-candidate non-performance floor is green on the
   corrected source: runtime 521 / 521; public facade 146 / 146; probe-armed
   workspace and pinned-C++ probes 747 / 747; ordinary and scripted golden each
@@ -898,9 +905,41 @@ FL-A post-rebase floor, refreshed after final independent review:
   oracle. Post-rebase verification exposed and removed one stale Rust
   deserializer requirement for the deleted ordinary-snapshot field.
 
+## FL-E wave acceptance disposition
+
+- W120 re-read all 24 former pending owners against pinned C++
+  `d788e8ec6e8b598526607d6a1e8818e8b637b60c`. Sixteen rows are faithful
+  candidates: `src/layout.cpp`, `src/layout_component.cpp`,
+  `src/math/random.cpp`, `src/solo.cpp`, and the twelve direct text owners for
+  font/shaping, lookup/breaking, Text, TextEngine, follow-path, modifier-group,
+  modifier-range, style-axis, variation-helper, and UTF behavior.
+- Eight rows are `divergent-by-decision`, never mislabeled faithful:
+  `src/layout/artboard_component_list_override.cpp` binds D3/FLR-20
+  **layout-engine**; `src/shapes/list_path.cpp` binds D13/FLR-20
+  **dynamic-list-path**; `src/text/raw_text.cpp` binds D14/FLR-20
+  **standalone-raw-text**; and `src/text/text_modifier.cpp`,
+  `src/text/text_style.cpp`, `src/text/text_style_feature.cpp`,
+  `src/text/text_target_modifier.cpp`, and
+  `src/text/text_variation_modifier.cpp` bind D15/FLR-20
+  **static-text-extensions**.
+- The ownership ledger is therefore 334 faithful, eight declared divergences,
+  and zero pending file rows. Every W120 manifest row deliberately retains
+  `verification = "pending-verification"`; the checker admits that state only
+  for the ledger's explicit 24-path allowlist in phase
+  `fl-e-wave-acceptance-candidate`. The orchestrator independently flips
+  verification and advances the phase after adjudicating W120 evidence.
+- Post-disposition candidate gates are green: runtime 871 passed / one
+  ignored; pinned C++ probe 889 passed / five documented ignores; binary
+  comparison 70 / 70;
+  ordinary and scripted goldens each 317 / 317 exact entries and 647 exact
+  segments; ownership checker 342 / 342 dispositioned with all ratchets green.
+  The scripted golden's generated upstream build outputs were redirected to
+  writable `/tmp` directories because the sandbox could not clean a prior
+  archive in the external pinned checkout; no source or pin changed.
+
 ## Next
 
-1. Resolve and verify the 23 pending earlier FL-E file rows; E7 cannot promote
-   them merely by being the last scheduled family.
+1. Orchestrator-adjudicate the 24 W120 candidate dispositions, flip their
+   manifest verification values, and advance the acceptance-candidate phase.
 2. Close the remaining FL-G01 and FL-G03 mechanism gaps.
 3. Rerun renderer golden on a host with a usable GPU adapter.

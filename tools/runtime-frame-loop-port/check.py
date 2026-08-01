@@ -724,6 +724,7 @@ def check_status(
     row: dict[str, Any],
     porting_rules: str,
     decision_ids: set[str],
+    decision_ceilings: dict[str, str],
     require_closed: bool,
     errors: list[str],
 ) -> str:
@@ -735,6 +736,7 @@ def check_status(
         errors.append(f"closed frame loop required but {subject} is {status}")
     rule = str(row.get("rule", ""))
     decision = str(row.get("decision", ""))
+    ceiling = str(row.get("ceiling", ""))
     if status == "adapted":
         if not re.fullmatch(r"(?:AF|RF|FLR)-\d+", rule):
             errors.append(f"{subject} is adapted without an AF/RF/FLR rule")
@@ -747,8 +749,23 @@ def check_status(
             errors.append(f"{subject} is divergent-by-decision without a D-row")
         elif decision not in decision_ids:
             errors.append(f"{subject} cites unknown decision {decision}")
+        if not ceiling:
+            errors.append(
+                f"{subject} is divergent-by-decision without a named ceiling"
+            )
+        elif decision_ceilings.get(decision) != ceiling:
+            errors.append(
+                f"{subject} cites ceiling {ceiling!r}, but decision {decision} "
+                f"binds {decision_ceilings.get(decision)!r}"
+            )
+        elif f"**{ceiling}**" not in porting_rules:
+            errors.append(
+                f"{subject} cites named ceiling {ceiling!r} missing from PORTING.md"
+            )
     elif decision:
         errors.append(f"{subject} is {status} but unexpectedly cites {decision}")
+    elif ceiling:
+        errors.append(f"{subject} is {status} but unexpectedly cites ceiling {ceiling}")
     return status
 
 
@@ -893,6 +910,8 @@ def validate_file_rows(
     repo_root: pathlib.Path,
     porting_rules: str,
     decision_ids: set[str],
+    decision_ceilings: dict[str, str],
+    pending_verification_paths: set[str],
     require_closed: bool,
     errors: list[str],
 ) -> tuple[dict[str, dict[str, Any]], collections.Counter[str]]:
@@ -912,6 +931,14 @@ def validate_file_rows(
         errors.append(
             "file classification rows outside expanded frame-loop scope: "
             + ", ".join(outside[:12])
+        )
+    unknown_pending_verification_paths = sorted(
+        pending_verification_paths - set(by_path)
+    )
+    if unknown_pending_verification_paths:
+        errors.append(
+            "candidate pending-verification paths outside the file ledger: "
+            + ", ".join(unknown_pending_verification_paths[:12])
         )
 
     status_counts: collections.Counter[str] = collections.Counter()
@@ -957,6 +984,7 @@ def validate_file_rows(
             row=row,
             porting_rules=porting_rules,
             decision_ids=decision_ids,
+            decision_ceilings=decision_ceilings,
             require_closed=require_closed,
             errors=errors,
         )
@@ -965,7 +993,11 @@ def validate_file_rows(
         verification = str(manifest.get("verification", ""))
         manifest_status = str(manifest.get("status", ""))
         if status in CLOSED_STATUSES:
-            if verification != "orchestrator-verified":
+            verification_is_accepted = verification == "orchestrator-verified" or (
+                path in pending_verification_paths
+                and verification == "pending-verification"
+            )
+            if not verification_is_accepted:
                 errors.append(
                     f"file {path} is {status} before file correspondence is "
                     "orchestrator-verified"
@@ -980,6 +1012,13 @@ def validate_file_rows(
                     f"file {path} is {status}, but file correspondence is "
                     f"{manifest_status!r}"
                 )
+        if path in pending_verification_paths and (
+            status not in CLOSED_STATUSES or verification != "pending-verification"
+        ):
+            errors.append(
+                f"candidate path {path} must be closed with file correspondence "
+                "pending-verification"
+            )
     return by_path, status_counts
 
 
@@ -1091,6 +1130,27 @@ def check(
     duplicates = duplicate_values(str(row.get("id", "")) for row in decisions)
     if duplicates:
         errors.append(f"duplicate decision ids: {', '.join(duplicates)}")
+    decision_ceilings: dict[str, str] = {}
+    for row in decisions:
+        decision_id = str(row.get("id", ""))
+        decision_rule = str(row.get("rule", ""))
+        decision_ceiling = str(row.get("ceiling", ""))
+        if bool(decision_rule) != bool(decision_ceiling):
+            errors.append(
+                f"decision {decision_id} must cite both a rule and named ceiling"
+            )
+        if decision_rule:
+            if not re.fullmatch(r"(?:AF|RF|FLR)-\d+", decision_rule):
+                errors.append(
+                    f"decision {decision_id} has invalid rule {decision_rule!r}"
+                )
+            elif f"**{decision_rule} " not in porting_rules:
+                errors.append(
+                    f"decision {decision_id} cites missing PORTING.md rule "
+                    f"{decision_rule}"
+                )
+        if decision_ceiling:
+            decision_ceilings[decision_id] = decision_ceiling
 
     waves = list(ledger.get("wave", []))
     wave_order = topological_order(waves, errors)
@@ -1116,6 +1176,34 @@ def check(
         upstream_ref=upstream_ref,
         errors=errors,
     )
+    phase = str(ledger.get("phase", ""))
+    candidate_paths_value = ledger.get("candidate_pending_verification_files", [])
+    if not isinstance(candidate_paths_value, list):
+        errors.append("candidate_pending_verification_files must be an array")
+        candidate_paths: list[str] = []
+    else:
+        candidate_paths = [str(value) for value in candidate_paths_value]
+    candidate_path_duplicates = duplicate_values(candidate_paths)
+    if candidate_path_duplicates:
+        errors.append(
+            "duplicate candidate pending-verification paths: "
+            + ", ".join(candidate_path_duplicates)
+        )
+    if phase == "fl-e-wave-acceptance-candidate":
+        if not candidate_paths:
+            errors.append(
+                "fl-e-wave-acceptance-candidate requires an explicit "
+                "candidate_pending_verification_files allowlist"
+            )
+        pending_verification_paths = set(candidate_paths)
+    else:
+        if candidate_paths:
+            errors.append(
+                "candidate_pending_verification_files is only valid in phase "
+                "fl-e-wave-acceptance-candidate"
+            )
+        pending_verification_paths = set()
+
     file_rows, file_status_counts = validate_file_rows(
         rows=list(ledger.get("file", [])),
         assignments=assignments,
@@ -1124,6 +1212,8 @@ def check(
         repo_root=repo_root,
         porting_rules=porting_rules,
         decision_ids=decision_ids,
+        decision_ceilings=decision_ceilings,
+        pending_verification_paths=pending_verification_paths,
         require_closed=require_closed,
         errors=errors,
     )
@@ -1379,6 +1469,7 @@ def check(
             row=row,
             porting_rules=porting_rules,
             decision_ids=decision_ids,
+            decision_ceilings=decision_ceilings,
             require_closed=require_closed,
             errors=errors,
         )

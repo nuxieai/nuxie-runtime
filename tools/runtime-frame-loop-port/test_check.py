@@ -24,6 +24,7 @@ if str(TOOL_DIR) not in sys.path:
 from check import (
     FL_B_FROZEN_SCOPE_FILES,
     FL_B_FROZEN_SCOPE_REF,
+    check_status,
     nested_event_owner_boundary_matches,
     validate_frozen_wave_scopes,
 )
@@ -667,6 +668,74 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
             "before file correspondence is orchestrator-verified", result.stderr
+        )
+
+    def test_fl_e_wave_acceptance_candidate_allows_pending_verification(self) -> None:
+        self.write_files(file_status="adapted")
+        self.ledger.write_text(
+            self.ledger.read_text().replace(
+                "version = 1\n",
+                'version = 1\nphase = "fl-e-wave-acceptance-candidate"\n'
+                'candidate_pending_verification_files = '
+                '["src/animation/linear_animation.cpp"]\n',
+                1,
+            )
+        )
+        self.manifest.write_text(
+            self.manifest.read_text().replace(
+                'status = "pending"\nverification = "pending-verification"',
+                'status = "faithful"\nverification = "pending-verification"',
+            )
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_candidate_phase_rejects_pending_verification_outside_allowlist(
+        self,
+    ) -> None:
+        self.write_files(file_status="adapted")
+        self.ledger.write_text(
+            self.ledger.read_text().replace(
+                "version = 1\n",
+                'version = 1\nphase = "fl-e-wave-acceptance-candidate"\n'
+                'candidate_pending_verification_files = ["src/other.cpp"]\n',
+                1,
+            )
+        )
+        self.manifest.write_text(
+            self.manifest.read_text().replace(
+                'status = "pending"\nverification = "pending-verification"',
+                'status = "faithful"\nverification = "pending-verification"',
+            )
+        )
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "before file correspondence is orchestrator-verified", result.stderr
+        )
+
+    def test_divergence_requires_the_decision_bound_named_ceiling(self) -> None:
+        errors: list[str] = []
+        check_status(
+            subject="file fixture.cpp",
+            row={
+                "status": "divergent-by-decision",
+                "decision": "D13",
+                "ceiling": "standalone-raw-text",
+            },
+            porting_rules=(
+                "- **FLR-20 Declare ceilings.** "
+                "**dynamic-list-path** **standalone-raw-text**\n"
+            ),
+            decision_ids={"D13"},
+            decision_ceilings={"D13": "dynamic-list-path"},
+            require_closed=False,
+            errors=errors,
+        )
+        self.assertIn(
+            "file fixture.cpp cites ceiling 'standalone-raw-text', but decision D13 binds "
+            "'dynamic-list-path'",
+            errors,
         )
 
     def test_untracked_trace_counter_mismatch_fails(self) -> None:

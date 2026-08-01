@@ -16,6 +16,7 @@ mod command_server;
 mod host_commands;
 mod listener_invocation;
 mod mat4;
+mod promise;
 mod renderer;
 mod resource_limits;
 mod view_model;
@@ -1091,6 +1092,7 @@ impl ScriptVm {
         install_mat4_global(&self.lua)?;
         install_math_fround(&self.lua)?;
         install_data_value_global(&self.lua)?;
+        promise::install_promise_globals(&self.lua)?;
 
         let late = self
             .lua

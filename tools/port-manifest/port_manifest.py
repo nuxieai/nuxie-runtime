@@ -40,7 +40,11 @@ FEATURE_ROWS = {
         "",
         "F6: semantics runtime is absent.",
     ),
-    "src/lua/lua_promise.cpp": ("absent", "", "F7: Lua promise binding is absent."),
+    "src/lua/lua_promise.cpp": (
+        "ported",
+        "crates/nuxie-scripting/src/vm/promise.rs; crates/nuxie-scripting/src/vm.rs",
+        "P1-i: all 47 pinned Promise scenarios plus 2 invalid-yield cases pass exact live C++/Rust VM differentials; image decode is a separate lane.",
+    ),
     "src/lua/renderer/lua_gpu.cpp": (
         "absent",
         "",

@@ -70,7 +70,8 @@ fn run() -> Result<(), String> {
         match status {
             Status::UnsupportedFeature => {
                 if options.verify_unsupported_cpp {
-                    let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
+                    let file =
+                        resolve_asset_path(&entry.path, &options.rive_runtime_dir, &corpus_dir);
                     match run_stream(
                         &options.cpp_runner,
                         entry,
@@ -101,7 +102,7 @@ fn run() -> Result<(), String> {
                 if let Some(feature) = unsupported_feature {
                     match &options.rust_runner {
                         Some(rust_runner) => {
-                            let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
+                            let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir, &corpus_dir);
                             match run_unsupported_diagnostic(
                                 rust_runner,
                                 entry,
@@ -125,7 +126,7 @@ fn run() -> Result<(), String> {
                 }
             }
             Status::Exact if entry.verification == VerificationMode::RejectsMalformed => {
-                let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
+                let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir, &corpus_dir);
                 let expected_rust_error = entry
                     .import_error_feature()
                     .expect("rejects-malformed entries are validated before execution");
@@ -169,7 +170,7 @@ fn run() -> Result<(), String> {
                 }
             }
             Status::NotYet | Status::Diverges | Status::Exact => {
-                let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir);
+                let file = resolve_asset_path(&entry.path, &options.rive_runtime_dir, &corpus_dir);
                 match run_stream(
                     &options.cpp_runner,
                     entry,
@@ -724,10 +725,12 @@ fn array_inner(value: &str, line: usize) -> Result<&str, String> {
     Ok(&value[1..value.len() - 1])
 }
 
-fn resolve_asset_path(path: &str, rive_runtime_dir: &Path) -> PathBuf {
+fn resolve_asset_path(path: &str, rive_runtime_dir: &Path, corpus_dir: &Path) -> PathBuf {
     let path = PathBuf::from(path);
     if path.is_absolute() {
         path
+    } else if path.starts_with("fixtures") {
+        corpus_dir.join(path)
     } else {
         rive_runtime_dir.join(path)
     }
@@ -1053,6 +1056,26 @@ mod tests {
             scripted_cpp
                 .get_args()
                 .all(|argument| argument != "--execute-scripts")
+        );
+    }
+
+    #[test]
+    fn workspace_fixture_paths_resolve_from_the_corpus_directory() {
+        assert_eq!(
+            resolve_asset_path(
+                "fixtures/fl-e8/text_style_feature.riv",
+                Path::new("/upstream/rive-runtime"),
+                Path::new("/workspace")
+            ),
+            PathBuf::from("/workspace/fixtures/fl-e8/text_style_feature.riv")
+        );
+        assert_eq!(
+            resolve_asset_path(
+                "tests/unit_tests/assets/example.riv",
+                Path::new("/upstream/rive-runtime"),
+                Path::new("/workspace")
+            ),
+            PathBuf::from("/upstream/rive-runtime/tests/unit_tests/assets/example.riv")
         );
     }
 

@@ -4,6 +4,56 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
+- W121 closes the final mechanism gaps. FL-G01's independent acceptance
+  reconciles the ownership ledger's existing `fl_b_verification =
+  "reaccepted"` state with the stale open row: the frozen scope is exactly 45
+  unique paths, the FL-B file ledger contains exactly those 45 faithful rows,
+  and all eight retained member rows match pinned C++ ownership. The live
+  zero-ratchets and four injected negative suites reject displaced KeyFrame
+  sidecars, LinearAnimation definition copies, reset clones, copied blend
+  payloads, dropped definitions, and occurrence-local empty fallbacks. FL-G03
+  closes on the source-bound canonical aggregate: `event_apply_batch` is C++
+  30 / Rust 11 and `state_machine_advance` is C++ 30 / Rust 11. Each side
+  therefore preserves one apply batch per counted advance; the 30-to-11 call
+  topology remains the accepted Rust owner-boundary adaptation for batched
+  ancestor delivery, bubbling, audio unwind, deferred errors, and settlement.
+  All 10 mechanism gaps are now closed.
+- FL-E7 is closed by mechanism correspondence, including FL-G08. DrawRules
+  retains its active target, DrawTarget retains its Drawable and placement,
+  retained Drawable allocations own the final `prev`/`next` links and
+  clone-local clipping proxies, and live draw walks those links without
+  serialized owner rediscovery. DrawOrder sorting is entered only at
+  construction and root DrawOrder dirt; Clipping retains the pinned internal
+  sort clear plus explicit root Clipping clear. The centralized callbacks and
+  sort-time DrawRules/DrawTarget property refreshes displaced by those owners
+  are deleted. `ShapePaintContainer::from` implements and retains the exact
+  nine pinned polymorphic branches; its live path choice, gradient shader
+  space, and paint-configuration epoch remain synchronized after non-Shape
+  Stroke mutation. Runtime is 871 passed with one ignored; `nuxie --lib`
+  is 154 / 154; the pinned-C++ probe is 889 passed with five ignored; ordinary
+  and scripted goldens are each 317 / 317 entries and 647 / 647 exact segments
+  with zero divergence; binary comparison is 70 / 70. Silver remains honestly
+  at 59 exact (49 byte-exact plus 10 epsilon), 36 divergent, and 100 explicitly
+  unsupported selected runtime cases. The final path-owner split keeps direct
+  TextStylePaint opacity buckets on C++'s replace lifecycle while retained
+  DashPath/effect/feather outputs rewind. Layout-origin Path dirt keeps those
+  owners, while dependency Path dirt replaces only opacity buckets; this
+  preserves the exact text-stroke, listener, and follow-path cases without
+  changing any silver classification. `animated_clipping-nodes` remains at
+  expected `drawPath`, got `makeRenderPath`; `layout_display` remains at
+  expected `makeRenderPath`, got `rewind`. The canonical trace records the explicit
+  occurrence-materialization adaptation (`draw_order_sort` C++ 24 / Rust 607;
+  `clipping_redundancy_clear` C++ 48 / Rust 1214), while the steady trace is
+  exact 0 / 0 for both and retained-pointer/handle `drawable_owner_lookup` is
+  structurally 0 / 0. Renderer golden could not run because
+  this environment exposes no Metal or other suitable graphics adapter.
+  FL-E7 closes its family. W120 has now assigned a candidate disposition to
+  every earlier FL-E row: 15 faithful and eight divergent-by-decision under
+  the named FLR-20 ceilings. The supporting FL-A RandomProvider row is also a
+  faithful candidate. No mapped file row remains pending, but all 24 W120
+  manifest verifications intentionally remain pending until orchestrator
+  adjudication, so this is the FL-E wave-acceptance candidate rather than its
+  final promotion.
 - FL-E1 is closed by mechanism correspondence. Each `ScriptVm` now owns one
   safe, stable-identity `PersistentFactoryContext`, installed by the file runtime immediately
   after VM construction and before script import. Listener, input,
@@ -112,26 +162,23 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   listener/action family is independently accepted at
   `0eb48976755d759c078f1f1a032bd88590e223f7` and its exact mapped rows are
   promoted.
-- Active production branch: `levi/fl-c`. The former `levi/fl-b` branch name
-  described the provisional stack base, not the active wave, and is no longer
-  used for FL-C publication. There is no PR.
+- Active production branch: `levi/fl-e7`. There is no PR.
 - Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
 - FL-B scope correction restores the frozen 45th owner,
   `src/importers/keyed_property_importer.cpp`, to the executable FL-B ledger.
   `src/animation/scripted_listener_action.cpp` remains deliberately assigned
   to FL-C; it is not a substitute FL-B row. The checker pins the exact
   45-file FL-B membership so either omission or reassignment fails.
-- File closure: 247 / 342. FL-D is closed by the dependency-ordered D1–D7
-  landings and FL-E1 promotes `src/command_server.cpp`; 95 FL-E/later rows
-  remain pending.
-- Member closure: 73 / 75 owner/member rows (33 faithful plus 40 accepted
-  adaptations); two FL-E rows remain pending.
-- Open mechanism gaps: 4 / 10. FL-G02, FL-G05, FL-G06, and FL-G09 are closed;
-  FL-G10 records
-  the user-approved D2 saturation choice for AnimationReset's otherwise
-  undefined float-to-int edge.
-- Current dependency wave: FL-D and FL-E1 are closed; FL-E2 is next. FL-C is closed
-  56 / 56. FL-B's frozen
+- File disposition: 342 / 342. FL-E is 87 / 95 faithful plus eight declared
+  FLR-20 divergences; the former supporting `src/math/random.cpp` row is a
+  faithful candidate. The 24 W120 rows remain `pending-verification` only.
+- Member closure: 75 / 75 owner/member rows (35 faithful plus 40 accepted
+  adaptations).
+- Open mechanism gaps: 0 / 10. W121 closes FL-G01 and FL-G03; all mechanism
+  rows are closed.
+- Current dependency wave: every FL-E file row has a wave-acceptance
+  disposition; orchestrator verification of the 24 W120 rows is the only
+  remaining file-ledger action. FL-C is closed 56 / 56. FL-B's frozen
   45-file/eight-member mini-map is reaccepted and promoted with FL-C5 at
   `14b18765`. After the accepted-candidate complete floor and the PR to main,
   work advances through FL-D as per-family PRs. FL-C2 is independently
@@ -167,8 +214,9 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   review passed focus, random-wait, DataBind-order, RNG, nullable nested-owner,
   and family-boundary fidelity. The five public file rows and
   `state_machine.layer` are promoted only by the dedicated reconciliation
-  commit. The supporting `src/math/random.cpp` row remains pending for its
-  later FL-D formula consumer.
+  commit. W120 reverified the supporting `src/math/random.cpp` row after FL-D:
+  both the transition and formula consumers now use its one FLR-18 provider,
+  so the row is a faithful candidate pending orchestrator verification.
 - FL-C3's fresh once-per-candidate non-performance floor is green on the
   corrected source: runtime 521 / 521; public facade 146 / 146; probe-armed
   workspace and pinned-C++ probes 747 / 747; ordinary and scripted golden each
@@ -871,11 +919,40 @@ FL-A post-rebase floor, refreshed after final independent review:
   oracle. Post-rebase verification exposed and removed one stale Rust
   deserializer requirement for the deleted ordinary-snapshot field.
 
+## FL-E wave acceptance disposition
+
+- W120 re-read all 24 former pending owners against pinned C++
+  `d788e8ec6e8b598526607d6a1e8818e8b637b60c`. Sixteen rows are faithful
+  candidates: `src/layout.cpp`, `src/layout_component.cpp`,
+  `src/math/random.cpp`, `src/solo.cpp`, and the twelve direct text owners for
+  font/shaping, lookup/breaking, Text, TextEngine, follow-path, modifier-group,
+  modifier-range, style-axis, variation-helper, and UTF behavior.
+- Eight rows are `divergent-by-decision`, never mislabeled faithful:
+  `src/layout/artboard_component_list_override.cpp` binds D3/FLR-20
+  **layout-engine**; `src/shapes/list_path.cpp` binds D13/FLR-20
+  **dynamic-list-path**; `src/text/raw_text.cpp` binds D14/FLR-20
+  **standalone-raw-text**; and `src/text/text_modifier.cpp`,
+  `src/text/text_style.cpp`, `src/text/text_style_feature.cpp`,
+  `src/text/text_target_modifier.cpp`, and
+  `src/text/text_variation_modifier.cpp` bind D15/FLR-20
+  **static-text-extensions**.
+- The ownership ledger is therefore 334 faithful, eight declared divergences,
+  and zero pending file rows. Every W120 manifest row deliberately retains
+  `verification = "pending-verification"`; the checker admits that state only
+  for the ledger's explicit 24-path allowlist in phase
+  `fl-e-wave-acceptance-candidate`. The orchestrator independently flips
+  verification and advances the phase after adjudicating W120 evidence.
+- Post-disposition candidate gates are green: runtime 871 passed / one
+  ignored; pinned C++ probe 889 passed / five documented ignores; binary
+  comparison 70 / 70;
+  ordinary and scripted goldens each 317 / 317 exact entries and 647 exact
+  segments; ownership checker 342 / 342 dispositioned with all ratchets green.
+  The scripted golden's generated upstream build outputs were redirected to
+  writable `/tmp` directories because the sandbox could not clean a prior
+  archive in the external pinned checkout; no source or pin changed.
+
 ## Next
 
-1. Run the single complete floor on accepted candidate
-   `14b187659a1eafadd3e425d75f516b7080c3b021`, with browser, size,
-   pixel-same, and pixel-static legs in parallel under the 2026-07-30
-   coordinator floor policy. There is no Apple leg.
-2. Open the joint FL-B/FL-C5 PR to main.
-3. Execute FL-E2 as the next dependency-ordered family.
+1. Orchestrator-adjudicate the 24 W120 candidate dispositions, flip their
+   manifest verification values, and advance the acceptance-candidate phase.
+2. Rerun renderer golden on a host with a usable GPU adapter.

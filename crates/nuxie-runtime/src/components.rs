@@ -602,6 +602,7 @@ impl RuntimeShapeState {
         previous & flags != flags
     }
 
+    #[cfg(test)]
     pub(crate) fn is_flagged(&self, flags: u8) -> bool {
         self.flags.get() & flags != 0
     }

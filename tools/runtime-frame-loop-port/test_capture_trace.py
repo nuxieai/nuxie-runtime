@@ -79,6 +79,17 @@ class CaptureTraceTest(unittest.TestCase):
             orchestration_log = repo / ".flc5/out/W29.log"
             orchestration_log.parent.mkdir(parents=True)
             orchestration_log.write_text("before\n")
+            e8_orchestration_log = repo / ".fle8/assembly.log"
+            e8_orchestration_log.parent.mkdir(parents=True)
+            e8_orchestration_log.write_text("before\n")
+            root_wave_log = repo / "W119.log"
+            root_wave_log.write_text("before\n")
+            root_wave_report = repo / "W117-report.md"
+            root_wave_report.write_text("before\n")
+            root_inventory_log = repo / "E8-inv-text.log"
+            root_inventory_log.write_text("before\n")
+            root_inventory_report = repo / "E8-inv-text.md"
+            root_inventory_report.write_text("before\n")
 
             first = CAPTURE.candidate_source_fingerprint(
                 repo, evidence_path=output
@@ -86,6 +97,11 @@ class CaptureTraceTest(unittest.TestCase):
             output.write_text('{"generated": true}\n')
             status.write_text("after\n")
             orchestration_log.write_text("after\n")
+            e8_orchestration_log.write_text("after\n")
+            root_wave_log.write_text("after\n")
+            root_wave_report.write_text("after\n")
+            root_inventory_log.write_text("after\n")
+            root_inventory_report.write_text("after\n")
             generated = repo / "tools/trace/__pycache__/capture.pyc"
             generated.parent.mkdir(parents=True)
             generated.write_bytes(b"generated")
@@ -95,6 +111,51 @@ class CaptureTraceTest(unittest.TestCase):
 
             self.assertEqual(first, second)
             self.assertEqual(first["file_count"], 1)
+
+    def test_candidate_source_fingerprint_excludes_generated_artifact_receipts(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = pathlib.Path(directory)
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            output = repo / "docs/runtime-frame-loop-trace.json"
+            output.parent.mkdir()
+            output.write_text("{}\n")
+            ledger = repo / "docs/runtime-frame-loop-ownership.toml"
+            ledger.write_text(
+                "schema = 8\n\n"
+                "[expected_trace_artifacts]\n"
+                f'cpp_binary_sha256 = "{"a" * 64}"\n\n'
+                "[active_owner_family]\n"
+                'id = "FL-E7"\n'
+            )
+
+            first = CAPTURE.candidate_source_fingerprint(
+                repo, evidence_path=output
+            )
+            ledger.write_text(
+                "schema = 8\n\n"
+                "[expected_trace_artifacts]\n"
+                f'cpp_binary_sha256 = "{"b" * 64}"\n\n'
+                "[active_owner_family]\n"
+                'id = "FL-E7"\n'
+            )
+            receipt_only = CAPTURE.candidate_source_fingerprint(
+                repo, evidence_path=output
+            )
+            ledger.write_text(
+                "schema = 9\n\n"
+                "[expected_trace_artifacts]\n"
+                f'cpp_binary_sha256 = "{"b" * 64}"\n\n'
+                "[active_owner_family]\n"
+                'id = "FL-E7"\n'
+            )
+            semantic_change = CAPTURE.candidate_source_fingerprint(
+                repo, evidence_path=output
+            )
+
+            self.assertEqual(first, receipt_only)
+            self.assertNotEqual(first["sha256"], semantic_change["sha256"])
 
     def test_interactive_input_is_only_enabled_for_mechanism_frame(self) -> None:
         row = {

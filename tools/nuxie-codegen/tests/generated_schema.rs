@@ -3,6 +3,24 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+#[test]
+fn fl_e8_static_text_fixture_type_keys_are_in_the_generated_schema() {
+    assert_eq!(
+        nuxie_schema::definition_by_name("TextStyleFeature")
+            .unwrap()
+            .type_key
+            .int,
+        164
+    );
+    assert_eq!(
+        nuxie_schema::definition_by_name("TextVariationModifier")
+            .unwrap()
+            .type_key
+            .int,
+        162
+    );
+}
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }

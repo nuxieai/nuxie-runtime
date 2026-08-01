@@ -1,11 +1,16 @@
 use anyhow::{Context, Result, bail};
+use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue, RuntimeFile};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 fn main() -> Result<()> {
-    let args = Args::parse()?;
+    let raw = std::env::args().skip(1).collect::<Vec<_>>();
+    if raw.first().is_some_and(|arg| arg == "fixture") {
+        return emit_fixture(FixtureArgs::parse(&raw[1..])?);
+    }
+    let args = Args::parse(raw)?;
     let schema = Schema::load(&args.defs)?;
     let generated = schema.render()?;
 
@@ -33,10 +38,10 @@ struct Args {
 }
 
 impl Args {
-    fn parse() -> Result<Self> {
+    fn parse(raw: Vec<String>) -> Result<Self> {
         let mut defs = None;
         let mut out = None;
-        let mut args = std::env::args().skip(1);
+        let mut args = raw.into_iter();
 
         while let Some(arg) = args.next() {
             match arg.as_str() {
@@ -62,6 +67,348 @@ impl Args {
             defs: defs.context("missing --defs <defs-dir>")?,
             out: out.context("missing --out <schema.rs>")?,
         })
+    }
+}
+
+#[derive(Debug)]
+struct FixtureArgs {
+    name: String,
+    font: PathBuf,
+    out: PathBuf,
+}
+
+impl FixtureArgs {
+    fn parse(raw: &[String]) -> Result<Self> {
+        let mut name = None;
+        let mut font = None;
+        let mut out = None;
+        let mut args = raw.iter();
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--name" => name = args.next().cloned(),
+                "--font" => font = args.next().map(PathBuf::from),
+                "--out" => out = args.next().map(PathBuf::from),
+                "--help" | "-h" => {
+                    println!(
+                        "usage: nuxie-codegen fixture --name <text-style-feature|text-variation-modifier> --font <font.ttf> --out <fixture.riv>"
+                    );
+                    std::process::exit(0);
+                }
+                _ => bail!("unknown fixture argument {arg:?}"),
+            }
+        }
+        Ok(Self {
+            name: name.context("missing --name <fixture-name>")?,
+            font: font.context("missing --font <font-file>")?,
+            out: out.context("missing --out <fixture.riv>")?,
+        })
+    }
+}
+
+fn emit_fixture(args: FixtureArgs) -> Result<()> {
+    let font = fs::read(&args.font)
+        .with_context(|| format!("reading fixture font {}", args.font.display()))?;
+    let records = match args.name.as_str() {
+        "text-style-feature" => text_style_feature_fixture(font),
+        "text-variation-modifier" => text_variation_modifier_fixture(font),
+        other => bail!("unknown fixture name {other:?}"),
+    };
+    RuntimeFile::from_authoring_records(records.clone())
+        .with_context(|| format!("validating {} fixture records", args.name))?;
+    let encoded = encode_authoring_records(&records);
+    if let Some(parent) = args.out.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("creating fixture directory {}", parent.display()))?;
+    }
+    fs::write(&args.out, &encoded)
+        .with_context(|| format!("writing fixture {}", args.out.display()))?;
+    eprintln!(
+        "generated {} fixture ({} bytes) into {}",
+        args.name,
+        encoded.len(),
+        args.out.display()
+    );
+    Ok(())
+}
+
+fn fixture_record(type_name: &str, properties: Vec<(&str, AuthoringValue)>) -> AuthoringRecord {
+    let definition = nuxie_schema::definition_by_name(type_name)
+        .unwrap_or_else(|| panic!("fixture record type exists: {type_name}"));
+    let properties = properties
+        .into_iter()
+        .map(|(property_name, value)| {
+            let property = std::iter::once(definition.name)
+                .chain(definition.ancestors.iter().copied())
+                .filter_map(nuxie_schema::definition_by_name)
+                .flat_map(|owner| owner.properties)
+                .find(|property| property.name == property_name)
+                .unwrap_or_else(|| panic!("fixture property exists: {type_name}.{property_name}"));
+            AuthoringProperty {
+                key: property.key.int,
+                value,
+            }
+        })
+        .collect();
+    AuthoringRecord {
+        type_key: definition.type_key.int,
+        properties,
+    }
+}
+
+fn text_fixture_prefix(font: Vec<u8>, name: &str) -> Vec<AuthoringRecord> {
+    vec![
+        fixture_record("Backboard", vec![]),
+        fixture_record(
+            "FontAsset",
+            vec![
+                ("name", AuthoringValue::String(format!("{name} font"))),
+                ("assetId", AuthoringValue::Uint(0)),
+            ],
+        ),
+        fixture_record(
+            "FileAssetContents",
+            vec![("bytes", AuthoringValue::Bytes(font))],
+        ),
+        fixture_record(
+            "Artboard",
+            vec![
+                ("name", AuthoringValue::String(name.to_owned())),
+                ("width", AuthoringValue::Double(420.0)),
+                ("height", AuthoringValue::Double(120.0)),
+            ],
+        ),
+        fixture_record(
+            "Text",
+            vec![
+                ("name", AuthoringValue::String("Static text".to_owned())),
+                ("x", AuthoringValue::Double(16.0)),
+                ("y", AuthoringValue::Double(16.0)),
+                ("sizingValue", AuthoringValue::Uint(0)),
+            ],
+        ),
+        fixture_record(
+            "TextStylePaint",
+            vec![
+                ("name", AuthoringValue::String("Fixture style".to_owned())),
+                ("parentId", AuthoringValue::Uint(1)),
+                ("fontSize", AuthoringValue::Double(42.0)),
+                ("fontAssetId", AuthoringValue::Uint(0)),
+            ],
+        ),
+    ]
+}
+
+fn text_style_feature_fixture(font: Vec<u8>) -> Vec<AuthoringRecord> {
+    let mut records = text_fixture_prefix(font, "FL-E8 text style feature");
+    records.extend([
+        fixture_record(
+            "TextStyleFeature",
+            vec![
+                ("parentId", AuthoringValue::Uint(2)),
+                (
+                    "tag",
+                    AuthoringValue::Uint(u64::from(u32::from_be_bytes(*b"liga"))),
+                ),
+            ],
+        ),
+        fixture_record(
+            "TextStyleFeature",
+            vec![
+                ("parentId", AuthoringValue::Uint(2)),
+                (
+                    "tag",
+                    AuthoringValue::Uint(u64::from(u32::from_be_bytes(*b"liga"))),
+                ),
+                ("featureValue", AuthoringValue::Uint(0)),
+            ],
+        ),
+        fixture_record(
+            "TextStyleFeature",
+            vec![
+                ("parentId", AuthoringValue::Uint(2)),
+                (
+                    "tag",
+                    AuthoringValue::Uint(u64::from(u32::from_be_bytes(*b"liga"))),
+                ),
+                ("featureValue", AuthoringValue::Uint(1)),
+            ],
+        ),
+        fixture_record("Fill", vec![("parentId", AuthoringValue::Uint(2))]),
+        fixture_record(
+            "SolidColor",
+            vec![
+                ("parentId", AuthoringValue::Uint(6)),
+                ("colorValue", AuthoringValue::Color(0xff22_3344)),
+            ],
+        ),
+        fixture_record(
+            "TextValueRun",
+            vec![
+                ("parentId", AuthoringValue::Uint(1)),
+                (
+                    "text",
+                    AuthoringValue::String("office affinity ffi".to_owned()),
+                ),
+                ("styleId", AuthoringValue::Uint(2)),
+            ],
+        ),
+    ]);
+    records
+}
+
+fn text_variation_modifier_fixture(font: Vec<u8>) -> Vec<AuthoringRecord> {
+    let mut records = text_fixture_prefix(font, "FL-E8 text variation modifier");
+    records.extend([
+        fixture_record(
+            "TextStyleAxis",
+            vec![
+                ("parentId", AuthoringValue::Uint(2)),
+                (
+                    "tag",
+                    AuthoringValue::Uint(u64::from(u32::from_be_bytes(*b"wght"))),
+                ),
+                ("axisValue", AuthoringValue::Double(400.0)),
+            ],
+        ),
+        fixture_record("Fill", vec![("parentId", AuthoringValue::Uint(2))]),
+        fixture_record(
+            "SolidColor",
+            vec![
+                ("parentId", AuthoringValue::Uint(4)),
+                ("colorValue", AuthoringValue::Color(0xff33_5577)),
+            ],
+        ),
+        fixture_record(
+            "TextValueRun",
+            vec![
+                ("parentId", AuthoringValue::Uint(1)),
+                ("text", AuthoringValue::String("variable text".to_owned())),
+                ("styleId", AuthoringValue::Uint(2)),
+            ],
+        ),
+        fixture_record(
+            "TextModifierGroup",
+            vec![
+                ("parentId", AuthoringValue::Uint(1)),
+                ("modifierFlags", AuthoringValue::Uint(1 | (1 << 4))),
+                ("originX", AuthoringValue::Double(0.25)),
+                ("originY", AuthoringValue::Double(0.75)),
+                ("scaleX", AuthoringValue::Double(1.2)),
+                ("scaleY", AuthoringValue::Double(0.8)),
+            ],
+        ),
+        fixture_record(
+            "TextModifierRange",
+            vec![
+                ("parentId", AuthoringValue::Uint(7)),
+                ("typeValue", AuthoringValue::Uint(1)),
+                ("modifyFrom", AuthoringValue::Double(0.0)),
+                ("modifyTo", AuthoringValue::Double(0.65)),
+                ("strength", AuthoringValue::Double(1.25)),
+            ],
+        ),
+        fixture_record(
+            "TextVariationModifier",
+            vec![
+                ("parentId", AuthoringValue::Uint(7)),
+                (
+                    "axisTag",
+                    AuthoringValue::Uint(u64::from(u32::from_be_bytes(*b"wght"))),
+                ),
+                ("axisValue", AuthoringValue::Double(700.0)),
+            ],
+        ),
+        fixture_record(
+            "TextVariationModifier",
+            vec![
+                ("parentId", AuthoringValue::Uint(7)),
+                (
+                    "axisTag",
+                    AuthoringValue::Uint(u64::from(u32::from_be_bytes(*b"wght"))),
+                ),
+                ("axisValue", AuthoringValue::Double(300.0)),
+            ],
+        ),
+    ]);
+    records
+}
+
+fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
+    loop {
+        let mut byte = (value & 0x7f) as u8;
+        value >>= 7;
+        if value != 0 {
+            byte |= 0x80;
+        }
+        bytes.push(byte);
+        if value == 0 {
+            break;
+        }
+    }
+}
+
+fn encode_authoring_records(records: &[AuthoringRecord]) -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 0x4e55_5849);
+    push_var_uint(&mut bytes, 0);
+    for record in records {
+        push_var_uint(&mut bytes, u64::from(record.type_key));
+        for property in &record.properties {
+            push_var_uint(&mut bytes, u64::from(property.key));
+            match &property.value {
+                AuthoringValue::Bool(value) => bytes.push(u8::from(*value)),
+                AuthoringValue::Bytes(value) => {
+                    push_var_uint(&mut bytes, value.len() as u64);
+                    bytes.extend_from_slice(value);
+                }
+                AuthoringValue::Color(value) => bytes.extend_from_slice(&value.to_le_bytes()),
+                AuthoringValue::Double(value) => bytes.extend_from_slice(&value.to_le_bytes()),
+                AuthoringValue::String(value) => {
+                    push_var_uint(&mut bytes, value.len() as u64);
+                    bytes.extend_from_slice(value.as_bytes());
+                }
+                AuthoringValue::Uint(value) => push_var_uint(&mut bytes, *value),
+            }
+        }
+        push_var_uint(&mut bytes, 0);
+    }
+    bytes
+}
+
+#[cfg(test)]
+mod fixture_tests {
+    use super::*;
+
+    #[test]
+    fn fl_e8_fixture_emission_is_byte_deterministic_and_schema_backed() {
+        let feature = text_style_feature_fixture(vec![0, 1, 2]);
+        let variation = text_variation_modifier_fixture(vec![0, 1, 2]);
+        assert_eq!(
+            encode_authoring_records(&feature),
+            encode_authoring_records(&feature)
+        );
+        assert_eq!(
+            encode_authoring_records(&variation),
+            encode_authoring_records(&variation)
+        );
+        assert!(feature.iter().any(|record| record.type_key == 164));
+        assert!(variation.iter().any(|record| record.type_key == 162));
+        assert_eq!(
+            nuxie_schema::definition_by_name("TextStyleFeature")
+                .unwrap()
+                .type_key
+                .int,
+            164
+        );
+        assert_eq!(
+            nuxie_schema::definition_by_name("TextVariationModifier")
+                .unwrap()
+                .type_key
+                .int,
+            162
+        );
     }
 }
 

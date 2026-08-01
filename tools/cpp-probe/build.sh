@@ -41,7 +41,13 @@ else
     runtime_targets=(rive rive_harfbuzz rive_sheenbidi rive_yoga)
     export RIVE_CPP_PROBE_RUNNER_NAME="${RIVE_CPP_PROBE_RUNNER_NAME:-rive_cpp_probe}"
 fi
-runtime_libdir="$rive_runtime/$runtime_out"
+if [[ "$runtime_out" = /* ]]; then
+    runtime_libdir="$runtime_out"
+    runtime_build_out="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$runtime_libdir" "$rive_runtime")"
+else
+    runtime_libdir="$rive_runtime/$runtime_out"
+    runtime_build_out="$runtime_out"
+fi
 runtime_archive="$runtime_libdir/librive.a"
 runtime_makefile="$runtime_libdir/rive.make"
 runtime_stamp="$runtime_archive.provenance"
@@ -61,10 +67,10 @@ if ! "$provenance" verify \
             premake5 gmake2 \
             --file=premake5_v2.lua \
             --config="$config" \
-            --out="$runtime_out" \
+            --out="$runtime_build_out" \
             "${runtime_premake_flags[@]}"
-        make -C "$runtime_out" clean
-        make -C "$runtime_out" -j"$jobs" "${runtime_targets[@]}"
+        make -C "$runtime_build_out" clean
+        make -C "$runtime_build_out" -j"$jobs" "${runtime_targets[@]}"
     )
     "$provenance" write \
         "$rive_runtime" \
@@ -86,18 +92,42 @@ echo "C++ probe librive provenance: $runtime_stamp"
 
 if [[ "$with_scripting" == "1" ]]; then
     echo "==== Building scripted C++ probe decoders ($config) ===="
-    (
-        cd "$rive_runtime/decoders"
-        PREMAKE_PATH="$rive_runtime/build${PREMAKE_PATH:+:$PREMAKE_PATH}" \
-            premake5 gmake2 \
-            --file=premake5_v2.lua \
-            --config="$config" \
-            --out="$decoders_out"
-        make -C "$decoders_out" clean
-        make -C "$decoders_out" -j"$jobs" \
-            rive_decoders libpng zlib libjpeg libwebp
+    if [[ "$decoders_out" = /* ]]; then
+        decoders_libdir="$decoders_out"
+        decoders_build_out="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$decoders_libdir" "$rive_runtime/decoders")"
+    else
+        decoders_libdir="$rive_runtime/decoders/$decoders_out"
+        decoders_build_out="$decoders_out"
+    fi
+    decoder_archives=(
+        "$decoders_libdir/librive_decoders.a"
+        "$decoders_libdir/liblibpng.a"
+        "$decoders_libdir/libzlib.a"
+        "$decoders_libdir/liblibjpeg.a"
+        "$decoders_libdir/liblibwebp.a"
     )
-    export RIVE_CPP_PROBE_DECODERS_LIBDIR="$rive_runtime/decoders/$decoders_out"
+    decoder_set_complete=1
+    for archive in "${decoder_archives[@]}"; do
+        if [[ ! -s "$archive" ]]; then
+            decoder_set_complete=0
+            break
+        fi
+    done
+    if [[ "$decoder_set_complete" == "1" ]]; then
+        echo "reusing complete scripted decoder archive set: $decoders_libdir"
+    else
+        (
+            cd "$rive_runtime/decoders"
+            PREMAKE_PATH="$rive_runtime/build${PREMAKE_PATH:+:$PREMAKE_PATH}" \
+                premake5 gmake2 \
+                --file=premake5_v2.lua \
+                --config="$config" \
+                --out="$decoders_build_out"
+            make -C "$decoders_build_out" -j"$jobs" \
+                rive_decoders libpng zlib libjpeg libwebp
+        )
+    fi
+    export RIVE_CPP_PROBE_DECODERS_LIBDIR="$decoders_libdir"
 fi
 
 cd "$script_dir/build"

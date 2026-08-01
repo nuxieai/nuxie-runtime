@@ -28,6 +28,7 @@ void addRandomProviderValue(float value);
 size_t randomProviderTotalCalls();
 } // namespace rive_probe
 
+#define TESTING
 #define private public
 #define protected public
 #include "rive/component.hpp"
@@ -47,6 +48,9 @@ size_t randomProviderTotalCalls();
 #include "rive/shapes/paint/shape_paint.hpp"
 #include "rive/shapes/shape_paint_container.hpp"
 #undef protected
+#define private public
+#include "rive/shapes/list_path.hpp"
+#undef private
 #define private public
 #include "rive/shapes/paint/linear_gradient.hpp"
 #include "rive/shapes/paint/target_effect.hpp"
@@ -246,11 +250,26 @@ size_t randomProviderTotalCalls();
 #include "rive/shapes/points_path.hpp"
 #include "rive/shapes/shape.hpp"
 #include "rive/static_scene.hpp"
+#define private public
+#define protected public
+#include "rive/text/text.hpp"
+#include "rive/text/font_hb.hpp"
+#include "rive/text/raw_text.hpp"
 #include "rive/text/text_input_cursor.hpp"
 #include "rive/text/text_input_selected_text.hpp"
 #include "rive/text/text_input_selection.hpp"
 #include "rive/text/text_input_text.hpp"
+#include "rive/text/text_modifier.hpp"
+#include "rive/text/text_modifier_group.hpp"
+#include "rive/text/text_modifier_range.hpp"
+#include "rive/text/text_style.hpp"
+#include "rive/text/text_style_axis.hpp"
+#include "rive/text/text_style_feature.hpp"
 #include "rive/text/text_style_paint.hpp"
+#include "rive/text/text_target_modifier.hpp"
+#include "rive/text/text_variation_modifier.hpp"
+#undef protected
+#undef private
 #include "rive/viewmodel/data_enum.hpp"
 #include "rive/viewmodel/data_enum_value.hpp"
 #include "rive/viewmodel/viewmodel.hpp"
@@ -290,6 +309,20 @@ size_t randomProviderTotalCalls();
 #include "rive/lua/rive_lua_libs.hpp"
 #endif
 #include "utils/no_op_factory.hpp"
+#include "utils/no_op_renderer.hpp"
+
+namespace rive::SimpleArrayTesting
+{
+int mallocCount = 0;
+int reallocCount = 0;
+int freeCount = 0;
+void resetCounters()
+{
+    mallocCount = 0;
+    reallocCount = 0;
+    freeCount = 0;
+}
+} // namespace rive::SimpleArrayTesting
 
 namespace
 {
@@ -317,6 +350,13 @@ struct RuntimeDoubleMutation
     size_t localId;
     uint32_t propertyKey;
     float value;
+};
+
+struct RuntimeUintMutation
+{
+    size_t localId;
+    uint32_t propertyKey;
+    uint32_t value;
 };
 
 struct RuntimeCollapseMutation
@@ -1006,10 +1046,16 @@ struct ProbeOptions
     bool runtimeGoldenSceneAdvance = false;
     float runtimeGoldenSceneSeconds = 0.0f;
     bool runtimeLayoutBounds = false;
+    bool runtimeFlE8StaticText = false;
+    bool runtimeFlE8FeatureCycle = false;
+    bool runtimeFlE8VariationCycle = false;
+    bool runtimeFlE8ListPath = false;
+    std::string runtimeFlE8FontSwapPath;
     bool runtimeBindDefaultViewModelArtboardContext = false;
     bool runtimeUpdateArtboardDataBinds = false;
     bool runtimeAdvanceArtboardAfterBind = false;
     std::vector<RuntimeDoubleMutation> runtimeDoubleMutations;
+    std::vector<RuntimeUintMutation> runtimeUintMutations;
     std::vector<RuntimeCollapseMutation> runtimeCollapseMutations;
     std::vector<RuntimeArtboardSizeMutation> runtimeArtboardSizeMutations;
     std::vector<RuntimeAnimationApplication> runtimeAnimationApplications;
@@ -1492,6 +1538,640 @@ void write_runtime_layout_bounds(std::ostream& out,
     out << ']';
 }
 
+std::vector<uint16_t> fl_e8_text_glyphs(
+    const std::vector<rive::Core*>& objects);
+
+void write_fl_e8_static_text_report(
+    std::ostream& out,
+    const std::vector<rive::Core*>& objects)
+{
+    size_t textCount = 0;
+    size_t abstractModifierCount = 0;
+    size_t interpolatorCount = 0;
+    for (auto* object : objects)
+    {
+        if (object == nullptr)
+        {
+            continue;
+        }
+        textCount += object->coreType() == rive::Text::typeKey ? 1 : 0;
+        abstractModifierCount +=
+            object->coreType() == rive::TextModifier::typeKey ? 1 : 0;
+        interpolatorCount +=
+            object->coreType() == rive::CubicInterpolatorComponent::typeKey
+                ? 1
+                : 0;
+    }
+
+    out << "{\"textCount\":" << textCount;
+    out << ",\"abstractModifierCount\":" << abstractModifierCount;
+    out << ",\"interpolatorCount\":" << interpolatorCount;
+
+    out << ",\"groups\":[";
+    bool first = true;
+    for (auto* object : objects)
+    {
+        if (object == nullptr ||
+            !object->isTypeOf(rive::TextModifierGroup::typeKey))
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        auto* group = object->as<rive::TextModifierGroup>();
+        size_t rangeCount = 0;
+        size_t modifierCount = 0;
+        size_t shapeModifierCount = 0;
+        size_t followPathModifierCount = 0;
+        for (auto* child : objects)
+        {
+            if (child == nullptr || !child->is<rive::Component>() ||
+                child->as<rive::Component>()->parent() != group)
+            {
+                continue;
+            }
+            rangeCount +=
+                child->isTypeOf(rive::TextModifierRange::typeKey) ? 1 : 0;
+            modifierCount += child->isTypeOf(rive::TextModifier::typeKey) ? 1 : 0;
+            shapeModifierCount +=
+                child->isTypeOf(rive::TextVariationModifier::typeKey) ? 1 : 0;
+            followPathModifierCount +=
+                child->isTypeOf(rive::TextTargetModifier::typeKey) &&
+                        child->coreType() != rive::TextTargetModifier::typeKey
+                    ? 1
+                    : 0;
+        }
+        out << "{\"rangeCount\":" << rangeCount;
+        out << ",\"modifierCount\":" << modifierCount;
+        out << ",\"shapeModifierCount\":" << shapeModifierCount;
+        out << ",\"followPathModifierCount\":" << followPathModifierCount;
+        out << ",\"directText\":"
+            << (group->textComponent() != nullptr ? "true" : "false");
+        out << ",\"modifiesOrigin\":"
+            << (group->modifiesOrigin() ? "true" : "false");
+        out << '}';
+    }
+    out << ']';
+
+    out << ",\"styles\":[";
+    first = true;
+    for (auto* object : objects)
+    {
+        if (object == nullptr || !object->isTypeOf(rive::TextStyle::typeKey))
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        auto* style = object->as<rive::TextStyle>();
+        size_t variationCount = 0;
+        size_t featureCount = 0;
+        for (auto* child : objects)
+        {
+            if (child == nullptr || !child->is<rive::Component>() ||
+                child->as<rive::Component>()->parent() != style)
+            {
+                continue;
+            }
+            variationCount += child->isTypeOf(rive::TextStyleAxis::typeKey) ? 1 : 0;
+            featureCount +=
+                child->isTypeOf(rive::TextStyleFeature::typeKey) ? 1 : 0;
+        }
+        out << "{\"variationCount\":" << variationCount;
+        out << ",\"featureCount\":" << featureCount;
+        out << ",\"hasOwningText\":"
+            << (style->parent() != nullptr &&
+                        style->parent()->isTypeOf(rive::Text::typeKey)
+                    ? "true"
+                    : "false");
+        out << '}';
+    }
+    out << ']';
+
+    out << ",\"features\":[";
+    first = true;
+    for (auto* object : objects)
+    {
+        if (object == nullptr ||
+            !object->isTypeOf(rive::TextStyleFeature::typeKey))
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        auto* feature = object->as<rive::TextStyleFeature>();
+        out << "{\"tag\":" << feature->tag();
+        out << ",\"value\":" << feature->featureValue();
+        out << '}';
+    }
+    out << ']';
+
+    out << ",\"variations\":[";
+    first = true;
+    for (auto* object : objects)
+    {
+        if (object == nullptr ||
+            !object->isTypeOf(rive::TextVariationModifier::typeKey))
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        auto* variation = object->as<rive::TextVariationModifier>();
+        out << "{\"tag\":" << variation->axisTag();
+        out << ",\"value\":" << variation->axisValue();
+        out << '}';
+    }
+    out << ']';
+
+    out << ",\"targets\":[";
+    first = true;
+    for (auto* object : objects)
+    {
+        if (object == nullptr ||
+            !object->isTypeOf(rive::TextTargetModifier::typeKey))
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        auto* target = object->as<rive::TextTargetModifier>();
+        const size_t targetId = static_cast<size_t>(target->targetId());
+        const bool resolved = targetId < objects.size() &&
+                              objects[targetId] != nullptr &&
+                              objects[targetId]->is<rive::TransformComponent>();
+        out << "{\"targetId\":" << target->targetId();
+        out << ",\"resolved\":"
+            << (resolved ? "true" : "false");
+        out << ",\"hasTextComponent\":"
+            << (target->textComponent() != nullptr ? "true" : "false");
+        out << '}';
+    }
+    out << ']';
+    out << ",\"glyphs\":[";
+    auto glyphs = fl_e8_text_glyphs(objects);
+    for (size_t i = 0; i < glyphs.size(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        out << glyphs[i];
+    }
+    out << ']';
+    std::vector<uint32_t> variationTags;
+    for (auto* object : objects)
+    {
+        if (object == nullptr ||
+            !object->isTypeOf(rive::TextVariationModifier::typeKey))
+        {
+            continue;
+        }
+        auto tag = object->as<rive::TextVariationModifier>()->axisTag();
+        if (std::find(variationTags.begin(), variationTags.end(), tag) ==
+            variationTags.end())
+        {
+            variationTags.push_back(tag);
+        }
+    }
+    out << ",\"glyphVariations\":[";
+    bool firstGlyph = true;
+    for (auto* object : objects)
+    {
+        if (object == nullptr || !object->isTypeOf(rive::Text::typeKey))
+        {
+            continue;
+        }
+        for (const auto& paragraph : object->as<rive::Text>()->shape())
+        {
+            for (const auto& run : paragraph.runs)
+            {
+                for (size_t glyph = 0; glyph < run.glyphs.size(); ++glyph)
+                {
+                    if (!firstGlyph)
+                    {
+                        out << ',';
+                    }
+                    firstGlyph = false;
+                    out << '[';
+                    for (size_t tag = 0; tag < variationTags.size(); ++tag)
+                    {
+                        if (tag != 0)
+                        {
+                            out << ',';
+                        }
+                        out << "{\"tag\":" << variationTags[tag];
+                        out << ",\"value\":"
+                            << (run.font != nullptr
+                                    ? run.font->getAxisValue(variationTags[tag])
+                                    : 0.0f);
+                        out << '}';
+                    }
+                    out << ']';
+                }
+            }
+        }
+    }
+    out << "]}";
+}
+
+// D-LP-INIT / R-LP-OWNER probe surface. The phased renderer differential is
+// the pinned `List to path` SerializingFactory scenario; this owner report
+// exposes the matching C++ occurrence-local listener/vertex cardinalities
+// without attempting any null-pointer precondition violations.
+void write_fl_e8_list_path_report(std::ostream& out,
+                                  const std::vector<rive::Core*>& objects)
+{
+    out << '[';
+    bool first = true;
+    for (size_t localId = 0; localId < objects.size(); ++localId)
+    {
+        auto object = objects[localId];
+        if (object == nullptr || !object->is<rive::ListPath>())
+        {
+            continue;
+        }
+        auto path = object->as<rive::ListPath>();
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        out << "{\"localId\":" << localId;
+        out << ",\"coreType\":" << path->coreType();
+        out << ",\"listSource\":" << path->listSource();
+        out << ",\"listenerCount\":" << path->m_vertexListeners.size();
+        out << ",\"vertexCount\":" << path->vertices().size();
+        out << ",\"rawVerbCount\":" << path->rawPath().verbs().size();
+        out << '}';
+    }
+    out << ']';
+}
+
+struct FlE8FontSwapReport
+{
+    bool available = false;
+    std::vector<std::vector<uint16_t>> glyphPhases;
+};
+
+struct FlE8FeatureCycleReport
+{
+    bool available = false;
+    std::vector<std::vector<uint16_t>> glyphPhases;
+};
+
+struct FlE8VariationCycleReport
+{
+    bool available = false;
+    std::vector<std::vector<uint16_t>> glyphPhases;
+    std::vector<uint32_t> axisTags;
+    std::vector<std::vector<std::optional<float>>> axisValuePhases;
+};
+
+std::vector<uint16_t> fl_e8_text_glyphs(
+    const std::vector<rive::Core*>& objects)
+{
+    std::vector<uint16_t> glyphs;
+    for (auto* object : objects)
+    {
+        if (object == nullptr || !object->isTypeOf(rive::Text::typeKey))
+        {
+            continue;
+        }
+        for (const auto& paragraph : object->as<rive::Text>()->shape())
+        {
+            for (const auto& run : paragraph.runs)
+            {
+                for (auto glyph : run.glyphs)
+                {
+                    glyphs.push_back(glyph);
+                }
+            }
+        }
+    }
+    return glyphs;
+}
+
+FlE8FeatureCycleReport run_fl_e8_feature_cycle(
+    rive::Artboard* artboard)
+{
+    FlE8FeatureCycleReport report;
+    if (artboard == nullptr)
+    {
+        return report;
+    }
+    auto& objects = artboard->objects();
+    rive::TextStyleFeature* feature = nullptr;
+    rive::TextStylePaint* style = nullptr;
+    for (auto* object : objects)
+    {
+        if (object != nullptr &&
+            object->isTypeOf(rive::TextStyleFeature::typeKey))
+        {
+            feature = object->as<rive::TextStyleFeature>();
+        }
+        if (object != nullptr &&
+            object->isTypeOf(rive::TextStylePaint::typeKey))
+        {
+            style = object->as<rive::TextStylePaint>();
+        }
+    }
+    if (feature == nullptr || style == nullptr)
+    {
+        return report;
+    }
+    artboard->updateComponents();
+    report.glyphPhases.push_back(fl_e8_text_glyphs(objects));
+    feature->featureValue(0);
+    report.glyphPhases.push_back(fl_e8_text_glyphs(objects));
+    auto clone = artboard->instance();
+    clone->updateComponents();
+    report.glyphPhases.push_back(fl_e8_text_glyphs(clone->objects()));
+    style->fontSize(style->fontSize() + 1.0f);
+    style->addDirt(rive::ComponentDirt::TextShape);
+    artboard->updateComponents();
+    report.glyphPhases.push_back(fl_e8_text_glyphs(objects));
+    report.available = true;
+    return report;
+}
+
+void write_fl_e8_feature_cycle_report(
+    std::ostream& out,
+    const FlE8FeatureCycleReport& report)
+{
+    out << "{\"available\":" << (report.available ? "true" : "false");
+    out << ",\"glyphPhases\":[";
+    for (size_t phase = 0; phase < report.glyphPhases.size(); ++phase)
+    {
+        if (phase != 0)
+        {
+            out << ',';
+        }
+        out << '[';
+        for (size_t glyph = 0; glyph < report.glyphPhases[phase].size(); ++glyph)
+        {
+            if (glyph != 0)
+            {
+                out << ',';
+            }
+            out << report.glyphPhases[phase][glyph];
+        }
+        out << ']';
+    }
+    out << "]}";
+}
+
+std::vector<std::optional<float>> fl_e8_text_axis_values(
+    const std::vector<rive::Core*>& objects,
+    uint32_t axisTag)
+{
+    std::vector<std::optional<float>> values;
+    for (auto* object : objects)
+    {
+        if (object == nullptr || !object->isTypeOf(rive::Text::typeKey))
+        {
+            continue;
+        }
+        for (const auto& paragraph : object->as<rive::Text>()->shape())
+        {
+            for (const auto& run : paragraph.runs)
+            {
+                for (size_t glyph = 0; glyph < run.glyphs.size(); ++glyph)
+                {
+                    auto* font = run.font != nullptr
+                                     ? static_cast<HBFont*>(run.font.get())
+                                     : nullptr;
+                    if (font == nullptr)
+                    {
+                        values.push_back(std::nullopt);
+                    }
+                    else
+                    {
+                        auto value = font->m_axisValues.find(axisTag);
+                        values.push_back(value != font->m_axisValues.end()
+                                             ? std::optional<float>(value->second)
+                                             : std::nullopt);
+                    }
+                }
+            }
+        }
+    }
+    return values;
+}
+
+FlE8VariationCycleReport run_fl_e8_variation_cycle(
+    rive::Artboard* artboard)
+{
+    FlE8VariationCycleReport report;
+    if (artboard == nullptr)
+    {
+        return report;
+    }
+    auto& objects = artboard->objects();
+    rive::TextVariationModifier* variation = nullptr;
+    rive::TextModifierRange* range = nullptr;
+    for (auto* object : objects)
+    {
+        if (object != nullptr &&
+            object->isTypeOf(rive::TextVariationModifier::typeKey))
+        {
+            variation = object->as<rive::TextVariationModifier>();
+        }
+        if (object != nullptr &&
+            object->isTypeOf(rive::TextModifierRange::typeKey))
+        {
+            range = object->as<rive::TextModifierRange>();
+        }
+    }
+    if (variation == nullptr || range == nullptr)
+    {
+        return report;
+    }
+    const uint32_t wght = (uint32_t('w') << 24) | (uint32_t('g') << 16) |
+                          (uint32_t('h') << 8) | uint32_t('t');
+    const uint32_t wdth = (uint32_t('w') << 24) | (uint32_t('d') << 16) |
+                          (uint32_t('t') << 8) | uint32_t('h');
+    auto capture = [&](rive::Artboard* source, uint32_t tag) {
+        report.glyphPhases.push_back(fl_e8_text_glyphs(source->objects()));
+        report.axisTags.push_back(tag);
+        report.axisValuePhases.push_back(
+            fl_e8_text_axis_values(source->objects(), tag));
+    };
+    artboard->updateComponents();
+    capture(artboard, wght);
+    variation->axisValue(900.0f);
+    artboard->updateComponents();
+    capture(artboard, wght);
+    range->strength(-1.0f);
+    artboard->updateComponents();
+    capture(artboard, wght);
+    range->strength(2.0f);
+    artboard->updateComponents();
+    capture(artboard, wght);
+    auto clone = artboard->instance();
+    clone->updateComponents();
+    capture(clone.get(), wght);
+    variation->axisTag(wdth);
+    capture(artboard, wght);
+    range->strength(1.5f);
+    artboard->updateComponents();
+    capture(artboard, wdth);
+    report.available = true;
+    return report;
+}
+
+void write_fl_e8_variation_cycle_report(
+    std::ostream& out,
+    const FlE8VariationCycleReport& report)
+{
+    out << "{\"available\":" << (report.available ? "true" : "false");
+    out << ",\"glyphPhases\":[";
+    for (size_t phase = 0; phase < report.glyphPhases.size(); ++phase)
+    {
+        if (phase != 0)
+        {
+            out << ',';
+        }
+        out << '[';
+        for (size_t glyph = 0; glyph < report.glyphPhases[phase].size(); ++glyph)
+        {
+            if (glyph != 0)
+            {
+                out << ',';
+            }
+            out << report.glyphPhases[phase][glyph];
+        }
+        out << ']';
+    }
+    out << "]";
+    out << ",\"axisTags\":[";
+    for (size_t phase = 0; phase < report.axisTags.size(); ++phase)
+    {
+        if (phase != 0)
+        {
+            out << ',';
+        }
+        out << report.axisTags[phase];
+    }
+    out << "]";
+    out << ",\"axisValuePhases\":[";
+    for (size_t phase = 0; phase < report.axisValuePhases.size(); ++phase)
+    {
+        if (phase != 0)
+        {
+            out << ',';
+        }
+        out << '[';
+        for (size_t value = 0; value < report.axisValuePhases[phase].size(); ++value)
+        {
+            if (value != 0)
+            {
+                out << ',';
+            }
+            if (report.axisValuePhases[phase][value].has_value())
+            {
+                out << *report.axisValuePhases[phase][value];
+            }
+            else
+            {
+                out << "null";
+            }
+        }
+        out << ']';
+    }
+    out << "]}";
+}
+
+FlE8FontSwapReport run_fl_e8_font_swap(
+    rive::File* file,
+    rive::ArtboardInstance* artboard,
+    const ProbeOptions& options)
+{
+    FlE8FontSwapReport report;
+    if (file == nullptr || artboard == nullptr ||
+        options.runtimeFlE8FontSwapPath.empty())
+    {
+        return report;
+    }
+    auto machine = artboard->stateMachineAt(0);
+    auto viewModelInstance = file->createDefaultViewModelInstance(artboard);
+    if (machine == nullptr || viewModelInstance == nullptr)
+    {
+        return report;
+    }
+    machine->bindViewModelInstance(viewModelInstance);
+    machine->advanceAndApply(0.0f);
+    artboard->updateComponents();
+    report.glyphPhases.push_back(fl_e8_text_glyphs(artboard->objects()));
+
+    auto font = HBFont::Decode(read_bytes(
+        options.runtimeFlE8FontSwapPath.c_str()));
+    auto fontProperty = viewModelInstance->propertyValue("fontProperty");
+    if (font == nullptr || fontProperty == nullptr ||
+        !fontProperty->is<rive::ViewModelInstanceAssetFont>())
+    {
+        return report;
+    }
+    fontProperty->as<rive::ViewModelInstanceAssetFont>()->value(font.get());
+    machine->advanceAndApply(0.016f);
+    artboard->updateComponents();
+    report.glyphPhases.push_back(fl_e8_text_glyphs(artboard->objects()));
+
+    machine->pointerDown(rive::Vec2D(490.0f, 490.0f));
+    machine->pointerUp(rive::Vec2D(490.0f, 490.0f));
+    machine->advanceAndApply(0.016f);
+    artboard->updateComponents();
+    report.glyphPhases.push_back(fl_e8_text_glyphs(artboard->objects()));
+
+    machine->pointerDown(rive::Vec2D(490.0f, 20.0f));
+    machine->pointerUp(rive::Vec2D(490.0f, 20.0f));
+    machine->advanceAndApply(0.016f);
+    artboard->updateComponents();
+    report.glyphPhases.push_back(fl_e8_text_glyphs(artboard->objects()));
+    report.available = true;
+    return report;
+}
+
+void write_fl_e8_font_swap_report(std::ostream& out,
+                                  const FlE8FontSwapReport& report)
+{
+    out << "{\"available\":" << (report.available ? "true" : "false");
+    out << ",\"glyphPhases\":[";
+    for (size_t phase = 0; phase < report.glyphPhases.size(); ++phase)
+    {
+        if (phase != 0)
+        {
+            out << ',';
+        }
+        out << '[';
+        for (size_t glyph = 0; glyph < report.glyphPhases[phase].size(); ++glyph)
+        {
+            if (glyph != 0)
+            {
+                out << ',';
+            }
+            out << report.glyphPhases[phase][glyph];
+        }
+        out << ']';
+    }
+    out << "]}";
+}
+
 void apply_runtime_golden_scene_advance(rive::File* file,
                                         rive::ArtboardInstance* artboard,
                                         const ProbeOptions& options)
@@ -1540,6 +2220,30 @@ void apply_runtime_double_mutations(const std::vector<rive::Core*>& objects,
             continue;
         }
         rive::CoreRegistry::setDouble(
+            object, mutation.propertyKey, mutation.value);
+    }
+}
+
+void apply_runtime_uint_mutations(const std::vector<rive::Core*>& objects,
+                                  const ProbeOptions& options)
+{
+    for (const auto& mutation : options.runtimeUintMutations)
+    {
+        if (mutation.localId >= objects.size())
+        {
+            continue;
+        }
+        auto* object = objects[mutation.localId];
+        if (object == nullptr ||
+            !rive::CoreRegistry::objectSupportsProperty(
+                object, mutation.propertyKey) ||
+            rive::CoreRegistry::propertyFieldId(
+                static_cast<int>(mutation.propertyKey)) !=
+                rive::CoreUintType::id)
+        {
+            continue;
+        }
+        rive::CoreRegistry::setUint(
             object, mutation.propertyKey, mutation.value);
     }
 }
@@ -13804,6 +14508,7 @@ void write_artboard(std::ostream& out,
     }
 
     apply_runtime_double_mutations(objects, options);
+    apply_runtime_uint_mutations(objects, options);
     apply_runtime_collapse_mutations(objects, options);
     apply_runtime_artboard_size_mutations(artboard, options);
     if (options.runtimeBindDefaultViewModelArtboardContext && file != nullptr)
@@ -13834,6 +14539,14 @@ void write_artboard(std::ostream& out,
     auto runtimeStateMachineAdvanceReports =
         apply_runtime_state_machine_advances(
             file, instanceArtboard, options, localIds);
+    auto flE8FontSwapReport =
+        run_fl_e8_font_swap(file, instanceArtboard, options);
+    auto flE8FeatureCycleReport = options.runtimeFlE8FeatureCycle
+                                      ? run_fl_e8_feature_cycle(artboard)
+                                      : FlE8FeatureCycleReport{};
+    auto flE8VariationCycleReport = options.runtimeFlE8VariationCycle
+                                        ? run_fl_e8_variation_cycle(artboard)
+                                        : FlE8VariationCycleReport{};
 
     bool runtimeUpdateDidUpdate = false;
     if (options.runtimeUpdate)
@@ -13875,6 +14588,31 @@ void write_artboard(std::ostream& out,
     {
         out << ",\"runtimeLayoutBounds\":";
         write_runtime_layout_bounds(out, localIds, objects);
+    }
+    if (options.runtimeFlE8StaticText)
+    {
+        out << ",\"flE8StaticText\":";
+        write_fl_e8_static_text_report(out, objects);
+    }
+    if (options.runtimeFlE8ListPath)
+    {
+        out << ",\"flE8ListPath\":";
+        write_fl_e8_list_path_report(out, objects);
+    }
+    if (options.runtimeFlE8FeatureCycle)
+    {
+        out << ",\"flE8FeatureCycle\":";
+        write_fl_e8_feature_cycle_report(out, flE8FeatureCycleReport);
+    }
+    if (options.runtimeFlE8VariationCycle)
+    {
+        out << ",\"flE8VariationCycle\":";
+        write_fl_e8_variation_cycle_report(out, flE8VariationCycleReport);
+    }
+    if (!options.runtimeFlE8FontSwapPath.empty())
+    {
+        out << ",\"flE8FontSwap\":";
+        write_fl_e8_font_swap_report(out, flE8FontSwapReport);
     }
     if (!options.runtimeAnimationAdvances.empty())
     {
@@ -15482,6 +16220,421 @@ void write_state_machine_definition_null_hole_sample(std::ostream& out)
     }
     out << "]}\n";
 }
+
+class RawTextCountingRenderer final : public rive::NoOpRenderer
+{
+public:
+    size_t saves = 0;
+    size_t restores = 0;
+    size_t transforms = 0;
+    size_t drawPaths = 0;
+    size_t clips = 0;
+    size_t drawImages = 0;
+
+    void save() override { ++saves; }
+    void restore() override { ++restores; }
+    void transform(const rive::Mat2D&) override { ++transforms; }
+    void drawPath(rive::RenderPath*, rive::RenderPaint*) override
+    {
+        ++drawPaths;
+    }
+    void clipPath(rive::RenderPath*) override { ++clips; }
+    void drawImage(const rive::RenderImage*,
+                   rive::ImageSampler,
+                   rive::BlendMode,
+                   float) override
+    {
+        ++drawImages;
+    }
+};
+
+rive::rcp<rive::Font> g_raw_text_probe_fallback;
+
+void write_raw_text_bounds(std::ostream& out, const rive::AABB& bounds)
+{
+    out << '[' << bounds.minX << ',' << bounds.minY << ',' << bounds.maxX
+        << ',' << bounds.maxY << ']';
+}
+
+void write_raw_text_command_kinds(std::ostream& out,
+                                  const rive::RawText& rawText)
+{
+    out << '[';
+    for (size_t index = 0; index < rawText.m_drawCommands.size(); ++index)
+    {
+        if (index != 0)
+        {
+            out << ',';
+        }
+        write_json_string(
+            out,
+            rawText.m_drawCommands[index].type ==
+                    rive::RawText::RawTextDrawCommand::kStylePath
+                ? "style"
+                : "color");
+    }
+    out << ']';
+}
+
+void write_raw_text_observation(std::ostream& out,
+                                rive::RawText& rawText,
+                                rive::rcp<rive::RenderPaint> overridePaint = nullptr)
+{
+    const auto bounds = rawText.bounds();
+    RawTextCountingRenderer renderer;
+    rawText.render(&renderer, overridePaint);
+    out << "{\"bounds\":";
+    write_raw_text_bounds(out, bounds);
+    out << ",\"order\":";
+    write_raw_text_command_kinds(out, rawText);
+    out << ",\"styleBounds\":[";
+    bool first = true;
+    for (const auto& style : rawText.m_styles)
+    {
+        if (style.isEmpty)
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ',';
+        }
+        first = false;
+        write_raw_text_bounds(out, style.path.rawPath()->bounds());
+    }
+    out << "],\"clip\":" << (rawText.m_clipRenderPath ? "true" : "false")
+        << ",\"saves\":" << renderer.saves
+        << ",\"restores\":" << renderer.restores
+        << ",\"clips\":" << renderer.clips
+        << ",\"drawPaths\":" << renderer.drawPaths
+        << ",\"drawImages\":" << renderer.drawImages << '}';
+}
+
+void write_raw_text_color_case(std::ostream& out,
+                               rive::NoOpFactory& factory,
+                               rive::rcp<rive::Font> font,
+                               const char* text,
+                               float size,
+                               float width)
+{
+    rive::RawText rawText(&factory);
+    rawText.maxWidth(width);
+    rawText.sizing(rive::TextSizing::autoHeight);
+    rawText.append(text, nullptr, font, size);
+    RawTextCountingRenderer renderer;
+    rawText.render(&renderer);
+    size_t colorCount = 0;
+    size_t styleCount = 0;
+    for (const auto& command : rawText.m_drawCommands)
+    {
+        if (command.type == rive::RawText::RawTextDrawCommand::kColorGlyph)
+        {
+            ++colorCount;
+        }
+        else
+        {
+            ++styleCount;
+        }
+    }
+    out << "{\"bounds\":";
+    write_raw_text_bounds(out, rawText.m_bounds);
+    out << ",\"commands\":" << rawText.m_drawCommands.size()
+        << ",\"colorCommands\":" << colorCount
+        << ",\"styleCommands\":" << styleCount
+        << ",\"drawPaths\":" << renderer.drawPaths
+        << ",\"drawImages\":" << renderer.drawImages << '}';
+}
+
+void write_raw_text_probe(std::ostream& out,
+                          const char* regularFontPath,
+                          const char* emojiFontPath,
+                          const char* rasterFontPath)
+{
+    auto regularFont = HBFont::Decode(read_bytes(regularFontPath));
+    auto emojiFont = HBFont::Decode(read_bytes(emojiFontPath));
+    auto rasterFont = HBFont::Decode(read_bytes(rasterFontPath));
+    if (regularFont == nullptr || emojiFont == nullptr || rasterFont == nullptr)
+    {
+        throw std::runtime_error("RawText probe failed to decode fonts");
+    }
+
+    rive::NoOpFactory factory;
+    rive::RawText rawText(&factory);
+    const auto initialBounds = rawText.bounds();
+    out << "{\"api\":{\"defaults\":{\"empty\":"
+        << (rawText.empty() ? "true" : "false")
+        << ",\"dirty\":" << (rawText.m_dirty ? "true" : "false")
+        << ",\"sizing\":" << static_cast<int>(rawText.sizing())
+        << ",\"overflow\":" << static_cast<int>(rawText.overflow())
+        << ",\"align\":" << static_cast<int>(rawText.align())
+        << ",\"maxWidth\":" << rawText.maxWidth()
+        << ",\"maxHeight\":" << rawText.maxHeight()
+        << ",\"paragraphSpacing\":" << rawText.paragraphSpacing()
+        << ",\"bounds\":";
+    write_raw_text_bounds(out, initialBounds);
+    out << "}";
+
+    auto paint = static_cast<rive::Factory&>(factory).makeRenderPaint();
+    rive::RawText emptyRunRawText(&factory);
+    emptyRunRawText.append("", paint, regularFont);
+    const bool emptyRunMakesNonempty = !emptyRunRawText.empty();
+    const bool emptyRunDirty = emptyRunRawText.m_dirty;
+    rawText.append(std::string("A\0ignored", 9), paint, regularFont, 24.0f, -1.0f, 0.0f, 0xff123456);
+    rawText.append("B", paint, regularFont, 12.0f, 40.0f, 3.0f, 0xffabcdef);
+    const auto populatedBounds = rawText.bounds();
+    out << ",\"append\":{\"emptyRunMakesNonempty\":"
+        << (emptyRunMakesNonempty ? "true" : "false")
+        << ",\"emptyRunDirty\":"
+        << (emptyRunDirty ? "true" : "false")
+        << ",\"styleCount\":" << rawText.m_styles.size()
+        << ",\"foreground\":" << rawText.m_styles.front().foregroundColor
+        << ",\"bounds\":";
+    write_raw_text_bounds(out, populatedBounds);
+    out << ",\"order\":";
+    write_raw_text_command_kinds(out, rawText);
+    out << '}';
+
+    rawText.sizing(rawText.sizing());
+    rawText.overflow(rawText.overflow());
+    rawText.align(rawText.align());
+    rawText.maxWidth(rawText.maxWidth());
+    rawText.maxHeight(rawText.maxHeight());
+    rawText.paragraphSpacing(rawText.paragraphSpacing());
+    const bool equalSettersClean = !rawText.m_dirty;
+    rawText.maxWidth(std::numeric_limits<float>::quiet_NaN());
+    const bool firstNanDirty = rawText.m_dirty;
+    rawText.m_dirty = false;
+    rawText.maxWidth(std::numeric_limits<float>::quiet_NaN());
+    const bool secondNanDirty = rawText.m_dirty;
+    out << ",\"setters\":{\"equalClean\":"
+        << (equalSettersClean ? "true" : "false")
+        << ",\"firstNanDirty\":" << (firstNanDirty ? "true" : "false")
+        << ",\"secondNanDirty\":" << (secondNanDirty ? "true" : "false")
+        << '}';
+
+    rawText.maxWidth(80.0f);
+    rawText.maxHeight(30.0f);
+    rawText.sizing(rive::TextSizing::fixed);
+    rawText.overflow(rive::TextOverflow::clipped);
+    const auto fixedBounds = rawText.bounds();
+    const bool clipCreated = rawText.m_clipRenderPath != nullptr;
+    RawTextCountingRenderer clippedRenderer;
+    rawText.render(&clippedRenderer);
+    rawText.overflow(rive::TextOverflow::visible);
+    rawText.bounds();
+    const bool clipReleased = rawText.m_clipRenderPath == nullptr;
+    out << ",\"clip\":{\"bounds\":";
+    write_raw_text_bounds(out, fixedBounds);
+    out << ",\"created\":" << (clipCreated ? "true" : "false")
+        << ",\"clipCalls\":" << clippedRenderer.clips
+        << ",\"released\":" << (clipReleased ? "true" : "false")
+        << '}';
+
+    const auto staleBounds = rawText.m_bounds;
+    rawText.clear();
+    const auto clearedBounds = rawText.bounds();
+    out << ",\"clear\":{\"empty\":"
+        << (rawText.empty() ? "true" : "false")
+        << ",\"stylesRetained\":" << rawText.m_styles.size()
+        << ",\"commands\":" << rawText.m_drawCommands.size()
+        << ",\"stale\":" << (clearedBounds == staleBounds ? "true" : "false")
+        << '}';
+
+    out << ",\"layout\":[";
+    bool firstLayout = true;
+    for (auto sizing : {rive::TextSizing::autoWidth,
+                        rive::TextSizing::autoHeight,
+                        rive::TextSizing::fixed})
+    {
+        for (auto overflow : {rive::TextOverflow::visible,
+                              rive::TextOverflow::hidden,
+                              rive::TextOverflow::clipped,
+                              rive::TextOverflow::ellipsis,
+                              rive::TextOverflow::fit,
+                              rive::TextOverflow::fitFontSize})
+        {
+            if (!firstLayout)
+            {
+                out << ',';
+            }
+            firstLayout = false;
+            rive::RawText value(&factory);
+            value.maxWidth(70.0f);
+            value.maxHeight(22.0f);
+            value.paragraphSpacing(7.0f);
+            value.sizing(sizing);
+            value.overflow(overflow);
+            value.append("one two three\nfour five", paint, regularFont, 16.0f);
+            out << "{\"sizing\":" << static_cast<int>(sizing)
+                << ",\"overflow\":" << static_cast<int>(overflow)
+                << ",\"value\":";
+            write_raw_text_observation(out, value);
+            out << '}';
+        }
+    }
+    out << ']';
+
+    out << ",\"align\":[";
+    for (auto align : {rive::TextAlign::left,
+                       rive::TextAlign::right,
+                       rive::TextAlign::center})
+    {
+        if (align != rive::TextAlign::left)
+        {
+            out << ',';
+        }
+        rive::RawText value(&factory);
+        value.maxWidth(160.0f);
+        value.sizing(rive::TextSizing::autoHeight);
+        value.align(align);
+        value.append("ABC", paint, regularFont, 20.0f);
+        out << "{\"align\":" << static_cast<int>(align) << ",\"value\":";
+        write_raw_text_observation(out, value);
+        out << '}';
+    }
+    out << ']';
+
+    rive::RawText bidi(&factory);
+    bidi.maxWidth(180.0f);
+    bidi.sizing(rive::TextSizing::autoHeight);
+    bidi.append("abc \xd7\x90\xd7\x91\xd7\x92", paint, regularFont, 20.0f);
+    out << ",\"bidi\":";
+    write_raw_text_observation(out, bidi);
+
+    rive::RawText ellipsis(&factory);
+    ellipsis.maxWidth(45.0f);
+    ellipsis.maxHeight(20.0f);
+    ellipsis.sizing(rive::TextSizing::fixed);
+    ellipsis.overflow(rive::TextOverflow::ellipsis);
+    ellipsis.append("one two three four", paint, regularFont, 16.0f);
+    out << ",\"ellipsis\":";
+    write_raw_text_observation(out, ellipsis);
+
+    rive::RawText nullable(&factory);
+    nullable.append("A", nullptr, regularFont, 16.0f);
+    out << ",\"nullPaint\":{";
+    out << "\"plain\":";
+    write_raw_text_observation(out, nullable);
+    out << ",\"override\":";
+    write_raw_text_observation(out, nullable, paint);
+    out << '}';
+
+    auto secondPaint = static_cast<rive::Factory&>(factory).makeRenderPaint();
+    rive::RawText order(&factory);
+    order.append("A", paint, regularFont, 16.0f);
+    order.append("B", secondPaint, regularFont, 20.0f);
+    order.append("C", paint, regularFont, 12.0f);
+    out << ",\"coalescing\":";
+    write_raw_text_observation(out, order);
+
+    rive::RawText retainedClip(&factory);
+    retainedClip.maxWidth(50.0f);
+    retainedClip.maxHeight(20.0f);
+    retainedClip.sizing(rive::TextSizing::fixed);
+    retainedClip.overflow(rive::TextOverflow::clipped);
+    retainedClip.append("A", paint, regularFont, 16.0f);
+    retainedClip.bounds();
+    retainedClip.clear();
+    out << ",\"emptyClipRetained\":";
+    write_raw_text_observation(out, retainedClip);
+
+    rive::RawText values(&factory);
+    values.sizing(rive::TextSizing::fixed);
+    values.overflow(rive::TextOverflow::fitFontSize);
+    values.align(rive::TextAlign::center);
+    values.maxWidth(-13.0f);
+    values.maxHeight(-17.0f);
+    values.paragraphSpacing(-19.0f);
+    out << ",\"stored\":{\"sizing\":" << static_cast<int>(values.sizing())
+        << ",\"overflow\":" << static_cast<int>(values.overflow())
+        << ",\"align\":" << static_cast<int>(values.align())
+        << ",\"maxWidth\":" << values.maxWidth()
+        << ",\"maxHeight\":" << values.maxHeight()
+        << ",\"paragraphSpacing\":" << values.paragraphSpacing();
+    values.maxHeight(std::numeric_limits<float>::infinity());
+    values.paragraphSpacing(std::numeric_limits<float>::quiet_NaN());
+    out << ",\"infiniteHeight\":" << (std::isinf(values.maxHeight()) ? "true" : "false")
+        << ",\"nanSpacing\":" << (std::isnan(values.paragraphSpacing()) ? "true" : "false")
+        << "}}";
+
+    g_raw_text_probe_fallback = emojiFont;
+    rive::Font::gFallbackProc = [](const rive::Unichar,
+                                   const uint32_t fallbackIndex,
+                                   const rive::Font*) -> rive::rcp<rive::Font> {
+        return fallbackIndex == 0 ? g_raw_text_probe_fallback : nullptr;
+    };
+    out << ",\"colors\":[";
+    write_raw_text_color_case(out, factory, emojiFont, "A", 32.0f, 200.0f);
+    out << ',';
+    write_raw_text_color_case(out,
+                              factory,
+                              emojiFont,
+                              "\xe2\x9d\xa4\xe2\x9d\xa4\xe2\x9d\xa4",
+                              32.0f,
+                              400.0f);
+    out << ',';
+    write_raw_text_color_case(out,
+                              factory,
+                              regularFont,
+                              "Hello \xe2\x9d\xa4 World",
+                              32.0f,
+                              400.0f);
+    out << ',';
+    write_raw_text_color_case(
+        out, factory, emojiFont, "\xe2\x9d\xa4", 1.0f, 100.0f);
+    out << ',';
+    write_raw_text_color_case(
+        out, factory, emojiFont, "\xe2\x9d\xa4", 200.0f, 2000.0f);
+    out << ']';
+    auto writeEngineFont = [&out](rive::rcp<rive::Font> font) {
+        rive::GlyphID glyphId = 0;
+        bool found = false;
+        for (uint32_t candidate = 0; candidate < 65536; ++candidate)
+        {
+            if (font->isColorGlyph(candidate))
+            {
+                glyphId = candidate;
+                found = true;
+                break;
+            }
+        }
+        std::vector<rive::Font::ColorGlyphLayer> layers;
+        if (found)
+        {
+            font->getColorLayers(glyphId, layers, 0xff123456);
+        }
+        size_t solids = 0, gradients = 0, images = 0, imageBytes = 0;
+        for (const auto& layer : layers)
+        {
+            if (layer.paintType == rive::Font::ColorGlyphPaintType::solid)
+            {
+                ++solids;
+            }
+            else if (layer.paintType == rive::Font::ColorGlyphPaintType::image)
+            {
+                ++images;
+                imageBytes += layer.imageBytes.size();
+            }
+            else
+            {
+                ++gradients;
+            }
+        }
+        out << "{\"found\":" << (found ? "true" : "false")
+            << ",\"glyphId\":" << glyphId << ",\"layers\":" << layers.size()
+            << ",\"solids\":" << solids << ",\"gradients\":" << gradients
+            << ",\"images\":" << images << ",\"imageBytes\":" << imageBytes << '}';
+    };
+    out << ",\"engine\":{\"regular\":";
+    writeEngineFont(regularFont);
+    out << ",\"colr\":";
+    writeEngineFont(emojiFont);
+    out << ",\"raster\":";
+    writeEngineFont(rasterFont);
+    out << "}}\n";
+    rive::Font::gFallbackProc = nullptr;
+    g_raw_text_probe_fallback = nullptr;
+}
 } // namespace
 
 int main(int argc, const char* argv[])
@@ -15493,10 +16646,25 @@ int main(int argc, const char* argv[])
     bool animationResetColorRoundtrip = false;
     bool transitionIntegerComparisonSamples = false;
     bool stateMachineDefinitionNullHoleSample = false;
+    const char* rawTextRegularFont = nullptr;
+    const char* rawTextEmojiFont = nullptr;
+    const char* rawTextRasterFont = nullptr;
     uint32_t animationResetColor = 0;
 
     for (int i = 1; i < argc; ++i)
     {
+        if (is_arg(argv[i], "--raw-text-probe"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr << "--raw-text-probe requires regularFont emojiFont rasterFont\n";
+                return 2;
+            }
+            rawTextRegularFont = argv[++i];
+            rawTextEmojiFont = argv[++i];
+            rawTextRasterFont = argv[++i];
+            continue;
+        }
         if (is_arg(argv[i], "--converter-samples"))
         {
             converterSamples = true;
@@ -15577,6 +16745,39 @@ int main(int argc, const char* argv[])
             continue;
         }
 
+        if (is_arg(argv[i], "--runtime-fl-e8-static-text"))
+        {
+            options.runtimeFlE8StaticText = true;
+            continue;
+        }
+        if (is_arg(argv[i], "--runtime-fl-e8-list-path"))
+        {
+            options.runtimeFlE8ListPath = true;
+            continue;
+        }
+        if (is_arg(argv[i], "--runtime-fl-e8-feature-cycle"))
+        {
+            options.runtimeFlE8FeatureCycle = true;
+            continue;
+        }
+        if (is_arg(argv[i], "--runtime-fl-e8-variation-cycle"))
+        {
+            options.runtimeFlE8VariationCycle = true;
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-fl-e8-font-swap"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--runtime-fl-e8-font-swap requires a font path\n";
+                return 2;
+            }
+            options.runtimeFlE8FontSwapPath = argv[++i];
+            options.instanceArtboards = true;
+            continue;
+        }
+
         if (is_arg(argv[i], "--runtime-golden-scene-advance"))
         {
             if (i + 1 >= argc)
@@ -15648,6 +16849,25 @@ int main(int argc, const char* argv[])
                 static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
             mutation.value = std::strtof(argv[++i], nullptr);
             options.runtimeDoubleMutations.push_back(mutation);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-set-uint"))
+        {
+            if (i + 3 >= argc)
+            {
+                std::cerr
+                    << "--runtime-set-uint requires localId propertyKey value\n";
+                return 2;
+            }
+            RuntimeUintMutation mutation;
+            mutation.localId =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            mutation.propertyKey =
+                static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
+            mutation.value =
+                static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
+            options.runtimeUintMutations.push_back(mutation);
             continue;
         }
 
@@ -19175,6 +20395,23 @@ int main(int argc, const char* argv[])
     {
         write_state_machine_definition_null_hole_sample(std::cout);
         return 0;
+    }
+
+    if (rawTextRegularFont != nullptr)
+    {
+        try
+        {
+            write_raw_text_probe(std::cout,
+                                 rawTextRegularFont,
+                                 rawTextEmojiFont,
+                                 rawTextRasterFont);
+            return 0;
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << error.what() << "\n";
+            return 1;
+        }
     }
 
     if (filename == nullptr)

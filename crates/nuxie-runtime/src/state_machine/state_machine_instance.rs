@@ -10720,6 +10720,33 @@ impl StateMachineInstance {
             .unwrap_or(false)
     }
 
+    #[cfg(feature = "tools")]
+    #[doc(hidden)]
+    pub fn debug_set_bound_main_font_bytes_by_property_name(
+        &mut self,
+        file: &RuntimeFile,
+        property_name: &str,
+        font_bytes: Option<std::sync::Arc<[u8]>>,
+    ) -> bool {
+        let Some(data_context) = self.owned_data_context.as_ref() else {
+            return false;
+        };
+        let Some(main) = data_context.main_context_chain(file).into_iter().next() else {
+            return false;
+        };
+        if !main.scope_path().is_empty() {
+            return false;
+        }
+        let changed = main
+            .root_handle()
+            .borrow_mut()
+            .set_live_font_bytes_by_property_name(property_name, font_bytes);
+        if changed {
+            self.needs_advance = true;
+        }
+        changed
+    }
+
     pub fn set_data_bind_formula_random_values(&mut self, values: &[f32]) {
         self.data_bind_graph.set_formula_random_values(values);
         for graph in self.key_frame_data_bind_graphs.iter_mut().flatten() {

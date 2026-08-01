@@ -120,7 +120,7 @@ ship this list as documentation; each row needs to stay true under Phase S.
 
 1. `f32::total_cmp` sort order vs C++ `operator<` on NaN/±0 (reproducibility over degenerate-input parity).
 2. Saturating float→int casts vs C++ UB; PingPong `duration==0` is the one constructible divergence.
-3. **Taffy, not Yoga** — edge-case layouts verify `tolerant`; fence: never pin Taffy behavior-by-behavior.
+3. **Taffy, not Yoga** — edge-case layouts verify `tolerant`; fence: never pin Taffy behavior-by-behavior. This is the FLR-20 **layout-engine** ceiling.
 4. luaur-rt pinned =0.1.8 as the scripting engine (mlua fallback untriggered); Luau engine-version skew is a standing WATCH (`deferred-2026-07-19-luau-engine`).
 5. Rust image decoders vs platform decoders — JPEG color-profile rows resolvable only by CoreGraphics; dimension+tolerant-pixel verification, never payload hashes.
 6. Renderer fuzz-accepted findings R3-FZ-03/04/05 (area-capped, neither rasterization canonical).
@@ -130,7 +130,6 @@ ship this list as documentation; each row needs to stay true under Phase S.
 10. 108 renderer rows contract-exact under the reviewed 2/32 Metal-vs-WebGPU subpixel budget (not byte-exact).
 11. **Bounded host decoded-image policy (2026-07-21).** The high-level `nuxie::File` import path caps the aggregate decoded RGBA bytes retained by one artboard-tree render cache at 64 MiB by default (`FileImportLimits::max_retained_decoded_image_bytes`); pinned C++ has no aggregate ceiling. The low-level compatibility/golden paths and `FileImportLimits::unbounded()` retain every image exactly like C++, so the exact-corpus floor is unaffected. No C ABI change.
 12. **[SUPERSEDED same day by #RD-1 — see map Phase RD.] Retained-renderer invalidation epochs (briefly user-approved 2026-07-21, #B-6 Family B).** The pure-Rust renderer retains replay caches (prepared paints/paths, draw command lists, text layout) that C++ has no counterpart for — C++ redraws through live objects each frame. The instance-to-cache version counters (cache/prepared/command/path/layout/text/draw-order/tree-paint epochs) are the invalidation bridge that retained design requires, validated by the 1,468/1,468 pixel gate and both golden gates. Guardrail: any epoch later found compensating for a missed PORT (lost C++ information) rather than bridging to the renderer is a defect and gets fixed individually — the distinction is "our design keeps more than C++" (feature cost, accepted) vs "our port lost what C++ had" (defect, rebuild).
-
 ## H — Drift & housekeeping
 
 | id | item |

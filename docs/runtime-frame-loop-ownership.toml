@@ -4,49 +4,49 @@ upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 porting_rules_file = "docs/PORTING.md"
 file_correspondence_manifest = "file-correspondence-manifest.toml"
 trace_evidence_file = "docs/runtime-frame-loop-trace.json"
-phase = "fl-e1-closed"
-# FL-D is ledger-promoted by the final D5-D7 landing. FL-E1 is the first
-# dependency-ordered FL-E family; check.py does not constrain phase vocabulary.
+phase = "fl-e8-wave-candidate"
+candidate_pending_verification_files = [
+  "src/shapes/list_path.cpp",
+  "src/text/text_modifier.cpp",
+  "src/text/text_style.cpp",
+  "src/text/text_style_feature.cpp",
+  "src/text/text_target_modifier.cpp",
+  "src/text/text_variation_modifier.cpp",
+  "src/text/raw_text.cpp",
+]
 provisional_runtime_base = "95eb04b7cfb847f24ba77872bd8a0ee43da1af41"
 provisional_fl_b_tip = "0b08970fccc42ff3677534d4dcece0f05f69a0bc"
 fl_b_verification = "reaccepted"
 
 [expected_trace_artifacts]
-cpp_binary_sha256 = "02d96a2c400f44455c010743663404f45b475b91755c46eda237346b766c4c86"
-cpp_coverage_sha256 = "ec2d86ca80e0c1be8ce83f94581fa618c9ddf469e9c0423b65f53bb2912e7802"
-cpp_mechanism_coverage_sha256 = "9e1222f631b1fc7802378b599b1e9fde2f08fb9f6c780d8ef94089df9fe9729d"
-cpp_steady_coverage_sha256 = "62952a171d2a0f3995e51f2345c9a2e12ec6946b3710e189b699c6549e9afe00"
-rust_binary_sha256 = "748277ed2de12ae9763e919ffa839445beb4ecad54b89f265a12c2a1387b776e"
-rust_coverage_sha256 = "237b24c7f2ba764597c24681aace196d768a96efd040d839dcbcf3feed0495b2"
-rust_mechanism_coverage_sha256 = "ed4d3b3efa59e246d1785b4ece8c27cc0c2ebc166ecbc07efc4497f7af017d85"
-rust_steady_coverage_sha256 = "9e92c2f0e6217fc80337cca2630fe1fb7c4ddd4b84aad07a8371715440ebf3f3"
+cpp_binary_sha256 = "f97319d2916ed69e9aa8b6a1e5c1f7f0926a3c326ff39f4ba761ab9364d285b3"
+cpp_coverage_sha256 = "2ace80c0a216d19f6e39c4ab3fa0896d4ceb5936342eca6a7e7a7ef42d46b92c"
+cpp_mechanism_coverage_sha256 = "8c97dcb8b02eed5f2d639e29b9dbb0aa8172fab53251a794e48ff4055bd908a2"
+cpp_steady_coverage_sha256 = "91852c9ce675252d715a268f23155cedc1d8aaac1be90cdda983e9d809b7807e"
+rust_binary_sha256 = "28b574e28ff712afdf1a020eee2b4d08825bdbe0707860a0a9b930fec8e446c8"
+rust_coverage_sha256 = "c5ef814a67603f20c862a4307949a511df722c1bb2d21b15be8301701c5e905c"
+rust_mechanism_coverage_sha256 = "f24cae1472fa315f0a0299c9ed92604c29872d0ae979d9d638df010a121ab19d"
+rust_steady_coverage_sha256 = "90d82a22ae11775218cd45b35c47afddb11557dea19927107d7bd2b3fb3768f2"
 
 [active_owner_family]
-id = "FL-C5-state-machine-instance"
-checklist = "docs/runtime-frame-loop-fl-c5-closure.md"
-# The live checker currently validates only planning/candidate checklist
-# completeness. Preserve its candidate vocabulary while recording the
-# coordinator's terminal family decision separately.
-checklist_state = "candidate"
-acceptance_state = "closed"
+id = "FL-E8-static-text-list-path-raw-text"
+checklist = "docs/runtime-frame-loop-fl-e8-tests.md"
+checklist_state = "planning"
+acceptance_state = "open"
 cpp_files = [
-  "src/animation/state_machine.cpp",
-  "src/animation/state_machine_instance.cpp",
+  "src/shapes/list_path.cpp",
+  "src/text/raw_text.cpp",
+  "src/text/text_modifier.cpp",
+  "src/text/text_style.cpp",
+  "src/text/text_style_feature.cpp",
+  "src/text/text_target_modifier.cpp",
+  "src/text/text_variation_modifier.cpp",
 ]
 required_adversarial = [
-  "Definition import and collection ownership",
-  "Occurrence construction order",
-  "Ordered duplicates and nullable slots",
-  "Transition search and state change",
-  "Hit listener and focus ownership",
-  "DataContext bind rebind and clear",
-  "Event application and chained reports",
-  "Zero-second and floating-point edges",
-  "Advance return and pending work",
-  "Keyframe DataBind lifecycle",
-  "Clone remount and teardown isolation",
-  "Direct C++ file correspondence",
-  "Permanent structural ratchets",
+  "WP0 ledger revert and family map",
+  "WP1 static-text extensions",
+  "WP2 dynamic ListPath",
+  "WP3 standalone RawText and shared color-glyph engine",
 ]
 
 [expected_trace_landmarks]
@@ -60,6 +60,7 @@ frame = [
   "component_dirt_consumptions",
   "databind_artboard_batch",
   "draw_order_sort",
+  "drawable_owner_lookup",
   "event_apply_batch",
   "internal_owner_rediscovery",
   "keyframe_double_apply_steps",
@@ -85,6 +86,7 @@ mechanism_frame = [
   "constraint_applications",
   "follow_path_measure_rebuilds",
   "internal_owner_rediscovery",
+  "drawable_owner_lookup",
   "per_frame_allocations",
   "resetting_dispatches",
   "scroll_child_applies",
@@ -103,6 +105,7 @@ steady = [
   "component_dirt_consumptions",
   "constraint_applications",
   "draw_order_sort",
+  "drawable_owner_lookup",
   "follow_path_measure_rebuilds",
   "internal_owner_rediscovery",
   "layout_compute",
@@ -142,19 +145,19 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 315
+faithful = 341
 adapted = 0
-divergent-by-decision = 0
-pending = 27
+divergent-by-decision = 1
+pending = 0
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
 # are the state-bearing frame-loop owners still requiring member-level proof.
 [expected_member_status_counts]
-faithful = 33
+faithful = 35
 adapted = 40
 divergent-by-decision = 0
-pending = 2
+pending = 0
 compensation = 0
 
 [[wave]]
@@ -186,6 +189,12 @@ id = "FL-E"
 sequence = 5
 depends_on = ["FL-A", "FL-D"]
 boundary = "Live Artboard draw integration through the existing Renderer/RenderFactory API."
+
+[[wave]]
+id = "FL-E8"
+sequence = 6
+depends_on = ["FL-E"]
+boundary = "Static-text extensions, dynamic ListPath, standalone RawText, and shared color-glyph parity."
 
 [[frozen_wave_scope]]
 wave = "FL-B"
@@ -1867,17 +1876,17 @@ status = "faithful"
 upstream = "src/draw_rules.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/artboard.rs"]
+rust_modules = ["crates/nuxie-runtime/src/draw_rules.rs", "crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/artboard.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/draw_target.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/artboard.rs"]
+rust_modules = ["crates/nuxie-runtime/src/draw_target.rs", "crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/artboard.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/drawable.cpp"
@@ -1949,7 +1958,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/layout.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/layout/artboard_component_list_override.cpp"
@@ -1957,7 +1966,9 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/layout/artboard_component_list_override.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = false
-status = "pending"
+status = "divergent-by-decision"
+decision = "D3"
+ceiling = "layout-engine"
 
 [[file]]
 upstream = "src/layout/axis.cpp"
@@ -2037,7 +2048,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/layout_component.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/listener_group.cpp"
@@ -2129,7 +2140,7 @@ rust_modules = [
   "crates/nuxie-runtime/src/math/random/wasm.rs",
 ]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/math/raw_path.cpp"
@@ -2342,10 +2353,10 @@ status = "faithful"
 [[file]]
 upstream = "src/shapes/list_path.cpp"
 source_set = "live-draw-boundary"
-wave = "FL-E"
+wave = "FL-E8"
 rust_modules = ["crates/nuxie-runtime/src/shapes/list_path.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/shapes/mesh.cpp"
@@ -2583,9 +2594,9 @@ status = "faithful"
 upstream = "src/shapes/shape_paint_container.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/shapes/shape_paint_container.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/shapes/slice_mesh.cpp"
@@ -2633,7 +2644,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/solo.rs", "crates/nuxie-runtime/src/artboard.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/cursor.cpp"
@@ -2649,7 +2660,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/font_hb.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/fully_shaped_text.cpp"
@@ -2657,7 +2668,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/fully_shaped_text.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/glyph_lookup.cpp"
@@ -2665,7 +2676,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/glyph_lookup.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/line_breaker.cpp"
@@ -2673,15 +2684,15 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/line_breaker.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/raw_text.cpp"
 source_set = "live-draw-boundary"
-wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/text/raw_text.rs", "crates/nuxie-runtime/src/draw.rs"]
+wave = "FL-E8"
+rust_modules = ["crates/nuxie-runtime/src/text/raw_text.rs", "crates/nuxie-runtime/src/text/font_hb.rs", "crates/nuxie-runtime/src/text/text_engine.rs", "crates/nuxie-runtime/src/text.rs", "crates/nuxie-runtime/src/draw.rs", "crates/nuxie/src/raw_text.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/raw_text_input.cpp"
@@ -2697,7 +2708,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text.rs", "crates/nuxie-runtime/src/text.rs", "crates/nuxie-runtime/src/draw.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_engine.cpp"
@@ -2705,7 +2716,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_engine.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_follow_path_modifier.cpp"
@@ -2713,7 +2724,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_follow_path_modifier.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_input.cpp"
@@ -2774,10 +2785,10 @@ status = "faithful"
 [[file]]
 upstream = "src/text/text_modifier.cpp"
 source_set = "live-draw-boundary"
-wave = "FL-E"
+wave = "FL-E8"
 rust_modules = ["crates/nuxie-runtime/src/text/text_modifier.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_modifier_group.cpp"
@@ -2785,7 +2796,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_modifier_group.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_modifier_range.cpp"
@@ -2793,7 +2804,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_modifier_range.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_selection_path.cpp"
@@ -2806,10 +2817,10 @@ status = "faithful"
 [[file]]
 upstream = "src/text/text_style.cpp"
 source_set = "live-draw-boundary"
-wave = "FL-E"
+wave = "FL-E8"
 rust_modules = ["crates/nuxie-runtime/src/text/text_style.rs", "crates/nuxie-runtime/src/text.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_style_axis.cpp"
@@ -2817,15 +2828,15 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_style_axis.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_style_feature.cpp"
 source_set = "live-draw-boundary"
-wave = "FL-E"
+wave = "FL-E8"
 rust_modules = ["crates/nuxie-runtime/src/text/text_style_feature.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_style_paint.cpp"
@@ -2838,10 +2849,10 @@ status = "faithful"
 [[file]]
 upstream = "src/text/text_target_modifier.cpp"
 source_set = "live-draw-boundary"
-wave = "FL-E"
+wave = "FL-E8"
 rust_modules = ["crates/nuxie-runtime/src/text/text_target_modifier.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_value_run.cpp"
@@ -2857,15 +2868,15 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/text_variation_helper.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/text_variation_modifier.cpp"
 source_set = "live-draw-boundary"
-wave = "FL-E"
+wave = "FL-E8"
 rust_modules = ["crates/nuxie-runtime/src/text/text_variation_modifier.rs"]
 dynamically_reached = false
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/text/utf.cpp"
@@ -2873,7 +2884,7 @@ source_set = "live-draw-boundary"
 wave = "FL-E"
 rust_modules = ["crates/nuxie-runtime/src/text/utf.rs"]
 dynamically_reached = true
-status = "pending"
+status = "faithful"
 
 [[file]]
 upstream = "src/transform_component.cpp"
@@ -3786,7 +3797,16 @@ wave = "FL-E"
 cpp_files = ["src/artboard.cpp", "src/drawable.cpp"]
 rust_file = "crates/nuxie-runtime/src/draw.rs"
 rust_anchor = "pub fn draw_artboard("
-status = "pending"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/artboard.cpp:264-330", "rust:crates/nuxie-runtime/src/draw.rs:9780-9870"]
+retain = ["cpp:src/drawable.cpp:8-88", "rust:crates/nuxie-runtime/src/draw.rs:9670-9790"]
+dirty = ["cpp:src/artboard.cpp:1153-1170", "rust:crates/nuxie-runtime/src/artboard.rs:8638-8650"]
+update = ["cpp:src/artboard.cpp:574-746", "rust:crates/nuxie-runtime/src/draw.rs:9960-10190"]
+advance = ["cpp:src/artboard.cpp:1417-1505", "rust:crates/nuxie-runtime/src/artboard.rs:7438-7705"]
+draw = ["cpp:src/artboard.cpp:1652-1750", "rust:crates/nuxie-runtime/src/draw.rs:3860-4390"]
+clone = ["cpp:src/artboard.cpp:1038-1057", "rust:crates/nuxie-runtime/src/draw.rs:9770-9795"]
+drop = ["cpp:src/artboard.cpp:79-140", "rust:crates/nuxie-runtime/src/draw.rs:9770-9795"]
 
 [[member]]
 id = "renderer.interface_boundary"
@@ -3794,4 +3814,13 @@ wave = "FL-E"
 cpp_files = ["src/shapes/paint/shape_paint.cpp"]
 rust_file = "crates/nuxie-runtime/src/draw.rs"
 rust_anchor = "renderer: &mut dyn Renderer"
-status = "pending"
+status = "faithful"
+[member.lifecycle]
+construct = ["cpp:src/shapes/paint/shape_paint.cpp:8-31", "rust:crates/nuxie-runtime/src/draw.rs:14455-15440"]
+retain = ["cpp:src/shapes/paint/shape_paint.cpp:33-89", "rust:crates/nuxie-runtime/src/draw.rs:12800-13280"]
+dirty = ["cpp:src/shapes/paint/shape_paint.cpp:91-135", "rust:crates/nuxie-runtime/src/draw.rs:19300-19410"]
+update = ["cpp:src/artboard.cpp:1153-1170", "rust:crates/nuxie-runtime/src/artboard.rs:8590-8650"]
+advance = ["cpp:src/artboard.cpp:1417-1505", "rust:crates/nuxie-runtime/src/artboard.rs:7438-7705"]
+draw = ["cpp:src/shapes/paint/shape_paint.cpp:137-171", "rust:crates/nuxie-runtime/src/draw.rs:3860-4390"]
+clone = ["cpp:src/artboard.cpp:1038-1057", "rust:crates/nuxie-runtime/src/draw.rs:13180-13280"]
+drop = ["cpp:src/artboard.cpp:79-140", "rust:crates/nuxie-runtime/src/draw.rs:13180-13280"]

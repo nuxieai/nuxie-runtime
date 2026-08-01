@@ -10,13 +10,20 @@ if [[ "$actual_ref" != "$expected_ref" ]]; then
     exit 2
 fi
 
-runtime_out="out/rive-frame-loop-coverage-debug"
-runtime_archive="$rive_runtime/$runtime_out/librive.a"
+runtime_out="${RIVE_FRAME_LOOP_CPP_RUNTIME_OUT:-$repo_root/target/runtime-frame-loop-trace/cpp-runtime}"
+if [[ "$runtime_out" = /* ]]; then
+    runtime_archive="$runtime_out/librive.a"
+else
+    runtime_archive="$rive_runtime/$runtime_out/librive.a"
+fi
 runtime_provenance="$runtime_archive.provenance"
 trace_provenance="$runtime_archive.frame-loop-trace-provenance"
-cpp_flags="-fprofile-instr-generate -fcoverage-mapping"
+build_profile_dir="$repo_root/target/runtime-frame-loop-trace/build-profiles"
+mkdir -p "$build_profile_dir"
+build_profile_pattern="$build_profile_dir/%m-%p.profraw"
+cpp_flags="-fprofile-instr-generate=$build_profile_pattern -fcoverage-mapping"
 cxx_flags="$cpp_flags -DRIVE_GOLDEN_COVERAGE_TRACE"
-link_flags="-fprofile-instr-generate"
+link_flags="-fprofile-instr-generate=$build_profile_pattern"
 expected_trace_provenance="$(
     printf '%s\n' \
         "schema=nuxie-frame-loop-trace-build-v1" \
@@ -45,6 +52,7 @@ env \
     CFLAGS="$cpp_flags" \
     CXXFLAGS="$cxx_flags" \
     LDFLAGS="$link_flags" \
+    LLVM_PROFILE_FILE="$build_profile_pattern" \
     RIVE_GOLDEN_RUNTIME_OUT="$runtime_out" \
     RIVE_GOLDEN_RUNNER_NAME="rive_golden_runner_coverage" \
     RIVE_RUNTIME_DIR="$rive_runtime" \
@@ -80,6 +88,7 @@ PY
 
 env \
     CARGO_TARGET_DIR="$repo_root/target/frame-loop-coverage" \
+    LLVM_PROFILE_FILE="$build_profile_pattern" \
     RUSTFLAGS="-Cinstrument-coverage" \
     cargo build --quiet --manifest-path "$repo_root/Cargo.toml" \
         -p rust-golden-runner --features coverage-trace

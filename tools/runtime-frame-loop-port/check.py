@@ -110,6 +110,56 @@ FL_B_FROZEN_SCOPE_FILES = frozenset(
         "src/importers/keyed_property_importer.cpp",
     }
 )
+FL_E8_FILES = frozenset(
+    {
+        "src/shapes/list_path.cpp",
+        "src/text/raw_text.cpp",
+        "src/text/text_modifier.cpp",
+        "src/text/text_style.cpp",
+        "src/text/text_style_feature.cpp",
+        "src/text/text_target_modifier.cpp",
+        "src/text/text_variation_modifier.cpp",
+    }
+)
+FL_E8_WP1_FILES = frozenset(
+    {
+        "src/text/text_modifier.cpp",
+        "src/text/text_style.cpp",
+        "src/text/text_style_feature.cpp",
+        "src/text/text_target_modifier.cpp",
+        "src/text/text_variation_modifier.cpp",
+    }
+)
+FL_E8_WP2_FILES = FL_E8_WP1_FILES | {"src/shapes/list_path.cpp"}
+FL_E8_WP3_FILES = FL_E8_WP1_FILES | frozenset({"src/text/raw_text.cpp"})
+FL_E8_WAVE_FILES = FL_E8_WP2_FILES | FL_E8_WP3_FILES
+FL_E8_FORBIDDEN_DECISIONS = frozenset({"D13", "D14", "D15"})
+FL_E8_FORBIDDEN_CEILINGS = (
+    "dynamic-list-path",
+    "standalone-raw-text",
+    "static-text-extensions",
+)
+FL_E_W120_PENDING_VERIFICATION_FILES = frozenset(
+    {
+        "src/layout.cpp",
+        "src/layout/artboard_component_list_override.cpp",
+        "src/layout_component.cpp",
+        "src/math/random.cpp",
+        "src/solo.cpp",
+        "src/text/font_hb.cpp",
+        "src/text/fully_shaped_text.cpp",
+        "src/text/glyph_lookup.cpp",
+        "src/text/line_breaker.cpp",
+        "src/text/text.cpp",
+        "src/text/text_engine.cpp",
+        "src/text/text_follow_path_modifier.cpp",
+        "src/text/text_modifier_group.cpp",
+        "src/text/text_modifier_range.cpp",
+        "src/text/text_style_axis.cpp",
+        "src/text/text_variation_helper.cpp",
+        "src/text/utf.cpp",
+    }
+)
 
 
 class CheckFailure(Exception):
@@ -724,6 +774,7 @@ def check_status(
     row: dict[str, Any],
     porting_rules: str,
     decision_ids: set[str],
+    decision_ceilings: dict[str, str],
     require_closed: bool,
     errors: list[str],
 ) -> str:
@@ -735,6 +786,7 @@ def check_status(
         errors.append(f"closed frame loop required but {subject} is {status}")
     rule = str(row.get("rule", ""))
     decision = str(row.get("decision", ""))
+    ceiling = str(row.get("ceiling", ""))
     if status == "adapted":
         if not re.fullmatch(r"(?:AF|RF|FLR)-\d+", rule):
             errors.append(f"{subject} is adapted without an AF/RF/FLR rule")
@@ -747,8 +799,23 @@ def check_status(
             errors.append(f"{subject} is divergent-by-decision without a D-row")
         elif decision not in decision_ids:
             errors.append(f"{subject} cites unknown decision {decision}")
+        if not ceiling:
+            errors.append(
+                f"{subject} is divergent-by-decision without a named ceiling"
+            )
+        elif decision_ceilings.get(decision) != ceiling:
+            errors.append(
+                f"{subject} cites ceiling {ceiling!r}, but decision {decision} "
+                f"binds {decision_ceilings.get(decision)!r}"
+            )
+        elif f"**{ceiling}**" not in porting_rules:
+            errors.append(
+                f"{subject} cites named ceiling {ceiling!r} missing from PORTING.md"
+            )
     elif decision:
         errors.append(f"{subject} is {status} but unexpectedly cites {decision}")
+    elif ceiling:
+        errors.append(f"{subject} is {status} but unexpectedly cites ceiling {ceiling}")
     return status
 
 
@@ -893,6 +960,8 @@ def validate_file_rows(
     repo_root: pathlib.Path,
     porting_rules: str,
     decision_ids: set[str],
+    decision_ceilings: dict[str, str],
+    pending_verification_paths: set[str],
     require_closed: bool,
     errors: list[str],
 ) -> tuple[dict[str, dict[str, Any]], collections.Counter[str]]:
@@ -913,6 +982,14 @@ def validate_file_rows(
             "file classification rows outside expanded frame-loop scope: "
             + ", ".join(outside[:12])
         )
+    unknown_pending_verification_paths = sorted(
+        pending_verification_paths - set(by_path)
+    )
+    if unknown_pending_verification_paths:
+        errors.append(
+            "candidate pending-verification paths outside the file ledger: "
+            + ", ".join(unknown_pending_verification_paths[:12])
+        )
 
     status_counts: collections.Counter[str] = collections.Counter()
     for path in sorted(set(assignments) & set(by_path)):
@@ -924,7 +1001,9 @@ def validate_file_rows(
                 f"file {path} names source_set {source_set!r}, "
                 f"expected {assignments[path]!r}"
             )
-        expected_wave = source_set_waves.get(source_set)
+        expected_wave = (
+            "FL-E8" if path in FL_E8_FILES else source_set_waves.get(source_set)
+        )
         if wave != expected_wave:
             errors.append(
                 f"file {path} names wave {wave!r}, expected {expected_wave!r}"
@@ -957,6 +1036,7 @@ def validate_file_rows(
             row=row,
             porting_rules=porting_rules,
             decision_ids=decision_ids,
+            decision_ceilings=decision_ceilings,
             require_closed=require_closed,
             errors=errors,
         )
@@ -965,7 +1045,11 @@ def validate_file_rows(
         verification = str(manifest.get("verification", ""))
         manifest_status = str(manifest.get("status", ""))
         if status in CLOSED_STATUSES:
-            if verification != "orchestrator-verified":
+            verification_is_accepted = verification == "orchestrator-verified" or (
+                path in pending_verification_paths
+                and verification == "pending-verification"
+            )
+            if not verification_is_accepted:
                 errors.append(
                     f"file {path} is {status} before file correspondence is "
                     "orchestrator-verified"
@@ -980,7 +1064,321 @@ def validate_file_rows(
                     f"file {path} is {status}, but file correspondence is "
                     f"{manifest_status!r}"
                 )
+        if path in pending_verification_paths and (
+            status not in CLOSED_STATUSES or verification != "pending-verification"
+        ):
+            errors.append(
+                f"candidate path {path} must be closed with file correspondence "
+                "pending-verification"
+            )
     return by_path, status_counts
+
+
+def validate_fl_e8_policy(
+    *,
+    phase: str,
+    waves: list[dict[str, Any]],
+    file_rows: list[dict[str, Any]],
+    expected_counts: dict[str, Any],
+    decisions: list[dict[str, Any]],
+    porting_rules: str,
+    parity_register: str,
+    candidate_paths: set[str],
+    errors: list[str],
+) -> None:
+    """Ratchet the user-approved FL-E8 ledger and sole FLR-20 ceiling."""
+    if phase not in {
+        "fl-e8-implementation",
+        "fl-e8-wp1-candidate",
+        "fl-e8-wave-candidate",
+    }:
+        return
+
+    decision_ids = {str(row.get("id", "")) for row in decisions}
+    for decision_id in sorted(FL_E8_FORBIDDEN_DECISIONS & decision_ids):
+        errors.append(f"rejected FL-E8 decision {decision_id} must not reappear")
+    for decision in decisions:
+        if str(decision.get("rule", "")) == "FLR-20" and (
+            str(decision.get("id", "")) != "D3"
+            or str(decision.get("ceiling", "")) != "layout-engine"
+        ):
+            errors.append("FLR-20 may bind only D3/layout-engine")
+
+    for number in (13, 14, 15):
+        if re.search(rf"(?m)^\s*{number}\.\s", parity_register):
+            errors.append(f"parity gap register must not contain D{number}")
+
+    flr20 = porting_rules.partition("- **FLR-20 ")[2].partition("\n- **")[0]
+    if not flr20:
+        errors.append("PORTING.md is missing FLR-20")
+    else:
+        if "**layout-engine**" not in flr20 or "D3" not in flr20:
+            errors.append("FLR-20 must name D3/layout-engine")
+        if "user-approved D-row" not in flr20:
+            errors.append("FLR-20 must require an explicit user-approved D-row")
+        for ceiling in FL_E8_FORBIDDEN_CEILINGS:
+            if ceiling in flr20:
+                errors.append(f"FLR-20 must not name rejected ceiling {ceiling!r}")
+
+    fl_e8_waves = [row for row in waves if str(row.get("id", "")) == "FL-E8"]
+    if len(fl_e8_waves) != 1:
+        errors.append("FL-E8 must have exactly one wave row")
+    else:
+        wave = fl_e8_waves[0]
+        if wave.get("sequence") != 6:
+            errors.append("FL-E8 wave sequence must be 6")
+        if wave.get("depends_on") != ["FL-E"]:
+            errors.append("FL-E8 must depend exactly on FL-E")
+
+    rows = {
+        str(row.get("upstream", "")): row
+        for row in file_rows
+        if str(row.get("wave", "")) == "FL-E8"
+    }
+    actual_paths = set(rows)
+    if actual_paths != FL_E8_FILES:
+        errors.append(
+            "FL-E8 wave must contain exactly seven directive-owned rows: "
+            f"missing={sorted(FL_E8_FILES - actual_paths)!r}, "
+            f"unexpected={sorted(actual_paths - FL_E8_FILES)!r}"
+        )
+
+    if phase == "fl-e8-implementation":
+        wrong = sorted(
+            path for path, row in rows.items() if row.get("status") != "pending"
+        )
+        if wrong:
+            errors.append(f"FL-E8 WP0 rows must all be pending: {wrong!r}")
+        required_counts = {"faithful": 334, "divergent-by-decision": 1, "pending": 7}
+        if candidate_paths:
+            errors.append("FL-E8 WP0 must not have a candidate allowlist")
+    elif phase == "fl-e8-wp1-candidate":
+        wrong_faithful = sorted(
+            path
+            for path in FL_E8_WP1_FILES
+            if rows.get(path, {}).get("status") != "faithful"
+        )
+        wrong_pending = sorted(
+            path
+            for path in FL_E8_FILES - FL_E8_WP1_FILES
+            if rows.get(path, {}).get("status") != "pending"
+        )
+        if wrong_faithful or wrong_pending:
+            errors.append(
+                "FL-E8 WP1 statuses are incoherent: "
+                f"faithful={wrong_faithful!r}, pending={wrong_pending!r}"
+            )
+        required_counts = {"faithful": 339, "divergent-by-decision": 1, "pending": 2}
+        if candidate_paths != FL_E8_WP1_FILES:
+            errors.append("FL-E8 WP1 candidate allowlist must be exactly the five promoted rows")
+    else:
+        wrong_faithful = sorted(
+            path
+            for path in FL_E8_WAVE_FILES
+            if rows.get(path, {}).get("status") != "faithful"
+        )
+        wrong_pending = sorted(
+            path
+            for path in FL_E8_FILES - FL_E8_WAVE_FILES
+            if rows.get(path, {}).get("status") != "pending"
+        )
+        if wrong_faithful or wrong_pending:
+            errors.append(
+                "FL-E8 wave statuses are incoherent: "
+                f"faithful={wrong_faithful!r}, pending={wrong_pending!r}"
+            )
+        required_counts = {"faithful": 341, "divergent-by-decision": 1, "pending": 0}
+        if candidate_paths != FL_E8_WAVE_FILES:
+            errors.append(
+                "FL-E8 wave candidate allowlist must be exactly the seven promoted rows"
+            )
+
+    for status, expected in required_counts.items():
+        if expected_counts.get(status) != expected:
+            errors.append(
+                f"FL-E8 {phase} requires {status}={expected}, "
+                f"got {expected_counts.get(status)!r}"
+            )
+
+
+def validate_fl_e8_wp1_artifacts(repo_root: pathlib.Path, errors: list[str]) -> None:
+    """R-ST-OWNER: pin WP1 source boundaries, fixtures, corpus, and probes."""
+    owner_predicates = {
+        "crates/nuxie-runtime/src/text/text_modifier.rs": "static_text_modifier_is_unsupported",
+        "crates/nuxie-runtime/src/text/text_style_feature.rs": "static_text_style_feature_is_unsupported",
+        "crates/nuxie-runtime/src/text/text_target_modifier.rs": "static_text_target_modifier_is_unsupported",
+        "crates/nuxie-runtime/src/text/text_variation_modifier.rs": "static_text_variation_modifier_is_unsupported",
+    }
+    for relative, predicate in owner_predicates.items():
+        path = repo_root / relative
+        source = path.read_text(encoding="utf-8") if path.is_file() else ""
+        if predicate in source:
+            errors.append(f"FL-E8 WP1 old static rejection predicate remains: {predicate}")
+        if not source:
+            errors.append(f"FL-E8 WP1 direct owner is missing: {relative}")
+
+    for relative in (
+        "fixtures/fl-e8/text_style_feature.riv",
+        "fixtures/fl-e8/text_variation_modifier.riv",
+    ):
+        path = repo_root / relative
+        if not path.is_file() or path.stat().st_size == 0:
+            errors.append(f"FL-E8 WP1 fixture is missing or empty: {relative}")
+
+    corpus_path = repo_root / "corpus.toml"
+    try:
+        corpus = tomllib.loads(corpus_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        corpus = {}
+    rows = list(corpus.get("file", []))
+    expected_corpus = {
+        "text_style_feature_fl_e8": "fixtures/fl-e8/text_style_feature.riv",
+        "text_variation_modifier_fl_e8": "fixtures/fl-e8/text_variation_modifier.riv",
+    }
+    for corpus_id, expected_path in expected_corpus.items():
+        matches = [row for row in rows if row.get("id") == corpus_id]
+        if len(matches) != 1 or matches[0].get("path") != expected_path or matches[0].get("status") != "exact":
+            errors.append(
+                f"FL-E8 WP1 corpus entry {corpus_id} must occur once as exact path {expected_path}"
+            )
+
+    probe_path = repo_root / "crates/nuxie-runtime/tests/cpp_probe.rs"
+    probe = probe_path.read_text(encoding="utf-8") if probe_path.is_file() else ""
+    for artifact in ("D-ST-STRUCT", "D-ST-FONT", "D-ST-FEATURE", "D-ST-VARIATION", "D-ST-TARGET"):
+        if artifact not in probe:
+            errors.append(f"FL-E8 WP1 live differential marker is missing: {artifact}")
+
+    cpp_probe_path = repo_root / "tools/cpp-probe/main.cpp"
+    cpp_probe = cpp_probe_path.read_text(encoding="utf-8") if cpp_probe_path.is_file() else ""
+    for mode in (
+        "--runtime-fl-e8-static-text",
+        "--runtime-fl-e8-font-swap",
+        "--runtime-fl-e8-feature-cycle",
+        "--runtime-fl-e8-variation-cycle",
+    ):
+        if mode not in cpp_probe:
+            errors.append(f"FL-E8 WP1 C++ probe mode is missing: {mode}")
+
+    codegen_path = repo_root / "tools/nuxie-codegen/src/main.rs"
+    codegen = codegen_path.read_text(encoding="utf-8") if codegen_path.is_file() else ""
+    for fixture_name in ("text-style-feature", "text-variation-modifier"):
+        if fixture_name not in codegen:
+            errors.append(f"FL-E8 WP1 fixture emitter is missing: {fixture_name}")
+    fixture_test = repo_root / "tools/nuxie-codegen/tests/fl_e8_fixtures.rs"
+    if not fixture_test.is_file():
+        errors.append("FL-E8 WP1 deterministic fixture-emission integration test is missing")
+
+
+def validate_fl_e8_wp2_artifacts(repo_root: pathlib.Path, errors: list[str]) -> None:
+    """R-LP-OWNER: pin ListPath ownership, differentials, and exact corpora."""
+    owner_path = repo_root / "crates/nuxie-runtime/src/shapes/list_path.rs"
+    owner = owner_path.read_text(encoding="utf-8") if owner_path.is_file() else ""
+    for token in (
+        "RuntimeListPathState",
+        "RuntimeListPathVertexListener",
+        "RuntimeListPathSubscription",
+        "RuntimeCubicDetachedVertex",
+        "clear_invalid",
+    ):
+        if token not in owner:
+            errors.append(f"FL-E8 WP2 ListPath owner token is missing: {token}")
+
+    bind_path = repo_root / "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
+    bind_source = bind_path.read_text(encoding="utf-8") if bind_path.is_file() else ""
+    if "RuntimeArtboardListTarget::ListPath" not in bind_source:
+        errors.append("FL-E8 WP2 ListPath list-consumer dispatch is missing")
+    if 'target.type_name != "ArtboardComponentList"' in bind_source:
+        errors.append("FL-E8 WP2 old explicit ListPath rejection branch remains")
+
+    rust_probe_path = repo_root / "crates/nuxie-runtime/tests/cpp_probe.rs"
+    silver_probe_path = repo_root / "tools/silver-corpus/tests/fl_e8_list_path.rs"
+    rust_probes = "\n".join(
+        path.read_text(encoding="utf-8") if path.is_file() else ""
+        for path in (rust_probe_path, silver_probe_path)
+    )
+    for artifact in (
+        "D-LP-INIT",
+        "D-LP-XY",
+        "D-LP-RD",
+        "D-LP-DETACHED",
+        "D-LP-POINT",
+        "D-LP-INVALID",
+        "D-LP-PARTIAL",
+        "D-LP-LIVE",
+        "D-LP-EDGE",
+    ):
+        if artifact not in rust_probes:
+            errors.append(f"FL-E8 WP2 differential marker is missing: {artifact}")
+
+    cpp_probe_path = repo_root / "tools/cpp-probe/main.cpp"
+    cpp_probe = cpp_probe_path.read_text(encoding="utf-8") if cpp_probe_path.is_file() else ""
+    if "--runtime-fl-e8-list-path" not in cpp_probe:
+        errors.append("FL-E8 WP2 C++ probe mode is missing: --runtime-fl-e8-list-path")
+
+    for manifest_name, table_name in (("corpus.toml", "file"), ("silver-corpus.toml", "case")):
+        manifest_path = repo_root / manifest_name
+        try:
+            manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError):
+            manifest = {}
+        matches = [
+            row for row in manifest.get(table_name, []) if row.get("id") == "list_to_path"
+        ]
+        if len(matches) != 1 or matches[0].get("status") != "exact":
+            errors.append(
+                f"FL-E8 WP2 {manifest_name} list_to_path must occur once with status=exact"
+            )
+
+    generator_path = repo_root / "tools/silver-corpus/generate_manifest.py"
+    generator = generator_path.read_text(encoding="utf-8") if generator_path.is_file() else ""
+    if "fl_e8_list_path_actions" not in generator or "range(60)" not in generator:
+        errors.append("FL-E8 WP2 generated eight-phase/60-frame action stream is missing")
+
+
+def validate_fl_e8_wp3_artifacts(repo_root: pathlib.Path, errors: list[str]) -> None:
+    """R-RT-OWNER: pin the facade, shared engine, integrated bitmap branch, and live probes."""
+    sources = {
+        relative: (repo_root / relative).read_text(encoding="utf-8")
+        if (repo_root / relative).is_file()
+        else ""
+        for relative in (
+            "crates/nuxie/src/lib.rs",
+            "crates/nuxie/src/raw_text.rs",
+            "crates/nuxie-runtime/src/text/raw_text.rs",
+            "crates/nuxie-runtime/src/text/text_engine.rs",
+            "crates/nuxie-runtime/src/text.rs",
+            "crates/nuxie-runtime/src/draw.rs",
+            "crates/nuxie/tests/raw_text_differential.rs",
+            "tools/cpp-probe/main.cpp",
+        )
+    }
+    required = {
+        "crates/nuxie/src/lib.rs": ("mod raw_text", "RawText"),
+        "crates/nuxie/src/raw_text.rs": ("pub struct RawText", "RawTextFont"),
+        "crates/nuxie-runtime/src/text/raw_text.rs": (
+            "pub struct RawText",
+            "runtime_classify_color_glyph",
+        ),
+        "crates/nuxie-runtime/src/text/text_engine.rs": (
+            "runtime_classify_color_glyph",
+            "runtime_extract_color_glyph_layers",
+        ),
+        "crates/nuxie-runtime/src/text.rs": ("RuntimeIntegratedColorGlyphCommand",),
+        "crates/nuxie-runtime/src/draw.rs": ("emoji_images", "draw_image"),
+        "crates/nuxie/tests/raw_text_differential.rs": (
+            "D-RT-API",
+            "D-RT-COLOR-188",
+            "D-RT-COLOR-474",
+        ),
+        "tools/cpp-probe/main.cpp": ("--raw-text-probe",),
+    }
+    for relative, markers in required.items():
+        for marker in markers:
+            if marker not in sources[relative]:
+                errors.append(f"FL-E8 WP3 artifact {relative} is missing {marker}")
+    combined = "\n".join(sources.values())
+    if "raw_text_is_unsupported" in combined or "standalone_raw_text_is_unsupported" in combined:
+        errors.append("FL-E8 WP3 standalone RawText rejection predicate remains")
 
 
 def check(
@@ -1091,6 +1489,27 @@ def check(
     duplicates = duplicate_values(str(row.get("id", "")) for row in decisions)
     if duplicates:
         errors.append(f"duplicate decision ids: {', '.join(duplicates)}")
+    decision_ceilings: dict[str, str] = {}
+    for row in decisions:
+        decision_id = str(row.get("id", ""))
+        decision_rule = str(row.get("rule", ""))
+        decision_ceiling = str(row.get("ceiling", ""))
+        if bool(decision_rule) != bool(decision_ceiling):
+            errors.append(
+                f"decision {decision_id} must cite both a rule and named ceiling"
+            )
+        if decision_rule:
+            if not re.fullmatch(r"(?:AF|RF|FLR)-\d+", decision_rule):
+                errors.append(
+                    f"decision {decision_id} has invalid rule {decision_rule!r}"
+                )
+            elif f"**{decision_rule} " not in porting_rules:
+                errors.append(
+                    f"decision {decision_id} cites missing PORTING.md rule "
+                    f"{decision_rule}"
+                )
+        if decision_ceiling:
+            decision_ceilings[decision_id] = decision_ceiling
 
     waves = list(ledger.get("wave", []))
     wave_order = topological_order(waves, errors)
@@ -1116,6 +1535,47 @@ def check(
         upstream_ref=upstream_ref,
         errors=errors,
     )
+    phase = str(ledger.get("phase", ""))
+    candidate_paths_value = ledger.get("candidate_pending_verification_files", [])
+    if not isinstance(candidate_paths_value, list):
+        errors.append("candidate_pending_verification_files must be an array")
+        candidate_paths: list[str] = []
+    else:
+        candidate_paths = [str(value) for value in candidate_paths_value]
+    candidate_path_duplicates = duplicate_values(candidate_paths)
+    if candidate_path_duplicates:
+        errors.append(
+            "duplicate candidate pending-verification paths: "
+            + ", ".join(candidate_path_duplicates)
+        )
+    if phase in {
+        "fl-e-wave-acceptance-candidate",
+        "fl-e8-wp1-candidate",
+        "fl-e8-wave-candidate",
+    }:
+        if not candidate_paths:
+            errors.append(
+                f"{phase} requires an explicit "
+                "candidate_pending_verification_files allowlist"
+            )
+        pending_verification_paths = set(candidate_paths)
+        if phase in {"fl-e8-wp1-candidate", "fl-e8-wave-candidate"}:
+            pending_verification_paths.update(FL_E_W120_PENDING_VERIFICATION_FILES)
+    elif phase == "fl-e8-implementation":
+        if candidate_paths:
+            errors.append(
+                "candidate_pending_verification_files is not used during FL-E8 WP0"
+            )
+        pending_verification_paths = set(FL_E_W120_PENDING_VERIFICATION_FILES)
+    else:
+        if candidate_paths:
+            errors.append(
+                "candidate_pending_verification_files is only valid in phase "
+                "fl-e-wave-acceptance-candidate, fl-e8-wp1-candidate, or "
+                "fl-e8-wave-candidate"
+            )
+        pending_verification_paths = set()
+
     file_rows, file_status_counts = validate_file_rows(
         rows=list(ledger.get("file", [])),
         assignments=assignments,
@@ -1124,9 +1584,34 @@ def check(
         repo_root=repo_root,
         porting_rules=porting_rules,
         decision_ids=decision_ids,
+        decision_ceilings=decision_ceilings,
+        pending_verification_paths=pending_verification_paths,
         require_closed=require_closed,
         errors=errors,
     )
+
+    parity_register_path = repo_root / "docs/parity-gap-register.md"
+    parity_register = (
+        parity_register_path.read_text(encoding="utf-8")
+        if parity_register_path.is_file()
+        else ""
+    )
+    validate_fl_e8_policy(
+        phase=phase,
+        waves=waves,
+        file_rows=list(ledger.get("file", [])),
+        expected_counts=dict(ledger.get("expected_file_status_counts", {})),
+        decisions=decisions,
+        porting_rules=porting_rules,
+        parity_register=parity_register,
+        candidate_paths=set(candidate_paths),
+        errors=errors,
+    )
+    if phase in {"fl-e8-wp1-candidate", "fl-e8-wave-candidate"}:
+        validate_fl_e8_wp1_artifacts(repo_root, errors)
+    if phase == "fl-e8-wave-candidate":
+        validate_fl_e8_wp2_artifacts(repo_root, errors)
+        validate_fl_e8_wp3_artifacts(repo_root, errors)
 
     trace_path = repo_root / str(
         ledger.get("trace_evidence_file", "docs/runtime-frame-loop-trace.json")
@@ -1272,6 +1757,7 @@ def check(
         "clipping_redundancy_clear",
         "layout_compute",
         "internal_owner_rediscovery",
+        "drawable_owner_lookup",
     }
     for name in sorted(
         required_steady_zero
@@ -1378,6 +1864,7 @@ def check(
             row=row,
             porting_rules=porting_rules,
             decision_ids=decision_ids,
+            decision_ceilings=decision_ceilings,
             require_closed=require_closed,
             errors=errors,
         )
@@ -1413,6 +1900,7 @@ def check(
     duplicates = duplicate_values(gap_ids)
     if duplicates:
         errors.append(f"duplicate gap ids: {', '.join(duplicates)}")
+    gap_status_counts: collections.Counter[str] = collections.Counter()
     for row in gap_rows:
         gap_id = str(row.get("id", ""))
         status = str(row.get("status", ""))
@@ -1420,6 +1908,8 @@ def check(
             errors.append("gap has an empty id")
         if status not in {"open", "closed"}:
             errors.append(f"gap {gap_id} has invalid status {status!r}")
+        else:
+            gap_status_counts[status] += 1
         if require_closed and status != "closed":
             errors.append(f"closed frame loop required but gap {gap_id} is open")
         citations = row.get("citations", [])
@@ -1434,6 +1924,17 @@ def check(
             errors.append(f"gap {gap_id} has no mechanism")
         if not str(row.get("closure", "")).strip():
             errors.append(f"gap {gap_id} has no closure")
+
+    expected_gap_status_counts = gaps.get("expected_gap_status_counts", {})
+    for status in ("open", "closed"):
+        expected = expected_gap_status_counts.get(status)
+        if not isinstance(expected, int):
+            errors.append(f"expected_gap_status_counts.{status} is missing")
+        elif gap_status_counts[status] != expected:
+            errors.append(
+                f"gap status count {status}={gap_status_counts[status]}, "
+                f"expected {expected}"
+            )
 
     mismatch_counters = {
         name

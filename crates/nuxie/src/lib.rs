@@ -32,6 +32,7 @@ use nuxie_runtime::{
 };
 
 pub mod flow_session;
+mod raw_text;
 mod scene;
 #[cfg(feature = "scripting")]
 mod script_import;
@@ -39,6 +40,9 @@ mod script_import;
 #[cfg(all(test, feature = "scripting"))]
 mod scripted_listener_action_lifecycle_tests;
 
+pub use raw_text::{
+    RawText, RawTextFont, RawTextFontError, RawTextPaint, TextAlign, TextOverflow, TextSizing,
+};
 pub use scene::*;
 #[cfg(feature = "scripting")]
 pub use script_import::{ScriptAuthenticationError, ScriptImportCapability};

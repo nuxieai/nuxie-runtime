@@ -6,7 +6,7 @@ use harfrust::{
 use nuxie_binary::RuntimeFile;
 use nuxie_graph::{
     ArtboardGraph, DataBindNode, PathGeometryNode, ShapePaintContainerNode, ShapePaintKind,
-    ShapePaintPathKind, ShapePaintStateNode,
+    ShapePaintStateNode,
 };
 use nuxie_render_api::{Aabb as RenderAabb, Vec2D as RenderVec2D};
 use nuxie_schema::definition_by_name;
@@ -23,10 +23,11 @@ use unicode_script::{Script as UnicodeScript, UnicodeScript as UnicodeScriptProp
 use crate::data_bind_flags_apply_source_to_target;
 use crate::draw::{
     RuntimeLayoutBounds, RuntimePathMeasure, RuntimeTextPaintPoolSpec, RuntimeTextPaintPoolUse,
-    runtime_path_geometry_commands, runtime_shape_paint_command,
+    runtime_live_shape_paint_path_kind, runtime_path_geometry_commands,
+    runtime_shape_paint_command,
 };
 use crate::joystick::{joystick_x_property_key, joystick_y_property_key};
-use crate::properties::property_key_for_name;
+use crate::properties::{property_key_for_name, solid_color_value_property_key};
 use crate::view_model::RuntimeFontAssetValue;
 use crate::{ArtboardInstance, Mat2D, RuntimePathCommand};
 use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind};
@@ -82,6 +83,8 @@ pub struct RuntimeTextLayoutDebugReport {
     pub glyph_lookup_counts: Vec<usize>,
     pub font_size: Option<f32>,
     pub local_transform: [f32; 6],
+    pub style_features: Vec<Vec<(u32, u32)>>,
+    pub line_glyph_variations: Vec<Vec<Vec<(u32, f32)>>>,
     pub modifier_groups: Vec<RuntimeTextModifierDebugReport>,
 }
 
@@ -91,6 +94,60 @@ pub struct RuntimeTextModifierDebugReport {
     pub range_count: usize,
     pub coverage: Vec<f32>,
     pub selected_runs: Vec<Option<RuntimeTextSelectedRunDebugReport>>,
+    pub modifier_locals: Vec<usize>,
+    pub shape_modifier_indices: Vec<usize>,
+    pub targets: Vec<RuntimeTextTargetModifierDebugReport>,
+}
+
+#[doc(hidden)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeTextTargetModifierDebugReport {
+    pub target_id: u32,
+    pub resolved: bool,
+    pub has_text_component: bool,
+}
+
+pub(crate) fn static_text_target_debug_report(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    text_local: usize,
+) -> Vec<RuntimeTextTargetModifierDebugReport> {
+    let Some(text) =
+        component_for_local(graph, text_local).filter(|component| component.type_name == "Text")
+    else {
+        return Vec::new();
+    };
+    text.children
+        .iter()
+        .copied()
+        .filter(|local| type_for_local(graph, *local) == Some("TextModifierGroup"))
+        .filter_map(|group_local| component_for_local(graph, group_local))
+        .flat_map(|group| {
+            group.children.iter().copied().filter_map(move |local| {
+                let type_name = type_for_local(graph, local)?;
+                if !nuxie_schema::definition_by_name(type_name)
+                    .is_some_and(|definition| definition.is_a("TextTargetModifier"))
+                {
+                    return None;
+                }
+                let (target_id, resolved) = if type_name == "TextFollowPathModifier" {
+                    let target =
+                        StaticTextFollowPathModifier::from_graph(runtime, graph, local).ok()?;
+                    (target.target_id, target.resolved_transform_local.is_some())
+                } else {
+                    let target =
+                        StaticTextTargetModifier::from_graph(runtime, graph, local, group.local_id)
+                            .ok()?;
+                    (target.target_id, target.resolved_transform_local.is_some())
+                };
+                Some(RuntimeTextTargetModifierDebugReport {
+                    target_id,
+                    resolved,
+                    has_text_component: true,
+                })
+            })
+        })
+        .collect()
 }
 
 #[doc(hidden)]
@@ -149,10 +206,48 @@ pub(crate) fn static_text_layout_debug_report(
                 range_count: group.ranges.len(),
                 coverage,
                 selected_runs,
+                modifier_locals: group
+                    .modifiers
+                    .iter()
+                    .map(StaticTextModifier::local_id)
+                    .collect(),
+                shape_modifier_indices: group.shape_modifier_indices.clone(),
+                targets: group
+                    .modifiers
+                    .iter()
+                    .filter_map(|modifier| match modifier {
+                        StaticTextModifier::Target(target) => {
+                            Some(RuntimeTextTargetModifierDebugReport {
+                                target_id: target.target_id,
+                                resolved: target.resolved_transform_local.is_some(),
+                                has_text_component: true,
+                            })
+                        }
+                        StaticTextModifier::FollowPath(target) => {
+                            Some(RuntimeTextTargetModifierDebugReport {
+                                target_id: target.target_id,
+                                resolved: target.resolved_transform_local.is_some(),
+                                has_text_component: true,
+                            })
+                        }
+                        _ => None,
+                    })
+                    .collect(),
             })
         })
         .collect::<Option<Vec<_>>>()?;
     let Some(layout) = layout else {
+        let style_features = slice
+            .styles
+            .iter()
+            .map(|style| {
+                style
+                    .features
+                    .iter()
+                    .map(|feature| feature.option(instance))
+                    .collect()
+            })
+            .collect();
         return Some(RuntimeTextLayoutDebugReport {
             text,
             paragraph_count: 0,
@@ -161,6 +256,8 @@ pub(crate) fn static_text_layout_debug_report(
             glyph_lookup_counts: Vec::new(),
             font_size: None,
             local_transform: Mat2D::IDENTITY.0,
+            style_features,
+            line_glyph_variations: Vec::new(),
             modifier_groups,
         });
     };
@@ -176,6 +273,17 @@ pub(crate) fn static_text_layout_debug_report(
         .flat_map(|line| &line.glyphs)
         .next()
         .map(|glyph| glyph.glyph.scale * TEXT_SHAPE_SCALE_F32);
+    let style_features = slice
+        .styles
+        .iter()
+        .map(|style| {
+            style
+                .features
+                .iter()
+                .map(|feature| feature.option(instance))
+                .collect()
+        })
+        .collect();
     Some(RuntimeTextLayoutDebugReport {
         paragraph_count: (!text.is_empty())
             .then(|| text.split('\n').count())
@@ -194,6 +302,17 @@ pub(crate) fn static_text_layout_debug_report(
         glyph_lookup_counts,
         font_size,
         local_transform: layout.local_transform.0,
+        style_features,
+        line_glyph_variations: layout
+            .lines
+            .iter()
+            .map(|line| {
+                line.glyphs
+                    .iter()
+                    .map(|glyph| glyph.glyph.variations.clone())
+                    .collect()
+            })
+            .collect(),
         modifier_groups,
         text,
     })
@@ -418,6 +537,25 @@ pub(crate) fn runtime_text_shape_paint_commands(
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     layout_constraint: Option<RuntimeTextLayoutConstraint>,
 ) -> Result<Vec<RuntimeShapePaintCommand>> {
+    Ok(runtime_text_draw_data(
+        runtime,
+        instance,
+        graph,
+        text_local,
+        layout_bounds,
+        layout_constraint,
+    )?
+    .commands)
+}
+
+pub(crate) fn runtime_text_draw_data(
+    runtime: &RuntimeFile,
+    instance: &ArtboardInstance,
+    graph: &ArtboardGraph,
+    text_local: usize,
+    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    layout_constraint: Option<RuntimeTextLayoutConstraint>,
+) -> Result<RuntimeTextDrawData> {
     let slice = StaticTextSlice::from_graph(runtime, graph, text_local)?;
     let render_opacity = instance
         .component(text_local)
@@ -430,8 +568,9 @@ pub(crate) fn runtime_text_shape_paint_commands(
         .path_buckets_by_style
         .iter()
         .all(|buckets| buckets.is_empty())
+        && render_data.color_glyphs.is_empty()
     {
-        return Ok(Vec::new());
+        return Ok(RuntimeTextDrawData::default());
     }
     let shape_world = text_world.multiply(render_data.local_transform);
     // C++ text draw isolates the glyph path transform even when clipping
@@ -464,7 +603,9 @@ pub(crate) fn runtime_text_shape_paint_commands(
         for paint in &container.paints {
             if let Some((bucket_index, path_bucket)) = opaque_bucket {
                 let mut path_commands = path_bucket.commands.clone();
-                if paint.path_kind == Some(ShapePaintPathKind::World) {
+                if runtime_live_shape_paint_path_kind(instance, paint)
+                    == Some(RuntimeShapePaintPathKind::World)
+                {
                     transform_path_commands(&mut path_commands, shape_world);
                 }
                 if let Some(mut command) = runtime_shape_paint_command(
@@ -496,7 +637,9 @@ pub(crate) fn runtime_text_shape_paint_commands(
                 .enumerate()
             {
                 let mut path_commands = path_bucket.commands.clone();
-                if paint.path_kind == Some(ShapePaintPathKind::World) {
+                if runtime_live_shape_paint_path_kind(instance, paint)
+                    == Some(RuntimeShapePaintPathKind::World)
+                {
                     transform_path_commands(&mut path_commands, shape_world);
                 }
                 let Some(mut command) = runtime_shape_paint_command(
@@ -527,7 +670,12 @@ pub(crate) fn runtime_text_shape_paint_commands(
             }
         }
     }
-    Ok(commands)
+    Ok(RuntimeTextDrawData {
+        commands,
+        color_glyphs: render_data.color_glyphs,
+        order: render_data.order,
+        shape_world,
+    })
 }
 
 pub(crate) fn runtime_text_input_shape_paint_commands(
@@ -676,6 +824,7 @@ struct StaticTextStyle<'a> {
     font_asset_id: Option<u32>,
     font_bytes: Option<&'a [u8]>,
     variations: Vec<StaticTextVariation>,
+    features: Vec<StaticTextStyleFeature>,
 }
 
 include!("text/text_style_axis.rs");
@@ -730,7 +879,43 @@ struct StaticVerticalTrim {
 #[derive(Debug, Clone)]
 struct StaticTextRenderData {
     path_buckets_by_style: Vec<Vec<StaticTextPathBucket>>,
+    color_glyphs: Vec<RuntimeIntegratedColorGlyphCommand>,
+    order: Vec<RuntimeTextDrawOrder>,
     local_transform: Mat2D,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeTextDrawData {
+    pub(crate) commands: Vec<RuntimeShapePaintCommand>,
+    pub(crate) color_glyphs: Vec<RuntimeIntegratedColorGlyphCommand>,
+    pub(crate) order: Vec<RuntimeTextDrawOrder>,
+    pub(crate) shape_world: Mat2D,
+}
+
+impl Default for RuntimeTextDrawData {
+    fn default() -> Self {
+        Self {
+            commands: Vec::new(),
+            color_glyphs: Vec::new(),
+            order: Vec::new(),
+            shape_world: Mat2D::IDENTITY,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimeTextDrawOrder {
+    Style(usize),
+    ColorGlyph(usize),
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeIntegratedColorGlyphCommand {
+    pub(crate) font_identity: usize,
+    pub(crate) glyph_id: u32,
+    pub(crate) transform: Mat2D,
+    pub(crate) opacity: f32,
+    pub(crate) layers: Vec<RuntimeColorGlyphLayer>,
 }
 
 include!("text/fully_shaped_text.rs");
@@ -1547,8 +1732,13 @@ impl<'a> StaticTextSlice<'a> {
                         | "TextValueRun"
                         | "TextStylePaint"
                         | "TextStyleAxis"
+                        | "TextStyleFeature"
                         | "TextModifierGroup"
                         | "TextModifierRange"
+                        | "TextModifier"
+                        | "TextShapeModifier"
+                        | "TextVariationModifier"
+                        | "TextTargetModifier"
                         | "Solo"
                         | "CubicInterpolatorComponent"
                         | "Shape"
@@ -1679,17 +1869,42 @@ impl<'a> StaticTextSlice<'a> {
                         | "TextInputText"
                         | "TextInputSelection"
                         | "TextInputSelectedText"
-                        | "TextShapeModifier"
                 )
-            ) || static_text_modifier_is_unsupported(object.type_name)
-                || static_text_style_feature_is_unsupported(object.type_name)
-                || static_text_variation_modifier_is_unsupported(object.type_name)
-                || static_text_target_modifier_is_unsupported(object.type_name)
+            )
         }) {
             bail!(
                 "static text subset does not support {} global {}",
                 object.type_name.unwrap_or("unknown"),
                 object.global_id
+            );
+        }
+
+        if let Some(component) = graph.components.iter().find(|component| {
+            definition_by_name(component.type_name)
+                .is_some_and(|definition| definition.is_a("TextModifier"))
+                && component
+                    .parent_local
+                    .and_then(|parent| type_for_local(graph, parent))
+                    != Some("TextModifierGroup")
+        }) {
+            bail!(
+                "{} local {} requires a direct TextModifierGroup parent",
+                component.type_name,
+                component.local_id
+            );
+        }
+        if let Some(component) = graph.components.iter().find(|component| {
+            component.type_name == "TextStyleFeature"
+                && !matches!(
+                    component
+                        .parent_local
+                        .and_then(|parent| type_for_local(graph, parent)),
+                    Some("TextStyle" | "TextStylePaint")
+                )
+        }) {
+            bail!(
+                "TextStyleFeature local {} requires a direct TextStyle parent",
+                component.local_id
             );
         }
 
@@ -1823,15 +2038,6 @@ impl<'a> StaticTextSlice<'a> {
         {
             bail!("TextInput subset currently supports exactly one TextStyle child");
         }
-        if text_input_component
-            .children
-            .iter()
-            .copied()
-            .any(|local| static_text_style_feature_is_unsupported(child_type(local)))
-        {
-            bail!("TextInput subset does not support style features");
-        }
-
         let text_input_global = global_for_local(graph, text_input_local)?;
         let style = StaticTextStyle::from_graph(runtime, graph, style_local)?;
         Ok(Self {
@@ -1919,6 +2125,7 @@ impl<'a> StaticTextSlice<'a> {
             .shaper(&harf_font)
             .instance(shaper_instance.as_ref())
             .build();
+        let features = base_style.harf_features(instance);
 
         let skrifa_font =
             SkrifaFontRef::new(font_bytes).context("failed to parse font for outlines")?;
@@ -1931,6 +2138,7 @@ impl<'a> StaticTextSlice<'a> {
             &text,
             &shaper,
             disable_legacy_kern,
+            &features,
         )?;
         let scaled_font_size = font_size * font_scale;
         let scale = scaled_font_size / TEXT_SHAPE_SCALE_F32;
@@ -1944,6 +2152,7 @@ impl<'a> StaticTextSlice<'a> {
             &text,
             &shaper,
             disable_legacy_kern,
+            &features,
             scale,
             letter_spacing,
             text_input_bidi,
@@ -2049,7 +2258,12 @@ impl<'a> StaticTextSlice<'a> {
                     ellipsis_style,
                     font_scale,
                 )?;
-                let base_glyphs = shape_text_glyphs(&shaper, line.text, disable_legacy_kern);
+                let base_glyphs = shape_text_glyphs_with_features(
+                    &shaper,
+                    line.text,
+                    disable_legacy_kern,
+                    &features,
+                );
                 let line_end = self.first_static_wrapped_line_end(
                     runtime,
                     instance,
@@ -2187,6 +2401,8 @@ impl<'a> StaticTextSlice<'a> {
         if resolved_runs.iter().all(|run| run.text.is_empty()) {
             return Ok(StaticTextRenderData {
                 path_buckets_by_style: vec![Vec::new(); self.styles.len()],
+                color_glyphs: Vec::new(),
+                order: Vec::new(),
                 local_transform: Mat2D::IDENTITY,
             });
         }
@@ -2201,10 +2417,15 @@ impl<'a> StaticTextSlice<'a> {
         else {
             return Ok(StaticTextRenderData {
                 path_buckets_by_style: vec![Vec::new(); self.styles.len()],
+                color_glyphs: Vec::new(),
+                order: Vec::new(),
                 local_transform: Mat2D::IDENTITY,
             });
         };
         let mut commands_by_style = vec![Vec::new(); self.styles.len()];
+        let mut color_glyphs = Vec::new();
+        let mut order = Vec::new();
+        let mut established_styles = vec![false; self.styles.len()];
         for line in &layout.lines {
             for positioned in &line.glyphs {
                 let glyph = &positioned.glyph;
@@ -2219,10 +2440,40 @@ impl<'a> StaticTextSlice<'a> {
                 let glyph_id = GlyphId::new(glyph.glyph_id);
                 let style = &self.styles[glyph.style_index];
                 if let Some(style_font_bytes) = style.font_bytes(runtime, instance) {
+                    if runtime_classify_color_glyph(style_font_bytes, glyph.glyph_id)
+                        != RuntimeColorGlyphClassification::Monochrome
+                    {
+                        let layers = runtime_extract_color_glyph_layers(
+                            style_font_bytes,
+                            glyph.glyph_id,
+                            style.foreground_color(instance),
+                        );
+                        if !layers.is_empty() {
+                            let color_index = color_glyphs.len();
+                            color_glyphs.push(RuntimeIntegratedColorGlyphCommand {
+                                font_identity: style_font_bytes.as_ptr() as usize,
+                                glyph_id: glyph.glyph_id,
+                                transform: runtime_positioned_color_glyph_transform(
+                                    positioned,
+                                    line.baseline,
+                                ),
+                                opacity: positioned.modifier_opacity,
+                                layers,
+                            });
+                            order.push(RuntimeTextDrawOrder::ColorGlyph(color_index));
+                        }
+                        continue;
+                    }
                     let style_font = SkrifaFontRef::new(style_font_bytes)
                         .context("failed to parse font for outlines")?;
                     let outlines = style_font.outline_glyphs();
-                    let skrifa_variations = style.skrifa_variations(instance);
+                    let skrifa_variations = glyph
+                        .variations
+                        .iter()
+                        .map(|(tag, value)| {
+                            VariationSetting::new(SkrifaTag::from_u32(*tag), *value)
+                        })
+                        .collect::<Vec<_>>();
                     let location = style_font
                         .axes()
                         .location(skrifa_variations.iter().copied());
@@ -2255,6 +2506,12 @@ impl<'a> StaticTextSlice<'a> {
                             positioned.modifier_opacity,
                             pen.commands,
                         );
+                        if positioned.modifier_opacity > 0.0
+                            && !established_styles[glyph.style_index]
+                        {
+                            established_styles[glyph.style_index] = true;
+                            order.push(RuntimeTextDrawOrder::Style(style.local_id));
+                        }
                     }
                 }
             }
@@ -2262,6 +2519,8 @@ impl<'a> StaticTextSlice<'a> {
 
         Ok(StaticTextRenderData {
             path_buckets_by_style: commands_by_style,
+            color_glyphs,
+            order,
             local_transform: layout.local_transform,
         })
     }
@@ -2300,6 +2559,7 @@ impl<'a> StaticTextSlice<'a> {
             .shaper(&harf_font)
             .instance(shaper_instance.as_ref())
             .build();
+        let features = base_style.harf_features(instance);
 
         let skrifa_font =
             SkrifaFontRef::new(font_bytes).context("failed to parse font for metrics")?;
@@ -2313,6 +2573,7 @@ impl<'a> StaticTextSlice<'a> {
             &text,
             &shaper,
             disable_legacy_kern,
+            &features,
         )?;
         let scaled_font_size = font_size * font_scale;
         let line_metrics =
@@ -2323,7 +2584,12 @@ impl<'a> StaticTextSlice<'a> {
             .iter()
             .filter(|line| !line.text.is_empty())
             .map(|line| {
-                let glyphs = shape_text_glyphs(&shaper, line.text, disable_legacy_kern);
+                let glyphs = shape_text_glyphs_with_features(
+                    &shaper,
+                    line.text,
+                    disable_legacy_kern,
+                    &features,
+                );
                 text_glyph_width(&glyphs, scale, letter_spacing)
             })
             .fold(0.0f32, f32::max);
@@ -2436,6 +2702,7 @@ impl<'a> StaticTextSlice<'a> {
             .shaper(&harf_font)
             .instance(shaper_instance.as_ref())
             .build();
+        let features = base_style.harf_features(instance);
 
         let skrifa_font =
             SkrifaFontRef::new(font_bytes).context("failed to parse font for metrics")?;
@@ -2448,6 +2715,7 @@ impl<'a> StaticTextSlice<'a> {
             &text,
             &shaper,
             disable_legacy_kern,
+            &features,
         )?;
         let scaled_font_size = font_size * font_scale;
         let scale = scaled_font_size / TEXT_SHAPE_SCALE_F32;
@@ -2459,6 +2727,7 @@ impl<'a> StaticTextSlice<'a> {
             &text,
             &shaper,
             disable_legacy_kern,
+            &features,
             scale,
             letter_spacing,
             self.kind == StaticTextKind::TextInput && text_has_rtl(&text),
@@ -2946,6 +3215,7 @@ impl<'a> StaticTextSlice<'a> {
         text: &str,
         shaper: &harfrust::Shaper<'_>,
         disable_legacy_kern: bool,
+        features: &[Feature],
     ) -> Result<f32> {
         // Ported from C++ src/text/text.cpp::Text::fitFontScale for the
         // current static text subset.
@@ -2962,6 +3232,7 @@ impl<'a> StaticTextSlice<'a> {
             text,
             shaper,
             disable_legacy_kern,
+            features,
             max_size,
         )
     }
@@ -2995,6 +3266,7 @@ impl<'a> StaticTextSlice<'a> {
         text: &str,
         shaper: &harfrust::Shaper<'_>,
         disable_legacy_kern: bool,
+        features: &[Feature],
         max_size: f32,
     ) -> Result<f32> {
         let sizing = self.effective_sizing(runtime, instance, layout_constraint)?;
@@ -3018,6 +3290,7 @@ impl<'a> StaticTextSlice<'a> {
                 text,
                 shaper,
                 disable_legacy_kern,
+                features,
                 scale,
                 letter_spacing,
                 self.kind == StaticTextKind::TextInput && text_has_rtl(text),
@@ -3069,6 +3342,22 @@ impl<'a> StaticTextSlice<'a> {
         runs: &[StaticResolvedRun],
         font_scale: f32,
     ) -> Result<Vec<StyledTextGlyph>> {
+        let full_text = runs.iter().map(|run| run.text.as_str()).collect::<String>();
+        let source_lines = split_static_text_lines(&full_text);
+        let character_count = full_text.chars().count();
+        let modifier_coverages = self
+            .modifiers
+            .iter()
+            .map(|group| {
+                if group.has_shape_modifiers() {
+                    group.coverage_by_character(runtime, instance, &full_text, runs, &source_lines)
+                } else {
+                    // Paint-only modifier coverage must not fracture shaping
+                    // context. C++ only splits runs for shape modifiers.
+                    Ok(vec![0.0; character_count])
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
         let mut glyphs = Vec::new();
         for run in runs {
             let style_index = self.style_index_for_local(run.style_local)?;
@@ -3077,14 +3366,46 @@ impl<'a> StaticTextSlice<'a> {
                 // resulting advances when a soft wrap slices the glyph run.
                 // In particular, a line-ending glyph retains kerning against
                 // the first glyph on the next visual line.
-                glyphs.extend(self.styled_text_glyphs_for_style(
-                    runtime,
-                    instance,
-                    paragraph.text,
-                    run.char_start + paragraph.char_start,
-                    style_index,
-                    font_scale,
-                )?);
+                let paragraph_start = run.char_start + paragraph.char_start;
+                let chars = paragraph.text.char_indices().collect::<Vec<_>>();
+                let mut segment_start = 0usize;
+                while segment_start < chars.len() {
+                    let global_start = paragraph_start + segment_start;
+                    let strengths = modifier_coverages
+                        .iter()
+                        .map(|coverage| coverage.get(global_start).copied().unwrap_or(0.0))
+                        .collect::<Vec<_>>();
+                    let mut segment_end = segment_start + 1;
+                    while segment_end < chars.len()
+                        && modifier_coverages
+                            .iter()
+                            .zip(&strengths)
+                            .all(|(coverage, strength)| {
+                                coverage
+                                    .get(paragraph_start + segment_end)
+                                    .copied()
+                                    .unwrap_or(0.0)
+                                    == *strength
+                            })
+                    {
+                        segment_end += 1;
+                    }
+                    let byte_start = chars[segment_start].0;
+                    let byte_end = chars
+                        .get(segment_end)
+                        .map(|value| value.0)
+                        .unwrap_or(paragraph.text.len());
+                    glyphs.extend(self.styled_text_glyphs_for_style_with_strengths(
+                        runtime,
+                        instance,
+                        &paragraph.text[byte_start..byte_end],
+                        global_start,
+                        style_index,
+                        font_scale,
+                        &strengths,
+                    )?);
+                    segment_start = segment_end;
+                }
             }
         }
         Ok(glyphs)
@@ -3151,6 +3472,27 @@ impl<'a> StaticTextSlice<'a> {
         style_index: usize,
         font_scale: f32,
     ) -> Result<Vec<StyledTextGlyph>> {
+        self.styled_text_glyphs_for_style_with_strengths(
+            runtime,
+            instance,
+            text,
+            char_start,
+            style_index,
+            font_scale,
+            &[],
+        )
+    }
+
+    fn styled_text_glyphs_for_style_with_strengths(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        text: &str,
+        char_start: usize,
+        style_index: usize,
+        font_scale: f32,
+        strengths: &[f32],
+    ) -> Result<Vec<StyledTextGlyph>> {
         let style = self
             .styles
             .get(style_index)
@@ -3161,7 +3503,33 @@ impl<'a> StaticTextSlice<'a> {
         let font_size = self.style_font_size(runtime, instance, style)?;
         let scale = font_size * font_scale / TEXT_SHAPE_SCALE_F32;
         let letter_spacing = self.style_letter_spacing(runtime, instance, style);
-        let raw_glyphs = shape_text_glyphs_for_style(font_bytes, style, instance, text)?;
+        let skrifa_font =
+            SkrifaFontRef::new(font_bytes).context("failed to parse localized variable font")?;
+        let mut localized = BTreeMap::<u32, f32>::new();
+        let mut effective = style
+            .variation_values(instance)
+            .into_iter()
+            .collect::<BTreeMap<_, _>>();
+        for (group, strength) in self.modifiers.iter().zip(strengths) {
+            if *strength == 0.0 || !group.has_shape_modifiers() {
+                continue;
+            }
+            let group_variations =
+                group.variation_map(instance, &skrifa_font, *strength, &effective);
+            effective.extend(group_variations.iter().map(|(tag, value)| (*tag, *value)));
+            localized.extend(group_variations);
+        }
+        let raw_glyphs = shape_text_glyphs_for_style_with_variations(
+            font_bytes, style, instance, text, &localized,
+        )?;
+        let mut variations = style.variation_values(instance);
+        for (tag, value) in localized {
+            if let Some(existing) = variations.iter_mut().find(|item| item.0 == tag) {
+                existing.1 = value;
+            } else {
+                variations.push((tag, value));
+            }
+        }
         Ok(raw_glyphs
             .iter()
             .enumerate()
@@ -3173,6 +3541,7 @@ impl<'a> StaticTextSlice<'a> {
                 advance: glyph.advance * scale + letter_spacing,
                 scale,
                 rtl: false,
+                variations: variations.clone(),
             })
             .collect())
     }
@@ -3211,12 +3580,14 @@ impl<'a> StaticTextSlice<'a> {
             .shaper(&harf_font)
             .instance(shaper_instance.as_ref())
             .build();
+        let features = style.harf_features(instance);
         let skrifa_font =
             SkrifaFontRef::new(font_bytes).context("failed to parse font for metrics")?;
-        let raw_glyphs = shape_bidi_text_glyphs(
+        let raw_glyphs = shape_bidi_text_glyphs_with_features(
             &shaper,
             text,
             disable_legacy_kern_for_advances(&skrifa_font),
+            &features,
         );
         let bidi = unicode_bidi::BidiInfo::new(text, None);
         Ok(raw_glyphs
@@ -3233,6 +3604,7 @@ impl<'a> StaticTextSlice<'a> {
                     .levels
                     .get(glyph.cluster as usize)
                     .is_some_and(|level| level.is_rtl()),
+                variations: style.variation_values(instance),
             })
             .collect())
     }
@@ -3384,6 +3756,7 @@ impl<'a> StaticTextSlice<'a> {
                 .shaper(&harf_font)
                 .instance(shaper_instance.as_ref())
                 .build();
+            let features = base_style.harf_features(instance);
             let skrifa_font =
                 SkrifaFontRef::new(font_bytes).context("failed to parse font for clip layout")?;
             let disable_legacy_kern = disable_legacy_kern_for_advances(&skrifa_font);
@@ -3395,6 +3768,7 @@ impl<'a> StaticTextSlice<'a> {
                 &text,
                 &shaper,
                 disable_legacy_kern,
+                &features,
             )?;
             let scale = self.style_font_size(runtime, instance, base_style)? * font_scale
                 / TEXT_SHAPE_SCALE_F32;
@@ -3405,6 +3779,7 @@ impl<'a> StaticTextSlice<'a> {
                 &text,
                 &shaper,
                 disable_legacy_kern,
+                &features,
                 scale,
                 self.letter_spacing(runtime, instance),
                 self.kind == StaticTextKind::TextInput && text_has_rtl(&text),
@@ -3670,6 +4045,7 @@ impl<'a> StaticTextSlice<'a> {
         text: &'text str,
         shaper: &harfrust::Shaper<'_>,
         disable_legacy_kern: bool,
+        features: &[Feature],
         scale: f32,
         letter_spacing: f32,
         bidi: bool,
@@ -3706,9 +4082,19 @@ impl<'a> StaticTextSlice<'a> {
             let mut soft_wrap_skipped_start = None;
             while !remaining.is_empty() {
                 let glyphs = if bidi {
-                    shape_bidi_text_glyphs(shaper, remaining, disable_legacy_kern)
+                    shape_bidi_text_glyphs_with_features(
+                        shaper,
+                        remaining,
+                        disable_legacy_kern,
+                        features,
+                    )
                 } else {
-                    shape_text_glyphs(shaper, remaining, disable_legacy_kern)
+                    shape_text_glyphs_with_features(
+                        shaper,
+                        remaining,
+                        disable_legacy_kern,
+                        features,
+                    )
                 };
                 let glyph_end = self.first_static_wrapped_line_end(
                     runtime,
@@ -4019,7 +4405,9 @@ impl<'a> StaticTextSlice<'a> {
         for path_bucket in order_opacity_buckets_like_cpp(path_buckets) {
             for paint in &container.paints {
                 let mut path_commands = path_bucket.commands.clone();
-                if paint.path_kind == Some(ShapePaintPathKind::World) {
+                if runtime_live_shape_paint_path_kind(instance, paint)
+                    == Some(RuntimeShapePaintPathKind::World)
+                {
                     transform_path_commands(&mut path_commands, shape_world);
                 }
                 let Some(mut command) = runtime_shape_paint_command(
@@ -4048,7 +4436,32 @@ impl<'a> StaticTextSlice<'a> {
 }
 
 impl<'a> StaticTextStyle<'a> {
+    fn foreground_color(&self, instance: &ArtboardInstance) -> u32 {
+        self.container
+            .into_iter()
+            .flat_map(|container| container.paints.iter())
+            .find(|paint| {
+                paint.paint_type == ShapePaintKind::Fill
+                    && matches!(
+                        paint.paint_state,
+                        Some(ShapePaintStateNode::SolidColor { .. })
+                    )
+            })
+            .and_then(|paint| match paint.paint_state {
+                Some(ShapePaintStateNode::SolidColor { color }) => Some(
+                    paint
+                        .mutator_local
+                        .zip(solid_color_value_property_key())
+                        .and_then(|(local, key)| instance.color_property(local, key))
+                        .unwrap_or(color),
+                ),
+                _ => None,
+            })
+            .unwrap_or(0xff00_0000)
+    }
+
     fn variation_values(&self, instance: &ArtboardInstance) -> Vec<(u32, f32)> {
+        let tag_key = property_key_for_name("TextStyleAxis", "tag");
         let axis_value_key = property_key_for_name("TextStyleAxis", "axisValue");
         self.variations
             .iter()
@@ -4056,7 +4469,11 @@ impl<'a> StaticTextStyle<'a> {
                 let value = axis_value_key
                     .and_then(|key| instance.double_property(variation.axis_local, key))
                     .unwrap_or(variation.authored_value);
-                (variation.tag, value)
+                let tag = tag_key
+                    .and_then(|key| instance.uint_property(variation.axis_local, key))
+                    .map(|value| value as u32)
+                    .unwrap_or(variation.tag);
+                (tag, value)
             })
             .collect()
     }
@@ -4071,6 +4488,14 @@ impl<'a> StaticTextStyle<'a> {
         self.variation_values(instance)
             .into_iter()
             .map(|(tag, value)| (HarfTag::from_u32(tag), value))
+            .collect()
+    }
+
+    fn harf_features(&self, instance: &ArtboardInstance) -> Vec<Feature> {
+        self.features
+            .iter()
+            .copied()
+            .map(|feature| feature.harf_feature(instance))
             .collect()
     }
 
@@ -4179,6 +4604,13 @@ impl<'a> StaticTextStyle<'a> {
                 authored_value: axis_value,
             });
         }
+        let features = style_component
+            .children
+            .iter()
+            .copied()
+            .filter(|local| type_for_local(graph, *local) == Some("TextStyleFeature"))
+            .map(|local| StaticTextStyleFeature::from_graph(runtime, graph, local))
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
             local_id: style_local,
@@ -4188,6 +4620,7 @@ impl<'a> StaticTextStyle<'a> {
             font_asset_id,
             font_bytes,
             variations,
+            features,
         })
     }
 
@@ -4204,6 +4637,24 @@ impl<'a> StaticTextStyle<'a> {
                 .and_then(|asset_id| instance.external_font_asset_bytes(asset_id))
         })
     }
+}
+
+fn runtime_positioned_color_glyph_transform(
+    positioned: &StaticPositionedTextGlyph,
+    baseline: f32,
+) -> Mat2D {
+    let size = positioned.glyph.scale * TEXT_SHAPE_SCALE_F32;
+    let base = Mat2D([size, 0.0, 0.0, size, positioned.x, baseline]);
+    if positioned.modifier_transform == Mat2D::IDENTITY {
+        return base;
+    }
+    let center_x = positioned.x + positioned.glyph.advance * 0.5;
+    let center = Mat2D([1.0, 0.0, 0.0, 1.0, center_x, baseline]);
+    let inverse_center = Mat2D([1.0, 0.0, 0.0, 1.0, -center_x, -baseline]);
+    center
+        .multiply(positioned.modifier_transform)
+        .multiply(inverse_center)
+        .multiply(base)
 }
 
 // Mirrors the static coverage/translation subset from C++
@@ -4961,6 +5412,7 @@ mod tests {
                 advance: 650.0,
                 scale: 1.0,
                 rtl: false,
+                variations: Vec::new(),
             },
             StyledTextGlyph {
                 glyph_id: 2,
@@ -4970,6 +5422,7 @@ mod tests {
                 advance: 1_194.0,
                 scale: 1.0,
                 rtl: false,
+                variations: Vec::new(),
             },
         ];
         let first_line = StaticTextLine {
@@ -5004,6 +5457,7 @@ mod tests {
                     advance: 1.0,
                     scale: 1.0,
                     rtl: false,
+                    variations: Vec::new(),
                 },
                 x: char_index as f32,
                 modifier_transform: Mat2D::IDENTITY,
@@ -5046,6 +5500,7 @@ mod tests {
                 advance,
                 scale: 1.0,
                 rtl: false,
+                variations: Vec::new(),
             },
             x,
             modifier_transform: Mat2D::IDENTITY,
@@ -5095,6 +5550,7 @@ mod tests {
                 advance,
                 scale: 1.0,
                 rtl: false,
+                variations: Vec::new(),
             },
             x,
             modifier_transform: Mat2D::IDENTITY,
@@ -5317,5 +5773,263 @@ mod tests {
                 "{target_type_name}.value should reach the runtime keyframe binding path"
             );
         }
+    }
+
+    fn fl_e8_fixture(bytes: &[u8]) -> (RuntimeFile, GraphFile, ArtboardInstance) {
+        let runtime = nuxie_binary::read_runtime_file(bytes).expect("FL-E8 fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("FL-E8 fixture graph builds");
+        let graph = graphs.artboards.first().expect("FL-E8 fixture artboard");
+        let instance =
+            ArtboardInstance::from_graph(&runtime, graph).expect("FL-E8 instance builds");
+        (runtime, graphs, instance)
+    }
+
+    // R-ST-OWNER: focused occurrence/source ratchets for the five WP1 owners.
+    #[test]
+    fn d_st_struct_registers_generic_modifiers_and_shape_subtype_indices_in_authored_order() {
+        let (runtime, graphs, instance) = fl_e8_fixture(include_bytes!(
+            "../../../fixtures/fl-e8/text_variation_modifier.riv"
+        ));
+        let graph = graphs.artboards.first().unwrap();
+        let report = static_text_layout_debug_report(&runtime, graph, &instance, 1, None).unwrap();
+        assert_eq!(report.modifier_groups.len(), 1);
+        assert_eq!(report.modifier_groups[0].modifier_locals, [9, 10]);
+        assert_eq!(report.modifier_groups[0].shape_modifier_indices, [0, 1]);
+        assert!(
+            report.modifier_groups[0]
+                .coverage
+                .iter()
+                .any(|value| *value == 0.0)
+        );
+        assert!(
+            report.modifier_groups[0]
+                .coverage
+                .iter()
+                .any(|value| *value != 0.0)
+        );
+    }
+
+    #[test]
+    fn d_st_feature_preserves_order_defaults_duplicates_and_live_callback_inaction() {
+        let (runtime, graphs, mut instance) = fl_e8_fixture(include_bytes!(
+            "../../../fixtures/fl-e8/text_style_feature.riv"
+        ));
+        let graph = graphs.artboards.first().unwrap();
+        let before = static_text_layout_debug_report(&runtime, graph, &instance, 1, None).unwrap();
+        let liga = u32::from_be_bytes(*b"liga");
+        assert_eq!(before.style_features[0], [(liga, 1), (liga, 0), (liga, 1)]);
+        let slice = StaticTextSlice::from_graph(&runtime, graph, 1).unwrap();
+        let style = &slice.styles[0];
+        let feature_local = style.features.last().unwrap().local_id;
+        assert!(instance.set_uint_property(
+            feature_local,
+            property_key_for_name("TextStyleFeature", "featureValue").unwrap(),
+            0,
+        ));
+        let after = static_text_layout_debug_report(&runtime, graph, &instance, 1, None).unwrap();
+        assert_eq!(after.style_features, before.style_features);
+        assert_eq!(after.line_glyph_ids, before.line_glyph_ids);
+
+        let font_bytes = style.font_bytes(&runtime, &instance).unwrap().to_vec();
+        assert!(instance.debug_set_text_style_font_bytes(style.local_id, font_bytes));
+        let reshaped =
+            static_text_layout_debug_report(&runtime, graph, &instance, 1, None).unwrap();
+        assert_eq!(
+            reshaped.style_features[0],
+            [(liga, 1), (liga, 0), (liga, 0)]
+        );
+        assert_ne!(reshaped.line_glyph_ids, before.line_glyph_ids);
+    }
+
+    #[test]
+    fn d_st_variation_splits_coverage_and_applies_duplicate_unclamped_interpolation() {
+        let (runtime, graphs, mut instance) = fl_e8_fixture(include_bytes!(
+            "../../../fixtures/fl-e8/text_variation_modifier.riv"
+        ));
+        let graph = graphs.artboards.first().unwrap();
+        let before = static_text_layout_debug_report(&runtime, graph, &instance, 1, None).unwrap();
+        let untouched = ArtboardInstance::from_graph(&runtime, graph).unwrap();
+        let wght = u32::from_be_bytes(*b"wght");
+        assert!(before.line_glyph_variations.iter().flatten().any(|axes| {
+            axes.iter()
+                .any(|(tag, value)| *tag == wght && value.is_finite())
+        }));
+        assert!(instance.set_double_property(
+            10,
+            property_key_for_name("TextVariationModifier", "axisValue").unwrap(),
+            900.0,
+        ));
+        let after = static_text_layout_debug_report(&runtime, graph, &instance, 1, None).unwrap();
+        assert_ne!(after.line_glyph_variations, before.line_glyph_variations);
+        let untouched_report =
+            static_text_layout_debug_report(&runtime, graph, &untouched, 1, None).unwrap();
+        assert_eq!(
+            untouched_report.line_glyph_variations,
+            before.line_glyph_variations
+        );
+        let mut slice = StaticTextSlice::from_graph(&runtime, graph, 1).unwrap();
+        let group = slice.modifiers.remove(0);
+        let style = slice.base_style().unwrap();
+        let font = SkrifaFontRef::new(style.font_bytes(&runtime, &instance).unwrap()).unwrap();
+        let inherited = BTreeMap::from([(wght, 400.0)]);
+        assert_eq!(
+            group
+                .variation_map(&untouched, &font, 1.25, &inherited)
+                .get(&wght),
+            Some(&181.25)
+        );
+        assert_eq!(
+            group
+                .variation_map(&untouched, &font, -0.5, &inherited)
+                .get(&wght),
+            Some(&225.0)
+        );
+        assert_eq!(
+            group
+                .variation_map(&untouched, &font, 0.0, &inherited)
+                .get(&wght),
+            Some(&400.0)
+        );
+        let modifier_dirt = instance.debug_component_dirt(10);
+        let group_dirt = instance.debug_component_dirt(7);
+        let text_dirt = instance.debug_component_dirt(1);
+        assert!(instance.set_uint_property(
+            10,
+            property_key_for_name("TextVariationModifier", "axisTag").unwrap(),
+            u64::from(u32::from_be_bytes(*b"wdth")),
+        ));
+        assert_eq!(instance.debug_component_dirt(10), modifier_dirt);
+        assert_eq!(instance.debug_component_dirt(7), group_dirt);
+        assert_eq!(instance.debug_component_dirt(1), text_dirt);
+        assert!(instance.set_uint_property(
+            3,
+            property_key_for_name("TextStyleAxis", "tag").unwrap(),
+            u64::from(u32::from_be_bytes(*b"wdth")),
+        ));
+        assert!(
+            instance.debug_component_dirt(3).is_some_and(|dirt| {
+                dirt.contains(crate::components::ComponentDirt::TEXT_SHAPE)
+            })
+        );
+        let glyph = StaticTextGlyphContext {
+            origin_x: 0.0,
+            origin_y: 0.0,
+            line_index_in_paragraph: 0,
+            paragraph_baselines: &[],
+            text_world_inverse: Mat2D::IDENTITY,
+        };
+        let transform = group.transform(&runtime, &instance, 1.0, &glyph).unwrap();
+        assert!((transform.0[4] - 0.05).abs() < 1e-6);
+        assert!((transform.0[5] + 0.15).abs() < 1e-6);
+    }
+
+    #[test]
+    fn d_st_font_live_swap_invalidates_the_retained_text_owner() {
+        let (runtime, graphs) = baseline_origin_text_runtime();
+        let graph = graphs.artboards.first().unwrap();
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).unwrap();
+        let slice = StaticTextSlice::from_graph(&runtime, graph, 1).unwrap();
+        let style = slice.base_style().unwrap();
+        let before = instance.layout_revision();
+        let mut font = RuntimeFontAssetValue::default();
+        assert!(font.set_live_font_bytes(Some(fixture_font_bytes().into())));
+        assert!(instance.set_text_style_font_override(style.local_id, font));
+        assert!(instance.layout_revision() > before);
+    }
+
+    #[test]
+    fn d_st_target_missing_resolution_is_ok_and_retains_no_target() {
+        let (runtime, graphs, _) = fl_e8_fixture(include_bytes!(
+            "../../../fixtures/fl-e8/text_variation_modifier.riv"
+        ));
+        let graph = graphs.artboards.first().unwrap();
+        let target = StaticTextTargetModifier::from_graph(&runtime, graph, 9, 7).unwrap();
+        assert_eq!(target.target_id, u32::MAX);
+        assert_eq!(target.resolved_transform_local, None);
+        assert_eq!(target.group_local, 7);
+    }
+
+    #[test]
+    fn d_st_target_wrong_parent_is_rejected_before_occurrence_registration() {
+        let runtime = RuntimeFile::from_authoring_records(vec![
+            authoring_record("Backboard", Vec::new()),
+            authoring_record("Artboard", Vec::new()),
+            authoring_record("Text", Vec::new()),
+            authoring_record(
+                "TextStylePaint",
+                vec![property(
+                    "TextStylePaint",
+                    "parentId",
+                    AuthoringValue::Uint(1),
+                )],
+            ),
+            authoring_record(
+                "TextValueRun",
+                vec![
+                    property("TextValueRun", "parentId", AuthoringValue::Uint(1)),
+                    property(
+                        "TextValueRun",
+                        "text",
+                        AuthoringValue::String("wrong parent".to_owned()),
+                    ),
+                    property("TextValueRun", "styleId", AuthoringValue::Uint(2)),
+                ],
+            ),
+            authoring_record(
+                "TextFollowPathModifier",
+                vec![property(
+                    "TextFollowPathModifier",
+                    "parentId",
+                    AuthoringValue::Uint(1),
+                )],
+            ),
+        ])
+        .unwrap();
+        let graphs = GraphFile::from_runtime_file(&runtime).unwrap();
+        let error = match StaticTextSlice::from_graph(&runtime, &graphs.artboards[0], 1) {
+            Ok(_) => panic!("wrong-parent TextTargetModifier must be rejected"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("direct TextModifierGroup parent")
+        );
+    }
+
+    #[test]
+    fn d_rt_engine_shared_classifier_extracts_colr_and_raster_layers() {
+        let root = std::path::PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        );
+        let colr_bytes =
+            std::fs::read(root.join("tests/unit_tests/assets/TwemojiMozilla.subset.ttf"))
+                .expect("read COLR differential font");
+        let colr_font = SkrifaFontRef::new(&colr_bytes).expect("parse COLR font");
+        let heart = (0..4096)
+            .find(|glyph| colr_font.color_glyphs().get(GlyphId::new(*glyph)).is_some())
+            .expect("Twemoji contains a COLR glyph");
+        assert_eq!(
+            runtime_classify_color_glyph(&colr_bytes, heart),
+            RuntimeColorGlyphClassification::Colr
+        );
+        assert!(!runtime_extract_color_glyph_layers(&colr_bytes, heart, 0xff12_3456).is_empty());
+
+        let raster_bytes =
+            std::fs::read(root.join("skia/dependencies/skia/resources/fonts/sbix.ttf"))
+                .expect("read raster differential font");
+        let raster_glyph = (0..256)
+            .find(|glyph| {
+                runtime_classify_color_glyph(&raster_bytes, *glyph)
+                    == RuntimeColorGlyphClassification::Raster
+            })
+            .expect("sbix fixture contains a raster glyph");
+        let layers = runtime_extract_color_glyph_layers(&raster_bytes, raster_glyph, 0xff00_0000);
+        assert!(
+            layers
+                .iter()
+                .any(|layer| { matches!(layer.paint, RuntimeColorGlyphPaint::Image { .. }) })
+        );
     }
 }

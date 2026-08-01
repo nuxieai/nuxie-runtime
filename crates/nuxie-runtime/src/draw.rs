@@ -40,13 +40,14 @@ use crate::properties::{
 };
 use crate::scripting::{ScriptNode, script_paint_for_shape};
 use crate::text::{
-    RuntimeTextLayoutConstraint, RuntimeTextLayoutDebugReport, StaticTextClipBounds,
-    build_static_text_constraint_bounds, runtime_text_input_shape_paint_commands,
-    runtime_text_shape_paint_commands, static_fixed_text_constraint_bounds,
-    static_text_caret_geometry, static_text_clip_bounds, static_text_constraint_bounds,
-    static_text_controlled_layout_bounds, static_text_hit, static_text_layout_debug_report,
-    static_text_layout_measure_bounds, static_text_selection_rects, static_text_value,
-    static_text_value_run_hit, text_input_layout_measure_bounds,
+    RuntimeIntegratedColorGlyphCommand, RuntimeTextDrawOrder, RuntimeTextLayoutConstraint,
+    RuntimeTextLayoutDebugReport, StaticTextClipBounds, build_static_text_constraint_bounds,
+    runtime_text_draw_data, runtime_text_input_shape_paint_commands,
+    static_fixed_text_constraint_bounds, static_text_caret_geometry, static_text_clip_bounds,
+    static_text_constraint_bounds, static_text_controlled_layout_bounds, static_text_hit,
+    static_text_layout_debug_report, static_text_layout_measure_bounds,
+    static_text_selection_rects, static_text_value, static_text_value_run_hit,
+    text_input_layout_measure_bounds,
 };
 use crate::{ArtboardInstance, ComponentDirt, Mat2D, RuntimeComponent, TransformProperty};
 use std::cell::{Cell, RefCell};
@@ -626,19 +627,9 @@ impl ArtboardInstance {
     /// Apply C++ `Artboard::sortDrawOrder` to the clone-owned drawable list.
     /// Called from the ordinary component update pass for `DrawOrder` dirt.
     pub(crate) fn sort_runtime_draw_order(&mut self) {
-        let draw_target_id_key = runtime_draw_property_key_for_name("DrawRules", "drawTargetId");
-        let placement_value_key =
-            runtime_draw_property_key_for_name("DrawTarget", "placementValue");
         let is_visible_key = property_key_for_name("ClippingShape", "isVisible");
-        self.runtime_drawables.sort_draw_order(
-            Some(&self.objects),
-            draw_target_id_key,
-            placement_value_key,
-            is_visible_key,
-            None,
-            None,
-            None,
-        );
+        self.runtime_drawables
+            .sort_draw_order(Some(&self.objects), is_visible_key, None);
     }
 
     pub(crate) fn runtime_hit_component_order(&self) -> Vec<ComponentHandle> {
@@ -2034,7 +2025,10 @@ impl ArtboardInstance {
                 {
                     continue;
                 }
-                let opacity_local = shape_paint_container_opacity_local(graph, container.local_id);
+                let opacity_local = crate::shapes::shape_paint_container::opacity_owner_local(
+                    graph,
+                    container.local_id,
+                );
                 let shape_world = runtime_shape_paint_container_world_transform(
                     self,
                     graph,
@@ -2136,7 +2130,10 @@ impl ArtboardInstance {
                 let object = runtime
                     .object(paint.global_id as usize)
                     .with_context(|| format!("missing paint global {}", paint.global_id))?;
-                let opacity_local = shape_paint_container_opacity_local(graph, container.local_id);
+                let opacity_local = crate::shapes::shape_paint_container::opacity_owner_local(
+                    graph,
+                    container.local_id,
+                );
                 let shape_world = runtime_shape_paint_container_world_transform(
                     self,
                     graph,
@@ -2603,7 +2600,7 @@ impl ArtboardInstance {
             }) else {
                 continue;
             };
-            let mut resources = item.child.render_resources.borrow_mut();
+            let mut resources = item.render_resources.borrow_mut();
             resources.initialize(
                 parent_backend_context_id,
                 runtime,
@@ -2946,7 +2943,7 @@ impl ArtboardInstance {
                     }) else {
                         continue;
                     };
-                    let mut resources = item.child.render_resources.borrow_mut();
+                    let mut resources = item.render_resources.borrow_mut();
                     resources.initialize(
                         paint_by_global.backend_context_id,
                         runtime,
@@ -3690,7 +3687,10 @@ impl ArtboardInstance {
             let object = runtime
                 .object(paint.global_id as usize)
                 .with_context(|| format!("missing paint global {}", paint.global_id))?;
-            let opacity_local = shape_paint_container_opacity_local(graph, container.local_id);
+            let opacity_local = crate::shapes::shape_paint_container::opacity_owner_local(
+                graph,
+                container.local_id,
+            );
             let shape_world = runtime_shape_paint_container_world_transform(
                 self,
                 graph,
@@ -3959,7 +3959,10 @@ impl ArtboardInstance {
                 continue;
             };
             let opacity_local = graph.map_or(owner_ref.shape_local, |graph| {
-                shape_paint_container_opacity_local(graph, owner_ref.shape_local)
+                crate::shapes::shape_paint_container::opacity_owner_local(
+                    graph,
+                    owner_ref.shape_local,
+                )
             });
             if let Some(render_opacity) = self
                 .component(opacity_local)
@@ -5021,7 +5024,7 @@ impl ArtboardInstance {
                 component.transform.world_transform
             });
         let render_opacity = self
-            .component(shape_paint_container_opacity_local(
+            .component(crate::shapes::shape_paint_container::opacity_owner_local(
                 graph,
                 container.local_id,
             ))
@@ -5086,7 +5089,7 @@ impl ArtboardInstance {
                 // world-space endpoints for a non-scaling stroke.
                 paint_state: runtime_shape_paint_state(self, paint, render_opacity),
                 feather_state: owner.feather_state.borrow().clone(),
-                paint_space_transform: runtime_shape_paint_space_transform(paint, shape_world),
+                paint_space_transform: runtime_shape_paint_space_transform(path_kind, shape_world),
                 path_commands,
                 effect_path_commands,
                 has_effect_path: active_effect.is_some(),
@@ -5111,6 +5114,7 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) {
+        self.invalidate_runtime_non_shape_paint_container_effects(local_id, dirt, graph);
         if dirt.contains(ComponentDirt::SCRIPT_UPDATE) {
             // Direct port of `ScriptedPathEffect::update` ->
             // `StrokeEffect::invalidateEffectFromLocal` ->
@@ -5223,6 +5227,69 @@ impl ArtboardInstance {
         }
     }
 
+    fn invalidate_runtime_non_shape_paint_container_effects(
+        &self,
+        local_id: usize,
+        dirt: ComponentDirt,
+        graph: &ArtboardGraph,
+    ) {
+        let Some(type_name) = self
+            .component(local_id)
+            .map(|component| component.type_name)
+        else {
+            return;
+        };
+        let container_locals = match type_name {
+            "ForegroundLayoutDrawable"
+                if !(dirt & (ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM)).is_empty() =>
+            {
+                vec![local_id]
+            }
+            "Text"
+                if !(dirt
+                    & (ComponentDirt::PATH | ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT))
+                    .is_empty() =>
+            {
+                graph
+                    .shape_paint_containers
+                    .iter()
+                    .filter(|container| container.type_name == "TextStylePaint")
+                    .filter(|container| {
+                        crate::shapes::shape_paint_container::opacity_owner_local(
+                            graph,
+                            container.local_id,
+                        ) == local_id
+                    })
+                    .map(|container| container.local_id)
+                    .collect()
+            }
+            "TextInput"
+                if !(dirt
+                    & (ComponentDirt::PATH | ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT))
+                    .is_empty()
+                    && self
+                        .component(local_id)
+                        .and_then(|component| component.concrete.text_input.as_ref())
+                        .is_some_and(|text_input| {
+                            text_input.raw.borrow().selection_needs_update()
+                        }) =>
+            {
+                graph
+                    .components
+                    .iter()
+                    .filter(|component| component.parent_local == Some(local_id))
+                    .filter(|component| is_text_input_drawable_type(component.type_name))
+                    .map(|component| component.local_id)
+                    .collect()
+            }
+            _ => return,
+        };
+        for container_local in container_locals {
+            self.runtime_shapes
+                .invalidate_container_stroke_effects(container_local);
+        }
+    }
+
     /// Direct port of `LayoutComponent::update` ->
     /// `Artboard::updateRenderPath`
     /// (`src/layout_component.cpp:91-120`, `src/artboard.cpp:1138-1157`).
@@ -5298,8 +5365,12 @@ impl ArtboardInstance {
             .replace_retained(RuntimeShapePathState {
                 raw_path: Arc::new(runtime_raw_path_from_commands(&world_commands)),
             });
+        crate::shapes::shape_paint_container::invalidate_stroke_effects(
+            crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily::Artboard,
+            &owner.paint_owners,
+            |paint| paint.invalidate_all_effects(),
+        );
         for paint in &owner.paint_owners {
-            paint.invalidate_all_effects();
             paint.mark_feather_dirty();
         }
     }
@@ -5311,17 +5382,49 @@ impl ArtboardInstance {
     /// `shape_paint_mutator.cpp:29-36`).
     fn propagate_runtime_shape_paint_opacity(
         &mut self,
+        opacity_owner_local: usize,
+        graph: &ArtboardGraph,
+        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    ) {
+        let container_locals = graph
+            .shape_paint_containers
+            .iter()
+            .filter(|container| {
+                crate::shapes::shape_paint_container::family(container.type_name).is_some()
+                    && crate::shapes::shape_paint_container::opacity_owner_local(
+                        graph,
+                        container.local_id,
+                    ) == opacity_owner_local
+            })
+            .map(|container| container.local_id)
+            .collect::<Vec<_>>();
+        for container_local in container_locals {
+            self.propagate_runtime_shape_paint_container_opacity(
+                container_local,
+                graph,
+                layout_bounds,
+            );
+        }
+    }
+
+    fn propagate_runtime_shape_paint_container_opacity(
+        &mut self,
         container_local: usize,
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) {
-        let Some(container) = graph.shape_paint_containers.iter().find(|container| {
-            runtime_shape_paint_container_is_occurrence_owned(container)
-                && container.local_id == container_local
-        }) else {
+        let Some(container) = graph
+            .shape_paint_containers
+            .iter()
+            .find(|container| container.local_id == container_local)
+        else {
             return;
         };
-        let opacity_local = shape_paint_container_opacity_local(graph, container_local);
+        let Some(family) = crate::shapes::shape_paint_container::family(container.type_name) else {
+            return;
+        };
+        let opacity_local =
+            crate::shapes::shape_paint_container::opacity_owner_local(graph, container_local);
         let render_opacity = self.component(opacity_local).map_or(1.0, |component| {
             if component.transform.render_opacity == 0.0
                 && component.dirt.contains(ComponentDirt::RENDER_OPACITY)
@@ -5338,21 +5441,26 @@ impl ArtboardInstance {
             return;
         };
         let mut changed = Vec::new();
-        for (owner_index, owner) in shape.paint_owners.iter().enumerate() {
-            let previous = owner.render_opacity.replace(render_opacity);
-            if !crate::shapes::paint::shape_paint_mutator::render_opacity_changed(
-                previous,
-                render_opacity,
-            ) {
-                continue;
-            }
-            owner.mark_mutator_dirty();
-            let mutator_type = container
-                .paints
-                .get(owner.paint_index)
-                .and_then(|paint| paint.mutator_type_name);
-            changed.push((owner_index, owner.mutator_local, mutator_type));
-        }
+        crate::shapes::shape_paint_container::propagate_opacity(
+            family,
+            &shape.paint_owners,
+            render_opacity,
+            |owner_index, owner, render_opacity| {
+                let previous = owner.render_opacity.replace(render_opacity);
+                if !crate::shapes::paint::shape_paint_mutator::render_opacity_changed(
+                    previous,
+                    render_opacity,
+                ) {
+                    return;
+                }
+                owner.mark_mutator_dirty();
+                let mutator_type = container
+                    .paints
+                    .get(owner.paint_index)
+                    .and_then(|paint| paint.mutator_type_name);
+                changed.push((owner_index, owner.mutator_local, mutator_type));
+            },
+        );
 
         for (owner_index, mutator_local, mutator_type) in changed {
             if mutator_type == Some("SolidColor") {
@@ -5401,11 +5509,9 @@ impl ArtboardInstance {
     /// Geometry is intentionally absent until Path and PathComposer settle,
     /// but the paint mutator state already belongs to this occurrence.
     pub(crate) fn initialize_runtime_shape_paint_owners(&self, graph: &ArtboardGraph) {
-        for container in graph
-            .shape_paint_containers
-            .iter()
-            .filter(|container| runtime_shape_paint_container_is_occurrence_owned(container))
-        {
+        for container in graph.shape_paint_containers.iter().filter(|container| {
+            crate::shapes::shape_paint_container::family(container.type_name).is_some()
+        }) {
             let shape_local = container.local_id;
             let Some(shape) = self.runtime_shapes.get(shape_local) else {
                 continue;
@@ -5480,14 +5586,20 @@ impl ArtboardInstance {
             return;
         };
         let mut settled_owner = false;
+        let mut settle_concrete_sidecar = false;
         for owner in owners.iter().copied() {
-            let is_solid_color = self
-                .runtime_shapes
-                .get(owner.shape_local)
-                .and_then(|shape| shape.paint_owners.get(owner.owner_index))
+            let Some(shape) = self.runtime_shapes.get(owner.shape_local) else {
+                continue;
+            };
+            let is_solid_color = shape
+                .paint_owners
+                .get(owner.owner_index)
                 .is_some_and(|paint| paint.mutator_local == Some(local_id));
             if is_solid_color {
                 settled_owner = true;
+                settle_concrete_sidecar |= shape
+                    .paint_container_family
+                    .is_some_and(|family| !family.owns_shape_geometry());
                 let Some(paint) = self
                     .runtime_shapes
                     .get(owner.shape_local)
@@ -5495,7 +5607,10 @@ impl ArtboardInstance {
                 else {
                     continue;
                 };
-                let opacity_local = shape_paint_container_opacity_local(graph, owner.shape_local);
+                let opacity_local = crate::shapes::shape_paint_container::opacity_owner_local(
+                    graph,
+                    owner.shape_local,
+                );
                 if self.component(opacity_local).is_some_and(|component| {
                     component.transform.render_opacity == 0.0
                         && component.dirt.contains(ComponentDirt::RENDER_OPACITY)
@@ -5565,7 +5680,7 @@ impl ArtboardInstance {
                 }
             }
         }
-        if !settled_owner {
+        if !settled_owner || settle_concrete_sidecar {
             self.settle_runtime_unowned_solid_color_backend(local_id, value, graph);
         }
     }
@@ -5879,7 +5994,7 @@ impl ArtboardInstance {
         graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Vec<RuntimePathCommand> {
-        if paint.path_kind.is_none() {
+        if runtime_live_shape_paint_path_kind(self, paint).is_none() {
             return Vec::new();
         }
         self.runtime_layout_component_draw_paths(layout_local, graph, layout_bounds)
@@ -8205,13 +8320,17 @@ impl ArtboardInstance {
         let Some(shape_component) = self.objects.component(shape_handle) else {
             return false;
         };
-        let Some(shape) = shape_component.concrete.shape.as_ref() else {
+        let Some(_shape) = shape_component.concrete.shape.as_ref() else {
             return false;
         };
-        let clipping_or_never_defer = shape.is_flagged(
-            crate::components::RuntimeShapeState::CLIPPING
-                | crate::components::RuntimeShapeState::NEVER_DEFER_UPDATE,
-        );
+        let container_path_flags =
+            self.runtime_shape_paint_container_path_flags(shape_component.local_id);
+        let clipping_or_never_defer = container_path_flags
+            & u64::from(
+                crate::components::RuntimeShapeState::CLIPPING
+                    | crate::components::RuntimeShapeState::NEVER_DEFER_UPDATE,
+            )
+            != 0;
         let has_skinned_path_dependent =
             shape_component.dependents.iter().copied().any(|dependent| {
                 self.objects.component(dependent).is_some_and(|component| {
@@ -8224,8 +8343,9 @@ impl ArtboardInstance {
                             .is_some()
                 })
             });
-        let follow_path_consumer = shape
-            .is_flagged(crate::components::RuntimeShapeState::FOLLOW_PATH)
+        let follow_path_consumer = container_path_flags
+            & u64::from(crate::components::RuntimeShapeState::FOLLOW_PATH)
+            != 0
             || path.is_flagged(
                 crate::components::RuntimePathState::FOLLOW_PATH
                     | crate::components::RuntimePathState::CLIPPING,
@@ -8236,6 +8356,29 @@ impl ArtboardInstance {
             has_skinned_path_dependent,
             follow_path_consumer,
         )
+    }
+
+    fn runtime_shape_paint_container_path_flags(&self, shape_local: usize) -> u64 {
+        let container_flags = self
+            .component(shape_local)
+            .and_then(|component| component.concrete.shape.as_ref())
+            .map_or(0, |shape| u64::from(shape.flags.get()));
+        self.runtime_shapes
+            .get(shape_local)
+            .map_or(container_flags, |shape| {
+                crate::shapes::shape_paint_container::path_flags(
+                    shape.paint_container_family.unwrap_or(
+                        crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily::Shape,
+                    ),
+                    container_flags,
+                    &shape.paint_owners,
+                    |paint| {
+                        crate::shapes::shape_paint_container::path_kind_flag(
+                            runtime_live_owned_shape_paint_path_kind(self, paint),
+                        )
+                    },
+                )
+            })
     }
 
     /// Pinned C++ `PathComposer::update` geometry composition
@@ -8261,14 +8404,29 @@ impl ArtboardInstance {
         };
         shape.world_bounds.set(None);
         shape.world_length.set(None);
-        for (path_kind, runtime_kind) in [
-            (ShapePaintPathKind::Local, RuntimeShapePaintPathKind::Local),
+        let _path_flags = self.runtime_shape_paint_container_path_flags(shape_local);
+        for (_flag, path_kind, runtime_kind) in [
             (
+                crate::shapes::shape_paint_container::PATH_FLAG_LOCAL,
+                ShapePaintPathKind::Local,
+                RuntimeShapePaintPathKind::Local,
+            ),
+            (
+                crate::shapes::shape_paint_container::PATH_FLAG_LOCAL_CLOCKWISE,
                 ShapePaintPathKind::LocalClockwise,
                 RuntimeShapePaintPathKind::LocalClockwise,
             ),
-            (ShapePaintPathKind::World, RuntimeShapePaintPathKind::World),
+            (
+                crate::shapes::shape_paint_container::PATH_FLAG_WORLD,
+                ShapePaintPathKind::World,
+                RuntimeShapePaintPathKind::World,
+            ),
         ] {
+            // C++ materializes only spaces named by `pathFlags`. Rust's
+            // renderer-neutral geometry and hit-test APIs share these three
+            // retained CPU slots, so they remain eagerly available even when
+            // no current paint selects one. The aggregate above is still the
+            // authoritative Shape::isFlagged value used by deferral.
             let mut commands = self.runtime_shape_path_commands_from_owners(
                 shape_local,
                 path_kind,
@@ -8282,9 +8440,13 @@ impl ArtboardInstance {
                 },
             );
         }
-        for paint in &shape.paint_owners {
-            paint.invalidate_all_effects();
-        }
+        crate::shapes::shape_paint_container::invalidate_stroke_effects(
+            shape.paint_container_family.unwrap_or(
+                crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily::Shape,
+            ),
+            &shape.paint_owners,
+            |paint| paint.invalidate_all_effects(),
+        );
     }
 
     /// Direct port of pinned C++ `ClippingShape::update`
@@ -8538,6 +8700,8 @@ impl Default for RuntimePathOwner {
 struct RuntimeShape {
     path_locals: Vec<usize>,
     paint_container_index: Option<usize>,
+    paint_container_family:
+        Option<crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily>,
     paint_paths: [RuntimeShapePaintPathOwner; 3],
     paint_owners: Vec<RuntimeShapePaintOwner>,
     world_bounds: Cell<Option<RenderAabb>>,
@@ -8549,6 +8713,7 @@ impl Clone for RuntimeShape {
         Self {
             path_locals: Vec::new(),
             paint_container_index: self.paint_container_index,
+            paint_container_family: self.paint_container_family,
             paint_paths: std::array::from_fn(|_| RuntimeShapePaintPathOwner::default()),
             paint_owners: self.paint_owners.clone(),
             world_bounds: Cell::new(None),
@@ -8937,51 +9102,72 @@ impl RuntimeShapeList {
         for composer in &graph.path_composers {
             shapes.slot_mut(composer.shape_local);
         }
-        for (container_index, container) in graph.shape_paint_containers.iter().enumerate() {
-            if !runtime_shape_paint_container_is_occurrence_owned(container) {
-                continue;
-            }
-            let shape = shapes.slot_mut(container.local_id);
-            shape.paint_container_index = Some(container_index);
-            shape.paint_owners.clear();
-            shape
-                .paint_owners
-                .extend(
-                    container
-                        .paints
-                        .iter()
-                        .enumerate()
-                        .map(|(paint_index, paint)| {
-                            RuntimeShapePaintOwner::new(paint_index, paint, container.local_id)
-                        }),
-                );
-            for (owner_index, paint) in container.paints.iter().enumerate() {
-                let owner_ref = RuntimeShapePaintOwnerRef {
-                    shape_local: container.local_id,
-                    owner_index,
-                };
-                shapes.paint_owner_refs.push(owner_ref);
-                shapes.register_paint_component(container.local_id, owner_ref);
-                shapes.register_paint_component(paint.local_id, owner_ref);
-                if let Some(local_id) = paint.mutator_local {
-                    shapes.register_paint_component(local_id, owner_ref);
-                }
-                if let Some(local_id) = paint.feather_local {
-                    shapes.register_paint_component(local_id, owner_ref);
-                }
-                for stop in &paint.gradient_stops {
-                    shapes.register_paint_component(stop.local_id, owner_ref);
-                }
-                for (effect_index, effect) in paint.effects.iter().enumerate() {
-                    shapes.register_effect_components(effect, owner_ref, effect_index);
-                }
-            }
-        }
+        shapes.retain_paint_containers(&graph.shape_paint_containers);
         shapes
             .pending_backend_paints
             .get_mut()
             .clone_from(&shapes.paint_owner_refs);
         shapes
+    }
+
+    fn retain_paint_containers(&mut self, containers: &[ShapePaintContainerNode]) {
+        for (container_index, container) in containers.iter().enumerate() {
+            let Some(family) = crate::shapes::shape_paint_container::family(container.type_name)
+            else {
+                continue;
+            };
+            let shape = self.slot_mut(container.local_id);
+            shape.paint_container_index = Some(container_index);
+            shape.paint_container_family = Some(family);
+            shape.paint_owners.clear();
+            for (paint_index, paint) in container.paints.iter().enumerate() {
+                crate::shapes::shape_paint_container::add_paint(
+                    family,
+                    &mut shape.paint_owners,
+                    RuntimeShapePaintOwner::new(paint_index, paint, container.local_id),
+                );
+            }
+            for (owner_index, paint) in container.paints.iter().enumerate() {
+                let owner_ref = RuntimeShapePaintOwnerRef {
+                    shape_local: container.local_id,
+                    owner_index,
+                };
+                // Shape/Artboard feed the common ShapePaint backend owner.
+                // Layout and text families retain their concrete C++-shaped
+                // backend sidecars in the live layout/text draw owners.
+                if family.owns_shape_geometry() {
+                    self.paint_owner_refs.push(owner_ref);
+                }
+                self.register_paint_component(container.local_id, owner_ref);
+                self.register_paint_component(paint.local_id, owner_ref);
+                if let Some(local_id) = paint.mutator_local {
+                    self.register_paint_component(local_id, owner_ref);
+                }
+                if let Some(local_id) = paint.feather_local {
+                    self.register_paint_component(local_id, owner_ref);
+                }
+                for stop in &paint.gradient_stops {
+                    self.register_paint_component(stop.local_id, owner_ref);
+                }
+                for (effect_index, effect) in paint.effects.iter().enumerate() {
+                    self.register_effect_components(effect, owner_ref, effect_index);
+                }
+            }
+        }
+    }
+
+    fn invalidate_container_stroke_effects(&self, container_local: usize) {
+        let Some(container) = self.get(container_local) else {
+            return;
+        };
+        let Some(family) = container.paint_container_family else {
+            return;
+        };
+        crate::shapes::shape_paint_container::invalidate_stroke_effects(
+            family,
+            &container.paint_owners,
+            |paint| paint.invalidate_all_effects(),
+        );
     }
 
     /// Rebuild the renderer-facing membership projection from the exact
@@ -9066,6 +9252,7 @@ impl RuntimeShapeList {
         self.by_local[shape_local].get_or_insert_with(|| RuntimeShape {
             path_locals: Vec::new(),
             paint_container_index: None,
+            paint_container_family: None,
             paint_paths: std::array::from_fn(|_| RuntimeShapePaintPathOwner::default()),
             paint_owners: Vec::new(),
             world_bounds: Cell::new(None),
@@ -9160,8 +9347,14 @@ impl RuntimeShapeList {
         }
         shape.world_bounds.set(None);
         shape.world_length.set(None);
+        crate::shapes::shape_paint_container::invalidate_stroke_effects(
+            shape.paint_container_family.unwrap_or(
+                crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily::Shape,
+            ),
+            &shape.paint_owners,
+            |paint| paint.invalidate_all_effects(),
+        );
         for (owner_index, paint) in shape.paint_owners.iter().enumerate() {
-            paint.invalidate_all_effects();
             paint.mark_feather_dirty();
             self.queue_backend_paint(RuntimeShapePaintOwnerRef {
                 shape_local,
@@ -9382,6 +9575,8 @@ impl RuntimeClippingShapeOwner {
 #[derive(Debug)]
 struct RuntimeTextDrawOwner {
     dirty: Cell<bool>,
+    render_styles_dirty: Cell<bool>,
+    retain_paths_on_rebuild: Cell<bool>,
     retained: RefCell<Option<RuntimeCachedTextShapePaints>>,
     backend: RefCell<RuntimeTextBackendResources>,
 }
@@ -9403,6 +9598,8 @@ impl Default for RuntimeTextDrawOwner {
     fn default() -> Self {
         Self {
             dirty: Cell::new(true),
+            render_styles_dirty: Cell::new(true),
+            retain_paths_on_rebuild: Cell::new(false),
             retained: RefCell::new(None),
             backend: RefCell::new(RuntimeTextBackendResources::default()),
         }
@@ -9418,12 +9615,24 @@ impl RuntimeTextDrawOwner {
         self.dirty.set(true);
     }
 
+    fn mark_paths_retained_dirty(&self) {
+        self.dirty.set(true);
+        if !self.render_styles_dirty.get() {
+            self.retain_paths_on_rebuild.set(true);
+        }
+    }
+
     fn mark_render_styles_dirty(&self) {
         self.dirty.set(true);
-        self.backend
-            .borrow_mut()
-            .paths
-            .retain(|key, _| key.paint_local.is_some());
+        self.render_styles_dirty.set(true);
+        self.retain_paths_on_rebuild.set(false);
+    }
+
+    fn mark_render_styles_dirty_unless_paths_retained(&self) {
+        self.dirty.set(true);
+        if !self.retain_paths_on_rebuild.get() {
+            self.render_styles_dirty.set(true);
+        }
     }
 
     fn retained_or_build(
@@ -9432,33 +9641,32 @@ impl RuntimeTextDrawOwner {
     ) -> Result<RuntimeCachedTextShapePaints> {
         if self.dirty.get() || self.retained.borrow().is_none() {
             let retained = build()?;
-            let rebuilt_render_styles = self
-                .retained
-                .borrow()
-                .as_ref()
-                .is_some_and(|previous| previous.commands != retained.commands);
-            if rebuilt_render_styles {
+            if self.retained.borrow().is_some() && self.render_styles_dirty.get() {
                 // `Text::buildRenderStyles()` begins with
                 // `clearRenderStyles()`, whose
                 // `TextStylePaint::rewindPath()` clears `m_opacityPaths`.
-                // Changed render styles therefore create fresh
+                // Render-style dirt therefore creates fresh
                 // ShapePaintPath/RenderPath objects; only
                 // TextStylePaint::m_path and Text::m_clipPath rewind in place
                 // (`text.cpp:534-543`, `text_style_paint.cpp:15-43`).
                 //
-                // Rust's path/layout epochs conservatively invalidate
-                // unrelated Text owners too. Preserve those owners' backend
-                // identity when rebuilding produces the same commands.
-                // `TextStylePaint::m_path` is retained and rewound in place.
-                // Effect/opacity paths carry a concrete paint owner key and
-                // are the only paths replaced by `clearRenderStyles`.
+                // World-transform and render-opacity dirt take C++'s separate
+                // update branches and must not clear these paths merely
+                // because Rust refreshes its immutable retained draw frame
+                // (`text.cpp:1209-1230`).
+                // Direct opacity buckets carry their TextStylePaint owner and
+                // are replaced by `clearRenderStyles`. Effect and feather
+                // outputs carry their concrete ShapePaint owner and rewind in
+                // place when that retained paint invalidates them.
                 self.backend
                     .borrow_mut()
                     .paths
-                    .retain(|key, _| key.paint_local.is_some());
+                    .retain(|key, _| !key.replace_on_render_style_rebuild);
             }
             *self.retained.borrow_mut() = Some(retained);
             self.dirty.set(false);
+            self.render_styles_dirty.set(false);
+            self.retain_paths_on_rebuild.set(false);
         }
         Ok(self
             .retained
@@ -9498,6 +9706,8 @@ struct RuntimeTextBackendResources {
     pooled_paints: BTreeMap<(usize, usize), RuntimeTextPooledPaintBackend>,
     paths: BTreeMap<RuntimeTextPathOwnerKey, RuntimeTextPathBackend>,
     clip_path: Option<RuntimeTextPathBackend>,
+    color_paths: BTreeMap<(usize, usize), RuntimeTextPathBackend>,
+    emoji_images: BTreeMap<(usize, u32), Option<Box<dyn RenderImage>>>,
 }
 
 impl std::fmt::Debug for RuntimeTextBackendResources {
@@ -9509,6 +9719,8 @@ impl std::fmt::Debug for RuntimeTextBackendResources {
             .field("pooled_paints", &self.pooled_paints.len())
             .field("paths", &self.paths.len())
             .field("clip_path", &self.clip_path.is_some())
+            .field("color_paths", &self.color_paths.len())
+            .field("emoji_images", &self.emoji_images.len())
             .finish()
     }
 }
@@ -9532,7 +9744,8 @@ struct RuntimeTextPathBackend {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct RuntimeTextPathOwnerKey {
-    paint_local: Option<usize>,
+    owner_local: usize,
+    replace_on_render_style_rebuild: bool,
     slot: usize,
 }
 
@@ -9681,6 +9894,7 @@ pub(crate) struct RuntimeDrawable {
     referenced_artboard_global: Option<u32>,
     layout_local: Option<usize>,
     flattened_draw_rules_local: Option<usize>,
+    flattened_draw_rules_index: Option<usize>,
     draw_target_local: Option<usize>,
     clipping_shape_local: Option<usize>,
     /// C++ `Text::m_drawCommands` / TextInputDrawable's parent-owned paths.
@@ -9712,6 +9926,7 @@ impl RuntimeDrawable {
             referenced_artboard_global: drawable.referenced_artboard_global,
             layout_local: drawable.layout_local,
             flattened_draw_rules_local: drawable.flattened_draw_rules_local,
+            flattened_draw_rules_index: None,
             draw_target_local: None,
             clipping_shape_local: None,
             text_draw_owner: (drawable.type_name == "Text"
@@ -9739,6 +9954,7 @@ impl RuntimeDrawable {
             referenced_artboard_global: None,
             layout_local: None,
             flattened_draw_rules_local: None,
+            flattened_draw_rules_index: None,
             draw_target_local: None,
             clipping_shape_local: Some(clipping_shape_local),
             text_draw_owner: None,
@@ -9761,14 +9977,6 @@ impl RuntimeDrawable {
     }
 }
 
-#[derive(Debug, Clone)]
-struct RuntimeDrawTarget {
-    local_id: usize,
-    drawable_local: Option<usize>,
-    first: Option<usize>,
-    last: Option<usize>,
-}
-
 /// Clone-owned counterpart of C++ `Artboard::m_Drawables`, `m_DrawTargets`,
 /// and `m_FirstDrawable`. Clip proxies are pooled by their owning clipping
 /// shape, matching `ClippingShape::resetDrawables/createProxyDrawable`.
@@ -9779,7 +9987,9 @@ pub(crate) struct RuntimeDrawableList {
     layout_draw_owners: Vec<Option<RuntimeLayoutDrawOwner>>,
     first_drawable: Option<usize>,
     drawable_by_local: BTreeMap<usize, usize>,
-    draw_targets: Vec<RuntimeDrawTarget>,
+    draw_rules: Vec<crate::draw_rules::RuntimeDrawRules>,
+    draw_rules_index_by_local: BTreeMap<usize, usize>,
+    draw_targets: Vec<crate::draw_target::RuntimeDrawTarget>,
     draw_target_index_by_local: BTreeMap<usize, usize>,
     draw_target_order: Vec<usize>,
     active_proxies: Vec<usize>,
@@ -9788,7 +9998,7 @@ pub(crate) struct RuntimeDrawableList {
 
 impl RuntimeDrawableList {
     pub(crate) fn from_graph(graph: &ArtboardGraph, objects: &InstanceObjectArena) -> Self {
-        let drawables = graph
+        let mut drawables = graph
             .drawable_order
             .iter()
             .map(|drawable| Box::new(RuntimeDrawable::from_imported(drawable, objects)))
@@ -9805,7 +10015,7 @@ impl RuntimeDrawableList {
             }
             layout_draw_owners[component.local_id] = Some(RuntimeLayoutDrawOwner::default());
         }
-        let drawable_by_local = drawables
+        let drawable_by_local: BTreeMap<usize, usize> = drawables
             .iter()
             .enumerate()
             .filter_map(|(index, drawable)| drawable.local_id.map(|local| (local, index)))
@@ -9813,28 +10023,48 @@ impl RuntimeDrawableList {
         let draw_targets = graph
             .draw_targets
             .iter()
-            .map(|target| RuntimeDrawTarget {
+            .map(|target| crate::draw_target::RuntimeDrawTarget {
                 local_id: target.local_id,
-                drawable_local: target.drawable_local,
+                drawable_index: target
+                    .drawable_local
+                    .and_then(|local| drawable_by_local.get(&local).copied()),
+                placement_value: target.placement_value,
                 first: None,
                 last: None,
             })
             .collect::<Vec<_>>();
-        let draw_target_index_by_local = draw_targets
+        let draw_target_index_by_local: BTreeMap<usize, usize> = draw_targets
             .iter()
             .enumerate()
             .map(|(index, target)| (target.local_id, index))
             .collect();
-        let initial_draw_targets = graph
+        let draw_rules = graph
             .draw_rules
             .iter()
-            .map(|rules| (rules.local_id, rules.active_target_local))
-            .collect::<BTreeMap<_, _>>();
-        let initial_placements = graph
-            .draw_targets
+            .map(|rules| {
+                crate::draw_rules::RuntimeDrawRules::new(
+                    rules
+                        .active_target_local
+                        .and_then(|target| draw_target_index_by_local.get(&target).copied()),
+                )
+            })
+            .collect::<Vec<_>>();
+        let draw_rules_index_by_local = graph
+            .draw_rules
             .iter()
-            .map(|target| (target.local_id, target.placement_value))
+            .enumerate()
+            .map(|(index, rules)| (rules.local_id, index))
             .collect::<BTreeMap<_, _>>();
+        for drawable in &mut drawables {
+            drawable.flattened_draw_rules_index = drawable
+                .flattened_draw_rules_local
+                .and_then(|local| draw_rules_index_by_local.get(&local).copied());
+        }
+        let draw_target_order = graph
+            .draw_target_order
+            .iter()
+            .filter_map(|local| draw_target_index_by_local.get(local).copied())
+            .collect();
         let initial_clipping_visibility = graph
             .clipping_shapes
             .iter()
@@ -9846,19 +10076,17 @@ impl RuntimeDrawableList {
             layout_draw_owners,
             first_drawable: None,
             drawable_by_local,
+            draw_rules,
+            draw_rules_index_by_local,
             draw_targets,
             draw_target_index_by_local,
-            draw_target_order: graph.draw_target_order.clone(),
+            draw_target_order,
             active_proxies: Vec::new(),
             pooled_proxies: BTreeMap::new(),
         };
         result.sort_draw_order(
             Some(objects),
-            runtime_draw_property_key_for_name("DrawRules", "drawTargetId"),
-            runtime_draw_property_key_for_name("DrawTarget", "placementValue"),
             runtime_draw_property_key_for_name("ClippingShape", "isVisible"),
-            Some(&initial_draw_targets),
-            Some(&initial_placements),
             Some(&initial_clipping_visibility),
         );
         result
@@ -9893,7 +10121,10 @@ impl RuntimeDrawableList {
     pub(crate) fn mark_text_resources_dirty(&self) {
         for drawable in self.drawables.iter().take(self.imported_count) {
             if let Some(owner) = drawable.text_draw_owner.as_ref() {
-                owner.mark_dirty();
+                // A font-resource replacement is C++ FontAsset::fontChanged
+                // -> TextShape dirt, so every affected Text executes
+                // buildRenderStyles and clears its opacity paths.
+                owner.mark_render_styles_dirty();
             }
         }
     }
@@ -9919,7 +10150,7 @@ impl RuntimeDrawableList {
             return;
         };
         if let Some(owner) = self.drawables[drawable_index].text_draw_owner.as_ref() {
-            owner.mark_dirty();
+            owner.mark_paths_retained_dirty();
         }
     }
 
@@ -9965,11 +10196,7 @@ impl RuntimeDrawableList {
     fn sort_draw_order(
         &mut self,
         objects: Option<&InstanceObjectArena>,
-        draw_target_id_key: Option<u16>,
-        placement_value_key: Option<u16>,
         is_visible_key: Option<u16>,
-        initial_draw_targets: Option<&BTreeMap<usize, Option<usize>>>,
-        initial_placements: Option<&BTreeMap<usize, u64>>,
         initial_clipping_visibility: Option<&BTreeMap<usize, bool>>,
     ) {
         // Ported from C++ `Artboard::sortDrawOrder` (artboard.cpp:574-746).
@@ -9987,21 +10214,19 @@ impl RuntimeDrawableList {
 
         let mut last_main = None;
         for drawable_index in 0..self.imported_count {
-            let active_target = self.drawables[drawable_index]
-                .flattened_draw_rules_local
-                .and_then(|rules_local| match objects.zip(draw_target_id_key) {
-                    Some((objects, key)) => objects
-                        .uint_property(rules_local, key)
-                        .and_then(|target| usize::try_from(target).ok())
-                        .filter(|target| self.draw_target_index_by_local.contains_key(target)),
-                    None => initial_draw_targets
-                        .and_then(|targets| targets.get(&rules_local).copied().flatten()),
+            let active_target_index = self.drawables[drawable_index]
+                .flattened_draw_rules_index
+                .and_then(|rules_index| self.draw_rules.get(rules_index))
+                .and_then(|rules| rules.active_target_index)
+                .filter(|target_index| {
+                    self.draw_targets
+                        .get(*target_index)
+                        .is_some_and(|target| target.drawable_index.is_some())
                 });
-            self.drawables[drawable_index].draw_target_local = active_target;
-            if let Some(target_local) = active_target
-                && let Some(target_index) =
-                    self.draw_target_index_by_local.get(&target_local).copied()
-            {
+            self.drawables[drawable_index].draw_target_local = active_target_index
+                .and_then(|target_index| self.draw_targets.get(target_index))
+                .map(|target| target.local_id);
+            if let Some(target_index) = active_target_index {
                 let previous = self.draw_targets[target_index].last;
                 self.drawables[drawable_index].prev = previous;
                 if let Some(previous) = previous {
@@ -10021,36 +10246,17 @@ impl RuntimeDrawableList {
         }
 
         for order_index in 0..self.draw_target_order.len() {
-            let target_local = self.draw_target_order[order_index];
-            let Some(target_index) = self.draw_target_index_by_local.get(&target_local).copied()
-            else {
-                continue;
-            };
+            let target_index = self.draw_target_order[order_index];
             let Some(group_first) = self.draw_targets[target_index].first else {
                 continue;
             };
             let Some(group_last) = self.draw_targets[target_index].last else {
                 continue;
             };
-            let Some(target_drawable) = self.draw_targets[target_index]
-                .drawable_local
-                .and_then(|local| self.drawable_by_local.get(&local).copied())
-            else {
+            let Some(target_drawable) = self.draw_targets[target_index].drawable_index else {
                 continue;
             };
-            let placement = objects
-                .zip(placement_value_key)
-                .and_then(|(objects, key)| {
-                    objects.uint_property(self.draw_targets[target_index].local_id, key)
-                })
-                .or_else(|| {
-                    initial_placements.and_then(|placements| {
-                        placements
-                            .get(&self.draw_targets[target_index].local_id)
-                            .copied()
-                    })
-                })
-                .unwrap_or(u64::MAX);
+            let placement = self.draw_targets[target_index].placement_value;
             match placement {
                 0 => {
                     let target_prev = self.drawables[target_drawable].prev;
@@ -10080,6 +10286,29 @@ impl RuntimeDrawableList {
         self.first_drawable = last_main;
         self.interleave_clipping_proxies(objects);
         self.clear_redundant_operations(objects, is_visible_key, initial_clipping_visibility);
+    }
+
+    pub(crate) fn set_draw_rules_active_target(
+        &mut self,
+        rules_local: usize,
+        active_target_local: Option<usize>,
+    ) {
+        let active_target_index = active_target_local
+            .and_then(|target| self.draw_target_index_by_local.get(&target).copied());
+        if let Some(rules) = self
+            .draw_rules_index_by_local
+            .get(&rules_local)
+            .and_then(|index| self.draw_rules.get_mut(*index))
+        {
+            rules.active_target_index = active_target_index;
+        }
+    }
+
+    pub(crate) fn set_draw_target_placement(&mut self, target_local: usize, placement_value: u64) {
+        let Some(target_index) = self.draw_target_index_by_local.get(&target_local).copied() else {
+            return;
+        };
+        self.draw_targets[target_index].placement_value = placement_value;
     }
 
     fn reset_proxy_drawables(&mut self) {
@@ -13703,9 +13932,24 @@ impl RuntimeWorldTransformSlots {
 #[derive(Debug, Clone)]
 struct RuntimeCachedTextShapePaints {
     commands: Arc<Vec<RuntimeShapePaintCommand>>,
+    replay: Arc<Vec<RuntimeTextReplay>>,
     paths: Arc<BTreeMap<RuntimeTextPathOwnerKey, Arc<RawPath>>>,
     clip_path: Option<Arc<RawPath>>,
+    color: Option<Arc<RuntimeRetainedColorGlyphs>>,
     publishes_layout_dirty: bool,
+}
+
+#[derive(Debug, Clone)]
+struct RuntimeRetainedColorGlyphs {
+    glyphs: Vec<RuntimeIntegratedColorGlyphCommand>,
+    order: Vec<RuntimeTextDrawOrder>,
+    shape_world: Mat2D,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeTextReplay {
+    Paint(usize),
+    ColorGlyph(usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15508,6 +15752,8 @@ fn runtime_prepare_gradient_paint_command(
     shape_world: Mat2D,
     layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
 ) -> RuntimeShapePaintCommand {
+    let path_kind = runtime_live_shape_paint_path_kind(instance, paint)
+        .unwrap_or(RuntimeShapePaintPathKind::Local);
     let paint_state = runtime_deform_gradient_paint_state_with_nsliced_node(
         instance,
         graph,
@@ -15522,10 +15768,7 @@ fn runtime_prepare_gradient_paint_command(
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
         fill_rule: runtime_live_shape_paint_fill_rule(instance, paint),
-        path_kind: paint
-            .path_kind
-            .and_then(runtime_shape_paint_path_kind)
-            .unwrap_or(RuntimeShapePaintPathKind::Local),
+        path_kind,
         path_slot_index: 0,
         clip_path_slot_index: 0,
         blend_mode_value: paint.blend_mode_value,
@@ -15536,7 +15779,7 @@ fn runtime_prepare_gradient_paint_command(
         render_opacity,
         paint_state,
         feather_state: None,
-        paint_space_transform: runtime_shape_paint_space_transform(paint, shape_world),
+        paint_space_transform: runtime_shape_paint_space_transform(path_kind, shape_world),
         path_commands: Vec::new(),
         effect_path_commands: Vec::new(),
         has_effect_path: false,
@@ -15597,6 +15840,17 @@ fn runtime_text_paint_shape_world(
     live_shape_world: Mat2D,
 ) -> Option<Mat2D> {
     draws_text.then(|| shape_world_override.unwrap_or(live_shape_world))
+}
+
+fn runtime_text_style_path_owner_local(paint: &RuntimeShapePaintCommand) -> Option<usize> {
+    paint
+        .text_paint_pool
+        .map(|pool| pool.spec.style_local)
+        .or_else(|| {
+            paint
+                .ensure_text_paint_pool_after_draw
+                .map(|pool| pool.style_local)
+        })
 }
 
 fn runtime_retained_text_draw_frame(
@@ -15669,25 +15923,35 @@ fn runtime_build_text_draw_frame(
             }
             return Ok(RuntimeCachedTextShapePaints {
                 commands: Arc::new(Vec::new()),
+                replay: Arc::new(Vec::new()),
                 paths: Arc::new(BTreeMap::new()),
                 clip_path: None,
+                color: None,
                 publishes_layout_dirty: false,
             });
         }
     }
-    let (mut commands, clip_bounds) = if drawable.type_name == "Text" {
+    let (mut commands, clip_bounds, color) = if drawable.type_name == "Text" {
         let layout_constraint =
             instance.runtime_text_layout_constraint(drawable_local, layout_bounds);
+        let draw_data = runtime_text_draw_data(
+            runtime,
+            instance,
+            graph,
+            drawable_local,
+            layout_bounds,
+            layout_constraint,
+        )?;
         (
-            runtime_text_shape_paint_commands(
-                runtime,
-                instance,
-                graph,
-                drawable_local,
-                layout_bounds,
-                layout_constraint,
-            )?,
+            draw_data.commands,
             static_text_clip_bounds(runtime, graph, instance, drawable_local, layout_constraint)?,
+            (!draw_data.color_glyphs.is_empty()).then(|| {
+                Arc::new(RuntimeRetainedColorGlyphs {
+                    glyphs: draw_data.color_glyphs,
+                    order: draw_data.order,
+                    shape_world: draw_data.shape_world,
+                })
+            }),
         )
     } else {
         (
@@ -15699,15 +15963,17 @@ fn runtime_build_text_draw_frame(
                 layout_bounds,
             )?,
             None,
+            None,
         )
     };
     assign_shape_paint_path_slot_indices(&mut commands);
+    let replay = runtime_text_replay_order(&commands, color.as_deref());
     let paths = Arc::new(runtime_text_owned_raw_paths(&commands));
     let clip_path = clip_bounds
         // C++ `Text::buildRenderStyles` returns before rebuilding
         // `m_clipRect` when shaping produced no renderable frame
         // (`src/text/text.cpp:534-543`).
-        .filter(|_| !commands.is_empty())
+        .filter(|_| !commands.is_empty() || color.is_some())
         .map(|bounds| {
             let world = instance.runtime_component_world_transform_with_bounds(
                 drawable_local,
@@ -15734,10 +16000,55 @@ fn runtime_build_text_draw_frame(
     }
     Ok(RuntimeCachedTextShapePaints {
         commands: Arc::new(commands),
+        replay: Arc::new(replay),
         paths,
         clip_path,
+        color,
         publishes_layout_dirty: true,
     })
+}
+
+fn runtime_text_replay_order(
+    commands: &[RuntimeShapePaintCommand],
+    color: Option<&RuntimeRetainedColorGlyphs>,
+) -> Vec<RuntimeTextReplay> {
+    let Some(color) = color else {
+        return (0..commands.len()).map(RuntimeTextReplay::Paint).collect();
+    };
+    let mut replay = Vec::with_capacity(commands.len() + color.glyphs.len());
+    let mut ordered_styles = BTreeSet::new();
+    for item in &color.order {
+        match *item {
+            RuntimeTextDrawOrder::Style(style_local) => {
+                ordered_styles.insert(style_local);
+                replay.extend(
+                    commands
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, paint)| {
+                            runtime_text_style_path_owner_local(paint) == Some(style_local)
+                        })
+                        .map(|(index, _)| RuntimeTextReplay::Paint(index)),
+                );
+            }
+            RuntimeTextDrawOrder::ColorGlyph(index) => {
+                if color.glyphs.get(index).is_some() {
+                    replay.push(RuntimeTextReplay::ColorGlyph(index));
+                }
+            }
+        }
+    }
+    replay.extend(
+        commands
+            .iter()
+            .enumerate()
+            .filter(|(_, paint)| {
+                runtime_text_style_path_owner_local(paint)
+                    .is_none_or(|style| !ordered_styles.contains(&style))
+            })
+            .map(|(index, _)| RuntimeTextReplay::Paint(index)),
+    );
+    replay
 }
 
 impl ArtboardInstance {
@@ -15796,7 +16107,11 @@ impl ArtboardInstance {
                 continue;
             };
             if !(dirt & (ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT)).is_empty() {
-                owner.mark_render_styles_dirty();
+                // A direct dependency Path/Paint propagation is a C++
+                // buildRenderStyles boundary. Layout propagation explicitly
+                // classifies its retained-frame refresh first because it
+                // shares the Path/TextShape bit without replacing paths.
+                owner.mark_render_styles_dirty_unless_paths_retained();
             } else {
                 owner.mark_dirty();
             }
@@ -15994,6 +16309,89 @@ fn runtime_configure_text_pooled_paint(
 /// `src/text/text_style_paint.cpp:42-127`,
 /// `src/text/text_input_drawable.cpp:24-41`). Each drawable owns its retained
 /// CPU draw frame; this path never constructs a `RuntimeDrawableDispatch`.
+fn runtime_draw_integrated_color_glyph(
+    glyph_index: usize,
+    command: &RuntimeIntegratedColorGlyphCommand,
+    shape_world: Mat2D,
+    factory: &mut dyn RenderFactory,
+    renderer: &mut dyn Renderer,
+    color_paths: &mut BTreeMap<(usize, usize), RuntimeTextPathBackend>,
+    emoji_images: &mut BTreeMap<(usize, u32), Option<Box<dyn RenderImage>>>,
+) {
+    renderer.save();
+    renderer.transform(runtime_render_mat(shape_world.multiply(command.transform)));
+    for (layer_index, layer) in command.layers.iter().enumerate() {
+        match &layer.paint {
+            crate::text::RuntimeColorGlyphPaint::Image {
+                bytes,
+                width,
+                height,
+                bearing_x,
+                bearing_y,
+                extent_x,
+                extent_y,
+            } => {
+                let image = emoji_images
+                    .entry((command.font_identity, command.glyph_id))
+                    .or_insert_with(|| factory.decode_image(bytes).ok());
+                if let Some(image) = image.as_deref() {
+                    renderer.save();
+                    renderer.transform(runtime_render_mat(Mat2D([
+                        *extent_x / *width as f32,
+                        0.0,
+                        0.0,
+                        *extent_y / *height as f32,
+                        *bearing_x,
+                        *bearing_y,
+                    ])));
+                    renderer.draw_image(
+                        Some(image),
+                        RenderImageSampler::LINEAR_CLAMP,
+                        RenderBlendMode::SrcOver,
+                        command.opacity,
+                    );
+                    renderer.restore();
+                }
+            }
+            paint_kind @ (crate::text::RuntimeColorGlyphPaint::Solid { .. }
+            | crate::text::RuntimeColorGlyphPaint::LinearGradient { .. }
+            | crate::text::RuntimeColorGlyphPaint::RadialGradient { .. }
+            | crate::text::RuntimeColorGlyphPaint::SweepGradient { .. }) => {
+                if layer.path.verbs().is_empty() {
+                    continue;
+                }
+                let color = match paint_kind {
+                    crate::text::RuntimeColorGlyphPaint::Solid { color } => *color,
+                    _ => 0xff00_0000,
+                };
+                let path_backend = color_paths
+                    .entry((glyph_index, layer_index))
+                    .or_insert_with(|| RuntimeTextPathBackend {
+                        path: runtime_make_path_from_raw_path(
+                            factory,
+                            &layer.path,
+                            RenderFillRule::NonZero,
+                        ),
+                        raw_mutation_id: layer.path.mutation_id(),
+                    });
+                if path_backend.raw_mutation_id != layer.path.mutation_id() {
+                    runtime_rebuild_path_from_raw_path(
+                        path_backend.path.as_mut(),
+                        &layer.path,
+                        RenderFillRule::NonZero,
+                    );
+                    path_backend.raw_mutation_id = layer.path.mutation_id();
+                }
+                let mut paint = factory.make_render_paint();
+                paint.style(RenderPaintStyle::Fill);
+                paint.color(color_modulate_opacity(color, command.opacity));
+                renderer.draw_path(path_backend.path.as_ref(), paint.as_ref());
+            }
+        }
+    }
+    renderer.restore();
+}
+
 #[allow(clippy::too_many_arguments)]
 fn runtime_draw_live_text_family(
     runtime: &RuntimeFile,
@@ -16047,7 +16445,38 @@ fn runtime_draw_live_text_family(
         renderer.clip_path(path);
     }
 
-    for paint in retained.commands.iter() {
+    for item in retained.replay.iter().copied() {
+        let paint = match item {
+            RuntimeTextReplay::Paint(index) => retained
+                .commands
+                .get(index)
+                .context("retained Text replay references a missing paint")?,
+            RuntimeTextReplay::ColorGlyph(index) => {
+                let color = retained
+                    .color
+                    .as_deref()
+                    .context("retained Text replay references missing color data")?;
+                let glyph = color
+                    .glyphs
+                    .get(index)
+                    .context("retained Text replay references a missing color glyph")?;
+                let RuntimeTextBackendResources {
+                    color_paths,
+                    emoji_images,
+                    ..
+                } = &mut *backend;
+                runtime_draw_integrated_color_glyph(
+                    index,
+                    glyph,
+                    color.shape_world,
+                    factory,
+                    renderer,
+                    color_paths,
+                    emoji_images,
+                );
+                continue;
+            }
+        };
         let global_id = paint.paint_global_id;
         let object = runtime
             .object(global_id as usize)
@@ -16140,7 +16569,17 @@ fn runtime_draw_live_text_family(
                     renderer.save();
                 }
                 let path_key = RuntimeTextPathOwnerKey {
-                    paint_local: paint.has_effect_path.then_some(paint.paint_local),
+                    // Without an effect C++ clips against the replaceable
+                    // TextStylePaint opacity bucket. With an effect it clips
+                    // against the retained EffectPath (`shape_paint.cpp:
+                    // 115-143`).
+                    owner_local: if paint.has_effect_path {
+                        paint.paint_local
+                    } else {
+                        runtime_text_style_path_owner_local(paint).unwrap_or(paint.paint_local)
+                    },
+                    replace_on_render_style_rebuild: !paint.has_effect_path
+                        && runtime_text_style_path_owner_local(paint).is_some(),
                     slot: paint.clip_path_slot_index,
                 };
                 let raw_path = retained
@@ -16182,12 +16621,25 @@ fn runtime_draw_live_text_family(
         }
 
         let path_key = RuntimeTextPathOwnerKey {
-            paint_local: (paint.has_effect_path
+            // Direct text drawing consumes TextStylePaint's opacity bucket,
+            // which clearRenderStyles replaces. StrokeEffect and inner
+            // Feather commands consume their concrete retained output paths.
+            owner_local: if paint.has_effect_path
                 || paint
                     .feather_state
                     .as_ref()
-                    .is_some_and(|feather| feather.inner))
-            .then_some(paint.paint_local),
+                    .is_some_and(|feather| feather.inner)
+            {
+                paint.paint_local
+            } else {
+                runtime_text_style_path_owner_local(paint).unwrap_or(paint.paint_local)
+            },
+            replace_on_render_style_rebuild: paint
+                .feather_state
+                .as_ref()
+                .is_none_or(|feather| !feather.inner)
+                && !paint.has_effect_path
+                && runtime_text_style_path_owner_local(paint).is_some(),
             slot: paint.path_slot_index,
         };
         let raw_path = retained
@@ -16573,7 +17025,10 @@ fn runtime_realize_owned_shape_paints(
         let opacity_local = instance
             .runtime_graph()
             .map_or(owner_ref.shape_local, |graph| {
-                shape_paint_container_opacity_local(graph, owner_ref.shape_local)
+                crate::shapes::shape_paint_container::opacity_owner_local(
+                    graph,
+                    owner_ref.shape_local,
+                )
             });
         if let Some(render_opacity) = instance
             .component(opacity_local)
@@ -17483,7 +17938,7 @@ fn runtime_draw_component_list_with_state(
 
         renderer.save();
         renderer.transform(runtime_render_mat(item_transforms[item_index]));
-        let mut resources = item.child.render_resources.borrow_mut();
+        let mut resources = item.render_resources.borrow_mut();
         resources.initialize(
             paint_by_global.backend_context_id,
             runtime,
@@ -17818,14 +18273,26 @@ fn runtime_text_owned_raw_paths(
         {
             retain(
                 RuntimeTextPathOwnerKey {
-                    paint_local: command.has_effect_path.then_some(command.paint_local),
+                    // The no-effect clip is TextStylePaint's replaceable
+                    // opacity bucket; an active effect supplies its retained
+                    // EffectPath instead. Feather's inner draw path below is
+                    // always retained (`text_style_paint.cpp:15-43`,
+                    // `shape_paint.cpp:115-145`).
+                    owner_local: if command.has_effect_path {
+                        command.paint_local
+                    } else {
+                        runtime_text_style_path_owner_local(command).unwrap_or(command.paint_local)
+                    },
+                    replace_on_render_style_rebuild: !command.has_effect_path
+                        && runtime_text_style_path_owner_local(command).is_some(),
                     slot: command.clip_path_slot_index,
                 },
                 source,
             );
             retain(
                 RuntimeTextPathOwnerKey {
-                    paint_local: Some(command.paint_local),
+                    owner_local: command.paint_local,
+                    replace_on_render_style_rebuild: false,
                     slot: command.path_slot_index,
                 },
                 feather.inner_path_commands.as_slice(),
@@ -17833,7 +18300,16 @@ fn runtime_text_owned_raw_paths(
         } else {
             retain(
                 RuntimeTextPathOwnerKey {
-                    paint_local: command.has_effect_path.then_some(command.paint_local),
+                    // A direct text path is TextStylePaint::m_opacityPaths and
+                    // is replaced by clearRenderStyles. Effect outputs are
+                    // retained by their StrokeEffect owner and rewind.
+                    owner_local: if command.has_effect_path {
+                        command.paint_local
+                    } else {
+                        runtime_text_style_path_owner_local(command).unwrap_or(command.paint_local)
+                    },
+                    replace_on_render_style_rebuild: !command.has_effect_path
+                        && runtime_text_style_path_owner_local(command).is_some(),
                     slot: command.path_slot_index,
                 },
                 source,
@@ -18605,7 +19081,7 @@ fn record_runtime_draw_path_command_replay() {
     RUNTIME_DRAW_PATH_COMMAND_REPLAYS.with(|calls| calls.set(calls.get() + 1));
 }
 
-fn runtime_raw_path_from_commands(commands: &[RuntimePathCommand]) -> RawPath {
+pub(crate) fn runtime_raw_path_from_commands(commands: &[RuntimePathCommand]) -> RawPath {
     let mut raw_path = RawPath::new();
     runtime_rebuild_raw_path_from_commands(&mut raw_path, commands);
     raw_path
@@ -19009,13 +19485,14 @@ fn runtime_shape_paint_command_with_effect_path(
     if let Some(feather_state) = feather_state.as_mut() {
         prune_empty_path_segments(&mut feather_state.inner_path_commands);
     }
+    let path_kind = runtime_live_shape_paint_path_kind(artboard, paint)?;
     Some(RuntimeShapePaintCommand {
         paint_local: paint.local_id,
         paint_global_id: paint.global_id,
         mutator_local: paint.mutator_local,
         paint_type: runtime_shape_paint_kind(paint.paint_type),
         fill_rule: runtime_live_shape_paint_fill_rule(artboard, paint),
-        path_kind: runtime_shape_paint_path_kind(paint.path_kind?)?,
+        path_kind,
         path_slot_index: 0,
         clip_path_slot_index: 0,
         blend_mode_value: paint.blend_mode_value,
@@ -19026,7 +19503,7 @@ fn runtime_shape_paint_command_with_effect_path(
         render_opacity,
         paint_state,
         feather_state,
-        paint_space_transform: runtime_shape_paint_space_transform(paint, shape_world),
+        paint_space_transform: runtime_shape_paint_space_transform(path_kind, shape_world),
         path_commands,
         effect_path_commands,
         has_effect_path,
@@ -19166,7 +19643,8 @@ fn runtime_shape_paint_kind(kind: ShapePaintKind) -> RuntimeShapePaintKind {
 }
 
 fn runtime_shape_paint_container_is_occurrence_owned(container: &ShapePaintContainerNode) -> bool {
-    matches!(container.type_name, "Shape" | "Artboard")
+    crate::shapes::shape_paint_container::family(container.type_name)
+        .is_some_and(|family| family.owns_shape_geometry())
 }
 
 fn runtime_shape_paint_path_kind(kind: ShapePaintPathKind) -> Option<RuntimeShapePaintPathKind> {
@@ -19177,7 +19655,7 @@ fn runtime_shape_paint_path_kind(kind: ShapePaintPathKind) -> Option<RuntimeShap
     }
 }
 
-fn runtime_live_shape_paint_path_kind(
+pub(crate) fn runtime_live_shape_paint_path_kind(
     artboard: &ArtboardInstance,
     paint: &ShapePaintNode,
 ) -> Option<RuntimeShapePaintPathKind> {
@@ -19230,10 +19708,10 @@ fn runtime_live_owned_shape_paint_path_kind(
 }
 
 fn runtime_shape_paint_space_transform(
-    paint: &ShapePaintNode,
+    path_kind: RuntimeShapePaintPathKind,
     shape_world: Mat2D,
 ) -> Option<Mat2D> {
-    (paint.path_kind == Some(ShapePaintPathKind::World)).then_some(shape_world)
+    (path_kind == RuntimeShapePaintPathKind::World).then_some(shape_world)
 }
 
 fn runtime_shape_paint_state(
@@ -19365,24 +19843,6 @@ fn runtime_retained_gradient_render_opacity(
             RuntimeShapePaintState::SolidColor { .. } => None,
         })
         .unwrap_or(1.0)
-}
-
-fn shape_paint_container_opacity_local(graph: &ArtboardGraph, container_local: usize) -> usize {
-    let mut current = Some(container_local);
-    while let Some(local_id) = current {
-        let Some(component) = graph
-            .components
-            .iter()
-            .find(|component| component.local_id == local_id)
-        else {
-            break;
-        };
-        if component.capabilities.transform || component.capabilities.artboard {
-            return local_id;
-        }
-        current = component.parent_local;
-    }
-    container_local
 }
 
 fn runtime_gradient_endpoints(
@@ -22691,7 +23151,9 @@ fn path_commands(
 ) -> Vec<RuntimePathCommand> {
     match path.type_name {
         "Ellipse" => ellipse_path_commands(path, path_kind, transform),
-        "PointsPath" => points_path_commands(path, path_kind, transform, weighted_context),
+        "PointsPath" | "ListPath" => {
+            points_path_commands(path, path_kind, transform, weighted_context)
+        }
         "Polygon" => polygon_path_commands(path, path_kind, transform),
         "Rectangle" => rectangle_path_commands(path, path_kind, transform),
         "Star" => star_path_commands(path, path_kind, transform),
@@ -22877,6 +23339,9 @@ fn runtime_retained_path_vertices(
     artboard: &ArtboardInstance,
     path_local: usize,
 ) -> Option<Vec<PathVertexNode>> {
+    if let Some(vertices) = artboard.runtime_list_path_vertices(path_local) {
+        return Some(vertices);
+    }
     let vertices = &artboard
         .component(path_local)?
         .concrete
@@ -23561,7 +24026,7 @@ fn points_path_commands(
     transform: Mat2D,
     weighted_context: Option<&WeightedPathContext<'_>>,
 ) -> Vec<RuntimePathCommand> {
-    if path.type_name != "PointsPath" || path.vertices.len() < 2 {
+    if !matches!(path.type_name, "PointsPath" | "ListPath") || path.vertices.len() < 2 {
         return Vec::new();
     }
     if path
@@ -24793,6 +25258,44 @@ mod tests {
     }
 
     #[test]
+    fn unresolved_draw_target_is_an_inert_graph_diagnostic_adaptation() {
+        let bytes = include_bytes!("../../../fixtures/graph/clipping_and_draw_order.riv");
+        let file = read_runtime_file(bytes).expect("fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("fixture graphs");
+        let mut graph = graphs
+            .artboards
+            .first()
+            .expect("fixture has an artboard")
+            .clone();
+        let target = graph
+            .draw_targets
+            .first_mut()
+            .expect("fixture has a draw target");
+        let target_local = target.local_id;
+        target.drawable_local = Some(usize::MAX);
+
+        let instance = ArtboardInstance::from_graph(&file, &graph)
+            .expect("Rust retains unresolved graph references as diagnostics");
+        let retained = instance
+            .runtime_drawables
+            .draw_targets
+            .iter()
+            .find(|target| target.local_id == target_local)
+            .expect("unresolved target remains inspectable");
+
+        assert_eq!(retained.drawable_index, None);
+        assert!(
+            instance
+                .runtime_drawables
+                .drawables
+                .iter()
+                .take(instance.runtime_drawables.imported_count)
+                .all(|drawable| drawable.draw_target_local != Some(target_local)),
+            "the diagnostic target must not splice a drawable group"
+        );
+    }
+
+    #[test]
     fn draw_order_dirt_relinks_retained_drawable_objects() {
         // Mirrors C++ `DrawTarget::placementValueChanged` ->
         // `ComponentDirt::DrawOrder` -> `Artboard::sortDrawOrder`
@@ -24934,6 +25437,109 @@ mod tests {
     }
 
     #[test]
+    fn draw_order_sort_uses_the_retained_draw_rules_owner() {
+        // `DrawRules::onAddedDirty` resolves `m_ActiveTarget` once and the
+        // generated setter refreshes that retained pointer before publishing
+        // DrawOrder dirt. `Artboard::sortDrawOrder` never resolves the local
+        // id again (`draw_rules.cpp:8-39`, `artboard.cpp:574-651`).
+        let bytes = include_bytes!("../../../fixtures/graph/clipping_and_draw_order.riv");
+        let file = read_runtime_file(bytes).expect("fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("fixture graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+
+        let rules_local = instance
+            .runtime_drawables
+            .drawables
+            .iter()
+            .take(instance.runtime_drawables.imported_count)
+            .find_map(|drawable| drawable.flattened_draw_rules_local)
+            .expect("fixture has retained DrawRules");
+        let order_before = instance
+            .runtime_drawables
+            .iter()
+            .filter_map(|drawable| drawable.local_id)
+            .collect::<Vec<_>>();
+        let draw_target_id_key =
+            property_key_for_name("DrawRules", "drawTargetId").expect("draw target id key");
+
+        // This deliberately bypasses the generated DrawRules callback. It is
+        // the Rust equivalent of changing deserialized backing storage after
+        // onAddedDirty: the retained active target must remain authoritative.
+        assert!(
+            instance
+                .objects
+                .set_uint_property(rules_local, draw_target_id_key, u64::MAX)
+        );
+        assert!(instance.add_dirt(0, ComponentDirt::DRAW_ORDER, false));
+        assert!(instance.update_pass());
+
+        assert_eq!(
+            instance
+                .runtime_drawables
+                .iter()
+                .filter_map(|drawable| drawable.local_id)
+                .collect::<Vec<_>>(),
+            order_before,
+            "DrawOrder sorting rediscovered DrawRules through its local id"
+        );
+    }
+
+    #[test]
+    fn draw_order_sort_uses_the_retained_draw_target_placement() {
+        // `DrawTarget::onAddedDirty` retains its resolved Drawable and the
+        // generated placement setter updates the retained target before
+        // publishing DrawOrder dirt. Sorting must not re-read either backing
+        // property (`draw_target.cpp:8-31`, `artboard.cpp:652-700`).
+        let bytes = include_bytes!("../../../fixtures/graph/clipping_and_draw_order.riv");
+        let file = read_runtime_file(bytes).expect("fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("fixture graphs");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_pass();
+
+        let target = graph
+            .draw_targets
+            .iter()
+            .find(|target| matches!(target.placement_value, 0 | 1))
+            .expect("fixture has a placed draw target");
+        let order_before = instance
+            .runtime_drawables
+            .iter()
+            .filter_map(|drawable| drawable.local_id)
+            .collect::<Vec<_>>();
+        let placement_key =
+            property_key_for_name("DrawTarget", "placementValue").expect("placement key");
+        let drawable_id_key =
+            property_key_for_name("DrawTarget", "drawableId").expect("drawable id key");
+        let bypass_value = u64::from(target.placement_value == 0);
+
+        assert!(
+            instance
+                .objects
+                .set_uint_property(target.local_id, drawable_id_key, u64::MAX,)
+        );
+        assert!(
+            instance
+                .objects
+                .set_uint_property(target.local_id, placement_key, bypass_value,)
+        );
+        assert!(instance.add_dirt(0, ComponentDirt::DRAW_ORDER, false));
+        assert!(instance.update_pass());
+
+        assert_eq!(
+            instance
+                .runtime_drawables
+                .iter()
+                .filter_map(|drawable| drawable.local_id)
+                .collect::<Vec<_>>(),
+            order_before,
+            "DrawOrder sorting re-read the serialized DrawTarget placement"
+        );
+    }
+
+    #[test]
     fn scripted_file_assets_displace_pending_image_importers() {
         let file = RuntimeFile::from_authoring_records(vec![
             authoring_record("Backboard", Vec::new()),
@@ -25059,8 +25665,10 @@ mod tests {
             builds.set(builds.get() + 1);
             Ok(RuntimeCachedTextShapePaints {
                 commands: Arc::new(Vec::new()),
+                replay: Arc::new(Vec::new()),
                 paths: Arc::new(BTreeMap::new()),
                 clip_path: None,
+                color: None,
                 publishes_layout_dirty: true,
             })
         };
@@ -25081,14 +25689,214 @@ mod tests {
     }
 
     #[test]
+    fn non_render_style_text_rebuild_retains_backend_paths() {
+        let owner = RuntimeTextDrawOwner::default();
+        let frame = RuntimeCachedTextShapePaints {
+            commands: Arc::new(Vec::new()),
+            replay: Arc::new(Vec::new()),
+            paths: Arc::new(BTreeMap::new()),
+            clip_path: None,
+            color: None,
+            publishes_layout_dirty: true,
+        };
+        owner
+            .retained_or_build(|| Ok(frame.clone()))
+            .expect("initial build succeeds");
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let raw_path = RawPath::new();
+        owner.backend.borrow_mut().paths.insert(
+            RuntimeTextPathOwnerKey {
+                owner_local: 7,
+                replace_on_render_style_rebuild: true,
+                slot: 0,
+            },
+            RuntimeTextPathBackend {
+                path: factory.make_empty_render_path(),
+                raw_mutation_id: raw_path.mutation_id(),
+            },
+        );
+
+        owner.mark_paths_retained_dirty();
+        owner.mark_render_styles_dirty_unless_paths_retained();
+        owner
+            .retained_or_build(|| Ok(frame))
+            .expect("non-render-style dirty rebuild succeeds");
+
+        assert_eq!(owner.backend.borrow().paths.len(), 1);
+        assert_eq!(stats.make_empty_paths.get(), 1);
+    }
+
+    #[test]
+    fn polymorphic_shape_paint_containers_retain_all_nine_families() {
+        let type_names = [
+            "Artboard",
+            "LayoutComponent",
+            "Shape",
+            "TextStylePaint",
+            "ForegroundLayoutDrawable",
+            "TextInputCursor",
+            "TextInputSelection",
+            "TextInputText",
+            "TextInputSelectedText",
+        ];
+        let containers = type_names
+            .iter()
+            .enumerate()
+            .map(|(index, type_name)| ShapePaintContainerNode {
+                local_id: index,
+                global_id: index as u32,
+                type_name,
+                blend_mode_value: 3,
+                paints: vec![ShapePaintNode {
+                    local_id: type_names.len() + index,
+                    global_id: (type_names.len() + index) as u32,
+                    type_name: "Fill",
+                    paint_type: ShapePaintKind::Fill,
+                    is_visible: true,
+                    blend_mode_value: 3,
+                    fill_rule: 0,
+                    path_kind: Some(ShapePaintPathKind::LocalClockwise),
+                    paint_state: None,
+                    mutator_local: None,
+                    mutator_global: None,
+                    mutator_type_name: None,
+                    feather: None,
+                    feather_local: None,
+                    feather_global: None,
+                    feather_type_name: None,
+                    effects: Vec::new(),
+                    gradient_stops: Vec::new(),
+                }],
+            })
+            .collect::<Vec<_>>();
+
+        let mut owners = RuntimeShapeList::default();
+        owners.retain_paint_containers(&containers);
+
+        for (index, type_name) in type_names.iter().enumerate() {
+            let retained = owners.get(index).expect("retained polymorphic container");
+            assert_eq!(
+                retained.paint_container_family,
+                crate::shapes::shape_paint_container::family(type_name),
+                "{type_name}"
+            );
+            assert_eq!(retained.paint_owners.len(), 1, "{type_name}");
+            retained.paint_owners[0].effect_dirty_from.set(None);
+            owners.invalidate_container_stroke_effects(index);
+            assert_eq!(
+                retained.paint_owners[0].effect_dirty_from.get(),
+                Some(0),
+                "{type_name}"
+            );
+        }
+        assert_eq!(
+            owners.paint_owner_refs.len(),
+            2,
+            "only Artboard/Shape use the common geometry backend; concrete layout/text sidecars remain separate"
+        );
+    }
+
+    #[test]
+    fn changed_text_render_style_rebuild_replaces_only_derived_paths() {
+        let owner = RuntimeTextDrawOwner::default();
+        let empty_frame = RuntimeCachedTextShapePaints {
+            commands: Arc::new(Vec::new()),
+            replay: Arc::new(Vec::new()),
+            paths: Arc::new(BTreeMap::new()),
+            clip_path: None,
+            color: None,
+            publishes_layout_dirty: true,
+        };
+        owner
+            .retained_or_build(|| Ok(empty_frame))
+            .expect("initial build succeeds");
+
+        let stats = Rc::new(CountingStats::default());
+        let mut factory = CountingFactory {
+            stats: Rc::clone(&stats),
+            next_path_id: 0,
+        };
+        let raw_path = RawPath::new();
+        for (owner_local, replace_on_render_style_rebuild) in [(7, false), (8, true)] {
+            owner.backend.borrow_mut().paths.insert(
+                RuntimeTextPathOwnerKey {
+                    owner_local,
+                    replace_on_render_style_rebuild,
+                    slot: 0,
+                },
+                RuntimeTextPathBackend {
+                    path: factory.make_empty_render_path(),
+                    raw_mutation_id: raw_path.mutation_id(),
+                },
+            );
+        }
+
+        let changed_frame = RuntimeCachedTextShapePaints {
+            commands: Arc::new(vec![RuntimeShapePaintCommand {
+                paint_local: 7,
+                paint_global_id: 7,
+                mutator_local: None,
+                paint_type: RuntimeShapePaintKind::Unknown,
+                fill_rule: RenderFillRule::NonZero,
+                path_kind: RuntimeShapePaintPathKind::Local,
+                path_slot_index: 0,
+                clip_path_slot_index: 0,
+                blend_mode_value: 0,
+                render_blend_mode_value: 0,
+                render_opacity: 1.0,
+                paint_state: None,
+                feather_state: None,
+                paint_space_transform: None,
+                path_commands: Vec::new(),
+                effect_path_commands: Vec::new(),
+                has_effect_path: false,
+                needs_save_operation: false,
+                shape_world_override: None,
+                aliases_local_clockwise_path: false,
+                uses_temporary_paint: false,
+                text_path_bucket_slot: None,
+                text_paint_pool: None,
+                ensure_text_paint_pool_after_draw: None,
+                prepared_raw_path: None,
+            }]),
+            replay: Arc::new(vec![RuntimeTextReplay::Paint(0)]),
+            paths: Arc::new(BTreeMap::new()),
+            clip_path: None,
+            color: None,
+            publishes_layout_dirty: true,
+        };
+        owner.mark_render_styles_dirty();
+        owner
+            .retained_or_build(|| Ok(changed_frame))
+            .expect("changed dirty rebuild succeeds");
+
+        let paths = owner.backend.borrow();
+        assert_eq!(paths.paths.len(), 1);
+        assert!(
+            paths
+                .paths
+                .keys()
+                .all(|key| !key.replace_on_render_style_rebuild)
+        );
+        assert_eq!(stats.make_empty_paths.get(), 2);
+    }
+
+    #[test]
     fn cloned_text_owner_starts_with_fresh_custom_and_backend_state() {
         let owner = RuntimeTextDrawOwner::default();
         owner
             .retained_or_build(|| {
                 Ok(RuntimeCachedTextShapePaints {
                     commands: Arc::new(Vec::new()),
+                    replay: Arc::new(Vec::new()),
                     paths: Arc::new(BTreeMap::new()),
                     clip_path: None,
+                    color: None,
                     publishes_layout_dirty: true,
                 })
             })
@@ -27390,6 +28198,115 @@ mod tests {
     }
 
     #[test]
+    fn layout_container_path_kind_reads_live_fill_rule() {
+        let bytes = synthetic_painted_layout_geometry_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic painted-layout riv imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("synthetic painted-layout graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let container = graph
+            .shape_paint_containers
+            .iter()
+            .find(|container| container.type_name == "LayoutComponent")
+            .expect("layout paint container");
+        let paint = container.paints.first().expect("layout fill");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+
+        assert_eq!(
+            runtime_live_shape_paint_path_kind(&instance, paint),
+            Some(RuntimeShapePaintPathKind::Local)
+        );
+        let fill_rule = property_key_for_name("Fill", "fillRule").expect("Fill.fillRule key");
+        assert!(instance.set_uint_property(paint.local_id, fill_rule, 2));
+        assert_eq!(
+            runtime_live_shape_paint_path_kind(&instance, paint),
+            Some(RuntimeShapePaintPathKind::LocalClockwise),
+            "non-Shape containers must select the live virtual Fill path"
+        );
+    }
+
+    #[test]
+    fn layout_gradient_stroke_mutation_keeps_path_shader_space_and_epoch_in_lockstep() {
+        let bytes = synthetic_painted_layout_gradient_stroke_riv();
+        let file = read_runtime_file(&bytes).expect("synthetic layout gradient stroke imports");
+        let graphs =
+            GraphFile::from_runtime_file(&file).expect("synthetic layout gradient stroke graphs");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("synthetic riv has an artboard");
+        let container = graph
+            .shape_paint_containers
+            .iter()
+            .find(|container| container.type_name == "LayoutComponent")
+            .expect("layout paint container");
+        let paint = container.paints.first().expect("layout gradient stroke");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        instance.update_components();
+        let shape_world = Mat2D([1.0, 0.0, 0.0, 1.0, 25.0, 0.0]);
+
+        let world_command = runtime_prepare_gradient_paint_command(
+            &instance,
+            graph,
+            1.0,
+            container,
+            paint,
+            shape_world,
+            None,
+        );
+        assert_eq!(world_command.path_kind, RuntimeShapePaintPathKind::World);
+        let world_transform = world_command
+            .paint_space_transform
+            .expect("world path carries its shader-space transform");
+        assert_eq!(
+            runtime_gradient_space_endpoints(Some(world_transform), 0.0, 0.0, 10.0, 0.0),
+            (25.0, 0.0, 35.0, 0.0)
+        );
+        assert_eq!(
+            runtime_paint_configuration_epoch(&instance, &world_command),
+            u128::from(runtime_world_paint_configuration_epoch(&instance))
+        );
+
+        let transform_affects_stroke = property_key_for_name("Stroke", "transformAffectsStroke")
+            .expect("Stroke.transformAffectsStroke key");
+        assert!(instance.set_bool_property(paint.local_id, transform_affects_stroke, true));
+        instance.update_components();
+
+        let local_command = runtime_prepare_gradient_paint_command(
+            &instance,
+            graph,
+            1.0,
+            container,
+            paint,
+            shape_world,
+            None,
+        );
+        assert_eq!(local_command.path_kind, RuntimeShapePaintPathKind::Local);
+        assert_eq!(local_command.paint_space_transform, None);
+        assert_eq!(
+            runtime_gradient_space_endpoints(
+                local_command.paint_space_transform,
+                0.0,
+                0.0,
+                10.0,
+                0.0,
+            ),
+            (0.0, 0.0, 10.0, 0.0)
+        );
+        assert_eq!(
+            runtime_paint_configuration_epoch(&instance, &local_command),
+            u128::from(instance.cache_epoch())
+        );
+        assert_ne!(
+            runtime_paint_configuration_epoch(&instance, &world_command),
+            runtime_paint_configuration_epoch(&instance, &local_command),
+            "changing the live path family must invalidate the cached gradient configuration"
+        );
+    }
+
+    #[test]
     fn paint_preparation_classifies_solid_only_files_without_hiding_gradients() {
         let solid_file = read_runtime_file(&synthetic_painted_layout_geometry_riv())
             .expect("synthetic solid-only riv imports");
@@ -29649,6 +30566,7 @@ mod tests {
             referenced_artboard_global: None,
             layout_local: None,
             flattened_draw_rules_local: None,
+            flattened_draw_rules_index: None,
             draw_target_local: None,
             clipping_shape_local: None,
             text_draw_owner: None,
@@ -29758,6 +30676,7 @@ mod tests {
             referenced_artboard_global: None,
             layout_local: None,
             flattened_draw_rules_local: None,
+            flattened_draw_rules_index: None,
             draw_target_local: None,
             clipping_shape_local: None,
             text_draw_owner: None,
@@ -30486,6 +31405,48 @@ mod tests {
         push_object(&mut bytes, "SolidColor", |bytes| {
             push_uint(bytes, "Component", "parentId", 3);
             push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+        });
+        bytes
+    }
+
+    fn synthetic_painted_layout_gradient_stroke_riv() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"RIVE");
+        push_var_uint(&mut bytes, 7);
+        push_var_uint(&mut bytes, 0);
+        push_var_uint(&mut bytes, 9660);
+        push_var_uint(&mut bytes, 0);
+        push_object(&mut bytes, "Backboard", |_| {});
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_f32(bytes, "LayoutComponent", "width", 200.0);
+            push_f32(bytes, "LayoutComponent", "height", 100.0);
+        });
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_f32(bytes, "Node", "x", 25.0);
+            push_f32(bytes, "LayoutComponent", "width", 100.0);
+            push_f32(bytes, "LayoutComponent", "height", 50.0);
+            push_uint(bytes, "LayoutComponent", "styleId", 2);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+        push_object(&mut bytes, "Stroke", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+            push_f32(bytes, "Stroke", "thickness", 2.0);
+            push_bool(bytes, "Stroke", "transformAffectsStroke", false);
+        });
+        push_object(&mut bytes, "LinearGradient", |bytes| {
+            push_uint(bytes, "Component", "parentId", 3);
+            push_f32(bytes, "LinearGradient", "endX", 10.0);
+        });
+        push_object(&mut bytes, "GradientStop", |bytes| {
+            push_uint(bytes, "Component", "parentId", 4);
+            push_color(bytes, "GradientStop", "colorValue", 0xffff_0000);
+            push_f32(bytes, "GradientStop", "position", 0.0);
+        });
+        push_object(&mut bytes, "GradientStop", |bytes| {
+            push_uint(bytes, "Component", "parentId", 4);
+            push_color(bytes, "GradientStop", "colorValue", 0xff00_00ff);
+            push_f32(bytes, "GradientStop", "position", 1.0);
         });
         bytes
     }
@@ -32039,5 +33000,54 @@ mod tests {
             "world-space gradient endpoints did not follow the shape world transform: \
              baseline {baseline:?}, moved {moved:?}"
         );
+    }
+
+    #[test]
+    fn d_rt_engine_integrated_bitmap_replay_reuses_owner_cache() {
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        let command = RuntimeIntegratedColorGlyphCommand {
+            font_identity: 7,
+            glyph_id: 9,
+            transform: Mat2D::IDENTITY,
+            opacity: 0.5,
+            layers: vec![crate::text::RuntimeColorGlyphLayer {
+                path: RawPath::new(),
+                paint: crate::text::RuntimeColorGlyphPaint::Image {
+                    bytes: Arc::from(&b"not-a-real-image"[..]),
+                    width: 1,
+                    height: 1,
+                    bearing_x: 2.0,
+                    bearing_y: 3.0,
+                    extent_x: 4.0,
+                    extent_y: 5.0,
+                },
+                uses_foreground: false,
+            }],
+        };
+        let mut path_cache = BTreeMap::new();
+        let mut image_cache = BTreeMap::new();
+        runtime_draw_integrated_color_glyph(
+            0,
+            &command,
+            Mat2D::IDENTITY,
+            &mut factory,
+            &mut renderer,
+            &mut path_cache,
+            &mut image_cache,
+        );
+        runtime_draw_integrated_color_glyph(
+            0,
+            &command,
+            Mat2D::IDENTITY,
+            &mut factory,
+            &mut renderer,
+            &mut path_cache,
+            &mut image_cache,
+        );
+        let stream = factory.stream();
+        assert_eq!(stream.matches("decodeImage").count(), 1);
+        assert_eq!(stream.matches("drawImage").count(), 2);
+        assert_eq!(image_cache.len(), 1);
     }
 }

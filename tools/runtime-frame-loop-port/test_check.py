@@ -22,9 +22,16 @@ if str(TOOL_DIR) not in sys.path:
     sys.path.insert(0, str(TOOL_DIR))
 
 from check import (
+    FL_E8_FILES,
+    FL_E8_WP3_FILES,
     FL_B_FROZEN_SCOPE_FILES,
     FL_B_FROZEN_SCOPE_REF,
+    check_status,
     nested_event_owner_boundary_matches,
+    validate_fl_e8_policy,
+    validate_fl_e8_wp1_artifacts,
+    validate_fl_e8_wp2_artifacts,
+    validate_fl_e8_wp3_artifacts,
     validate_frozen_wave_scopes,
 )
 
@@ -113,6 +120,9 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 f"""
                 version = 1
                 upstream_ref = "{self.ref}"
+                [expected_gap_status_counts]
+                open = 0
+                closed = 0
                 decision = []
                 ratchet = []
                 """
@@ -415,6 +425,27 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "ratchet required_shape decreased to 0 < 1",
             result.stderr,
         )
+
+    def test_fl_e7_sort_ratchet_rejects_lookup_but_stops_at_setter(self) -> None:
+        self.assert_production_ratchet_case(
+            "fl_e7_sort_serialized_owner_rediscovery_absent",
+            "crates/nuxie-runtime/src/draw.rs",
+            """
+            fn sort_draw_order(&self) {
+                let target_local = self.draw_target_order[0];
+                let _ = self.draw_target_index_by_local.get(&target_local);
+            }
+            """,
+            """
+            fn sort_draw_order(&self) {
+                let target_index = self.draw_target_order[0];
+                let _ = self.draw_targets.get(target_index);
+            }
+            fn set_draw_rules_active_target(&self, target_local: usize) {
+                let _ = self.draw_target_index_by_local.get(&target_local);
+            }
+            """,
+        )
         (self.repo / "crates/runtime/src/animation.rs").write_text(
             "struct RuntimeAnimation;\nstruct RuntimeRequiredShape;\n"
         )
@@ -648,6 +679,340 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "before file correspondence is orchestrator-verified", result.stderr
         )
 
+    def test_fl_e_wave_acceptance_candidate_allows_pending_verification(self) -> None:
+        self.write_files(file_status="adapted")
+        self.ledger.write_text(
+            self.ledger.read_text().replace(
+                "version = 1\n",
+                'version = 1\nphase = "fl-e-wave-acceptance-candidate"\n'
+                'candidate_pending_verification_files = '
+                '["src/animation/linear_animation.cpp"]\n',
+                1,
+            )
+        )
+        self.manifest.write_text(
+            self.manifest.read_text().replace(
+                'status = "pending"\nverification = "pending-verification"',
+                'status = "faithful"\nverification = "pending-verification"',
+            )
+        )
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_candidate_phase_rejects_pending_verification_outside_allowlist(
+        self,
+    ) -> None:
+        self.write_files(file_status="adapted")
+        self.ledger.write_text(
+            self.ledger.read_text().replace(
+                "version = 1\n",
+                'version = 1\nphase = "fl-e-wave-acceptance-candidate"\n'
+                'candidate_pending_verification_files = ["src/other.cpp"]\n',
+                1,
+            )
+        )
+        self.manifest.write_text(
+            self.manifest.read_text().replace(
+                'status = "pending"\nverification = "pending-verification"',
+                'status = "faithful"\nverification = "pending-verification"',
+            )
+        )
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "before file correspondence is orchestrator-verified", result.stderr
+        )
+
+    def test_divergence_requires_the_decision_bound_named_ceiling(self) -> None:
+        errors: list[str] = []
+        check_status(
+            subject="file fixture.cpp",
+            row={
+                "status": "divergent-by-decision",
+                "decision": "D13",
+                "ceiling": "standalone-raw-text",
+            },
+            porting_rules=(
+                "- **FLR-20 Declare ceilings.** "
+                "**dynamic-list-path** **standalone-raw-text**\n"
+            ),
+            decision_ids={"D13"},
+            decision_ceilings={"D13": "dynamic-list-path"},
+            require_closed=False,
+            errors=errors,
+        )
+        self.assertIn(
+            "file fixture.cpp cites ceiling 'standalone-raw-text', but decision D13 binds "
+            "'dynamic-list-path'",
+            errors,
+        )
+
+    def fl_e8_policy_errors(
+        self,
+        *,
+        decisions: list[dict[str, object]] | None = None,
+        depends_on: list[str] | None = None,
+        paths: set[str] | None = None,
+        statuses: dict[str, str] | None = None,
+        expected_counts: dict[str, int] | None = None,
+        porting_rules: str | None = None,
+        parity_register: str = "12. retained history\n",
+        phase: str = "fl-e8-implementation",
+        candidate_paths: set[str] | None = None,
+    ) -> list[str]:
+        paths = FL_E8_FILES if paths is None else paths
+        statuses = statuses or {}
+        errors: list[str] = []
+        validate_fl_e8_policy(
+            phase=phase,
+            waves=[
+                {
+                    "id": "FL-E8",
+                    "sequence": 6,
+                    "depends_on": ["FL-E"] if depends_on is None else depends_on,
+                }
+            ],
+            file_rows=[
+                {
+                    "upstream": path,
+                    "wave": "FL-E8",
+                    "status": statuses.get(path, "pending"),
+                }
+                for path in sorted(paths)
+            ],
+            expected_counts=expected_counts
+            or {"faithful": 334, "divergent-by-decision": 1, "pending": 7},
+            decisions=decisions
+            or [
+                {
+                    "id": "D3",
+                    "rule": "FLR-20",
+                    "ceiling": "layout-engine",
+                }
+            ],
+            porting_rules=porting_rules
+            or (
+                "- **FLR-20 Declare support ceilings.** The only approved "
+                "**layout-engine** ceiling is D3; a new ceiling requires an "
+                "explicit user-approved D-row.\n- **FLR-21 Next.** fixture\n"
+            ),
+            parity_register=parity_register,
+            candidate_paths=candidate_paths or set(),
+            errors=errors,
+        )
+        return errors
+
+    def test_fl_e8_rejects_d13_reappearance(self) -> None:
+        errors = self.fl_e8_policy_errors(
+            decisions=[{"id": "D13", "rule": "FLR-20", "ceiling": "layout-engine"}]
+        )
+        self.assertIn("rejected FL-E8 decision D13 must not reappear", errors)
+
+    def test_fl_e8_rejects_d14_reappearance(self) -> None:
+        errors = self.fl_e8_policy_errors(
+            decisions=[{"id": "D14", "rule": "FLR-20", "ceiling": "layout-engine"}]
+        )
+        self.assertIn("rejected FL-E8 decision D14 must not reappear", errors)
+
+    def test_fl_e8_rejects_d15_reappearance(self) -> None:
+        errors = self.fl_e8_policy_errors(
+            decisions=[{"id": "D15", "rule": "FLR-20", "ceiling": "layout-engine"}]
+        )
+        self.assertIn("rejected FL-E8 decision D15 must not reappear", errors)
+
+    def test_fl_e8_requires_exact_wave_dependency_and_seven_rows(self) -> None:
+        errors = self.fl_e8_policy_errors(
+            depends_on=["FL-D"], paths=set(FL_E8_FILES) - {"src/text/text_style.cpp"}
+        )
+        self.assertIn("FL-E8 must depend exactly on FL-E", errors)
+        self.assertTrue(
+            any("FL-E8 wave must contain exactly seven" in error for error in errors)
+        )
+
+    def test_fl_e8_requires_wp0_counts(self) -> None:
+        errors = self.fl_e8_policy_errors(
+            expected_counts={"faithful": 335, "divergent-by-decision": 1, "pending": 6}
+        )
+        self.assertIn(
+            "FL-E8 fl-e8-implementation requires faithful=334, got 335", errors
+        )
+        self.assertIn(
+            "FL-E8 fl-e8-implementation requires pending=7, got 6", errors
+        )
+
+    def test_fl_e8_wave_requires_all_seven_promotions(self) -> None:
+        promoted = {
+            "src/shapes/list_path.cpp",
+            "src/text/raw_text.cpp",
+            "src/text/text_modifier.cpp",
+            "src/text/text_style.cpp",
+            "src/text/text_style_feature.cpp",
+            "src/text/text_target_modifier.cpp",
+            "src/text/text_variation_modifier.cpp",
+        }
+        errors: list[str] = []
+        validate_fl_e8_policy(
+            phase="fl-e8-wave-candidate",
+            waves=[{"id": "FL-E8", "sequence": 6, "depends_on": ["FL-E"]}],
+            file_rows=[
+                {
+                    "upstream": path,
+                    "wave": "FL-E8",
+                    "status": "faithful" if path in promoted else "pending",
+                }
+                for path in sorted(FL_E8_FILES)
+            ],
+            expected_counts={
+                "faithful": 341,
+                "divergent-by-decision": 1,
+                "pending": 0,
+            },
+            decisions=[{"id": "D3", "rule": "FLR-20", "ceiling": "layout-engine"}],
+            porting_rules=(
+                "- **FLR-20 Declare support ceilings.** The only approved "
+                "**layout-engine** ceiling is D3; a new ceiling requires an "
+                "explicit user-approved D-row.\n- **FLR-21 Next.** fixture\n"
+            ),
+            parity_register="12. retained history\n",
+            candidate_paths=promoted,
+            errors=errors,
+        )
+        self.assertEqual(errors, [])
+
+    def test_fl_e8_allows_only_d3_layout_engine_divergence(self) -> None:
+        self.assertEqual(self.fl_e8_policy_errors(), [])
+        errors = self.fl_e8_policy_errors(
+            decisions=[{"id": "D3", "rule": "FLR-20", "ceiling": "other"}]
+        )
+        self.assertIn("FLR-20 may bind only D3/layout-engine", errors)
+
+    def test_fl_e8_wp1_artifacts_pin_predicates_fixtures_corpus_and_probes(self) -> None:
+        owners = {
+            "text_modifier.rs": "enum StaticTextModifier {}\n",
+            "text_style_feature.rs": "struct StaticTextStyleFeature;\n",
+            "text_target_modifier.rs": "struct StaticTextTargetModifier;\n",
+            "text_variation_modifier.rs": "struct StaticTextVariationModifier;\n",
+        }
+        owner_dir = self.repo / "crates/nuxie-runtime/src/text"
+        owner_dir.mkdir(parents=True, exist_ok=True)
+        for name, source in owners.items():
+            (owner_dir / name).write_text(source)
+        fixture_dir = self.repo / "fixtures"
+        fixture_dir.mkdir(parents=True, exist_ok=True)
+        fl_e8_dir = fixture_dir / "fl-e8"
+        fl_e8_dir.mkdir()
+        (fl_e8_dir / "text_style_feature.riv").write_bytes(b"feature")
+        (fl_e8_dir / "text_variation_modifier.riv").write_bytes(b"variation")
+        (self.repo / "corpus.toml").write_text(
+            '[[file]]\nid="text_style_feature_fl_e8"\npath="fixtures/fl-e8/text_style_feature.riv"\nstatus="exact"\n'
+            '[[file]]\nid="text_variation_modifier_fl_e8"\npath="fixtures/fl-e8/text_variation_modifier.riv"\nstatus="exact"\n'
+        )
+        probe = self.repo / "crates/nuxie-runtime/tests/cpp_probe.rs"
+        probe.parent.mkdir(parents=True, exist_ok=True)
+        probe.write_text("D-ST-STRUCT D-ST-FONT D-ST-FEATURE D-ST-VARIATION D-ST-TARGET")
+        cpp_probe = self.repo / "tools/cpp-probe/main.cpp"
+        cpp_probe.parent.mkdir(parents=True, exist_ok=True)
+        cpp_probe.write_text(
+            "--runtime-fl-e8-static-text --runtime-fl-e8-font-swap "
+            "--runtime-fl-e8-feature-cycle --runtime-fl-e8-variation-cycle"
+        )
+        codegen = self.repo / "tools/nuxie-codegen/src/main.rs"
+        codegen.parent.mkdir(parents=True, exist_ok=True)
+        codegen.write_text("text-style-feature text-variation-modifier")
+        fixture_test = self.repo / "tools/nuxie-codegen/tests/fl_e8_fixtures.rs"
+        fixture_test.parent.mkdir(parents=True, exist_ok=True)
+        fixture_test.write_text("deterministic")
+        errors: list[str] = []
+        validate_fl_e8_wp1_artifacts(self.repo, errors)
+        self.assertEqual(errors, [])
+
+        (owner_dir / "text_modifier.rs").write_text(
+            "fn static_text_modifier_is_unsupported() {}\n"
+        )
+        errors = []
+        validate_fl_e8_wp1_artifacts(self.repo, errors)
+        self.assertIn(
+            "FL-E8 WP1 old static rejection predicate remains: static_text_modifier_is_unsupported",
+            errors,
+        )
+
+    def test_fl_e8_wp2_artifacts_pin_owner_differentials_and_exact_rows(self) -> None:
+        owner = self.repo / "crates/nuxie-runtime/src/shapes/list_path.rs"
+        owner.parent.mkdir(parents=True, exist_ok=True)
+        owner.write_text(
+            "RuntimeListPathState RuntimeListPathVertexListener "
+            "RuntimeListPathSubscription RuntimeCubicDetachedVertex clear_invalid"
+        )
+        bind = self.repo / "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"
+        bind.parent.mkdir(parents=True, exist_ok=True)
+        bind.write_text("RuntimeArtboardListTarget::ListPath")
+        probe = self.repo / "crates/nuxie-runtime/tests/cpp_probe.rs"
+        probe.parent.mkdir(parents=True, exist_ok=True)
+        probe.write_text("D-LP-INIT D-LP-EDGE")
+        silver_test = self.repo / "tools/silver-corpus/tests/fl_e8_list_path.rs"
+        silver_test.parent.mkdir(parents=True, exist_ok=True)
+        silver_test.write_text(
+            "D-LP-XY D-LP-RD D-LP-DETACHED D-LP-POINT "
+            "D-LP-INVALID D-LP-PARTIAL D-LP-LIVE"
+        )
+        cpp_probe = self.repo / "tools/cpp-probe/main.cpp"
+        cpp_probe.parent.mkdir(parents=True, exist_ok=True)
+        cpp_probe.write_text("--runtime-fl-e8-list-path")
+        (self.repo / "corpus.toml").write_text(
+            '[[file]]\nid="list_to_path"\nstatus="exact"\n'
+        )
+        (self.repo / "silver-corpus.toml").write_text(
+            '[[case]]\nid="list_to_path"\nstatus="exact"\n'
+        )
+        generator = self.repo / "tools/silver-corpus/generate_manifest.py"
+        generator.parent.mkdir(parents=True, exist_ok=True)
+        generator.write_text("def fl_e8_list_path_actions():\n    return range(60)\n")
+        errors: list[str] = []
+        validate_fl_e8_wp2_artifacts(self.repo, errors)
+        self.assertEqual(errors, [])
+
+        (self.repo / "silver-corpus.toml").write_text(
+            '[[case]]\nid="list_to_path"\nstatus="unsupported-feature"\n'
+        )
+        errors = []
+        validate_fl_e8_wp2_artifacts(self.repo, errors)
+        self.assertIn(
+            "FL-E8 WP2 silver-corpus.toml list_to_path must occur once with status=exact",
+            errors,
+        )
+
+    def test_fl_e8_wp3_artifacts_pin_facade_engine_bitmap_and_probe(self) -> None:
+        files = {
+            "crates/nuxie/src/lib.rs": "mod raw_text; pub use raw_text::RawText;",
+            "crates/nuxie/src/raw_text.rs": "pub struct RawText; pub struct RawTextFont;",
+            "crates/nuxie-runtime/src/text/raw_text.rs": (
+                "pub struct RawText; runtime_classify_color_glyph"
+            ),
+            "crates/nuxie-runtime/src/text/text_engine.rs": (
+                "runtime_classify_color_glyph runtime_extract_color_glyph_layers"
+            ),
+            "crates/nuxie-runtime/src/text.rs": "RuntimeIntegratedColorGlyphCommand",
+            "crates/nuxie-runtime/src/draw.rs": "emoji_images draw_image",
+            "crates/nuxie/tests/raw_text_differential.rs": (
+                "D-RT-API D-RT-COLOR-188 D-RT-COLOR-474"
+            ),
+            "tools/cpp-probe/main.cpp": "--raw-text-probe",
+        }
+        for relative, source in files.items():
+            path = self.repo / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(source)
+        errors: list[str] = []
+        validate_fl_e8_wp3_artifacts(self.repo, errors)
+        self.assertEqual(errors, [])
+
+        (self.repo / "crates/nuxie-runtime/src/text/raw_text.rs").write_text(
+            "pub struct RawText; standalone_raw_text_is_unsupported"
+        )
+        errors = []
+        validate_fl_e8_wp3_artifacts(self.repo, errors)
+        self.assertIn("FL-E8 WP3 standalone RawText rejection predicate remains", errors)
+
     def test_untracked_trace_counter_mismatch_fails(self) -> None:
         trace = json.loads((self.repo / "docs/trace.json").read_text())
         trace["landmarks"] = {"component_add_dirt": {"cpp": 1, "rust": 2}}
@@ -658,6 +1023,31 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "trace landmark mismatches have no gap rows: component_add_dirt",
             result.stderr,
         )
+
+    def test_expected_gap_status_counts_reject_stale_open_total(self) -> None:
+        self.gaps.write_text(
+            self.gaps.read_text().replace(
+                "open = 0\nclosed = 0\n",
+                "open = 1\nclosed = 0\n",
+                1,
+            )
+        )
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("gap status count open=0, expected 1", result.stderr)
+
+    def test_expected_gap_status_counts_are_required(self) -> None:
+        self.gaps.write_text(
+            self.gaps.read_text().replace(
+                "[expected_gap_status_counts]\nopen = 0\nclosed = 0\n",
+                "",
+                1,
+            )
+        )
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("expected_gap_status_counts.open is missing", result.stderr)
+        self.assertIn("expected_gap_status_counts.closed is missing", result.stderr)
 
     def test_missing_required_trace_counter_fails(self) -> None:
         content = self.ledger.read_text().replace(

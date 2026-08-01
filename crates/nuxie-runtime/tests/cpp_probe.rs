@@ -87299,10 +87299,102 @@ struct CppArtboard {
     runtime_state_machine_advances: Vec<CppRuntimeStateMachineAdvance>,
     #[serde(default, rename = "dataBinds")]
     data_binds: Vec<CppArtboardDataBind>,
+    #[serde(default, rename = "flE8StaticText")]
+    fl_e8_static_text: Option<CppFlE8StaticTextReport>,
+    #[serde(default, rename = "flE8FontSwap")]
+    fl_e8_font_swap: Option<CppFlE8FontSwapReport>,
+    #[serde(default, rename = "flE8FeatureCycle")]
+    fl_e8_feature_cycle: Option<CppFlE8FeatureCycleReport>,
+    #[serde(default, rename = "flE8VariationCycle")]
+    fl_e8_variation_cycle: Option<CppFlE8VariationCycleReport>,
+    #[serde(default, rename = "flE8ListPath")]
+    fl_e8_list_path: Option<Vec<CppFlE8ListPathReport>>,
     #[serde(default, rename = "nestedStateMachines")]
     nested_state_machines: Vec<CppNestedStateMachine>,
     #[serde(default, rename = "nestedRemapAnimations")]
     nested_remap_animations: Vec<CppNestedRemapAnimation>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppFlE8FontSwapReport {
+    available: bool,
+    glyph_phases: Vec<Vec<u32>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppFlE8FeatureCycleReport {
+    available: bool,
+    glyph_phases: Vec<Vec<u32>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppFlE8VariationCycleReport {
+    available: bool,
+    glyph_phases: Vec<Vec<u32>>,
+    axis_tags: Vec<u32>,
+    axis_value_phases: Vec<Vec<Option<f32>>>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct CppFlE8ListPathReport {
+    local_id: usize,
+    core_type: u16,
+    list_source: u32,
+    listener_count: usize,
+    vertex_count: usize,
+    raw_verb_count: usize,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct CppFlE8StaticTextReport {
+    text_count: usize,
+    abstract_modifier_count: usize,
+    interpolator_count: usize,
+    groups: Vec<CppFlE8ModifierGroupReport>,
+    styles: Vec<CppFlE8StyleReport>,
+    features: Vec<CppFlE8OptionReport>,
+    variations: Vec<CppFlE8OptionReport>,
+    targets: Vec<CppFlE8TargetReport>,
+    glyphs: Vec<u32>,
+    glyph_variations: Vec<Vec<CppFlE8OptionReport>>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct CppFlE8ModifierGroupReport {
+    range_count: usize,
+    modifier_count: usize,
+    shape_modifier_count: usize,
+    follow_path_modifier_count: usize,
+    direct_text: bool,
+    modifies_origin: bool,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct CppFlE8StyleReport {
+    variation_count: usize,
+    feature_count: usize,
+    has_owning_text: bool,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct CppFlE8OptionReport {
+    tag: u32,
+    value: f32,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct CppFlE8TargetReport {
+    target_id: u32,
+    resolved: bool,
+    has_text_component: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -87652,6 +87744,659 @@ struct CppObject {
     data_bind_path_ids: Option<Vec<u32>>,
     #[serde(default, rename = "resolvedDataBindPathIds")]
     resolved_data_bind_path_ids: Option<Vec<u32>>,
+}
+
+fn fl_e8_local_fixture_bytes(name: &str) -> &'static [u8] {
+    match name {
+        "feature" => include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv"),
+        "variation" => include_bytes!("../../../fixtures/fl-e8/text_variation_modifier.riv"),
+        _ => panic!("unknown FL-E8 fixture {name}"),
+    }
+}
+
+fn fl_e8_cpp_and_rust_local_types(
+    label: &str,
+    bytes: &[u8],
+    args: &[String],
+) -> (CppProbeFile, RuntimeFile, GraphFile, Vec<u16>, Vec<u16>) {
+    let probe = probe_path().expect("the FL-E8 static-text differential requires cpp_probe");
+    let mut probe_args = vec!["--runtime-fl-e8-static-text".to_owned()];
+    probe_args.extend_from_slice(args);
+    let cpp = read_cpp_probe_bytes_with_args(&probe, label, bytes, &probe_args);
+    let runtime = read_runtime_file(bytes).expect("FL-E8 differential fixture imports in Rust");
+    let graphs = GraphFile::from_runtime_file(&runtime).expect("FL-E8 differential graph builds");
+    let cpp_types = cpp.artboards[0]
+        .objects
+        .iter()
+        .flatten()
+        .map(|object| object.core_type)
+        .collect::<Vec<_>>();
+    let rust_types = graphs.artboards[0]
+        .local_objects
+        .iter()
+        .map(|object| runtime.object(object.global_id as usize).unwrap().type_key)
+        .collect::<Vec<_>>();
+    (cpp, runtime, graphs, cpp_types, rust_types)
+}
+
+#[test]
+fn d_st_struct_live_cpp_modifier_registration_matches_rust() {
+    let bytes = std::fs::read(cpp_runtime_fixture("modifier_test.riv"))
+        .expect("read upstream modifier_test fixture");
+    let (cpp, _runtime, graphs, cpp_types, rust_types) =
+        fl_e8_cpp_and_rust_local_types("D-ST-STRUCT", &bytes, &[]);
+    assert_eq!(cpp_types, rust_types);
+    let report = cpp.artboards[0]
+        .fl_e8_static_text
+        .as_ref()
+        .expect("C++ FL-E8 structure report");
+    assert_eq!(report.text_count, 1);
+    assert_eq!(report.abstract_modifier_count, 0);
+    assert_eq!(report.interpolator_count, 1);
+    assert_eq!(report.groups.len(), 1);
+    assert_eq!(
+        report.groups[0],
+        CppFlE8ModifierGroupReport {
+            range_count: 1,
+            modifier_count: 0,
+            shape_modifier_count: 0,
+            follow_path_modifier_count: 0,
+            direct_text: true,
+            modifies_origin: false,
+        }
+    );
+    let graph = &graphs.artboards[0];
+    assert_eq!(
+        graph
+            .components
+            .iter()
+            .filter(|component| component.type_name == "Text")
+            .count(),
+        report.text_count
+    );
+}
+
+#[test]
+fn d_st_font_live_cpp_embedded_font_fixture_matches_rust() {
+    let fixture = std::fs::read(cpp_runtime_fixture("data_bind_font_test.riv")).unwrap();
+    let font_path = cpp_runtime_fixture("kablammo.ttf");
+    let (cpp, runtime, graphs, cpp_types, rust_types) = fl_e8_cpp_and_rust_local_types(
+        "D-ST-FONT",
+        &fixture,
+        &[
+            "--runtime-fl-e8-font-swap".to_owned(),
+            font_path.to_string_lossy().into_owned(),
+        ],
+    );
+    assert_eq!(cpp_types, rust_types);
+    assert!(cpp_types.contains(&137));
+    let cpp_report = cpp.artboards[0].fl_e8_font_swap.as_ref().unwrap();
+    assert!(cpp_report.available);
+    assert_eq!(cpp_report.glyph_phases.len(), 4);
+
+    let graph = &graphs.artboards[0];
+    let text_local = graph
+        .components
+        .iter()
+        .position(|component| component.type_name == "Text")
+        .unwrap();
+    let mut artboard = ArtboardInstance::from_graph(&runtime, graph).unwrap();
+    let mut machine = artboard.state_machine_instance(0).unwrap();
+    assert!(machine.bind_default_view_model_context_on_artboard(&mut artboard));
+    machine.advance_and_apply(&mut artboard, 0.0).unwrap();
+    let mut rust_phases = vec![
+        artboard
+            .debug_static_text_layout_report(text_local)
+            .unwrap()
+            .line_glyph_ids
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>(),
+    ];
+
+    let font_bytes: std::sync::Arc<[u8]> = std::fs::read(font_path).unwrap().into();
+    assert!(machine.debug_set_bound_main_font_bytes_by_property_name(
+        &runtime,
+        "fontProperty",
+        Some(font_bytes),
+    ));
+    machine.advance_and_apply(&mut artboard, 0.016).unwrap();
+    rust_phases.push(
+        artboard
+            .debug_static_text_layout_report(text_local)
+            .unwrap()
+            .line_glyph_ids
+            .into_iter()
+            .flatten()
+            .collect(),
+    );
+
+    for (x, y) in [(490.0, 490.0), (490.0, 20.0)] {
+        machine.pointer_down(&mut artboard, x, y, 0);
+        machine.pointer_up(&mut artboard, x, y, 0);
+        machine.advance_and_apply(&mut artboard, 0.016).unwrap();
+        rust_phases.push(
+            artboard
+                .debug_static_text_layout_report(text_local)
+                .unwrap()
+                .line_glyph_ids
+                .into_iter()
+                .flatten()
+                .collect(),
+        );
+    }
+    assert_eq!(rust_phases, cpp_report.glyph_phases);
+    assert_ne!(rust_phases[0], rust_phases[1]);
+}
+
+#[test]
+fn d_st_feature_live_cpp_authored_feature_chain_matches_rust() {
+    let fixture = fl_e8_local_fixture_bytes("feature");
+    let (cpp, runtime, graphs, cpp_types, rust_types) =
+        fl_e8_cpp_and_rust_local_types("D-ST-FEATURE", fixture, &[]);
+    assert_eq!(cpp_types, rust_types);
+    assert_eq!(cpp_types.iter().filter(|key| **key == 164).count(), 3);
+    let report = cpp.artboards[0].fl_e8_static_text.as_ref().unwrap();
+    assert_eq!(report.styles[0].feature_count, 3);
+    assert_eq!(
+        report.features,
+        vec![
+            CppFlE8OptionReport {
+                tag: u32::from_be_bytes(*b"liga"),
+                value: 1.0,
+            },
+            CppFlE8OptionReport {
+                tag: u32::from_be_bytes(*b"liga"),
+                value: 0.0,
+            },
+            CppFlE8OptionReport {
+                tag: u32::from_be_bytes(*b"liga"),
+                value: 1.0,
+            },
+        ]
+    );
+    let graph = &graphs.artboards[0];
+    let text_local = graph
+        .components
+        .iter()
+        .find(|component| component.type_name == "Text")
+        .unwrap()
+        .local_id;
+    let style_local = graph
+        .components
+        .iter()
+        .find(|component| component.type_name == "TextStylePaint")
+        .unwrap()
+        .local_id;
+    let feature_local = graph
+        .components
+        .iter()
+        .filter(|component| component.type_name == "TextStyleFeature")
+        .last()
+        .unwrap()
+        .local_id;
+    let mut artboard = ArtboardInstance::from_graph(&runtime, graph).unwrap();
+    let rust_before = artboard
+        .debug_static_text_layout_report(text_local)
+        .unwrap();
+    assert_eq!(
+        report.glyphs,
+        rust_before
+            .line_glyph_ids
+            .iter()
+            .flatten()
+            .copied()
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        report
+            .features
+            .iter()
+            .map(|feature| (feature.tag, feature.value as u32))
+            .collect::<Vec<_>>(),
+        rust_before.style_features[0]
+    );
+
+    let cycle_args = vec!["--runtime-fl-e8-feature-cycle".to_owned()];
+    let (cpp_cycle, _, _, _, _) =
+        fl_e8_cpp_and_rust_local_types("D-ST-FEATURE-cycle", fixture, &cycle_args);
+    let cpp_cycle = cpp_cycle.artboards[0].fl_e8_feature_cycle.as_ref().unwrap();
+    assert!(cpp_cycle.available);
+    assert_eq!(cpp_cycle.glyph_phases.len(), 4);
+    let feature_value_key = property_key_for_name("TextStyleFeature", "featureValue");
+    assert!(artboard.set_uint_property(feature_local, feature_value_key, 0));
+    let rust_inaction = artboard
+        .debug_static_text_layout_report(text_local)
+        .unwrap();
+    assert_eq!(rust_inaction.line_glyph_ids, rust_before.line_glyph_ids);
+    let cloned = artboard.clone();
+    let rust_clone = cloned.debug_static_text_layout_report(text_local).unwrap();
+    let font_size_key = property_key_for_name("TextStylePaint", "fontSize");
+    assert!(artboard.set_double_property(style_local, font_size_key, 17.0));
+    let rust_reshaped = artboard
+        .debug_static_text_layout_report(text_local)
+        .unwrap();
+    let rust_phases = vec![
+        rust_before
+            .line_glyph_ids
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>(),
+        rust_inaction
+            .line_glyph_ids
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>(),
+        rust_clone
+            .line_glyph_ids
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>(),
+        rust_reshaped
+            .line_glyph_ids
+            .iter()
+            .flatten()
+            .copied()
+            .collect::<Vec<_>>(),
+    ];
+    assert_eq!(cpp_cycle.glyph_phases, rust_phases);
+    assert_eq!(cpp_cycle.glyph_phases[0], cpp_cycle.glyph_phases[1]);
+    assert_ne!(cpp_cycle.glyph_phases[1], cpp_cycle.glyph_phases[2]);
+    assert_eq!(cpp_cycle.glyph_phases[2], cpp_cycle.glyph_phases[3]);
+    assert_eq!(rust_reshaped.style_features[0].last().unwrap().1, 0);
+}
+
+fn fl_e8_rust_variation_phase(
+    report: &nuxie_runtime::RuntimeTextLayoutDebugReport,
+    axis_tag: u32,
+) -> (Vec<u32>, Vec<Option<f32>>) {
+    let glyphs = report
+        .line_glyph_ids
+        .iter()
+        .flatten()
+        .copied()
+        .collect::<Vec<_>>();
+    let values = report
+        .line_glyph_variations
+        .iter()
+        .flatten()
+        .map(|axes| {
+            axes.iter()
+                .find(|(tag, _)| *tag == axis_tag)
+                .map(|(_, value)| *value)
+        })
+        .collect::<Vec<_>>();
+    (glyphs, values)
+}
+
+#[test]
+fn d_st_variation_live_cpp_axis_value_mutation_matches_rust_update() {
+    let axis_value = definition_by_name("TextVariationModifier")
+        .unwrap()
+        .properties
+        .iter()
+        .find(|property| property.name == "axisValue")
+        .unwrap()
+        .key
+        .int;
+    let args = vec![
+        "--runtime-set-double".to_owned(),
+        "10".to_owned(),
+        axis_value.to_string(),
+        "900".to_owned(),
+        "--runtime-update".to_owned(),
+    ];
+    let (cpp, runtime, graphs, cpp_types, rust_types) = fl_e8_cpp_and_rust_local_types(
+        "D-ST-VARIATION",
+        fl_e8_local_fixture_bytes("variation"),
+        &args,
+    );
+    assert_eq!(cpp_types, rust_types);
+    assert_eq!(cpp_types.iter().filter(|key| **key == 162).count(), 2);
+    let report = cpp.artboards[0].fl_e8_static_text.as_ref().unwrap();
+    assert_eq!(report.groups.len(), 1);
+    assert_eq!(report.groups[0].modifier_count, 2);
+    assert_eq!(report.groups[0].shape_modifier_count, 2);
+    assert!(report.groups[0].modifies_origin);
+    assert_eq!(report.variations[1].value, 900.0);
+    let graph = &graphs.artboards[0];
+    let text_local = graph
+        .components
+        .iter()
+        .find(|component| component.type_name == "Text")
+        .unwrap()
+        .local_id;
+    let mut artboard = ArtboardInstance::from_graph(&runtime, graph).unwrap();
+    assert!(artboard.set_double_property(10, axis_value, 900.0));
+    let rust_report = artboard
+        .debug_static_text_layout_report(text_local)
+        .unwrap();
+    assert_eq!(
+        report.glyphs,
+        rust_report
+            .line_glyph_ids
+            .iter()
+            .flatten()
+            .copied()
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        rust_report.modifier_groups[0].modifier_locals.len(),
+        report.groups[0].modifier_count
+    );
+    assert_eq!(
+        rust_report.modifier_groups[0].shape_modifier_indices.len(),
+        report.groups[0].shape_modifier_count
+    );
+    let rust_glyph_variations = rust_report
+        .line_glyph_variations
+        .iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    assert_eq!(report.glyph_variations.len(), rust_glyph_variations.len());
+    for (cpp_axes, rust_axes) in report.glyph_variations.iter().zip(rust_glyph_variations) {
+        assert_eq!(cpp_axes.len(), rust_axes.len());
+        for (cpp_axis, (rust_tag, rust_value)) in cpp_axes.iter().zip(rust_axes) {
+            assert_eq!(cpp_axis.tag, *rust_tag);
+            assert!((cpp_axis.value - *rust_value).abs() <= 0.001);
+        }
+    }
+
+    let cycle_args = vec!["--runtime-fl-e8-variation-cycle".to_owned()];
+    let (cpp_cycle, runtime, graphs, _, _) = fl_e8_cpp_and_rust_local_types(
+        "D-ST-VARIATION-cycle",
+        fl_e8_local_fixture_bytes("variation"),
+        &cycle_args,
+    );
+    let cpp_cycle = cpp_cycle.artboards[0]
+        .fl_e8_variation_cycle
+        .as_ref()
+        .unwrap();
+    assert!(cpp_cycle.available);
+    assert_eq!(cpp_cycle.glyph_phases.len(), 7);
+    let graph = &graphs.artboards[0];
+    let text_local = graph
+        .components
+        .iter()
+        .find(|component| component.type_name == "Text")
+        .unwrap()
+        .local_id;
+    let variation_local = graph
+        .components
+        .iter()
+        .filter(|component| component.type_name == "TextVariationModifier")
+        .last()
+        .unwrap()
+        .local_id;
+    let range_local = graph
+        .components
+        .iter()
+        .filter(|component| component.type_name == "TextModifierRange")
+        .last()
+        .unwrap()
+        .local_id;
+    let axis_tag_key = property_key_for_name("TextVariationModifier", "axisTag");
+    let strength_key = property_key_for_name("TextModifierRange", "strength");
+    let wght = u32::from_be_bytes(*b"wght");
+    let wdth = u32::from_be_bytes(*b"wdth");
+    let mut artboard = ArtboardInstance::from_graph(&runtime, graph).unwrap();
+    let mut rust_phases = Vec::new();
+    rust_phases.push(fl_e8_rust_variation_phase(
+        &artboard
+            .debug_static_text_layout_report(text_local)
+            .unwrap(),
+        wght,
+    ));
+    assert!(artboard.set_double_property(variation_local, axis_value, 900.0));
+    rust_phases.push(fl_e8_rust_variation_phase(
+        &artboard
+            .debug_static_text_layout_report(text_local)
+            .unwrap(),
+        wght,
+    ));
+    assert!(artboard.set_double_property(range_local, strength_key, -1.0));
+    rust_phases.push(fl_e8_rust_variation_phase(
+        &artboard
+            .debug_static_text_layout_report(text_local)
+            .unwrap(),
+        wght,
+    ));
+    assert!(artboard.set_double_property(range_local, strength_key, 2.0));
+    rust_phases.push(fl_e8_rust_variation_phase(
+        &artboard
+            .debug_static_text_layout_report(text_local)
+            .unwrap(),
+        wght,
+    ));
+    let cloned = artboard.clone();
+    rust_phases.push(fl_e8_rust_variation_phase(
+        &cloned.debug_static_text_layout_report(text_local).unwrap(),
+        wght,
+    ));
+    assert!(artboard.set_uint_property(variation_local, axis_tag_key, u64::from(wdth)));
+    rust_phases.push(fl_e8_rust_variation_phase(
+        &artboard
+            .debug_static_text_layout_report(text_local)
+            .unwrap(),
+        wght,
+    ));
+    assert!(artboard.set_double_property(range_local, strength_key, 1.5));
+    rust_phases.push(fl_e8_rust_variation_phase(
+        &artboard
+            .debug_static_text_layout_report(text_local)
+            .unwrap(),
+        wdth,
+    ));
+    assert_eq!(
+        cpp_cycle.axis_tags,
+        vec![wght, wght, wght, wght, wght, wght, wdth]
+    );
+    for (phase, ((rust_glyphs, rust_values), (cpp_glyphs, cpp_values))) in rust_phases
+        .iter()
+        .zip(
+            cpp_cycle
+                .glyph_phases
+                .iter()
+                .zip(&cpp_cycle.axis_value_phases),
+        )
+        .enumerate()
+    {
+        assert_eq!(rust_glyphs, cpp_glyphs, "glyph phase {phase}");
+        assert_eq!(rust_values.len(), cpp_values.len(), "axis phase {phase}");
+        assert_eq!(
+            rust_values.iter().filter(|value| value.is_some()).count(),
+            cpp_values.iter().filter(|value| value.is_some()).count(),
+            "axis presence count phase {phase}: Rust {rust_values:?}, C++ {cpp_values:?}"
+        );
+        for (rust, cpp) in rust_values.iter().zip(cpp_values) {
+            match (rust, cpp) {
+                (Some(rust), Some(cpp)) => assert!(
+                    (rust - cpp).abs() <= 0.001,
+                    "axis phase {phase}: Rust {rust}, C++ {cpp}"
+                ),
+                (None, None) => {}
+                _ => panic!("axis presence phase {phase}: Rust {rust:?}, C++ {cpp:?}"),
+            }
+        }
+    }
+    assert_eq!(
+        cpp_cycle.axis_value_phases[3],
+        cpp_cycle.axis_value_phases[4]
+    );
+    assert_eq!(
+        cpp_cycle.axis_value_phases[4],
+        cpp_cycle.axis_value_phases[5]
+    );
+    assert_ne!(
+        cpp_cycle.axis_value_phases[5],
+        cpp_cycle.axis_value_phases[6]
+    );
+}
+
+#[test]
+fn d_st_target_live_cpp_missing_target_is_ok_like_rust() {
+    let bytes = synthetic_runtime_file(0x44535454, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Text", |_| {});
+        push_object_with_properties(bytes, "TextModifierGroup", |bytes| {
+            push_uint_property(bytes, "TextModifierGroup", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "TextFollowPathModifier", |bytes| {
+            push_uint_property(bytes, "TextFollowPathModifier", "parentId", 2);
+        });
+    });
+    let (cpp, runtime, graphs, cpp_types, rust_types) =
+        fl_e8_cpp_and_rust_local_types("D-ST-TARGET", &bytes, &[]);
+    assert_eq!(cpp_types, rust_types);
+    assert!(cpp_types.contains(&547));
+    let report = cpp.artboards[0].fl_e8_static_text.as_ref().unwrap();
+    assert_eq!(report.groups[0].modifier_count, 1);
+    assert_eq!(report.groups[0].follow_path_modifier_count, 1);
+    assert_eq!(report.targets.len(), 1);
+    assert!(!report.targets[0].resolved);
+    assert!(report.targets[0].has_text_component);
+    let graph = &graphs.artboards[0];
+    let artboard = ArtboardInstance::from_graph(&runtime, graph).unwrap();
+    let rust_targets = graph
+        .components
+        .iter()
+        .filter(|component| component.type_name == "Text")
+        .flat_map(|component| {
+            artboard
+                .debug_static_text_target_report(component.local_id)
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        report
+            .targets
+            .iter()
+            .map(|target| (target.target_id, target.resolved, target.has_text_component))
+            .collect::<Vec<_>>(),
+        rust_targets
+            .iter()
+            .map(|target| (target.target_id, target.resolved, target.has_text_component))
+            .collect::<Vec<_>>()
+    );
+
+    let valid = std::fs::read(cpp_runtime_fixture("text_follow_path_shape_length.riv"))
+        .expect("read promoted follow-path fixture");
+    let (cpp, runtime, graphs, cpp_types, rust_types) =
+        fl_e8_cpp_and_rust_local_types("D-ST-TARGET-valid", &valid, &[]);
+    assert_eq!(cpp_types, rust_types);
+    let valid_report = cpp.artboards[0].fl_e8_static_text.as_ref().unwrap();
+    assert!(!valid_report.targets.is_empty());
+    assert!(valid_report.targets.iter().all(|target| target.resolved));
+    assert!(
+        valid_report
+            .targets
+            .iter()
+            .all(|target| target.has_text_component)
+    );
+    assert!(
+        valid_report
+            .groups
+            .iter()
+            .all(|group| group.follow_path_modifier_count == 1)
+    );
+    let graph = &graphs.artboards[0];
+    let artboard = ArtboardInstance::from_graph(&runtime, graph).unwrap();
+    let rust_targets = graph
+        .components
+        .iter()
+        .filter(|component| component.type_name == "Text")
+        .flat_map(|component| {
+            artboard
+                .debug_static_text_target_report(component.local_id)
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        valid_report
+            .targets
+            .iter()
+            .map(|target| (target.target_id, target.resolved, target.has_text_component))
+            .collect::<Vec<_>>(),
+        rust_targets
+            .iter()
+            .map(|target| (target.target_id, target.resolved, target.has_text_component))
+            .collect::<Vec<_>>()
+    );
+
+    let transform_descendant = synthetic_runtime_file(0x44535449, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Text", |_| {});
+        push_object_with_properties(bytes, "TextModifierGroup", |bytes| {
+            push_uint_property(bytes, "TextModifierGroup", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "TextFollowPathModifier", |bytes| {
+            push_uint_property(bytes, "TextFollowPathModifier", "parentId", 2);
+            push_uint_property(bytes, "TextTargetModifier", "targetId", 5);
+        });
+        push_object_with_properties(bytes, "RootBone", |bytes| {
+            push_uint_property(bytes, "RootBone", "parentId", 0);
+            push_f32_property(bytes, "RootBone", "length", 10.0);
+        });
+        push_object_with_properties(bytes, "Bone", |bytes| {
+            push_uint_property(bytes, "Bone", "parentId", 4);
+        });
+    });
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe_path().unwrap(),
+        "D-ST-TARGET-transform-descendant",
+        &transform_descendant,
+        &["--runtime-fl-e8-static-text".to_owned()],
+    );
+    let runtime = read_runtime_file(&transform_descendant).unwrap();
+    let graphs = GraphFile::from_runtime_file(&runtime).unwrap();
+    let cpp_target = &cpp.artboards[0].fl_e8_static_text.as_ref().unwrap().targets[0];
+    let graph = &graphs.artboards[0];
+    let artboard = ArtboardInstance::from_graph(&runtime, graph).unwrap();
+    let rust_targets = artboard.debug_static_text_target_report(1).unwrap();
+    let rust_target = &rust_targets[0];
+    assert_eq!(
+        (cpp_target.target_id, cpp_target.resolved),
+        (rust_target.target_id, rust_target.resolved)
+    );
+    assert!(cpp_target.resolved);
+
+    let wrong_parent_bytes = synthetic_runtime_file(0x44535457, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Text", |_| {});
+        push_object_with_properties(bytes, "TextTargetModifier", |bytes| {
+            push_uint_property(bytes, "TextTargetModifier", "parentId", 1);
+        });
+    });
+    let path = cpp_probe_temp_path("fl-e8-target-wrong-parent", "D-ST-TARGET");
+    std::fs::write(&path, &wrong_parent_bytes).unwrap();
+    let output = Command::new(probe_path().unwrap())
+        .arg("--instance-artboards")
+        .arg("--runtime-fl-e8-static-text")
+        .arg("--file")
+        .arg(&path)
+        .output()
+        .unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert!(output.status.success());
+    let wrong_parent: CppProbeFile = serde_json::from_slice(&output.stdout).unwrap();
+    let wrong_report = wrong_parent.artboards[0]
+        .fl_e8_static_text
+        .as_ref()
+        .unwrap();
+    assert!(wrong_report.groups.is_empty());
+    assert!(wrong_report.targets.is_empty());
+    let runtime = read_runtime_file(&wrong_parent_bytes).unwrap();
+    let graphs = GraphFile::from_runtime_file(&runtime).unwrap();
+    let artboard = ArtboardInstance::from_graph(&runtime, &graphs.artboards[0]).unwrap();
+    assert!(
+        artboard
+            .debug_static_text_target_report(1)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[derive(Debug, Deserialize)]
@@ -88617,6 +89362,305 @@ fn upstream_raw_path_coarse_and_precise_bounds_are_ported() {
     ] {
         assert_close(actual, expected, field);
     }
+}
+
+#[test]
+fn fl_e8_list_path_xy_phase_retains_four_live_synthetic_vertices() {
+    // D-LP-INIT and D-LP-EDGE supplement the eight-phase renderer
+    // differential with occurrence/remap/lifetime assertions that are not in
+    // the upstream silver body.
+    let label = "list_to_path.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(label))
+        .unwrap_or_else(|error| panic!("failed to read {label}: {error}"));
+    let cpp = read_cpp_probe_bytes_with_args(
+        &probe_path().expect("D-LP-INIT requires the freshly built pinned C++ probe"),
+        "D-LP-INIT",
+        &bytes,
+        &["--runtime-fl-e8-list-path".to_owned()],
+    );
+    assert_eq!(
+        cpp.artboards[0].fl_e8_list_path.as_deref(),
+        Some(
+            [CppFlE8ListPathReport {
+                local_id: 2,
+                core_type: 619,
+                list_source: u32::MAX,
+                listener_count: 0,
+                vertex_count: 0,
+                raw_verb_count: 0,
+            }]
+            .as_slice()
+        )
+    );
+    let runtime = read_runtime_file(&bytes)
+        .unwrap_or_else(|error| panic!("failed to import {label}: {error:#}"));
+    let graph = GraphFile::from_runtime_file(&runtime)
+        .unwrap_or_else(|error| panic!("failed to graph {label}: {error:#}"));
+    let (artboard_index, artboard_graph) = graph
+        .artboards
+        .iter()
+        .enumerate()
+        .find(|(_, artboard)| artboard.name.as_deref() == Some("main"))
+        .expect("main artboard");
+    let path_local = artboard_graph
+        .components
+        .iter()
+        .find(|component| component.type_name == "ListPath")
+        .expect("ListPath component")
+        .local_id;
+    let mut artboard =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard_graph, &graph.artboards)
+            .unwrap_or_else(|error| panic!("failed to instantiate {label}: {error:#}"));
+    let mut state_machine = artboard
+        .state_machine_instance(0)
+        .expect("default state machine");
+    let view_model_index = runtime
+        .artboard(artboard_index)
+        .and_then(|artboard| artboard.uint_property("viewModelId"))
+        .and_then(|index| usize::try_from(index).ok())
+        .expect("main view model");
+    let main = RuntimeOwnedViewModelInstance::from_instance(&runtime, view_model_index, 0)
+        .or_else(|| RuntimeOwnedViewModelInstance::new(&runtime, view_model_index))
+        .expect("main view-model instance");
+    let mut context = RuntimeOwnedViewModelContext::from_main(main);
+    context.complete_for_artboard(&runtime, artboard_index);
+    artboard.bind_owned_view_model_artboard_contexts(&runtime, &context);
+    assert!(state_machine.bind_owned_view_model_contexts(&context));
+    state_machine.advance_data_context();
+    StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+        &mut artboard,
+        std::slice::from_mut(&mut state_machine),
+        0.0,
+        true,
+        || false,
+    )
+    .expect("initial advance");
+    StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+        &mut artboard,
+        std::slice::from_mut(&mut state_machine),
+        0.016,
+        true,
+        || false,
+    )
+    .expect("initial settle");
+
+    let main = context.main_handle().expect("main handle");
+    let mut children = Vec::new();
+    for numbers in [
+        Vec::new(),
+        vec![("x", 100.0)],
+        vec![("x", 100.0), ("y", 100.0)],
+        vec![("y", 100.0)],
+    ] {
+        let view_model_index = runtime
+            .view_models()
+            .iter()
+            .position(|candidate| candidate.object.string_property("name") == Some("vertex-x-y"))
+            .expect("vertex-x-y schema");
+        let mut child = RuntimeOwnedViewModelInstance::new(&runtime, view_model_index)
+            .expect("vertex-x-y instance");
+        for (property, value) in numbers {
+            assert!(child.set_number_by_property_name(property, value));
+        }
+        let child = RuntimeOwnedViewModelHandle::new(child);
+        let index = main
+            .list_item_count_by_property_name_path("lis")
+            .expect("lis list");
+        assert!(main.insert_list_item_by_property_name_path("lis", index, &child));
+        children.push(child);
+    }
+    StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+        &mut artboard,
+        std::slice::from_mut(&mut state_machine),
+        0.0,
+        true,
+        || false,
+    )
+    .expect("XY advance");
+    StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+        &mut artboard,
+        std::slice::from_mut(&mut state_machine),
+        0.016,
+        true,
+        || false,
+    )
+    .expect("XY settle");
+
+    let report = artboard
+        .runtime_list_path_debug_report(path_local)
+        .expect("ListPath report");
+    assert_eq!(report.vertices.len(), 4);
+    assert_eq!(
+        report
+            .vertices
+            .iter()
+            .map(|vertex| (vertex.x, vertex.y))
+            .collect::<Vec<_>>(),
+        vec![(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)]
+    );
+    assert_eq!(report.subscription_count, 8);
+
+    // Clone owns a cold dynamic ListPath and never aliases listeners or
+    // synthetic vertices from its source occurrence.
+    let cloned = artboard.clone();
+    let cloned_report = cloned
+        .runtime_list_path_debug_report(path_local)
+        .expect("cloned ListPath report");
+    assert_eq!(cloned_report.reconciliation_generation, 0);
+    assert!(cloned_report.vertices.is_empty());
+    drop(cloned);
+
+    let settle =
+        |artboard: &mut ArtboardInstance, state_machine: &mut StateMachineInstance, label: &str| {
+            StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+                artboard,
+                std::slice::from_mut(state_machine),
+                0.0,
+                true,
+                || false,
+            )
+            .unwrap_or_else(|error| panic!("{label} advance: {error:#}"));
+            StateMachineInstance::advance_and_apply_state_machines_with_view_models(
+                artboard,
+                std::slice::from_mut(state_machine),
+                0.016,
+                true,
+                || false,
+            )
+            .unwrap_or_else(|error| panic!("{label} settle: {error:#}"));
+        };
+
+    let initial_generation = report.reconciliation_generation;
+    assert!(!main.insert_list_item_by_property_name_path("lis", 99, &children[0]));
+    assert!(!main.remove_list_item_by_property_name_path("lis", 99));
+    assert!(!main.swap_list_items_by_property_name_path("lis", 0, 99));
+    assert_eq!(
+        artboard
+            .runtime_list_path_debug_report(path_local)
+            .expect("unchanged report")
+            .reconciliation_generation,
+        initial_generation,
+        "invalid indices must not manufacture list dirt"
+    );
+
+    // A valid self-swap notifies, then identical positional remaps no-op the
+    // listener identities while reconciliation still dirties unconditionally.
+    assert!(main.swap_list_items_by_property_name_path("lis", 0, 0));
+    settle(&mut artboard, &mut state_machine, "self swap");
+    let same = artboard
+        .runtime_list_path_debug_report(path_local)
+        .expect("same-identity report");
+    assert_eq!(same.instance_identities, report.instance_identities);
+    assert!(same.reconciliation_generation > initial_generation);
+
+    // Reorder is positional: row occurrences remain in place and remap every
+    // moved source, yielding the new list order.
+    assert!(main.swap_list_items_by_property_name_path("lis", 0, 1));
+    settle(&mut artboard, &mut state_machine, "swap");
+    let swapped = artboard
+        .runtime_list_path_debug_report(path_local)
+        .expect("swapped report");
+    assert_eq!((swapped.vertices[0].x, swapped.vertices[1].x), (100.0, 0.0));
+    assert!(main.swap_list_items_by_property_name_path("lis", 0, 1));
+    settle(&mut artboard, &mut state_machine, "swap restore");
+
+    // Duplicate instances retain two distinct rows and two independent
+    // synthetic vertices, even though their source occurrence identities are
+    // equal.
+    assert!(main.insert_list_item_by_property_name_path("lis", 1, &children[0]));
+    settle(&mut artboard, &mut state_machine, "duplicate insert");
+    let duplicate = artboard
+        .runtime_list_path_debug_report(path_local)
+        .expect("duplicate report");
+    assert_eq!(duplicate.vertices.len(), 5);
+    assert_eq!(
+        duplicate.instance_identities[0],
+        duplicate.instance_identities[1]
+    );
+    assert!(main.remove_list_item_by_property_name_path("lis", 1));
+    settle(&mut artboard, &mut state_machine, "duplicate remove");
+
+    // Same-count replacement unsubscribes the old source and immediately
+    // initializes from the replacement. Later old-source changes are inert;
+    // replacement-source changes remain live.
+    let replacement_schema = runtime
+        .view_models()
+        .iter()
+        .position(|candidate| candidate.object.string_property("name") == Some("vertex-x-y"))
+        .expect("vertex-x-y schema");
+    let mut replacement = RuntimeOwnedViewModelInstance::new(&runtime, replacement_schema)
+        .expect("replacement instance");
+    assert!(replacement.set_number_by_property_name("x", 42.0));
+    assert!(replacement.set_number_by_property_name("y", 24.0));
+    let replacement = RuntimeOwnedViewModelHandle::new(replacement);
+    assert!(main.set_list_item_by_property_name_path("lis", 1, &replacement));
+    settle(&mut artboard, &mut state_machine, "replacement");
+    let replaced = artboard
+        .runtime_list_path_debug_report(path_local)
+        .expect("replacement report");
+    assert_eq!(
+        (replaced.vertices[1].x, replaced.vertices[1].y),
+        (42.0, 24.0)
+    );
+    let replacement_generation = replaced.reconciliation_generation;
+
+    assert!(
+        children[1]
+            .borrow_mut()
+            .set_number_by_property_name("x", -999.0)
+    );
+    settle(&mut artboard, &mut state_machine, "old source mutation");
+    let old_source = artboard
+        .runtime_list_path_debug_report(path_local)
+        .expect("old-source report");
+    assert_eq!(old_source.reconciliation_generation, replacement_generation);
+    assert_eq!(old_source.vertices[1].x, 42.0);
+
+    assert!(
+        replacement
+            .borrow_mut()
+            .set_number_by_property_name("x", 43.0)
+    );
+    settle(&mut artboard, &mut state_machine, "replacement mutation");
+    let live = artboard
+        .runtime_list_path_debug_report(path_local)
+        .expect("live replacement report");
+    assert!(live.reconciliation_generation > replacement_generation);
+    assert_eq!(live.vertices[1].x, 43.0);
+
+    // Tail shrink drops subscriptions. One and zero vertices are retained as
+    // state but have the Path::<2 empty-render boundary.
+    while main
+        .list_item_count_by_property_name_path("lis")
+        .expect("lis count")
+        > 1
+    {
+        let last = main
+            .list_item_count_by_property_name_path("lis")
+            .expect("lis count")
+            - 1;
+        assert!(main.remove_list_item_by_property_name_path("lis", last));
+    }
+    settle(&mut artboard, &mut state_machine, "shrink to one");
+    assert_eq!(
+        artboard
+            .runtime_list_path_debug_report(path_local)
+            .expect("one-row report")
+            .vertices
+            .len(),
+        1
+    );
+    assert!(artboard.object_world_bounds(path_local).is_none());
+    assert!(main.clear_list_items_by_property_name_path("lis"));
+    settle(&mut artboard, &mut state_machine, "clear");
+    assert!(
+        artboard
+            .runtime_list_path_debug_report(path_local)
+            .expect("empty report")
+            .vertices
+            .is_empty()
+    );
+    assert!(artboard.object_world_bounds(path_local).is_none());
 }
 
 #[test]

@@ -115,6 +115,48 @@ TEST_CASE("renders selected board", "[silver]")
         self.assertEqual(actions, ())
         self.assertEqual(blocker, "view-model-mutation")
 
+    def test_list_path_port_has_all_eight_phases_and_sixty_live_frames(self):
+        actions = generate_manifest.fl_e8_list_path_actions("list_to_path")
+        self.assertIsNotNone(actions)
+        self.assertEqual(
+            sum(action.get("kind") == "frame" for action in actions),
+            67,
+        )
+        self.assertEqual(
+            sum(
+                action.get("kind") == "set-view-model-list-item-number"
+                and action.get("property") == "inRotation"
+                for action in actions
+            ),
+            60,
+        )
+        self.assertEqual(
+            sum(
+                action.get("kind") == "set-view-model-list-item-number"
+                and action.get("property") == "rotation"
+                for action in actions
+            ),
+            61,
+        )
+        self.assertEqual(
+            [
+                action.get("view_model")
+                for action in actions
+                if action.get("kind") == "append-view-model-list-item"
+            ],
+            [
+                "vertex-x-y",
+                "vertex-x-y",
+                "vertex-x-y",
+                "vertex-x-y",
+                "vertex-rotation-distance",
+                "vertex-detached",
+                "vertex-in-out",
+                "non-vertex",
+                "vertex-incomplete",
+            ],
+        )
+
     def test_rejects_unencoded_focus_actions_instead_of_silently_dropping_them(self):
         actions, blocker = generate_manifest.executable_actions(
             """

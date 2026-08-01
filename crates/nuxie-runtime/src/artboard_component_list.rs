@@ -34,10 +34,10 @@ impl RuntimeComponentListItemInstance {
 
     /// Apply the C++ property-recorder reset to a pooled occurrence.
     ///
-    /// Rust can restore the complete authored clone in one ownership-safe
-    /// move. Keep the pooled Box allocation and Artboard occurrence identity,
-    /// but replace every mutable authored/resource member with the fresh
-    /// source clone and its newly bound state-machine occurrences.
+    /// Rust can restore the authored clone in one ownership-safe move. Keep
+    /// the pooled Box allocation, Artboard occurrence identity, and retained
+    /// renderer resources; C++ rewinds the occurrence's authored properties
+    /// without replacing its RenderPath/RenderPaint owners.
     fn restore_from_fresh(&mut self, mut fresh: Self) {
         std::mem::swap(
             &mut self.child.instance_identity,
@@ -46,7 +46,6 @@ impl RuntimeComponentListItemInstance {
         *self.child = *fresh.child;
         self.state_machines.clear();
         self.state_machines.append(&mut fresh.state_machines);
-        self.render_resources = fresh.render_resources;
         self.context = fresh.context;
         self.context_rebind_sink = fresh.context_rebind_sink;
         self.draw_index_sink = fresh.draw_index_sink;

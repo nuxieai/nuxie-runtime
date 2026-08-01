@@ -667,8 +667,17 @@ fn embedded_image_contents_remain_authoritative_over_external_bytes() {
 
 #[test]
 fn public_api_exposes_the_default_rust_renderer() {
-    let mut factory =
-        nuxie::DefaultRendererFactory::new(16, 16).expect("construct the default Rust renderer");
+    let mut factory = match nuxie::DefaultRendererFactory::new(16, 16) {
+        Ok(factory) => factory,
+        Err(nuxie::RendererError::Adapter(message)) => {
+            assert!(
+                message.contains("No suitable graphics adapter found"),
+                "adapter discovery must return the public diagnostic: {message}"
+            );
+            return;
+        }
+        Err(error) => panic!("construct the default Rust renderer: {error}"),
+    };
     let mut frame = factory.begin_frame(0xff_12_34_56);
     let mut path = factory.make_empty_render_path();
     path.move_to(2.0, 2.0);

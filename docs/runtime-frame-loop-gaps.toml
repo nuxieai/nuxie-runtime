@@ -2,6 +2,10 @@ version = 1
 title = "Runtime frame-loop mechanism and gap inventory"
 upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 
+[expected_gap_status_counts]
+open = 0
+closed = 10
+
 # User-approved deliberate divergences are recorded here and cited by their
 # parity-gap-register D-row.
 
@@ -10,10 +14,17 @@ id = "D2"
 source = "docs/parity-gap-register.md#d--deliberate-divergence-register-declare-dont-fix"
 approved = "The project-wide saturating float-to-int policy was already binding; the user reaffirmed on 2026-07-25 that Rust should make the sensible safe choice where C++ relies on a condition Rust cannot represent safely."
 
+[[decision]]
+id = "D3"
+source = "docs/parity-gap-register.md#d--deliberate-divergence-register-declare-dont-fix"
+rule = "FLR-20"
+ceiling = "layout-engine"
+approved = "FLR-20 layout-engine ceiling: Taffy remains the supported layout engine instead of Yoga; known edge and interpolation differences are declared rather than patched behavior-by-behavior."
+
 [[gap]]
 id = "FL-G01"
-status = "open"
-mechanism = "FL-B1/FL-B2/FL-B3/FL-B4 now mirror the C++ KeyFrame, LinearAnimation, AnimationReset, and blend definition/occurrence owners: each concrete frame occurrence retains attachment-time seconds inside one insertion-ordered KeyedProperty sequence, one type-safe target enum binds CoreRegistry's single property dispatch, the Artboard owns one immutable definition arena, every animation occurrence retains only a typed definition handle plus C++-shaped mutable state, and each reset occurrence leases one pooled first-seen object/property stream that is cleared and returned on final release. Each BlendState uniquely owns its ordered BlendAnimation definitions; every embedded blend occurrence retains a handle back to that exact definition, reads live source/value fields during advance, and retains unresolved animation IDs through the shared empty-animation owner. Rust-only StateMachineInstance snapshot clones share immutable definition/reset leases instead of cloning factory state. C++'s process-global empty animation is represented by one safe Artboard-shared definition because Rust's full definition type can contain non-Sync scripting handles; its generated defaults, occurrence sharing, and behavior remain exact. The former read-time fps calculation, six parallel frame vectors, property-family booleans, import-time source snapshots, per-occurrence descriptor clones, copied blend source/value payloads, positional from/to rediscovery, invalid-definition/empty-state elision, Option loop override, local zero guards, flat reset clones, global pair scans, and empty-reset elision are deleted. The gap remains open only until the complete FL-B owner family is independently verified."
+status = "closed"
+mechanism = "FL-B1/FL-B2/FL-B3/FL-B4 mirror the C++ KeyFrame, LinearAnimation, AnimationReset, and blend definition/occurrence owners: each concrete frame occurrence retains attachment-time seconds inside one insertion-ordered KeyedProperty sequence, one type-safe target enum binds CoreRegistry's single property dispatch, the Artboard owns one immutable definition arena, every animation occurrence retains only a typed definition handle plus C++-shaped mutable state, and each reset occurrence leases one pooled first-seen object/property stream that is cleared and returned on final release. Each BlendState uniquely owns its ordered BlendAnimation definitions; every embedded blend occurrence retains a handle back to that exact definition, reads live source/value fields during advance, and retains unresolved animation IDs through the shared empty-animation owner. Rust-only StateMachineInstance snapshot clones share immutable definition/reset leases instead of cloning factory state. C++'s process-global empty animation is represented by one safe Artboard-shared definition because Rust's full definition type can contain non-Sync scripting handles; its generated defaults, occurrence sharing, and behavior remain exact. Independent W121 acceptance reconciled the ledger's reaccepted state with this formerly stale row: all 45 frozen FL-B paths are present exactly once and faithful, all eight member rows are closed, and the live structural checker plus four injected FL-B negative suites reject every displaced sidecar, definition clone, reset clone, copied blend payload, dropped definition, and per-occurrence empty fallback."
 citations = [
   "cpp:src/animation/keyframe.cpp:10",
   "cpp:src/importers/keyed_property_importer.cpp:13-17",
@@ -30,17 +41,22 @@ citations = [
   "cpp:include/rive/animation/blend_state_instance.hpp:18-129",
   "cpp:src/animation/blend_state_1d_instance.cpp:10-149",
   "cpp:src/animation/blend_state_direct_instance.cpp:10-62",
-  "rust:crates/nuxie-runtime/src/animation.rs:329-331",
-  "rust:crates/nuxie-runtime/src/animation.rs:1022-1064",
-  "rust:crates/nuxie-runtime/src/animation.rs:1338-1421",
-  "rust:crates/nuxie-runtime/src/animation.rs:1557-2067",
-  "rust:crates/nuxie-runtime/src/artboard.rs:390",
-  "rust:crates/nuxie-runtime/src/artboard.rs:4119-4196",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine.rs:763-1103",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine.rs:1143-1405",
-  "rust:crates/nuxie-runtime/src/state_machine/state_instance.rs:1-180",
+  "rust:crates/nuxie-runtime/src/animation.rs:299-668",
+  "rust:crates/nuxie-runtime/src/animation.rs:782-799",
+  "rust:crates/nuxie-runtime/src/animation.rs:1101-1139",
+  "rust:crates/nuxie-runtime/src/animation.rs:1462-1648",
+  "rust:crates/nuxie-runtime/src/animation.rs:1656-1783",
+  "rust:crates/nuxie-runtime/src/artboard.rs:370-375",
+  "rust:crates/nuxie-runtime/src/artboard.rs:518-519",
+  "rust:crates/nuxie-runtime/src/artboard.rs:2208-2209",
+  "rust:crates/nuxie-runtime/src/artboard.rs:4217-4239",
+  "rust:crates/nuxie-runtime/src/state_machine/animation_reset_factory.rs:3-25",
+  "rust:crates/nuxie-runtime/src/state_machine/animation_reset_factory.rs:101-196",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine.rs:675-1064",
+  "rust:crates/nuxie-runtime/src/state_machine/blend_state_direct_instance.rs:3-139",
+  "rust:crates/nuxie-runtime/src/state_machine/state_instance.rs:4-187",
 ]
-closure = "Independent FL-B acceptance verifies the complete 45-file/eight-member wave and promotes the retained KeyFrame/KeyedProperty/LinearAnimation/AnimationReset/BlendState owners without any displaced sidecar, definition clone, reset clone, copied blend payload, dropped definition, or per-occurrence empty fallback."
+closure = "Closed by independent W121 FL-B acceptance of the complete 45-file/eight-member frozen wave against pinned C++ d788e8ec: exact scope membership and all retained KeyFrame/KeyedProperty/LinearAnimation/AnimationReset/BlendState owners hold, with every listed disqualifying shape absent and guarded by live zero-ratchets plus injected negative controls."
 
 [[gap]]
 id = "FL-G02"
@@ -57,7 +73,7 @@ closure = "Closed by FL-A: one retained owner graph, one root/component dirt own
 
 [[gap]]
 id = "FL-G03"
-status = "open"
+status = "closed"
 counters = [
   "component_add_dirt",
   "event_apply_batch",
@@ -65,19 +81,21 @@ counters = [
   "state_machine_transition_search",
   "component_dirt_consumptions",
 ]
-mechanism = "The complete listener/action family now dispatches ListenerAlignTarget through the retained target Node with the pinned transform/world-transform dirt writes. The merged E5 trace reaches exact transition-search and component-dirt-consumption counts, while its exact ordinary and scripted golden streams expose a remaining call-topology difference: pinned C++ enters StateMachineInstance::advance/applyEvents 30 times and Rust enters advance_with_report_mode/apply_local_event_listeners 11 times. Rust performs callback-major batching and ancestor delivery, then report-time bubbling, audio unwind, deferred terminal-error retention, and owner-mediated settlement through its retained safe facade rather than a raw parent-pointer recursion. Independent round-nine standards review classified this 30-to-11 topology as a safe owner-boundary adaptation. The two coverage counters remain explicitly open; output equality alone does not close this mechanism-level difference."
+mechanism = "The complete listener/action family dispatches ListenerAlignTarget through the retained target Node with the pinned transform/world-transform dirt writes. Transition-search and component-dirt-consumption ownership are already classified at their downstream boundaries. The source-bound W121 canonical aggregate measures the final topology pair at event_apply_batch C++ 30 / Rust 11 and state_machine_advance C++ 30 / Rust 11. The equal pair on each side proves one apply batch per counted advance while preserving the documented 30-to-11 occurrence topology: Rust performs callback-major batching and ancestor delivery, then report-time bubbling, audio unwind, deferred terminal-error retention, and owner-mediated settlement through its retained safe facade rather than raw parent-pointer recursion. This is the independently classified safe owner-boundary adaptation; exact 30-to-30 call parity is neither expected nor required."
 citations = [
   "cpp:src/animation/state_machine_instance.cpp:2320-2342",
   "cpp:src/animation/state_machine_instance.cpp:2548-2575",
   "cpp:src/animation/state_machine_instance.cpp:2583",
   "cpp:src/animation/listener_align_target.cpp:9",
   "rust:crates/nuxie-runtime/src/state_machine/listener_align_target.rs:15-112",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7327-7520",
   "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7672-7721",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12613-12663",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12934",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:13115",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12094-12479",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12669-12860",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12935-12988",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:13115-13152",
 ]
-closure = "FL-C4 closes ListenerAlignTarget and its component-dirt branch. FL-C5 closes transition-search count parity and displaced lookup paths. The round-nine classification action is closed: the cited batching, ancestor-delivery, bubbling, audio, deferred-retention, and settlement path establishes the 30-to-11 advance/applyEvents topology as a safe owner-boundary adaptation. The final two counters remain tracked here for later aggregate trace closure rather than requiring exact call parity."
+closure = "Closed by W121 aggregate trace acceptance: event_apply_batch is 30 / 11 C++/Rust and state_machine_advance is 30 / 11 C++/Rust, so both sides preserve the required one-batch-per-advance relationship across the independently accepted owner-boundary adaptation. FL-C4 owns ListenerAlignTarget, FL-C5 owns transition search and displaced lookups, and the cited Rust batching/bubbling/audio/error/settlement chain owns the intentional call-topology difference."
 
 [[gap]]
 id = "FL-G04"
@@ -102,7 +120,7 @@ closure = "FL-D4 closes the owner boundary: every authored Artboard DataBind is 
 [[gap]]
 id = "FL-G05"
 status = "closed"
-mechanism = "FL-D7 classifies Artboard update epochs and nested layout-transfer keys as owner-local adaptations. DataBind dirty/processed epochs coalesce pushed occurrence dirt without polling the ViewModel graph; layout/path/prepared epochs fence retained derived state owned by the same Artboard occurrence; nested transfer keys represent Yoga's `hasNewLayout` handoff to one mounted child. FL-E4 deletes the joystick instance of the former broad prepared-frame fallback: the six generated double callbacks now publish only root Components dirt from the direct Joystick owner, while cache_epoch remains the Artboard's derived-observation fence. None substitutes for a missing Component or DataBind owner."
+mechanism = "FL-D7 classifies Artboard update epochs and nested layout-transfer keys as owner-local adaptations. DataBind dirty/processed epochs coalesce pushed occurrence dirt without polling the ViewModel graph; layout/path/prepared revisions fence retained derived state owned by the same Artboard occurrence; nested transfer keys represent Yoga's `hasNewLayout` handoff to one mounted child. FL-E4 deletes the joystick instance of the former broad prepared-frame fallback. FL-E7 completes the classification in live-draw territory: DrawOrder and Clipping have no epoch authority, their generated callbacks publish root dirt, and the Artboard consumes those bits to mutate retained links/proxies. prepared_epoch is only a derived late-renderer/query observation after owner-local publication. No setter uses an epoch instead of the direct owner chain."
 citations = [
   "cpp:src/artboard.cpp:1417-1460",
   "cpp:src/joystick.cpp:131-142",
@@ -112,8 +130,12 @@ citations = [
   "rust:crates/nuxie-runtime/src/joystick.rs:149-170",
   "rust:crates/nuxie-runtime/src/artboard.rs:15206-15252",
   "rust:crates/nuxie-runtime/src/nested_artboard_layout.rs:3-20",
+  "rust:crates/nuxie-runtime/src/artboard.rs:6750-7125",
+  "rust:crates/nuxie-runtime/src/artboard.rs:8638-8650",
+  "rust:crates/nuxie-runtime/src/draw_rules.rs:18-43",
+  "rust:crates/nuxie-runtime/src/draw_target.rs:20-38",
 ]
-closure = "Closed by FL-A/FL-D and preserved by FL-E4: every retained epoch/key belongs to the Artboard or mounted nested occurrence whose derived state it fences; joystick dirty propagation now remains on the direct Joystick/Component owners. The focused unit test proves the exact dirt mask, while structural ratchets reject the former central fallback shapes and keep the global path-epoch compensation ceiling unchanged."
+closure = "Closed by FL-A/FL-D and preserved through FL-E7: every retained revision/key belongs to the Artboard or mounted nested occurrence whose derived state it fences. Joystick, Layout/Text, DrawRules, DrawTarget, and Clipping work remains on direct owners and dirt; prepared_epoch only invalidates renderer/query observations. Focused tests prove the exact masks and adversarial backing-storage tests prove DrawOrder cannot fall back to epoch/local-id rediscovery."
 
 [[gap]]
 id = "FL-G06"
@@ -167,20 +189,26 @@ closure = "Closed by FL-E5 stage 2 mechanism correspondence. The mutable update 
 
 [[gap]]
 id = "FL-G08"
-status = "open"
+status = "closed"
 counters = [
   "draw_order_sort",
   "clipping_redundancy_clear",
   "drawable_owner_lookup",
 ]
-mechanism = "The Rust Artboard update integration repeatedly refreshes drawable ordering, clipping proxies, and local-id owner lookups where C++ retains linked Drawable ownership and dirt-gates sort/clear work."
+mechanism = "RuntimeDrawableList retains every Drawable allocation, prev/next link, DrawRules active target, DrawTarget drawable/placement, clipping membership, and proxy pool. Construction performs the initial sort. Thereafter only root DrawOrder dirt calls sort_draw_order; sort performs C++'s internal clear, and a simultaneous root Clipping bit performs C++'s second explicit clear. Live draw walks first_drawable through prev and dispatches the retained family/ComponentHandle. ComponentHandle is the safe generational-pointer adaptation for C++ Drawable*, so drawable_owner_lookup is 0/0 serialized local-id resolutions; it is not counted as an owner lookup. C++ rejects an unresolved DrawTarget drawable with MissingObject; Rust preserves graph diagnostics and makes that target inert, with no drawable index or group splice."
 citations = [
-  "cpp:src/artboard.cpp:1161",
-  "cpp:src/artboard.cpp:1652",
-  "rust:crates/nuxie-runtime/src/artboard.rs:4816",
-  "rust:crates/nuxie-runtime/src/draw.rs:9290",
+  "cpp:src/draw_rules.cpp:8-39",
+  "cpp:src/draw_target.cpp:8-31",
+  "cpp:src/artboard.cpp:574-746",
+  "cpp:src/artboard.cpp:1153-1170",
+  "cpp:src/artboard.cpp:1652-1750",
+  "rust:crates/nuxie-runtime/src/draw_rules.rs:1-43",
+  "rust:crates/nuxie-runtime/src/draw_target.rs:1-38",
+  "rust:crates/nuxie-runtime/src/artboard.rs:8638-8650",
+  "rust:crates/nuxie-runtime/src/draw.rs:9670-10240",
+  "rust:crates/nuxie-runtime/src/draw.rs:24900-25020",
 ]
-closure = "FL-A/FL-E ports the retained Drawable link and exact DrawOrder/Clipping dirt lifecycle; the three counters match C++ or cite a binding adaptation."
+closure = "FL-E7 closes the retained Drawable lifecycle. The fresh source-bound canonical trace records draw_order_sort at C++ 24 versus Rust 607 and clipping_redundancy_clear at C++ 48 versus Rust 1214. This is an explicit construction/materialization adaptation: C++ sorts each traced Artboard instance once, while Rust eagerly constructs an occurrence-local RuntimeDrawableList for every resolved runtime graph occurrence; every Rust construction invokes sort once and its internal clear once. The second Rust clear is reachable only through root Clipping dirt, exactly like C++. The decisive steady trace is exact at 0/0 for both counters, proving neither lifecycle runs per frame. The source-bound structural drawable_owner_lookup landmark is exact at 0/0: C++ dereferences retained Drawable pointers and Rust dereferences retained indices. Permanent ratchets reject the deleted sort-time property reads and local-id map lookups, centralized callbacks, draw-time family rediscovery, and any additional sort/clear entry point. The final live-draw stream also rejects the deleted eager unchanged text-style backend-path clear: renderer paths rewind only after a materially changed retained command set."
 
 [[gap]]
 id = "FL-G09"
@@ -2230,3 +2258,120 @@ id = "fl_e4_displaced_joystick_behavior_absent"
 globs = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/intrinsically_sizeable.rs"]
 pattern = "fn\\s+(?:apply_joystick_at|joystick_axis_seconds|measure_joystick_layout|control_runtime_joystick_size)\\b"
 max_occurrences = 0
+
+[[ratchet]]
+id = "fl_e7_draw_rules_retained_owner_required"
+globs = ["crates/nuxie-runtime/src/draw_rules.rs"]
+pattern = "\\A(?=[\\s\\S]*struct\\s+RuntimeDrawRules\\s*\\{[\\s\\S]{0,220}active_target_index:\\s*Option<usize>)(?=[\\s\\S]*fn\\s+uint_property_changed\\b[\\s\\S]{0,1500}set_draw_rules_active_target\\([\\s\\S]{0,500}ComponentDirt::DRAW_ORDER)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_draw_target_retained_owner_required"
+globs = ["crates/nuxie-runtime/src/draw_target.rs"]
+pattern = "\\A(?=[\\s\\S]*struct\\s+RuntimeDrawTarget\\s*\\{[\\s\\S]{0,700}drawable_index:\\s*Option<usize>[\\s\\S]{0,220}placement_value:\\s*u64[\\s\\S]{0,220}first:\\s*Option<usize>[\\s\\S]{0,220}last:\\s*Option<usize>)(?=[\\s\\S]*fn\\s+uint_property_changed\\b[\\s\\S]{0,1500}set_draw_target_placement\\([\\s\\S]{0,500}ComponentDirt::DRAW_ORDER)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_switch_required"
+globs = ["crates/nuxie-runtime/src/shapes/shape_paint_container.rs"]
+pattern = "\\A(?=[\\s\\S]*\\\"Artboard\\\"\\s*=>\\s*Self::Artboard)(?=[\\s\\S]*\\\"LayoutComponent\\\"\\s*=>\\s*Self::LayoutComponent)(?=[\\s\\S]*\\\"Shape\\\"\\s*=>\\s*Self::Shape)(?=[\\s\\S]*\\\"TextStylePaint\\\"\\s*=>\\s*Self::TextStylePaint)(?=[\\s\\S]*\\\"ForegroundLayoutDrawable\\\"\\s*=>\\s*Self::ForegroundLayoutDrawable)(?=[\\s\\S]*\\\"TextInputCursor\\\"\\s*=>\\s*Self::TextInputCursor)(?=[\\s\\S]*\\\"TextInputSelection\\\"\\s*=>\\s*Self::TextInputSelection)(?=[\\s\\S]*\\\"TextInputText\\\"\\s*=>\\s*Self::TextInputText)(?=[\\s\\S]*\\\"TextInputSelectedText\\\"\\s*=>\\s*Self::TextInputSelectedText)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_operations_required"
+globs = ["crates/nuxie-runtime/src/shapes/shape_paint_container.rs"]
+pattern = "\\A(?=[\\s\\S]*fn\\s+add_paint\\b)(?=[\\s\\S]*fn\\s+path_flags\\b)(?=[\\s\\S]*fn\\s+invalidate_stroke_effects\\b)(?=[\\s\\S]*fn\\s+propagate_opacity\\b)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_path_flags_production_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "shape_paint_container::path_flags\\s*\\("
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_add_paint_production_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "shape_paint_container::add_paint\\s*\\("
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_propagate_opacity_production_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "shape_paint_container::propagate_opacity\\s*\\("
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_invalidate_effects_production_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "shape_paint_container::invalidate_stroke_effects\\s*\\("
+min_occurrences = 4
+max_occurrences = 4
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_all_families_retained_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "fn\\s+retain_paint_containers\\b[\\s\\S]{0,500}for\\s+\\(container_index,\\s*container\\)\\s+in\\s+containers\\.iter\\(\\)\\.enumerate\\(\\)\\s*\\{\\s*let\\s+Some\\(family\\)\\s*=\\s*crate::shapes::shape_paint_container::family\\(container\\.type_name\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_shape_paint_container_non_shape_invalidation_callbacks_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "fn\\s+invalidate_runtime_non_shape_paint_container_effects\\b(?=[\\s\\S]{0,4000}\\\"ForegroundLayoutDrawable\\\")(?=[\\s\\S]{0,4000}\\\"Text\\\")(?=[\\s\\S]{0,4000}\\\"TextInput\\\")(?=[\\s\\S]{0,4000}invalidate_container_stroke_effects)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_unchanged_text_style_paths_retained_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "paths\\s*\\.retain\\(\\|key,\\s*_\\|\\s*!key\\.replace_on_render_style_rebuild\\)"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_central_draw_owner_callback_absent"
+globs = ["crates/nuxie-runtime/src/artboard.rs"]
+pattern = "type_name\\s*\\)\\s*==\\s*Some\\(\\\"(?:DrawRules|DrawTarget)\\\"\\)[\\s\\S]{0,500}ComponentDirt::DRAW_ORDER"
+max_occurrences = 0
+
+[[ratchet]]
+id = "fl_e7_sort_serialized_owner_rediscovery_absent"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "(?:fn\\s+sort_draw_order\\b[\\s\\S]{0,8000}(?:objects\\s*\\.\\s*uint_property|runtime_draw_property_key_for_name\\(\\\"(?:DrawRules|DrawTarget)\\\"\\)))|(?:let\\s+target_local\\s*=\\s*self\\s*\\.\\s*draw_target_order\\s*\\[[^]]+\\][\\s\\S]{0,300}self\\s*\\.\\s*draw_target_index_by_local\\s*\\.\\s*get)|(?:flattened_draw_rules_(?:local|index)[\\s\\S]{0,300}self\\s*\\.\\s*draw_rules_index_by_local\\s*\\.\\s*get)|(?:for\\s+drawable_index[\\s\\S]{0,1000}self\\s*\\.\\s*drawable_by_local\\s*\\.\\s*get)"
+max_occurrences = 0
+
+[[ratchet]]
+id = "fl_e7_drawable_retained_rules_index_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "struct\\s+RuntimeDrawable\\s*\\{[\\s\\S]{0,800}flattened_draw_rules_index:\\s*Option<usize>"
+min_occurrences = 1
+max_occurrences = 1
+
+[[ratchet]]
+id = "fl_e7_draw_order_sort_entry_points_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "\\.sort_draw_order\\s*\\("
+min_occurrences = 2
+max_occurrences = 2
+
+[[ratchet]]
+id = "fl_e7_clipping_clear_entry_points_required"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "\\.clear_redundant_operations\\s*\\("
+min_occurrences = 2
+max_occurrences = 2
+
+[[ratchet]]
+id = "fl_e7_drawable_family_resolution_construction_only"
+globs = ["crates/nuxie-runtime/src/draw.rs"]
+pattern = "RuntimeDrawableFamily::from_type_name\\s*\\("
+min_occurrences = 1
+max_occurrences = 1

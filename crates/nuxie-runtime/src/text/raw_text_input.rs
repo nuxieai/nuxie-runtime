@@ -373,6 +373,10 @@ impl RawTextInput {
         self.selection_dirty = true;
     }
 
+    pub(crate) fn selection_needs_update(&self) -> bool {
+        self.selection_dirty
+    }
+
     pub(crate) fn cached_measure(
         &self,
         max_width: f32,

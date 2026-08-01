@@ -89,6 +89,8 @@ mod data_converter_trigger;
 #[path = "data_bind/converters/data_converter_trigger.rs"]
 mod data_converter_trigger_owner;
 mod draw;
+mod draw_rules;
+mod draw_target;
 mod event;
 mod focus;
 mod foreground_layout_drawable;
@@ -224,6 +226,7 @@ pub use scripting::{
     script_node_for_artboard, script_view_model_from_owned, script_view_model_from_owned_context,
     script_view_model_from_owned_snapshot, script_view_models,
 };
+pub use shapes::list_path::{RuntimeListPathDebugReport, RuntimeListPathDebugVertex};
 #[doc(hidden)]
 pub use state_machine::RuntimeFileStateMachineActionCatalog;
 pub use state_machine::{
@@ -251,9 +254,17 @@ pub(crate) use state_machine::{
     StateMachineTransitionDurationInstance,
 };
 pub use text::{
+    RawText as RuntimeRawText, RawTextFont, RawTextFontError, RawTextPaint,
+    RuntimeColorGlyphClassification, RuntimeColorGlyphGradientStop, RuntimeColorGlyphLayer,
+    RuntimeColorGlyphPaint, TextAlign, TextOverflow, TextSizing, runtime_classify_color_glyph,
+    runtime_classify_color_glyph_face, runtime_extract_color_glyph_layers,
+    runtime_extract_color_glyph_layers_face,
+};
+pub use text::{
     RuntimeTextLayoutDebugReport, RuntimeTextModifierDebugReport,
-    RuntimeTextSelectedRunDebugReport, debug_text_word_unit_count, embedded_font_is_parseable,
-    embedded_fonts_are_parseable, static_text_support_error,
+    RuntimeTextSelectedRunDebugReport, RuntimeTextTargetModifierDebugReport,
+    debug_text_word_unit_count, embedded_font_is_parseable, embedded_fonts_are_parseable,
+    static_text_support_error,
 };
 pub use view_model::{
     RuntimeBindableArtboard, RuntimeDataContext, RuntimeDataContextInstanceRef,

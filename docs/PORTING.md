@@ -278,28 +278,34 @@ Preserve the aliases and the `0xFFFE` value exactly — they are part of the
 protocol. Dirt is stored per-component (`components.rs:448`, initialized
 `FILTHY`) and once at artboard level.
 
-### 2.2 The epoch counters
+### 2.2 The retained revision counters
 
 Dirt drives *intra-frame update ordering*. Epochs are the *cross-frame retained-
 cache invalidation keys* — `u64` fields on `ArtboardInstance`
 (`artboard.rs:117`), all initialized to `1`, all bumped with `wrapping_add(1)`
 (`artboard.rs:1162`).
 
-| Epoch | Bumped by | Read by (what it lets you skip) |
+| Revision | Bumped by | Read by (what it lets you skip) |
 |---|---|---|
 | `cache_epoch` | `mark_changed()` — nearly every property write | Paint-prep skip (`draw.rs:829`), `can_skip_prepared_frame` (`draw.rs:5790`), paint-config currency `is_current` (`draw.rs:5691`) |
-| `prepared_epoch` | `mark_prepared_changed()`; **cascaded** from layout/path/draw_order/render_opacity bumps | Rebuild of the whole prepared draw-command list (`prepared_artboard_frame`, `draw.rs:6619`) |
+| `prepared_epoch` | owner-local callbacks call `mark_prepared_changed()`; layout/path/DrawOrder/Clipping/render-opacity publication may cascade into it | Derived renderer/query cache observation only; it never sorts Drawables, rebuilds clipping proxies, or substitutes for an owner callback |
 | `path_epoch` | `mark_path_changed()` (also bumps prepared) | Shape-paint / path-geometry command caches (`draw.rs:3430`, `7004`) |
-| `layout_epoch` | `mark_layout_changed()` (also bumps prepared) | Retained Taffy layout bounds (`draw.rs:6691`, `artboard.rs:927`) |
-| `draw_order_epoch` | `mark_draw_order_changed()` (also bumps prepared) | Drawable re-sort (`sorted_drawable_order_frame`, `draw.rs:6658`) |
+| `layout_revision` | `mark_layout_changed()` or the direct LayoutComponent/Yoga callback (also bumps prepared only where renderer observation changes) | Retained Taffy layout solve and bounds |
 
 A sixth, **derived** epoch — `nested_epoch` — is *not* stored: it is an FNV-1a
 hash over nested-artboard draw commands and their children's `cache_epoch`,
 computed on demand (`runtime_nested_paint_preparation_epoch`, `draw.rs:946`).
 
-`prepared_epoch` is the roll-up "topology changed" counter; `cache_epoch` is the
-coarse "anything changed" counter. Every retained sub-cache is a
+`prepared_epoch` is a roll-up renderer-observation counter; `cache_epoch` is
+the coarse "anything changed" counter. Neither owns component work. Every retained sub-cache is a
 `if cached.key != key { rebuild }` gate keyed on the matching epoch.
+
+Draw ordering and clipping deliberately have no epoch authority. Generated
+DrawRules/DrawTarget/Clipping callbacks publish root `DRAW_ORDER` or
+`CLIPPING` dirt; the Artboard update consumes those bits exactly once and
+mutates the retained Drawable links/proxies. `prepared_epoch` may invalidate a
+late renderer cache after that owner-local mutation, but cannot request or
+replace the mutation.
 
 ### 2.3 Dirt vs. epoch — when to use which
 
@@ -307,8 +313,9 @@ coarse "anything changed" counter. Every retained sub-cache is a
   (`artboard.rs:1295`) sets bits and cascades to `dependent_locals`;
   `update_components` clears `COMPONENTS` and walks dependents.
 - Use an **epoch** to let `prepare`/`draw` *skip rebuilding a cross-frame cache*.
-- The bridge is `add_dirt`: it translates newly-set dirt bits into the correct
-  epoch bumps. **This translation is the fence.**
+- `add_dirt` publishes work to the concrete owner and separately updates only
+  the derived renderer observations affected by that work. **This separation
+  is the fence.**
 
 ### 2.4 THE FENCE RULES
 
@@ -927,7 +934,7 @@ disagreement is resolved below and is binding on RD-C1/RD-C2.
 
 - **RF-13 A cached sorted vector is not the live-list port.** The senior
   translation treated `Arc<Vec<SortedDrawableNode>>` keyed by
-  `draw_order_epoch` as equivalent to C++'s list. The strict translation kept
+  a cached draw-order revision as equivalent to C++'s list. The strict translation kept
   `firstDrawable` plus `prev`/`next` ids on retained drawable objects, including
   synthetic clip/layout proxies. RD uses the strict form: imported graph order
   may seed construction, but the runtime representation being traversed is the
@@ -1386,3 +1393,16 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   visitation and keeps the context-install and init passes separate
   (`include/rive/animation/state_machine_instance.hpp:399-402`;
   `src/animation/state_machine_instance.cpp:2072-2082,2886-2913`).
+- **FLR-20 Declare support ceilings as decisions; never call them faithful.**
+  A direct Rust owner can close a file-correspondence row even when the product
+  intentionally stops below the complete pinned C++ surface, but only as
+  `divergent-by-decision`. The only approved named support ceiling is
+  **layout-engine**, bound to D3: Taffy replaces Yoga, including its known
+  edge/interpolation differences. A new ceiling requires an explicit,
+  user-approved D-row before any manifest row may use
+  `divergent-by-decision`.
+  The supported portion must still live in its direct filename owner and cite
+  the exact pinned and Rust anchors. A corpus absence (C1), latent backlog label
+  (F13), or a passing golden alone is not a decision and cannot promote a row.
+  Adding any ceiling behavior later reopens the corresponding D-row and
+  requires ordinary owner-family closure under §0 steps 1–5 and FLR-16.

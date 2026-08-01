@@ -3181,15 +3181,15 @@ note = "F7: this Lua binding is absent."
 
 [[file]]
 upstream = "src/lua/lua_buffer_ext.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "absent"
+rust_module = "crates/nuxie-scripting/src/vm/buffer_ext.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0263"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F7: this Lua binding is absent."
+note = "P1-h faithful candidate: the luaur buffer adapter installs readf16, writef16, stridedcopy, and convert before sandboxing; all 35 pinned inline-Luau oracle cases are direct Rust scenario ports. Packed f32/f16 conversion uses the scalar IEEE implementation because C++ SIMD is optional and does not change the covered behavior. Final status awaits orchestrator verification."
 
 [[file]]
 upstream = "src/lua/lua_data_context.cpp"

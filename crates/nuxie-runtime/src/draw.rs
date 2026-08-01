@@ -657,7 +657,10 @@ impl ArtboardInstance {
     }
 
     pub fn draw_commands(&self, graph: &ArtboardGraph) -> Vec<RuntimeDrawableDispatch> {
-        let layout_bounds = self.runtime_taffy_layout_bounds(graph, None);
+        // FL-E5 made the immutable runtime file an occurrence-retained input.
+        // Keep layout measurement on that retained engine state so Text can
+        // shape against the constraints Taffy passes during this solve.
+        let layout_bounds = self.runtime_taffy_layout_bounds(graph, self.runtime_file());
         self.draw_commands_with_layout_bounds(graph, layout_bounds.as_ref())
     }
 
@@ -6603,7 +6606,9 @@ impl ArtboardInstance {
         cache: &mut BTreeMap<usize, RuntimeLayoutBounds>,
         visiting: &mut BTreeSet<usize>,
     ) -> Option<RuntimeLayoutBounds> {
-        if let Some(bounds) = TaffyRuntimeLayoutEngine.compute_bounds(self, graph, None) {
+        if let Some(bounds) =
+            TaffyRuntimeLayoutEngine.compute_bounds(self, graph, self.runtime_file())
+        {
             for (local, bounds) in &bounds {
                 cache.entry(*local).or_insert(*bounds);
             }
@@ -10342,7 +10347,7 @@ struct TaffyRuntimeLayoutEngine;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TaffyMeasureContext {
-    LayoutComponent {
+    LayoutComponentMeasure {
         local: usize,
     },
     ComponentListItem {
@@ -10563,7 +10568,7 @@ impl TaffyRuntimeLayoutEngine {
                 available_space,
                 |known_dimensions, available_space, _node_id, node_context, _style| {
                     match node_context {
-                        Some(TaffyMeasureContext::LayoutComponent { local }) => runtime
+                        Some(TaffyMeasureContext::LayoutComponentMeasure { local }) => runtime
                             .and_then(|runtime| {
                                 self.measure_layout_component(
                                     runtime,
@@ -10741,10 +10746,13 @@ impl TaffyRuntimeLayoutEngine {
 
         let node = if child_nodes.is_empty() {
             if runtime.is_some()
-                && self.layout_component_has_intrinsic_static_measure(instance, graph, local)?
+                && self.layout_component_registers_measure_func(instance, graph, local)?
             {
                 taffy
-                    .new_leaf_with_context(style, TaffyMeasureContext::LayoutComponent { local })
+                    .new_leaf_with_context(
+                        style,
+                        TaffyMeasureContext::LayoutComponentMeasure { local },
+                    )
                     .ok()?
             } else {
                 taffy.new_leaf(style).ok()?
@@ -11256,7 +11264,7 @@ impl TaffyRuntimeLayoutEngine {
                 RuntimeLayoutStyleProperty::MinWidth,
                 RuntimeLayoutStyleProperty::MinWidthUnitsValue,
                 false,
-                self.intrinsic_static_hug_min_is_auto(instance, graph, local, style_local, true)?,
+                false,
             )?,
             height: self.dimension_style(
                 instance,
@@ -11264,7 +11272,7 @@ impl TaffyRuntimeLayoutEngine {
                 RuntimeLayoutStyleProperty::MinHeight,
                 RuntimeLayoutStyleProperty::MinHeightUnitsValue,
                 false,
-                self.intrinsic_static_hug_min_is_auto(instance, graph, local, style_local, false)?,
+                false,
             )?,
         };
         // The top-level Artboard adapter preserves its historical
@@ -11836,7 +11844,7 @@ impl TaffyRuntimeLayoutEngine {
             return Some(false);
         }
         if runtime.is_some()
-            && self.layout_component_has_intrinsic_static_measure(instance, graph, layout_local)?
+            && self.layout_component_registers_measure_func(instance, graph, layout_local)?
         {
             return Some(false);
         }
@@ -11878,7 +11886,10 @@ impl TaffyRuntimeLayoutEngine {
         }))
     }
 
-    fn layout_component_has_intrinsic_static_measure(
+    /// Mirrors `LayoutComponent::syncStyle`: an intrinsically-sized Yoga leaf
+    /// owns a measure function even when its measured children contribute
+    /// zero. The callback itself performs the `IntrinsicallySizeable` dispatch.
+    fn layout_component_registers_measure_func(
         &self,
         instance: &ArtboardInstance,
         graph: &ArtboardGraph,
@@ -11894,38 +11905,10 @@ impl TaffyRuntimeLayoutEngine {
         {
             return Some(false);
         }
-        let component = graph
-            .components
-            .iter()
-            .find(|component| component.local_id == layout_local)?;
-        Some(component.children.iter().any(|child_local| {
-            graph
-                .components
-                .iter()
-                .find(|component| component.local_id == *child_local)
-                .is_some_and(|child| {
-                    matches!(child.type_name, "Shape" | "Text" | "TextInput" | "Joystick")
-                        || (child.type_name == "ArtboardComponentList"
-                            && instance
-                                .component_list_items(*child_local)
-                                .is_some_and(|items| !items.is_empty()))
-                })
-        }))
-    }
-
-    fn intrinsic_static_hug_min_is_auto(
-        &self,
-        instance: &ArtboardInstance,
-        graph: &ArtboardGraph,
-        layout_local: usize,
-        style_local: usize,
-        width_axis: bool,
-    ) -> Option<bool> {
-        const LAYOUT_SCALE_TYPE_HUG: u64 = 2;
-        if instance.runtime_layout_axis_scale(style_local, width_axis) != LAYOUT_SCALE_TYPE_HUG {
-            return Some(false);
-        }
-        self.layout_component_has_intrinsic_static_measure(instance, graph, layout_local)
+        Some(
+            self.layout_provider_children(instance, graph, layout_local)?
+                .is_empty(),
+        )
     }
 
     fn measure_layout_component(
@@ -12037,9 +12020,6 @@ impl TaffyRuntimeLayoutEngine {
                                 child.local_id,
                                 layout_constraint,
                             )
-                        })
-                        .or_else(|| {
-                            static_text_constraint_bounds(runtime, graph, instance, child.local_id)
                         });
                     let Some((_x, _y, width, height)) = measured_bounds else {
                         continue;
@@ -27835,6 +27815,127 @@ mod tests {
     }
 
     #[test]
+    fn retained_runtime_layout_query_remeasures_wrapped_text_with_the_solve_constraint() {
+        let bytes = cpp_runtime_fixture("layout/layout_display.riv");
+        let file = read_runtime_file(&bytes).expect("layout display fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("layout display graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let mut instance =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("layout display instance builds");
+        let key = |owner, name| {
+            property_key_for_name(owner, name)
+                .unwrap_or_else(|| panic!("missing property {owner}.{name}"))
+        };
+
+        let outer = 3;
+        let column = 6;
+        let column_style = 26;
+        let headline_layout = 8;
+        let headline_style = 9;
+        let headline_text = 11;
+        let headline_text_style = 12;
+        let headline_run = 16;
+        let subtitle_layout = 17;
+        let subtitle_style = 18;
+
+        assert!(instance.set_double_property(outer, key("LayoutComponent", "width"), 242.0));
+        assert!(instance.set_double_property(outer, key("LayoutComponent", "height"), 400.0));
+        let _ = instance.set_uint_property(
+            column_style,
+            key("LayoutComponentStyle", "layoutWidthScaleType"),
+            1,
+        );
+        let _ = instance.set_uint_property(
+            column_style,
+            key("LayoutComponentStyle", "layoutHeightScaleType"),
+            1,
+        );
+        assert!(instance.set_bool_property(
+            headline_style,
+            key("LayoutComponentStyle", "intrinsicallySizedValue"),
+            true,
+        ));
+        let _ = instance.set_uint_property(
+            headline_style,
+            key("LayoutComponentStyle", "layoutWidthScaleType"),
+            1,
+        );
+        assert!(instance.set_uint_property(
+            headline_style,
+            key("LayoutComponentStyle", "layoutHeightScaleType"),
+            2,
+        ));
+        assert!(instance.set_uint_property(headline_text, key("Text", "sizingValue"), 1));
+        assert!(instance.set_double_property(headline_text, key("Text", "width"), 210.0));
+        assert!(instance.set_double_property(
+            headline_text_style,
+            key("TextStyle", "fontSize"),
+            40.0,
+        ));
+        assert!(instance.set_double_property(
+            headline_text_style,
+            key("TextStyle", "lineHeight"),
+            46.0,
+        ));
+        assert!(instance.set_string_property(
+            headline_run,
+            key("TextValueRun", "text"),
+            b"Display".to_vec(),
+        ));
+        let _ = instance.set_uint_property(
+            subtitle_style,
+            key("LayoutComponentStyle", "layoutWidthScaleType"),
+            1,
+        );
+        assert!(instance.set_uint_property(
+            subtitle_style,
+            key("LayoutComponentStyle", "layoutHeightScaleType"),
+            0,
+        ));
+        assert!(instance.set_double_property(
+            subtitle_layout,
+            key("LayoutComponent", "height"),
+            46.0,
+        ));
+
+        instance.update_pass();
+        assert!(instance.set_string_property(
+            headline_run,
+            key("TextValueRun", "text"),
+            b"Display wraps over four lines".to_vec(),
+        ));
+        // Seed the exact stale compensation that caused UNIV-1204: the
+        // retained intrinsic pass knew only the one-line display height. A
+        // real measure function must ignore it and reshape at Taffy's width.
+        instance
+            .component(headline_text)
+            .and_then(|component| component.concrete.text.as_ref())
+            .expect("headline owns retained Text state")
+            .retain_bounds((0.0, 0.0, 210.0, 46.0));
+
+        let headline = instance
+            .runtime_supported_layout_component_bounds(headline_layout, graph)
+            .expect("retained runtime query solves the headline");
+        let subtitle = instance
+            .runtime_supported_layout_component_bounds(subtitle_layout, graph)
+            .expect("retained runtime query solves the subtitle");
+        let column = instance
+            .runtime_supported_layout_component_bounds(column, graph)
+            .expect("retained runtime query solves the column");
+        assert!(
+            (headline.height - 185.92029).abs() <= 0.0001,
+            "headline height was {}",
+            headline.height
+        );
+        assert!(
+            (subtitle.y - (column.y + 10.0 + headline.height + 10.0)).abs() <= 0.0001,
+            "subtitle y was {}",
+            subtitle.y
+        );
+    }
+
+    #[test]
     fn settled_layout_world_transform_replaces_authored_affine_with_layout_translation() {
         let bytes = synthetic_affine_layout_geometry_riv();
         let file = read_runtime_file(&bytes).expect("synthetic affine layout riv imports");
@@ -30093,7 +30194,8 @@ mod tests {
         });
 
         let file = read_runtime_file(&bytes).expect("component-list guard fixture imports");
-        let graphs = GraphFile::from_runtime_file(&file).expect("component-list guard graph builds");
+        let graphs =
+            GraphFile::from_runtime_file(&file).expect("component-list guard graph builds");
         let graph = graphs.artboards.first().expect("fixture has an artboard");
 
         assert_eq!(

@@ -88737,6 +88737,112 @@ fn upstream_layout_world_xy(
 }
 
 #[test]
+fn constrained_display_text_measure_places_the_following_sibling_after_all_wrapped_lines() {
+    let (runtime, graphs, index, mut artboard) =
+        upstream_layout_fixture("layout/layout_display.riv", None);
+    let graph = &graphs.artboards[index];
+    let key = |owner, name| property_key_for_name(owner, name);
+
+    // The fixture contains an outer fixed LayoutComponent and a padded column
+    // with two text-bearing LayoutComponent leaves. Turn the first leaf into
+    // the constrained display headline and keep the second as its subtitle.
+    let outer = 3;
+    let column = 6;
+    let column_style = 26;
+    let headline_layout = 8;
+    let headline_style = 9;
+    let headline_text = 11;
+    let headline_text_style = 12;
+    let headline_run = 16;
+    let subtitle_layout = 17;
+    let subtitle_style = 18;
+    let subtitle_run = 25;
+
+    // The outer fixture owns 16px padding on both sides, leaving the nested
+    // column at the requested 210px constraint (and its content at 190px).
+    assert!(artboard.set_double_property(outer, key("LayoutComponent", "width"), 242.0));
+    assert!(artboard.set_double_property(outer, key("LayoutComponent", "height"), 400.0));
+    let _ = artboard.set_uint_property(
+        column_style,
+        key("LayoutComponentStyle", "layoutWidthScaleType"),
+        1,
+    );
+    let _ = artboard.set_uint_property(
+        column_style,
+        key("LayoutComponentStyle", "layoutHeightScaleType"),
+        1,
+    );
+
+    assert!(artboard.set_bool_property(
+        headline_style,
+        key("LayoutComponentStyle", "intrinsicallySizedValue"),
+        true,
+    ));
+    let _ = artboard.set_uint_property(
+        headline_style,
+        key("LayoutComponentStyle", "layoutWidthScaleType"),
+        1,
+    );
+    assert!(artboard.set_uint_property(
+        headline_style,
+        key("LayoutComponentStyle", "layoutHeightScaleType"),
+        2,
+    ));
+    assert!(artboard.set_uint_property(headline_text, key("Text", "sizingValue"), 1));
+    assert!(artboard.set_double_property(headline_text, key("Text", "width"), 210.0));
+    assert!(artboard.set_double_property(headline_text_style, key("TextStyle", "fontSize"), 40.0,));
+    assert!(artboard.set_double_property(
+        headline_text_style,
+        key("TextStyle", "lineHeight"),
+        46.0,
+    ));
+    assert!(artboard.set_string_property(
+        headline_run,
+        key("TextValueRun", "text"),
+        b"Display wraps over four lines".to_vec(),
+    ));
+
+    let _ = artboard.set_uint_property(
+        subtitle_style,
+        key("LayoutComponentStyle", "layoutWidthScaleType"),
+        1,
+    );
+    assert!(artboard.set_uint_property(
+        subtitle_style,
+        key("LayoutComponentStyle", "layoutHeightScaleType"),
+        0,
+    ));
+    assert!(artboard.set_double_property(subtitle_layout, key("LayoutComponent", "height"), 46.0,));
+    assert!(artboard.set_string_property(
+        subtitle_run,
+        key("TextValueRun", "text"),
+        b"Subtitle".to_vec(),
+    ));
+
+    artboard.update_pass();
+    let report = artboard
+        .debug_taffy_layout_bounds_report(&runtime, graph)
+        .expect("display-text fixture settles with Taffy");
+    let solved = |local_id| {
+        report
+            .iter()
+            .find(|entry| entry.local_id == local_id)
+            .unwrap_or_else(|| panic!("missing solved layout local {local_id}"))
+    };
+    let headline = solved(headline_layout);
+    let subtitle = solved(subtitle_layout);
+    let column = solved(column);
+
+    assert_close(headline.height, 185.92029, "headline.height");
+    assert_close(headline.width, 190.0, "headline.width");
+    assert_close(
+        subtitle.world_transform[5],
+        column.world_transform[5] + 10.0 + headline.height + 10.0,
+        "subtitle.world_y",
+    );
+}
+
+#[test]
 fn upstream_layout_flex_direction_row_body_is_ported() {
     let (runtime, graph, index, mut artboard) =
         upstream_layout_fixture("layout/layout_horizontal.riv", None);

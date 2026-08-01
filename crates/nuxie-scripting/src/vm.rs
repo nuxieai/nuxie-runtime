@@ -16,6 +16,9 @@ mod bytecode;
 mod command_server;
 mod host_commands;
 mod listener_invocation;
+mod logging_scripting_context;
+mod lua_color;
+mod lua_rive_base;
 mod mat4;
 mod renderer;
 mod resource_limits;
@@ -27,6 +30,8 @@ use std::ffi::CString;
 use std::rc::Rc;
 
 use bytecode::validate_luau_bytecode;
+use logging_scripting_context::LoggingScriptingContext;
+use lua_rive_base::install_host_print;
 use luaur_rt::ffi::lua_error;
 use luaur_rt::{
     AnyUserData, Buffer as LuaBuffer, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table,
@@ -49,6 +54,7 @@ use crate::gpu_canvas::{
 };
 
 pub use host_commands::{HostCommand, HostCycleCheckpoint, HostEffectCheckpoint, HostValue};
+pub use logging_scripting_context::{ScriptingLogLevel, ScriptingLogSink};
 pub use luaur_rt::{Error, Result};
 pub use resource_limits::ScriptResourceLimit;
 
@@ -186,6 +192,7 @@ pub struct ScriptVm {
     host_cycle_active: Rc<Cell<bool>>,
     resource_limits: resource_limits::ResourceLimitTracker,
     gpu_canvas_shaders: ImportedGpuCanvasShaderAssets,
+    logging: LoggingScriptingContext,
 }
 
 /// Cloneable handle for the detached view-model roots owned by one scripting
@@ -243,6 +250,7 @@ pub struct LuaScriptInstance {
     resource_limits: resource_limits::ResourceLimitTracker,
     gpu_canvas: Option<ImportedGpuCanvasInstance>,
     gpu_canvas_context: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
+    logging: LoggingScriptingContext,
 }
 
 #[derive(Debug, Clone)]
@@ -356,6 +364,7 @@ impl LuaScriptInstance {
             resource_limits: resource_limits::ResourceLimitTracker::default(),
             gpu_canvas: None,
             gpu_canvas_context: None,
+            logging: LoggingScriptingContext::default(),
         }
     }
 
@@ -375,6 +384,7 @@ impl LuaScriptInstance {
         execution_budget: Option<ScriptExecutionBudget>,
         script_safepoints: Option<Rc<Cell<usize>>>,
         host_cycle_active: Option<Rc<Cell<bool>>>,
+        logging: LoggingScriptingContext,
     ) -> Self {
         Self {
             table: Some(table),
@@ -395,6 +405,7 @@ impl LuaScriptInstance {
             resource_limits,
             gpu_canvas,
             gpu_canvas_context,
+            logging,
         }
     }
 
@@ -411,6 +422,7 @@ impl LuaScriptInstance {
     }
 
     fn script_error(&self, error: Error) -> ScriptError {
+        self.logging.log_error(&error);
         tracked_script_error(error, &self.resource_limits)
     }
 
@@ -881,6 +893,7 @@ impl ScriptVm {
                 self.execution_budget.clone(),
                 Some(Rc::clone(&self.script_safepoints)),
                 Some(Rc::clone(&self.host_cycle_active)),
+                self.logging.clone(),
             )) as Box<dyn ScriptInstance>)
         };
         if let Some(factory) = factory {
@@ -933,7 +946,27 @@ impl ScriptVm {
             host_cycle_active,
             resource_limits,
             gpu_canvas_shaders: Rc::new(RefCell::new(BTreeMap::new())),
+            logging: LoggingScriptingContext::default(),
         }
+    }
+
+    /// Boot a VM whose script console and Lua errors are routed to `sink`.
+    pub fn new_with_log_sink(sink: impl Fn(ScriptingLogLevel, &[u8]) + 'static) -> Self {
+        let vm = Self::new();
+        vm.set_log_sink(sink);
+        vm
+    }
+
+    /// Route future complete script log lines to a host-provided sink.
+    ///
+    /// This may be called before or after [`Self::install_rive_globals`].
+    pub fn set_log_sink(&self, sink: impl Fn(ScriptingLogLevel, &[u8]) + 'static) {
+        self.logging.set_sink(Rc::new(sink));
+    }
+
+    /// Stop routing script log lines to the currently configured sink.
+    pub fn clear_log_sink(&self) {
+        self.logging.clear_sink();
     }
 
     /// Boot a VM whose total memory and each host-to-Luau callback are
@@ -1088,6 +1121,7 @@ impl ScriptVm {
             return Ok(());
         }
 
+        install_host_print(&self.lua, self.logging.clone())?;
         install_vector_global(&self.lua)?;
         install_mat4_global(&self.lua)?;
         install_math_fround(&self.lua)?;
@@ -1136,11 +1170,11 @@ impl ScriptVm {
     /// hostile `.riv` payloads get a safe Rust preflight before the raw VM call.
     pub fn load_bytecode(&self, chunk_name: &str, bytecode: &[u8]) -> Result<Function> {
         self.ensure_initialized()?;
-        validate_luau_bytecode(bytecode).map_err(|e| {
-            Error::runtime(format!(
-                "ScriptAsset '{chunk_name}': malformed Luau bytecode: {e}"
-            ))
-        })?;
+        if let Err(error) = validate_luau_bytecode(bytecode) {
+            return self.track_resource_result(Err(Error::runtime(format!(
+                "ScriptAsset '{chunk_name}': malformed Luau bytecode: {error}"
+            ))));
+        }
         let name = CString::new(format!("={chunk_name}"))
             .unwrap_or_else(|_| CString::new("=script").expect("static"));
         let result = unsafe {
@@ -1392,9 +1426,9 @@ impl ScriptVm {
         match &result {
             Value::Table(_) | Value::Function(_) => {}
             other => {
-                return Err(Error::runtime(format!(
+                return self.track_resource_result(Err(Error::runtime(format!(
                     "module '{display}' must return a table or function, got {other:?}"
-                )));
+                ))));
             }
         }
         // The module cache is a private plain table with no metamethods. Raw
@@ -1549,12 +1583,14 @@ impl ScriptVm {
             self.execution_budget.clone(),
             Some(Rc::clone(&self.script_safepoints)),
             Some(Rc::clone(&self.host_cycle_active)),
+            self.logging.clone(),
         )
     }
 
     fn track_resource_result<T>(&self, result: Result<T>) -> Result<T> {
         if let Err(error) = &result {
             self.resource_limits.observe_vm_error(error);
+            self.logging.log_error(error);
         }
         result
     }
@@ -1947,6 +1983,7 @@ impl RuntimeScriptingVm for ScriptVm {
             self.execution_budget.clone(),
             Some(Rc::clone(&self.script_safepoints)),
             Some(Rc::clone(&self.host_cycle_active)),
+            self.logging.clone(),
         )))
     }
 
@@ -2984,6 +3021,7 @@ mod context_init_tests {
                 None,
                 None,
                 None,
+                LoggingScriptingContext::default(),
             );
             instance
                 .set_context_view_model(None)
@@ -3064,6 +3102,7 @@ mod context_init_tests {
             None,
             None,
             None,
+            LoggingScriptingContext::default(),
         );
         assert!(
             !instance
@@ -3181,6 +3220,7 @@ mod context_init_tests {
             None,
             None,
             None,
+            LoggingScriptingContext::default(),
         );
         assert!(
             !instance
@@ -3665,6 +3705,7 @@ mod context_init_tests {
             None,
             None,
             None,
+            LoggingScriptingContext::default(),
         );
         let mut host = NoopScriptHost;
 

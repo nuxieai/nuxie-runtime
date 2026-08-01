@@ -167,6 +167,7 @@ pub use animation::{
 pub use artboard::RuntimeNestedRemapAnimationReport;
 pub use artboard::{
     ArtboardInstance, ExternalFontAssetError, RuntimeArtboardOccurrenceSegment, RuntimeComponents,
+    artboard_draw_frame_id,
 };
 pub use components::{
     ComponentDirt, Mat2D, RuntimeComponent, RuntimeComponentCapabilities, TransformProperty,

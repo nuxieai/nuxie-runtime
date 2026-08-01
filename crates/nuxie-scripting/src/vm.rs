@@ -24,6 +24,13 @@ mod lua_rive_base;
 mod lua_vec2d;
 mod promise;
 mod renderer;
+
+mod lua_artboards;
+mod lua_mat2d;
+mod lua_paint;
+mod lua_path;
+mod lua_renderer;
+mod lua_renderer_library;
 mod resource_limits;
 mod view_model;
 

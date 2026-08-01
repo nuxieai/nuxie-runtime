@@ -30,8 +30,9 @@
 /W[0-9]*-report.md
 /W[0-9]*-resume*.log
 /renderer-golden-*.log
-/P1[QR]*.log
-/P1[QR]*-report.md
+/P1*.log
+/P1*-report.md
+/W1*-report.md
 /wp3-setup.log
 /E8-inv-*
 /.fle8/

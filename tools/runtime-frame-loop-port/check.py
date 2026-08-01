@@ -1505,6 +1505,7 @@ def check(
     duplicates = duplicate_values(gap_ids)
     if duplicates:
         errors.append(f"duplicate gap ids: {', '.join(duplicates)}")
+    gap_status_counts: collections.Counter[str] = collections.Counter()
     for row in gap_rows:
         gap_id = str(row.get("id", ""))
         status = str(row.get("status", ""))
@@ -1512,6 +1513,8 @@ def check(
             errors.append("gap has an empty id")
         if status not in {"open", "closed"}:
             errors.append(f"gap {gap_id} has invalid status {status!r}")
+        else:
+            gap_status_counts[status] += 1
         if require_closed and status != "closed":
             errors.append(f"closed frame loop required but gap {gap_id} is open")
         citations = row.get("citations", [])
@@ -1526,6 +1529,17 @@ def check(
             errors.append(f"gap {gap_id} has no mechanism")
         if not str(row.get("closure", "")).strip():
             errors.append(f"gap {gap_id} has no closure")
+
+    expected_gap_status_counts = gaps.get("expected_gap_status_counts", {})
+    for status in ("open", "closed"):
+        expected = expected_gap_status_counts.get(status)
+        if not isinstance(expected, int):
+            errors.append(f"expected_gap_status_counts.{status} is missing")
+        elif gap_status_counts[status] != expected:
+            errors.append(
+                f"gap status count {status}={gap_status_counts[status]}, "
+                f"expected {expected}"
+            )
 
     mismatch_counters = {
         name

@@ -4,6 +4,20 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
 
 ## Current
 
+- W121 closes the final mechanism gaps. FL-G01's independent acceptance
+  reconciles the ownership ledger's existing `fl_b_verification =
+  "reaccepted"` state with the stale open row: the frozen scope is exactly 45
+  unique paths, the FL-B file ledger contains exactly those 45 faithful rows,
+  and all eight retained member rows match pinned C++ ownership. The live
+  zero-ratchets and four injected negative suites reject displaced KeyFrame
+  sidecars, LinearAnimation definition copies, reset clones, copied blend
+  payloads, dropped definitions, and occurrence-local empty fallbacks. FL-G03
+  closes on the source-bound canonical aggregate: `event_apply_batch` is C++
+  30 / Rust 11 and `state_machine_advance` is C++ 30 / Rust 11. Each side
+  therefore preserves one apply batch per counted advance; the 30-to-11 call
+  topology remains the accepted Rust owner-boundary adaptation for batched
+  ancestor delivery, bubbling, audio unwind, deferred errors, and settlement.
+  All 10 mechanism gaps are now closed.
 - FL-E7 is closed by mechanism correspondence, including FL-G08. DrawRules
   retains its active target, DrawTarget retains its Drawable and placement,
   retained Drawable allocations own the final `prev`/`next` links and
@@ -160,8 +174,8 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   faithful candidate. The 24 W120 rows remain `pending-verification` only.
 - Member closure: 75 / 75 owner/member rows (35 faithful plus 40 accepted
   adaptations).
-- Open mechanism gaps: 2 / 10. FL-G01 and FL-G03 remain open; FL-G08 is closed
-  by E7's retained Drawable mechanism.
+- Open mechanism gaps: 0 / 10. W121 closes FL-G01 and FL-G03; all mechanism
+  rows are closed.
 - Current dependency wave: every FL-E file row has a wave-acceptance
   disposition; orchestrator verification of the 24 W120 rows is the only
   remaining file-ledger action. FL-C is closed 56 / 56. FL-B's frozen
@@ -941,5 +955,4 @@ FL-A post-rebase floor, refreshed after final independent review:
 
 1. Orchestrator-adjudicate the 24 W120 candidate dispositions, flip their
    manifest verification values, and advance the acceptance-candidate phase.
-2. Close the remaining FL-G01 and FL-G03 mechanism gaps.
-3. Rerun renderer golden on a host with a usable GPU adapter.
+2. Rerun renderer golden on a host with a usable GPU adapter.

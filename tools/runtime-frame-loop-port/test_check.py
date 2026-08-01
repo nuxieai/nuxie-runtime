@@ -114,6 +114,9 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 f"""
                 version = 1
                 upstream_ref = "{self.ref}"
+                [expected_gap_status_counts]
+                open = 0
+                closed = 0
                 decision = []
                 ratchet = []
                 """
@@ -748,6 +751,31 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "trace landmark mismatches have no gap rows: component_add_dirt",
             result.stderr,
         )
+
+    def test_expected_gap_status_counts_reject_stale_open_total(self) -> None:
+        self.gaps.write_text(
+            self.gaps.read_text().replace(
+                "open = 0\nclosed = 0\n",
+                "open = 1\nclosed = 0\n",
+                1,
+            )
+        )
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("gap status count open=0, expected 1", result.stderr)
+
+    def test_expected_gap_status_counts_are_required(self) -> None:
+        self.gaps.write_text(
+            self.gaps.read_text().replace(
+                "[expected_gap_status_counts]\nopen = 0\nclosed = 0\n",
+                "",
+                1,
+            )
+        )
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("expected_gap_status_counts.open is missing", result.stderr)
+        self.assertIn("expected_gap_status_counts.closed is missing", result.stderr)
 
     def test_missing_required_trace_counter_fails(self) -> None:
         content = self.ledger.read_text().replace(

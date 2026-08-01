@@ -31,11 +31,14 @@ LOCAL_FIXTURE_LINKS = {
     pathlib.PurePosixPath(f"fixtures/{name}")
     for name in ("animation", "flow", "graph", "minimal")
 }
-# FL-C5 work-package plans, salvage patches, and logs are local orchestration
-# inputs rather than candidate source, even when the directory is untracked.
-LOCAL_ORCHESTRATION_DIRS = {".flc5"}
+# FL-C5 work-package state plus root W-wave and E-wave inventory receipts are
+# local orchestration evidence rather than candidate source. Exclude only their
+# fixed naming forms, even when those receipts are untracked and actively
+# updated during a source-bound capture.
+LOCAL_ORCHESTRATION_DIRS = {".flc5", ".fle8"}
 LOCAL_WAVE_ARTIFACT = re.compile(
-    r"W\d+(?:-resume\d*)?\.log|W\d+-report\.md"
+    r"W\d+(?:-resume\d*)?\.log|W\d+-report\.md|"
+    r"E\d+-inv-[A-Za-z0-9_-]+\.(?:log|md)"
 )
 
 

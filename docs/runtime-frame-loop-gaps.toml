@@ -2,6 +2,10 @@ version = 1
 title = "Runtime frame-loop mechanism and gap inventory"
 upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 
+[expected_gap_status_counts]
+open = 0
+closed = 10
+
 # User-approved deliberate divergences are recorded here and cited by their
 # parity-gap-register D-row.
 
@@ -40,8 +44,8 @@ approved = "FLR-20 static-text-extensions ceiling: TextModifier base registratio
 
 [[gap]]
 id = "FL-G01"
-status = "open"
-mechanism = "FL-B1/FL-B2/FL-B3/FL-B4 now mirror the C++ KeyFrame, LinearAnimation, AnimationReset, and blend definition/occurrence owners: each concrete frame occurrence retains attachment-time seconds inside one insertion-ordered KeyedProperty sequence, one type-safe target enum binds CoreRegistry's single property dispatch, the Artboard owns one immutable definition arena, every animation occurrence retains only a typed definition handle plus C++-shaped mutable state, and each reset occurrence leases one pooled first-seen object/property stream that is cleared and returned on final release. Each BlendState uniquely owns its ordered BlendAnimation definitions; every embedded blend occurrence retains a handle back to that exact definition, reads live source/value fields during advance, and retains unresolved animation IDs through the shared empty-animation owner. Rust-only StateMachineInstance snapshot clones share immutable definition/reset leases instead of cloning factory state. C++'s process-global empty animation is represented by one safe Artboard-shared definition because Rust's full definition type can contain non-Sync scripting handles; its generated defaults, occurrence sharing, and behavior remain exact. The former read-time fps calculation, six parallel frame vectors, property-family booleans, import-time source snapshots, per-occurrence descriptor clones, copied blend source/value payloads, positional from/to rediscovery, invalid-definition/empty-state elision, Option loop override, local zero guards, flat reset clones, global pair scans, and empty-reset elision are deleted. The gap remains open only until the complete FL-B owner family is independently verified."
+status = "closed"
+mechanism = "FL-B1/FL-B2/FL-B3/FL-B4 mirror the C++ KeyFrame, LinearAnimation, AnimationReset, and blend definition/occurrence owners: each concrete frame occurrence retains attachment-time seconds inside one insertion-ordered KeyedProperty sequence, one type-safe target enum binds CoreRegistry's single property dispatch, the Artboard owns one immutable definition arena, every animation occurrence retains only a typed definition handle plus C++-shaped mutable state, and each reset occurrence leases one pooled first-seen object/property stream that is cleared and returned on final release. Each BlendState uniquely owns its ordered BlendAnimation definitions; every embedded blend occurrence retains a handle back to that exact definition, reads live source/value fields during advance, and retains unresolved animation IDs through the shared empty-animation owner. Rust-only StateMachineInstance snapshot clones share immutable definition/reset leases instead of cloning factory state. C++'s process-global empty animation is represented by one safe Artboard-shared definition because Rust's full definition type can contain non-Sync scripting handles; its generated defaults, occurrence sharing, and behavior remain exact. Independent W121 acceptance reconciled the ledger's reaccepted state with this formerly stale row: all 45 frozen FL-B paths are present exactly once and faithful, all eight member rows are closed, and the live structural checker plus four injected FL-B negative suites reject every displaced sidecar, definition clone, reset clone, copied blend payload, dropped definition, and per-occurrence empty fallback."
 citations = [
   "cpp:src/animation/keyframe.cpp:10",
   "cpp:src/importers/keyed_property_importer.cpp:13-17",
@@ -58,17 +62,22 @@ citations = [
   "cpp:include/rive/animation/blend_state_instance.hpp:18-129",
   "cpp:src/animation/blend_state_1d_instance.cpp:10-149",
   "cpp:src/animation/blend_state_direct_instance.cpp:10-62",
-  "rust:crates/nuxie-runtime/src/animation.rs:329-331",
-  "rust:crates/nuxie-runtime/src/animation.rs:1022-1064",
-  "rust:crates/nuxie-runtime/src/animation.rs:1338-1421",
-  "rust:crates/nuxie-runtime/src/animation.rs:1557-2067",
-  "rust:crates/nuxie-runtime/src/artboard.rs:390",
-  "rust:crates/nuxie-runtime/src/artboard.rs:4119-4196",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine.rs:763-1103",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine.rs:1143-1405",
-  "rust:crates/nuxie-runtime/src/state_machine/state_instance.rs:1-180",
+  "rust:crates/nuxie-runtime/src/animation.rs:299-668",
+  "rust:crates/nuxie-runtime/src/animation.rs:782-799",
+  "rust:crates/nuxie-runtime/src/animation.rs:1101-1139",
+  "rust:crates/nuxie-runtime/src/animation.rs:1462-1648",
+  "rust:crates/nuxie-runtime/src/animation.rs:1656-1783",
+  "rust:crates/nuxie-runtime/src/artboard.rs:370-375",
+  "rust:crates/nuxie-runtime/src/artboard.rs:518-519",
+  "rust:crates/nuxie-runtime/src/artboard.rs:2208-2209",
+  "rust:crates/nuxie-runtime/src/artboard.rs:4217-4239",
+  "rust:crates/nuxie-runtime/src/state_machine/animation_reset_factory.rs:3-25",
+  "rust:crates/nuxie-runtime/src/state_machine/animation_reset_factory.rs:101-196",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine.rs:675-1064",
+  "rust:crates/nuxie-runtime/src/state_machine/blend_state_direct_instance.rs:3-139",
+  "rust:crates/nuxie-runtime/src/state_machine/state_instance.rs:4-187",
 ]
-closure = "Independent FL-B acceptance verifies the complete 45-file/eight-member wave and promotes the retained KeyFrame/KeyedProperty/LinearAnimation/AnimationReset/BlendState owners without any displaced sidecar, definition clone, reset clone, copied blend payload, dropped definition, or per-occurrence empty fallback."
+closure = "Closed by independent W121 FL-B acceptance of the complete 45-file/eight-member frozen wave against pinned C++ d788e8ec: exact scope membership and all retained KeyFrame/KeyedProperty/LinearAnimation/AnimationReset/BlendState owners hold, with every listed disqualifying shape absent and guarded by live zero-ratchets plus injected negative controls."
 
 [[gap]]
 id = "FL-G02"
@@ -85,7 +94,7 @@ closure = "Closed by FL-A: one retained owner graph, one root/component dirt own
 
 [[gap]]
 id = "FL-G03"
-status = "open"
+status = "closed"
 counters = [
   "component_add_dirt",
   "event_apply_batch",
@@ -93,19 +102,21 @@ counters = [
   "state_machine_transition_search",
   "component_dirt_consumptions",
 ]
-mechanism = "The complete listener/action family now dispatches ListenerAlignTarget through the retained target Node with the pinned transform/world-transform dirt writes. The merged E5 trace reaches exact transition-search and component-dirt-consumption counts, while its exact ordinary and scripted golden streams expose a remaining call-topology difference: pinned C++ enters StateMachineInstance::advance/applyEvents 30 times and Rust enters advance_with_report_mode/apply_local_event_listeners 11 times. Rust performs callback-major batching and ancestor delivery, then report-time bubbling, audio unwind, deferred terminal-error retention, and owner-mediated settlement through its retained safe facade rather than a raw parent-pointer recursion. Independent round-nine standards review classified this 30-to-11 topology as a safe owner-boundary adaptation. The two coverage counters remain explicitly open; output equality alone does not close this mechanism-level difference."
+mechanism = "The complete listener/action family dispatches ListenerAlignTarget through the retained target Node with the pinned transform/world-transform dirt writes. Transition-search and component-dirt-consumption ownership are already classified at their downstream boundaries. The source-bound W121 canonical aggregate measures the final topology pair at event_apply_batch C++ 30 / Rust 11 and state_machine_advance C++ 30 / Rust 11. The equal pair on each side proves one apply batch per counted advance while preserving the documented 30-to-11 occurrence topology: Rust performs callback-major batching and ancestor delivery, then report-time bubbling, audio unwind, deferred terminal-error retention, and owner-mediated settlement through its retained safe facade rather than raw parent-pointer recursion. This is the independently classified safe owner-boundary adaptation; exact 30-to-30 call parity is neither expected nor required."
 citations = [
   "cpp:src/animation/state_machine_instance.cpp:2320-2342",
   "cpp:src/animation/state_machine_instance.cpp:2548-2575",
   "cpp:src/animation/state_machine_instance.cpp:2583",
   "cpp:src/animation/listener_align_target.cpp:9",
   "rust:crates/nuxie-runtime/src/state_machine/listener_align_target.rs:15-112",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7327-7520",
   "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:7672-7721",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12613-12663",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12934",
-  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:13115",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12094-12479",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12669-12860",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:12935-12988",
+  "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:13115-13152",
 ]
-closure = "FL-C4 closes ListenerAlignTarget and its component-dirt branch. FL-C5 closes transition-search count parity and displaced lookup paths. The round-nine classification action is closed: the cited batching, ancestor-delivery, bubbling, audio, deferred-retention, and settlement path establishes the 30-to-11 advance/applyEvents topology as a safe owner-boundary adaptation. The final two counters remain tracked here for later aggregate trace closure rather than requiring exact call parity."
+closure = "Closed by W121 aggregate trace acceptance: event_apply_batch is 30 / 11 C++/Rust and state_machine_advance is 30 / 11 C++/Rust, so both sides preserve the required one-batch-per-advance relationship across the independently accepted owner-boundary adaptation. FL-C4 owns ListenerAlignTarget, FL-C5 owns transition search and displaced lookups, and the cited Rust batching/bubbling/audio/error/settlement chain owns the intentional call-topology difference."
 
 [[gap]]
 id = "FL-G04"

@@ -24641,6 +24641,23 @@ mod tests {
     }
 
     #[test]
+    fn scene_text_sizing_authors_exact_wire_values() {
+        for (sizing, wire_value) in [
+            (SceneTextSizing::AutoWidth, 0),
+            (SceneTextSizing::AutoHeight, 1),
+            (SceneTextSizing::Fixed, 2),
+        ] {
+            assert_eq!(
+                ExportedProperty::TextSizing(sizing).into_authoring_property(),
+                AuthoringProperty {
+                    key: PROPERTY_TEXT_SIZING,
+                    value: AuthoringValue::Uint(wire_value),
+                }
+            );
+        }
+    }
+
+    #[test]
     fn authored_view_model_handle_is_shared_across_artboards() -> Result<()> {
         let mut scene = Scene::new();
         let ((first_artboard, second_artboard, defaults, number), _) = scene.edit(|tx| {

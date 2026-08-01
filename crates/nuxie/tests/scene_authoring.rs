@@ -1014,6 +1014,176 @@ fn wrapped_text_geometry_scene(content: &str, width: f32) -> Result<(Scene, Artb
     Ok((scene, artboard, text))
 }
 
+#[test]
+fn auto_height_text_wraps_and_places_the_following_flex_sibling_after_its_height() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, headline, subtitle), _) = scene.edit(|tx| {
+        let font = tx.create_font_asset(FontAssetSpec {
+            name: "Roboto A".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Auto-height text layout".into(),
+            width: 120.0,
+            height: 400.0,
+        })?;
+        let column = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Column".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 120.0,
+                height: 0.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec {
+                    flex_direction: SceneLayoutFlexDirection::Column,
+                    layout_height_scale: SceneLayoutScale::Hug,
+                    ..LayoutComponentStyleSpec::default()
+                },
+            }),
+        )?;
+        let headline_layout = tx.create(
+            Parent::Object(column),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Headline layout".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 120.0,
+                height: 20.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec {
+                    intrinsically_sized: true,
+                    layout_height_scale: SceneLayoutScale::Hug,
+                    ..LayoutComponentStyleSpec::default()
+                },
+            }),
+        )?;
+        let headline = tx.create(
+            Parent::Object(headline_layout),
+            NodeSpec::Text(TextSpec {
+                name: "Headline".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                sizing: SceneTextSizing::AutoHeight,
+                width: 120.0,
+                height: 20.0,
+                align: SceneTextAlign::Left,
+                wrap: SceneTextWrap::Wrap,
+                overflow: SceneTextOverflow::Visible,
+            }),
+        )?;
+        let headline_style = tx.create(
+            Parent::Object(headline),
+            NodeSpec::TextStylePaint(TextStylePaintSpec {
+                name: "Headline style".into(),
+                font_size: 16.0,
+                line_height: 20.0,
+                letter_spacing: 0.0,
+                font,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(headline),
+            NodeSpec::TextValueRun(TextValueRunSpec {
+                name: "Headline run".into(),
+                text: "One two three four five six seven eight nine ten".into(),
+                style: headline_style,
+            }),
+        )?;
+
+        let subtitle_layout = tx.create(
+            Parent::Object(column),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Subtitle layout".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 120.0,
+                height: 20.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec::default(),
+            }),
+        )?;
+        let subtitle = tx.create(
+            Parent::Object(subtitle_layout),
+            NodeSpec::Text(TextSpec {
+                name: "Subtitle".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                sizing: SceneTextSizing::Fixed,
+                width: 120.0,
+                height: 20.0,
+                align: SceneTextAlign::Left,
+                wrap: SceneTextWrap::NoWrap,
+                overflow: SceneTextOverflow::Visible,
+            }),
+        )?;
+        let subtitle_style = tx.create(
+            Parent::Object(subtitle),
+            NodeSpec::TextStylePaint(TextStylePaintSpec {
+                name: "Subtitle style".into(),
+                font_size: 16.0,
+                line_height: 20.0,
+                letter_spacing: 0.0,
+                font,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(subtitle),
+            NodeSpec::TextValueRun(TextValueRunSpec {
+                name: "Subtitle run".into(),
+                text: "Sibling".into(),
+                style: subtitle_style,
+            }),
+        )?;
+        Ok((artboard, headline, subtitle))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+
+    let mut frame = scene.frame();
+    let headline = frame
+        .world_bounds(instance, headline)
+        .expect("auto-height headline has settled bounds");
+    let subtitle = frame
+        .world_bounds(instance, subtitle)
+        .expect("following sibling has settled bounds");
+    assert!(
+        headline.height() > 2.0 * 20.0,
+        "headline must wrap beyond two line heights: {headline:?}"
+    );
+    assert!(
+        subtitle.min_y >= headline.max_y,
+        "subtitle must follow the wrapped headline: headline={headline:?}, subtitle={subtitle:?}"
+    );
+    Ok(())
+}
+
 fn backtracking_multi_run_text_geometry_scene() -> Result<(Scene, ArtboardId, ObjectId)> {
     let mut scene = Scene::new();
     let ((artboard, text), _) = scene.edit(|tx| {

@@ -3214,11 +3214,15 @@ fn render_scene_schema() -> String {
          }\n\n\
          #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]\n\
          pub enum SceneTextSizing {\n\
+             AutoWidth,\n\
+             AutoHeight,\n\
              Fixed,\n\
          }\n\n\
          impl SceneTextSizing {\n\
              const fn wire_value(self) -> u32 {\n\
                  match self {\n\
+                     Self::AutoWidth => 0,\n\
+                     Self::AutoHeight => 1,\n\
                      Self::Fixed => 2,\n\
                  }\n\
              }\n\

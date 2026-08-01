@@ -12,13 +12,13 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 
 [expected_status_counts]
 ported-differential = 4
-ported-direct = 30
+ported-direct = 31
 partial = 17
-pending = 95
+pending = 94
 n-a = 2
 
 [ratchet]
-max_pending = 95
+max_pending = 94
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -609,9 +609,9 @@ note = "corpus_scripts.rs runs the ArtboardGrid protocol and scripting_linear_an
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_buffer_ext_test.cpp"
 test_case_count = 35
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/tests/buffer_extensions.rs", "P1H-report.md"]
+note = "All 35 pinned inline-Luau TEST_CASE scenarios are direct Rust ports through ScriptVm and luaur buffers. This is classified direct, not differential, because the Cargo test does not invoke the C++ process."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_canvas_drawing_phase_test.cpp"

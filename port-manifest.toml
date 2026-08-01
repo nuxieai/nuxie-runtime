@@ -1562,8 +1562,8 @@ note = "F13: advanced ListenerGroup behavior remains latent."
 [[file]]
 upstream = "src/lua/logging_scripting_context.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "Consolidated Rust port for lua."
+rust_module = "crates/nuxie-scripting/src/vm/logging_scripting_context.rs; crates/nuxie/src/lib.rs"
+note = "P1G: direct host logging context and File host route are ported."
 
 [[file]]
 upstream = "src/lua/lua_artboards.cpp"
@@ -1585,15 +1585,15 @@ note = "F7: this Lua binding is absent."
 
 [[file]]
 upstream = "src/lua/lua_data_context.cpp"
-status = "absent"
-rust_module = ""
-note = "F7: this Lua binding is absent."
+status = "partial"
+rust_module = "crates/nuxie-scripting/src/vm/view_model.rs"
+note = "F7/P1G: DataContext methods are present; parent contexts without a main view model remain unrepresentable."
 
 [[file]]
 upstream = "src/lua/lua_data_value.cpp"
-status = "absent"
-rust_module = ""
-note = "F7: this Lua binding is absent."
+status = "partial"
+rust_module = "crates/nuxie-scripting/src/vm.rs"
+note = "F7/P1G: DataValue surface is present with tracked index/newindex, coercion, and color-channel gaps."
 
 [[file]]
 upstream = "src/lua/lua_image_decode.cpp"
@@ -1609,9 +1609,9 @@ note = "Consolidated Rust port for lua."
 
 [[file]]
 upstream = "src/lua/lua_promise.cpp"
-status = "absent"
-rust_module = ""
-note = "F7: Lua promise binding is absent."
+status = "ported"
+rust_module = "crates/nuxie-scripting/src/vm/promise.rs; crates/nuxie-scripting/src/vm.rs"
+note = "P1-i: all 47 pinned Promise scenarios plus 2 invalid-yield cases pass exact live C++/Rust VM differentials; image decode is a separate lane."
 
 [[file]]
 upstream = "src/lua/lua_properties.cpp"
@@ -1622,8 +1622,8 @@ note = "Consolidated Rust port for lua."
 [[file]]
 upstream = "src/lua/lua_rive_base.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "Consolidated Rust port for lua."
+rust_module = "crates/nuxie-scripting/src/vm/lua_rive_base.rs"
+note = "P1G: direct host-routed _G.print binding is ported."
 
 [[file]]
 upstream = "src/lua/lua_scripted_context.cpp"
@@ -1633,15 +1633,15 @@ note = "F7: this Lua binding is absent."
 
 [[file]]
 upstream = "src/lua/lua_state.cpp"
-status = "absent"
-rust_module = ""
-note = "F7: this Lua binding is absent."
+status = "partial"
+rust_module = "crates/nuxie-scripting/src/vm/view_model.rs"
+note = "F7/P1G: Data initialization is ported with tracked constructor-arity gaps."
 
 [[file]]
 upstream = "src/lua/math/lua_color.cpp"
-status = "absent"
-rust_module = ""
-note = "F7: this Lua binding is absent."
+status = "ported"
+rust_module = "crates/nuxie-scripting/src/vm/lua_color.rs"
+note = "F7/P1G: the complete Color binding is ported."
 
 [[file]]
 upstream = "src/lua/math/lua_input.cpp"
@@ -1658,20 +1658,20 @@ note = "Consolidated Rust port for lua."
 [[file]]
 upstream = "src/lua/math/lua_mat4.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "Consolidated Rust port for lua."
+rust_module = "crates/nuxie-scripting/src/vm/lua_mat4.rs"
+note = "P1-e direct filename owner; the unchanged Mat4 binding is anchored by the mat4_bindings suite."
 
 [[file]]
 upstream = "src/lua/math/lua_math.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "Consolidated Rust port for lua."
+rust_module = "crates/nuxie-scripting/src/vm/lua_math.rs"
+note = "P1-e direct C5 owner for the previously vm.rs-owned Vector/Mat4 registration and existing luaur math.fround compatibility hook; C4 retains its unchanged Mat2D/Color registration."
 
 [[file]]
 upstream = "src/lua/math/lua_vec2d.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "Consolidated Rust port for lua."
+rust_module = "crates/nuxie-scripting/src/vm/lua_vec2d.rs"
+note = "P1-e direct filename owner; the unchanged Vector binding is anchored by the vm_boot rive_vector_* tests."
 
 [[file]]
 upstream = "src/lua/renderer/lua_blob.cpp"
@@ -1687,9 +1687,9 @@ note = "F7/F8: Lua GPU binding and ORE GPU host are absent."
 
 [[file]]
 upstream = "src/lua/renderer/lua_gradient.cpp"
-status = "absent"
-rust_module = ""
-note = "F7: this Lua binding is absent."
+status = "partial"
+rust_module = "crates/nuxie-scripting/src/vm/renderer.rs"
+note = "F7/P1G: Gradient constructors are present with tracked non-table stop and unsigned-color conversion gaps."
 
 [[file]]
 upstream = "src/lua/renderer/lua_image.cpp"

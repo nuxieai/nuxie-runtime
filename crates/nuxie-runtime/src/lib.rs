@@ -101,6 +101,7 @@ mod font_asset;
 mod foreground_layout_drawable;
 #[path = "data_bind/converters/formula/formula_token.rs"]
 mod formula_token;
+mod hittest_command_path;
 mod intrinsically_sizeable;
 mod joystick;
 mod layout;
@@ -133,6 +134,7 @@ mod scripted_object;
 mod scripting;
 mod shapes;
 mod state_machine;
+mod static_scene;
 mod text;
 mod text_input;
 #[path = "text/text.rs"]
@@ -194,6 +196,7 @@ pub use focus::{
     FocusNode, FocusNodeId, FocusPoint,
 };
 pub use font_asset::RuntimeFontAssetOwners;
+pub use hittest_command_path::{HitTestArea, HitTestCommandPath};
 pub use math::random::{
     RuntimeRandomTestValuesGuard, runtime_random_call_count, set_runtime_deterministic_mode,
     set_runtime_random_test_values,
@@ -263,6 +266,7 @@ pub(crate) use state_machine::{
     StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
     StateMachineTransitionDurationInstance,
 };
+pub use static_scene::{SceneLoop, StaticScene, StaticSceneArtboard};
 pub use text::{
     RawText as RuntimeRawText, RawTextFont, RawTextFontError, RawTextPaint,
     RuntimeColorGlyphClassification, RuntimeColorGlyphGradientStop, RuntimeColorGlyphLayer,

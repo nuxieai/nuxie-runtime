@@ -1,9 +1,9 @@
 use nuxie_binary::{
-    FieldValue, RuntimeComponentDirt, RuntimeConvertedDataValue, RuntimeDataBindUpdateEffect,
-    RuntimeDataConverterInterpolatorState, RuntimeDataConverterState, RuntimeDataType,
-    RuntimeDataValue, RuntimeFile, RuntimeHeader, RuntimeImportStatus, RuntimeManifest,
-    RuntimeObject, RuntimeProperty, RuntimeReadErrorKind, RuntimeViewModelInstance,
-    read_runtime_file, read_runtime_file_with_error_kind,
+    BinaryDataReader, BinaryWriter, FieldValue, RuntimeComponentDirt, RuntimeConvertedDataValue,
+    RuntimeDataBindUpdateEffect, RuntimeDataConverterInterpolatorState, RuntimeDataConverterState,
+    RuntimeDataType, RuntimeDataValue, RuntimeFile, RuntimeHeader, RuntimeImportStatus,
+    RuntimeManifest, RuntimeObject, RuntimeProperty, RuntimeReadErrorKind,
+    RuntimeViewModelInstance, read_runtime_file, read_runtime_file_with_error_kind,
 };
 use nuxie_schema::{
     Definition, FieldKind, core_registry_getter_field_kind_by_property_key, definition_by_name,
@@ -49,6 +49,115 @@ fn probe_path() -> Option<PathBuf> {
 
     let path = default_probe_path();
     path.exists().then_some(path)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppF14BinaryOracle {
+    upstream_round_trip_bytes: Vec<u8>,
+    upstream_round_trip_var_uint: u32,
+    upstream_round_trip_uint16: u16,
+    upstream_round_trip_float32_bits: u32,
+    writer_bytes: Vec<u8>,
+    read_var_uint32: u32,
+    read_var_uint: u64,
+    read_float32_bits: u32,
+    read_float64_bits: u64,
+    read_byte: u8,
+    read_uint32: u32,
+    read_string: Vec<u8>,
+    reader_eof: bool,
+    reader_overflow: bool,
+    overflow_value: u64,
+    overflow_eof: bool,
+    overflow_after_complete: bool,
+    completed_byte: u8,
+    reset_before: u8,
+    reset_after: u8,
+    reset_length: usize,
+}
+
+#[test]
+#[allow(clippy::approx_constant)] // Literal values emitted by the pinned C++ oracle.
+fn f14_binary_writer_and_data_reader_match_cpp_probe() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping F14 binary differential; set RIVE_CPP_PROBE or run make cpp-probe");
+        return;
+    };
+    let output = Command::new(&probe)
+        .arg("--f14-binary-oracle")
+        .output()
+        .unwrap_or_else(|error| panic!("failed to run {}: {error}", probe.display()));
+    assert!(
+        output.status.success(),
+        "F14 C++ oracle failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let cpp: CppF14BinaryOracle = serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|error| panic!("invalid F14 C++ oracle JSON: {error}"));
+
+    let mut upstream_round_trip_bytes = Vec::new();
+    {
+        let mut writer = BinaryWriter::new(&mut upstream_round_trip_bytes);
+        writer.write_var_uint32(34);
+        writer.write_u16(22);
+        writer.write_f32(3.14);
+    }
+    assert_eq!(
+        upstream_round_trip_bytes, cpp.upstream_round_trip_bytes,
+        "binary_reader_test.cpp writer bytes"
+    );
+    let mut upstream_round_trip_reader = BinaryDataReader::new(&upstream_round_trip_bytes);
+    assert_eq!(
+        upstream_round_trip_reader.read_var_uint32(),
+        cpp.upstream_round_trip_var_uint
+    );
+    let upstream_round_trip_uint16 = u16::from_le_bytes([
+        upstream_round_trip_reader.read_byte(),
+        upstream_round_trip_reader.read_byte(),
+    ]);
+    assert_eq!(upstream_round_trip_uint16, cpp.upstream_round_trip_uint16);
+    assert_eq!(
+        upstream_round_trip_reader.read_float32().to_bits(),
+        cpp.upstream_round_trip_float32_bits
+    );
+
+    let mut rust_bytes = Vec::new();
+    {
+        let mut writer = BinaryWriter::new(&mut rust_bytes);
+        writer.write_var_uint32(34);
+        writer.write_var_uint64(u64::MAX);
+        writer.write_f32(3.14);
+        writer.write_f64(-7.25);
+        writer.write_u8(0xab);
+        writer.write_u32(0x89ab_cdef);
+        writer.write_string(b"Rive\0Rust");
+    }
+    assert_eq!(rust_bytes, cpp.writer_bytes, "BinaryWriter wire bytes");
+
+    let mut reader = BinaryDataReader::new(&rust_bytes);
+    assert_eq!(reader.read_var_uint32(), cpp.read_var_uint32);
+    assert_eq!(reader.read_var_uint(), cpp.read_var_uint);
+    assert_eq!(reader.read_float32().to_bits(), cpp.read_float32_bits);
+    assert_eq!(reader.read_float64().to_bits(), cpp.read_float64_bits);
+    assert_eq!(reader.read_byte(), cpp.read_byte);
+    assert_eq!(reader.read_uint32(), cpp.read_uint32);
+    assert_eq!(reader.read_string(), cpp.read_string);
+    assert_eq!(reader.is_eof(), cpp.reader_eof);
+    assert_eq!(reader.did_overflow(), cpp.reader_overflow);
+
+    let mut overflow = BinaryDataReader::new(&[0x80]);
+    assert_eq!(overflow.read_var_uint(), cpp.overflow_value);
+    assert_eq!(overflow.is_eof(), cpp.overflow_eof);
+    overflow.complete(&[0x2a]);
+    assert_eq!(overflow.did_overflow(), cpp.overflow_after_complete);
+    assert_eq!(overflow.read_byte(), cpp.completed_byte);
+
+    let mut reset = BinaryDataReader::new(&[1, 2]);
+    assert_eq!(reset.read_byte(), cpp.reset_before);
+    reset.reset();
+    assert_eq!(reset.read_byte(), cpp.reset_after);
+    assert_eq!(reset.length_in_bytes(), cpp.reset_length);
 }
 
 fn reference_unit_fixture_dir() -> PathBuf {

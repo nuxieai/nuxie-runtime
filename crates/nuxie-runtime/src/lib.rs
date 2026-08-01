@@ -101,6 +101,7 @@ mod font_asset;
 mod foreground_layout_drawable;
 #[path = "data_bind/converters/formula/formula_token.rs"]
 mod formula_token;
+mod hittest_command_path;
 mod intrinsically_sizeable;
 mod joystick;
 mod layout;
@@ -133,6 +134,7 @@ mod scripted_object;
 mod scripting;
 mod shapes;
 mod state_machine;
+mod static_scene;
 mod text;
 mod text_input;
 #[path = "text/text.rs"]
@@ -144,6 +146,7 @@ mod text_style_paint_owner;
 #[path = "text/text_value_run.rs"]
 mod text_value_run_owner;
 mod view_model;
+mod work_pool;
 // #RB-1: retained-identity view-model core (map Phase RB). Additive while
 // consumers migrate; the compensation family deletes when migration ends.
 #[path = "data_bind/data_bind_list_item_consumer.rs"]
@@ -195,6 +198,7 @@ pub use focus::{
     FocusNode, FocusNodeId, FocusPoint,
 };
 pub use font_asset::RuntimeFontAssetOwners;
+pub use hittest_command_path::{HitTestArea, HitTestCommandPath};
 pub use math::random::{
     RuntimeRandomTestValuesGuard, runtime_random_call_count, set_runtime_deterministic_mode,
     set_runtime_random_test_values,
@@ -264,6 +268,7 @@ pub(crate) use state_machine::{
     StateMachineBindableTriggerInstance, StateMachineBindableViewModelInstance,
     StateMachineTransitionDurationInstance,
 };
+pub use static_scene::{SceneLoop, StaticScene, StaticSceneArtboard};
 pub use text::{
     RawText as RuntimeRawText, RawTextFont, RawTextFontError, RawTextPaint,
     RuntimeColorGlyphClassification, RuntimeColorGlyphGradientStop, RuntimeColorGlyphLayer,
@@ -338,6 +343,10 @@ pub(crate) use view_model::{
 };
 #[doc(hidden)]
 pub use view_model_cell::RuntimeFileViewModelInstanceCatalog;
+pub use work_pool::{
+    WorkPool, WorkStatus, WorkTask, WorkTaskRef, WorkTaskState, global_work_pool_exists,
+    next_work_owner_id, poll_async_work, with_global_work_pool, with_global_work_pool_if_exists,
+};
 
 #[cfg(test)]
 #[test]

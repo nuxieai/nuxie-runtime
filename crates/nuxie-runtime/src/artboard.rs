@@ -2845,6 +2845,7 @@ impl ArtboardInstance {
         // `scripted_drawable.cpp:376-397`;
         // `scripted_path_effect.cpp:111-130`).
         let mut did_advance = false;
+        let mut first_error = None;
         let mut host = NoopScriptHost;
         for index in 0..self.advancing_components.len() {
             let entry = self.advancing_components[index];
@@ -2856,8 +2857,15 @@ impl ArtboardInstance {
             ) {
                 continue;
             }
-            did_advance |=
-                self.advance_script_component_with(entry, seconds, &mut host, &mut call_advance)?;
+            match self.advance_script_component_with(entry, seconds, &mut host, &mut call_advance) {
+                Ok(advanced) => did_advance |= advanced,
+                Err(error) => {
+                    first_error.get_or_insert(error);
+                }
+            }
+        }
+        if let Some(error) = first_error {
+            return Err(error);
         }
         Ok(did_advance)
     }
@@ -2895,24 +2903,21 @@ impl ArtboardInstance {
         }
 
         // C++ clears m_isAdvanceActive before entering user code. A true
-        // result rearms the same owner; false parks it until wakeAdvance
-        // (`scripted_drawable.cpp:376-397`;
+        // result rearms the same owner; false parks it until wakeAdvance.
+        // ScriptedObject::scriptAdvance also converts a protected-call error
+        // to false, so surfacing Rust's typed error must not rearm the owner
+        // (`scripted_object.cpp:178-203`;
+        // `scripted_drawable.cpp:376-397`;
         // `scripted_path_effect.cpp:111-130`).
         self.set_script_owner_advance_active_handle(component, false);
         let Some(handle) = self.script_instances_by_global.get(&global_id).cloned() else {
             return Ok(false);
         };
-        let result = match call_advance(
+        let result = call_advance(
             handle.borrow_mut().as_mut(),
             &[ScriptValue::Number(f64::from(seconds))],
             host,
-        ) {
-            Ok(result) => result,
-            Err(error) => {
-                self.set_script_owner_advance_active_handle(component, true);
-                return Err(error);
-            }
-        };
+        )?;
         if result != ScriptValue::Bool(true) {
             return Ok(false);
         }
@@ -5807,9 +5812,8 @@ impl ArtboardInstance {
 
     /// Root C++ `Artboard::advance` settlement boundary.
     ///
-    /// C++ polls retained decoder promises immediately before this call.
-    /// Rust decoders are synchronously resolved by the owning host/File seam,
-    /// so this occurrence has no additional async queue to poll.
+    /// Like C++, this polls completed async work before any scripted or
+    /// retained advancing component runs.
     pub fn advance(&mut self, elapsed_seconds: f32) -> Result<bool, ScriptError> {
         crate::scene::advance(self, elapsed_seconds)
     }
@@ -5932,14 +5936,18 @@ impl ArtboardInstance {
             &mut dyn FnMut(&mut ArtboardInstance, usize, &[StateMachineReportedEvent]) -> bool,
         >,
     ) -> Result<bool, ScriptError> {
-        let mut changed = self.advance_retained_components_collect_events_with_scripts(
+        let retained_result = self.advance_retained_components_collect_events_with_scripts(
             elapsed_seconds,
             true,
             script_mode,
             nested_events,
             nested_event_dispatch,
-        )?;
+        );
+        let mut changed = retained_result.as_ref().copied().unwrap_or(false);
         changed |= self.advance_artboard_data_binds_with_elapsed(elapsed_seconds);
+        if let Err(error) = retained_result {
+            return Err(error);
+        }
         Ok(changed)
     }
 
@@ -5979,6 +5987,7 @@ impl ArtboardInstance {
         >,
     ) -> Result<bool, ScriptError> {
         let mut changed = false;
+        let mut first_script_error = None;
         if self.advancing_components.is_empty() {
             return Ok(changed);
         }
@@ -6041,7 +6050,7 @@ impl ArtboardInstance {
                                 .as_mut()
                                 .is_some_and(|dispatch| (**dispatch)(artboard, host_local, events))
                         };
-                    let advanced = self.advance_nested_artboard_entry(
+                    let advance_result = self.advance_nested_artboard_entry(
                         host_local,
                         elapsed_seconds,
                         new_frame,
@@ -6057,16 +6066,30 @@ impl ArtboardInstance {
                                     &[StateMachineReportedEvent],
                                 ) -> bool,
                         ),
-                    )?;
-                    advanced | self.publish_nested_view_model_context_mutations(host_local)
+                    );
+                    let published = self.publish_nested_view_model_context_mutations(host_local);
+                    match advance_result {
+                        Ok(advanced) => advanced | published,
+                        Err(error) => {
+                            first_script_error.get_or_insert(error);
+                            published
+                        }
+                    }
                 }
-                AdvancingComponentKind::ArtboardComponentList => self
-                    .advance_component_list_entry(
+                AdvancingComponentKind::ArtboardComponentList => {
+                    match self.advance_component_list_entry(
                         entry.local_id,
                         elapsed_seconds,
                         new_frame,
                         script_mode,
-                    )?,
+                    ) {
+                        Ok(advanced) => advanced,
+                        Err(error) => {
+                            first_script_error.get_or_insert(error);
+                            false
+                        }
+                    }
+                }
                 AdvancingComponentKind::ScrollConstraint => {
                     entry.component.is_some_and(|constraint| {
                         crate::constraints::advance_scroll_constraint(
@@ -6091,12 +6114,18 @@ impl ArtboardInstance {
                 | AdvancingComponentKind::ScriptedPathEffect
                     if script_mode.is_enabled() =>
                 {
-                    self.advance_script_component_with(
+                    match self.advance_script_component_with(
                         entry,
                         elapsed_seconds,
                         &mut script_host,
                         &mut |instance, args, host| script_mode.call(instance, args, host),
-                    )?
+                    ) {
+                        Ok(advanced) => advanced,
+                        Err(error) => {
+                            first_script_error.get_or_insert(error);
+                            false
+                        }
+                    }
                 }
                 // Root Artboard participates in the C++ advancing interface
                 // only when a concrete root owner adds work; ordinary roots
@@ -6115,6 +6144,9 @@ impl ArtboardInstance {
                 | AdvancingComponentKind::ScriptedLayout
                 | AdvancingComponentKind::ScriptedPathEffect => false,
             };
+        }
+        if let Some(error) = first_script_error {
+            return Err(error);
         }
         Ok(changed)
     }
@@ -6317,7 +6349,7 @@ impl ArtboardInstance {
             }
         }
 
-        let keep_going = if new_frame {
+        let (keep_going, first_script_error) = if new_frame {
             let Some(mut nested) = self.nested_artboards.remove(&host_local) else {
                 return Ok(false);
             };
@@ -6374,11 +6406,17 @@ impl ArtboardInstance {
             };
             self.restore_active_nested_state_machines(&mut nested);
             self.nested_artboards.insert(host_local, nested);
-            result?
+            match result {
+                Ok(changed) => (changed, None),
+                Err(error) => (false, Some(error)),
+            }
         } else {
-            self.nested_artboards
-                .get_mut(&host_local)
-                .is_some_and(RuntimeNestedArtboardInstance::advance_outer_update)
+            (
+                self.nested_artboards
+                    .get_mut(&host_local)
+                    .is_some_and(RuntimeNestedArtboardInstance::advance_outer_update),
+                None,
+            )
         };
         let child_dirty = self
             .nested_artboards
@@ -6386,6 +6424,9 @@ impl ArtboardInstance {
             .is_some_and(|nested| nested.child.has_dirt(ComponentDirt::COMPONENTS));
         if child_dirty {
             self.add_dirt(host_local, ComponentDirt::COMPONENTS, false);
+        }
+        if let Some(error) = first_script_error {
+            return Err(error);
         }
         Ok(keep_going)
     }
@@ -6410,6 +6451,7 @@ impl ArtboardInstance {
         let mut source_changed = false;
         let mut child_dirty = false;
         let mut keep_going = false;
+        let mut first_script_error = None;
         let Some(items) = self.component_list_items_mut(list_local) else {
             return Ok(false);
         };
@@ -6461,7 +6503,7 @@ impl ArtboardInstance {
                     );
                 }
             }
-            row_changed |= if new_frame {
+            let child_result = if new_frame {
                 item.child
                     .advance_retained_components_collect_events_with_scripts(
                         elapsed_seconds,
@@ -6469,7 +6511,7 @@ impl ArtboardInstance {
                         script_mode,
                         None,
                         None,
-                    )?
+                    )
             } else {
                 item.child
                     .advance_retained_components_collect_events_with_scripts(
@@ -6478,8 +6520,14 @@ impl ArtboardInstance {
                         script_mode,
                         None,
                         None,
-                    )?
+                    )
             };
+            match child_result {
+                Ok(changed) => row_changed |= changed,
+                Err(error) => {
+                    first_script_error.get_or_insert(error);
+                }
+            }
             row_changed |= item
                 .child
                 .advance_artboard_data_binds_with_elapsed(elapsed_seconds);
@@ -6501,6 +6549,9 @@ impl ArtboardInstance {
         }
         if child_dirty {
             self.add_dirt(list_local, ComponentDirt::COMPONENTS, false);
+        }
+        if let Some(error) = first_script_error {
+            return Err(error);
         }
         Ok(keep_going)
     }
@@ -10613,7 +10664,7 @@ impl RuntimeNestedArtboardInstance {
                     ),
                 }
             };
-        let mut changed = self
+        let child_result = self
             .child
             .advance_retained_components_collect_events_with_scripts(
                 local_elapsed_seconds,
@@ -10621,12 +10672,16 @@ impl RuntimeNestedArtboardInstance {
                 script_mode,
                 None,
                 Some(&mut dispatch_nested_source),
-            )?;
+            );
+        let mut changed = child_result.as_ref().copied().unwrap_or(false);
         drop(dispatch_nested_source);
         // Mirrors C++ src/nested_artboard.cpp NestedArtboard::updateDataBinds.
         changed |= self
             .child
             .advance_artboard_data_binds_with_elapsed(local_elapsed_seconds);
+        if let Err(error) = child_result {
+            return Err(error);
+        }
         Ok(changed)
     }
 
@@ -11244,6 +11299,67 @@ mod tests {
     use std::cell::{Cell, RefCell};
     use std::path::PathBuf;
     use std::rc::Rc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    struct ArtboardPollTask {
+        state: crate::WorkTaskState,
+        completed: AtomicBool,
+        callback_thread: std::sync::Mutex<Option<std::thread::ThreadId>>,
+    }
+
+    impl crate::WorkTask for ArtboardPollTask {
+        fn state(&self) -> &crate::WorkTaskState {
+            &self.state
+        }
+
+        fn execute(&self) -> bool {
+            true
+        }
+
+        fn on_complete(&self) {
+            *self
+                .callback_thread
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) =
+                Some(std::thread::current().id());
+            self.completed.store(true, Ordering::Release);
+        }
+    }
+
+    #[test]
+    fn root_artboard_advance_polls_global_async_work_before_advancing() {
+        let task = ArtboardPollTask {
+            state: crate::WorkTaskState::default(),
+            completed: AtomicBool::new(false),
+            callback_thread: std::sync::Mutex::new(None),
+        };
+        let task = std::sync::Arc::new(task);
+        crate::with_global_work_pool(|pool| {
+            pool.submit(Some(task.clone()));
+        });
+
+        #[cfg(feature = "threading")]
+        while matches!(
+            task.state.status(),
+            crate::WorkStatus::Pending | crate::WorkStatus::Running
+        ) {
+            std::thread::yield_now();
+        }
+        assert!(!task.completed.load(Ordering::Acquire));
+
+        let mut artboard = synthetic_instance(Vec::new(), Vec::new());
+        let polling_thread = std::thread::current().id();
+        let _ = artboard.advance(0.0).expect("advance empty artboard");
+
+        assert!(task.completed.load(Ordering::Acquire));
+        assert_eq!(
+            *task
+                .callback_thread
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+            Some(polling_thread)
+        );
+    }
 
     struct UpdateScriptInstance {
         inits: Rc<Cell<usize>>,
@@ -13930,33 +14046,153 @@ mod tests {
     }
 
     #[test]
-    fn failed_script_advance_preserves_active_state_for_exact_retry() {
+    fn failed_script_advance_parks_each_owner_while_surfacing_the_error() {
+        for type_name in ["ScriptedDrawable", "ScriptedLayout", "ScriptedPathEffect"] {
+            let attempts = Rc::new(RefCell::new(Vec::new()));
+            let should_fail = Rc::new(Cell::new(true));
+            let mut instance =
+                synthetic_instance(vec![synthetic_component_for_type(0, type_name)], vec![0]);
+            instance.set_script_instance_for_global(
+                0,
+                Box::new(FailOnceAdvanceScriptInstance {
+                    attempts: Rc::clone(&attempts),
+                    should_fail: Rc::clone(&should_fail),
+                }),
+            );
+            let mut factory = RecordingFactory::new();
+
+            let error = instance
+                .advance_frame_components_with_factory(0.5, &mut factory)
+                .expect_err("the protected script failure remains a typed host signal");
+            assert_eq!(error.to_string(), "fail once");
+            assert!(
+                !instance
+                    .advance_frame_components_with_factory(0.5, &mut factory)
+                    .expect("a parked owner does not call the script again")
+            );
+            assert!(
+                !instance
+                    .advance_frame_components_with_factory(0.25, &mut factory)
+                    .expect("the owner remains parked on later frames")
+            );
+
+            assert_eq!(
+                attempts.borrow().as_slice(),
+                [0.5],
+                "{type_name} must retain C++ clear-before-call park semantics"
+            );
+        }
+    }
+
+    #[test]
+    fn failed_script_advance_surfaces_after_later_retained_slots_run() {
         let attempts = Rc::new(RefCell::new(Vec::new()));
         let should_fail = Rc::new(Cell::new(true));
-        let mut instance = synthetic_instance(
-            vec![synthetic_component_for_type(0, "ScriptedDrawable")],
-            vec![0],
-        );
+        let later_calls = Rc::new(RefCell::new(Vec::new()));
+        let mut failing = synthetic_component_for_type(0, "ScriptedDrawable");
+        failing.global_id = 10;
+        let mut later = synthetic_component_for_type(1, "ScriptedPathEffect");
+        later.global_id = 20;
+        let mut instance = synthetic_instance(vec![failing, later], vec![0, 1]);
         instance.set_script_instance_for_global(
-            0,
+            10,
             Box::new(FailOnceAdvanceScriptInstance {
                 attempts: Rc::clone(&attempts),
-                should_fail: Rc::clone(&should_fail),
+                should_fail,
+            }),
+        );
+        instance.set_script_instance_for_global(
+            20,
+            Box::new(OrderedAdvanceScriptInstance {
+                label: 20,
+                calls: Rc::clone(&later_calls),
             }),
         );
         let mut factory = RecordingFactory::new();
 
-        instance
+        let error = instance
             .advance_frame_components_with_factory(0.5, &mut factory)
-            .expect_err("first advance fails");
-        instance
-            .advance_frame_components_with_factory(0.5, &mut factory)
-            .expect("the exact owner is retryable");
-        instance
-            .advance_frame_components_with_factory(0.25, &mut factory)
-            .expect("the following frame remains independent");
+            .expect_err("the first typed error is surfaced after retained scheduling completes");
 
-        assert_eq!(attempts.borrow().as_slice(), [0.5, 0.5, 0.25]);
+        assert_eq!(error.to_string(), "fail once");
+        assert_eq!(attempts.borrow().as_slice(), [0.5]);
+        assert_eq!(
+            later_calls.borrow().as_slice(),
+            [20],
+            "C++ converts the failed call to false and continues the m_advancingComponents loop"
+        );
+    }
+
+    #[test]
+    fn nested_failed_script_advance_surfaces_after_later_parent_slots_run() {
+        let attempts = Rc::new(RefCell::new(Vec::new()));
+        let later_calls = Rc::new(RefCell::new(Vec::new()));
+        let mut child_script = synthetic_component_for_type(0, "ScriptedDrawable");
+        child_script.global_id = 101;
+        let mut child = synthetic_instance(vec![child_script], vec![0]);
+        child.set_script_instance_for_global(
+            101,
+            Box::new(FailOnceAdvanceScriptInstance {
+                attempts: Rc::clone(&attempts),
+                should_fail: Rc::new(Cell::new(true)),
+            }),
+        );
+        let mut nested = synthetic_nested_artboard_instance(101);
+        nested.child = Box::new(child);
+
+        let nested_host = synthetic_component_for_type(0, "NestedArtboard");
+        let mut later = synthetic_component_for_type(1, "ScriptedDrawable");
+        later.global_id = 20;
+        let mut parent = synthetic_instance(vec![nested_host, later], vec![0, 1]);
+        parent.nested_artboards.insert(0, nested);
+        parent.set_script_instance_for_global(
+            20,
+            Box::new(OrderedAdvanceScriptInstance {
+                label: 20,
+                calls: Rc::clone(&later_calls),
+            }),
+        );
+        let mut factory = RecordingFactory::new();
+
+        let error = parent
+            .advance_frame_components_with_factory(0.5, &mut factory)
+            .expect_err("the nested typed error is surfaced after the parent schedule completes");
+
+        assert_eq!(error.to_string(), "fail once");
+        assert_eq!(attempts.borrow().as_slice(), [0.5]);
+        assert_eq!(later_calls.borrow().as_slice(), [20]);
+    }
+
+    #[test]
+    fn root_advance_runs_update_pass_before_surfacing_script_advance_error() {
+        let attempts = Rc::new(RefCell::new(Vec::new()));
+        let root = synthetic_component_for_type(0, "Artboard");
+        let mut scripted = synthetic_component_for_type(1, "ScriptedDrawable");
+        scripted.global_id = 10;
+        let mut instance = synthetic_instance(vec![root, scripted], vec![0, 1]);
+        instance.set_script_instance_for_global(
+            10,
+            Box::new(FailOnceAdvanceScriptInstance {
+                attempts: Rc::clone(&attempts),
+                should_fail: Rc::new(Cell::new(true)),
+            }),
+        );
+        instance
+            .update_pass_with_script_errors()
+            .expect("initial ScriptUpdate settles before the error probe");
+        instance.install_persistent_dirt_component_fixture();
+
+        let error = instance
+            .advance(0.5)
+            .expect_err("the typed error is surfaced after root settlement");
+
+        assert_eq!(error.to_string(), "fail once");
+        assert_eq!(attempts.borrow().as_slice(), [0.5]);
+        assert_eq!(
+            instance.persistent_dirt_component_fixture_receipt(),
+            (1, 1, false),
+            "the C++ update pass still consumes earlier component dirt before Rust surfaces the additive error"
+        );
     }
 
     #[test]
@@ -14026,6 +14262,64 @@ mod tests {
             "the complete frame entry point walks Artboard::m_advancingComponents insertion \
              order, not a late global-id script sweep (`artboard.cpp:1463-1480`; \
              `advancing_component.cpp:17-44`)"
+        );
+    }
+
+    #[test]
+    fn mixed_scripted_component_advances_run_at_their_retained_cpp_slots() {
+        let calls = Rc::new(RefCell::new(Vec::new()));
+
+        let mut nested_script = synthetic_component_for_type(0, "ScriptedDrawable");
+        nested_script.global_id = 101;
+        let mut child = synthetic_instance(vec![nested_script], vec![0]);
+        child.set_script_instance_for_global(
+            101,
+            Box::new(OrderedAdvanceScriptInstance {
+                label: 101,
+                calls: Rc::clone(&calls),
+            }),
+        );
+        let mut nested = synthetic_nested_artboard_instance(101);
+        nested.child = Box::new(child);
+
+        let mut drawable = synthetic_component_for_type(0, "ScriptedDrawable");
+        drawable.global_id = 90;
+        let nested_host = synthetic_component_for_type(1, "NestedArtboard");
+        let mut path_effect = synthetic_component_for_type(2, "ScriptedPathEffect");
+        path_effect.global_id = 20;
+        let mut layout = synthetic_component_for_type(3, "ScriptedLayout");
+        layout.global_id = 70;
+        let mut instance = synthetic_instance(
+            vec![drawable, nested_host, path_effect, layout],
+            vec![0, 1, 2, 3],
+        );
+        instance.nested_artboards.insert(1, nested);
+        for global_id in [90, 20, 70] {
+            instance.set_script_instance_for_global(
+                global_id,
+                Box::new(OrderedAdvanceScriptInstance {
+                    label: global_id,
+                    calls: Rc::clone(&calls),
+                }),
+            );
+        }
+
+        let mut factory = RecordingFactory::new();
+        assert!(
+            instance
+                .advance_frame_components_with_factory(0.1, &mut factory)
+                .expect("mixed retained component advance succeeds")
+        );
+        assert_eq!(
+            calls.borrow().as_slice(),
+            [90, 101, 20, 70],
+            concat!(
+                "ScriptedDrawable, nested-artboard work, ScriptedPathEffect, and ScriptedLayout ",
+                "run from their interleaved m_advancingComponents slots; the removed deferred ",
+                "queue would have moved the root scripted calls after the nested slot ",
+                "(`artboard.cpp:1463-1480`; `scripted_drawable.cpp:376-399`; ",
+                "`scripted_path_effect.cpp:111-133`)"
+            )
         );
     }
 

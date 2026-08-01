@@ -2514,9 +2514,7 @@ impl nuxie_runtime::ScriptArtboard for FileScriptArtboard {
                 || false,
             )
         } else {
-            let mut changed = self.instance.advance_frame_components(seconds)?;
-            changed |= self.instance.update_pass_with_script_errors()?;
-            Ok(changed)
+            self.instance.advance(seconds)
         }
     }
 
@@ -2988,7 +2986,19 @@ fn advance_scripted_artboard_frame_with_factory(
         )?;
     }
     let changed = if state_machines.is_empty() {
-        instance.advance_frame_components_with_factory(elapsed_seconds, factory)?
+        let component_result =
+            instance.advance_frame_components_with_factory(elapsed_seconds, factory);
+        let mut changed = component_result.as_ref().copied().unwrap_or(false);
+        let update_result = instance.update_pass_with_factory(factory);
+        changed |= update_result.as_ref().copied().unwrap_or(false);
+        verify_scripted_artboard_tree_attached(file, root_graph, instance)?;
+        if let Err(error) = component_result {
+            return Err(error);
+        }
+        if let Err(error) = update_result {
+            return Err(error);
+        }
+        return Ok(changed);
     } else {
         StateMachineInstance::advance_and_apply_state_machines_with_factory_and_view_models(
             instance,
@@ -2998,11 +3008,6 @@ fn advance_scripted_artboard_frame_with_factory(
             true,
             || file.advance_detached_view_models(),
         )?
-    };
-    let changed = if state_machines.is_empty() {
-        changed | instance.update_pass_with_factory(factory)?
-    } else {
-        changed
     };
     verify_scripted_artboard_tree_attached(file, root_graph, instance)?;
     Ok(changed)
@@ -3984,6 +3989,7 @@ impl<'a> ArtboardInstance<'a> {
         factory: &mut dyn Factory,
         elapsed_seconds: f32,
     ) -> Result<bool> {
+        nuxie_runtime::poll_async_work();
         #[cfg(feature = "scripting")]
         {
             let changed = advance_scripted_artboard_frame_with_factory(
@@ -4236,6 +4242,7 @@ impl<'a> ArtboardInstance<'a> {
         if state_machines.is_empty() {
             return self.advance(elapsed_seconds);
         }
+        nuxie_runtime::poll_async_work();
         let changed = false;
         #[cfg(feature = "scripting")]
         for state_machine in state_machines.iter_mut() {
@@ -4280,6 +4287,7 @@ impl<'a> ArtboardInstance<'a> {
         if state_machines.is_empty() {
             return self.bind_view_model(view_model) | self.advance(elapsed_seconds);
         }
+        nuxie_runtime::poll_async_work();
         let mut changed = false;
         changed |= self
             .raw
@@ -4344,6 +4352,7 @@ impl<'a> ArtboardInstance<'a> {
         if state_machines.is_empty() {
             return self.try_advance_with_factory(factory, elapsed_seconds);
         }
+        nuxie_runtime::poll_async_work();
         let mut changed = false;
         #[cfg(feature = "scripting")]
         {
@@ -4389,6 +4398,7 @@ impl<'a> ArtboardInstance<'a> {
                 .try_advance_with_factory(factory, elapsed_seconds)
                 .map(|advanced| changed | advanced);
         }
+        nuxie_runtime::poll_async_work();
         let mut changed = false;
         #[cfg(not(feature = "scripting"))]
         for state_machine in state_machines.iter_mut() {
@@ -4564,6 +4574,9 @@ impl OwnedArtboardInstance {
                     ExternalFontAssetError::InvalidFont { asset_id }
                 }
             })?;
+        let external_font_assets = self.file.external_font_assets.snapshot();
+        self.raw
+            .replace_external_font_asset_snapshot(&external_font_assets);
         Ok(())
     }
 
@@ -4582,6 +4595,7 @@ impl OwnedArtboardInstance {
         factory: &mut dyn Factory,
         elapsed_seconds: f32,
     ) -> Result<bool> {
+        nuxie_runtime::poll_async_work();
         #[cfg(feature = "scripting")]
         let artboard = self
             .file
@@ -4915,6 +4929,7 @@ impl OwnedArtboardInstance {
         if state_machines.is_empty() {
             return self.advance(elapsed_seconds);
         }
+        nuxie_runtime::poll_async_work();
         let changed = false;
         #[cfg(feature = "scripting")]
         for state_machine in state_machines.iter_mut() {
@@ -4959,6 +4974,7 @@ impl OwnedArtboardInstance {
         if state_machines.is_empty() {
             return self.bind_view_model(view_model) | self.advance(elapsed_seconds);
         }
+        nuxie_runtime::poll_async_work();
         let mut changed = false;
         changed |= self
             .raw
@@ -5025,6 +5041,7 @@ impl OwnedArtboardInstance {
         if state_machines.is_empty() {
             return self.try_advance_with_factory(factory, elapsed_seconds);
         }
+        nuxie_runtime::poll_async_work();
         let mut changed = false;
         #[cfg(feature = "scripting")]
         let artboard = self
@@ -5077,6 +5094,7 @@ impl OwnedArtboardInstance {
                 .try_advance_with_factory(factory, elapsed_seconds)
                 .map(|advanced| changed | advanced);
         }
+        nuxie_runtime::poll_async_work();
         let mut changed = false;
         #[cfg(feature = "scripting")]
         let artboard = self
@@ -5653,6 +5671,8 @@ mod owned_instance_tests {
     use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
     use nuxie_render_api::{PersistentFactory, RecordingFactory};
     use nuxie_schema::definition_by_name;
+    #[cfg(feature = "scripting")]
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     const FIXTURE: &[u8] = include_bytes!("../../../fixtures/graph/dependency_test.riv");
 
@@ -5999,6 +6019,65 @@ mod owned_instance_tests {
         assert!(!view_model.set_color("missing", 0));
         assert!(!view_model.fire_trigger("missing"));
         assert!(!view_model.set_artboard("missing", 0));
+    }
+
+    #[cfg(feature = "scripting")]
+    struct ScriptArtboardPollTask {
+        state: nuxie_runtime::WorkTaskState,
+        completed: Arc<AtomicBool>,
+    }
+
+    #[cfg(feature = "scripting")]
+    impl nuxie_runtime::WorkTask for ScriptArtboardPollTask {
+        fn state(&self) -> &nuxie_runtime::WorkTaskState {
+            &self.state
+        }
+
+        fn execute(&self) -> bool {
+            true
+        }
+
+        fn on_complete(&self) {
+            self.completed.store(true, Ordering::Release);
+        }
+    }
+
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn scripted_artboard_without_state_machine_polls_global_async_work() {
+        let file = Arc::new(facade_view_model_file());
+        let mut scripted = FileScriptArtboard::new(file, 0, None)
+            .expect("scripted artboard without a state machine");
+        assert!(scripted.state_machine.is_none());
+
+        let completed = Arc::new(AtomicBool::new(false));
+        let task = Arc::new(ScriptArtboardPollTask {
+            state: nuxie_runtime::WorkTaskState::default(),
+            completed: Arc::clone(&completed),
+        });
+        nuxie_runtime::with_global_work_pool(|pool| {
+            assert_ne!(pool.submit(Some(task)), 0);
+        });
+        assert!(!completed.load(Ordering::Acquire));
+
+        #[cfg(not(feature = "threading"))]
+        nuxie_runtime::ScriptArtboard::advance(&mut scripted, 0.0)
+            .expect("scripted artboard advances");
+
+        #[cfg(feature = "threading")]
+        {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while !completed.load(Ordering::Acquire) {
+                nuxie_runtime::ScriptArtboard::advance(&mut scripted, 0.0)
+                    .expect("scripted artboard advances");
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "worker completion was not delivered by scripted-artboard polling"
+                );
+                std::thread::yield_now();
+            }
+        }
+        assert!(completed.load(Ordering::Acquire));
     }
 
     #[test]
@@ -6411,6 +6490,32 @@ mod owned_instance_tests {
                 .get(&font_id)
                 .expect("cloned font")
         ));
+    }
+
+    #[test]
+    fn idempotent_owned_font_attachment_refreshes_a_stale_sibling() {
+        let file = Arc::new(
+            File::import(&external_fixture("hosted_font_file.riv")).expect("import font file"),
+        );
+        let font_id = first_semantic_asset_id(&file, "FontAsset");
+        let mut first = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+            .expect("instantiate first sibling");
+        let mut stale =
+            OwnedArtboardInstance::instantiate_default(file).expect("instantiate stale sibling");
+        let font_bytes = external_fixture("fonts/Inter_18pt-Regular.ttf");
+
+        first
+            .attach_font_asset_bytes(font_id, font_bytes.clone())
+            .expect("attach font to shared File and first instance");
+        assert_eq!(stale.raw().external_font_asset_bytes(font_id), None);
+
+        stale
+            .attach_font_asset_bytes(font_id, font_bytes.clone())
+            .expect("refresh stale sibling from idempotent File attachment");
+        assert_eq!(
+            stale.raw().external_font_asset_bytes(font_id),
+            Some(font_bytes.as_slice())
+        );
     }
 
     #[cfg(feature = "scripting")]

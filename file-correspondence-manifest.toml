@@ -1309,15 +1309,15 @@ note = "P1-b faithful candidate: pinned ShaderAsset SignedContent/RSTB header, d
 
 [[file]]
 upstream = "src/async/work_pool.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "absent"
+rust_module = "crates/nuxie-runtime/src/work_pool.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0108"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F12: async work pool is absent."
+note = "P1-l faithful candidate: WorkTask status/error/owner state, null-submit rejection, point-in-time owner cancellation generations, single polling-thread callback delivery, bounded polling, in-flight accounting, shutdown joins, and cancelled-task destruction callbacks are ported. The opt-in threading feature mirrors WITH_RIVE_THREADING; without it, work executes during polling. Both modes share one safely synchronized process-global pool; Rust requires Send + Sync tasks so that global identity does not reproduce C++'s unsynchronized cross-thread data races. Every root Artboard advance facade polls the existing global pool before advancing components; advanceInternal counterparts remain unpolled. All 13 work_pool_test.cpp and 6 work_task_test.cpp cases are direct public-interface ports with deterministic barriers for queued/in-flight states; the pinned probe ABI has no async-work commands. Lua image.decode remains deliberately out of scope. Final status awaits orchestrator verification."
 
 [[file]]
 upstream = "src/audio/audio_engine.cpp"
@@ -1777,15 +1777,15 @@ note = "Consolidated runtime port."
 
 [[file]]
 upstream = "src/core/binary_data_reader.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "not-applicable"
+rust_module = "crates/nuxie-binary/src/binary_data_reader.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0147"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F14: C++ binary data reader plumbing is outside the Rust importer shape."
+note = "P1-p/F14 implementation awaiting orchestrator verification: direct byte-preserving reader owner with sticky-overflow, complete/reset contract tests and a pinned C++ differential oracle."
 
 [[file]]
 upstream = "src/core/binary_reader.cpp"
@@ -1801,15 +1801,15 @@ note = "P1-a direct owner split at d788e8ec: the runtime-importer reader slice i
 
 [[file]]
 upstream = "src/core/binary_writer.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "not-applicable"
+rust_module = "crates/nuxie-binary/src/binary_writer.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0149"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F14: binary writing is outside the read-only runtime contract."
+note = "P1-p/F14 implementation awaiting orchestrator verification: direct BinaryStream/BinaryWriter owner with destructor flush, clear, exact little-endian primitive/LEB128/string bytes, direct tests, and a pinned C++ byte differential."
 
 [[file]]
 upstream = "src/core/field_types/core_bool_type.cpp"
@@ -2557,15 +2557,15 @@ note = "FL-E5 direct owner plus draw coordinator preserve parent path/world look
 
 [[file]]
 upstream = "src/hittest_command_path.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "not-applicable"
+rust_module = "crates/nuxie-runtime/src/hittest_command_path.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0211"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F14: command-path helper is outside the supported runtime architecture."
+note = "P1-p/F14 implementation awaiting orchestrator verification: direct command-path owner and production geometry integration preserve transform, fill rule, rewind, and pinned integer-cell winding behavior; direct hittest-basics plus hit_test_test/hit_test_nested/opaque_hit_test C++ differentials cover the live path."
 
 [[file]]
 upstream = "src/importers/artboard_importer.cpp"
@@ -3542,14 +3542,14 @@ note = "Consolidated Rust port for math."
 [[file]]
 upstream = "src/math/hit_test.cpp"
 status = "faithful"
-verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/components.rs"
+verification = "pending-verification"
+rust_module = "crates/nuxie-runtime/src/math/hit_test.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0293"
 b6_verdict = "ADAPTED"
 b6_cluster = "bones-math-components"
 audit_record = "docs/b6-audit/results/bones-math-components.md"
-note = "Consolidated Rust port for math."
+note = "P1-p dependency ownership correction awaiting orchestrator verification: direct integer-cell HitTester owner consumed by HitTestCommandPath."
 
 [[file]]
 upstream = "src/math/mat2d.cpp"
@@ -3889,15 +3889,15 @@ note = "AF-1/AF-5: retained per-artboard scripted converter VMs are invoked by t
 
 [[file]]
 upstream = "src/scripted/scripted_drawable.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/scripting.rs"
+rust_module = "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/scripting.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0322"
-b6_verdict = "DIVERGENT"
+b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-3: RD-1 live traversal is complete, but the deferred script-advance queue remains divergent."
+note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. This reconciliation completes scripted-drawable lifecycle parity: protected-call failure preserves pinned C++ clear-before-call parking, while Rust additionally surfaces typed ScriptError to the host without rearming the owner."
 
 [[file]]
 upstream = "src/scripted/scripted_interpolator.cpp"
@@ -3925,27 +3925,27 @@ note = "F7: RD-1 ported live traversal, but ScriptedLayout measure/resize/layout
 
 [[file]]
 upstream = "src/scripted/scripted_object.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/scripted_object.rs; crates/nuxie-runtime/src/scripting.rs"
+rust_module = "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/scripted_object.rs; crates/nuxie-runtime/src/scripting.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0325"
-b6_verdict = "DIVERGENT"
+b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-3: retained VM ownership is adapted, but the deferred script-advance queue remains divergent."
+note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. This reconciliation completes the remaining scripted-object error lifecycle: failed protected calls park the owner exactly like C++ false, while Rust's typed ScriptError remains only an additive host signal and performs no automatic rearm."
 
 [[file]]
 upstream = "src/scripted/scripted_path_effect.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/scripting.rs"
+rust_module = "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/scripting.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0326"
-b6_verdict = "DIVERGENT"
+b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-3: retained path-effect VM ownership is adapted, but deferred advance remains divergent."
+note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. This reconciliation completes scripted-path-effect lifecycle parity: protected-call failure preserves pinned C++ clear-before-call parking, while typed ScriptError is surfaced additively without rearming the owner."
 
 [[file]]
 upstream = "src/semantic/semantic_data.cpp"
@@ -4549,15 +4549,15 @@ note = "W120 faithful candidate: pinned active-child mutation, recursive collaps
 
 [[file]]
 upstream = "src/static_scene.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "not-applicable"
+rust_module = "crates/nuxie-runtime/src/static_scene.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0377"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F14: static scene helper is outside the supported runtime contract."
+note = "P1-p/F14 implementation awaiting orchestrator verification: direct StaticScene owner delegates name/translucency, reports one-shot/zero duration, ignores elapsed seconds, advances the artboard at zero, and returns true; API-contract tested against pinned C++ behavior."
 
 [[file]]
 upstream = "src/text/cursor.cpp"

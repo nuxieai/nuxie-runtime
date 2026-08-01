@@ -1201,51 +1201,51 @@ note = "F1/A2: audio asset object data is imported, but decode/playback ownershi
 
 [[file]]
 upstream = "src/assets/blob_asset.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/objects.rs"
+rust_module = "crates/nuxie-binary/src/assets/blob_asset.rs; crates/nuxie-binary/src/assets/file_asset_contents.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0099"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/results/assets-importers.md"
-note = "Consolidated Rust port for assets."
+note = "P1-b faithful candidate: pinned BlobAsset moves decoded bytes into owned storage and reports the blob extension at src/assets/blob_asset.cpp:5-11; the direct Rust filename owner pins the extension at crates/nuxie-binary/src/assets/blob_asset.rs:1 and owned last-record-wins payload association lives at crates/nuxie-binary/src/assets/file_asset_contents.rs:90-141. Anchors: scripting_file_asset_catalog_uses_importer_ownership_not_adjacency, file_asset_unique_names_and_filenames_match_cpp_runtime, and cpp_probe_matches_rust_file_assets_when_available."
 
 [[file]]
 upstream = "src/assets/file_asset.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/objects.rs"
+rust_module = "crates/nuxie-binary/src/assets/file_asset.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0100"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/results/assets-importers.md"
-note = "Consolidated Rust port for assets."
+note = "P1-b faithful candidate: pinned FileAsset backboard cataloging, unique-name/filename metadata, CDN UUID decode/format, and duplicate-id normalization span src/assets/file_asset.cpp:11-79; the direct Rust owner carries the file-global catalog, metadata/UUID formatting, extension dispatch, and imported-id normalization at crates/nuxie-binary/src/assets/file_asset.rs:3-184. Anchors: duplicate_file_asset_ids_are_normalized_like_cpp_importer, runtime_file_assets_match_cpp_file_assets_collection, file_asset_cdn_uuid_bytes_format_like_cpp_runtime, file_asset_unique_names_and_filenames_match_cpp_runtime, cpp_probe_matches_rust_file_assets_when_available, and cpp_file_asset_helpers_match_binary_asset_metadata_model."
 
 [[file]]
 upstream = "src/assets/file_asset_contents.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/objects.rs"
+rust_module = "crates/nuxie-binary/src/assets/file_asset_contents.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0101"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/results/assets-importers.md"
-note = "Consolidated Rust port for assets."
+note = "P1-b faithful candidate: pinned FileAssetContents transfers owned bytes/signature to the latest FileAsset importer at src/assets/file_asset_contents.cpp:8-46; the direct Rust owner retains the dense/inspection catalogs, imported-status filtering, importer-boundary association, bounds, and deterministic last-record-wins payload at crates/nuxie-binary/src/assets/file_asset_contents.rs:3-196. Anchors: scripting_reader_gives_script_and_shader_contents_their_file_asset_importers, scripting_file_asset_catalog_uses_importer_ownership_not_adjacency, scripting_file_asset_catalog_respects_manifest_importer_boundary, and cpp_probe_matches_rust_file_assets_when_available."
 
 [[file]]
 upstream = "src/assets/file_asset_referencer.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/objects.rs"
+rust_module = "crates/nuxie-binary/src/assets/file_asset_referencer.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0102"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/results/assets-importers.md"
-note = "Consolidated Rust port for assets."
+note = "P1-b faithful candidate under the B6 AF-1/AF-5 immutable-arena adaptation: pinned referencer registration and typed FileAsset installation span src/assets/file_asset_referencer.cpp:8-40; the direct Rust owner resolves imported referencers by serialized dense index and enforces the matching asset subtype at crates/nuxie-binary/src/assets/file_asset_referencer.rs:3-50. Anchors: runtime_file_asset_referencers_resolve_like_cpp_backboard_importer and cpp_probe_matches_rust_file_assets_when_available."
 
 [[file]]
 upstream = "src/assets/font_asset.cpp"
@@ -1273,15 +1273,15 @@ note = "AF-1/RF-27/RF-28/RF-31: the portable/native body retains decoded RenderI
 
 [[file]]
 upstream = "src/assets/manifest_asset.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/objects.rs"
+rust_module = "crates/nuxie-binary/src/assets/manifest_asset.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0105"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/results/assets-importers.md"
-note = "Consolidated Rust port for assets."
+note = "P1-b faithful candidate: pinned ManifestAsset section framing, exact-size validation, names/paths decode, signed-int key reinterpretation, and empty fallback span src/assets/manifest_asset.cpp:10-164; the direct Rust owner carries discovery, budget validation, bounded section decode, partial soft-failure state, and resolvers at crates/nuxie-binary/src/assets/manifest_asset.rs:3-282. Anchors: manifest_asset_contents_decode_names_and_paths_like_cpp_runtime, malformed_manifest_asset_contents_keep_cpp_partial_decode_state, manifest_known_sections_do_not_read_past_their_declared_size, manifest_declared_entries_and_components_share_the_property_budget, and cpp_probe_matches_rust_manifest_when_available."
 
 [[file]]
 upstream = "src/assets/script_asset.cpp"
@@ -1297,15 +1297,15 @@ note = "AF-1/AF-5: the file script catalog and scripting VM retain ScriptAsset m
 
 [[file]]
 upstream = "src/assets/shader_asset.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/objects.rs"
+rust_module = "crates/nuxie-binary/src/assets/shader_asset.rs; crates/nuxie-scripting/src/shader_asset.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0107"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/results/assets-importers.md"
-note = "Consolidated Rust port for assets."
+note = "P1-b faithful candidate: pinned ShaderAsset SignedContent/RSTB header, descriptor last-wins indexing, tagged-section skipping, widened range validation, and exact target lookup span src/assets/shader_asset.cpp:6-125; binary metadata is owned at crates/nuxie-binary/src/assets/shader_asset.rs:1 and the strong direct decode owner is crates/nuxie-scripting/src/shader_asset.rs:36-132. Anchors: scripting_reader_gives_script_and_shader_contents_their_file_asset_importers plus shader_asset tests decodes_pinned_cpp_webgpu_whole_module_and_binding_map, validates_only_final_last_wins_descriptors_like_cpp, accepts_cpp_descriptor_aliases_gaps_and_trailing_bytes, and requires_wgsl_source_and_binding_map_targets."
 
 [[file]]
 upstream = "src/async/work_pool.cpp"

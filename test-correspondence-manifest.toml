@@ -1,0 +1,1074 @@
+# Upstream C++ unit-test correspondence ledger. A differential disposition
+# requires complete behavior execution through both the pinned C++ runtime and
+# Rust. Direct-only coverage is never promoted from nearby or foundational tests.
+schema = "nuxie-test-correspondence/v1"
+schema_version = 1
+upstream_repository = "rive-app/rive-runtime"
+upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+source_globs = ["tests/unit_tests/runtime/*.cpp", "tests/unit_tests/runtime/scripting/*.cpp"]
+row_count = 148
+test_case_count = 1316
+status_values = ["ported-differential", "ported-direct", "partial", "pending", "n-a"]
+
+[expected_status_counts]
+ported-differential = 4
+ported-direct = 30
+partial = 17
+pending = 95
+n-a = 2
+
+[ratchet]
+max_pending = 95
+
+[[file]]
+upstream = "tests/unit_tests/runtime/aabb_test.cpp"
+test_case_count = 9
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/animation_state_instance_test.cpp"
+test_case_count = 14
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/src/animation.rs::upstream_animation_state_speed_start_and_spilled_time_matrix"]
+note = "All 14 cases and 30 assertions are mapped directly in the FL-B/FL-C backfill."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/audio_test.cpp"
+test_case_count = 13
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/bezier_utils_test.cpp"
+test_case_count = 11
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/binary_reader_test.cpp"
+test_case_count = 3
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/bound_bones_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/bounds_test.cpp"
+test_case_count = 3
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-e5-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::{upstream_background_shape_bounds_follow_text_and_artboard_transform,upstream_raw_path_coarse_and_precise_bounds_are_ported,upstream_text_local_bounds_fixture_retains_origin_adjusted_bounds}"]
+note = "All three assertion sequences are direct Rust ports."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/cdn_asset_test.cpp"
+test_case_count = 2
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/child_iterator_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/clip_test.cpp"
+test_case_count = 5
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-e7-tests.md", "corpus.toml::{animated_clipping,artboardclipping,circle_clips,clipping_and_draw_order}"]
+note = "The completed E7 checklist covers all five cases with focused retained-proxy, visibility, and dirt-boundary Rust tests. Generic golden fixtures are not claimed as exact per-case differentials."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/color_glyph_test.cpp"
+test_case_count = 22
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/color_test.cpp"
+test_case_count = 2
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/command_queue_test.cpp"
+test_case_count = 79
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/component_list_test.cpp"
+test_case_count = 29
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-d5-d7-tests.md", "crates/nuxie-runtime/{src/artboard.rs,src/artboard_component_list.rs,src/nested_artboard.rs,tests/cpp_probe.rs}"]
+note = "The completed D5-D7 checklist explicitly absorbs all 29 cases with direct owner assertions; unsupported silver action streams are not treated as differential coverage."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/component_test.cpp"
+test_case_count = 8
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-d5-d7-tests.md", "crates/nuxie-runtime/{src/artboard.rs,src/nested_artboard.rs,tests/cpp_probe.rs}"]
+note = "The completed D5-D7 checklist explicitly absorbs all eight active cases with direct owner assertions; the block-commented ninth macro is not counted."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/contour_measure_test.cpp"
+test_case_count = 6
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/cubic_value_test.cpp"
+test_case_count = 1
+status = "ported-differential"
+evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::upstream_cubic_and_elastic_fixture_assertions_match_cpp_probe"]
+note = "The sole fixture case compares the pinned C++ runtime update with Rust for both exact samples."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/dash_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/data_bind_container_test.cpp"
+test_case_count = 12
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-d3-d4-tests.md", "crates/nuxie-runtime/src/data_bind/data_bind_container.rs"]
+note = "All 12 queue and membership cases are direct Rust ports."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/data_bind_lists_test.cpp"
+test_case_count = 4
+status = "ported-differential"
+evidence = ["docs/runtime-frame-loop-fl-d3-d4-tests.md", "silver-corpus.toml::{clear_viewmodel_list,list_items,number_to_list_nested_children,viewmodel_list_trigger}"]
+note = "All four literal action streams execute through the pinned C++ silver producer and Rust action runner; exact and recorded-divergence outcomes both count as exercised."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
+test_case_count = 9
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/data_binding_computed_values_test.cpp"
+test_case_count = 1
+status = "ported-differential"
+evidence = ["silver-corpus.toml::computed_values_test"]
+note = "The sole literal action stream executes through both runtimes and currently records a genuine divergence."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/data_binding_converters_test.cpp"
+test_case_count = 3
+status = "ported-differential"
+evidence = ["docs/runtime-frame-loop-fl-d3-d4-tests.md", "silver-corpus.toml::{data_converter_interpolator_reset,interpolation_zero_duration,list_to_length_test}"]
+note = "All three literal action streams execute through both runtimes; exact and recorded-divergence outcomes both count as exercised."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/data_binding_cycle_test.cpp"
+test_case_count = 7
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-d3-d4-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::fl_d4_cycle_*"]
+note = "All seven data_binding_test_3.riv assertion sequences are literal Rust fixture ports; these exact tests do not invoke the C++ process."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/data_binding_fonts_test.cpp"
+test_case_count = 2
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/data_binding_images_test.cpp"
+test_case_count = 9
+status = "partial"
+evidence = ["silver-corpus.toml::{image_fit_alignment_2,image_fit_alignment_3,image_fit_alignment_updated_test,viewmodel_based_condition}"]
+covered_test_cases = ["Image fit & alignment with databound images 2", "Image fit & alignment images 3", "Image fit & alignment with image scaling", "Image based conditions work"]
+note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/data_binding_keyframes.cpp"
+test_case_count = 5
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/data_binding_test.cpp"
+test_case_count = 40
+status = "partial"
+evidence = ["silver-corpus.toml::{artboard_width_test,computed_root_transform-list,computed_root_transform-nested_artboard,custom_property_enum,data_bind_solo-solos-to-values,data_bind_solo-values-to-solos,data_converter_to_number,databind_artboard,format_number_with_commas,relative_data_binding,state_transition_fire_trigger,time_based_interpolation,trigger_based_listeners,trigger_fires_single_change}"]
+covered_test_cases = ["Artboard properties conditions work without binding", "Computed root transform list", "Computed root transform nested artboard", "Custom enum properties", "Data binding solos - target to source", "Data binding solos", "Convert to number", "Artboards as conditions", "Format text with commas", "Relative data binding", "State machine fire triggers", "Interpolate color and number", "Trigger based listeners", "Trigger fires single change on listener"]
+note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/data_binding_viewmodels_test.cpp"
+test_case_count = 2
+status = "partial"
+evidence = ["silver-corpus.toml::{unbound_stateful_component}"]
+covered_test_cases = ["Stateful component is bound before binding the view model instance"]
+note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/decode_ktx2_test.cpp"
+test_case_count = 11
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/default_state_machine_test.cpp"
+test_case_count = 1
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_default_state_machine_fixture_contract"]
+note = "The sole entry.riv case is directly ported across the public default-scene API."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/distance_constraint_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/draw_order_test.cpp"
+test_case_count = 1
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-e7-tests.md", "corpus.toml::draw_rule_cycle"]
+note = "Focused Rust tests cover relinking, proxy reuse, and retained-owner lookup. The generic draw_rule_cycle golden does not by itself prove every upstream assertion through both runtimes."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/elastic_easing_test.cpp"
+test_case_count = 2
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/{tests/cpp_probe.rs::upstream_cubic_and_elastic_fixture_assertions_match_cpp_probe,src/animation.rs::upstream_elastic_ease_numeric_contract}"]
+note = "Both cases are covered; only the fixture-loading case is differential, so the file remains ported-direct."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/enums_test.cpp"
+test_case_count = 17
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/file_test.cpp"
+test_case_count = 12
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/focus_test.cpp"
+test_case_count = 81
+status = "partial"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/src/state_machine/focus.rs"]
+covered_test_cases = ["FocusNode property setters", "FocusNode hierarchy", "FocusManager basic focus operations", "FocusManager focus change notifications", "FocusManager respects canFocus", "FocusManager hierarchy", "FocusManager hasFocus with descendants", "FocusManager removeChild clears focus", "List row reparent: FocusNode removeFromParent preserves primary focus", "FocusManager input routing", "FocusManager traversal basic", "FocusManager traversal with tabIndex", "FocusManager traversal skips non-traversable", "FocusManager edge behavior closedLoop", "FocusManager edge behavior stop", "FocusManager ancestor notification on focus", "FocusManager common ancestor optimization", "FocusManager traversal focuses leaves only", "FocusManager nested scopes focus deepest leaf", "FocusManager edge behavior parentScope exits to parent", "FocusManager clearFocus clears hasFocus flag chain", "FocusManager removeChild clears manager reference", "Freeing a FocusNode clears the parent pointer of a child that outlives it", "FocusManager::addChild removes a migrating root from its previous manager", "A migrated focus scope survives destruction of its previous manager", "FocusManager traversal backward from first leaf exits scope", "FocusManager closedLoop wraps backward", "FocusManager stop prevents backward traversal", "StateMachineInstance hasFocusNodes ignores non-traversable scopes", "StateMachineInstance hasFocusNodes sees leaves under a transparent scope", "StateMachineInstance hasFocusNodes counts focus data that is currently ineligible for traversal", "FocusManager traversal descends through a transparent scope and keeps sibling order", "FocusManager drops focus when a leaf under a transparent scope becomes hidden", "FocusManager rebuilding one scope's subtree preserves focus in a sibling scope", "FocusActionTraversal perform advances focus with traversalKind next", "FocusActionTraversal perform moves focus back with traversalKind previous", "FocusActionTraversal perform unknown traversalKind defaults to next", "StateMachineInstance exposes hasFocusNodes, focusNext, focusPrevious from focusManager", "FocusActionTraversal perform ignores null StateMachineInstance", "Focusable::acceptsKeyboardInput defaults to false", "StateMachineInstance::focusState reports no focus when nothing is focused", "StateMachineInstance::focusState reports focused non-keyboard focusable", "StateMachineInstance::focusState reports keyboard expectation when focused focusable accepts keys", "StateMachineInstance::focusState clears when focus is cleared", "StateMachineInstance::focusState tracks switches between focusables", "StateMachineInstance::focusState uses external focus manager when set", "StateMachineInstance::clearFocus clears internal focus manager", "FocusManager setFocus on a scope descends to first leaf", "FocusManager setFocus on a scope descends depth-first", "FocusManager setFocus on a scope with no eligible leaf falls back", "FocusManager setFocus on an ineligible scope is a no-op", "FocusManager setFocus on a leaf is unchanged", "FocusManager Tab after focusing a scope traverses leaf siblings", "FocusActionClear perform clears the primary focus", "FocusActionClear perform is a no-op when nothing is focused", "FocusActionClear perform ignores null StateMachineInstance", "TransitionFocusCondition uses the reassigned core type key", "TransitionFocusCondition evaluate returns false for a null StateMachineInstance", "TransitionFocusCondition evaluate returns false when no target comparator is configured", "Focus based transitions work"]
+note = "The exhaustive FL-B/FL-C table identifies the listed names as fully covered TEST_CASEs; mixed or finding rows remain unclaimed."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/follow_path_constraint_test.cpp"
+test_case_count = 8
+status = "partial"
+evidence = ["silver-corpus.toml::{follow_path_animate_shape,follow_path_animate_solo,follow_path_animate_target,follow_path_constraint,text_follow_path_shape_length}"]
+covered_test_cases = ["Animate shape along follow path", "Animate solo along follow path", "Animate follow path target path", "Follow path constraint with path as target", "Text follow path modifier"]
+note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/font_test.cpp"
+test_case_count = 5
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/gamepad_test.cpp"
+test_case_count = 7
+status = "pending"
+evidence = []
+note = "Wire size and typed dispatch are covered, but the missing byte-batch parser means no complete upstream TEST_CASE is ported."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/global_view_model_binding_test.cpp"
+test_case_count = 9
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
+test_case_count = 3
+status = "partial"
+evidence = ["silver-corpus.toml::{global_viewmodels_test-auto_instance}"]
+covered_test_cases = ["Test global view models with automatic instancing"]
+note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/hittest_test.cpp"
+test_case_count = 21
+status = "partial"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/tests/cpp_probe.rs::hittest_test.cpp provenance findings"]
+covered_test_cases = ["hittest-basics", "hittest-mesh", "hit test on opaque target", "hit test on opaque nested artboard", "early out on listeners", "Hit testing multi touch events", "Multitouch with nested artboard and pointer exit event", "Hit test leaves in collapsed layouts"]
+note = "The exhaustive FL-B/FL-C table identifies the listed names as fully covered TEST_CASEs; mixed or finding rows remain unclaimed."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/ik_constraint_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/ik_test.cpp"
+test_case_count = 2
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/image_asset_test.cpp"
+test_case_count = 2
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-e2-tests.md", "crates/nuxie-runtime/src/draw.rs::{upstream_image_asset_in_band_literals_and_sharing_are_ported,upstream_image_asset_out_of_band_literals_and_sharing_are_ported}"]
+note = "Both encoded-size and shared-identity cases are direct Rust ports."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/image_decoders_test.cpp"
+test_case_count = 5
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-e2-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::{upstream_png_decoder_fixture_contract,upstream_jpeg_decoder_fixture_contract,upstream_bad_jpeg_fixture_is_rejected_before_oversized_allocation,upstream_bad_png_fixture_is_rejected_before_oversized_allocation,upstream_webp_decoder_fixture_contract}"]
+note = "All five pinned decoder fixtures are direct Rust tests; the bounded oversized-image rejection is an explicit host-policy adaptation."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/image_mesh_test.cpp"
+test_case_count = 2
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-e2-tests.md", "crates/nuxie-runtime/src/draw.rs::{upstream_image_mesh_fixture_literals_are_ported,artboard_clone_shares_file_image_and_mesh_source_but_not_occurrence_buffers}"]
+note = "Both mesh/source/clone cases are directly ported; tape.riv also runs in both golden lanes."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/in_band_asset_load_test.cpp"
+test_case_count = 3
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-e2-tests.md", "crates/nuxie-runtime/src/draw.rs::upstream_in_band_*"]
+note = "All three metadata, loader-responsibility, and rejection-fallback cases are direct Rust ports."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/instancing_test.cpp"
+test_case_count = 3
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/joystick_flags_test.cpp"
+test_case_count = 1
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-e4-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_joystick_flags_fixture_actions_are_ported"]
+note = "The sole fixture action sequence and all authored masks are directly ported."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/layout_scroll_test.cpp"
+test_case_count = 23
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/layout_test.cpp"
+test_case_count = 22
+status = "partial"
+evidence = ["docs/runtime-frame-loop-fl-e4-tests.md", "docs/runtime-frame-loop-fl-e5-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_layout_*"]
+covered_test_cases = ["LayoutComponent FlexDirection row", "LayoutComponent FlexDirection column", "LayoutComponent FlexDirection row with gap", "LayoutComponent FlexDirection row with wrap", "LayoutComponent Center using alignItems and justifyContent", "LayoutComponent with intrinsic size gets measured correctly", "LayoutComponent Padding Px", "LayoutComponent Margin Px", "LayoutComponent Corner Radius", "LayoutComponent Direction", "LayoutComponent forcedWidth/Height dirt test", "LayoutComponent Alignment", "Prevent Margin Pct on Artboard", "Multiple layout collapsing and soloing in hierarchy.", "Layout animation time databound", "Layout animation artboard component list", "Layout animation nested artboards", "Layout aspect ratio", "Animating layout display", "Layout background & foreground shape paints."]
+note = "The first 13 direct bodies and seven executable silver bodies are covered. Layout fixed/fill and top-level hug remain unsupported, so the file is partial."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/library_asset_test.cpp"
+test_case_count = 10
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/line_break_test.cpp"
+test_case_count = 12
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/linear_animation_instance_test.cpp"
+test_case_count = 10
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/src/animation.rs::upstream_linear_animation_instance_sequences"]
+note = "All ten cases and 115 assertions are mapped directly."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/linear_animation_test.cpp"
+test_case_count = 6
+status = "partial"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/tests/cpp_probe.rs::linear_animation_test.cpp provenance findings"]
+covered_test_cases = ["LinearAnimation with positive speed have normal start and end seconds", "LinearAnimation with negative speed have reversed start and end seconds", "LinearAnimation reports when to keep going correctly", "LinearAnimation keeps initializing after missing keyed object", "Looping timeline events load correctly and report"]
+note = "The exhaustive FL-B/FL-C table identifies the listed names as fully covered TEST_CASEs; mixed or finding rows remain unclaimed."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/listener_action_flags_test.cpp"
+test_case_count = 7
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/src/state_machine/listener_action.rs::upstream_listener_action_flag_decode_occurrence_and_import_routing_matrix"]
+note = "All seven flag/import-routing cases are direct Rust ports."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/listener_align_target_test.cpp"
+test_case_count = 2
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_listener_align_target_fixture_contract"]
+note = "Both preserve-offset cases are direct fixture ports."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/lite_rtti_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/main_test.cpp"
+test_case_count = 0
+status = "n-a"
+evidence = []
+note = "This C++ support/runner translation unit declares no active TEST_CASE at the pinned revision."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/mat2d_test.cpp"
+test_case_count = 3
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/math_test.cpp"
+test_case_count = 18
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/nested_artboard_opacity_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/nested_artboard_origin_test.cpp"
+test_case_count = 2
+status = "partial"
+evidence = ["silver-corpus.toml::{nested_artboard_origin_override_test}"]
+covered_test_cases = ["Animated origin and click events"]
+note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/nested_artboard_test.cpp"
+test_case_count = 9
+status = "partial"
+evidence = ["silver-corpus.toml::{nested_events,nested_hug,nested_needs_advance,pause_nested_artboard}"]
+covered_test_cases = ["Nested events don't conflict with parent events.", "All nested artboard modes respect hug", "Nested artboard needs advance", "Pause and resume nested artboards"]
+note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/nested_input_test.cpp"
+test_case_count = 4
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/src/artboard.rs::upstream_runtime_nested_inputs_fixture_aliases_share_live_occurrences"]
+note = "All four nested bool/number/trigger cases are direct fixture ports."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/nested_text_run_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/node_test.cpp"
+test_case_count = 2
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/object_stream_test.cpp"
+test_case_count = 4
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/path_test.cpp"
+test_case_count = 13
+status = "partial"
+evidence = ["silver-corpus.toml::{fill_trim_path,group_effect-main-missing-targets,path_effect_with_feathers,stacked_path_effects}"]
+covered_test_cases = ["Apply trim path effect to fill", "Apply group effect with missing items", "Path effects with inner & outer feathers", "Apply stacked path effects to paths"]
+note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/raw_path_test.cpp"
+test_case_count = 7
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/raw_text_input_test.cpp"
+test_case_count = 16
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-e6-tests.md", "crates/nuxie-runtime/src/text/{cursor.rs,raw_text_input.rs}"]
+note = "All 16 raw cursor, edit, selection, measurement, and journal cases are direct Rust ports."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/reader_test.cpp"
+test_case_count = 4
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/rectangles_to_contour_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/refcnt_test.cpp"
+test_case_count = 2
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/render_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "solid_affects_has_changed is sampled only at time zero in the generic corpus; it does not port the upstream case's repeated 0.1-second advance/didChange assertions."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/rive_testing.cpp"
+test_case_count = 0
+status = "n-a"
+evidence = []
+note = "This C++ support/runner translation unit declares no active TEST_CASE at the pinned revision."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/rotation_constraint_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scale_constraint_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripted_path_test.cpp"
+test_case_count = 26
+status = "pending"
+evidence = []
+note = "The scripted corpus proves script_paths_test.riv bytecode loads, but it does not port any complete path/contour TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
+test_case_count = 12
+status = "pending"
+evidence = []
+note = "corpus_scripts.rs runs the ArtboardGrid protocol and scripting_linear_animation bytecode, but it does not reproduce any complete upstream artboard TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_buffer_ext_test.cpp"
+test_case_count = 35
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_canvas_drawing_phase_test.cpp"
+test_case_count = 3
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_color_test.cpp"
+test_case_count = 3
+status = "pending"
+evidence = []
+note = "The scripted corpus loads scripted_color.riv bytecode only; no complete color TEST_CASE is corresponded."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
+test_case_count = 22
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_converter_test.cpp"
+test_case_count = 8
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_dependency_test.cpp"
+test_case_count = 5
+status = "pending"
+evidence = []
+note = "corpus_require_dependency_chain_registers_and_resolves proves module registration/require, but not a complete converter-output TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_detached_viewmodel_advance_test.cpp"
+test_case_count = 3
+status = "pending"
+evidence = []
+note = "D1 owner tests cover trigger advancement and retained parents, but none of the three wrapper/tracking lifecycle TEST_CASEs is fully ported."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_direct_field_benchmark.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_drawable_test.cpp"
+test_case_count = 5
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-e7-tests.md", "crates/nuxie-runtime/{src/draw.rs,src/state_machine/state_machine_instance.rs}", "crates/nuxie/tests/vector_scripted_drawable.rs"]
+note = "All five callbacks/dispatch cases are covered directly; keyboard_event_to_script also runs in both golden lanes, but not every case has dual-runtime execution."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_gamepad_event_test.cpp"
+test_case_count = 2
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-scripting/src/vm/listener_invocation.rs"]
+note = "Both snapshot/mapping cases are direct Rust ports."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_gc_fflag_init_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_gradient_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_image_decode_test.cpp"
+test_case_count = 3
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_input_test.cpp"
+test_case_count = 15
+status = "partial"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/tests/cpp_probe.rs::scripting/scripting_input_test.cpp provenance findings"]
+covered_test_cases = ["scripted object can set and read number input", "scripted object can set and read string input", "scripted object can set and read boolean input", "scripted object can set and read integer input", "scripted object can use multiple inputs", "scripted object inputs can be used in advance function", "ScriptedDrawable can be created and initialized", "ScriptedLayout can be created and initialized", "ScriptedDataConverter can be created and initialized", "ensureScriptInitialized then hydrate twice keeps same self ref", "hydrateScriptInputs runs Lua init without DataContext when inputs allow", "hydration preflight fails atomically when VM input cannot resolve"]
+note = "The exhaustive FL-B/FL-C table identifies the listed names as fully covered TEST_CASEs; mixed or finding rows remain unclaimed."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_layout_test.cpp"
+test_case_count = 6
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_listener_action_test.cpp"
+test_case_count = 3
+status = "pending"
+evidence = []
+note = "The backfill explicitly retains all three exact script-console/view-model-result cases as findings; pending scripted silver entries are not executed evidence."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_mat2d_test.cpp"
+test_case_count = 5
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_mat4_test.cpp"
+test_case_count = 18
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_mesh_test.cpp"
+test_case_count = 2
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_paint_test.cpp"
+test_case_count = 2
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_path_effect_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_pointer_event_test.cpp"
+test_case_count = 2
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs::successive_pointer_events_preserve_previous_position_and_timestamp", "crates/nuxie-scripting/src/vm/listener_invocation.rs::pointer_wrapper_matches_cpp_uint8_id_and_owned_payload"]
+note = "Both construction cases are covered directly."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_promise_test.cpp"
+test_case_count = 47
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
+test_case_count = 16
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_renderer_test.cpp"
+test_case_count = 4
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_require_check.cpp"
+test_case_count = 11
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_scope_test.cpp"
+test_case_count = 7
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_text_runs.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_transition_condition_test.cpp"
+test_case_count = 1
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/tests/cpp_probe.rs::scripted_transition_conditions_match_live_cpp_success_and_failure_order", "crates/nuxie-runtime/src/state_machine/scripted_transition_condition.rs::scripted_transition_requires_an_exact_true_boolean"]
+note = "The sole condition case is fully covered; the live comparison is narrower than every assertion variant, so this is retained as ported-direct."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_update_phase_guard_test.cpp"
+test_case_count = 3
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_vector_test.cpp"
+test_case_count = 13
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scripting/scripting_wake_advance_test.cpp"
+test_case_count = 2
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scroll_test.cpp"
+test_case_count = 4
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/scroll_velocity_test.cpp"
+test_case_count = 4
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/semantic_artboard_test.cpp"
+test_case_count = 10
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/semantic_data_lifecycle_test.cpp"
+test_case_count = 9
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/semantic_dispatch_test.cpp"
+test_case_count = 16
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/semantic_focus_list_test.cpp"
+test_case_count = 2
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/semantic_label_inference_test.cpp"
+test_case_count = 36
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/semantic_provider_test.cpp"
+test_case_count = 6
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/semantic_state_machine_test.cpp"
+test_case_count = 15
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
+test_case_count = 38
+status = "partial"
+evidence = ["silver-corpus.toml::{advance_blend_mode-inputs,advance_blend_mode-vms,bankcard,collapse_data_binds-test_1,collapse_data_binds-test_2,event_trigger_event,hide_test,hunter_x_demo,n_slice_triangle,recursive_data_bind,saturation,spotify_kids_app_icon,spotify_kids_demo,superbowl,text_stroke_test,transition_artboard_condition_test,vertical_align_ellipsis,virtualize_blendmode}"]
+covered_test_cases = ["Advance two consecutive blend modes and apply inputs", "Advance two consecutive blend modes and apply view model", "bank card data binding", "Collapsed data binds from layouts with display hidden", "Collapsed data binds from property groups in solos", "Event triggers another event", "hide silver", "hunter x demo data binding", "n-slice silver", "Recursive data binding artboards are skipped", "Target to source with different data types on source and target", "spotify kids app icon data binding", "spotify kids demo data binding", "superbowl data binding", "validate text with modifiers and dashes render correctly", "Test State machine transition conditions based on artboards", "Vertical align on text with ellipsis", "Virtualized list with blended animations as initial state correctly render their mixed values"]
+note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/shader_asset_test.cpp"
+test_case_count = 17
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/signed_content_header_test.cpp"
+test_case_count = 16
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/simd_test.cpp"
+test_case_count = 23
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/simple_array_test.cpp"
+test_case_count = 13
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/solo_test.cpp"
+test_case_count = 7
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/span_test.cpp"
+test_case_count = 3
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/state_machine_event_test.cpp"
+test_case_count = 10
+status = "partial"
+evidence = ["silver-corpus.toml::{target_event}"]
+covered_test_cases = ["event targetting an event object triggers correctly"]
+note = "Only the listed literal TEST_CASE action streams execute through both runtimes; other cases in this file have no completed correspondence or remain unsupported."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/state_machine_input_test.cpp"
+test_case_count = 1
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_state_machine_input_fixture_contract"]
+note = "The sole 17-assertion fixture-loading case is directly ported."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/state_machine_test.cpp"
+test_case_count = 18
+status = "partial"
+evidence = ["docs/runtime-frame-loop-test-backfill-bc.md", "crates/nuxie-runtime/tests/cpp_probe.rs::state_machine_test.cpp provenance findings"]
+covered_test_cases = ["file with state machine be read", "file with blend states loads correctly", "Blend state animations with reset applied to them.", "Transitions with reset applied to them.", "Transition with list index can be compared to a number"]
+note = "The exhaustive FL-B/FL-C table identifies the listed names as fully covered TEST_CASEs; mixed or finding rows remain unclaimed."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/stroke_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/text_input_test.cpp"
+test_case_count = 19
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-e6-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_text_input_*"]
+note = "All 19 authored TextInput cases are direct Rust ports; the serialized rendering case is additionally exercised by silver."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/text_modifier_test.cpp"
+test_case_count = 2
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-e5-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::{upstream_text_modifier_structure_body_is_ported,upstream_text_feather_falloff_repro_structure_body_is_ported}"]
+note = "Both assertion sequences are direct Rust ports; the animated draw remains in the silver/golden corpus."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/text_test.cpp"
+test_case_count = 17
+status = "partial"
+evidence = ["docs/runtime-frame-loop-fl-e5-tests.md", "crates/nuxie-runtime/tests/cpp_probe.rs::upstream_*text*_body_is_ported"]
+covered_test_cases = ["file with text loads correctly", "can query for all text runs", "can query for a text run at a given index", "simple text loads", "vertical trim shrinks the box to the chosen band", "vertical trim top/bottom uint passthroughs pack into the mask", "ellipsis is shown", "fitFontSize shrinks the font to fit the bounds", "range mapper maps words", "run modifier ranges select runs", "run modifier ranges select runs with varying text size", "double new line type works", "can load and run opacity modifiers", "Vertical Trim"]
+note = "The 13 direct bodies and executable Vertical Trim silver body are covered. Zero-width-space, word-joiner, and serialized Fit font size remain unsupported, so the file is partial."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/texture_compressor_test.cpp"
+test_case_count = 7
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/transform_constraint_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/translation_constraint_test.cpp"
+test_case_count = 1
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/trim_test.cpp"
+test_case_count = 2
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/type_conversions_test.cpp"
+test_case_count = 11
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/viewmodel_instance_list_index_runtime_test.cpp"
+test_case_count = 2
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-d2-tests.md", "crates/nuxie-runtime/src/viewmodel/runtime/viewmodel_instance_list_index_runtime.rs::{list_index_runtime_reports_type_and_reads_value,list_index_runtime_reports_value_changes}"]
+note = "Both public runtime-wrapper cases are literal Rust ports."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/viewmodel_instance_prune_test.cpp"
+test_case_count = 2
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-d1-tests.md", "docs/runtime-frame-loop-fl-d3-d4-tests.md", "crates/nuxie-runtime/src/viewmodel/viewmodel_instance.rs::remove_value_removes_only_the_matching_property", "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"]
+note = "Both removeValue and sparse parent-fallback cases are directly covered across the completed D1/D3 families."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/viewmodel_instance_replace_test.cpp"
+test_case_count = 2
+status = "ported-direct"
+evidence = ["docs/runtime-frame-loop-fl-d1-tests.md", "crates/nuxie-runtime/src/viewmodel/viewmodel_instance.rs::{replacing_view_model_notifies_every_value_dependent,applying_view_model_update_notifies_value_dependent}"]
+note = "Both replacement/dependent TEST_CASEs, including the data-bind apply route, are directly covered."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/wangs_formula_test.cpp"
+test_case_count = 8
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/work_pool_test.cpp"
+test_case_count = 13
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+
+[[file]]
+upstream = "tests/unit_tests/runtime/work_task_test.cpp"
+test_case_count = 6
+status = "pending"
+evidence = []
+note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."

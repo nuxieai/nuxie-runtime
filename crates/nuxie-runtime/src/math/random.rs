@@ -193,6 +193,10 @@ pub fn set_runtime_deterministic_mode(enabled: bool) {
     DETERMINISTIC_MODE.store(enabled, Ordering::SeqCst);
 }
 
+pub(crate) fn runtime_deterministic_mode() -> bool {
+    DETERMINISTIC_MODE.load(Ordering::SeqCst)
+}
+
 /// Install the process-global counted FIFO used by pinned-C++ random
 /// differentials. Values are consumed in order and exhaustion returns zero.
 #[doc(hidden)]

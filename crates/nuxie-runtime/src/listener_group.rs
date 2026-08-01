@@ -6,6 +6,7 @@ use crate::state_machine::{RuntimeListenerType, StateMachineEventContext};
 pub(crate) enum ListenerGroupKind {
     Authored { listener_index: usize },
     Draggable { proxy_index: usize },
+    TextInput,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +65,8 @@ pub(crate) struct ListenerGroup {
     pointer_data: Vec<PointerData>,
     pointer_data_pool: Vec<PointerData>,
     has_dragged: bool,
+    pub(crate) text_input:
+        Option<crate::state_machine::text_input_listener_group::RuntimeTextInputListenerGroup>,
 }
 
 impl ListenerGroup {
@@ -75,6 +78,16 @@ impl ListenerGroup {
         Self::new(ListenerGroupKind::Draggable { proxy_index })
     }
 
+    pub(crate) fn text_input(text_input_local_id: usize) -> Self {
+        let mut group = Self::new(ListenerGroupKind::TextInput);
+        group.text_input = Some(
+            crate::state_machine::text_input_listener_group::RuntimeTextInputListenerGroup::new(
+                text_input_local_id,
+            ),
+        );
+        group
+    }
+
     fn new(kind: ListenerGroupKind) -> Self {
         Self {
             kind,
@@ -82,6 +95,7 @@ impl ListenerGroup {
             pointer_data: Vec::new(),
             pointer_data_pool: Vec::new(),
             has_dragged: false,
+            text_input: None,
         }
     }
 

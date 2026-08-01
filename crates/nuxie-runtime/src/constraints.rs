@@ -1185,6 +1185,130 @@ fn set_scroll_offset(
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RuntimeTextInputScrollViewport {
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) offset_x: f32,
+    pub(crate) offset_y: f32,
+    pub(crate) constrains_horizontal: bool,
+    pub(crate) constrains_vertical: bool,
+}
+
+/// Read-only bridge for `TextInput::worldToLocalWithViewport`.
+pub(crate) fn text_input_scroll_viewport(
+    artboard: &ArtboardInstance,
+    constraint: ComponentHandle,
+) -> Option<RuntimeTextInputScrollViewport> {
+    let scroll = artboard
+        .objects
+        .component(constraint)?
+        .concrete
+        .scroll
+        .as_ref()?;
+    let metrics = runtime_scroll_layout_metrics(artboard, constraint, scroll, false)
+        .unwrap_or_else(|| {
+            build_runtime_scroll_layout_metrics(artboard, constraint, scroll, None, false)
+        });
+    Some(RuntimeTextInputScrollViewport {
+        width: metrics.viewport_width,
+        height: metrics.viewport_height,
+        offset_x: scroll.offset_x,
+        offset_y: scroll.offset_y,
+        constrains_horizontal: metrics.constrains_horizontal(),
+        constrains_vertical: metrics.constrains_vertical(),
+    })
+}
+
+/// Pinned `TextInput::updateMultiline` clears the scroll axis that no longer
+/// participates when switching between single-line and multiline modes.
+pub(crate) fn reset_text_input_cross_axis_scroll(
+    artboard: &mut ArtboardInstance,
+    constraint: ComponentHandle,
+    multiline: bool,
+) {
+    let axis = if multiline {
+        RuntimeScrollAxis::X
+    } else {
+        RuntimeScrollAxis::Y
+    };
+    let offset = artboard
+        .objects
+        .component(constraint)
+        .and_then(|component| component.concrete.scroll.as_ref())
+        .map(|scroll| match axis {
+            RuntimeScrollAxis::X => scroll.offset_x,
+            RuntimeScrollAxis::Y => scroll.offset_y,
+        })
+        .unwrap_or(0.0);
+    if offset == 0.0 {
+        return;
+    }
+    if let Some(physics) = artboard
+        .objects
+        .component_mut(constraint)
+        .and_then(|component| component.concrete.scroll.as_mut())
+        .and_then(|scroll| scroll.physics.as_mut())
+    {
+        physics.stop();
+    }
+    set_scroll_offset(artboard, constraint, axis, 0.0);
+}
+
+pub(crate) fn scroll_text_input_caret_into_view(
+    artboard: &mut ArtboardInstance,
+    constraint: ComponentHandle,
+    multiline: bool,
+    cursor_x: f32,
+    cursor_top: f32,
+    cursor_bottom: f32,
+) -> bool {
+    let Some(viewport) = text_input_scroll_viewport(artboard, constraint) else {
+        return false;
+    };
+    let next = if !multiline && viewport.constrains_horizontal {
+        let viewport_x = cursor_x + viewport.offset_x;
+        if viewport_x < 0.0 {
+            Some((RuntimeScrollAxis::X, viewport.offset_x - viewport_x))
+        } else if viewport_x > viewport.width - 1.0 {
+            Some((
+                RuntimeScrollAxis::X,
+                viewport.offset_x - (viewport_x - viewport.width + 1.0),
+            ))
+        } else {
+            None
+        }
+    } else if multiline && viewport.constrains_vertical {
+        let viewport_top = cursor_top + viewport.offset_y;
+        let viewport_bottom = cursor_bottom + viewport.offset_y;
+        if viewport_top < 0.0 {
+            Some((RuntimeScrollAxis::Y, viewport.offset_y - viewport_top))
+        } else if viewport_bottom > viewport.height {
+            Some((
+                RuntimeScrollAxis::Y,
+                viewport.offset_y - (viewport_bottom - viewport.height),
+            ))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let Some((axis, value)) = next else {
+        return false;
+    };
+    if let Some(physics) = artboard
+        .objects
+        .component_mut(constraint)
+        .and_then(|component| component.concrete.scroll.as_mut())
+        .and_then(|scroll| scroll.physics.as_mut())
+    {
+        physics.stop();
+    }
+    set_scroll_offset(artboard, constraint, axis, value);
+    true
+}
+
 pub(crate) fn advance_text_input_scroll(
     artboard: &mut ArtboardInstance,
     constraint: ComponentHandle,

@@ -61,10 +61,8 @@ impl RuntimeKeyboardListenerGroup {
     /// TextInput owner and must not fall through to a scripted drawable or
     /// authored listener.
     ///
-    /// The editable `RawTextInput` implementation belongs to the later text
-    /// owner family. Until that owner supplies its delegate, use the exact
-    /// no-text-feature return from pinned C++ (`keyInput` is false) rather
-    /// than approximating key editing in this listener owner.
+    /// FL-E6 supplies the editable `RawTextInput` delegate behind this owner
+    /// boundary; this listener still owns only precedence and routing.
     pub(crate) fn text_input_key_result(
         &self,
         artboard: &mut ArtboardInstance,
@@ -77,9 +75,8 @@ impl RuntimeKeyboardListenerGroup {
         Some(artboard.text_input_key_input(text_input_local, key, modifiers, is_pressed, is_repeat))
     }
 
-    /// Pinned C++ returns true even without the text feature after routing the
-    /// call to TextInput, so retain that boundary result until the text owner
-    /// adds the live insertion delegate.
+    /// Committed text is delegated to the FL-E6 TextInput owner after the
+    /// listener resolves its FocusData parent.
     pub(crate) fn text_input_text_result(
         &self,
         artboard: &mut ArtboardInstance,

@@ -101,15 +101,67 @@ fn shape_text_glyphs(
     }
     glyphs
 }
+fn shape_bidi_text_glyphs(
+    shaper: &harfrust::Shaper<'_>,
+    text: &str,
+    disable_legacy_kern: bool,
+) -> Vec<TextGlyph> {
+    let bidi = unicode_bidi::BidiInfo::new(text, None);
+    let mut glyphs = Vec::new();
+    for paragraph in &bidi.paragraphs {
+        let (_, runs) = bidi.visual_runs(paragraph, paragraph.range.clone());
+        for run in runs {
+            let direction = if bidi.levels[run.start].is_rtl() {
+                Direction::RightToLeft
+            } else {
+                Direction::LeftToRight
+            };
+            for script_run in cxx_script_runs(&text[run.clone()]) {
+                let cluster_offset =
+                    u32::try_from(run.start + script_run.byte_start).unwrap_or(u32::MAX);
+                let mut run_glyphs = shape_cxx_script_run_glyphs_in_direction(
+                    shaper,
+                    script_run.text,
+                    script_run.script,
+                    direction,
+                    disable_legacy_kern,
+                );
+                for glyph in &mut run_glyphs {
+                    glyph.cluster = glyph.cluster.saturating_add(cluster_offset);
+                }
+                glyphs.extend(run_glyphs);
+            }
+        }
+    }
+    // Line breaking and style lookup consume logical order. Equal clusters
+    // retain HarfBuzz's within-cluster visual order.
+    glyphs.sort_by_key(|glyph| glyph.cluster);
+    glyphs
+}
 fn shape_cxx_script_run_glyphs(
     shaper: &harfrust::Shaper<'_>,
     text: &str,
     script: HarfScript,
     disable_legacy_kern: bool,
 ) -> Vec<TextGlyph> {
+    shape_cxx_script_run_glyphs_in_direction(
+        shaper,
+        text,
+        script,
+        Direction::LeftToRight,
+        disable_legacy_kern,
+    )
+}
+fn shape_cxx_script_run_glyphs_in_direction(
+    shaper: &harfrust::Shaper<'_>,
+    text: &str,
+    script: HarfScript,
+    direction: Direction,
+    disable_legacy_kern: bool,
+) -> Vec<TextGlyph> {
     let mut buffer = UnicodeBuffer::new();
     buffer.push_str(text);
-    buffer.set_direction(Direction::LeftToRight);
+    buffer.set_direction(direction);
     buffer.set_script(script);
     buffer.guess_segment_properties();
     let kern_off = [Feature::new(HarfTag::new(b"kern"), 0, ..)];

@@ -6239,7 +6239,7 @@ impl ArtboardInstance {
     }
 
     pub(crate) fn retain_runtime_layout_component_bounds(
-        &self,
+        &mut self,
         local_id: usize,
         bounds: RuntimeLayoutBounds,
         all_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
@@ -6267,20 +6267,32 @@ impl ArtboardInstance {
             let y = parent_bounds.map_or(bounds.y, |parent| bounds.y - parent.y);
             if layout.retain_bounds(x, y, bounds.width, bounds.height) {
                 let layout_handle = self.component_handle(local_id);
-                for text_local in self.components().iter().filter_map(|component| {
-                    (component.type_name == "Text"
-                        && layout_handle
-                            .is_some_and(|layout| component.layout_ancestors.contains(&layout)))
-                    .then_some(component.local_id)
-                }) {
+                let affected_text = self
+                    .components()
+                    .iter()
+                    .filter_map(|component| {
+                        (matches!(component.type_name, "Text" | "TextInput")
+                            && layout_handle
+                                .is_some_and(|layout| component.layout_ancestors.contains(&layout)))
+                        .then_some(component.local_id)
+                    })
+                    .collect::<Vec<_>>();
+                for text_local in affected_text {
                     if let Some(text) = self
                         .component(text_local)
                         .and_then(|component| component.concrete.text.as_ref())
                     {
                         text.invalidate_bounds();
                     }
+                    if let Some(text_input) = self
+                        .component(text_local)
+                        .and_then(|component| component.concrete.text_input.as_ref())
+                    {
+                        text_input.raw.borrow_mut().mark_geometry_dirty();
+                    }
                     self.runtime_drawables
                         .mark_text_resource_dirty_for_local(text_local);
+                    self.add_dirt(text_local, ComponentDirt::TEXT_SHAPE, false);
                 }
                 let has_layout_draw_owner = self
                     .runtime_drawables
@@ -6521,7 +6533,7 @@ impl ArtboardInstance {
     pub(crate) fn runtime_text_input_layout_constraint(
         &self,
         text_input_local: usize,
-        graph: &ArtboardGraph,
+        _graph: &ArtboardGraph,
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
     ) -> Option<RuntimeTextLayoutConstraint> {
         let parent_local = self.component_parent_local(text_input_local)?;
@@ -6532,7 +6544,12 @@ impl ArtboardInstance {
         let style_local = self.runtime_layout_component_style_local(parent_local)?;
         let bounds = layout_bounds
             .and_then(|bounds| bounds.get(&parent_local).copied())
-            .or_else(|| Some(self.runtime_layout_component_bounds(parent_local, graph)))?;
+            // A TextInput can be an intrinsic child of this same layout. Asking
+            // the layout engine to solve the parent here would measure the
+            // TextInput again and recurse through this function. Until solved
+            // layout bounds are available, C++ uses the parent's authored
+            // constraint rather than re-entering layout measurement.
+            .unwrap_or_else(|| self.runtime_authored_layout_component_bounds(parent_local));
         Some(RuntimeTextLayoutConstraint {
             width: bounds.width,
             height: bounds.height,
@@ -6542,6 +6559,18 @@ impl ArtboardInstance {
                 .debug_layout_actual_direction(parent_local)
                 .unwrap_or(0),
         })
+    }
+
+    pub(crate) fn runtime_retained_text_input_layout_constraint(
+        &self,
+        text_input_local: usize,
+        graph: &ArtboardGraph,
+    ) -> Option<RuntimeTextLayoutConstraint> {
+        self.runtime_text_input_layout_constraint(
+            text_input_local,
+            graph,
+            self.layout_constraint_bounds.as_deref(),
+        )
     }
 
     fn runtime_layout_component_bounds_memo(
@@ -6565,7 +6594,10 @@ impl ArtboardInstance {
         bounds
     }
 
-    fn runtime_authored_layout_component_bounds(&self, layout_local: usize) -> RuntimeLayoutBounds {
+    pub(crate) fn runtime_authored_layout_component_bounds(
+        &self,
+        layout_local: usize,
+    ) -> RuntimeLayoutBounds {
         let width = self.runtime_layout_component_dimension(layout_local, "width");
         let height = self.runtime_layout_component_dimension(layout_local, "height");
         if self.component_parent_local(layout_local) == Some(0) {
@@ -15562,26 +15594,22 @@ fn runtime_text_paint_shape_world(
 }
 
 fn runtime_retained_text_draw_frame(
-    runtime: &RuntimeFile,
-    instance: &ArtboardInstance,
-    graph: &ArtboardGraph,
+    _runtime: &RuntimeFile,
+    _instance: &ArtboardInstance,
+    _graph: &ArtboardGraph,
     drawable: &RuntimeDrawable,
-    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
+    _layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
 ) -> Result<RuntimeCachedTextShapePaints> {
     let owner = drawable
         .text_draw_owner
         .as_ref()
         .context("live text drawable is missing its retained owner")?;
-    if drawable.type_name == "Text" {
-        return owner.retained_frame().with_context(|| {
-            format!(
-                "Text local {} retained owner",
-                drawable.local_id.unwrap_or(usize::MAX)
-            )
-        });
-    }
-    owner.retained_or_build(|| {
-        runtime_build_text_draw_frame(runtime, instance, graph, drawable, layout_bounds)
+    owner.retained_frame().with_context(|| {
+        format!(
+            "{} local {} retained owner",
+            drawable.type_name,
+            drawable.local_id.unwrap_or(usize::MAX)
+        )
     })
 }
 
@@ -15722,39 +15750,63 @@ impl ArtboardInstance {
                 | ComponentDirt::WORLD_TRANSFORM
                 | ComponentDirt::RENDER_OPACITY))
             .is_empty()
-            || self
-                .component(local_id)
-                .map(|component| component.type_name)
-                != Some("Text")
         {
             return false;
         }
-        let Some(runtime) = self.runtime_file() else {
-            return false;
-        };
-        let Some(drawable_index) = self
-            .runtime_drawables
-            .drawable_by_local
-            .get(&local_id)
-            .copied()
+        let Some(type_name) = self
+            .component(local_id)
+            .map(|component| component.type_name)
         else {
             return false;
         };
-        let drawable = self.runtime_drawables.drawables[drawable_index].as_ref();
-        let Some(owner) = drawable.text_draw_owner.as_ref() else {
+        let target_locals = if type_name == "TextInput" {
+            graph
+                .components
+                .iter()
+                .filter(|component| component.parent_local == Some(local_id))
+                .filter(|component| is_text_input_drawable_type(component.type_name))
+                .map(|component| component.local_id)
+                .collect::<Vec<_>>()
+        } else if type_name == "Text" || is_text_input_drawable_type(type_name) {
+            vec![local_id]
+        } else {
             return false;
         };
-        let rebuilt = owner
-            .rebuild(|| {
-                runtime_build_text_draw_frame(runtime, self, graph, drawable, layout_bounds)
-            })
-            .unwrap_or(false);
-        rebuilt
-            && owner
-                .retained
-                .borrow()
-                .as_ref()
-                .is_some_and(|frame| frame.publishes_layout_dirty)
+        let Some(runtime) = self.runtime_file() else {
+            return false;
+        };
+        let mut publishes_layout_dirty = false;
+        for target_local in target_locals {
+            let Some(drawable_index) = self
+                .runtime_drawables
+                .drawable_by_local
+                .get(&target_local)
+                .copied()
+            else {
+                continue;
+            };
+            let drawable = self.runtime_drawables.drawables[drawable_index].as_ref();
+            let Some(owner) = drawable.text_draw_owner.as_ref() else {
+                continue;
+            };
+            if !(dirt & (ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT)).is_empty() {
+                owner.mark_render_styles_dirty();
+            } else {
+                owner.mark_dirty();
+            }
+            let rebuilt = owner
+                .rebuild(|| {
+                    runtime_build_text_draw_frame(runtime, self, graph, drawable, layout_bounds)
+                })
+                .unwrap_or(false);
+            publishes_layout_dirty |= rebuilt
+                && owner
+                    .retained
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|frame| frame.publishes_layout_dirty);
+        }
+        publishes_layout_dirty
     }
 }
 

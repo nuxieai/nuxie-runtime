@@ -1,4 +1,9 @@
 use anyhow::{Context, Result, bail};
+mod binary_data_reader;
+mod binary_writer;
+
+pub use binary_data_reader::BinaryDataReader;
+pub use binary_writer::{BinaryStream, BinaryWriter};
 use nuxie_schema::{
     BitmaskPassthrough, CoreRegistryFieldKind, Definition, FieldKind, Property,
     StoredFieldInitializer, UintStorage, core_registry_field_kind_by_property_key,

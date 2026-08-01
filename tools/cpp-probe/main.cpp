@@ -15,6 +15,7 @@
 #include <iomanip>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -122,6 +123,9 @@ size_t randomProviderTotalCalls();
 #include "rive/component.hpp"
 #include "rive/constraints/scrolling/scroll_constraint.hpp"
 #include "rive/core.hpp"
+#include "rive/core/binary_data_reader.hpp"
+#include "rive/core/binary_reader.hpp"
+#include "rive/core/vector_binary_writer.hpp"
 #include "rive/core/field_types/core_bool_type.hpp"
 #include "rive/core/field_types/core_color_type.hpp"
 #include "rive/core/field_types/core_double_type.hpp"
@@ -16635,6 +16639,110 @@ void write_raw_text_probe(std::ostream& out,
     rive::Font::gFallbackProc = nullptr;
     g_raw_text_probe_fallback = nullptr;
 }
+
+void write_f14_binary_oracle(std::ostream& out)
+{
+    std::vector<uint8_t> upstreamRoundTripBytes;
+    {
+        rive::VectorBinaryWriter writer(&upstreamRoundTripBytes);
+        writer.writeVarUint(uint32_t(34));
+        writer.write(uint16_t(22));
+        writer.write(3.14f);
+    }
+    rive::BinaryReader upstreamRoundTripReader(upstreamRoundTripBytes);
+    const auto upstreamRoundTripVarUint =
+        upstreamRoundTripReader.readVarUintAs<uint32_t>();
+    const auto upstreamRoundTripUint16 = upstreamRoundTripReader.readUint16();
+    const auto upstreamRoundTripFloat32 = upstreamRoundTripReader.readFloat32();
+
+    std::vector<uint8_t> bytes;
+    {
+        rive::VectorBinaryWriter writer(&bytes);
+        writer.writeVarUint(uint32_t(34));
+        writer.writeVarUint(std::numeric_limits<uint64_t>::max());
+        writer.write(3.14f);
+        writer.write(-7.25);
+        writer.write(uint8_t(0xab));
+        writer.write(uint32_t(0x89abcdef));
+        writer.write(std::string("Rive\0Rust", 9));
+    }
+
+    rive::BinaryDataReader reader(bytes.data(), bytes.size());
+    const auto readVarUint32 = reader.readVarUint32();
+    const auto readVarUint = reader.readVarUint();
+    const auto readFloat32 = reader.readFloat32();
+    const auto readFloat64 = reader.readFloat64();
+    const auto readByte = reader.readByte();
+    const auto readUint32 = reader.readUint32();
+    const auto readString = reader.readString();
+    uint32_t readFloat32Bits = 0;
+    uint64_t readFloat64Bits = 0;
+    std::memcpy(&readFloat32Bits, &readFloat32, sizeof(readFloat32Bits));
+    std::memcpy(&readFloat64Bits, &readFloat64, sizeof(readFloat64Bits));
+
+    uint8_t overflowBytes[] = {0x80};
+    rive::BinaryDataReader overflowReader(overflowBytes, sizeof(overflowBytes));
+    const auto overflowValue = overflowReader.readVarUint();
+    const bool overflowEof = overflowReader.isEOF();
+    uint8_t completedBytes[] = {0x2a};
+    overflowReader.complete(completedBytes, sizeof(completedBytes));
+    const bool overflowAfterComplete = overflowReader.didOverflow();
+    const auto completedByte = overflowReader.readByte();
+
+    uint8_t resetBytes[] = {1, 2};
+    rive::BinaryDataReader resetReader(resetBytes, sizeof(resetBytes));
+    const auto resetBefore = resetReader.readByte();
+    resetReader.reset(resetBytes);
+    const auto resetAfter = resetReader.readByte();
+
+    auto writeBytes = [&out](const auto& values) {
+        out << '[';
+        bool first = true;
+        for (auto value : values)
+        {
+            if (!first)
+            {
+                out << ',';
+            }
+            first = false;
+            out << static_cast<unsigned>(static_cast<uint8_t>(value));
+        }
+        out << ']';
+    };
+
+    out << "{\"upstreamRoundTripBytes\":";
+    writeBytes(upstreamRoundTripBytes);
+    out << ",\"upstreamRoundTripVarUint\":" << upstreamRoundTripVarUint;
+    out << ",\"upstreamRoundTripUint16\":" << upstreamRoundTripUint16;
+    out << ",\"upstreamRoundTripFloat32Bits\":";
+    uint32_t upstreamRoundTripFloat32Bits = 0;
+    std::memcpy(&upstreamRoundTripFloat32Bits,
+                &upstreamRoundTripFloat32,
+                sizeof(upstreamRoundTripFloat32Bits));
+    out << upstreamRoundTripFloat32Bits;
+    out << ",\"writerBytes\":";
+    writeBytes(bytes);
+    out << ",\"readVarUint32\":" << readVarUint32;
+    out << ",\"readVarUint\":" << readVarUint;
+    out << ",\"readFloat32Bits\":" << readFloat32Bits;
+    out << ",\"readFloat64Bits\":" << readFloat64Bits;
+    out << ",\"readByte\":" << static_cast<unsigned>(readByte);
+    out << ",\"readUint32\":" << readUint32;
+    out << ",\"readString\":";
+    writeBytes(readString);
+    out << ",\"readerEof\":" << (reader.isEOF() ? "true" : "false");
+    out << ",\"readerOverflow\":"
+        << (reader.didOverflow() ? "true" : "false");
+    out << ",\"overflowValue\":" << overflowValue;
+    out << ",\"overflowEof\":"
+        << (overflowEof ? "true" : "false");
+    out << ",\"overflowAfterComplete\":"
+        << (overflowAfterComplete ? "true" : "false");
+    out << ",\"completedByte\":" << static_cast<unsigned>(completedByte);
+    out << ",\"resetBefore\":" << static_cast<unsigned>(resetBefore);
+    out << ",\"resetAfter\":" << static_cast<unsigned>(resetAfter);
+    out << ",\"resetLength\":" << resetReader.lengthInBytes() << "}\n";
+}
 } // namespace
 
 int main(int argc, const char* argv[])
@@ -16646,6 +16754,7 @@ int main(int argc, const char* argv[])
     bool animationResetColorRoundtrip = false;
     bool transitionIntegerComparisonSamples = false;
     bool stateMachineDefinitionNullHoleSample = false;
+    bool f14BinaryOracle = false;
     const char* rawTextRegularFont = nullptr;
     const char* rawTextEmojiFont = nullptr;
     const char* rawTextRasterFont = nullptr;
@@ -16668,6 +16777,12 @@ int main(int argc, const char* argv[])
         if (is_arg(argv[i], "--converter-samples"))
         {
             converterSamples = true;
+            continue;
+        }
+
+        if (is_arg(argv[i], "--f14-binary-oracle"))
+        {
+            f14BinaryOracle = true;
             continue;
         }
 
@@ -20375,6 +20490,12 @@ int main(int argc, const char* argv[])
     if (converterSamples)
     {
         write_converter_samples(std::cout);
+        return 0;
+    }
+
+    if (f14BinaryOracle)
+    {
+        write_f14_binary_oracle(std::cout);
         return 0;
     }
 

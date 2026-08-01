@@ -883,9 +883,9 @@ note = "Consolidated runtime port."
 
 [[file]]
 upstream = "src/core/binary_data_reader.cpp"
-status = "not-applicable"
-rust_module = ""
-note = "F14: C++ binary data reader plumbing is outside the Rust importer shape."
+status = "ported"
+rust_module = "crates/nuxie-binary/src/binary_data_reader.rs"
+note = "P1-p/F14: direct BinaryDataReader owner with contract and pinned C++ differential coverage."
 
 [[file]]
 upstream = "src/core/binary_reader.cpp"
@@ -895,9 +895,9 @@ note = "Consolidated Rust port for core."
 
 [[file]]
 upstream = "src/core/binary_writer.cpp"
-status = "not-applicable"
-rust_module = ""
-note = "F14: binary writing is outside the read-only runtime contract."
+status = "ported"
+rust_module = "crates/nuxie-binary/src/binary_writer.rs"
+note = "P1-p/F14: direct exact-wire BinaryWriter owner with pinned C++ differential coverage."
 
 [[file]]
 upstream = "src/core/field_types/core_bool_type.cpp"
@@ -1267,9 +1267,9 @@ note = "Consolidated runtime port."
 
 [[file]]
 upstream = "src/hittest_command_path.cpp"
-status = "not-applicable"
-rust_module = ""
-note = "F14: command-path helper is outside the supported runtime architecture."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/hittest_command_path.rs"
+note = "P1-p/F14: direct HitTestCommandPath owner with upstream fixture differentials."
 
 [[file]]
 upstream = "src/importers/artboard_importer.cpp"
@@ -1760,8 +1760,8 @@ note = "Consolidated Rust port for math."
 [[file]]
 upstream = "src/math/hit_test.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/components.rs"
-note = "Consolidated Rust port for math."
+rust_module = "crates/nuxie-runtime/src/math/hit_test.rs"
+note = "P1-p: direct integer-cell HitTester owner consumed by HitTestCommandPath."
 
 [[file]]
 upstream = "src/math/mat2d.cpp"
@@ -2263,9 +2263,9 @@ note = "Consolidated runtime port."
 
 [[file]]
 upstream = "src/static_scene.cpp"
-status = "not-applicable"
-rust_module = ""
-note = "F14: static scene helper is outside the supported runtime contract."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/static_scene.rs"
+note = "P1-p/F14: direct StaticScene owner with pinned C++ API-contract coverage."
 
 [[file]]
 upstream = "src/text/cursor.cpp"

@@ -263,7 +263,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/shapes/list_path.cpp": ("partial", "F10"),
             "src/async/work_pool.cpp": ("absent", "F12"),
             "src/listener_group.cpp": ("partial", "F13"),
-            "src/core/binary_writer.cpp": ("not-applicable", "F14"),
+            "src/core/binary_writer.cpp": ("ported", "F14"),
         }
         self.write_upstream(*expected)
         output = self.repo / "generated.toml"
@@ -457,10 +457,10 @@ class PortManifestCliTest(unittest.TestCase):
             "src/nested_artboard.cpp": ("partial", "F13"),
             "src/data_bind/context/context_value_artboard.cpp": ("partial", "F13"),
             "src/text/text_modifier.cpp": ("partial", "F13"),
-            "src/core/binary_writer.cpp": ("not-applicable", "F14"),
-            "src/core/binary_data_reader.cpp": ("not-applicable", "F14"),
-            "src/static_scene.cpp": ("not-applicable", "F14"),
-            "src/hittest_command_path.cpp": ("not-applicable", "F14"),
+            "src/core/binary_writer.cpp": ("ported", "F14"),
+            "src/core/binary_data_reader.cpp": ("ported", "F14"),
+            "src/static_scene.cpp": ("ported", "F14"),
+            "src/hittest_command_path.cpp": ("ported", "F14"),
             "src/intrinsically_sizeable.cpp": ("ported", "FL-E4"),
         }
         self.write_upstream(*expected)

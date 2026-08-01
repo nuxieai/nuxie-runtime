@@ -24252,9 +24252,22 @@ fn assert_fl_c5_pointer_down_up_fixture_matches_cpp(
     x_argument: &str,
     y_argument: &str,
 ) {
+    let _ = assert_fl_c5_pointer_down_up_fixture_on_artboard_matches_cpp(
+        label, None, x, y, x_argument, y_argument,
+    );
+}
+
+fn assert_fl_c5_pointer_down_up_fixture_on_artboard_matches_cpp(
+    label: &str,
+    artboard_name: Option<&str>,
+    x: f32,
+    y: f32,
+    x_argument: &str,
+    y_argument: &str,
+) -> bool {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
-        return;
+        return false;
     };
     let bytes = std::fs::read(cpp_runtime_fixture(label))
         .unwrap_or_else(|error| panic!("failed to read C++ pointer fixture {label}: {error}"));
@@ -24271,7 +24284,28 @@ fn assert_fl_c5_pointer_down_up_fixture_matches_cpp(
         y_argument.to_owned(),
     ];
     let cpp = read_cpp_probe_bytes_with_args(&probe, label, &bytes, &args);
-    let (_, mut rust) = read_rust_instance_from_bytes(&bytes, label);
+    let runtime = read_runtime_file(&bytes)
+        .unwrap_or_else(|error| panic!("failed to import {label}: {error:#}"));
+    let graph = GraphFile::from_runtime_file(&runtime)
+        .unwrap_or_else(|error| panic!("failed to build Rust graph for {label}: {error:#}"));
+    let artboard_index = artboard_name
+        .map(|name| {
+            graph
+                .artboards
+                .iter()
+                .position(|artboard| artboard.name.as_deref() == Some(name))
+                .unwrap_or_else(|| panic!("missing Rust artboard {name:?} for {label}"))
+        })
+        .unwrap_or(0);
+    let artboard = graph
+        .artboards
+        .get(artboard_index)
+        .unwrap_or_else(|| panic!("missing Rust artboard index {artboard_index} for {label}"));
+    let mut rust =
+        ArtboardInstance::from_graph_with_artboards(&runtime, artboard, &graph.artboards)
+            .unwrap_or_else(|error| {
+                panic!("failed to build Rust artboard instance for {label}: {error:#}")
+            });
     let mut state_machine = rust
         .state_machine_instance(0)
         .unwrap_or_else(|| panic!("missing Rust state-machine instance for {label}"));
@@ -24283,7 +24317,7 @@ fn assert_fl_c5_pointer_down_up_fixture_matches_cpp(
     let _ = state_machine.pointer_up(&mut rust, x, y, 0);
     let after_up = state_machine.clone();
     let rust_reports = [(false, after_down), (false, after_up)];
-    let all_cpp_reports = &cpp.artboards[0].runtime_state_machine_advances;
+    let all_cpp_reports = &cpp.artboards[artboard_index].runtime_state_machine_advances;
     assert_eq!(all_cpp_reports.len(), 3, "{label} action count");
     assert!(!all_cpp_reports[0].pointer_input_probe);
     compare_state_machine_advance(
@@ -24315,6 +24349,7 @@ fn assert_fl_c5_pointer_down_up_fixture_matches_cpp(
             &format!("{label} WP3 pointer action {step}"),
         );
     }
+    rust_pointer_down_hit
 }
 
 #[test]
@@ -24366,6 +24401,44 @@ fn fl_c5_hit_component_shared_target_down_up_matches_cpp_probe() {
         "250",
         "50",
     );
+}
+
+#[test]
+fn p1p_hittest_command_path_fixtures_match_cpp_probe() {
+    if probe_path().is_none() {
+        eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    }
+    // F14's direct command-path port is exercised through the production
+    // state-machine hit-test path against all three upstream oracle fixtures.
+    assert!(
+        assert_fl_c5_pointer_down_up_fixture_on_artboard_matches_cpp(
+            "hit_test_test.riv",
+            Some("ab-1"),
+            50.0,
+            150.0,
+            "50",
+            "150",
+        )
+    );
+    assert!(
+        !assert_fl_c5_pointer_down_up_fixture_on_artboard_matches_cpp(
+            "hit_test_test.riv",
+            Some("ab-1"),
+            260.0,
+            150.0,
+            "260",
+            "150",
+        )
+    );
+    for (label, x, y, x_argument, y_argument) in [
+        ("hit_test_nested.riv", 150.0, 150.0, "150", "150"),
+        ("hit_test_nested.riv", 400.0, 350.0, "400", "350"),
+        ("opaque_hit_test.riv", 100.0, 50.0, "100", "50"),
+        ("opaque_hit_test.riv", 100.0, 110.0, "100", "110"),
+    ] {
+        assert_fl_c5_pointer_down_up_fixture_matches_cpp(label, x, y, x_argument, y_argument);
+    }
 }
 
 #[test]

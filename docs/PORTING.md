@@ -1406,3 +1406,15 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   (F13), or a passing golden alone is not a decision and cannot promote a row.
   Adding any ceiling behavior later reopens the corresponding D-row and
   requires ordinary owner-family closure under §0 steps 1–5 and FLR-16.
+
+**Script-advance error lifecycle is ported, not a support ceiling.** Pinned C++
+`ScriptedObject::scriptAdvance` converts a failed
+`rive_lua_pcall_with_context` to `false`; `ScriptedDrawable` (also the
+`ScriptedLayout` base) and `ScriptedPathEffect` clear their active bit before
+the call and therefore stay parked (`src/scripted/scripted_object.cpp:178-203`;
+`src/scripted/scripted_drawable.cpp:376-399`;
+`src/scripted/scripted_path_effect.cpp:111-133`). Rust must preserve that owner
+lifecycle for typed `ScriptError` too: surface the error as an additive host
+signal, but do not automatically rearm, queue, or retry the owner. A later
+authored wake may reactivate the exact slot through the ordinary C++-shaped
+path.

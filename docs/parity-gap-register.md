@@ -109,9 +109,30 @@ mechanism under the ordinary, scripted, probe, and applicable pixel floors.
 | id | subsystem | named mechanism | status |
 |---|---|---|---|
 | RB-2 | Focus ownership/projection | `RuntimeFocusTree::sync` descriptor projection plus `target_nodes` rebuild instead of retained live `Focusable`/`FocusData` relationships | OPEN |
-| RB-3 | Scripted-object advance | `script_advance_queue` stores elapsed steps during component advance and replays them later at a factory-bearing facade | OPEN |
+| RB-3 | Scripted-object advance | `script_advance_queue` stored elapsed steps during component advance and replayed them later at a factory-bearing facade | CLOSED — queue removed; exact-slot ordering and park-on-error lifecycle are ported |
 | RB-4 | Scalar ScriptInput binding | `rehydrate_script_listener_actions` rescans and hydrates scalar inputs at scene rebind instead of retaining the C++ `ScriptInput`/`DataBindContext` push relationship | OPEN |
 | RB-5 | SolidColor paint mutation | `solid_color_paint_revisions` defers the C++ `SolidColor::colorValueChanged` retained-paint mutation to a later draw handoff | OPEN |
+
+RB-3's exact-slot schedule and deferred-queue removal landed in `d6d36a32`.
+Rust retains one `RuntimeAdvancingComponent` schedule in authored object order,
+threads the factory capability into that ordinary walk, and calls each
+scripted drawable, layout, or path-effect VM from its exact slot before
+artboard data binds. The live pinned-C++ schedule differential
+`graph_projects_resetting_and_advancing_component_registrations` and the
+queue-sensitive runtime regression
+`mixed_scripted_component_advances_run_at_their_retained_cpp_slots` bind the
+`Artboard::m_advancingComponents` lifecycle at pinned
+`src/artboard.cpp:1463-1480`, `src/scripted/scripted_drawable.cpp:376-399`, and
+`src/scripted/scripted_path_effect.cpp:111-133`. This reconciliation closes the
+remaining error lifecycle: `ScriptedObject::scriptAdvance` converts a protected
+call failure to `false`
+(`src/scripted/scripted_object.cpp:178-203`), so the owner cleared before the
+call remains parked. Rust additionally surfaces the typed `ScriptError` to its
+host, but that additive signal neither rearms the owner nor changes scheduling.
+`failed_script_advance_parks_each_owner_while_surfacing_the_error` covers all
+three Rust owner families, and
+`persistent_advance_failure_runs_once_like_pinned_cpp` proves the live Rust/C++
+one-attempt behavior.
 
 ## D — Deliberate-divergence register (declare, don't fix)
 

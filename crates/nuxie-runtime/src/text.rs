@@ -821,6 +821,7 @@ struct StaticTextStyle<'a> {
     global_id: u32,
     name: Option<String>,
     container: Option<&'a ShapePaintContainerNode>,
+    font_asset_global: Option<u32>,
     font_asset_id: Option<u32>,
     font_bytes: Option<&'a [u8]>,
     variations: Vec<StaticTextVariation>,
@@ -4547,33 +4548,35 @@ impl<'a> StaticTextStyle<'a> {
         let style = runtime
             .object(style_global as usize)
             .with_context(|| format!("missing TextStylePaint global {style_global}"))?;
-        let (font_asset_id, font_bytes) = if style.property("fontAssetId").is_some() {
-            let font_asset_index = style
-                .uint_property("fontAssetId")
-                .context("TextStylePaint serialized fontAssetId is not a uint")?;
-            let font_asset = runtime
-                .file_asset(
-                    usize::try_from(font_asset_index).context("font asset id is too large")?,
+        let (font_asset_global, font_asset_id, font_bytes) =
+            if style.property("fontAssetId").is_some() {
+                let font_asset_index = style
+                    .uint_property("fontAssetId")
+                    .context("TextStylePaint serialized fontAssetId is not a uint")?;
+                let font_asset = runtime
+                    .file_asset(
+                        usize::try_from(font_asset_index).context("font asset id is too large")?,
+                    )
+                    .context("TextStylePaint fontAssetId did not resolve to a file asset")?;
+                if font_asset.type_name != "FontAsset" {
+                    bail!(
+                        "static text subset expected FontAsset, found {} global {}",
+                        font_asset.type_name,
+                        font_asset.id
+                    );
+                }
+                let asset_id = font_asset
+                    .uint_property("assetId")
+                    .context("FontAsset is missing its semantic assetId")?;
+                let asset_id = u32::try_from(asset_id).context("FontAsset assetId is too large")?;
+                (
+                    Some(font_asset.id),
+                    Some(asset_id),
+                    embedded_file_asset_bytes(runtime, font_asset.id),
                 )
-                .context("TextStylePaint fontAssetId did not resolve to a file asset")?;
-            if font_asset.type_name != "FontAsset" {
-                bail!(
-                    "static text subset expected FontAsset, found {} global {}",
-                    font_asset.type_name,
-                    font_asset.id
-                );
-            }
-            let asset_id = font_asset
-                .uint_property("assetId")
-                .context("FontAsset is missing its semantic assetId")?;
-            let asset_id = u32::try_from(asset_id).context("FontAsset assetId is too large")?;
-            (
-                Some(asset_id),
-                embedded_file_asset_bytes(runtime, font_asset.id),
-            )
-        } else {
-            (None, None)
-        };
+            } else {
+                (None, None, None)
+            };
 
         let style_component = graph
             .components
@@ -4617,6 +4620,7 @@ impl<'a> StaticTextStyle<'a> {
             global_id: style_global,
             name: style.string_property("name").map(str::to_owned),
             container,
+            font_asset_global,
             font_asset_id,
             font_bytes,
             variations,
@@ -4632,10 +4636,13 @@ impl<'a> StaticTextStyle<'a> {
         if let Some(value) = instance.text_style_font_override(self.local_id) {
             return runtime_font_asset_bytes(runtime, instance, value);
         }
-        self.font_bytes.or_else(|| {
-            self.font_asset_id
-                .and_then(|asset_id| instance.external_font_asset_bytes(asset_id))
-        })
+        self.font_asset_global
+            .and_then(|asset_global| instance.runtime_font_asset_bytes(asset_global))
+            .or(self.font_bytes)
+            .or_else(|| {
+                self.font_asset_id
+                    .and_then(|asset_id| instance.external_font_asset_bytes(asset_id))
+            })
     }
 }
 
@@ -4803,12 +4810,15 @@ pub(crate) fn runtime_font_asset_bytes<'a>(
         && let Some(font_asset) = runtime.file_asset(file_asset_index)
         && font_asset.type_name == "FontAsset"
     {
-        return embedded_file_asset_bytes(runtime, font_asset.id).or_else(|| {
-            font_asset
-                .uint_property("assetId")
-                .and_then(|asset_id| u32::try_from(asset_id).ok())
-                .and_then(|asset_id| instance.external_font_asset_bytes(asset_id))
-        });
+        return instance
+            .runtime_font_asset_bytes(font_asset.id)
+            .or_else(|| embedded_file_asset_bytes(runtime, font_asset.id))
+            .or_else(|| {
+                font_asset
+                    .uint_property("assetId")
+                    .and_then(|asset_id| u32::try_from(asset_id).ok())
+                    .and_then(|asset_id| instance.external_font_asset_bytes(asset_id))
+            });
     }
 
     value.live_font_bytes()

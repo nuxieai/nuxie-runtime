@@ -2504,9 +2504,7 @@ impl nuxie_runtime::ScriptArtboard for FileScriptArtboard {
                 || false,
             )
         } else {
-            let mut changed = self.instance.advance_frame_components(seconds)?;
-            changed |= self.instance.update_pass_with_script_errors()?;
-            Ok(changed)
+            self.instance.advance(seconds)
         }
     }
 
@@ -2978,7 +2976,19 @@ fn advance_scripted_artboard_frame_with_factory(
         )?;
     }
     let changed = if state_machines.is_empty() {
-        instance.advance_frame_components_with_factory(elapsed_seconds, factory)?
+        let component_result =
+            instance.advance_frame_components_with_factory(elapsed_seconds, factory);
+        let mut changed = component_result.as_ref().copied().unwrap_or(false);
+        let update_result = instance.update_pass_with_factory(factory);
+        changed |= update_result.as_ref().copied().unwrap_or(false);
+        verify_scripted_artboard_tree_attached(file, root_graph, instance)?;
+        if let Err(error) = component_result {
+            return Err(error);
+        }
+        if let Err(error) = update_result {
+            return Err(error);
+        }
+        return Ok(changed);
     } else {
         StateMachineInstance::advance_and_apply_state_machines_with_factory_and_view_models(
             instance,
@@ -2988,11 +2998,6 @@ fn advance_scripted_artboard_frame_with_factory(
             true,
             || file.advance_detached_view_models(),
         )?
-    };
-    let changed = if state_machines.is_empty() {
-        changed | instance.update_pass_with_factory(factory)?
-    } else {
-        changed
     };
     verify_scripted_artboard_tree_attached(file, root_graph, instance)?;
     Ok(changed)

@@ -1,6 +1,6 @@
 #![cfg(feature = "scripting")]
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf, process::Command, sync::Arc};
 
 use anyhow::Result;
 use ed25519_dalek::{Signer as _, SigningKey};
@@ -22,6 +22,29 @@ type ScriptFactory = PersistentFactory<RecordingFactory>;
 
 fn script_factory() -> ScriptFactory {
     PersistentFactory::new(RecordingFactory::new())
+}
+
+fn scripted_cpp_probe_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("RIVE_CPP_PROBE_SCRIPTED") {
+        let path = PathBuf::from(path);
+        return Some(if path.is_absolute() {
+            path
+        } else {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join(path)
+        });
+    }
+    let os = match std::env::consts::OS {
+        "macos" => "macosx",
+        other => other,
+    };
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("tools/cpp-probe/build")
+        .join(os)
+        .join("bin/release/rive_cpp_probe_scripted");
+    path.exists().then_some(path)
 }
 
 fn compile_luau(source: &[u8]) -> Vec<u8> {
@@ -922,6 +945,91 @@ end
 }
 
 #[test]
+fn persistent_advance_failure_runs_once_like_pinned_cpp() -> Result<()> {
+    let bytes = imported_single_scripted_file(
+        br#"
+return function(_context)
+    return {
+        _nuxieProbeAdvanceAttempts = 0,
+        advance = function(self, _seconds)
+            self._nuxieProbeAdvanceAttempts += 1
+            error("persistent advance failure")
+        end,
+    }
+end
+"#,
+    );
+    let file = File::import_with_unsigned_scripts(&bytes)?;
+    let mut instance = file
+        .default_artboard()
+        .expect("fixture artboard")
+        .instantiate()?;
+    let mut factory = script_factory();
+    let mut renderer = factory.borrow().make_renderer();
+    instance
+        .draw(&mut factory, &mut renderer)
+        .expect("initial script attachment and ScriptUpdate settle before the failure probe");
+
+    let error = instance
+        .try_advance_with_factory(&mut factory, 0.1)
+        .expect_err("the first protected-call failure is surfaced to the Rust host");
+    assert!(
+        format!("{error:#}").contains("persistent advance failure"),
+        "{error:#}"
+    );
+    instance
+        .try_advance_with_factory(&mut factory, 0.1)
+        .expect("the parked Rust owner does not invoke the failing script again");
+    instance
+        .try_advance_with_factory(&mut factory, 0.1)
+        .expect("the Rust owner remains parked on later frames");
+
+    let Some(probe) = scripted_cpp_probe_path() else {
+        eprintln!(
+            "skipping pinned-C++ half of persistent failure differential; set RIVE_CPP_PROBE_SCRIPTED"
+        );
+        return Ok(());
+    };
+    let path = std::env::temp_dir().join(format!(
+        "nuxie-persistent-script-advance-failure-{}.riv",
+        std::process::id()
+    ));
+    std::fs::write(&path, &bytes)?;
+    let output = Command::new(&probe)
+        .args([
+            "--no-advance",
+            "--runtime-advance-artboard",
+            "0.0",
+            "--runtime-advance-artboard",
+            "0.0",
+            "--runtime-advance-artboard",
+            "0.1",
+            "--runtime-advance-artboard",
+            "0.1",
+            "--runtime-advance-artboard",
+            "0.1",
+            "--file",
+        ])
+        .arg(&path)
+        .output()?;
+    let _ = std::fs::remove_file(&path);
+    assert!(
+        output.status.success(),
+        "pinned C++ scripted probe failed with {}: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let cpp: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(
+        cpp["artboards"][0]["runtimeScriptAdvanceAttempts"],
+        serde_json::json!([1]),
+        "pinned C++ must convert the protected-call error to false and leave the clear-before-call owner parked (`scripted_object.cpp:178-203`; `scripted_drawable.cpp:376-399`); stderr={}; cpp={cpp}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(())
+}
+
+#[test]
 fn direct_trusted_callbacks_start_a_fresh_cycle_after_interrupt_exhaustion() -> Result<()> {
     let bytes = imported_single_scripted_file(
         br#"
@@ -963,8 +1071,12 @@ end
         "{error:#}"
     );
     assert!(
+        instance.raw_mut().wake_script_advance_for_global(4),
+        "a failed callback parks the owner; this test explicitly wakes it to probe a fresh host cycle"
+    );
+    assert!(
         instance.try_advance_with_factory(&mut factory, 1.0 / 60.0)?,
-        "a later direct callback must not inherit the previous callback's terminal limit"
+        "an explicitly reawakened callback must not inherit the previous callback's terminal limit"
     );
     Ok(())
 }

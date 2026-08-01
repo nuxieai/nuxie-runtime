@@ -13060,20 +13060,28 @@ impl StateMachineInstance {
         advance_view_models: bool,
         advance_detached_view_models: impl FnOnce() -> bool,
     ) -> Result<bool, ScriptError> {
-        let mut changed =
-            Self::advance_artboard_frame_components(artboard, state_machines, elapsed_seconds)?;
-        changed |= if advance_view_models {
+        let component_result =
+            Self::advance_artboard_frame_components(artboard, state_machines, elapsed_seconds);
+        let mut changed = component_result.as_ref().copied().unwrap_or(false);
+        let settlement_result = if advance_view_models {
             artboard.settle_state_machine_update_passes_after_main_advance_with_script_errors(
                 state_machines,
-            )?
+            )
         } else {
             artboard
                 .settle_state_machine_update_passes_after_main_advance_without_root_view_model_reset_with_script_errors(
                     state_machines,
-                )?
+                )
         };
+        changed |= settlement_result.as_ref().copied().unwrap_or(false);
         if advance_view_models {
             changed |= advance_detached_view_models();
+        }
+        if let Err(error) = component_result {
+            return Err(error);
+        }
+        if let Err(error) = settlement_result {
+            return Err(error);
         }
         Ok(Self::advance_and_apply_return(
             changed,
@@ -13090,25 +13098,33 @@ impl StateMachineInstance {
         advance_view_models: bool,
         advance_detached_view_models: impl FnOnce() -> bool,
     ) -> Result<bool, ScriptError> {
-        let mut changed = Self::advance_artboard_frame_components_with_factory(
+        let component_result = Self::advance_artboard_frame_components_with_factory(
             artboard,
             state_machines,
             elapsed_seconds,
             factory,
-        )?;
-        changed |= if advance_view_models {
+        );
+        let mut changed = component_result.as_ref().copied().unwrap_or(false);
+        let settlement_result = if advance_view_models {
             artboard.settle_state_machine_update_passes_after_main_advance_with_factory(
                 state_machines,
                 factory,
-            )?
+            )
         } else {
             artboard
                 .settle_state_machine_update_passes_after_main_advance_without_root_view_model_reset_with_script_errors(
                     state_machines,
-                )?
+                )
         };
+        changed |= settlement_result.as_ref().copied().unwrap_or(false);
         if advance_view_models {
             changed |= advance_detached_view_models();
+        }
+        if let Err(error) = component_result {
+            return Err(error);
+        }
+        if let Err(error) = settlement_result {
+            return Err(error);
         }
         Ok(Self::advance_and_apply_return(
             changed,

@@ -14,6 +14,11 @@ impl RuntimeScriptImplementedMethods {
     pub(crate) const LEGACY_ALL: Self = Self(Self::METHOD_MASK);
 
     pub(crate) const ADVANCE: u32 = 1 << 0;
+    pub(crate) const POINTER_DOWN: u32 = 1 << 3;
+    pub(crate) const POINTER_MOVE: u32 = 1 << 4;
+    pub(crate) const POINTER_UP: u32 = 1 << 5;
+    pub(crate) const POINTER_EXIT: u32 = 1 << 6;
+    pub(crate) const POINTER_CANCEL: u32 = 1 << 7;
     pub(crate) const INIT: u32 = 1 << 9;
     pub(crate) const DATA_CONVERT: u32 = 1 << 10;
     pub(crate) const DATA_REVERSE_CONVERT: u32 = 1 << 11;
@@ -35,6 +40,35 @@ impl RuntimeScriptImplementedMethods {
 
     pub(crate) fn advances(self) -> bool {
         self.0 & Self::ADVANCE != 0
+    }
+
+    pub(crate) fn listens_to_pointer_events(self) -> bool {
+        self.0
+            & (Self::POINTER_DOWN
+                | Self::POINTER_MOVE
+                | Self::POINTER_UP
+                | Self::POINTER_EXIT
+                | Self::POINTER_CANCEL
+                | Self::GAMEPAD_CONNECT
+                | Self::GAMEPAD_DISCONNECT
+                | Self::GAMEPAD_EVENT)
+            != 0
+    }
+
+    pub(crate) fn wants_pointer_down(self) -> bool {
+        self.0 & Self::POINTER_DOWN != 0
+    }
+
+    pub(crate) fn wants_pointer_move(self) -> bool {
+        self.0 & Self::POINTER_MOVE != 0
+    }
+
+    pub(crate) fn wants_pointer_up(self) -> bool {
+        self.0 & Self::POINTER_UP != 0
+    }
+
+    pub(crate) fn wants_pointer_exit(self) -> bool {
+        self.0 & Self::POINTER_EXIT != 0
     }
 
     pub(crate) fn inits(self) -> bool {
@@ -119,6 +153,11 @@ mod tests {
         let legacy = RuntimeScriptImplementedMethods::from_serialized(u32::MAX);
         assert_eq!(legacy, RuntimeScriptImplementedMethods::LEGACY_ALL);
         assert!(legacy.advances());
+        assert!(legacy.listens_to_pointer_events());
+        assert!(legacy.wants_pointer_down());
+        assert!(legacy.wants_pointer_move());
+        assert!(legacy.wants_pointer_up());
+        assert!(legacy.wants_pointer_exit());
         assert!(legacy.inits());
         assert!(legacy.data_converts());
         assert!(legacy.data_reverse_converts());

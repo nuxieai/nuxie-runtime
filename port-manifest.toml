@@ -1604,8 +1604,8 @@ note = "F7: this Lua binding is absent."
 [[file]]
 upstream = "src/lua/lua_listener_invocation.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "Consolidated Rust port for lua."
+rust_module = "crates/nuxie-scripting/src/vm/listener_invocation.rs"
+note = "P1J: complete owned Invocation classification/conversion and pointer, keyboard, text, focus, reported-event, view-model, none, and gamepad payload surface."
 
 [[file]]
 upstream = "src/lua/lua_promise.cpp"
@@ -1645,9 +1645,9 @@ note = "F7/P1G: the complete Color binding is ported."
 
 [[file]]
 upstream = "src/lua/math/lua_input.cpp"
-status = "absent"
-rust_module = ""
-note = "F7: this Lua binding is absent."
+status = "ported"
+rust_module = "crates/nuxie-scripting/src/vm/listener_invocation.rs"
+note = "F7/P1J: PointerEvent fields, constructor, event labels, and end-to-end VM-to-state-machine tri-state hit propagation are ported."
 
 [[file]]
 upstream = "src/lua/math/lua_mat2d.cpp"

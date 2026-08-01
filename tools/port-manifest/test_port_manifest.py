@@ -442,7 +442,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/lua/lua_scripted_context.cpp": ("absent", "F7"),
             "src/lua/lua_state.cpp": ("partial", "F7"),
             "src/lua/math/lua_color.cpp": ("ported", "F7"),
-            "src/lua/math/lua_input.cpp": ("absent", "F7"),
+            "src/lua/math/lua_input.cpp": ("ported", "F7"),
             "src/lua/renderer/lua_blob.cpp": ("absent", "F7"),
             "src/lua/renderer/lua_gpu.cpp": ("absent", "F8"),
             "src/lua/renderer/lua_gradient.cpp": ("partial", "F7"),

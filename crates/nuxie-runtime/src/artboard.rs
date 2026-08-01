@@ -21,17 +21,16 @@ use crate::animation::{
 };
 use crate::artboard_data_bind::{
     RuntimeArtboardAuthoredDataBindStates, RuntimeArtboardContextSourceValue,
-    RuntimeArtboardConverterPropertyBindingInstance, RuntimeArtboardCustomPropertyBindingInstance,
-    RuntimeArtboardDataBindSourceQueues, RuntimeArtboardDataBindTargetQueues,
-    RuntimeArtboardFormulaTokenBindingStates, RuntimeArtboardImageAssetBindingInstance,
-    RuntimeArtboardLayoutComputedBindingInstance, RuntimeArtboardListBindingInstance,
-    RuntimeArtboardNestedHostBindingInstance, RuntimeArtboardNumericSourceBindingInstance,
-    RuntimeArtboardPropertyBindingInstance, RuntimeArtboardRetainedSubordinateConverterOperands,
-    RuntimeArtboardSoloBindingInstance, RuntimeArtboardSoloSourceBindingInstance,
-    RuntimeArtboardTextListBindingInstance, RuntimeNestedChildContextUpdate,
-    RuntimeOwnedDataContext, apply_artboard_name_based_color_data_bind_defaults,
-    build_artboard_authored_data_bind_states, build_artboard_converter_property_bindings,
-    build_artboard_custom_property_bindings, build_artboard_default_view_model_values,
+    RuntimeArtboardConverterPropertyBindingInstance, RuntimeArtboardDataBindSourceQueues,
+    RuntimeArtboardDataBindTargetQueues, RuntimeArtboardFormulaTokenBindingStates,
+    RuntimeArtboardImageAssetBindingInstance, RuntimeArtboardLayoutComputedBindingInstance,
+    RuntimeArtboardListBindingInstance, RuntimeArtboardNestedHostBindingInstance,
+    RuntimeArtboardNumericSourceBindingInstance, RuntimeArtboardPropertyBindingInstance,
+    RuntimeArtboardRetainedSubordinateConverterOperands, RuntimeArtboardSoloBindingInstance,
+    RuntimeArtboardSoloSourceBindingInstance, RuntimeArtboardTextListBindingInstance,
+    RuntimeNestedChildContextUpdate, RuntimeOwnedDataContext,
+    apply_artboard_name_based_color_data_bind_defaults, build_artboard_authored_data_bind_states,
+    build_artboard_converter_property_bindings, build_artboard_default_view_model_values,
     build_artboard_formula_token_bindings, build_artboard_image_asset_bindings,
     build_artboard_layout_computed_bindings, build_artboard_list_bindings,
     build_artboard_nested_host_bindings, build_artboard_numeric_source_bindings,
@@ -52,6 +51,9 @@ use crate::constraints::{
     apply_scroll_offset_changed, component_list_virtualization, retain_runtime_scroll_constraints,
     runtime_scroll_double_property, set_runtime_scroll_double_property,
 };
+use crate::custom_property_container::{
+    RuntimeArtboardCustomPropertyBindingInstance, build_artboard_custom_property_bindings,
+};
 use crate::data_bind_graph::{
     RuntimeDataBindGraphConverterBuildCache, RuntimeDataBindGraphFormulaRandomSource,
     RuntimeDataBindGraphValue,
@@ -70,6 +72,7 @@ use crate::properties::{
     solid_color_value_property_key, solo_active_component_id_property_key,
     transform_property_for_key,
 };
+use crate::scene::select_default_state_machine;
 use crate::script_asset::{RuntimeScriptImplementedMethods, RuntimeScriptedObjectOccurrence};
 use crate::scripting::{
     NoopScriptHost, RuntimeScriptInstanceHandle, ScriptArtboard, ScriptError, ScriptHost,
@@ -687,53 +690,6 @@ impl Clone for ArtboardInstance {
         cloned.refresh_runtime_font_asset_referencers();
         cloned
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum RuntimeEventPropertyValue {
-    Number(f32),
-    Bool(bool),
-    String(Vec<u8>),
-    Color(u32),
-    Enum(u64),
-    Trigger(u64),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RuntimeEventProperty {
-    pub name: Option<String>,
-    pub value: RuntimeEventPropertyValue,
-}
-
-/// The player selected by pinned C++ `Artboard::defaultScene`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RuntimeArtboardDefaultScene {
-    StateMachine(usize),
-    LinearAnimation(usize),
-}
-
-fn select_default_state_machine(
-    authored_index: Option<u64>,
-    state_machine_count: usize,
-) -> Option<usize> {
-    authored_index
-        .and_then(|index| usize::try_from(index).ok())
-        .filter(|index| *index < state_machine_count)
-}
-
-fn select_default_scene(
-    authored_index: Option<u64>,
-    state_machine_count: usize,
-    animation_count: usize,
-) -> Option<RuntimeArtboardDefaultScene> {
-    select_default_state_machine(authored_index, state_machine_count)
-        .map(RuntimeArtboardDefaultScene::StateMachine)
-        .or_else(|| {
-            (state_machine_count != 0).then_some(RuntimeArtboardDefaultScene::StateMachine(0))
-        })
-        .or_else(|| {
-            (animation_count != 0).then_some(RuntimeArtboardDefaultScene::LinearAnimation(0))
-        })
 }
 
 include!("nested_artboard.rs");
@@ -3261,50 +3217,6 @@ impl ArtboardInstance {
         &self.slots
     }
 
-    /// Snapshot authored custom properties attached to one event, preserving
-    /// their component/local order.
-    pub fn event_properties(&self, event_local_id: usize) -> Vec<RuntimeEventProperty> {
-        let Some(event) = self.component_handle(event_local_id) else {
-            return Vec::new();
-        };
-        (0..self.component_child_len(event))
-            .filter_map(|index| self.component_child_at(event, index))
-            .filter_map(|handle| self.objects.component(handle))
-            .filter_map(|component| {
-                let key = property_key_for_name(component.type_name, "propertyValue")?;
-                let value = match component.type_name {
-                    "CustomPropertyNumber" => RuntimeEventPropertyValue::Number(
-                        self.double_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyBoolean" => RuntimeEventPropertyValue::Bool(
-                        self.bool_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyString" => RuntimeEventPropertyValue::String(
-                        self.string_property(component.local_id, key)?.to_vec(),
-                    ),
-                    "CustomPropertyColor" => RuntimeEventPropertyValue::Color(
-                        self.color_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyEnum" => RuntimeEventPropertyValue::Enum(
-                        self.uint_property(component.local_id, key)?,
-                    ),
-                    "CustomPropertyTrigger" => RuntimeEventPropertyValue::Trigger(
-                        self.uint_property(component.local_id, key)?,
-                    ),
-                    _ => return None,
-                };
-                let name_key = property_key_for_name(component.type_name, "name")?;
-                Some(RuntimeEventProperty {
-                    name: self
-                        .string_property(component.local_id, name_key)
-                        .map(|value| String::from_utf8_lossy(value).into_owned())
-                        .filter(|name| !name.is_empty()),
-                    value,
-                })
-            })
-            .collect()
-    }
-
     pub(crate) fn component_mut(&mut self, local_id: usize) -> Option<&mut RuntimeComponent> {
         self.objects.component_for_local_mut(local_id)
     }
@@ -3797,17 +3709,6 @@ impl ArtboardInstance {
     /// falls back to state machine zero.
     pub fn default_state_machine(&self) -> Option<&RuntimeStateMachine> {
         self.state_machine(self.default_state_machine_index()?)
-    }
-
-    /// Pinned C++ selection order: explicit default state machine, state
-    /// machine zero, linear animation zero, then null.
-    pub fn default_scene(&self) -> Option<RuntimeArtboardDefaultScene> {
-        select_default_scene(
-            property_key_for_name("Artboard", "defaultStateMachineId")
-                .and_then(|key| self.uint_property(0, key)),
-            self.state_machines.len(),
-            self.linear_animations.len(),
-        )
     }
 
     pub fn set_artboard_dimensions(&mut self, width: f32, height: f32) -> bool {
@@ -5900,9 +5801,7 @@ impl ArtboardInstance {
     /// Rust decoders are synchronously resolved by the owning host/File seam,
     /// so this occurrence has no additional async queue to poll.
     pub fn advance(&mut self, elapsed_seconds: f32) -> Result<bool, ScriptError> {
-        let mut changed = self.advance_frame_components(elapsed_seconds)?;
-        changed |= self.update_pass_with_script_errors()?;
-        Ok(changed || self.has_dirt(ComponentDirt::COMPONENTS))
+        crate::scene::advance(self, elapsed_seconds)
     }
 
     /// Factory-aware form of [`Self::advance_frame_components`].
@@ -15082,26 +14981,6 @@ mod tests {
             (1, 1, false),
             "advanceInternal precedes updatePass; root advance returns the union of work and any dirt retained after settlement"
         );
-    }
-
-    #[test]
-    fn default_scene_selection_covers_explicit_fallback_and_null_branches() {
-        assert_eq!(select_default_state_machine(Some(1), 2), Some(1));
-        assert_eq!(select_default_state_machine(None, 2), None);
-        assert_eq!(select_default_state_machine(Some(2), 2), None);
-        assert_eq!(
-            select_default_scene(Some(1), 2, 1),
-            Some(RuntimeArtboardDefaultScene::StateMachine(1))
-        );
-        assert_eq!(
-            select_default_scene(Some(9), 2, 1),
-            Some(RuntimeArtboardDefaultScene::StateMachine(0))
-        );
-        assert_eq!(
-            select_default_scene(None, 0, 1),
-            Some(RuntimeArtboardDefaultScene::LinearAnimation(0))
-        );
-        assert_eq!(select_default_scene(None, 0, 0), None);
     }
 
     #[test]

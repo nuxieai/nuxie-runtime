@@ -103,7 +103,10 @@ use nuxie_scripting::vm::{
     HostCommand as LuaHostCommand, HostCycleCheckpoint, HostValue as LuaHostValue, ScriptProgram,
 };
 #[cfg(feature = "scripting")]
-pub use nuxie_scripting::vm::{LuaScriptInstance, ScopeKey, ScriptExecutionLimits, ScriptVm};
+pub use nuxie_scripting::vm::{
+    LuaScriptInstance, ScopeKey, ScriptExecutionLimits, ScriptVm, ScriptingLogLevel,
+    ScriptingLogSink,
+};
 
 #[cfg(feature = "scripting")]
 type FileScriptPolicy = Option<ScriptExecutionLimits>;
@@ -161,6 +164,7 @@ struct FileScriptRuntime {
     imports: Arc<[FileScriptLibraryImport]>,
     authorization: ScriptExecutionAuthorization,
     execution_limits: Option<ScriptExecutionLimits>,
+    log_sink: Option<ScriptingLogSink>,
     ready: Option<ReadyFileScripts>,
 }
 
@@ -173,6 +177,7 @@ impl std::fmt::Debug for FileScriptRuntime {
             .field("imports", &self.imports)
             .field("authorization", &self.authorization)
             .field("execution_limits", &self.execution_limits)
+            .field("has_log_sink", &self.log_sink.is_some())
             .field("ready", &self.ready.is_some())
             .finish_non_exhaustive()
     }
@@ -251,7 +256,7 @@ impl FileScriptRuntime {
             })
             .collect::<Vec<_>>()
             .into();
-        Self::new(assets, imports, authorization, execution_limits)
+        Self::new(assets, imports, authorization, execution_limits, None)
     }
 
     fn new(
@@ -259,12 +264,14 @@ impl FileScriptRuntime {
         imports: Arc<[FileScriptLibraryImport]>,
         authorization: ScriptExecutionAuthorization,
         execution_limits: Option<ScriptExecutionLimits>,
+        log_sink: Option<ScriptingLogSink>,
     ) -> Self {
         Self {
             assets,
             imports,
             authorization,
             execution_limits,
+            log_sink,
             ready: None,
         }
     }
@@ -292,6 +299,9 @@ impl FileScriptRuntime {
         })?;
         let mut vm = ScriptVm::new_with_execution_limits(execution_limits)
             .map_err(|error| nuxie_runtime::ScriptError::new(error.to_string()))?;
+        if let Some(sink) = self.log_sink.clone() {
+            vm.set_log_sink(move |level, line| sink(level, line));
+        }
         vm.install_render_factory(factory)?;
         vm.set_view_models(nuxie_runtime::script_view_models(runtime));
         // LibraryAsset records are serialized import edges. Seed every pin
@@ -3336,6 +3346,7 @@ impl Clone for File {
                 Arc::clone(&scripts.imports),
                 scripts.authorization,
                 scripts.execution_limits,
+                scripts.log_sink.clone(),
             )))
         };
         Self {
@@ -3354,6 +3365,31 @@ impl Clone for File {
 }
 
 impl File {
+    /// Route this File's script console output and Lua failures to the host.
+    ///
+    /// The sink is retained by the File and applied to its lazy scripting VM.
+    /// Replacing it after script bootstrap updates that live VM as well.
+    #[cfg(feature = "scripting")]
+    pub fn set_scripting_log_sink(&self, sink: impl Fn(ScriptingLogLevel, &[u8]) + 'static) {
+        let sink: ScriptingLogSink = Rc::new(sink);
+        let mut scripts = self.scripts.borrow_mut();
+        if let Some(ready) = scripts.ready.as_ref() {
+            let sink = Rc::clone(&sink);
+            ready.vm.set_log_sink(move |level, line| sink(level, line));
+        }
+        scripts.log_sink = Some(sink);
+    }
+
+    /// Stop routing this File's script output to its configured host sink.
+    #[cfg(feature = "scripting")]
+    pub fn clear_scripting_log_sink(&self) {
+        let mut scripts = self.scripts.borrow_mut();
+        if let Some(ready) = scripts.ready.as_ref() {
+            ready.vm.clear_log_sink();
+        }
+        scripts.log_sink = None;
+    }
+
     /// Retain this File's exact live script VM while giving occurrence-owned
     /// ScriptInput resolvers an owning handle.
     ///
@@ -5222,6 +5258,7 @@ impl ViewModelInstance {
 #[cfg(all(test, feature = "scripting"))]
 mod inert_script_import_tests {
     use super::*;
+    use nuxie_render_api::{PersistentFactory, RecordingFactory};
     use nuxie_schema::definition_by_name;
 
     fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
@@ -5567,6 +5604,35 @@ mod inert_script_import_tests {
         let assets = scripts.assets.as_ref();
         assert_eq!(assets.len(), 1);
         assert_eq!(assets[0].payload.as_deref(), Some([0, 1, 2, 3].as_slice()));
+    }
+
+    #[test]
+    fn file_host_log_sink_reaches_its_lazy_scripting_vm() {
+        let bytes = imported_script_asset_bytes();
+        let file =
+            File::import_with_unsigned_scripts(&bytes).expect("trusted script catalog imports");
+        let lines = Rc::new(RefCell::new(Vec::new()));
+        let captured = Rc::clone(&lines);
+        file.set_scripting_log_sink(move |level, line| {
+            captured.borrow_mut().push((level, line.to_vec()));
+        });
+
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let error = file
+            .scripts
+            .borrow()
+            .build_candidate(&file.runtime, &mut factory)
+            .err()
+            .expect("malformed fixture script does not bootstrap");
+
+        let lines = lines.borrow();
+        assert_eq!(lines.len(), 1, "bootstrap error was {error}");
+        assert_eq!(lines[0].0, ScriptingLogLevel::Error);
+        assert!(
+            String::from_utf8_lossy(&lines[0].1).contains("bytecode version mismatch"),
+            "unexpected host log line: {:?}",
+            lines[0].1
+        );
     }
 
     #[test]

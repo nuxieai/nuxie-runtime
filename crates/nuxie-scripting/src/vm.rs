@@ -11,11 +11,18 @@
 //! exposed because luaur ships the Luau *compiler* too, which the C++
 //! runtime does not embed — useful for tests and future editor-style flows.
 
+mod buffer_ext;
 mod bytecode;
 mod command_server;
 mod host_commands;
 mod listener_invocation;
-mod mat4;
+mod logging_scripting_context;
+mod lua_color;
+mod lua_mat4;
+mod lua_math;
+mod lua_rive_base;
+mod lua_vec2d;
+mod promise;
 mod renderer;
 mod resource_limits;
 mod view_model;
@@ -26,13 +33,15 @@ use std::ffi::CString;
 use std::rc::Rc;
 
 use bytecode::validate_luau_bytecode;
+use logging_scripting_context::LoggingScriptingContext;
+use lua_math::install_math_globals;
+use lua_rive_base::install_host_print;
 use luaur_rt::ffi::lua_error;
 use luaur_rt::{
-    AnyUserData, Buffer as LuaBuffer, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table,
-    UserData, UserDataFields, UserDataMethods, Value, Vector as LuaVector, VmState,
+    AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, UserData,
+    UserDataFields, UserDataMethods, Value, Vector as LuaVector, VmState,
 };
 use luaur_vm::functions::luau_load::luau_load;
-use mat4::install_mat4_global;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
     ScriptArtboard, ScriptCoreString, ScriptDataConverterMethod, ScriptDataConverterOptionalCall,
@@ -48,6 +57,7 @@ use crate::gpu_canvas::{
 };
 
 pub use host_commands::{HostCommand, HostCycleCheckpoint, HostEffectCheckpoint, HostValue};
+pub use logging_scripting_context::{ScriptingLogLevel, ScriptingLogSink};
 pub use luaur_rt::{Error, Result};
 pub use resource_limits::ScriptResourceLimit;
 
@@ -185,6 +195,7 @@ pub struct ScriptVm {
     host_cycle_active: Rc<Cell<bool>>,
     resource_limits: resource_limits::ResourceLimitTracker,
     gpu_canvas_shaders: ImportedGpuCanvasShaderAssets,
+    logging: LoggingScriptingContext,
 }
 
 /// Cloneable handle for the detached view-model roots owned by one scripting
@@ -242,6 +253,7 @@ pub struct LuaScriptInstance {
     resource_limits: resource_limits::ResourceLimitTracker,
     gpu_canvas: Option<ImportedGpuCanvasInstance>,
     gpu_canvas_context: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
+    logging: LoggingScriptingContext,
 }
 
 #[derive(Debug, Clone)]
@@ -355,6 +367,7 @@ impl LuaScriptInstance {
             resource_limits: resource_limits::ResourceLimitTracker::default(),
             gpu_canvas: None,
             gpu_canvas_context: None,
+            logging: LoggingScriptingContext::default(),
         }
     }
 
@@ -374,6 +387,7 @@ impl LuaScriptInstance {
         execution_budget: Option<ScriptExecutionBudget>,
         script_safepoints: Option<Rc<Cell<usize>>>,
         host_cycle_active: Option<Rc<Cell<bool>>>,
+        logging: LoggingScriptingContext,
     ) -> Self {
         Self {
             table: Some(table),
@@ -394,6 +408,7 @@ impl LuaScriptInstance {
             resource_limits,
             gpu_canvas,
             gpu_canvas_context,
+            logging,
         }
     }
 
@@ -410,6 +425,7 @@ impl LuaScriptInstance {
     }
 
     fn script_error(&self, error: Error) -> ScriptError {
+        self.logging.log_error(&error);
         tracked_script_error(error, &self.resource_limits)
     }
 
@@ -880,6 +896,7 @@ impl ScriptVm {
                 self.execution_budget.clone(),
                 Some(Rc::clone(&self.script_safepoints)),
                 Some(Rc::clone(&self.host_cycle_active)),
+                self.logging.clone(),
             )) as Box<dyn ScriptInstance>)
         };
         if let Some(factory) = factory {
@@ -932,7 +949,27 @@ impl ScriptVm {
             host_cycle_active,
             resource_limits,
             gpu_canvas_shaders: Rc::new(RefCell::new(BTreeMap::new())),
+            logging: LoggingScriptingContext::default(),
         }
+    }
+
+    /// Boot a VM whose script console and Lua errors are routed to `sink`.
+    pub fn new_with_log_sink(sink: impl Fn(ScriptingLogLevel, &[u8]) + 'static) -> Self {
+        let vm = Self::new();
+        vm.set_log_sink(sink);
+        vm
+    }
+
+    /// Route future complete script log lines to a host-provided sink.
+    ///
+    /// This may be called before or after [`Self::install_rive_globals`].
+    pub fn set_log_sink(&self, sink: impl Fn(ScriptingLogLevel, &[u8]) + 'static) {
+        self.logging.set_sink(Rc::new(sink));
+    }
+
+    /// Stop routing script log lines to the currently configured sink.
+    pub fn clear_log_sink(&self) {
+        self.logging.clear_sink();
     }
 
     /// Boot a VM whose total memory and each host-to-Luau callback are
@@ -1087,10 +1124,11 @@ impl ScriptVm {
             return Ok(());
         }
 
-        install_vector_global(&self.lua)?;
-        install_mat4_global(&self.lua)?;
-        install_math_fround(&self.lua)?;
+        install_host_print(&self.lua, self.logging.clone())?;
+        install_math_globals(&self.lua)?;
         install_data_value_global(&self.lua)?;
+        buffer_ext::install_buffer_extensions(&self.lua)?;
+        promise::install_promise_globals(&self.lua)?;
 
         let late = self
             .lua
@@ -1134,11 +1172,11 @@ impl ScriptVm {
     /// hostile `.riv` payloads get a safe Rust preflight before the raw VM call.
     pub fn load_bytecode(&self, chunk_name: &str, bytecode: &[u8]) -> Result<Function> {
         self.ensure_initialized()?;
-        validate_luau_bytecode(bytecode).map_err(|e| {
-            Error::runtime(format!(
-                "ScriptAsset '{chunk_name}': malformed Luau bytecode: {e}"
-            ))
-        })?;
+        if let Err(error) = validate_luau_bytecode(bytecode) {
+            return self.track_resource_result(Err(Error::runtime(format!(
+                "ScriptAsset '{chunk_name}': malformed Luau bytecode: {error}"
+            ))));
+        }
         let name = CString::new(format!("={chunk_name}"))
             .unwrap_or_else(|_| CString::new("=script").expect("static"));
         let result = unsafe {
@@ -1390,9 +1428,9 @@ impl ScriptVm {
         match &result {
             Value::Table(_) | Value::Function(_) => {}
             other => {
-                return Err(Error::runtime(format!(
+                return self.track_resource_result(Err(Error::runtime(format!(
                     "module '{display}' must return a table or function, got {other:?}"
-                )));
+                ))));
             }
         }
         // The module cache is a private plain table with no metamethods. Raw
@@ -1547,12 +1585,14 @@ impl ScriptVm {
             self.execution_budget.clone(),
             Some(Rc::clone(&self.script_safepoints)),
             Some(Rc::clone(&self.host_cycle_active)),
+            self.logging.clone(),
         )
     }
 
     fn track_resource_result<T>(&self, result: Result<T>) -> Result<T> {
         if let Err(error) = &result {
             self.resource_limits.observe_vm_error(error);
+            self.logging.log_error(error);
         }
         result
     }
@@ -1565,9 +1605,6 @@ impl ScriptVm {
     }
 }
 
-// Coarsely translated from nuxie-runtime/src/lua/math/lua_vec2d.cpp. The C++
-// API is a static-method table; __call retains the constructor shape exposed
-// by the initial Rust scripting seam.
 fn install_data_value_global(lua: &Lua) -> Result<()> {
     let data_value = lua.create_table();
     data_value.set(
@@ -1596,272 +1633,6 @@ fn install_data_value_global(lua: &Lua) -> Result<()> {
     )?;
     data_value.set_readonly(true);
     lua.globals().set("DataValue", data_value)
-}
-
-fn install_vector_global(lua: &Lua) -> Result<()> {
-    let vector = lua.create_table();
-    vector.set(
-        "distance",
-        lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| {
-            let x = lhs.x() - rhs.x();
-            let y = lhs.y() - rhs.y();
-            let z = lhs.z() - rhs.z();
-            Ok((x * x + y * y + z * z).sqrt())
-        })?,
-    )?;
-    vector.set(
-        "distanceSquared",
-        lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| {
-            let x = lhs.x() - rhs.x();
-            let y = lhs.y() - rhs.y();
-            let z = lhs.z() - rhs.z();
-            Ok(x * x + y * y + z * z)
-        })?,
-    )?;
-    vector.set(
-        "dot",
-        lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| Ok(vector_dot3(lhs, rhs)))?,
-    )?;
-    vector.set(
-        "cross",
-        lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| {
-            Ok(lhs.x() * rhs.y() - lhs.y() * rhs.x())
-        })?,
-    )?;
-    vector.set(
-        "cross3",
-        lua.create_function(|_, (a, b): (LuaVector, LuaVector)| {
-            Ok(LuaVector::new(
-                a.y() * b.z() - a.z() * b.y(),
-                a.z() * b.x() - a.x() * b.z(),
-                a.x() * b.y() - a.y() * b.x(),
-            ))
-        })?,
-    )?;
-    vector.set(
-        "scaleAndAdd",
-        lua.create_function(|_, (a, b, scale): (LuaVector, LuaVector, f32)| {
-            Ok(LuaVector::new(
-                a.x() + b.x() * scale,
-                a.y() + b.y() * scale,
-                a.z() + b.z() * scale,
-            ))
-        })?,
-    )?;
-    vector.set(
-        "scaleAndSub",
-        lua.create_function(|_, (a, b, scale): (LuaVector, LuaVector, f32)| {
-            Ok(LuaVector::new(
-                a.x() - b.x() * scale,
-                a.y() - b.y() * scale,
-                a.z() - b.z() * scale,
-            ))
-        })?,
-    )?;
-    vector.set(
-        "lerp",
-        lua.create_function(|_, (lhs, rhs, factor): (LuaVector, LuaVector, f32)| {
-            Ok(LuaVector::new(
-                vector_lerp_component(lhs.x(), rhs.x(), factor),
-                vector_lerp_component(lhs.y(), rhs.y(), factor),
-                vector_lerp_component(lhs.z(), rhs.z(), factor),
-            ))
-        })?,
-    )?;
-    vector.set(
-        "xy",
-        lua.create_function(|_, (x, y): (Option<f32>, Option<f32>)| {
-            Ok(LuaVector::new(x.unwrap_or(0.0), y.unwrap_or(0.0), 0.0))
-        })?,
-    )?;
-    vector.set(
-        "xyz",
-        lua.create_function(|_, (x, y, z): (Option<f32>, Option<f32>, Option<f32>)| {
-            Ok(LuaVector::new(
-                x.unwrap_or(0.0),
-                y.unwrap_or(0.0),
-                z.unwrap_or(0.0),
-            ))
-        })?,
-    )?;
-    vector.set(
-        "origin",
-        lua.create_function(|_, ()| Ok(LuaVector::zero()))?,
-    )?;
-    vector.set(
-        "length",
-        lua.create_function(|_, value: LuaVector| Ok(vector_dot3(value, value).sqrt()))?,
-    )?;
-    vector.set(
-        "lengthSquared",
-        lua.create_function(|_, value: LuaVector| Ok(vector_dot3(value, value)))?,
-    )?;
-    vector.set(
-        "normalized",
-        lua.create_function(|_, value: LuaVector| {
-            let length_squared = vector_dot3(value, value);
-            let scale = if length_squared > 0.0 {
-                1.0 / length_squared.sqrt()
-            } else {
-                1.0
-            };
-            Ok(LuaVector::new(
-                value.x() * scale,
-                value.y() * scale,
-                value.z() * scale,
-            ))
-        })?,
-    )?;
-    vector.set(
-        "writeToBuffer",
-        lua.create_function(|_, (value, buffer, offset): (LuaVector, LuaBuffer, i64)| {
-            write_vector_buffer(value, &buffer, offset, None, "writeToBuffer")
-        })?,
-    )?;
-    vector.set(
-        "writeVec4",
-        lua.create_function(
-            |_, (value, buffer, offset, w): (LuaVector, LuaBuffer, i64, f32)| {
-                write_vector_buffer(value, &buffer, offset, Some(w), "writeVec4")
-            },
-        )?,
-    )?;
-
-    let metatable = lua.create_table();
-    metatable.set(
-        "__call",
-        lua.create_function(
-            |_, (_table, x, y, z): (Table, Option<f32>, Option<f32>, Option<f32>)| {
-                Ok(LuaVector::new(
-                    x.unwrap_or(0.0),
-                    y.unwrap_or(0.0),
-                    z.unwrap_or(0.0),
-                ))
-            },
-        )?,
-    )?;
-    vector.set_metatable(Some(metatable))?;
-
-    // Rive replaces Luau's built-in vector metatable so instance syntax
-    // (`value:length()`) reaches the same bindings as `Vector.length(value)`.
-    // An __index callback also preserves axis and numeric component access.
-    let methods = vector.clone();
-    let value_metatable = lua.create_table();
-    value_metatable.set(
-        "__index",
-        lua.create_function(move |_, (value, key): (LuaVector, Value)| {
-            if let Some(component) = vector_component(value, &key)? {
-                return Ok(Value::Number(component as f64));
-            }
-
-            if let Value::String(name) = &key {
-                let name = name.to_str()?;
-                if matches!(
-                    name.as_str(),
-                    "length"
-                        | "lengthSquared"
-                        | "normalized"
-                        | "distance"
-                        | "distanceSquared"
-                        | "dot"
-                        | "lerp"
-                        | "writeToBuffer"
-                        | "writeVec4"
-                ) {
-                    let method: Value = methods.get(name.as_str())?;
-                    if !matches!(method, Value::Nil) {
-                        return Ok(method);
-                    }
-                }
-            }
-
-            Err(Error::runtime(format!(
-                "'{}' is not a valid index of Vector",
-                vector_index_name(&key)
-            )))
-        })?,
-    )?;
-    value_metatable.set_readonly(true);
-    lua.set_type_metatable::<LuaVector>(Some(value_metatable));
-
-    vector.set_readonly(true);
-    lua.globals().set("Vector", vector)
-}
-
-#[inline]
-fn vector_dot3(lhs: LuaVector, rhs: LuaVector) -> f32 {
-    lhs.x() * rhs.x() + lhs.y() * rhs.y() + lhs.z() * rhs.z()
-}
-
-#[inline]
-fn vector_lerp_component(a: f32, b: f32, factor: f32) -> f32 {
-    if factor == 1.0 {
-        b
-    } else {
-        a + (b - a) * factor
-    }
-}
-
-fn write_vector_buffer(
-    value: LuaVector,
-    buffer: &LuaBuffer,
-    offset: i64,
-    w: Option<f32>,
-    method: &'static str,
-) -> Result<()> {
-    let byte_len = if w.is_some() { 16 } else { 12 };
-    let error = || Error::runtime(format!("Vector:{method} offset out of range"));
-    let offset = usize::try_from(offset).map_err(|_| error())?;
-    if offset > buffer.len().saturating_sub(byte_len) || buffer.len() < byte_len {
-        return Err(error());
-    }
-
-    let mut bytes = [0_u8; 16];
-    for (index, component) in [value.x(), value.y(), value.z()].into_iter().enumerate() {
-        let start = index * 4;
-        bytes[start..start + 4].copy_from_slice(&component.to_ne_bytes());
-    }
-    if let Some(w) = w {
-        bytes[12..16].copy_from_slice(&w.to_ne_bytes());
-    }
-    buffer.write_bytes(offset, &bytes[..byte_len]);
-    Ok(())
-}
-
-fn vector_component(value: LuaVector, key: &Value) -> Result<Option<f32>> {
-    let index = match key {
-        Value::String(name) => match name.to_str()?.as_str() {
-            "x" | "1" => Some(0),
-            "y" | "2" => Some(1),
-            "z" | "3" => Some(2),
-            _ => None,
-        },
-        Value::Integer(1) => Some(0),
-        Value::Integer(2) => Some(1),
-        Value::Integer(3) => Some(2),
-        Value::Number(number) if *number == 1.0 => Some(0),
-        Value::Number(number) if *number == 2.0 => Some(1),
-        Value::Number(number) if *number == 3.0 => Some(2),
-        _ => None,
-    };
-    Ok(index.map(|index| [value.x(), value.y(), value.z()][index]))
-}
-
-fn vector_index_name(key: &Value) -> String {
-    match key {
-        Value::String(value) => value
-            .to_str()
-            .unwrap_or_else(|_| "<non-utf8 string>".to_owned()),
-        other => format!("{other:?}"),
-    }
-}
-
-fn install_math_fround(lua: &Lua) -> Result<()> {
-    let math: Table = lua.globals().get("math")?;
-    math.set(
-        "fround",
-        lua.create_function(|_, value: f64| Ok(f64::from(value as f32)))?,
-    )
 }
 
 impl RuntimeScriptingVm for ScriptVm {
@@ -1945,6 +1716,7 @@ impl RuntimeScriptingVm for ScriptVm {
             self.execution_budget.clone(),
             Some(Rc::clone(&self.script_safepoints)),
             Some(Rc::clone(&self.host_cycle_active)),
+            self.logging.clone(),
         )))
     }
 
@@ -2982,6 +2754,7 @@ mod context_init_tests {
                 None,
                 None,
                 None,
+                LoggingScriptingContext::default(),
             );
             instance
                 .set_context_view_model(None)
@@ -3062,6 +2835,7 @@ mod context_init_tests {
             None,
             None,
             None,
+            LoggingScriptingContext::default(),
         );
         assert!(
             !instance
@@ -3179,6 +2953,7 @@ mod context_init_tests {
             None,
             None,
             None,
+            LoggingScriptingContext::default(),
         );
         assert!(
             !instance
@@ -3663,6 +3438,7 @@ mod context_init_tests {
             None,
             None,
             None,
+            LoggingScriptingContext::default(),
         );
         let mut host = NoopScriptHost;
 

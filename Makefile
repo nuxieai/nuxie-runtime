@@ -40,6 +40,7 @@ RENDERER_CORPUS_MANIFEST ?= $(CURDIR)/corpus-r.toml
 RENDERER_CORPUS_EXPECTED_ROWS ?= 1468
 CPP_PROBE ?= $(CURDIR)/tools/cpp-probe/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_cpp_probe
 SCRIPTED_CPP_PROBE ?= $(CURDIR)/tools/cpp-probe/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_cpp_probe_scripted
+PROMISE_CPP_ORACLE ?= $(CURDIR)/target/promise-oracle/rive_cpp_promise_oracle
 GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_golden_runner
 SCRIPTED_GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_golden_runner_scripted
 RUST_GOLDEN_RUNNER ?= $(CURDIR)/target/$(RUST_PROFILE)/rust-golden-runner
@@ -205,6 +206,14 @@ cpp-probe:
 
 cpp-probe-scripted:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" RIVE_CPP_PROBE_WITH_SCRIPTING=1 RIVE_CPP_PROBE_RUNNER_NAME=rive_cpp_probe_scripted tools/cpp-probe/build.sh "$(CPP_CONFIG)"
+
+.PHONY: promise-oracle promise-differential
+
+promise-oracle:
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" bash tools/promise-oracle/build.sh release
+
+promise-differential: promise-oracle
+	NUXIE_CPP_PROMISE_ORACLE="$(PROMISE_CPP_ORACLE)" cargo test -p nuxie-scripting --test promise_scenarios promise_scenarios_match_live_cpp_oracle -- --ignored --exact
 
 cpp-atlas-mask-oracle-preflight:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/cpp-atlas-mask-oracle/build.sh --preflight

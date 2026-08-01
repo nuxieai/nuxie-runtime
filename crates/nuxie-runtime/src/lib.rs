@@ -35,6 +35,7 @@ mod context_value_symbol_list_index;
 mod context_value_trigger;
 #[path = "data_bind/context/context_value_viewmodel.rs"]
 mod context_value_viewmodel;
+mod custom_property_container;
 mod data_bind_container;
 #[path = "data_bind/data_bind_container.rs"]
 mod data_bind_container_owner;
@@ -118,6 +119,7 @@ mod parent_traversal;
 mod project_data_converter;
 mod properties;
 mod rectangles_to_contour;
+mod scene;
 mod script_asset;
 mod script_input_artboard;
 mod script_input_boolean;
@@ -161,14 +163,13 @@ pub use animation::{
 #[cfg(feature = "tools")]
 pub use artboard::RuntimeNestedRemapAnimationReport;
 pub use artboard::{
-    ArtboardInstance, ExternalFontAssetError, RuntimeArtboardDefaultScene,
-    RuntimeArtboardOccurrenceSegment, RuntimeComponents, RuntimeEventProperty,
-    RuntimeEventPropertyValue,
+    ArtboardInstance, ExternalFontAssetError, RuntimeArtboardOccurrenceSegment, RuntimeComponents,
 };
 pub use components::{
     ComponentDirt, Mat2D, RuntimeComponent, RuntimeComponentCapabilities, TransformProperty,
     TransformRuntimeState, UpdateComponentsReport,
 };
+pub use custom_property_container::{RuntimeEventProperty, RuntimeEventPropertyValue};
 pub(crate) use data_bind_graph::{
     RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase, RuntimeDataBindGraphConverter,
     RuntimeDataBindGraphTargetsMut, RuntimeDataBindGraphValue,
@@ -209,6 +210,7 @@ pub use project_data_converter::{
     ProjectDataConverterValidationRule, ProjectDataValue, ProjectDataValuePath,
     ProjectDataViewModelReference,
 };
+pub use scene::RuntimeArtboardDefaultScene;
 #[doc(hidden)]
 pub use script_asset::scripted_object_inits;
 pub use script_input_viewmodel_property::{

@@ -40,7 +40,11 @@ FEATURE_ROWS = {
         "",
         "F6: semantics runtime is absent.",
     ),
-    "src/lua/lua_promise.cpp": ("absent", "", "F7: Lua promise binding is absent."),
+    "src/lua/lua_promise.cpp": (
+        "ported",
+        "crates/nuxie-scripting/src/vm/promise.rs; crates/nuxie-scripting/src/vm.rs",
+        "P1-i: all 47 pinned Promise scenarios plus 2 invalid-yield cases pass exact live C++/Rust VM differentials; image decode is a separate lane.",
+    ),
     "src/lua/renderer/lua_gpu.cpp": (
         "absent",
         "",
@@ -224,19 +228,54 @@ for _path in {
 for _path in {
     "src/lua/lua_audio.cpp",
     "src/lua/lua_buffer_ext.cpp",
-    "src/lua/lua_data_context.cpp",
-    "src/lua/lua_data_value.cpp",
     "src/lua/lua_image_decode.cpp",
     "src/lua/lua_scripted_context.cpp",
-    "src/lua/lua_state.cpp",
-    "src/lua/math/lua_color.cpp",
     "src/lua/math/lua_input.cpp",
     "src/lua/renderer/lua_blob.cpp",
-    "src/lua/renderer/lua_gradient.cpp",
     "src/lua/renderer/lua_image.cpp",
     "src/lua/renderer/lua_mesh.cpp",
 }:
     FEATURE_ROWS[_path] = ("absent", "", "F7: this Lua binding is absent.")
+
+FEATURE_ROWS.update(
+    {
+        "src/lua/lua_data_context.cpp": (
+            "partial",
+            "crates/nuxie-scripting/src/vm/view_model.rs",
+            "F7/P1G: DataContext methods are present; parent contexts without a main view model remain unrepresentable.",
+        ),
+        "src/lua/lua_data_value.cpp": (
+            "partial",
+            "crates/nuxie-scripting/src/vm.rs",
+            "F7/P1G: DataValue surface is present with tracked index/newindex, coercion, and color-channel gaps.",
+        ),
+        "src/lua/lua_state.cpp": (
+            "partial",
+            "crates/nuxie-scripting/src/vm/view_model.rs",
+            "F7/P1G: Data initialization is ported with tracked constructor-arity gaps.",
+        ),
+        "src/lua/math/lua_color.cpp": (
+            "ported",
+            "crates/nuxie-scripting/src/vm/lua_color.rs",
+            "F7/P1G: the complete Color binding is ported.",
+        ),
+        "src/lua/renderer/lua_gradient.cpp": (
+            "partial",
+            "crates/nuxie-scripting/src/vm/renderer.rs",
+            "F7/P1G: Gradient constructors are present with tracked non-table stop and unsigned-color conversion gaps.",
+        ),
+        "src/lua/logging_scripting_context.cpp": (
+            "ported",
+            "crates/nuxie-scripting/src/vm/logging_scripting_context.rs; crates/nuxie/src/lib.rs",
+            "P1G: direct host logging context and File host route are ported.",
+        ),
+        "src/lua/lua_rive_base.cpp": (
+            "ported",
+            "crates/nuxie-scripting/src/vm/lua_rive_base.rs",
+            "P1G: direct host-routed _G.print binding is ported.",
+        ),
+    }
+)
 PREFIX_MODULES = (
     ("src/animation/", "crates/nuxie-runtime/src/animation.rs"),
     ("src/assets/", "crates/nuxie-runtime/src/objects.rs"),

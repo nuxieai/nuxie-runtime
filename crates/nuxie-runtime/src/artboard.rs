@@ -490,6 +490,7 @@ pub struct ArtboardInstance {
     pub(crate) did_change: Cell<bool>,
     pub(crate) layout_constraint_bounds_enabled: bool,
     pub(crate) layout_constraint_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
+    solved_layout_bounds: Option<Arc<BTreeMap<usize, RuntimeLayoutBounds>>>,
 }
 
 impl Clone for ArtboardInstance {
@@ -597,6 +598,7 @@ impl Clone for ArtboardInstance {
             did_change: self.did_change.clone(),
             layout_constraint_bounds_enabled: self.layout_constraint_bounds_enabled,
             layout_constraint_bounds: self.layout_constraint_bounds.clone(),
+            solved_layout_bounds: self.solved_layout_bounds.clone(),
         };
 
         // Core clones generated fields into fresh Components, then reruns the
@@ -924,6 +926,7 @@ impl ArtboardInstance {
     fn reset_layout_constraint_bounds_for_new_occurrence(&mut self) {
         self.layout_constraint_bounds_enabled = false;
         self.layout_constraint_bounds = None;
+        self.solved_layout_bounds = None;
     }
 
     fn added_to_host(&self) {
@@ -973,6 +976,7 @@ impl ArtboardInstance {
         // consume that renderer event.
         self.layout_constraint_bounds_enabled = source.layout_constraint_bounds_enabled;
         self.layout_constraint_bounds = source.layout_constraint_bounds.clone();
+        self.solved_layout_bounds = source.solved_layout_bounds.clone();
         for (local_id, source_nested) in source.nested_artboards.iter() {
             if let Some(cloned_nested) = self.nested_artboards.get_mut(local_id) {
                 // A transient layout clone is a non-mutating view of this
@@ -2276,6 +2280,7 @@ impl ArtboardInstance {
             did_change: Cell::new(true),
             layout_constraint_bounds_enabled,
             layout_constraint_bounds: None,
+            solved_layout_bounds: None,
         };
         instance.initialize_root_layout_bounds();
         instance
@@ -3567,6 +3572,20 @@ impl ArtboardInstance {
         )
     }
 
+    /// Return one layout component's retained solved border box.
+    ///
+    /// This reads the exact occurrence-owned result retained during layout
+    /// settlement. It does not run or approximate a layout solve. The `x` and
+    /// `y` values are in artboard-local coordinates; width and height are the
+    /// solved dimensions exposed by pinned C++
+    /// `LayoutComponent::layoutBounds/layoutWidth/layoutHeight`.
+    pub fn layout_bounds(&self, local_id: usize) -> Option<RuntimeLayoutBounds> {
+        self.solved_layout_bounds
+            .as_deref()?
+            .get(&local_id)
+            .copied()
+    }
+
     /// Whether authored nested or component-list players still need a future
     /// advance. Hosts use this independently from the selected root player so
     /// a static root cannot prematurely settle a playing child artboard.
@@ -3928,6 +3947,7 @@ impl ArtboardInstance {
             },
         );
         self.layout_constraint_bounds = Some(Arc::new(bounds));
+        self.solved_layout_bounds = self.layout_constraint_bounds.clone();
         if let Some(text_input) = self
             .component(text_input_local)
             .and_then(|component| component.concrete.text_input.as_ref())
@@ -6869,6 +6889,7 @@ impl ArtboardInstance {
                     .then_some(component.local_id)
             })
             .collect::<Vec<_>>();
+        self.solved_layout_bounds = next_bounds.clone();
         self.layout_constraint_bounds = next_bounds;
         if let (Some(bounds), Some(graph)) = (
             self.layout_constraint_bounds.clone(),
@@ -8185,6 +8206,7 @@ impl ArtboardInstance {
             self.runtime_taffy_layout_bounds(&graphs[*graph_index], self.runtime_file())
                 .map(Arc::new)
         });
+        self.solved_layout_bounds = layout_bounds.clone();
         if let Some(layout_bounds) = layout_bounds.as_deref() {
             for (&local_id, &bounds) in layout_bounds {
                 self.retain_runtime_layout_component_bounds(local_id, bounds, Some(layout_bounds));
@@ -11578,6 +11600,7 @@ mod tests {
             did_change: Cell::new(true),
             layout_constraint_bounds_enabled: false,
             layout_constraint_bounds: None,
+            solved_layout_bounds: None,
         }
     }
 

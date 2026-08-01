@@ -1249,15 +1249,15 @@ note = "P1-b faithful candidate under the B6 AF-1/AF-5 immutable-arena adaptatio
 
 [[file]]
 upstream = "src/assets/font_asset.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/objects.rs"
+rust_module = "crates/nuxie-runtime/src/assets/font_asset.rs; crates/nuxie-runtime/src/assets/file_asset_loader.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0103"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "A1: font bytes work, but the FileAssetLoader decode/referencer callback lifecycle remains incomplete."
+note = "P1-k faithful candidate closing the historical A1/B6 tracked gap: the image/font-only import seam mirrors FileAssetLoader claim/fallback and retains cloneable asset handles for asynchronous completion; FontAsset decode validates and replaces its concrete file owner, publishes to exact live TextStyle referencers, and follows TextStyle::onDirty into owning-Text reshaping. The B6 verdict and audit_record remain the historical audit result pending independent verification. Anchors: general_loader_claims_in_band_image_and_suppresses_fallback, general_loader_rejection_decodes_in_band_image_fallback, hosted_image_cdn_descriptor_matches_pinned_cpp, hosted_font_cdn_descriptor_matches_pinned_cpp, data_bind_font_fixture_applies_a_live_font_on_advance_and_draw, font_data_bind_stores_replaces_and_clears_its_private_font, and asynchronously_decoded_font_notifies_live_text_style_shape_dirt."
 
 [[file]]
 upstream = "src/assets/image_asset.cpp"

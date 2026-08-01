@@ -461,6 +461,10 @@ pub struct ArtboardInstance {
     text_variation_modifier_tags: RefCell<BTreeMap<usize, (u64, u32)>>,
     pub(crate) runtime_images: crate::draw::image::RuntimeImageList,
     external_font_assets: Arc<BTreeMap<u32, Arc<[u8]>>>,
+    pub(crate) runtime_font_assets: Arc<crate::RuntimeFontAssetOwners>,
+    pub(crate) runtime_font_asset_snapshots: BTreeMap<u32, Arc<[u8]>>,
+    pub(crate) runtime_font_asset_referencer:
+        Rc<crate::font_asset::RuntimeFontAssetReferencerQueue>,
     /// C++ File/ImageAsset ownership projected into the runtime occurrence
     /// tree. Every clone retains the same file-owned owner list; Images borrow
     /// RenderImage from it and never from a facade scene cache.
@@ -604,6 +608,9 @@ impl Clone for ArtboardInstance {
             text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: self.runtime_images.clone(),
             external_font_assets: self.external_font_assets.clone(),
+            runtime_font_assets: Arc::clone(&self.runtime_font_assets),
+            runtime_font_asset_snapshots: self.runtime_font_asset_snapshots.clone(),
+            runtime_font_asset_referencer: Rc::new(Default::default()),
             runtime_image_assets: self.runtime_image_assets.clone(),
             runtime_image_asset_referencer: Rc::new(Default::default()),
             render_resources: self.render_resources.clone(),
@@ -680,6 +687,7 @@ impl Clone for ArtboardInstance {
         if let Some(owners) = image_assets {
             cloned.attach_runtime_image_assets_tree(owners);
         }
+        cloned.refresh_runtime_font_asset_referencers();
         cloned
     }
 }
@@ -733,6 +741,7 @@ struct RuntimeArtboardBuildContext {
     nested_structure_epoch: Arc<AtomicU64>,
     paint_preparation_epoch: Arc<AtomicU64>,
     external_font_assets: Arc<BTreeMap<u32, Arc<[u8]>>>,
+    runtime_font_assets: Arc<crate::RuntimeFontAssetOwners>,
 }
 
 fn build_artboard_index_by_global(artboards: &[ArtboardGraph]) -> Vec<Option<usize>> {
@@ -1909,6 +1918,7 @@ impl ArtboardInstance {
             nested_structure_epoch: Arc::new(AtomicU64::new(0)),
             paint_preparation_epoch: Arc::new(AtomicU64::new(0)),
             external_font_assets: Arc::new(BTreeMap::new()),
+            runtime_font_assets: Arc::new(crate::RuntimeFontAssetOwners::from_runtime(file)),
         };
         Self::from_graph_inner(
             file,
@@ -1981,6 +1991,12 @@ impl ArtboardInstance {
             nested_structure_epoch: Arc::new(AtomicU64::new(0)),
             paint_preparation_epoch: Arc::new(AtomicU64::new(0)),
             external_font_assets: Arc::new(external_font_assets.clone()),
+            runtime_font_assets: Arc::new(
+                crate::RuntimeFontAssetOwners::from_runtime_with_external_fonts(
+                    file,
+                    external_font_assets,
+                ),
+            ),
         };
         Self::from_graph_inner(
             file,
@@ -2004,6 +2020,20 @@ impl ArtboardInstance {
             .as_ref()
             .map(|context| Arc::clone(&context.external_font_assets))
             .unwrap_or_default();
+        let runtime_font_assets = build_context
+            .as_ref()
+            .map(|context| Arc::clone(&context.runtime_font_assets))
+            .unwrap_or_else(|| Arc::new(crate::RuntimeFontAssetOwners::from_runtime(file)));
+        let runtime_font_asset_snapshots = file
+            .file_assets()
+            .into_iter()
+            .filter(|asset| asset.type_name == "FontAsset")
+            .filter_map(|asset| {
+                runtime_font_assets
+                    .get(asset.id)
+                    .map(|bytes| (asset.id, bytes))
+            })
+            .collect();
         let inserted = visiting.insert(graph.global_id);
         let dimensions =
             RuntimeArtboardDimensions::from_object(file.object(graph.global_id as usize));
@@ -2256,6 +2286,9 @@ impl ArtboardInstance {
             text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: crate::draw::image::RuntimeImageList::from_graph(file, graph),
             external_font_assets,
+            runtime_font_assets,
+            runtime_font_asset_snapshots,
+            runtime_font_asset_referencer: Rc::new(Default::default()),
             runtime_image_assets: RefCell::new(None),
             runtime_image_asset_referencer: Rc::new(Default::default()),
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),
@@ -2290,6 +2323,7 @@ impl ArtboardInstance {
         instance.apply_initial_component_collapse_callbacks_in_authored_order();
         instance.initialize_runtime_shape_paint_owners(graph);
         instance.initialize_text_inputs();
+        instance.register_runtime_font_asset_referencers(file, graph);
         let nested_host_locals = instance.nested_artboard_locals.clone();
         for host_local_id in nested_host_locals {
             instance.sync_nested_artboard_root_opacity(host_local_id);
@@ -2431,6 +2465,86 @@ impl ArtboardInstance {
     /// Return the external font bytes visible to this concrete runtime tree.
     pub fn external_font_asset_bytes(&self, asset_id: u32) -> Option<&[u8]> {
         self.external_font_assets.get(&asset_id).map(AsRef::as_ref)
+    }
+
+    pub(crate) fn runtime_font_asset_bytes(&self, asset_global: u32) -> Option<&[u8]> {
+        self.runtime_font_asset_snapshots
+            .get(&asset_global)
+            .map(AsRef::as_ref)
+    }
+
+    fn register_runtime_font_asset_referencers(&self, file: &RuntimeFile, graph: &ArtboardGraph) {
+        let styles = graph.local_objects.iter().filter_map(|local| {
+            let object = file.object(local.global_id as usize)?;
+            if !matches!(object.type_name, "TextStyle" | "TextStylePaint") {
+                return None;
+            }
+            let asset_index = object
+                .uint_property("fontAssetId")
+                .and_then(|index| usize::try_from(index).ok())?;
+            let asset = file.file_asset(asset_index)?;
+            (asset.type_name == "FontAsset").then_some((asset.id, local.local_id))
+        });
+        self.runtime_font_asset_referencer.replace_styles(styles);
+        self.runtime_font_assets
+            .register_referencer(&self.runtime_font_asset_referencer);
+    }
+
+    fn refresh_runtime_font_asset_referencers(&self) {
+        let Some((file, graph)) = self.build_context.as_ref().and_then(|context| {
+            let graph_index = context
+                .artboard_index_by_global
+                .get(usize::try_from(self.graph_global_id).ok()?)
+                .copied()
+                .flatten()?;
+            Some((context.file.as_ref(), context.artboards.get(graph_index)?))
+        }) else {
+            return;
+        };
+        self.register_runtime_font_asset_referencers(file, graph);
+    }
+
+    /// Attach the file-owned ImageAsset/FontAsset owner set to this complete
+    /// occurrence tree and to contexts that may materialize children later.
+    pub fn attach_runtime_file_asset_owners(&mut self, owners: &crate::RuntimeFileAssetOwners) {
+        if let Some(images) = owners.loader_image_assets() {
+            self.attach_runtime_image_assets_tree(images);
+        }
+        self.attach_runtime_font_assets_tree(owners.font_assets());
+    }
+
+    fn attach_runtime_font_assets_tree(&mut self, owners: Arc<crate::RuntimeFontAssetOwners>) {
+        self.runtime_font_assets = Arc::clone(&owners);
+        self.runtime_font_asset_snapshots.clear();
+        if let Some(context) = self.build_context.as_ref() {
+            for asset in context.file.file_assets() {
+                if asset.type_name == "FontAsset"
+                    && let Some(bytes) = owners.get(asset.id)
+                {
+                    self.runtime_font_asset_snapshots.insert(asset.id, bytes);
+                }
+            }
+        }
+        if let Some(context) = self.build_context.as_mut() {
+            context.runtime_font_assets = Arc::clone(&owners);
+        }
+        self.refresh_runtime_font_asset_referencers();
+        for nested in self.nested_artboards.values_mut() {
+            nested
+                .child
+                .attach_runtime_font_assets_tree(Arc::clone(&owners));
+        }
+        for list_index in 0..self.component_list_count() {
+            let Some(local_id) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            if let Some(items) = self.component_list_items_mut(local_id) {
+                for item in items {
+                    item.child
+                        .attach_runtime_font_assets_tree(Arc::clone(&owners));
+                }
+            }
+        }
     }
 
     /// Replace the validated external-font snapshot for this complete runtime
@@ -7565,6 +7679,7 @@ impl ArtboardInstance {
 
     pub fn update_components(&mut self) -> UpdateComponentsReport {
         self.settle_runtime_image_asset_updates();
+        self.settle_runtime_font_asset_updates();
         let mut script_mode = RuntimeScriptUpdateMode::HostOnly;
         self.update_components_with_hook_recording(
             true,
@@ -7609,6 +7724,7 @@ impl ArtboardInstance {
         root_transform: Mat2D,
     ) -> bool {
         let image_assets_did_update = self.settle_runtime_image_asset_updates();
+        let font_assets_did_update = self.settle_runtime_font_asset_updates();
         // Mirrors C++ src/artboard.cpp Artboard::updatePass: data binds run
         // before components, with artboard-host children publishing first.
         self.update_data_binds_for_update_pass(root_transform);
@@ -7617,8 +7733,9 @@ impl ArtboardInstance {
         // parent Yoga graph reports a new layout. The transfer key keeps later
         // precise child-local writes from causing a second solve in the same
         // outer update while still refreshing genuine parent assignments.
-        let mut did_update =
-            image_assets_did_update | self.apply_nested_artboard_layout_bounds_after_parent_solve();
+        let mut did_update = image_assets_did_update
+            | font_assets_did_update
+            | self.apply_nested_artboard_layout_bounds_after_parent_solve();
         if self.joysticks_apply_before_update {
             did_update |= self.apply_joysticks(true);
         }
@@ -11727,6 +11844,9 @@ mod tests {
             text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
             runtime_images: crate::draw::image::RuntimeImageList::default(),
             external_font_assets: Arc::new(BTreeMap::new()),
+            runtime_font_assets: Arc::new(crate::RuntimeFontAssetOwners::default()),
+            runtime_font_asset_snapshots: BTreeMap::new(),
+            runtime_font_asset_referencer: Rc::new(Default::default()),
             runtime_image_assets: RefCell::new(None),
             runtime_image_asset_referencer: Rc::new(Default::default()),
             render_resources: RefCell::new(crate::draw::RuntimeOccurrenceRenderResources::default()),

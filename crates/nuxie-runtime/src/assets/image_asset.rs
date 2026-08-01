@@ -84,6 +84,7 @@ impl<'a> RuntimeImageAssetCatalog<'a> {
 #[derive(Default)]
 struct RuntimeImageAssetOwnerState {
     owners_by_global: Vec<Option<RuntimeImageAssetOwner>>,
+    import_resolved_globals: BTreeSet<u32>,
     /// Source-artboard Mesh members retained by the file. Concrete clones
     /// copy the UV/index reference-counted handles and allocate only a fresh
     /// dynamic vertex buffer, matching `Mesh::clone`.
@@ -191,6 +192,44 @@ impl RuntimeImageAssetOwners {
             .and_then(|owner| owner.as_ref())
             .and_then(|owner| owner.render_image.as_ref())
             .map(Rc::clone)
+    }
+
+    pub(crate) fn mark_import_resolved(&self, global_id: u32) {
+        self.state
+            .borrow_mut()
+            .import_resolved_globals
+            .insert(global_id);
+    }
+
+    fn is_import_resolved(&self, global_id: u32) -> bool {
+        self.state
+            .borrow()
+            .import_resolved_globals
+            .contains(&global_id)
+    }
+
+    /// Decode and atomically replace one concrete ImageAsset owner.
+    pub fn decode(
+        &self,
+        global_id: u32,
+        bytes: &[u8],
+        factory: &mut dyn RenderFactory,
+    ) -> Result<(), ImageDecodeError> {
+        let dimensions = preflight_encoded_image(bytes).ok_or(ImageDecodeError)?;
+        let decoded_byte_length =
+            decoded_rgba_len(dimensions.width, dimensions.height).ok_or(ImageDecodeError)?;
+        let previous_retained_decoded_bytes = self
+            .try_reserve_replacement_decoded_bytes(global_id, decoded_byte_length)
+            .ok_or(ImageDecodeError)?;
+        let image = match factory.decode_image(bytes) {
+            Ok(image) => image,
+            Err(error) => {
+                self.cancel_decoded_byte_reservation(previous_retained_decoded_bytes);
+                return Err(error);
+            }
+        };
+        self.insert_reserved(global_id, image, decoded_byte_length);
+        Ok(())
     }
 
     /// Imports one runtime `ImageAsset` through a host loader. This is the
@@ -364,6 +403,9 @@ pub(super) fn predecode_render_image(
     factory: &mut dyn RenderFactory,
     images: &RuntimeImageAssetOwners,
 ) -> Result<(), ImageDecodeError> {
+    if images.is_import_resolved(asset_global) {
+        return Ok(());
+    }
     predecode_render_image_with_loader(
         runtime,
         image_assets,
@@ -384,12 +426,14 @@ pub(super) fn predecode_render_image_with_loader(
     images: &RuntimeImageAssetOwners,
     mut loader: Option<&mut dyn RuntimeImageAssetLoader>,
 ) -> Result<(), ImageDecodeError> {
+    let is_import = loader.is_some();
     let embedded = image_assets.embedded_bytes(asset_global);
     if let (Some(loader), Some(asset)) = (loader.as_mut(), runtime.object(asset_global as usize))
         && loader.load_contents(asset, embedded.unwrap_or_default(), factory)
     {
         // Direct `FileAssetImporter::resolve`: a true result transfers loading
         // responsibility to the host and suppresses in-band fallback decode.
+        images.mark_import_resolved(asset_global);
         return Ok(());
     }
     let bytes = embedded.or_else(|| {
@@ -400,20 +444,10 @@ pub(super) fn predecode_render_image_with_loader(
         external_images?.get(&semantic_id).map(AsRef::as_ref)
     });
     if let Some(bytes) = bytes {
-        let dimensions = preflight_encoded_image(bytes).ok_or(ImageDecodeError)?;
-        let decoded_byte_length =
-            decoded_rgba_len(dimensions.width, dimensions.height).ok_or(ImageDecodeError)?;
-        let previous_retained_decoded_bytes = images
-            .try_reserve_replacement_decoded_bytes(asset_global, decoded_byte_length)
-            .ok_or(ImageDecodeError)?;
-        let image = match factory.decode_image(bytes) {
-            Ok(image) => image,
-            Err(error) => {
-                images.cancel_decoded_byte_reservation(previous_retained_decoded_bytes);
-                return Err(error);
-            }
-        };
-        images.insert_reserved(asset_global, image, decoded_byte_length);
+        images.decode(asset_global, bytes, factory)?;
+    }
+    if is_import {
+        images.mark_import_resolved(asset_global);
     }
     Ok(())
 }

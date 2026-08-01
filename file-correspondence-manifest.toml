@@ -1897,15 +1897,15 @@ note = "P1-a direct owner split at d788e8ec: pinned unsigned-int range-checked v
 
 [[file]]
 upstream = "src/custom_property_container.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
+rust_module = "crates/nuxie-runtime/src/custom_property_container.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0156"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port."
+note = "P1-f direct owner split at d788e8ec: pinned child membership and stable unique add/remove are at src/custom_property_container.cpp:7-36; the moved occurrence membership scan is at crates/nuxie-runtime/src/custom_property_container.rs:60-103 and the moved typed custom-property DataBind collection/builder is at crates/nuxie-runtime/src/custom_property_container.rs:45-57,106-251. Generated scalar storage/setters remain generic in crates/nuxie-runtime/src/objects.rs, and source/target notification queues remain in crates/nuxie-runtime/src/data_bind/data_bind_context.rs."
 
 [[file]]
 upstream = "src/data_bind/context/context_target_value.cpp"
@@ -3781,15 +3781,15 @@ note = "Consolidated runtime port."
 
 [[file]]
 upstream = "src/scene.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
+rust_module = "crates/nuxie-runtime/src/scene.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0313"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port."
+note = "P1-f direct owner split at d788e8ec: pinned Scene's thin artboard facade and default no-op pointer seam are at src/scene.cpp:7-40; the moved default-scene selection, root advance settlement, and basic pointer facade bodies are at crates/nuxie-runtime/src/scene.rs:11-122. Exact public advance and pointerDown/Move/Up/Exit signatures remain as ownership-ratchet delegations in crates/nuxie-runtime/src/artboard.rs and crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:6391-6796; concrete pointer/event dispatch remains in the latter FL-C5 owner. Width/height remain ArtboardInstance occurrence state, drawing remains in crates/nuxie-runtime/src/draw.rs, and input/bind/callback behavior remains in state-machine/generated-property owners."
 
 [[file]]
 upstream = "src/script_input_artboard.cpp"

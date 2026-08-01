@@ -3,6 +3,7 @@
 //! Owns live-context resolution and the artboard-facing typed adapters.
 
 use crate::components::{ComponentHandle, DataBindHandle};
+use crate::custom_property_container::RuntimeArtboardCustomPropertyBindingInstance;
 use crate::data_bind_container::RuntimeDataBindContainerQueue;
 use crate::data_bind_graph::{
     DATA_BIND_FLAG_DIRECTION_TO_SOURCE, RuntimeDataBindGraphConverterBuildCache,
@@ -124,7 +125,10 @@ macro_rules! cached_runtime_data_bind_property_key {
     }};
 }
 
-fn runtime_data_bind_property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {
+pub(crate) fn runtime_data_bind_property_key_for_name(
+    type_name: &str,
+    property_name: &str,
+) -> Option<u16> {
     match (type_name, property_name) {
         ("Component", "parentId") => {
             cached_runtime_data_bind_property_key!("Component", "parentId")
@@ -209,7 +213,7 @@ fn runtime_data_bind_property_key_for_name(type_name: &str, property_name: &str)
     }
 }
 
-fn shared_data_bind_path(path: Vec<u32>) -> Arc<[u32]> {
+pub(crate) fn shared_data_bind_path(path: Vec<u32>) -> Arc<[u32]> {
     Arc::from(path.into_boxed_slice())
 }
 
@@ -2032,21 +2036,6 @@ impl RuntimeArtboardDataBindSourceQueues {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct RuntimeArtboardCustomPropertyBindingInstance {
-    data_bind_index: usize,
-    target_local_id: usize,
-    property_key: u16,
-    path: Arc<[u32]>,
-    path_is_name_based: bool,
-    owned_context_source_path: Option<Vec<usize>>,
-    flags: u64,
-    value_kind: RuntimeArtboardDataBindValueKind,
-    converter: Option<RuntimeDataBindGraphConverter>,
-    converter_state: RuntimeDataBindGraphConverterState,
-    default_value: RuntimeDataBindGraphValue,
-}
-
-#[derive(Debug, Clone)]
 pub(super) struct RuntimeArtboardLayoutComputedBindingInstance {
     data_bind_index: usize,
     target_local_id: usize,
@@ -2349,7 +2338,7 @@ enum RuntimeArtboardNestedHostProperty {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RuntimeArtboardDataBindValueKind {
+pub(crate) enum RuntimeArtboardDataBindValueKind {
     Number,
     Boolean,
     String,
@@ -2358,7 +2347,7 @@ enum RuntimeArtboardDataBindValueKind {
     Trigger,
 }
 
-fn runtime_artboard_data_bind_default_value_for_kind(
+pub(crate) fn runtime_artboard_data_bind_default_value_for_kind(
     kind: RuntimeArtboardDataBindValueKind,
 ) -> RuntimeDataBindGraphValue {
     match kind {
@@ -3526,7 +3515,7 @@ pub(super) fn build_artboard_nested_host_bindings(
         .collect()
 }
 
-fn runtime_type_is_a(type_key: u16, type_name: &str) -> bool {
+pub(crate) fn runtime_type_is_a(type_key: u16, type_name: &str) -> bool {
     definition_by_type_key(type_key).is_some_and(|definition| definition.is_a(type_name))
 }
 
@@ -3610,153 +3599,6 @@ pub(super) fn apply_artboard_name_based_color_data_bind_defaults(
         changed |= objects.set_color_property(target_local_id, color_key, 0xFF000000);
     }
     changed
-}
-
-pub(super) fn build_artboard_custom_property_bindings<'a>(
-    file: &'a RuntimeFile,
-    graph: &ArtboardGraph,
-    converter_cache: &mut RuntimeDataBindGraphConverterBuildCache<'a>,
-) -> Vec<RuntimeArtboardCustomPropertyBindingInstance> {
-    let Some(artboard_index) = artboard_index_for_graph(file, graph) else {
-        return Vec::new();
-    };
-    let default_instance = artboard_default_view_model_instance(file, artboard_index);
-    let trim_start_key = runtime_data_bind_property_key_for_name("TrimPath", "start");
-    let trim_end_key = runtime_data_bind_property_key_for_name("TrimPath", "end");
-    let shape_length_key = runtime_data_bind_property_key_for_name("Shape", "length");
-    let parametric_width_key = runtime_data_bind_property_key_for_name("ParametricPath", "width");
-    let parametric_height_key = runtime_data_bind_property_key_for_name("ParametricPath", "height");
-
-    file.artboard_data_binds(artboard_index)
-        .into_iter()
-        .enumerate()
-        .filter_map(|(data_bind_index, data_bind)| {
-            let flags = data_bind.object.uint_property("flags").unwrap_or(0);
-            if !data_bind_flags_apply_target_to_source(flags) {
-                return None;
-            }
-            let target = data_bind.target?;
-            let target_local_id = data_bind.target_local_id?;
-            let property_key =
-                u16::try_from(data_bind.object.uint_property("propertyKey")?).ok()?;
-            let value_kind = match target.type_name {
-                "CustomPropertyNumber"
-                    if runtime_data_bind_property_key_for_name(
-                        "CustomPropertyNumber",
-                        "propertyValue",
-                    ) == Some(property_key) =>
-                {
-                    RuntimeArtboardDataBindValueKind::Number
-                }
-                "CustomPropertyBoolean"
-                    if runtime_data_bind_property_key_for_name(
-                        "CustomPropertyBoolean",
-                        "propertyValue",
-                    ) == Some(property_key) =>
-                {
-                    RuntimeArtboardDataBindValueKind::Boolean
-                }
-                "CustomPropertyString"
-                    if runtime_data_bind_property_key_for_name(
-                        "CustomPropertyString",
-                        "propertyValue",
-                    ) == Some(property_key) =>
-                {
-                    RuntimeArtboardDataBindValueKind::String
-                }
-                "CustomPropertyColor"
-                    if runtime_data_bind_property_key_for_name(
-                        "CustomPropertyColor",
-                        "propertyValue",
-                    ) == Some(property_key) =>
-                {
-                    RuntimeArtboardDataBindValueKind::Color
-                }
-                "CustomPropertyEnum"
-                    if runtime_data_bind_property_key_for_name(
-                        "CustomPropertyEnum",
-                        "propertyValue",
-                    ) == Some(property_key) =>
-                {
-                    RuntimeArtboardDataBindValueKind::Enum
-                }
-                "CustomPropertyTrigger" | "ViewModelInstanceTrigger"
-                    if runtime_data_bind_property_key_for_name(
-                        target.type_name,
-                        "propertyValue",
-                    ) == Some(property_key) =>
-                {
-                    RuntimeArtboardDataBindValueKind::Trigger
-                }
-                _ => {
-                    let uses_specialized_numeric_source = matches!(target.type_name,
-                        "TrimPath" if [trim_start_key, trim_end_key].contains(&Some(property_key))
-                    ) || (target.type_name == "Shape"
-                        && Some(property_key) == shape_length_key)
-                        || (runtime_type_is_a(target.type_key, "ParametricPath")
-                            && [parametric_width_key, parametric_height_key]
-                                .contains(&Some(property_key)));
-                    if uses_specialized_numeric_source {
-                        return None;
-                    }
-                    match nuxie_schema::core_registry_setter_field_kind_by_property_key(
-                        property_key,
-                    )? {
-                        FieldKind::Double => RuntimeArtboardDataBindValueKind::Number,
-                        FieldKind::Bool => RuntimeArtboardDataBindValueKind::Boolean,
-                        FieldKind::String => RuntimeArtboardDataBindValueKind::String,
-                        FieldKind::Color => RuntimeArtboardDataBindValueKind::Color,
-                        _ => return None,
-                    }
-                }
-            };
-            let path = file.data_bind_context_source_path_ids_for_object(data_bind.object)?;
-            let converter = runtime_data_bind_graph_converter_with_cache(
-                file,
-                data_bind.object,
-                converter_cache,
-            );
-            if matches!(converter, Some(RuntimeDataBindGraphConverter::Unsupported)) {
-                return None;
-            }
-            let default_value = default_instance
-                .as_ref()
-                .and_then(|default_instance| {
-                    file.data_context_view_model_property_for_instance(
-                        default_instance.object,
-                        &path,
-                    )
-                    .and_then(|source| runtime_created_view_model_value_for_source(file, source))
-                })
-                .or_else(|| {
-                    if file
-                        .data_bind_is_name_based_for_object(data_bind.object)
-                        .unwrap_or(false)
-                    {
-                        return None;
-                    }
-                    runtime_created_view_model_value_for_declared_path(file, &path)
-                })
-                .unwrap_or_else(|| runtime_artboard_data_bind_default_value_for_kind(value_kind));
-            Some(RuntimeArtboardCustomPropertyBindingInstance {
-                data_bind_index,
-                target_local_id,
-                property_key,
-                path: shared_data_bind_path(path),
-                path_is_name_based: file
-                    .data_bind_is_name_based_for_object(data_bind.object)
-                    .unwrap_or(false),
-                owned_context_source_path: None,
-                flags,
-                value_kind,
-                converter_state: RuntimeDataBindGraphConverterState::for_converter(
-                    converter.as_ref(),
-                ),
-                converter,
-                default_value,
-            })
-        })
-        .collect()
 }
 
 pub(super) fn build_artboard_numeric_source_bindings(
@@ -4506,7 +4348,7 @@ fn runtime_created_view_model_value_for_path(
     runtime_created_view_model_value_for_source(file, source)
 }
 
-fn artboard_default_view_model_instance(
+pub(crate) fn artboard_default_view_model_instance(
     file: &RuntimeFile,
     artboard_index: usize,
 ) -> Option<nuxie_binary::RuntimeViewModelInstanceReference<'_>> {
@@ -4515,7 +4357,7 @@ fn artboard_default_view_model_instance(
     file.view_model_default_instance(view_model_index)
 }
 
-fn runtime_created_view_model_value_for_source(
+pub(crate) fn runtime_created_view_model_value_for_source(
     file: &RuntimeFile,
     source: &RuntimeObject,
 ) -> Option<RuntimeDataBindGraphValue> {
@@ -4540,7 +4382,7 @@ fn runtime_created_view_model_value_for_source(
     }
 }
 
-fn runtime_created_view_model_value_for_declared_path(
+pub(crate) fn runtime_created_view_model_value_for_declared_path(
     file: &RuntimeFile,
     path: &[u32],
 ) -> Option<RuntimeDataBindGraphValue> {

@@ -4803,7 +4803,7 @@ impl StateMachineInstance {
         self.script_error.get_or_insert(error);
     }
 
-    pub(super) fn retain_script_result<T: Default>(&mut self, result: Result<T, ScriptError>) -> T {
+    pub(crate) fn retain_script_result<T: Default>(&mut self, result: Result<T, ScriptError>) -> T {
         match result {
             Ok(value) => value,
             Err(error) => {
@@ -6395,9 +6395,7 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
-        let result =
-            self.try_pointer_down_with_script_host(artboard, x, y, pointer_id, &mut NoopScriptHost);
-        self.retain_script_result(result)
+        crate::scene::pointer_down(self, artboard, x, y, pointer_id)
     }
 
     pub(crate) fn hit_test(&self, artboard: &ArtboardInstance, x: f32, y: f32) -> bool {
@@ -6556,15 +6554,7 @@ impl StateMachineInstance {
         seconds: f32,
         pointer_id: i32,
     ) -> bool {
-        let result = self.try_pointer_move_with_timestamp_and_script_host(
-            artboard,
-            x,
-            y,
-            pointer_id,
-            seconds,
-            &mut NoopScriptHost,
-        );
-        self.retain_script_result(result)
+        crate::scene::pointer_move(self, artboard, x, y, seconds, pointer_id)
     }
 
     pub fn pointer_move_with_owned_view_model_context(
@@ -6651,9 +6641,7 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
-        let result =
-            self.try_pointer_up_with_script_host(artboard, x, y, pointer_id, &mut NoopScriptHost);
-        self.retain_script_result(result)
+        crate::scene::pointer_up(self, artboard, x, y, pointer_id)
     }
 
     pub fn pointer_up_with_event_context(
@@ -6804,9 +6792,7 @@ impl StateMachineInstance {
         y: f32,
         pointer_id: i32,
     ) -> bool {
-        let result =
-            self.try_pointer_exit_with_script_host(artboard, x, y, pointer_id, &mut NoopScriptHost);
-        self.retain_script_result(result)
+        crate::scene::pointer_exit(self, artboard, x, y, pointer_id)
     }
 
     pub(crate) fn drag_start(

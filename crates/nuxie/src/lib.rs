@@ -2890,11 +2890,16 @@ fn mount_scripted_artboard_tree(
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
     {
         let scripts = file.scripts.borrow();
+        // Project data converters travel as `ScriptAsset` carriers but are
+        // evaluated by the pure-Rust converter runtime, never the Luau VM.
+        // A converter-only File must not construct a scripting VM — doing so
+        // demands a `PersistentFactory` renderer context that plain draw
+        // factories (for example the browser product surface) do not provide.
         if !scripts.scripts_are_authenticated()
             || !scripts
                 .assets
                 .iter()
-                .any(|asset| asset.type_name == "ScriptAsset")
+                .any(|asset| asset.type_name == "ScriptAsset" && !asset.is_project_data_converter)
         {
             return Ok(false);
         }

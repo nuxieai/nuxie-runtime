@@ -2473,8 +2473,7 @@ b6_row_id = "B6-0203"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "FL-E7 direct retained owner: construction resolves the active DrawTarget once, drawTargetIdChanged refreshes that sidecar and publishes root DrawOrder dirt, and sorting never re-reads the serialized id. MR-2b/C04 justified exception: the remaining Artboard residue is the common draw-order builder shared with B6-0094."
-note = "FL-E7 direct retained owner: construction resolves the active DrawTarget once, drawTargetIdChanged refreshes that sidecar and publishes root DrawOrder dirt, and sorting never re-reads the serialized id. MR-2b/C05 justified exception: draw-order relinking is one RuntimeDrawableList operation shared with siblings B6-0204 DrawTarget and B6-0205 Drawable, so splitting it would require new forwarding signatures."
+note = "FL-E7 direct retained owner: construction resolves the active DrawTarget once, drawTargetIdChanged refreshes that sidecar and publishes root DrawOrder dirt, and sorting never re-reads the serialized id. MR-2b/C04 justified exception: the remaining Artboard residue is the common draw-order builder shared with B6-0094. MR-2b/C05 justified exception: draw-order relinking is one RuntimeDrawableList operation shared with siblings B6-0204 DrawTarget and B6-0205 Drawable, so splitting it would require new forwarding signatures."
 
 [[file]]
 upstream = "src/draw_target.cpp"
@@ -2486,8 +2485,7 @@ b6_row_id = "B6-0204"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "FL-E7 direct retained owner: resolved Drawable identity and placement drive dirt-gated relink; placementValueChanged refreshes the sidecar and publishes root DrawOrder dirt. Explicit Rust import adaptation: unlike C++ MissingObject, an unresolved graph diagnostic is retained as an inert target with no drawable index and cannot detach or splice a group. MR-2b/C04 justified exception: the remaining Artboard residue is the common draw-order builder shared with B6-0094."
-note = "FL-E7 direct retained owner: resolved Drawable identity and placement drive dirt-gated relink; placementValueChanged refreshes the sidecar and publishes root DrawOrder dirt. Explicit Rust import adaptation: unlike C++ MissingObject, an unresolved graph diagnostic is retained as an inert target with no drawable index and cannot detach or splice a group. MR-2b/C05 justified exception: draw-target placement is consumed inside the same RuntimeDrawableList relink operation as siblings B6-0203 DrawRules and B6-0205 Drawable, so no clean per-row seam exists."
+note = "FL-E7 direct retained owner: resolved Drawable identity and placement drive dirt-gated relink; placementValueChanged refreshes the sidecar and publishes root DrawOrder dirt. Explicit Rust import adaptation: unlike C++ MissingObject, an unresolved graph diagnostic is retained as an inert target with no drawable index and cannot detach or splice a group. MR-2b/C04 justified exception: the remaining Artboard residue is the common draw-order builder shared with B6-0094. MR-2b/C05 justified exception: draw-target placement is consumed inside the same RuntimeDrawableList relink operation as siblings B6-0203 DrawRules and B6-0205 Drawable, so no clean per-row seam exists."
 
 [[file]]
 upstream = "src/drawable.cpp"
@@ -2499,8 +2497,7 @@ b6_row_id = "B6-0205"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "RD-C1 implemented and executor-gate-green pending independent orchestrator verification: stable clone-owned drawable objects retain live order/clipping membership and read mutable hidden/collapsed state at traversal time. MR-2b/C04 justified exception: Drawable hit testing and dirt dispatch share the virtual Component chain with B6-0123 and B6-0258."
-note = "RD-C1 implemented and executor-gate-green pending independent orchestrator verification: stable clone-owned drawable objects retain live order/clipping membership and read mutable hidden/collapsed state at traversal time. MR-2b/C05 justified exception: retained drawable ordering and hit traversal are entangled with sibling B6-0203 DrawRules and B6-0204 DrawTarget in one owner, so moving them would require signature and ownership changes."
+note = "RD-C1 implemented and executor-gate-green pending independent orchestrator verification: stable clone-owned drawable objects retain live order/clipping membership and read mutable hidden/collapsed state at traversal time. MR-2b/C04 justified exception: Drawable hit testing and dirt dispatch share the virtual Component chain with B6-0123 and B6-0258. MR-2b/C05 justified exception: retained drawable ordering and hit traversal are entangled with sibling B6-0203 DrawRules and B6-0204 DrawTarget in one owner, so moving them would require signature and ownership changes."
 
 [[file]]
 upstream = "src/event.cpp"
@@ -3136,8 +3133,7 @@ b6_row_id = "B6-0258"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "W120 faithful candidate under the accepted Taffy substitution contract: pinned dirt/style, retained layout/interpolation, measurement, solve, path, draw, and advance ownership is at src/layout_component.cpp:31-1507; direct callbacks live at crates/nuxie-runtime/src/layout_component.rs:5-89 and the mapped retained solve/draw owner is crates/nuxie-runtime/src/draw.rs:6010-6046,11940-12620. Each occurrence retains clone-local backend paths and no scene-level layout path cache remains. MR-2b/C04 justified exception: Artboard-side layout hit testing and update dispatch share the Drawable virtual chain with B6-0205."
-note = "W120 faithful candidate under the accepted Taffy substitution contract: pinned dirt/style, retained layout/interpolation, measurement, solve, path, draw, and advance ownership is at src/layout_component.cpp:31-1507; direct callbacks live at crates/nuxie-runtime/src/layout_component.rs:5-89 and the mapped retained solve/draw owner is crates/nuxie-runtime/src/draw.rs:6010-6046,11940-12620. Each occurrence retains clone-local backend paths and no scene-level layout path cache remains. MR-2b/C05 justified exception: the retained Taffy build/solve/draw methods jointly implement sibling B6-0210 ForegroundLayoutDrawable and B6-0304 NestedArtboardLayout, so they cannot move per row without API changes."
+note = "W120 faithful candidate under the accepted Taffy substitution contract: pinned dirt/style, retained layout/interpolation, measurement, solve, path, draw, and advance ownership is at src/layout_component.cpp:31-1507; direct callbacks live at crates/nuxie-runtime/src/layout_component.rs:5-89 and the mapped retained solve/draw owner is crates/nuxie-runtime/src/draw.rs:6010-6046,11940-12620. Each occurrence retains clone-local backend paths and no scene-level layout path cache remains. MR-2b/C04 justified exception: Artboard-side layout hit testing and update dispatch share the Drawable virtual chain with B6-0205. MR-2b/C05 justified exception: the retained Taffy build/solve/draw methods jointly implement sibling B6-0210 ForegroundLayoutDrawable and B6-0304 NestedArtboardLayout, so they cannot move per row without API changes."
 
 [[file]]
 upstream = "src/listener_group.cpp"
@@ -3677,8 +3673,7 @@ b6_row_id = "B6-0303"
 b6_verdict = "DIVERGENT"
 b6_cluster = "artboard"
 audit_record = "docs/b6-audit/results/artboard.md"
-note = "FL-D5 direct mounted-occurrence owner with animation-before-child teardown, cold clone, replacement, and nested advance settlement. MR-2b/C04 justified exception: remaining nested construction and frame advance recurse through the common Artboard lifecycle shared with B6-0094."
-note = "FL-D5 direct mounted-occurrence owner with animation-before-child teardown, cold clone, replacement, and nested advance settlement. MR-2b/C05 justified exception: one nested-artboard preparation/draw recursion dispatches siblings B6-0304 NestedArtboardLayout and B6-0305 NestedArtboardLeaf as well as this row."
+note = "FL-D5 direct mounted-occurrence owner with animation-before-child teardown, cold clone, replacement, and nested advance settlement. MR-2b/C04 justified exception: remaining nested construction and frame advance recurse through the common Artboard lifecycle shared with B6-0094. MR-2b/C05 justified exception: one nested-artboard preparation/draw recursion dispatches siblings B6-0304 NestedArtboardLayout and B6-0305 NestedArtboardLeaf as well as this row."
 
 [[file]]
 upstream = "src/nested_artboard_layout.cpp"
@@ -3690,8 +3685,7 @@ b6_row_id = "B6-0304"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "FL-D5 direct NestedArtboardLayout transfer-key and retained bounds owner. MR-2b/C04 justified exception: remaining bounds transfer executes inside the nested Artboard advance path shared with B6-0303."
-note = "FL-D5 direct NestedArtboardLayout transfer-key and retained bounds owner. MR-2b/C05 justified exception: nested layout transfer and drawing are embedded in the same recursion as siblings B6-0303 NestedArtboard and B6-0305 NestedArtboardLeaf."
+note = "FL-D5 direct NestedArtboardLayout transfer-key and retained bounds owner. MR-2b/C04 justified exception: remaining bounds transfer executes inside the nested Artboard advance path shared with B6-0303. MR-2b/C05 justified exception: nested layout transfer and drawing are embedded in the same recursion as siblings B6-0303 NestedArtboard and B6-0305 NestedArtboardLeaf."
 
 [[file]]
 upstream = "src/nested_artboard_leaf.cpp"
@@ -3703,8 +3697,7 @@ b6_row_id = "B6-0305"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "FL-D5 filename-corresponding NestedArtboardLeaf occurrence classification plus direct fit/alignment world-transform update; renderer code supplies only resolved frame/content bounds. MR-2b/C04 justified exception: remaining leaf transform application shares the nested Artboard bounds pass with B6-0304."
-note = "FL-D5 filename-corresponding NestedArtboardLeaf occurrence classification plus direct fit/alignment world-transform update; renderer code supplies only resolved frame/content bounds. MR-2b/C05 justified exception: leaf fit/frame settlement is consumed inside the shared nested draw recursion for siblings B6-0303 NestedArtboard and B6-0304 NestedArtboardLayout."
+note = "FL-D5 filename-corresponding NestedArtboardLeaf occurrence classification plus direct fit/alignment world-transform update; renderer code supplies only resolved frame/content bounds. MR-2b/C04 justified exception: remaining leaf transform application shares the nested Artboard bounds pass with B6-0304. MR-2b/C05 justified exception: leaf fit/frame settlement is consumed inside the shared nested draw recursion for siblings B6-0303 NestedArtboard and B6-0304 NestedArtboardLayout."
 
 [[file]]
 upstream = "src/nested_artboard_origin.cpp"
@@ -4018,8 +4011,7 @@ b6_row_id = "B6-0331"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C04 justified exception: remaining clipping dirt fanout is part of the Drawable callback dispatcher shared with B6-0205."
-note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C05 moved the complete ClippingShape update owner and its attribution into shapes/clipping_shape.rs; draw.rs and artboard.rs retain shared proxy-list storage and traversal plumbing."
+note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C04 justified exception: remaining clipping dirt fanout is part of the Drawable callback dispatcher shared with B6-0205. MR-2b/C05 moved the complete ClippingShape update owner and its attribution into shapes/clipping_shape.rs; draw.rs and artboard.rs retain shared proxy-list storage and traversal plumbing."
 
 [[file]]
 upstream = "src/shapes/cubic_asymmetric_vertex.cpp"
@@ -4271,8 +4263,7 @@ b6_row_id = "B6-0352"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C04 justified exception: remaining paint invalidation is part of the shared shape callback dispatcher with B6-0368."
-note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C05 moved the complete clone-owned ShapePaint renderer into shapes/paint/shape_paint.rs; draw.rs and artboard.rs retain shared backend storage, configuration, and traversal plumbing."
+note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C04 justified exception: remaining paint invalidation is part of the shared shape callback dispatcher with B6-0368. MR-2b/C05 moved the complete clone-owned ShapePaint renderer into shapes/paint/shape_paint.rs; draw.rs and artboard.rs retain shared backend storage, configuration, and traversal plumbing."
 
 [[file]]
 upstream = "src/shapes/paint/shape_paint_mutator.cpp"
@@ -4332,8 +4323,7 @@ b6_row_id = "B6-0357"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C04 justified exception: effect invalidation recursively publishes paint dirt through B6-0352, with no independent Artboard seam."
-note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C05 moved the complete StrokeEffect dispatcher into shapes/paint/stroke_effect.rs; per-effect implementations remain in their smallest natural owners, including sibling B6-0359 TrimPath."
+note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C04 justified exception: effect invalidation recursively publishes paint dirt through B6-0352, with no independent Artboard seam. MR-2b/C05 moved the complete StrokeEffect dispatcher into shapes/paint/stroke_effect.rs; per-effect implementations remain in their smallest natural owners, including sibling B6-0359 TrimPath."
 
 [[file]]
 upstream = "src/shapes/paint/target_effect.cpp"
@@ -4381,8 +4371,7 @@ b6_row_id = "B6-0361"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C04 justified exception: deferred path dirt is dispatched through the common Shape callback path shared with B6-0368."
-note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C05 moved Path update, deferral, and layout-controlled geometry ownership into shapes/path.rs; draw.rs and artboard.rs retain shared geometry helpers, storage, and dependency traversal."
+note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C04 justified exception: deferred path dirt is dispatched through the common Shape callback path shared with B6-0368. MR-2b/C05 moved Path update, deferral, and layout-controlled geometry ownership into shapes/path.rs; draw.rs and artboard.rs retain shared geometry helpers, storage, and dependency traversal."
 
 [[file]]
 upstream = "src/shapes/path_composer.cpp"
@@ -4394,8 +4383,7 @@ b6_row_id = "B6-0362"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C04 justified exception: composer scheduling is an embedded Shape callback shared with B6-0368."
-note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C05 moved the complete PathComposer update owner into shapes/path_composer.rs; draw.rs and artboard.rs retain shared path aggregation helpers, storage, and dependency traversal."
+note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C04 justified exception: composer scheduling is an embedded Shape callback shared with B6-0368. MR-2b/C05 moved the complete PathComposer update owner into shapes/path_composer.rs; draw.rs and artboard.rs retain shared path aggregation helpers, storage, and dependency traversal."
 
 [[file]]
 upstream = "src/shapes/path_vertex.cpp"
@@ -4467,8 +4455,7 @@ b6_row_id = "B6-0368"
 b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
-note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C04 justified exception: remaining path-composer and paint callback routing shares the component dispatcher with B6-0123."
-note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C05 moved the complete clone-owned Shape renderer into shapes/shape.rs and delegates paint rendering to sibling B6-0352's natural owner; draw.rs and artboard.rs retain shared storage and traversal plumbing."
+note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/effect lifecycle are occurrence-local. MR-2b/C04 justified exception: remaining path-composer and paint callback routing shares the component dispatcher with B6-0123. MR-2b/C05 moved the complete clone-owned Shape renderer into shapes/shape.rs and delegates paint rendering to sibling B6-0352's natural owner; draw.rs and artboard.rs retain shared storage and traversal plumbing."
 
 [[file]]
 upstream = "src/shapes/shape_paint_container.cpp"
@@ -4672,8 +4659,7 @@ b6_row_id = "B6-0385"
 b6_verdict = "DIVERGENT"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/results/text.md"
-note = "W120 faithful candidate: pinned Text measurement/render-style construction, update/draw, dirt callbacks, and retained bounds span src/text/text.cpp:137-1387; direct callback ownership is crates/nuxie-runtime/src/text/text.rs:6-119, retained shaping/measurement state is coordinated at crates/nuxie-runtime/src/text.rs:648-4211, and live drawing is mapped through crates/nuxie-runtime/src/draw.rs:15870-16270. FL-G07 already closes same-update publication. MR-2b/C04 justified exception: remaining text-resource invalidation traverses the common component callback path shared with B6-0123."
-note = "W120 faithful candidate: pinned Text measurement/render-style construction, update/draw, dirt callbacks, and retained bounds span src/text/text.cpp:137-1387; direct callback ownership is crates/nuxie-runtime/src/text/text.rs:6-119, retained shaping/measurement state is coordinated at crates/nuxie-runtime/src/text.rs:648-4211, and live drawing is mapped through crates/nuxie-runtime/src/draw.rs:15870-16270. FL-G07 already closes same-update publication. MR-2b/C05 justified exception: the retained text replay function jointly handles siblings B6-0390 TextInputDrawable and B6-0402 TextStylePaint."
+note = "W120 faithful candidate: pinned Text measurement/render-style construction, update/draw, dirt callbacks, and retained bounds span src/text/text.cpp:137-1387; direct callback ownership is crates/nuxie-runtime/src/text/text.rs:6-119, retained shaping/measurement state is coordinated at crates/nuxie-runtime/src/text.rs:648-4211, and live drawing is mapped through crates/nuxie-runtime/src/draw.rs:15870-16270. FL-G07 already closes same-update publication. MR-2b/C04 justified exception: remaining text-resource invalidation traverses the common component callback path shared with B6-0123. MR-2b/C05 justified exception: the retained text replay function jointly handles siblings B6-0390 TextInputDrawable and B6-0402 TextStylePaint."
 
 [[file]]
 upstream = "src/text/text_engine.cpp"

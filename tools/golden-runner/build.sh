@@ -37,8 +37,8 @@ if [[ "${RIVE_GOLDEN_WITH_SCRIPTING:-0}" == "1" ]]; then
     runtime_mode="scripted"
     runtime_out="${RIVE_GOLDEN_SCRIPTING_OUT:-out/rive-rust-golden-scripting-$config}"
     decoders_out="${RIVE_GOLDEN_DECODERS_OUT:-out/rive-rust-golden-scripting-$config}"
-    runtime_premake_flags=(--with_rive_text --with_rive_layout --with_rive_scripting)
-    runtime_targets=(rive rive_harfbuzz rive_sheenbidi rive_yoga luau_vm)
+    runtime_premake_flags=(--with_rive_text --with_rive_layout --with_rive_scripting --with_rive_audio=external)
+    runtime_targets=(rive rive_harfbuzz rive_sheenbidi rive_yoga luau_vm miniaudio)
 else
     runtime_mode="ordinary"
     runtime_out="${RIVE_GOLDEN_RUNTIME_OUT:-out/rive-rust-golden-$config}"

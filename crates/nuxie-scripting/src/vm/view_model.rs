@@ -4,7 +4,8 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use luaur_rt::{
-    AnyUserData, Function, Lua, MultiValue, Table, UserData, UserDataFields, UserDataMethods, Value,
+    AnyUserData, Buffer, Function, Lua, MultiValue, Table, UserData, UserDataFields,
+    UserDataMethods, Value,
 };
 use luaur_vm::functions::lua_getmetatable::lua_getmetatable;
 use nuxie_runtime::{RuntimeOwnedViewModelInstance, ScriptViewModel, ScriptViewModelProperty};
@@ -759,29 +760,31 @@ impl ScriptedPropertyImage {
 impl UserData for ScriptedPropertyImage {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("value", |lua, this| {
-            Ok(match this.model.image(&this.name) {
-                Some(image) => create_asset_image(lua, image)?
-                    .map(Value::UserData)
-                    .unwrap_or(Value::Nil),
-                None => Value::Nil,
-            })
+            if let Some(image) = this.model.render_image(&this.name) {
+                return lua
+                    .create_userdata(ScriptedImage::from_render_image_rc(image))
+                    .map(Value::UserData);
+            }
+            let asset = this.model.image(&this.name);
+            Ok(asset
+                .map(|image| create_asset_image(lua, image))
+                .transpose()?
+                .flatten()
+                .map(Value::UserData)
+                .unwrap_or(Value::Nil))
         });
         fields.add_field_method_set("value", |_, this, value: Value| {
-            let image = match value {
-                Value::Nil => None,
-                Value::UserData(image) => Some(
-                    image
-                        .borrow::<ScriptedImage>()?
-                        .asset_identity()
-                        .ok_or_else(|| {
-                            luaur_rt::Error::runtime(
-                                "factory-backed Image cannot be assigned to this runtime image property",
-                            )
-                        })?,
-                ),
+            match value {
+                Value::Nil => {
+                    this.model.set_render_image(&this.name, None);
+                }
+                Value::UserData(image) => {
+                    let image = image.borrow::<ScriptedImage>()?;
+                    this.model
+                        .set_render_image(&this.name, Some(image.render_image()?));
+                }
                 _ => return Err(luaur_rt::Error::runtime("expected Image userdata or nil")),
-            };
-            this.model.set_image(&this.name, image);
+            }
             Ok(())
         });
     }
@@ -1090,6 +1093,10 @@ impl UserData for ScriptedContext {
         methods.add_method("blob", |lua, this, name: String| {
             this.require_live("blob")?;
             ScriptedBlobAssets::lookup(lua, &name)
+        });
+        methods.add_method("decodeImage", |lua, this, encoded: Buffer| {
+            this.require_live("decodeImage")?;
+            super::lua_image_decode::start(lua, encoded)
         });
         methods.add_method("gpuCanvas", |lua, this, ()| {
             this.require_live("gpuCanvas")?;
@@ -1699,14 +1706,21 @@ mod tests {
             })
             .expect("authored instance has an image property");
         let current = model.image(&property_name).expect("property has an image");
-        let (asset_name, expected) = file
+        let (asset_name, expected, expected_global_id) = file
             .file_assets()
             .into_iter()
             .enumerate()
             .find_map(|(index, asset)| {
                 let index = u64::try_from(index).ok()?;
-                (asset.type_name == "ImageAsset" && index != current.file_asset_index())
-                    .then(|| (asset.string_property("name").unwrap().to_owned(), index))
+                (asset.type_name == "ImageAsset" && index != current.file_asset_index()).then(
+                    || {
+                        (
+                            asset.string_property("name").unwrap().to_owned(),
+                            index,
+                            asset.id,
+                        )
+                    },
+                )
             })
             .expect("fixture has a replacement image");
 
@@ -1748,11 +1762,103 @@ mod tests {
         .exec()
         .expect("image property script runs");
 
-        assert_eq!(
-            model.image(&property_name).unwrap().file_asset_index(),
-            expected
-        );
+        assert!(model.image(&property_name).is_none());
+        let retained = model
+            .render_image(&property_name)
+            .expect("asset-backed assignment retains the decoded image identity");
+        let expected_image = owners
+            .image_assets()
+            .get(expected_global_id)
+            .expect("replacement image was decoded");
+        assert!(Rc::ptr_eq(&retained, &expected_image));
+        assert_ne!(expected, current.file_asset_index());
+
+        let mut png_header = vec![0; 24];
+        png_header[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+        png_header[12..16].copy_from_slice(b"IHDR");
+        png_header[16..20].copy_from_slice(&3_u32.to_be_bytes());
+        png_header[20..24].copy_from_slice(&5_u32.to_be_bytes());
+        let factory_image = nuxie_render_api::Factory::decode_image(&mut factory, &png_header)
+            .expect("recording factory image");
+        lua.globals()
+            .set(
+                "factoryImage",
+                lua.create_userdata(ScriptedImage::from_render_image(factory_image))
+                    .unwrap(),
+            )
+            .unwrap();
+        let dimensions: Table = lua
+            .load(
+                "local property = model:getImage(propertyName); \
+                 property.value = factoryImage; \
+                 return { property.value.width, property.value.height }",
+            )
+            .eval()
+            .expect("factory-backed image round trip");
+        assert_eq!(dimensions.get::<u32>(1).unwrap(), 3);
+        assert_eq!(dimensions.get::<u32>(2).unwrap(), 5);
+        let retained = model
+            .render_image(&property_name)
+            .expect("runtime view-model state retains the factory image");
+        assert_eq!((retained.width(), retained.height()), (3, 5));
         assert!(!missing_requested_data.get());
+    }
+
+    #[test]
+    fn context_image_returns_nil_until_the_asset_has_a_render_resource() {
+        let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+            .join("tests/unit_tests/assets/image_scripting_property_value.riv");
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+        let file = nuxie_binary::read_runtime_file(&bytes).expect("fixture parses");
+        let model = nuxie_runtime::script_view_models(&file)
+            .into_values()
+            .next()
+            .and_then(|definition| definition.named_instance(None))
+            .expect("fixture has a script view model");
+        let property_name = model
+            .properties()
+            .iter()
+            .find_map(|(name, kind)| {
+                (*kind == ScriptViewModelProperty::Image).then(|| name.clone())
+            })
+            .expect("fixture has an image property");
+        let asset_name = file
+            .file_assets()
+            .into_iter()
+            .find(|asset| asset.type_name == "ImageAsset")
+            .and_then(|asset| asset.string_property("name"))
+            .expect("fixture has an image")
+            .to_owned();
+        let lua = Lua::new();
+        crate::vm::lua_image::set_image_asset_owners(
+            &lua,
+            std::sync::Arc::new(nuxie_runtime::RuntimeImageAssetOwners::default()),
+        );
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        let context = lua
+            .create_userdata(ScriptedContext::new(
+                Rc::new(RefCell::new(Some(model))),
+                Vec::new(),
+                Rc::new(Cell::new(false)),
+                None,
+            ))
+            .unwrap();
+        lua.globals().set("model", table).unwrap();
+        lua.globals().set("context", context).unwrap();
+        lua.globals().set("propertyName", property_name).unwrap();
+        lua.globals().set("assetName", asset_name).unwrap();
+
+        assert!(
+            lua.load(
+                "return context:image(assetName) == nil \
+                 and model:getImage(propertyName).value == nil",
+            )
+            .eval::<bool>()
+            .unwrap()
+        );
     }
 
     fn positive_blob_lookup_surface() -> String {

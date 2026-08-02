@@ -1597,9 +1597,9 @@ note = "F7/P1G: DataValue surface is present with tracked index/newindex, coerci
 
 [[file]]
 upstream = "src/lua/lua_image_decode.cpp"
-status = "absent"
-rust_module = ""
-note = "F7: this Lua binding is absent."
+status = "ported"
+rust_module = "crates/nuxie-scripting/src/vm/lua_image_decode.rs; crates/nuxie-image-codec/src/lib.rs; crates/nuxie-scripting/src/vm/promise.rs; crates/nuxie-runtime/src/scene.rs"
+note = "P2A: WorkPool-scheduled decode, root-frame VM-thread Promise settlement, cancellation, and unbounded premultiplied RGBA result/error behavior are ported."
 
 [[file]]
 upstream = "src/lua/lua_listener_invocation.cpp"
@@ -1693,9 +1693,9 @@ note = "F7/P1G: Gradient constructors are present with tracked non-table stop an
 
 [[file]]
 upstream = "src/lua/renderer/lua_image.cpp"
-status = "partial"
-rust_module = "crates/nuxie-scripting/src/vm/lua_image.rs"
-note = "P2B partial: asset-backed and factory-backed Image handles plus the exact clamp/repeat/mirror and bilinear/nearest ImageSampler surface are ported. The existing lazy-decode runtime requires asset-backed userdata to preserve file-asset identity before a RenderImage is available; direct rendering resolves the resource once the decode owner is populated. Tightening pre-decode Context:image/property reads to pinned nil behavior, Image width/height/view, and decode scheduling remain assigned to the concurrent image-decode lane; factory-backed assignment into identity-only runtime image properties also remains a tracked gap."
+status = "ported"
+rust_module = "crates/nuxie-scripting/src/vm/lua_image.rs; crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie-runtime/src/data_bind/data_bind_context.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/shapes/image.rs"
+note = "P2A/P2B: decoded Image width/height, pre-decode nil behavior, runtime-image assignment through bound draw targets, and ImageSampler are ported; the optional ORE-only view member is omitted in this non-ORE build."
 
 [[file]]
 upstream = "src/lua/renderer/lua_mesh.cpp"

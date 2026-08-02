@@ -20,6 +20,7 @@ mod logging_scripting_context;
 mod lua_blob;
 mod lua_color;
 mod lua_image;
+mod lua_image_decode;
 mod lua_mat4;
 mod lua_math;
 mod lua_mesh;
@@ -441,6 +442,16 @@ impl LuaScriptInstance {
     }
 
     fn reset_execution_budget(&self) {
+        if let Some(lua) = self
+            .table
+            .as_ref()
+            .map(Table::lua)
+            .or_else(|| self.generator.as_ref().map(Function::lua))
+        {
+            if let Err(error) = lua_image_decode::poll_completed(&lua) {
+                self.logging.log_error(&error);
+            }
+        }
         if self
             .host_cycle_active
             .as_ref()
@@ -1022,6 +1033,9 @@ impl ScriptVm {
     }
 
     fn reset_execution_budget(&self) {
+        if let Err(error) = lua_image_decode::poll_completed(&self.lua) {
+            self.logging.log_error(&error);
+        }
         // File/Artboard facade callbacks do not all have an explicit flow
         // operation around them. Treat each such callback as its own bounded
         // cycle so the cumulative main-VM ceiling cannot poison an otherwise
@@ -1163,6 +1177,7 @@ impl ScriptVm {
         install_data_value_global(&self.lua)?;
         buffer_ext::install_buffer_extensions(&self.lua)?;
         promise::install_promise_globals(&self.lua)?;
+        lua_image_decode::install(&self.lua);
 
         let late = self
             .lua
@@ -1766,6 +1781,18 @@ impl Drop for LuaScriptInstance {
 }
 
 impl ScriptInstance for LuaScriptInstance {
+    fn poll_async_work(&mut self) -> std::result::Result<bool, ScriptError> {
+        let Some(lua) = self
+            .table
+            .as_ref()
+            .map(Table::lua)
+            .or_else(|| self.generator.as_ref().map(Function::lua))
+        else {
+            return Ok(false);
+        };
+        lua_image_decode::poll_completed(&lua).map_err(|error| self.script_error(error))
+    }
+
     fn set_context_view_model(
         &mut self,
         view_model: Option<ScriptViewModel>,

@@ -7,7 +7,10 @@
 //! ownership of that graph, while terminal transitions eagerly sever the same
 //! parent/consumer/callback links as `src/lua/lua_promise.cpp`.
 
-use luaur_rt::{Function, Lua, MultiValue, Result, Table, UserData, UserDataMethods};
+use luaur_rt::{
+    AnyUserData, Function, IntoLuaMulti, Lua, MultiValue, Result, Table, UserData, UserDataMethods,
+    Value,
+};
 
 const PROMISE_ENGINE_REGISTRY_KEY: &str = "rive_scripting_promise_engine";
 
@@ -18,6 +21,32 @@ fn dispatch(lua: &Lua, method: &str, args: MultiValue) -> Result<MultiValue> {
     let engine: Table = lua.named_registry_value(PROMISE_ENGINE_REGISTRY_KEY)?;
     let function: Function = engine.get(method)?;
     function.call(args)
+}
+
+fn call_engine<R: luaur_rt::FromLuaMulti>(
+    lua: &Lua,
+    method: &str,
+    args: impl IntoLuaMulti,
+) -> Result<R> {
+    let engine: Table = lua.named_registry_value(PROMISE_ENGINE_REGISTRY_KEY)?;
+    let function: Function = engine.get(method)?;
+    function.call(args)
+}
+
+pub(super) fn new_pending(lua: &Lua) -> Result<AnyUserData> {
+    call_engine(lua, "newPending", ())
+}
+
+pub(super) fn resolve(lua: &Lua, promise: AnyUserData, value: Value) -> Result<()> {
+    call_engine(lua, "resolve", (promise, value))
+}
+
+pub(super) fn reject(lua: &Lua, promise: AnyUserData, reason: String) -> Result<()> {
+    call_engine(lua, "reject", (promise, reason))
+}
+
+pub(super) fn set_on_cancel(lua: &Lua, promise: AnyUserData, callback: Function) -> Result<()> {
+    call_engine(lua, "onCancel", (promise, callback))
 }
 
 impl UserData for ScriptedPromise {
@@ -321,6 +350,12 @@ return function(newPromise)
     engine.getStatus = function(promise)
         return stateOf(promise).status
     end
+
+    -- Native producers use the same state machine without exposing these
+    -- operations through the public Promise table.
+    engine.newPending = newPending
+    engine.resolve = resolve
+    engine.reject = reject
 
     local statics = {}
 

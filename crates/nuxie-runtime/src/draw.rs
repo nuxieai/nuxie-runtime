@@ -3864,6 +3864,15 @@ impl ArtboardInstance {
             .get(asset_global)
     }
 
+    /// Returns the file-level decoded-image owner set currently attached to
+    /// this occurrence. Scripting hosts use this immediately after the
+    /// file-registration renderer boundary so `Context:image` observes the
+    /// same already-decoded resources as the pinned C++ `File`.
+    #[doc(hidden)]
+    pub fn scripted_runtime_image_assets(&self) -> Option<Arc<RuntimeImageAssetOwners>> {
+        self.runtime_image_assets.borrow().as_ref().map(Arc::clone)
+    }
+
     fn runtime_image_backend_context_id(&self) -> Option<u64> {
         Some(
             self.runtime_image_assets
@@ -4718,12 +4727,19 @@ impl ArtboardInstance {
                     // C++ `Image::willDraw` also requires a nonzero render
                     // opacity; the retained (include_invisible) stream defers
                     // that check to replay like the opacity types below.
-                    return self
-                        .resolved_image_asset_global(
-                            drawable.local_id,
-                            drawable.resolved_image_asset_global,
-                        )
-                        .is_some()
+                    let has_runtime_image = drawable.local_id.is_some_and(|local_id| {
+                        self.image_render_overrides
+                            .get(&local_id)
+                            .and_then(crate::RuntimeViewModelImage::render_image)
+                            .is_some()
+                    });
+                    return (has_runtime_image
+                        || self
+                            .resolved_image_asset_global(
+                                drawable.local_id,
+                                drawable.resolved_image_asset_global,
+                            )
+                            .is_some())
                         && (include_invisible
                             || self.runtime_drawable_render_opacity_is_nonzero(drawable));
                 }

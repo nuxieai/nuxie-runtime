@@ -265,10 +265,8 @@ for _path in {
 for _path in {
     "src/lua/lua_audio.cpp",
     "src/lua/lua_buffer_ext.cpp",
-    "src/lua/lua_image_decode.cpp",
     "src/lua/lua_scripted_context.cpp",
     "src/lua/renderer/lua_blob.cpp",
-    "src/lua/renderer/lua_image.cpp",
     "src/lua/renderer/lua_mesh.cpp",
 }:
     FEATURE_ROWS[_path] = ("absent", "", "F7: this Lua binding is absent.")
@@ -284,6 +282,16 @@ FEATURE_ROWS.update(
             "partial",
             "crates/nuxie-scripting/src/vm.rs",
             "F7/P1G: DataValue surface is present with tracked index/newindex, coercion, and color-channel gaps.",
+        ),
+        "src/lua/lua_image_decode.cpp": (
+            "ported",
+            "crates/nuxie-scripting/src/vm/lua_image_decode.rs",
+            "P2A: WorkPool-scheduled decode, root-frame VM-thread Promise settlement, cancellation, and unbounded premultiplied RGBA result/error behavior are ported.",
+        ),
+        "src/lua/renderer/lua_image.cpp": (
+            "ported",
+            "crates/nuxie-scripting/src/vm/lua_image.rs",
+            "P2A/P2B: decoded Image width/height, pre-decode nil behavior, runtime-image assignment through bound draw targets, and ImageSampler are ported; the optional ORE-only view member is omitted in this non-ORE build.",
         ),
         "src/lua/lua_state.cpp": (
             "partial",

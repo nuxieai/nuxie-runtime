@@ -8,4 +8,5 @@ repository.workspace = true
 [dependencies]
 image-webp = "0.2.4"
 jpeg-decoder = { version = "0.3", default-features = false }
+moxcms = "0.8.1"
 png = "0.18"

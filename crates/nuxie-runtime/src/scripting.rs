@@ -18,7 +18,7 @@ use crate::properties::property_key_for_name;
 use crate::state_machine::ScriptListenerInvocation;
 use crate::{
     ArtboardInstance, LinearAnimationInstance, RuntimeOwnedViewModelContextHandle,
-    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeViewModelImage,
 };
 
 /// Runtime-owned scripting error type.
@@ -894,6 +894,18 @@ impl ScriptViewModel {
         })
     }
 
+    pub fn render_image(&self, name: &str) -> Option<Rc<dyn nuxie_render_api::RenderImage>> {
+        if self.property(name) != Some(ScriptViewModelProperty::Image) {
+            return None;
+        }
+        let path = self.scoped_property_path(name)?;
+        self.context
+            .root_handle()
+            .borrow()
+            .runtime_image_by_property_path(&path)?
+            .render_image()
+    }
+
     pub fn image_asset_named(&self, name: &str) -> Option<ScriptImage> {
         self.file
             .file_assets()
@@ -926,6 +938,26 @@ impl ScriptViewModel {
             .root_handle()
             .borrow_mut()
             .set_asset_by_property_path(&path, file_asset_index)
+    }
+
+    pub fn set_render_image(
+        &self,
+        name: &str,
+        image: Option<Rc<dyn nuxie_render_api::RenderImage>>,
+    ) -> bool {
+        if self.property(name) != Some(ScriptViewModelProperty::Image) {
+            return false;
+        }
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
+            .borrow_mut()
+            .set_runtime_image_by_property_path(
+                &path,
+                image.map(RuntimeViewModelImage::from_render_image),
+            )
     }
 
     /// Mirrors C++ `ScriptedViewModel::pushIndex` for component-list rows.
@@ -1868,6 +1900,13 @@ pub trait ScriptViewModelInputResolver: fmt::Debug {
 
 /// Runtime-owned handle for one scripted object instance.
 pub trait ScriptInstance {
+    /// Settle backend-owned asynchronous work on the script VM's owning
+    /// thread. Root scene advance calls this immediately after the shared
+    /// WorkPool completion poll, including for parked/event-only scripts.
+    fn poll_async_work(&mut self) -> Result<bool, ScriptError> {
+        Ok(false)
+    }
+
     fn set_context_view_model(
         &mut self,
         _view_model: Option<ScriptViewModel>,

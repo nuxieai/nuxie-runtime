@@ -10236,7 +10236,12 @@ impl ArtboardInstance {
         // cannot be resolved (including the owning artboard itself) leaves the
         // outgoing child untouched.
         if value == u64::from(u32::MAX) {
-            let changed = self.nested_artboards.remove(&local_id).is_some();
+            // Keep the owned occurrence alive through the hosting artboard's
+            // layout cleanup. This is the Rust ownership twin of leaving
+            // `m_host` attached while C++ destroys `m_Instance`: teardown may
+            // use that host to unregister pending layout work.
+            let removed = self.nested_artboards.remove(&local_id);
+            let changed = removed.is_some();
             if changed {
                 self.remove_nested_artboard_local(local_id);
                 self.mark_nested_structure_changed();
@@ -10246,6 +10251,7 @@ impl ArtboardInstance {
                 self.mark_changed();
                 self.mark_prepared_changed();
             }
+            drop(removed);
             return changed;
         }
         let Some(mut nested) = self.runtime_nested_artboard_instance_for_id(local_id, value) else {
@@ -13574,6 +13580,39 @@ mod tests {
         assert!(!parent.set_nested_artboard_artboard_id(3, 0));
         assert!(!parent.nested_artboards.contains_key(&3));
         assert!(parent.nested_artboard_locals.is_empty());
+    }
+
+    #[test]
+    fn null_bound_artboard_swap_survives_pending_layout_sync() {
+        // The swap host has a static artboard and an artboardId bind whose
+        // view-model artboard property is never set. The first advance applies
+        // the bind as an explicit null while the statically nested occurrence
+        // still participates in hosting-artboard layout work.
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("fixtures/sync/databind_null_artboard_swap.riv");
+        let bytes = std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("read upstream fixture {}: {error}", fixture.display()));
+        let file = read_runtime_file(&bytes).expect("null-artboard fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("null-artboard fixture graphs");
+        let mut artboard = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            &graphs.artboards[0],
+            &graphs.artboards,
+        )
+        .expect("null-artboard fixture instance");
+        let host_local_id = artboard
+            .slots
+            .iter()
+            .find(|slot| slot.name.as_deref() == Some("swap host"))
+            .map(|slot| slot.local_id)
+            .expect("named swap host");
+
+        assert!(artboard.nested_artboards.get(&host_local_id).is_some());
+        artboard.advance(0.0).expect("first advance survives");
+        artboard.advance(0.0).expect("second advance survives");
+
+        assert!(artboard.nested_artboards.get(&host_local_id).is_none());
     }
 
     #[test]

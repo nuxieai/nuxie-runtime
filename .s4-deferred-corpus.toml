@@ -1,0 +1,8 @@
+# Enroll at pin advance to 4ac7b327 (fixture absent from pinned tree until then)
+[[file]]
+id = "databind_null_artboard_swap"
+path = "tests/unit_tests/assets/databind_null_artboard_swap.riv"
+samples = [0.0]
+status = "not-yet"
+features = ["type-key:1:Artboard", "type-key:23:Backboard", "type-key:409:LayoutComponent", "type-key:420:LayoutComponentStyle", "type-key:435:ViewModel", "type-key:437:ViewModelInstance", "type-key:447:DataBindContext", "type-key:452:NestedArtboardLayout", "type-key:598:ViewModelPropertyArtboard", "type-key:599:ViewModelInstanceArtboard"]
+

@@ -107,6 +107,8 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             textwrap.dedent(
                 f"""
                 upstream_ref = "{self.ref}"
+                [scatter_ratchet]
+                max_multi_module_rows = 0
                 [[file]]
                 upstream = "src/animation/linear_animation.cpp"
                 status = "pending"
@@ -631,6 +633,53 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         result = self.run_check()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("assigned by both animation and duplicate", result.stderr)
+
+    def test_scatter_ratchet_rejects_increased_multi_module_row_count(self) -> None:
+        self.manifest.write_text(
+            self.manifest.read_text().replace(
+                'rust_module = "crates/runtime/src/animation.rs"',
+                'rust_module = "crates/runtime/src/animation.rs; '
+                'crates/runtime/src/animation_extra.rs"\n'
+                'note = "MR-3 exception: fixture split."',
+            )
+        )
+        (self.repo / "crates/runtime/src/animation_extra.rs").write_text(
+            "struct RuntimeAnimationExtra;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "scatter ratchet increased to 1 > 0",
+            result.stderr,
+        )
+
+    def test_scatter_ratchet_rejects_multi_module_row_without_justification(
+        self,
+    ) -> None:
+        self.manifest.write_text(
+            self.manifest.read_text()
+            .replace("max_multi_module_rows = 0", "max_multi_module_rows = 1")
+            .replace(
+                'rust_module = "crates/runtime/src/animation.rs"',
+                'rust_module = "crates/runtime/src/animation.rs; '
+                'crates/runtime/src/animation_extra.rs"\n'
+                'note = "Split across two files."',
+            )
+        )
+        (self.repo / "crates/runtime/src/animation_extra.rs").write_text(
+            "struct RuntimeAnimationExtra;\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "multi-module row src/animation/linear_animation.cpp must have an "
+            "MR or exception marker in note",
+            result.stderr,
+        )
 
     def test_adaptation_requires_binding_rule(self) -> None:
         self.write_files(file_status="adapted")

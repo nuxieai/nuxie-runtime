@@ -1397,7 +1397,7 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   A direct Rust owner can close a file-correspondence row even when the product
   intentionally stops below the complete pinned C++ surface, but only as
   `divergent-by-decision`. Approved named support ceilings are
-  **layout-engine**, bound to D3, and **decoded-pcm-resampler**, bound to D18.
+  **layout-engine**, bound to D3, and **decoded-pcm-resampler**, bound to D17.
   A new ceiling requires an explicit,
   user-approved D-row before any manifest row may use
   `divergent-by-decision`.
@@ -1417,7 +1417,7 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   listener hook semantics remain faithful port obligations under the direct
   `src/profiler/rive_profile.cpp` owner.
 - **FLR-22 Audio decode/resampling is an approved implementation ceiling.**
-  The **decoded-pcm-resampler** ceiling is bound to D18 and Levi's approved
+  The **decoded-pcm-resampler** ceiling is bound to D17 and Levi's approved
   P2-f decomposition-question-5 decision (2026-08-01). Symphonia replaces
   miniaudio only for encoded WAV/MP3/FLAC decode, channel conversion, and
   resampling; Vorbis remains recognized but unwired. PCM bytes and individual

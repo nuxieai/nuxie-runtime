@@ -4,7 +4,7 @@
 //! scheduling, clipping, control, completion, volume, and frame-clock
 //! contracts remain exact. Decoder PCM values are not byte-exact contracts,
 //! and resampled reader lengths may differ from miniaudio by up to two frames
-//! under approved adaptation D18.
+//! under approved adaptation D17.
 
 mod engine;
 mod source;

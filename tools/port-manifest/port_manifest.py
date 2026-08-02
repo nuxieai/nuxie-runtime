@@ -79,7 +79,7 @@ FEATURE_ROWS = {
     "src/audio/audio_reader.cpp": (
         "ported",
         "crates/nuxie-audio/src/source.rs",
-        "P2F1/D18: Symphonia-backed independent readers are ported under the approved decoder/resampler tolerance boundary.",
+        "P2F1/D17: Symphonia-backed independent readers are ported under the approved decoder/resampler tolerance boundary.",
     ),
     "src/audio/audio_sound.cpp": (
         "ported",
@@ -89,7 +89,7 @@ FEATURE_ROWS = {
     "src/audio/audio_source.cpp": (
         "ported",
         "crates/nuxie-audio/src/source.rs",
-        "P2F1/D18: owned WAV/MP3/FLAC and buffered sources are ported under the approved decoder/resampler tolerance boundary.",
+        "P2F1/D17: owned WAV/MP3/FLAC and buffered sources are ported under the approved decoder/resampler tolerance boundary.",
     ),
     "src/math/hit_test.cpp": (
         "ported",

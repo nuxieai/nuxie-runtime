@@ -314,9 +314,9 @@ class PortManifestCliTest(unittest.TestCase):
     def test_generate_seeds_the_register_feature_rows(self) -> None:
         expected = {
             "src/audio/audio_engine.cpp": ("partial", "P2F1"),
-            "src/audio/audio_reader.cpp": ("ported", "D18"),
+            "src/audio/audio_reader.cpp": ("ported", "D17"),
             "src/audio/audio_sound.cpp": ("ported", "P2F1"),
-            "src/audio/audio_source.cpp": ("ported", "D18"),
+            "src/audio/audio_source.cpp": ("ported", "D17"),
             "src/audio_event.cpp": ("ported", "P2F2"),
             "src/text/cursor.cpp": ("ported", "FL-E6"),
             "src/command_queue.cpp": ("absent", "F3"),
@@ -461,9 +461,9 @@ class PortManifestCliTest(unittest.TestCase):
             "src/artboard.cpp": ("partial", "F1"),
             "src/assets/audio_asset.cpp": ("ported", "P2F1"),
             "src/audio/audio_engine.cpp": ("partial", "P2F1"),
-            "src/audio/audio_reader.cpp": ("ported", "D18"),
+            "src/audio/audio_reader.cpp": ("ported", "D17"),
             "src/audio/audio_sound.cpp": ("ported", "P2F1"),
-            "src/audio/audio_source.cpp": ("ported", "D18"),
+            "src/audio/audio_source.cpp": ("ported", "D17"),
             "src/audio_event.cpp": ("ported", "P2F2"),
             "src/text/cursor.cpp": ("ported", "FL-E6"),
             "src/text/raw_text_input.cpp": ("ported", "FL-E6"),

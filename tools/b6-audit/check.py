@@ -12,11 +12,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "file-correspondence-manifest.toml"
 EXPECTED_REF = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
 EXPECTED_COUNTS = {
-    "ISOMORPHIC": 19,
-    "ADAPTED": 193,
-    "DIVERGENT": 157,
+    "ISOMORPHIC": 22,
+    "ADAPTED": 203,
+    "DIVERGENT": 154,
     "TRACKED-GAP": 30,
-    "N/A": 49,
+    "N/A": 39,
 }
 SECOND_PASS_VERDICTS = {
     "TRACKED-GAP": {
@@ -34,13 +34,9 @@ SECOND_PASS_VERDICTS = {
         "B6-0139",
         "B6-0140",
         "B6-0246",
-        "B6-0260",
-        "B6-0267",
-        "B6-0270",
         "B6-0301",
         "B6-0323",
         "B6-0324",
-        "B6-0339",
         "B6-0378",
         "B6-0384",
         "B6-0388",
@@ -58,6 +54,10 @@ SECOND_PASS_VERDICTS = {
         "B6-0249",
         "B6-0255",
         "B6-0321",
+        "B6-0322",
+        "B6-0325",
+        "B6-0326",
+        "B6-0339",
         "B6-0340",
         "B6-0341",
         "B6-0370",
@@ -71,9 +71,6 @@ SECOND_PASS_VERDICTS = {
         "B6-0316",
         "B6-0317",
         "B6-0318",
-        "B6-0322",
-        "B6-0325",
-        "B6-0326",
         "B6-0355",
     },
     "N/A": {"B6-0295"},

@@ -1176,6 +1176,10 @@ fn render_scene_schema() -> String {
         property_by_key_in_hierarchy(layout_component_style.type_key.int, 515)
             .expect("paddingBottom key")
             .1;
+    let layout_display_value =
+        property_by_key_in_hierarchy(layout_component_style.type_key.int, 596)
+            .expect("displayValue key")
+            .1;
     let linear_animation = concrete_definition("LinearAnimation");
     let cubic_ease_interpolator = concrete_definition("CubicEaseInterpolator");
     let cubic_value_interpolator = concrete_definition("CubicValueInterpolator");
@@ -3677,6 +3681,20 @@ fn render_scene_schema() -> String {
             "f32",
             layout_padding_bottom.key.int,
             "paddingBottom",
+            "Double",
+            "LayoutComponentStyle",
+            "prop_layout_style_apply",
+            "set_runtime_double",
+            "read_runtime_double",
+        ),
+        // displayValue is a uint8 enum upstream (Flex=0, None=1) and is
+        // bindable there; the authoring surface carries it as a number the
+        // way data binds do, and the runtime coerces on apply.
+        (
+            "LAYOUT_DISPLAY",
+            "f32",
+            layout_display_value.key.int,
+            "displayValue",
             "Double",
             "LayoutComponentStyle",
             "prop_layout_style_apply",

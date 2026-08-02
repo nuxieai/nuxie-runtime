@@ -176,6 +176,35 @@ class TestCorrespondenceCheckTest(unittest.TestCase):
         ):
             check_manifest(self.repo, self.upstream, self.manifest)
 
+    def test_promotion_discarded_by_an_ours_merge_is_still_ratcheted(self) -> None:
+        subprocess.run(
+            ["git", "checkout", "-qb", "promote"], cwd=self.repo, check=True
+        )
+        self.write_manifest(script_status="ported-direct")
+        subprocess.run(["git", "add", "."], cwd=self.repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-qm", "promote script row"], cwd=self.repo, check=True
+        )
+        subprocess.run(["git", "checkout", "-q", "-"], cwd=self.repo, check=True)
+        subprocess.run(
+            ["git", "merge", "-q", "-s", "ours", "--no-edit", "promote"],
+            cwd=self.repo,
+            check=True,
+        )
+        self.write_manifest(script_status="partial")
+        with self.assertRaisesRegex(
+            CheckFailure, "script_test.cpp status partial regressed from historical ported-direct"
+        ):
+            check_manifest(self.repo, self.upstream, self.manifest)
+
+    def test_unreadable_history_fails_closed(self) -> None:
+        broken = pathlib.Path(self.temp.name) / "broken"
+        broken.mkdir()
+        manifest = broken / "test-correspondence-manifest.toml"
+        manifest.write_text(self.manifest.read_text())
+        with self.assertRaisesRegex(CheckFailure, "cannot read .* history"):
+            check_manifest(broken, self.upstream, manifest)
+
     def test_shallow_clone_fails_closed(self) -> None:
         shallow = pathlib.Path(self.temp.name) / "shallow"
         subprocess.run(

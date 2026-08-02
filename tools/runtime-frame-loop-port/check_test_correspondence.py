@@ -190,8 +190,10 @@ def historical_row_floors(
     Statuses may only move in the pending -> partial -> ported direction, so
     every row is ratcheted against the best status it ever held. n-a rows are
     excluded: they exist exactly while the pinned upstream file has zero
-    TEST_CASEs, which only changes when the pin moves. Fails closed on shallow
-    clones, where git history would understate the floors.
+    TEST_CASEs, which only changes when the pin moves. Walks --full-history so
+    merge simplification cannot prune a discarded parent's promotions, and
+    fails closed on shallow clones or unreadable history, where the floors
+    would be understated.
     """
 
     try:
@@ -211,13 +213,18 @@ def historical_row_floors(
             "manifest's full history; run `git fetch --unshallow` first"
         )
     history = subprocess.run(
-        ["git", "log", "--format=%H", "--", relative],
+        ["git", "log", "--full-history", "--format=%H", "--", relative],
         cwd=repo_root,
         check=False,
         capture_output=True,
         text=True,
     )
-    if history.returncode != 0 or not history.stdout.strip():
+    if history.returncode != 0:
+        raise CheckFailure(
+            f"cannot read {relative} history for the status ratchet: "
+            f"{history.stderr.strip()}"
+        )
+    if not history.stdout.strip():
         return None
     floors: dict[str, str] = {}
     for revision in history.stdout.splitlines():

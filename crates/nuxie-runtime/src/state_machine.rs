@@ -63,7 +63,6 @@ pub(crate) mod text_input_listener_group;
 mod transition_bool_condition;
 mod transition_comparator;
 mod transition_condition;
-mod transition_condition_op;
 mod transition_duration_binding;
 mod transition_focus_condition;
 mod transition_input_condition;
@@ -175,7 +174,7 @@ use state_transition::{
 use transition_bool_condition::RuntimeTransitionBoolCondition;
 use transition_comparator::runtime_transition_comparators;
 use transition_condition::RuntimeTransitionCondition;
-use transition_condition_op::TransitionConditionOp;
+use transition_number_condition::TransitionConditionOp;
 use transition_duration_binding::runtime_transition_duration_bindings;
 pub(crate) use transition_duration_binding::{
     RuntimeTransitionDurationBinding, StateMachineTransitionDurationInstance,

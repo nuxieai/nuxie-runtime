@@ -357,7 +357,6 @@ rust_modules = [
   "crates/nuxie-runtime/src/state_machine.rs",
   "crates/nuxie-runtime/src/state_machine/instance.rs",
   "crates/nuxie-runtime/src/state_machine/transition_bool_condition.rs",
-  "crates/nuxie-runtime/src/state_machine/transition_condition_op.rs",
   "crates/nuxie-runtime/src/state_machine/transition_condition.rs",
   "crates/nuxie-runtime/src/state_machine/transition_duration_binding.rs",
   "crates/nuxie-runtime/src/state_machine/transition_input_condition.rs",

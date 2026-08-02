@@ -304,16 +304,19 @@ class PortManifestCliTest(unittest.TestCase):
                 "src/component.cpp",
             ],
         )
-        self.assertEqual(rows[0]["status"], "partial")
+        self.assertEqual(rows[0]["status"], "ported")
         self.assertIn("P2F1", rows[0]["note"])
-        self.assertEqual(rows[0]["rust_module"], "crates/nuxie-audio/src/engine.rs")
+        self.assertEqual(
+            rows[0]["rust_module"],
+            "crates/nuxie-audio/src/engine.rs; crates/nuxie-audio/src/device.rs",
+        )
         self.assertEqual(rows[1]["status"], "ported")
         self.assertEqual(rows[1]["rust_module"], "crates/nuxie-runtime/src/components.rs")
         self.assertEqual(document["upstream_ref"], "test-ref")
 
     def test_generate_seeds_the_register_feature_rows(self) -> None:
         expected = {
-            "src/audio/audio_engine.cpp": ("partial", "P2F1"),
+            "src/audio/audio_engine.cpp": ("ported", "P2F1"),
             "src/audio/audio_reader.cpp": ("ported", "D17"),
             "src/audio/audio_sound.cpp": ("ported", "P2F1"),
             "src/audio/audio_source.cpp": ("ported", "D17"),
@@ -396,9 +399,9 @@ class PortManifestCliTest(unittest.TestCase):
 
             [[file]]
             upstream = "src/audio/audio_engine.cpp"
-            status = "ported"
+            status = "partial"
             rust_module = "crates/runtime/src/lib.rs"
-            note = "Incorrectly claimed as ported."
+            note = "Incorrectly claimed as partial."
             """
         )
 
@@ -406,7 +409,7 @@ class PortManifestCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "register seed drift for src/audio/audio_engine.cpp: expected status=partial",
+            "register seed drift for src/audio/audio_engine.cpp: expected status=ported",
             result.stderr,
         )
 
@@ -458,9 +461,9 @@ class PortManifestCliTest(unittest.TestCase):
 
     def test_generate_seeds_every_cpp_surface_named_by_the_feature_register(self) -> None:
         expected = {
-            "src/artboard.cpp": ("partial", "F1"),
+            "src/artboard.cpp": ("partial", "P2F2"),
             "src/assets/audio_asset.cpp": ("ported", "P2F1"),
-            "src/audio/audio_engine.cpp": ("partial", "P2F1"),
+            "src/audio/audio_engine.cpp": ("ported", "P2F1"),
             "src/audio/audio_reader.cpp": ("ported", "D17"),
             "src/audio/audio_sound.cpp": ("ported", "P2F1"),
             "src/audio/audio_source.cpp": ("ported", "D17"),
@@ -499,7 +502,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/semantic/semantic_inference_registry.cpp": ("absent", "F6"),
             "src/semantic/semantic_manager.cpp": ("absent", "F6"),
             "src/semantic/semantic_provider.cpp": ("absent", "F6"),
-            "src/lua/lua_audio.cpp": ("absent", "F7"),
+            "src/lua/lua_audio.cpp": ("ported", "P2F3"),
             "src/lua/lua_buffer_ext.cpp": ("absent", "F7"),
             "src/lua/lua_data_context.cpp": ("partial", "F7"),
             "src/lua/lua_data_value.cpp": ("partial", "F7"),
@@ -509,11 +512,11 @@ class PortManifestCliTest(unittest.TestCase):
             "src/lua/lua_state.cpp": ("partial", "F7"),
             "src/lua/math/lua_color.cpp": ("ported", "F7"),
             "src/lua/math/lua_input.cpp": ("ported", "F7"),
-            "src/lua/renderer/lua_blob.cpp": ("absent", "F7"),
+            "src/lua/renderer/lua_blob.cpp": ("ported", "P2B"),
             "src/lua/renderer/lua_gpu.cpp": ("absent", "F8"),
             "src/lua/renderer/lua_gradient.cpp": ("partial", "F7"),
             "src/lua/renderer/lua_image.cpp": ("ported", "P2A/P2B"),
-            "src/lua/renderer/lua_mesh.cpp": ("absent", "F7"),
+            "src/lua/renderer/lua_mesh.cpp": ("ported", "P2B"),
             "src/joystick.cpp": ("ported", "FL-E4"),
             "src/shapes/list_path.cpp": ("partial", "F10"),
             "src/async/work_pool.cpp": ("absent", "F12"),

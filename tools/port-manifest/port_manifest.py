@@ -17,7 +17,7 @@ FEATURE_ROWS = {
     "src/artboard.cpp": (
         "partial",
         "crates/nuxie-runtime/src/artboard.rs",
-        "F1: core artboard behavior is ported; Artboard::volume remains absent.",
+        "P2F2: core Artboard behavior includes retained volume/audio-engine configuration, recursive propagation to nested and component-list occurrences, and Artboard-scoped sound teardown. Other historical Artboard ceilings keep this legacy row partial.",
     ),
     "src/text/cursor.cpp": (
         "ported",
@@ -72,9 +72,9 @@ FEATURE_ROWS = {
         "P1-p/F14: direct exact-wire BinaryWriter owner with pinned C++ differential coverage.",
     ),
     "src/audio/audio_engine.cpp": (
-        "partial",
-        "crates/nuxie-audio/src/engine.rs",
-        "P2F1/F1: the external headless frame-clock, mixer, scheduling, lifecycle, levels, and manual PCM pull are ported; device output is a later package.",
+        "ported",
+        "crates/nuxie-audio/src/engine.rs; crates/nuxie-audio/src/device.rs",
+        "P2F1/P2F3: exact headless frame clock, scheduling/clipping, manual PCM pull/sum, levels, lifecycle, and artboard stop; optional CPAL output drains that same authoritative mixer through the default device.",
     ),
     "src/audio/audio_reader.cpp": (
         "ported",
@@ -263,11 +263,8 @@ for _path in {
     FEATURE_ROWS[_path] = ("absent", "", "F6: semantics runtime is absent.")
 
 for _path in {
-    "src/lua/lua_audio.cpp",
     "src/lua/lua_buffer_ext.cpp",
     "src/lua/lua_scripted_context.cpp",
-    "src/lua/renderer/lua_blob.cpp",
-    "src/lua/renderer/lua_mesh.cpp",
 }:
     FEATURE_ROWS[_path] = ("absent", "", "F7: this Lua binding is absent.")
 
@@ -283,15 +280,30 @@ FEATURE_ROWS.update(
             "crates/nuxie-scripting/src/vm.rs",
             "F7/P1G: DataValue surface is present with tracked index/newindex, coercion, and color-channel gaps.",
         ),
+        "src/lua/lua_audio.cpp": (
+            "ported",
+            "crates/nuxie-scripting/src/vm/lua_audio.rs; crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie/src/lib.rs",
+            "P2F3: Context:audio, the Audio static playback/time API, AudioSource duration, and AudioSound control/query/volume bindings are direct pure-Rust Luau ports.",
+        ),
         "src/lua/lua_image_decode.cpp": (
             "ported",
-            "crates/nuxie-scripting/src/vm/lua_image_decode.rs",
+            "crates/nuxie-scripting/src/vm/lua_image_decode.rs; crates/nuxie-image-codec/src/lib.rs; crates/nuxie-scripting/src/vm/promise.rs; crates/nuxie-runtime/src/scene.rs",
             "P2A: WorkPool-scheduled decode, root-frame VM-thread Promise settlement, cancellation, and unbounded premultiplied RGBA result/error behavior are ported.",
+        ),
+        "src/lua/renderer/lua_blob.cpp": (
+            "ported",
+            "crates/nuxie-scripting/src/vm/lua_blob.rs",
+            "P2B faithful candidate: Blob userdata exposes pinned name/size/fresh-copy data fields, and exact-name Context lookup preserves file order while skipping empty BlobAssets; the previously missing positive path has a live pinned-C++ differential.",
         ),
         "src/lua/renderer/lua_image.cpp": (
             "ported",
-            "crates/nuxie-scripting/src/vm/lua_image.rs",
+            "crates/nuxie-scripting/src/vm/lua_image.rs; crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie-runtime/src/data_bind/data_bind_context.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/shapes/image.rs",
             "P2A/P2B: decoded Image width/height, pre-decode nil behavior, runtime-image assignment through bound draw targets, and ImageSampler are ported; the optional ORE-only view member is omitted in this non-ORE build.",
+        ),
+        "src/lua/renderer/lua_mesh.cpp": (
+            "ported",
+            "crates/nuxie-scripting/src/vm/lua_mesh.rs",
+            "P2B faithful candidate under the backend-neutral render-factory adaptation: callable vertex/triangle userdata, add/reset invalidation, mapped-once native buffer upload, u16 index bounds, and renderer drawImageMesh wiring are present; both upstream cases are direct ports.",
         ),
         "src/lua/lua_state.cpp": (
             "partial",

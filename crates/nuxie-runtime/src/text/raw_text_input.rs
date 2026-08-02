@@ -1,10 +1,167 @@
 //! Retained editable buffer ported from `src/text/raw_text_input.cpp`.
 
-use super::TextInputGeometry;
+use super::{
+    RuntimeTextLayoutConstraint, StaticShapedTextLayout, StaticShapedTextLine, StaticTextSlice,
+    char_byte_index, paragraph_base_is_rtl,
+};
 use super::cursor::{Cursor, CursorPosition};
 use super::text_selection_path::TextSelectionPath;
-use crate::RuntimePathCommand;
+use crate::{ArtboardInstance, Mat2D, RuntimePathCommand};
+use nuxie_binary::RuntimeFile;
+use nuxie_graph::ArtboardGraph;
+use nuxie_render_api::{Aabb as RenderAabb, Vec2D as RenderVec2D};
 use unicode_properties::UnicodeGeneralCategory;
+
+#[derive(Clone)]
+pub(crate) struct TextInputGeometry {
+    layout: StaticShapedTextLayout,
+    local_bounds: Option<(f32, f32, f32, f32)>,
+}
+
+impl std::fmt::Debug for TextInputGeometry {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TextInputGeometry")
+            .field("text_len", &self.layout.text.len())
+            .field("line_count", &self.layout.lines.len())
+            .field("local_bounds", &self.local_bounds)
+            .finish()
+    }
+}
+
+impl TextInputGeometry {
+    pub(crate) fn caret(&self, byte_offset: usize) -> Option<(RenderVec2D, RenderVec2D)> {
+        self.layout.caret(byte_offset)
+    }
+
+    pub(crate) fn hit(&self, point: RenderVec2D) -> Option<usize> {
+        let inverse = self.layout.shape_world.invert_or_identity();
+        let (x, y) = inverse.transform_point(point.x, point.y);
+        let line = self
+            .layout
+            .lines
+            .iter()
+            .find(|line| y <= line.bottom)
+            .or_else(|| self.layout.lines.last())?;
+        if x <= line.start_x.min(line.end_x) {
+            let first = line.glyphs.first()?;
+            let index = if first.glyph.rtl {
+                first.glyph.char_index.saturating_add(first.glyph.char_len)
+            } else {
+                first.glyph.char_index
+            };
+            return Some(char_byte_index(&self.layout.text, index));
+        }
+        if x >= line.start_x.max(line.end_x) {
+            let last = line.glyphs.last()?;
+            let index = if last.glyph.rtl {
+                last.glyph.char_index
+            } else {
+                last.glyph.char_index.saturating_add(last.glyph.char_len)
+            };
+            return Some(char_byte_index(&self.layout.text, index));
+        }
+        self.layout.hit(point)
+    }
+
+    pub(crate) fn selection_rects(&self, range: std::ops::Range<usize>) -> Vec<RenderAabb> {
+        self.layout.selection_rects(range)
+    }
+
+    pub(crate) fn local_bounds(&self) -> Option<(f32, f32, f32, f32)> {
+        self.local_bounds
+    }
+
+    pub(crate) fn line_metrics(&self) -> Vec<(usize, usize, f32, f32)> {
+        self.layout
+            .lines
+            .iter()
+            .map(|line| (line.char_start, line.char_end, line.top, line.bottom))
+            .collect()
+    }
+
+    pub(crate) fn line_directions(&self) -> Vec<bool> {
+        self.layout
+            .lines
+            .iter()
+            .map(|line| self.line_is_rtl(line))
+            .collect()
+    }
+
+    fn line_is_rtl(&self, line: &StaticShapedTextLine) -> bool {
+        paragraph_base_is_rtl(&self.layout.text, line.char_start)
+    }
+
+    pub(crate) fn line_range(&self, codepoint_index: usize) -> Option<std::ops::Range<usize>> {
+        let line =
+            self.layout.lines.iter().find(|line| {
+                codepoint_index >= line.char_start && codepoint_index <= line.char_end
+            })?;
+        Some(line.char_start..line.char_end)
+    }
+
+    pub(crate) fn vertical_cursor(
+        &self,
+        codepoint_index: usize,
+        direction: i32,
+        ideal_x: Option<f32>,
+    ) -> Option<(usize, f32)> {
+        let current = self.layout.lines.iter().position(|line| {
+            codepoint_index >= line.char_start && codepoint_index <= line.char_end
+        })?;
+        let target = if direction < 0 {
+            current.checked_sub(1)
+        } else {
+            current
+                .checked_add(1)
+                .filter(|index| *index < self.layout.lines.len())
+        };
+        let byte = char_byte_index(
+            &self.layout.text,
+            codepoint_index.min(self.layout.text.chars().count()),
+        );
+        let (top, bottom) = self.layout.caret(byte)?;
+        let x = ideal_x.unwrap_or((top.x + bottom.x) * 0.5);
+        let Some(target) = target else {
+            return Some((
+                if direction < 0 {
+                    0
+                } else {
+                    self.layout.text.chars().count()
+                },
+                x,
+            ));
+        };
+        let target_line = &self.layout.lines[target];
+        let target_y = (target_line.top + target_line.bottom) * 0.5;
+        let hit_byte = self.layout.hit(RenderVec2D::new(x, target_y))?;
+        Some((self.layout.char_index_at_byte(hit_byte)?, x))
+    }
+}
+
+pub(crate) fn build_text_input_geometry(
+    runtime: &RuntimeFile,
+    graph: &ArtboardGraph,
+    instance: &ArtboardInstance,
+    text_local: usize,
+    layout_constraint: Option<RuntimeTextLayoutConstraint>,
+) -> Option<TextInputGeometry> {
+    let slice = StaticTextSlice::from_text_input_graph(runtime, graph, text_local).ok()?;
+    let local_bounds = match layout_constraint {
+        Some(constraint) => slice
+            .local_bounds_with_layout_constraint(runtime, instance, constraint)
+            .ok()
+            .flatten(),
+        None => slice.local_bounds(runtime, instance).ok().flatten(),
+    };
+    let layout = slice
+        .shaped_layout(runtime, instance, layout_constraint, Mat2D::IDENTITY)
+        .ok()??;
+    Some(TextInputGeometry {
+        layout,
+        local_bounds,
+    })
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CursorBoundary {

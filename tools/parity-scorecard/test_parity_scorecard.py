@@ -44,6 +44,22 @@ def size_summary(off=7534056, on=8335288, budget=8388608):
 
 
 class ParityScorecardCliTests(unittest.TestCase):
+    def test_ci_uses_explicit_evidence_check_after_make_target_became_snapshot(self):
+        workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+
+        self.assertIn(
+            "python3 tools/parity-scorecard/parity_scorecard.py check",
+            workflow,
+        )
+        self.assertIn(
+            "--json target/parity-scorecard/scorecard.json",
+            workflow,
+        )
+        self.assertNotIn(
+            "make parity-scorecard > target/parity-scorecard/scorecard.md",
+            workflow,
+        )
+
     def test_workspace_floor_cannot_silently_skip_the_pinned_cpp_oracles(self):
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
         trusted_workflow = (
@@ -59,11 +75,15 @@ class ParityScorecardCliTests(unittest.TestCase):
             makefile,
             re.compile(
                 r"cpp-oracle-workspace-tests:[^\n]*\bfixtures\b"
-                r"[^\n]*\bgolden-runner\b[^\n]*\bcpp-probe\b\s+"
+                r"[^\n]*\bgolden-runner\b[^\n]*\bcpp-probe\b"
+                r"[^\n]*\bcpp-probe-scripted\b\s+"
                 r'@test -x "\$\(GOLDEN_RUNNER\)"[\s\S]{0,300}'
                 r'@test -x "\$\(CPP_PROBE\)"[\s\S]{0,300}'
+                r'@test -x "\$\(SCRIPTED_CPP_PROBE\)"[\s\S]{0,300}'
                 r'RIVE_GOLDEN_RUNNER="\$\(GOLDEN_RUNNER\)" '
-                r'RIVE_CPP_PROBE="\$\(CPP_PROBE\)" cargo test --workspace'
+                r'RIVE_CPP_PROBE="\$\(CPP_PROBE\)" '
+                r'RIVE_CPP_PROBE_SCRIPTED="\$\(SCRIPTED_CPP_PROBE\)" '
+                r'cargo test --workspace'
             ),
         )
         self.assertIn("-- make cpp-oracle-workspace-tests", workflow)

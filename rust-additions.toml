@@ -1,0 +1,120 @@
+schema = "nuxie-rust-additions/v1"
+schema_version = 1
+category_values = ["scene-api", "flowsession-abi", "retained-render", "codegen", "test-infra"]
+
+[[addition]]
+path = "crates/nuxie-binary/src/assets/mod.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-binary/src/bin/riv-inspect.rs"
+category = "test-infra"
+
+[[addition]]
+path = "crates/nuxie-binary/src/core/field_types/mod.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-binary/src/core/mod.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-render-api/src/lib.rs"
+category = "retained-render"
+
+[[addition]]
+path = "crates/nuxie-render-api/src/serializing.rs"
+category = "retained-render"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/data_bind_container.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/data_converter.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/math/mod.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/objects.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/project_data_converter.rs"
+category = "scene-api"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/properties.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/retained_data_bind.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/shapes/mod.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/shapes/paint/mod.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/state_machine.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/state_machine/instance.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/state_machine/listener_types/mod.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/viewmodel/mod.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-runtime/src/viewmodel/runtime/mod.rs"
+category = "codegen"
+
+[[addition]]
+path = "crates/nuxie-scripting/src/envelope.rs"
+category = "flowsession-abi"
+
+[[addition]]
+path = "crates/nuxie-scripting/src/gpu_canvas.rs"
+category = "retained-render"
+
+[[addition]]
+path = "crates/nuxie-scripting/src/lib.rs"
+category = "flowsession-abi"
+
+[[addition]]
+path = "crates/nuxie-scripting/src/vm/bytecode.rs"
+category = "flowsession-abi"
+
+[[addition]]
+path = "crates/nuxie-scripting/src/vm/host_commands.rs"
+category = "flowsession-abi"
+
+[[addition]]
+path = "crates/nuxie-scripting/src/vm/resource_limits.rs"
+category = "flowsession-abi"
+
+[[addition]]
+path = "crates/nuxie/src/flow_session.rs"
+category = "flowsession-abi"
+
+[[addition]]
+path = "crates/nuxie/src/scene.rs"
+category = "scene-api"
+
+[[addition]]
+path = "crates/nuxie/src/script_import.rs"
+category = "flowsession-abi"
+

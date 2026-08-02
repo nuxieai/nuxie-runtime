@@ -508,7 +508,11 @@ jobs:
         run: |
           mkdir -p target/parity-scorecard/evidence
           set +e
-          make parity-scorecard > target/parity-scorecard/scorecard.md
+          python3 tools/parity-scorecard/parity_scorecard.py check \
+            --repo-root "${GITHUB_WORKSPACE}" \
+            --evidence-dir target/parity-scorecard/evidence \
+            --json target/parity-scorecard/scorecard.json \
+            > target/parity-scorecard/scorecard.md
           scorecard_status=$?
           set -e
           cat target/parity-scorecard/scorecard.md

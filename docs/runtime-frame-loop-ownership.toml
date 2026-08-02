@@ -441,9 +441,7 @@ rust_modules = [
   "crates/nuxie-runtime/src/artboard_component_list_order.rs",
   "crates/nuxie-runtime/src/artboard_list_map_rule.rs",
   "crates/nuxie-runtime/src/artboard_referencer.rs",
-  "crates/nuxie-runtime/src/artboard_data_bind.rs",
   "crates/nuxie-runtime/src/bindable_artboard.rs",
-  "crates/nuxie-runtime/src/data_bind_graph.rs",
   "crates/nuxie-runtime/src/event.rs",
   "crates/nuxie-runtime/src/listener_group.rs",
   "crates/nuxie-runtime/src/nested_artboard.rs",
@@ -1268,7 +1266,7 @@ status = "faithful"
 upstream = "src/artboard.cpp"
 source_set = "databind-artboard-settlement"
 wave = "FL-D"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/state_machine/listener_action_owner.rs", "crates/nuxie/src/lib.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie/src/lib.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -2740,7 +2738,7 @@ status = "faithful"
 upstream = "src/text/raw_text.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E8"
-rust_modules = ["crates/nuxie-runtime/src/text/raw_text.rs", "crates/nuxie-runtime/src/text/font_hb.rs", "crates/nuxie-runtime/src/text/text_engine.rs", "crates/nuxie-runtime/src/text.rs", "crates/nuxie-runtime/src/draw.rs", "crates/nuxie/src/raw_text.rs"]
+rust_modules = ["crates/nuxie/src/raw_text.rs", "crates/nuxie-runtime/src/text/raw_text.rs"]
 dynamically_reached = false
 status = "faithful"
 

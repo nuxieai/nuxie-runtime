@@ -737,10 +737,48 @@ These sets are the expected final `rust_module` values after same-boundary aggre
 
 No current covered row maps to a C ABI crate, so there is no C ABI-shim exception in this snapshot. If a later reparse introduces one, it must name the ABI boundary and remain under a single `nux-capi` integrator.
 
+### C17 finale amendments
+
+The final cross-root reparse found that the following planned extractions do
+not have a complete behavior-neutral item seam. These amendments supersede the
+earlier target or post-move set for only the named rows. Each retained set is
+finite and names every live correspondence owner; module declarations and
+re-exports are not invented as empty forwarding targets. Twenty-one rows move
+from actionable to exception, so the amended finale classification is 170
+actionable rows and 96 exceptions; the other three amendments refine retained
+sets for rows that were already exceptions.
+
+| Row | Final retained modules | Amendment reason |
+|---|---|---|
+| `B6-0001` | `crates/nuxie-runtime/src/lib.rs`; `crates/nuxie-runtime/src/artboard.rs` | Advancing-list construction, ordering, and dispatch are Artboard lifecycle methods while the root remains live wiring; a leaf extraction would split those methods. |
+| `B6-0077` | `crates/nuxie-runtime/src/state_machine/focused_input_dispatch.rs`; `crates/nuxie-runtime/src/state_machine/state_machine_instance.rs`; `crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs`; `crates/nuxie-runtime/src/state_machine/bindables.rs`; `crates/nuxie-runtime/src/view_model_cell.rs`; `crates/nuxie-runtime/src/state_machine/data_bind_template.rs`; `crates/nuxie-runtime/src/state_machine/transition_duration_binding.rs`; `crates/nuxie-runtime/src/state_machine/scripted_object_lifecycle.rs`; `crates/nuxie-runtime/src/state_machine/data_converter_binding.rs`; `crates/nuxie-runtime/src/artboard.rs`; `crates/nuxie/src/lib.rs` | File-local frame-loop structural proofs and registered owner-boundary hashes bind these lifecycle fragments to their current modules; regrouping them is not a clean behavior-neutral seam. |
+| `B6-0083` | `crates/nuxie-runtime/src/state_machine/text_input_listener_group.rs`; `crates/nuxie-runtime/src/state_machine/state_machine_instance.rs`; `crates/nuxie-runtime/src/listener_group.rs` | Pointer-phase handling, StateMachineInstance delivery, and shared listener timing/group state form one live gesture lifecycle; extracting the leaf would duplicate or re-signature shared dispatch. |
+| `B6-0145` | `crates/nuxie-runtime/src/lib.rs` | Container collapse behavior is embedded in common component/layout ownership, leaving no complete row-specific body for `container_component.rs`. |
+| `B6-0146` | `crates/nuxie-runtime/src/lib.rs` | Core notification remains distributed through retained-cell and Artboard reconciliation, so a standalone `core.rs` would be an empty shim. |
+| `B6-0202` | `crates/nuxie-runtime/src/lib.rs`; `crates/nuxie-runtime/src/artboard.rs` | Dependency ordering is jointly implemented by Artboard initialization and shared component/draw traversal; extracting it would partition shared traversal bodies. |
+| `B6-0207` | `crates/nuxie-runtime/src/lib.rs` | Factory behavior is adapted across render and asset owners; a runtime `factory.rs` would contain only forwarding API. |
+| `B6-0208` | `crates/nuxie/src/lib.rs`; `crates/nuxie-runtime/src/lib.rs`; `crates/nuxie-binary/src/lib.rs`; `crates/nuxie-binary/src/assets/file_asset.rs`; `crates/nuxie-binary/src/assets/file_asset_contents.rs` | The planned binary `file.rs` owner does not exist; the live File boundary remains split across facade, runtime wiring, binary catalog, and binary asset representation/content owners. |
+| `B6-0209` | `crates/nuxie-runtime/src/lib.rs` | FocusData projection and dispatch remain in shared focus/Artboard lifecycle code, with no complete row-specific body for `focus_data.rs`. |
+| `B6-0258` | `crates/nuxie-runtime/src/layout_component.rs`; `crates/nuxie-runtime/src/draw.rs`; `crates/nuxie-runtime/src/artboard.rs` | The dedicated Taffy layout owner shares draw traversal and Artboard update/hit-test lifecycle; consolidating the row would split those shared methods. |
+| `B6-0307` | `crates/nuxie-runtime/src/lib.rs` | Node state, transforms, and invalidation are shared component/Artboard concerns; `node.rs` would only forward them. |
+| `B6-0310` | `crates/nuxie-runtime/src/profiler.rs`; `crates/nuxie-runtime/src/profiler/rive_profile.rs`; `crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs`; `crates/nuxie-runtime/src/state_machine/state_machine_instance.rs` | Profile encoding/capture and state-machine timing callbacks share public profiler state and layer/instance lifecycle hooks; no leaf owns the complete row. |
+| `B6-0311` | `crates/nuxie-runtime/src/lib.rs` | Renderer contracts and implementations cross render-api, text, and draw boundaries; a runtime leaf would not own the whole row. |
+| `B6-0312` | `crates/nuxie-runtime/src/lib.rs` | Reset state and ordering are embedded in the Artboard reset lifecycle, leaving no standalone resetting-component body. |
+| `B6-0322` | `crates/nuxie-runtime/src/artboard.rs`; `crates/nuxie-runtime/src/draw.rs`; `crates/nuxie-runtime/src/scripting.rs`; `crates/nuxie/src/lib.rs` | The planned `scripted/scripted_drawable.rs` owner does not exist; behavior remains embedded in Artboard scheduling, draw replay, shared scripting traits, and facade hosting. |
+| `B6-0326` | `crates/nuxie-runtime/src/artboard.rs`; `crates/nuxie-runtime/src/scripting.rs` | Scripted-path-effect scheduling and dispatch are the same shared exact-slot lifecycle used by sibling scripted owners; extracting it would split shared methods. |
+| `B6-0385` | `crates/nuxie-runtime/src/text/text.rs`; `crates/nuxie-runtime/src/text.rs`; `crates/nuxie-runtime/src/draw.rs`; `crates/nuxie-runtime/src/artboard.rs` | File-local frame-loop citations bind direct callbacks to `text/text.rs`, while retained shaping, shared replay, and Artboard invalidation serve sibling text rows. |
+| `B6-0388` | `crates/nuxie-runtime/src/text_input.rs`; `crates/nuxie-runtime/src/components.rs`; `crates/nuxie-runtime/src/artboard.rs`; `crates/nuxie-runtime/src/constraints.rs`; `crates/nuxie-runtime/src/text.rs` | TextInput editing shares component/focus state, Artboard update/hit testing, scroll constraints, and text shaping/draw integration; its full lifecycle cannot move atomically to the leaf. |
+| `B6-0398` | `crates/nuxie-runtime/src/text/text_selection_path.rs`; `crates/nuxie-runtime/src/rectangles_to_contour.rs`; `crates/nuxie-runtime/src/text.rs` | Selection construction uses the shared rectangle-contour utility and common text integration path; moving both into the leaf would steal a sibling utility or require a forwarding shim. |
+| `B6-0399` | `crates/nuxie-runtime/src/text/text_style.rs`; `crates/nuxie-runtime/src/text.rs`; `crates/nuxie-runtime/src/artboard.rs` | Style callbacks, common shaping/font state, and Artboard dirt dispatch form a shared Text lifecycle, preventing a complete per-row extraction. |
+| `B6-0404` | `crates/nuxie-runtime/src/text/text_value_run.rs`; `crates/nuxie-runtime/src/text.rs`; `crates/nuxie-runtime/src/artboard.rs` | Run callbacks, common retained-run geometry, and Artboard mutation invalidation form a shared Text lifecycle, preventing a complete per-row extraction. |
+| `B6-0408` | `crates/nuxie-runtime/src/lib.rs`; `crates/nuxie-runtime/src/artboard.rs` | Transform dirt propagation and its regression harness share common component and Artboard state; a leaf split has no complete boundary. |
+| `B6-0446` | `crates/nuxie-runtime/src/lib.rs` | Virtualization is expressed through shared layout/component capabilities, leaving no complete `virtualizing_component.rs` body. |
+| `B6-0447` | `crates/nuxie-runtime/src/lib.rs` | World-transform state and opacity propagation share component/Artboard owners, leaving no complete row-specific body. |
+
 ## MR-2 completion checks
 
 - Every table row is reconciled against the manifest after rebase; duplicate table appearances do not create duplicate work.
-- All 191 actionable targets still pass the no-duplicate/no-unowned-existing collision check.
+- The original 191 candidate targets pass the no-duplicate/no-unowned-existing collision check; after the C17 amendments, 170 remain actionable.
 - Each shared root is edited only by the worker in the ownership ledger; C07 and C08 are hard single-writer lanes.
 - Every atomic landing commit updates only its affected manifest rows in lockstep with the complete code move, preserves ticket/audit attribution, runs the full gate battery, and proves goldens byte-stable.
 - Final scatter equals the exception list (or a smaller reviewed subset); any new exception requires an explicit one-line manifest note and MR-1 plan amendment.

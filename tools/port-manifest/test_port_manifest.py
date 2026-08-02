@@ -439,7 +439,7 @@ class PortManifestCliTest(unittest.TestCase):
         expected = {
             "src/animation/keyframe.cpp": "crates/nuxie-runtime/src/animation.rs",
             "src/constraints/constraint.cpp": "crates/nuxie-runtime/src/constraints.rs",
-            "src/data_bind/data_bind.cpp": "crates/nuxie-runtime/src/artboard_data_bind.rs",
+            "src/data_bind/data_bind.cpp": "crates/nuxie-runtime/src/data_bind/data_bind_context.rs",
             "src/lua/lua_properties.cpp": "crates/nuxie-scripting/src/vm.rs",
             "src/shapes/path.cpp": "crates/nuxie-runtime/src/draw.rs",
             "src/text/text.cpp": "crates/nuxie-runtime/src/text.rs",

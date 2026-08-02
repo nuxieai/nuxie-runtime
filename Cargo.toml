@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/nux-container",
+    "crates/nuxie-audio",
     "crates/nuxie-binary",
     "crates/nuxie-graph",
     "crates/nuxie-image-codec",
@@ -49,7 +50,8 @@ luaur-vm = { path = "vendor/luaur-vm-0.1.8" }
 
 # Panic-freedom lint discipline for the runtime crates (v2-status item 20 #6).
 # Opted into per-crate via `lints.workspace = true` by the SDK runtime crates
-# only (nuxie-runtime, nuxie-binary, nuxie-graph, nuxie-schema, nuxie, nux-capi) --
+# only (nuxie-audio, nuxie-runtime, nuxie-binary, nuxie-graph, nuxie-schema,
+# nuxie, nux-capi) --
 # NOT the tools/ crates and NOT nuxie-scripting (active external work area).
 # These are `[lints.clippy]` entries, so they fire only under `cargo clippy`
 # (no cargo build/check noise). All three sit at WARN because the pre-existing

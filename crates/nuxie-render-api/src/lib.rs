@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 mod serializing;
+pub use nuxie_audio::{AudioDecodeError, AudioSource};
 pub use serializing::{SerializingFactory, SerializingRenderer};
 
 pub type ColorInt = u32;
@@ -1049,6 +1050,14 @@ pub trait Factory {
     fn make_empty_render_path(&mut self) -> Box<dyn RenderPath>;
     fn make_render_paint(&mut self) -> Box<dyn RenderPaint>;
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError>;
+
+    /// Validate and take ownership of encoded audio bytes.
+    ///
+    /// This is the Rust counterpart of C++ `Factory::decodeAudio`: a
+    /// non-renderer-specific helper on the Factory seam, not a backend hook.
+    fn decode_audio(&mut self, data: &[u8]) -> Result<Arc<AudioSource>, AudioDecodeError> {
+        AudioSource::from_encoded(data.to_vec()).map(Arc::new)
+    }
 
     /// Parse, validate, and materialize one fresh authored shader occurrence
     /// in this factory's backend/device domain.

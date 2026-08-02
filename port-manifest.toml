@@ -589,9 +589,9 @@ note = "Consolidated runtime port."
 
 [[file]]
 upstream = "src/assets/audio_asset.cpp"
-status = "partial"
-rust_module = "crates/nuxie-runtime/src/objects.rs"
-note = "F1: audio asset object data is ported, but playback is absent."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/assets/audio_asset.rs; crates/nuxie-runtime/src/assets/file_asset_loader.rs"
+note = "P2F1: embedded and host-loader AudioAsset resolution retains an owned decoded AudioSource; invalid audio clears the source without failing import, matching pinned AudioAsset::decode."
 
 [[file]]
 upstream = "src/assets/blob_asset.cpp"
@@ -655,27 +655,27 @@ note = "F12: async work pool is absent."
 
 [[file]]
 upstream = "src/audio/audio_engine.cpp"
-status = "absent"
-rust_module = ""
-note = "F1: audio runtime is absent."
+status = "partial"
+rust_module = "crates/nuxie-audio/src/engine.rs"
+note = "P2F1 headless/external build: exact frame clock, absolute scheduling/clipping, manual PCM pull/sum, levels, completion cleanup, start/stop, and artboard-scoped unlink; device output is a later package."
 
 [[file]]
 upstream = "src/audio/audio_reader.cpp"
-status = "absent"
-rust_module = ""
-note = "F1: audio runtime is absent."
+status = "ported"
+rust_module = "crates/nuxie-audio/src/source.rs"
+note = "P2F1/D18: independent Symphonia-backed readers with channel conversion and linear resampling; PCM bytes are never pinned and resampled frame counts permit an absolute two-frame differential tolerance."
 
 [[file]]
 upstream = "src/audio/audio_sound.cpp"
-status = "absent"
-rust_module = ""
-note = "F1: audio runtime is absent."
+status = "ported"
+rust_module = "crates/nuxie-audio/src/engine.rs"
+note = "P2F1: retained sound controls, cursor, volume, completion/disposal, fades, and engine-outliving handle safety are owned by the headless mixer."
 
 [[file]]
 upstream = "src/audio/audio_source.cpp"
-status = "absent"
-rust_module = ""
-note = "F1: audio runtime is absent."
+status = "ported"
+rust_module = "crates/nuxie-audio/src/source.rs"
+note = "P2F1/D18: owned encoded WAV/MP3/FLAC and buffered f32 sources, lazy Symphonia PCM decode, metadata/duration, and recognized-but-unwired Vorbis."
 
 [[file]]
 upstream = "src/audio_event.cpp"

@@ -3,16 +3,17 @@ use nuxie_graph::GraphFile;
 use nuxie_image_codec::{decoded_rgba_len, preflight_encoded_image, validate_encoded_image};
 use nuxie_render_api::{RawPath, RecordingFactory};
 use nuxie_runtime::{
-    ArtboardInstance, ComponentDirt, Mat2D, RuntimeArtboardDefaultScene, RuntimeComponent,
-    RuntimeDataContext, RuntimeDataContextLookupKind, RuntimeDataContextLookupReport,
-    RuntimeDrawableDispatchKind, RuntimeFeatherState, RuntimeGradientStop,
-    RuntimeImportedViewModelInstanceContext, RuntimeKeyFrame, RuntimeNestedEventChainPhase,
-    RuntimeNestedEventChainTrace, RuntimeNestedNotifyBatchTrace, RuntimeOwnedViewModelContext,
-    RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
-    RuntimePathCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
-    RuntimeStateMachineDataConverterBindStep, RuntimeViewModelLinkError, ScriptError, ScriptHost,
-    ScriptInputViewModelPropertyPath, ScriptInstance, ScriptMethod, ScriptValue,
-    ScriptedStateMachineObjectKind, StateMachineInputKind, StateMachineInstance, TransformProperty,
+    ArtboardInstance, AudioEngine, AudioSource, ComponentDirt, Mat2D, RuntimeArtboardDefaultScene,
+    RuntimeComponent, RuntimeDataContext, RuntimeDataContextLookupKind,
+    RuntimeDataContextLookupReport, RuntimeDrawableDispatchKind, RuntimeFeatherState,
+    RuntimeGradientStop, RuntimeImportedViewModelInstanceContext, RuntimeKeyFrame,
+    RuntimeNestedEventChainPhase, RuntimeNestedEventChainTrace, RuntimeNestedNotifyBatchTrace,
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
+    RuntimeOwnedViewModelInstance, RuntimePathCommand, RuntimeShapePaintKind,
+    RuntimeShapePaintPathKind, RuntimeShapePaintState, RuntimeStateMachineDataConverterBindStep,
+    RuntimeViewModelLinkError, ScriptError, ScriptHost, ScriptInputViewModelPropertyPath,
+    ScriptInstance, ScriptMethod, ScriptValue, ScriptedStateMachineObjectKind,
+    StateMachineInputKind, StateMachineInstance, TransformProperty,
     bound_script_view_model_from_owned_context, bound_script_view_model_from_owned_path,
     bound_script_view_model_snapshot, bound_script_view_model_snapshot_from_path,
     runtime_data_context_lookup_reports, runtime_random_call_count, script_view_model_from_owned,
@@ -74,6 +75,232 @@ fn probe_path() -> Option<PathBuf> {
 
     verify_probe_fingerprint(&path, "make cpp-probe");
     Some(path)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppAudioOracle {
+    channels: u32,
+    sample_rate: u32,
+    format: u32,
+    duration: f32,
+    native_frames: u64,
+    mono48_frames: u64,
+    stereo32_frames: u64,
+    read_succeeded: bool,
+    frames_read: u64,
+    frame_clock: u64,
+    completed: bool,
+    window_energy: Vec<f32>,
+    interior_read_succeeded: bool,
+    interior_frames_read: u64,
+    interior_completed: bool,
+    interior_window_energy: Vec<f32>,
+    seconds_read_succeeded: bool,
+    seconds_frames_read: u64,
+    seconds_completed: bool,
+    seconds_samples: Vec<f32>,
+    before_artboard_stop: usize,
+    after_artboard_stop: usize,
+    stopped_completed_before_dispose: bool,
+    after_stopped_replay: usize,
+    stopped_completed_after_dispose: bool,
+    after_deferred_dispose: usize,
+    stopped_volume: f32,
+    seek_succeeded: bool,
+    seek_cursor: u64,
+    seek_cursor_after_read: u64,
+    outliving_completed: bool,
+}
+
+#[test]
+fn audio_source_reader_and_headless_schedule_match_pinned_cpp() {
+    let Some(probe) = probe_path() else {
+        return;
+    };
+    let fixture = cpp_runtime_fixture("audio/what.wav");
+    let output = Command::new(probe)
+        .args(["--audio-oracle", fixture.to_string_lossy().as_ref()])
+        .output()
+        .expect("run pinned audio oracle");
+    assert!(
+        output.status.success(),
+        "audio oracle failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let cpp: CppAudioOracle =
+        serde_json::from_slice(&output.stdout).expect("decode pinned audio oracle JSON");
+
+    let bytes = std::fs::read(&fixture).expect("read pinned WAV");
+    let source = AudioSource::from_encoded(bytes).expect("Rust WAV source");
+    assert_eq!(source.channels(), cpp.channels);
+    assert_eq!(source.sample_rate(), cpp.sample_rate);
+    assert_eq!(cpp.format, 1, "pinned AudioFormat::wav ordinal");
+    assert!((source.duration() - cpp.duration).abs() < 1.0e-6);
+    assert_eq!(
+        source
+            .make_reader(2, 44_100)
+            .expect("native reader")
+            .length_in_frames(),
+        cpp.native_frames
+    );
+    assert!(
+        source
+            .make_reader(1, 48_000)
+            .expect("48 kHz reader")
+            .length_in_frames()
+            .abs_diff(cpp.mono48_frames)
+            <= 2
+    );
+    assert!(
+        source
+            .make_reader(2, 32_000)
+            .expect("32 kHz reader")
+            .length_in_frames()
+            .abs_diff(cpp.stereo32_frames)
+            <= 2
+    );
+
+    let engine = AudioEngine::new(2, 44_100).expect("Rust headless engine");
+    let source = Arc::new(source);
+    let sound = engine
+        .play(source, 512, 1024, 0, None)
+        .expect("scheduled sound");
+    sound.set_volume(0.5);
+    let mut scheduled = vec![0.0; 1536 * 2];
+    let rust_frames_read = scheduled
+        .chunks_exact_mut(512 * 2)
+        .map(|block| engine.read_audio_frames(block))
+        .sum::<u64>();
+    assert_eq!(rust_frames_read, cpp.frames_read);
+    assert!(cpp.read_succeeded);
+    let rust_window_energy = scheduled
+        .chunks_exact(512 * 2)
+        .map(|window| window.iter().map(|sample| sample.abs()).sum::<f32>())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rust_window_energy
+            .iter()
+            .map(|energy| *energy > 0.0)
+            .collect::<Vec<_>>(),
+        cpp.window_energy
+            .iter()
+            .map(|energy| *energy > 0.0)
+            .collect::<Vec<_>>(),
+        "decoder PCM is tolerant, but absolute scheduling/clipping windows are exact"
+    );
+    assert_eq!(engine.time_in_frames(), cpp.frame_clock);
+    assert_eq!(sound.completed(), cpp.completed);
+    assert_eq!(engine.playing_sound_count(), 0);
+
+    let interior_engine = AudioEngine::new(2, 44_100).expect("interior engine");
+    let interior_sound = interior_engine
+        .play(Arc::clone(&source), 513, 1025, 0, None)
+        .expect("interior scheduled sound");
+    let mut interior_scheduled = vec![0.0; 1536 * 2];
+    assert_eq!(
+        interior_engine.read_audio_frames(&mut interior_scheduled),
+        cpp.interior_frames_read
+    );
+    assert!(cpp.interior_read_succeeded);
+    let rust_interior_energy = interior_scheduled
+        .chunks_exact(512 * 2)
+        .map(|window| window.iter().map(|sample| sample.abs()).sum::<f32>() > 0.0)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rust_interior_energy,
+        cpp.interior_window_energy
+            .iter()
+            .map(|energy| *energy > 0.0)
+            .collect::<Vec<_>>(),
+        "non-block-aligned absolute scheduling windows are exact"
+    );
+    assert_eq!(interior_sound.completed(), cpp.interior_completed);
+
+    let control_source = Arc::new(
+        AudioSource::from_buffered((0..8).map(|sample| sample as f32).collect(), 1, 4)
+            .expect("control source"),
+    );
+    let seconds_engine = AudioEngine::new(1, 4).expect("seconds engine");
+    let seconds_sound = seconds_engine
+        .play_seconds(Arc::clone(&control_source), 0.5, 6, 1, None)
+        .expect("seconds sound");
+    let mut seconds_samples = [0.0; 16];
+    let seconds_frames_read = seconds_samples
+        .chunks_exact_mut(8)
+        .map(|block| seconds_engine.read_audio_frames(block))
+        .sum::<u64>();
+    assert_eq!(seconds_frames_read, cpp.seconds_frames_read);
+    assert!(cpp.seconds_read_succeeded);
+    assert_eq!(seconds_samples.as_slice(), cpp.seconds_samples.as_slice());
+    assert_eq!(seconds_sound.completed(), cpp.seconds_completed);
+
+    let lifecycle_engine = AudioEngine::new(1, 4).expect("lifecycle engine");
+    let stopped = lifecycle_engine
+        .play(
+            Arc::clone(&control_source),
+            0,
+            0,
+            0,
+            Some(nuxie_runtime::AudioArtboardId(1)),
+        )
+        .expect("stopped sound");
+    let _stopped2 = lifecycle_engine
+        .play(
+            Arc::clone(&control_source),
+            0,
+            0,
+            0,
+            Some(nuxie_runtime::AudioArtboardId(1)),
+        )
+        .expect("second stopped sound");
+    let retained = lifecycle_engine
+        .play(
+            Arc::clone(&control_source),
+            0,
+            0,
+            0,
+            Some(nuxie_runtime::AudioArtboardId(2)),
+        )
+        .expect("retained sound");
+    stopped.set_volume(0.25);
+    assert_eq!(stopped.volume(), cpp.stopped_volume);
+    assert_eq!(
+        lifecycle_engine.playing_sound_count(),
+        cpp.before_artboard_stop
+    );
+    lifecycle_engine.stop_artboard(nuxie_runtime::AudioArtboardId(1));
+    assert_eq!(
+        lifecycle_engine.playing_sound_count(),
+        cpp.after_artboard_stop
+    );
+    assert_eq!(stopped.completed(), cpp.stopped_completed_before_dispose);
+    stopped.play();
+    assert_eq!(
+        lifecycle_engine.playing_sound_count(),
+        cpp.after_stopped_replay
+    );
+    let _cleanup = lifecycle_engine
+        .play(Arc::clone(&control_source), 0, 0, 0, None)
+        .expect("cleanup trigger");
+    assert_eq!(stopped.completed(), cpp.stopped_completed_after_dispose);
+    assert_eq!(
+        lifecycle_engine.playing_sound_count(),
+        cpp.after_deferred_dispose
+    );
+    assert_eq!(retained.seek(3), cpp.seek_succeeded);
+    assert_eq!(retained.time_in_frames(), cpp.seek_cursor);
+    lifecycle_engine.read_audio_frames(&mut [0.0]);
+    assert_eq!(retained.time_in_frames(), cpp.seek_cursor_after_read);
+
+    let outliving = {
+        let temporary_engine = AudioEngine::new(1, 4).expect("temporary engine");
+        temporary_engine
+            .play(control_source, 0, 0, 0, None)
+            .expect("outliving sound")
+    };
+    outliving.stop(0);
+    assert_eq!(outliving.completed(), cpp.outliving_completed);
 }
 
 fn scripted_probe_path() -> Option<PathBuf> {

@@ -37,9 +37,10 @@ note = "All 14 cases and 30 assertions are mapped directly in the FL-B/FL-C back
 [[file]]
 upstream = "tests/unit_tests/runtime/audio_test.cpp"
 test_case_count = 13
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "partial"
+evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::audio_source_reader_and_headless_schedule_match_pinned_cpp", "crates/nuxie-audio/src/source.rs", "crates/nuxie-audio/src/engine.rs", "crates/nuxie/tests/audio_core.rs", "docs/audio-core-parity.md"]
+covered_test_cases = ["audio engine initializes", "audio source can be opened", "file with audio loads correctly", "audio sound can outlive engine", "many audio sounds can outlive engine", "Artboard has audio", "Artboard has audio in nested artboard", "Artboard does not have audio", "audio source duration from file", "audio source duration from buffered samples", "audio source duration mp3"]
+note = "P2F1 ports the listed 11 non-firing cases: engine/source/reader initialization and durations, live headless scheduling differential, levels, embedded load, engine/sound lifetime, and direct/nested/no-audio fixture queries. The engine tests additionally bind the per-artboard stop seam, but the upstream artboard-stop case and scripted-audio case both fire AudioEvent and therefore remain for later packages."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/bezier_utils_test.cpp"

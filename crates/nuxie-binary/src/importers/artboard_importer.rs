@@ -1,5 +1,28 @@
 use super::*;
 
+pub(super) fn dispatch_imports_successfully(
+    object: &RuntimeObject,
+    definition: &'static Definition,
+    context: &ImportContext,
+) -> Option<bool> {
+    match definition.name {
+        "Artboard" => Some(
+            imports_successfully(object, definition, context)
+                .expect("Artboard is owned by ArtboardImporter"),
+        ),
+        _ => None,
+    }
+}
+
+pub(super) fn dispatch_update_context(
+    definition: &'static Definition,
+    context: &mut ImportContext,
+) {
+    if definition.name == "Artboard" {
+        update_context(definition, context);
+    }
+}
+
 pub(super) fn imports_successfully(
     _object: &RuntimeObject,
     definition: &'static Definition,

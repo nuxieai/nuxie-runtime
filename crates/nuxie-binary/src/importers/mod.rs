@@ -229,7 +229,9 @@ fn object_imports_successfully(
     definition: &'static Definition,
     context: &ImportContext,
 ) -> bool {
-    if let Some(decision) = enum_importer::imports_successfully(object, definition, context) {
+    if let Some(decision) =
+        enum_importer::dispatch_imports_successfully(object, definition, context)
+    {
         return decision;
     }
 
@@ -273,53 +275,60 @@ fn object_imports_successfully(
         _ => {}
     }
 
-    if let Some(decision) = artboard_importer::imports_successfully(object, definition, context) {
-        return decision;
-    }
     if let Some(decision) =
-        scripted_object_importer::imports_successfully(object, definition, context)
+        artboard_importer::dispatch_imports_successfully(object, definition, context)
     {
         return decision;
     }
     if let Some(decision) =
-        listener_input_type_gamepad_importer::imports_successfully(object, definition, context)
+        scripted_object_importer::dispatch_imports_successfully(object, definition, context)
+    {
+        return decision;
+    }
+    if let Some(decision) = listener_input_type_gamepad_importer::dispatch_imports_successfully(
+        object, definition, context,
+    ) {
+        return decision;
+    }
+    if let Some(decision) = listener_input_type_keyboard_importer::dispatch_imports_successfully(
+        object, definition, context,
+    ) {
+        return decision;
+    }
+    if let Some(decision) = listener_input_type_semantic_importer::dispatch_imports_successfully(
+        object, definition, context,
+    ) {
+        return decision;
+    }
+    if let Some(decision) =
+        linear_animation_importer::dispatch_imports_successfully(object, definition, context)
     {
         return decision;
     }
     if let Some(decision) =
-        listener_input_type_keyboard_importer::imports_successfully(object, definition, context)
+        keyed_object_importer::dispatch_imports_successfully(object, definition, context)
     {
         return decision;
     }
     if let Some(decision) =
-        listener_input_type_semantic_importer::imports_successfully(object, definition, context)
+        state_machine_layer_importer::dispatch_imports_successfully(object, definition, context)
     {
         return decision;
     }
     if let Some(decision) =
-        linear_animation_importer::imports_successfully(object, definition, context)
-    {
-        return decision;
-    }
-    if let Some(decision) = keyed_object_importer::imports_successfully(object, definition, context)
-    {
-        return decision;
-    }
-    if let Some(decision) =
-        state_machine_layer_importer::imports_successfully(object, definition, context)
-    {
-        return decision;
-    }
-    if let Some(decision) =
-        data_converter_group_importer::imports_successfully(object, definition, context)
+        data_converter_group_importer::dispatch_imports_successfully(object, definition, context)
     {
         return decision;
     }
 
-    if let Some(decision) = text_asset_importer::imports_successfully(object, definition, context) {
+    if let Some(decision) =
+        text_asset_importer::dispatch_imports_successfully(object, definition, context)
+    {
         return decision;
     }
-    if let Some(decision) = file_asset_importer::imports_successfully(object, definition, context) {
+    if let Some(decision) =
+        file_asset_importer::dispatch_imports_successfully(object, definition, context)
+    {
         return decision;
     }
 
@@ -335,9 +344,9 @@ fn object_imports_successfully(
         return context.latest(ImportStackKey::TransitionViewModelCondition);
     }
 
-    if let Some(decision) =
-        state_machine_layer_component_importer::imports_successfully(object, definition, context)
-    {
+    if let Some(decision) = state_machine_layer_component_importer::dispatch_imports_successfully(
+        object, definition, context,
+    ) {
         return decision;
     }
 
@@ -346,12 +355,13 @@ fn object_imports_successfully(
     }
 
     if let Some(decision) =
-        state_machine_listener_importer::imports_successfully(object, definition, context)
+        state_machine_listener_importer::dispatch_imports_successfully(object, definition, context)
     {
         return decision;
     }
 
-    if let Some(decision) = layer_state_importer::imports_successfully(object, definition, context)
+    if let Some(decision) =
+        layer_state_importer::dispatch_imports_successfully(object, definition, context)
     {
         return decision;
     }
@@ -367,7 +377,7 @@ fn object_imports_successfully(
     }
 
     if let Some(decision) =
-        data_bind_path_importer::imports_successfully(object, definition, context)
+        data_bind_path_importer::dispatch_imports_successfully(object, definition, context)
     {
         return decision;
     }
@@ -378,7 +388,7 @@ fn object_imports_successfully(
     }
 
     if let Some(decision) =
-        data_converter_formula_importer::imports_successfully(object, definition, context)
+        data_converter_formula_importer::dispatch_imports_successfully(object, definition, context)
     {
         return decision;
     }
@@ -416,23 +426,27 @@ pub(crate) fn update_import_context(
         _ => {}
     }
 
-    artboard_importer::update_context(definition, context);
-    linear_animation_importer::update_context(definition, context);
-    keyed_object_importer::update_context(definition, context);
-    state_machine_layer_importer::update_context(definition, context);
-    enum_importer::update_context(definition, context);
-    data_converter_group_importer::update_context(definition, context);
-    data_converter_formula_importer::update_context(definition, context);
-    file_asset_importer::update_context(definition, context, script_assets_create_importers);
-    listener_input_type_gamepad_importer::update_context(definition, context);
-    listener_input_type_keyboard_importer::update_context(definition, context);
-    listener_input_type_semantic_importer::update_context(definition, context);
-    state_machine_layer_component_importer::update_context(definition, context);
+    artboard_importer::dispatch_update_context(definition, context);
+    linear_animation_importer::dispatch_update_context(definition, context);
+    keyed_object_importer::dispatch_update_context(definition, context);
+    state_machine_layer_importer::dispatch_update_context(definition, context);
+    enum_importer::dispatch_update_context(definition, context);
+    data_converter_group_importer::dispatch_update_context(definition, context);
+    data_converter_formula_importer::dispatch_update_context(definition, context);
+    file_asset_importer::dispatch_update_context(
+        definition,
+        context,
+        script_assets_create_importers,
+    );
+    listener_input_type_gamepad_importer::dispatch_update_context(definition, context);
+    listener_input_type_keyboard_importer::dispatch_update_context(definition, context);
+    listener_input_type_semantic_importer::dispatch_update_context(definition, context);
+    state_machine_layer_component_importer::dispatch_update_context(definition, context);
     if definition.is_a("StateTransition") {
         context.make_latest(ImportStackKey::StateTransition);
     }
-    layer_state_importer::update_context(definition, context);
-    state_machine_listener_importer::update_context(definition, context);
+    layer_state_importer::dispatch_update_context(definition, context);
+    state_machine_listener_importer::dispatch_update_context(definition, context);
     if let Some(kind) = state_machine_input_kind(definition) {
         context.state_machine_inputs.push(Some(kind));
     }
@@ -447,8 +461,8 @@ pub(crate) fn update_import_context(
     if definition.is_a("BindableProperty") {
         bindable_property_importer::update_context(definition, context);
     }
-    data_bind_path_importer::update_context(definition, context);
-    scripted_object_importer::update_context(definition, context);
+    data_bind_path_importer::dispatch_update_context(definition, context);
+    scripted_object_importer::dispatch_update_context(definition, context);
 
     let _ = object;
 }

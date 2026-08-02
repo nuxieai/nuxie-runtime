@@ -113,6 +113,8 @@ local unix_links = {
 }
 
 if with_scripting then
+    table.insert(mac_links, 2, 'miniaudio')
+    table.insert(unix_links, 2, 'miniaudio')
     table.insert(mac_links, 2, 'rive_decoders')
     table.insert(mac_links, 3, 'luau_vm')
     table.insert(mac_links, 4, 'libpng')

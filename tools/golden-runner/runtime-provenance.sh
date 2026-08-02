@@ -59,8 +59,12 @@ expected_defines() {
     fi
     if [[ "$mode" == "scripted" ]]; then
         defines+=(
+            "EXTERNAL_RIVE_AUDIO_ENGINE"
             "HYDRO_SIGN_VERIFY_ONLY=1"
+            "MA_NO_DEVICE_IO"
+            "MA_NO_RESOURCE_MANAGER"
             "RIVE_DECODERS"
+            "WITH_RIVE_AUDIO"
             "WITH_RIVE_SCRIPTING"
         )
     elif [[ "$mode" == "audio" ]]; then

@@ -54,7 +54,7 @@ ceilings from `v2-status.md` are merged in.
 
 | id | subsystem | size (≈lines) | status | notes |
 |---|---|---|---|---|
-| F1 | **Audio** — `src/audio/**` engine/source/sound/reader, `audio_event.cpp` firing, `Artboard::volume` | 1,030+ | PARTIAL (P2F1) | Symphonia WAV/MP3/FLAC source/reader decode, file-owned AudioAsset loading, Factory decode, and the Rive-owned headless frame-clock/mixer/sound lifecycle are ported under D18. `AudioEvent` firing, artboard volume propagation, Lua audio, and CPAL device output remain later packages. |
+| F1 | **Audio** — `src/audio/**` engine/source/sound/reader, `audio_event.cpp` firing, `Artboard::volume` | 1,030+ | PARTIAL (P2F1/P2F2) | Symphonia WAV/MP3/FLAC source/reader decode, file-owned AudioAsset loading, Factory decode, the Rive-owned headless frame-clock/mixer/sound lifecycle and retained default engine, dense-ordinal AudioEvent playback, multiplied Artboard volume, recursive engine/volume propagation, and Artboard-scoped teardown are ported under D18. Lua audio and CPAL device output remain later packages. |
 | F2 | **Text input editing** — cursor motion, selection, keyboard routing (`raw_text_input.cpp` 992, `text_input.cpp` 777, `cursor.cpp` 359, selection/selected-text files) | ~2,400 | CLOSED | FL-E6 ports the retained buffer/journal, cursor and selection paths, key/committed-text routing, multiline source/display behavior, pointer multi-click/drag selection, focus request, and scroll-viewport edge advancement. The remaining non-TextInput gamepad/semantic listener work stays in F5. |
 | F3 | **Command queue/server** — threaded host command API (`command_server.cpp` 3,821 + `command_queue.cpp` 2,321) | 6,142 | ABSENT | The model rive-ios/flutter bindings drive. FlowSession is the Nuxie analog but single-threaded; its product C boundary is owned by `nuxie-ios` (see A-tier). Decide: port, or declare FlowSession the supported architecture (D-row + docs). |
 | F4 | **Scroll physics** — `elastic_scroll_physics.cpp` (303), `scroll_bar_constraint(.proxy)` (237+), momentum/virtualized scroll | ~700 | PARTIAL | Clamped/core scroll constraint ported at sample-0; interactive momentum, elastic overscroll, scrollbars absent. Paywall-relevant (scrolling lists). |
@@ -80,7 +80,7 @@ in this repository.
 | id | gap | tier |
 |---|---|---|
 | A1 | **No `FileAssetLoader` callback** — no lazy/out-of-band/CDN asset resolution; host must pre-resolve all bytes at import; `cdnUuid`/`cdnBaseUrl` never consulted. | 1 |
-| A2 | **Audio control absent everywhere** (volume, engine start/stop) — pairs with F1. | 1 |
+| A2 | **Native device-output control remains absent** — the Rust Artboard facade now exposes headless engine and volume control, but CPAL start/stop and the portable C boundary remain later work. | 1 |
 | A3 | **Text run set/get not in the portable surface** — runtime primitive exists (`set_root_text_value_run`) but is surfaced only via the `nuxie-ios` FlowSession boundary; reading a run's text is exposed nowhere. Most common SDK write after inputs. | 1 |
 | A4 | **Event custom properties missing from the low-level surface** — `StateMachineReportedEvent` carries name/url/target/delay only; properties exist only in FlowSession output. Portable embedders lose them. | 2 |
 | A5 | **`nux-capi` cannot read events at all**; VM coverage is bool/number/string set-only (no color/enum/trigger/image/artboard/list, no getters/observers); no `pointer_exit`; no input reads. | 2 |

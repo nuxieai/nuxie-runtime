@@ -98,6 +98,8 @@ pub struct AudioEngine {
     shared: Arc<EngineShared>,
 }
 
+static RUNTIME_ENGINE: Mutex<Option<AudioEngine>> = Mutex::new(None);
+
 impl AudioEngine {
     pub const DEFAULT_CHANNELS: u32 = 2;
     pub const DEFAULT_SAMPLE_RATE: u32 = 48_000;
@@ -119,6 +121,26 @@ impl AudioEngine {
                 }),
             }),
         })
+    }
+
+    /// Construct and retain the process runtime engine used by AudioEvent
+    /// playback when an Artboard has no explicitly configured engine.
+    pub fn make_and_store(channels: u32, sample_rate: u32) -> Result<Self, AudioEngineError> {
+        let engine = Self::new(channels, sample_rate)?;
+        *lock(&RUNTIME_ENGINE) = Some(engine.clone());
+        Ok(engine)
+    }
+
+    /// Return the retained runtime engine, lazily creating the pinned default
+    /// two-channel, 48 kHz headless engine when necessary.
+    pub fn runtime_engine() -> Self {
+        let mut runtime = lock(&RUNTIME_ENGINE);
+        runtime
+            .get_or_insert_with(|| {
+                Self::new(Self::DEFAULT_CHANNELS, Self::DEFAULT_SAMPLE_RATE)
+                    .expect("the fixed runtime audio defaults are valid")
+            })
+            .clone()
     }
 
     pub fn channels(&self) -> u32 {
@@ -612,6 +634,28 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert!(sounds.iter().all(AudioSound::completed));
+    }
+
+    #[test]
+    fn stored_runtime_engine_is_the_default_headless_playback_owner() {
+        let stored = AudioEngine::make_and_store(
+            AudioEngine::DEFAULT_CHANNELS,
+            AudioEngine::DEFAULT_SAMPLE_RATE,
+        )
+        .expect("stored runtime engine");
+        let runtime = AudioEngine::runtime_engine();
+        runtime
+            .play(
+                mono_source(&[1.0; 8], AudioEngine::DEFAULT_SAMPLE_RATE),
+                0,
+                0,
+                0,
+                None,
+            )
+            .expect("runtime-owned sound");
+
+        assert_eq!(stored.playing_sound_count(), 1);
+        stored.stop_all_sounds();
     }
 
     #[test]

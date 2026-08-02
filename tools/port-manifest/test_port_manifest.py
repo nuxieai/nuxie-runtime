@@ -317,6 +317,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/audio/audio_reader.cpp": ("ported", "D18"),
             "src/audio/audio_sound.cpp": ("ported", "P2F1"),
             "src/audio/audio_source.cpp": ("ported", "D18"),
+            "src/audio_event.cpp": ("ported", "P2F2"),
             "src/text/cursor.cpp": ("ported", "FL-E6"),
             "src/command_queue.cpp": ("absent", "F3"),
             "src/constraints/scrolling/elastic_scroll_physics.cpp": ("absent", "F4"),
@@ -410,13 +411,13 @@ class PortManifestCliTest(unittest.TestCase):
         )
 
     def test_check_rejects_the_wrong_feature_id_on_an_absent_seed(self) -> None:
-        self.write_upstream("src/audio_event.cpp")
+        self.write_upstream("src/command_server.cpp")
         manifest = self.write_manifest(
             """
             version = 1
 
             [[file]]
-            upstream = "src/audio_event.cpp"
+            upstream = "src/command_server.cpp"
             status = "absent"
             rust_module = ""
             note = "F2: wrong register row."
@@ -427,7 +428,7 @@ class PortManifestCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "register seed drift for src/audio_event.cpp: expected feature ids F1",
+            "register seed drift for src/command_server.cpp: expected feature ids F3",
             result.stderr,
         )
 
@@ -463,7 +464,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/audio/audio_reader.cpp": ("ported", "D18"),
             "src/audio/audio_sound.cpp": ("ported", "P2F1"),
             "src/audio/audio_source.cpp": ("ported", "D18"),
-            "src/audio_event.cpp": ("absent", "F1"),
+            "src/audio_event.cpp": ("ported", "P2F2"),
             "src/text/cursor.cpp": ("ported", "FL-E6"),
             "src/text/raw_text_input.cpp": ("ported", "FL-E6"),
             "src/text/text_input.cpp": ("ported", "FL-E6"),

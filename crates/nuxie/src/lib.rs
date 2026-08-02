@@ -3994,6 +3994,26 @@ impl<'a> ArtboardInstance<'a> {
         self.raw.has_audio()
     }
 
+    pub fn audio_engine(&self) -> Option<AudioEngine> {
+        self.raw.audio_engine()
+    }
+
+    pub fn set_audio_engine(&mut self, engine: Option<AudioEngine>) {
+        self.raw.set_audio_engine(engine);
+    }
+
+    pub fn volume(&self) -> f32 {
+        self.raw.volume()
+    }
+
+    pub fn set_volume(&mut self, volume: f32) {
+        self.raw.set_volume(volume);
+    }
+
+    pub fn play_audio_event(&self, event_local_id: usize) -> Option<AudioSound> {
+        self.raw.play_audio_event(event_local_id)
+    }
+
     /// Snapshot imported ScrollConstraints in this concrete artboard occurrence.
     pub fn scroll_constraint_occurrences(&self) -> Vec<RuntimeScrollConstraintSnapshot> {
         self.raw.scroll_constraint_occurrences()
@@ -4608,6 +4628,26 @@ impl OwnedArtboardInstance {
 
     pub fn has_audio(&self) -> bool {
         self.raw.has_audio()
+    }
+
+    pub fn audio_engine(&self) -> Option<AudioEngine> {
+        self.raw.audio_engine()
+    }
+
+    pub fn set_audio_engine(&mut self, engine: Option<AudioEngine>) {
+        self.raw.set_audio_engine(engine);
+    }
+
+    pub fn volume(&self) -> f32 {
+        self.raw.volume()
+    }
+
+    pub fn set_volume(&mut self, volume: f32) {
+        self.raw.set_volume(volume);
+    }
+
+    pub fn play_audio_event(&self, event_local_id: usize) -> Option<AudioSound> {
+        self.raw.play_audio_event(event_local_id)
     }
 
     /// Snapshot imported ScrollConstraints in this concrete artboard occurrence.

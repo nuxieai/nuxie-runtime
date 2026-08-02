@@ -127,6 +127,8 @@ size_t randomProviderTotalCalls();
 #include "rive/audio/audio_sound.hpp"
 #include "rive/audio/audio_source.hpp"
 #undef private
+#include "rive/assets/audio_asset.hpp"
+#include "rive/audio_event.hpp"
 #endif
 #include "rive/assets/library_asset.hpp"
 #include "rive/bones/skin.hpp"
@@ -17421,7 +17423,30 @@ size_t audio_playing_sound_count(const rive::rcp<rive::AudioEngine>& engine)
     return count;
 }
 
-void write_audio_oracle(std::ostream& out, const char* filename)
+rive::Artboard* first_nested_audio_artboard(rive::Artboard* artboard)
+{
+    for (auto nested : artboard->find<rive::NestedArtboard>())
+    {
+        auto child = nested->artboardInstance();
+        if (child == nullptr)
+        {
+            continue;
+        }
+        if (!child->find<rive::AudioEvent>().empty())
+        {
+            return child;
+        }
+        if (auto descendant = first_nested_audio_artboard(child))
+        {
+            return descendant;
+        }
+    }
+    return nullptr;
+}
+
+void write_audio_oracle(std::ostream& out,
+                        const char* filename,
+                        const char* mp3Filename)
 {
     std::ifstream input(filename, std::ios::binary);
     if (!input)
@@ -17484,6 +17509,29 @@ void write_audio_oracle(std::ostream& out, const char* filename)
     std::vector<float> controlSamples = {0, 1, 2, 3, 4, 5, 6, 7};
     auto controlSource = rive::rcp<rive::AudioSource>(new rive::AudioSource(
         rive::Span<float>(controlSamples.data(), controlSamples.size()), 1, 4));
+    std::vector<float> durationSamples(48000 * 2);
+    auto durationSource = rive::rcp<rive::AudioSource>(new rive::AudioSource(
+        rive::Span<float>(durationSamples.data(), durationSamples.size()),
+        2,
+        48000));
+    const auto bufferedDuration = durationSource->duration();
+
+    std::ifstream mp3Input(mp3Filename, std::ios::binary);
+    if (!mp3Input)
+    {
+        throw std::runtime_error(std::string("failed to open MP3 fixture ") +
+                                 mp3Filename);
+    }
+    std::vector<uint8_t> mp3Bytes((std::istreambuf_iterator<char>(mp3Input)),
+                                  std::istreambuf_iterator<char>());
+    auto mp3Source = rive::AudioSource::MakeAudioSource(
+        rive::SimpleArray<uint8_t>(mp3Bytes.data(), mp3Bytes.size()));
+    if (mp3Source == nullptr)
+    {
+        throw std::runtime_error("pinned runtime rejected MP3 fixture");
+    }
+    const auto mp3Duration = mp3Source->duration();
+    const auto mp3CachedDuration = mp3Source->duration();
     auto secondsEngine = rive::AudioEngine::Make(1, 4);
     auto secondsSound =
         secondsEngine->playSeconds(controlSource, 0.5f, 6, 1);
@@ -17531,6 +17579,25 @@ void write_audio_oracle(std::ostream& out, const char* filename)
     }
     outlivingSound->stop();
 
+    std::vector<rive::rcp<rive::AudioSound>> manyOutlivingSounds;
+    {
+        auto temporaryEngine = rive::AudioEngine::Make(2, 44100);
+        for (size_t i = 0; i < 20; ++i)
+        {
+            manyOutlivingSounds.push_back(
+                temporaryEngine->play(source, 0, 0, 0));
+        }
+        float frames[512 * 2] = {};
+        temporaryEngine->readAudioFrames(frames, 512);
+    }
+    bool manyOutlivingCompleted = true;
+    for (auto& manySound : manyOutlivingSounds)
+    {
+        manySound->stop();
+        manyOutlivingCompleted =
+            manyOutlivingCompleted && manySound->completed();
+    }
+
     out << "{\"channels\":" << source->channels();
     out << ",\"sampleRate\":" << source->sampleRate();
     out << ",\"format\":" << static_cast<unsigned>(source->format());
@@ -17538,6 +17605,11 @@ void write_audio_oracle(std::ostream& out, const char* filename)
     out << ",\"nativeFrames\":" << native->lengthInFrames();
     out << ",\"mono48Frames\":" << mono48->lengthInFrames();
     out << ",\"stereo32Frames\":" << stereo32->lengthInFrames();
+    out << ",\"bufferedDuration\":" << bufferedDuration;
+    out << ",\"mp3DurationPositive\":"
+        << (mp3Duration > 0 ? "true" : "false");
+    out << ",\"mp3DurationCached\":"
+        << (mp3CachedDuration == mp3Duration ? "true" : "false");
     out << ",\"readSucceeded\":" << (readSucceeded ? "true" : "false");
     out << ",\"framesRead\":" << framesRead;
     out << ",\"frameClock\":" << engine->timeInFrames();
@@ -17587,7 +17659,128 @@ void write_audio_oracle(std::ostream& out, const char* filename)
     out << ",\"seekCursorAfterRead\":" << seekCursorAfterRead;
     out << ",\"outlivingCompleted\":"
         << (outlivingSound->completed() ? "true" : "false");
+    out << ",\"manyOutlivingCount\":" << manyOutlivingSounds.size();
+    out << ",\"manyOutlivingCompleted\":"
+        << (manyOutlivingCompleted ? "true" : "false");
     out << "}\n";
+}
+
+void write_audio_riv_oracle(std::ostream& out,
+                            const char* soundFilename,
+                            const char* sound2Filename)
+{
+    rive::ImportResult soundResult = rive::ImportResult::success;
+    auto soundFile = open_file(soundFilename, &soundResult, false);
+    if (soundFile == nullptr || soundResult != rive::ImportResult::success)
+    {
+        throw std::runtime_error("pinned runtime rejected sound.riv");
+    }
+    auto engine = rive::AudioEngine::Make(2, 44100);
+    auto artboard = soundFile->artboardDefault();
+    artboard->audioEngine(engine);
+    auto events = artboard->find<rive::AudioEvent>();
+    if (events.size() != 1)
+    {
+        throw std::runtime_error("sound.riv AudioEvent did not resolve");
+    }
+    auto event = events[0];
+    const auto denseAssetOrdinal = event->assetId();
+    auto assets = soundFile->assets();
+    if (denseAssetOrdinal >= assets.size() ||
+        !assets[denseAssetOrdinal]->is<rive::AudioAsset>())
+    {
+        throw std::runtime_error("sound.riv AudioEvent asset ordinal is invalid");
+    }
+    auto asset = assets[denseAssetOrdinal]->as<rive::AudioAsset>();
+    asset->volume(0.5f);
+    artboard->volume(0.25f);
+    event->play();
+    const auto playingAfterPlay = audio_playing_sound_count(engine);
+    const auto eventVolume = engine->m_playingSoundsHead == nullptr
+                                 ? -1.0f
+                                 : engine->m_playingSoundsHead->volume();
+    artboard->volume(0.0f);
+    event->play();
+    const auto playingAfterZeroVolume = audio_playing_sound_count(engine);
+    artboard->volume(0.25f);
+    event->play();
+    const auto playingAfterSecondPlay = audio_playing_sound_count(engine);
+    const auto semanticAssetId = asset->assetId();
+    const auto hasAudioSource = asset->hasAudioSource();
+    artboard.reset();
+    const auto playingAfterDrop = audio_playing_sound_count(engine);
+
+    auto fallbackEngine = rive::AudioEngine::MakeAndStore(2, 44100);
+    auto fallbackArtboard = soundFile->artboardDefault();
+    auto fallbackEvents = fallbackArtboard->find<rive::AudioEvent>();
+    fallbackEvents[0]->play();
+    const auto fallbackPlayingAfterPlay =
+        audio_playing_sound_count(fallbackEngine);
+    fallbackArtboard.reset();
+    const auto fallbackPlayingAfterDrop =
+        audio_playing_sound_count(fallbackEngine);
+
+    rive::ImportResult sound2Result = rive::ImportResult::success;
+    auto sound2File = open_file(sound2Filename, &sound2Result, false);
+    if (sound2File == nullptr || sound2Result != rive::ImportResult::success)
+    {
+        throw std::runtime_error("pinned runtime rejected sound2.riv");
+    }
+    auto child = sound2File->artboardNamed("child");
+    auto grandParent = sound2File->artboardNamed("grand-parent");
+    auto noAudio = sound2File->artboardNamed("no-audio");
+    if (child == nullptr || grandParent == nullptr || noAudio == nullptr)
+    {
+        throw std::runtime_error("sound2.riv named artboard is missing");
+    }
+    auto nestedEngine = rive::AudioEngine::Make(2, 44100);
+    grandParent->audioEngine(nestedEngine);
+    grandParent->volume(0.125f);
+    auto nestedAudioArtboard = first_nested_audio_artboard(grandParent.get());
+    if (nestedAudioArtboard == nullptr)
+    {
+        throw std::runtime_error("sound2.riv nested AudioEvent did not resolve");
+    }
+    auto nestedEvents = nestedAudioArtboard->find<rive::AudioEvent>();
+    const auto nestedEnginePropagated =
+        nestedAudioArtboard->audioEngine() == nestedEngine;
+    const auto nestedVolumePropagated = nestedAudioArtboard->volume();
+    nestedEvents[0]->play();
+    const auto nestedPlayingAfterPlay =
+        audio_playing_sound_count(nestedEngine);
+    const auto nestedEventVolume =
+        nestedEngine->m_playingSoundsHead == nullptr
+            ? -1.0f
+            : nestedEngine->m_playingSoundsHead->volume();
+
+    out << "{\"soundImport\":true";
+    out << ",\"eventCount\":" << events.size();
+    out << ",\"denseAssetOrdinal\":" << denseAssetOrdinal;
+    out << ",\"semanticAssetId\":" << semanticAssetId;
+    out << ",\"hasAudioSource\":" << (hasAudioSource ? "true" : "false");
+    out << ",\"playingAfterPlay\":" << playingAfterPlay;
+    out << ",\"eventVolume\":" << eventVolume;
+    out << ",\"playingAfterZeroVolume\":" << playingAfterZeroVolume;
+    out << ",\"playingAfterSecondPlay\":" << playingAfterSecondPlay;
+    out << ",\"playingAfterDrop\":" << playingAfterDrop;
+    out << ",\"fallbackPlayingAfterPlay\":" << fallbackPlayingAfterPlay;
+    out << ",\"fallbackPlayingAfterDrop\":" << fallbackPlayingAfterDrop;
+    out << ",\"sound2Import\":true";
+    out << ",\"childHasAudio\":" << (child->hasAudio() ? "true" : "false");
+    out << ",\"childEventCount\":" << child->find<rive::AudioEvent>().size();
+    out << ",\"grandParentHasAudio\":"
+        << (grandParent->hasAudio() ? "true" : "false");
+    out << ",\"grandParentEventCount\":"
+        << grandParent->find<rive::AudioEvent>().size();
+    out << ",\"nestedEnginePropagated\":"
+        << (nestedEnginePropagated ? "true" : "false");
+    out << ",\"nestedVolumePropagated\":" << nestedVolumePropagated;
+    out << ",\"nestedPlayingAfterPlay\":" << nestedPlayingAfterPlay;
+    out << ",\"nestedEventVolume\":" << nestedEventVolume;
+    out << ",\"noAudioHasAudio\":"
+        << (noAudio->hasAudio() ? "true" : "false");
+    out << ",\"noAudioEventCount\":"
+        << noAudio->find<rive::AudioEvent>().size() << "}\n";
 }
 #endif
 } // namespace
@@ -17604,6 +17797,9 @@ int main(int argc, const char* argv[])
     bool f14BinaryOracle = false;
     bool f12ProfilerOracle = false;
     const char* audioOracle = nullptr;
+    const char* audioMp3Oracle = nullptr;
+    const char* audioRivOracle = nullptr;
+    const char* audioRivOracle2 = nullptr;
     const char* rawTextRegularFont = nullptr;
     const char* rawTextEmojiFont = nullptr;
     const char* rawTextRasterFont = nullptr;
@@ -17648,12 +17844,26 @@ int main(int argc, const char* argv[])
 
         if (is_arg(argv[i], "--audio-oracle"))
         {
-            if (i + 1 >= argc)
+            if (i + 2 >= argc)
             {
-                std::cerr << "--audio-oracle requires an encoded audio path\n";
+                std::cerr
+                    << "--audio-oracle requires WAV and MP3 audio paths\n";
                 return 2;
             }
             audioOracle = argv[++i];
+            audioMp3Oracle = argv[++i];
+            continue;
+        }
+
+        if (is_arg(argv[i], "--audio-riv-oracle"))
+        {
+            if (i + 2 >= argc)
+            {
+                std::cerr << "--audio-riv-oracle requires sound.riv sound2.riv\n";
+                return 2;
+            }
+            audioRivOracle = argv[++i];
+            audioRivOracle2 = argv[++i];
             continue;
         }
 
@@ -21431,7 +21641,27 @@ int main(int argc, const char* argv[])
 #ifdef WITH_RIVE_AUDIO
         try
         {
-            write_audio_oracle(std::cout, audioOracle);
+            write_audio_oracle(std::cout, audioOracle, audioMp3Oracle);
+            return 0;
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << error.what() << "\n";
+            return 1;
+        }
+#else
+        std::cerr << "probe was built without audio support\n";
+        return 1;
+#endif
+    }
+
+    if (audioRivOracle != nullptr)
+    {
+#ifdef WITH_RIVE_AUDIO
+        try
+        {
+            write_audio_riv_oracle(
+                std::cout, audioRivOracle, audioRivOracle2);
             return 0;
         }
         catch (const std::exception& error)

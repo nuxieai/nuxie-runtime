@@ -83,6 +83,7 @@ fn keyed_property_target(
         }),
         CoreRegistryFieldKind::Bool => Some(RuntimeKeyedPropertyTarget::Bool),
         CoreRegistryFieldKind::Uint => Some(RuntimeKeyedPropertyTarget::Uint),
+        CoreRegistryFieldKind::Int => Some(RuntimeKeyedPropertyTarget::Int),
         CoreRegistryFieldKind::StringOrBytes => Some(RuntimeKeyedPropertyTarget::String),
     }
 }
@@ -236,6 +237,7 @@ pub(crate) fn build_linear_animations<'a>(
                 | "KeyFrameColor"
                 | "KeyFrameBool"
                 | "KeyFrameUint"
+                | "KeyFrameInt"
                 | "KeyFrameId"
                 | "KeyFrameString"
         ) && normalized_interpolator_id(object).is_some()
@@ -364,6 +366,35 @@ pub(crate) fn build_linear_animations<'a>(
                 interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
                 interpolator_id: normalized_interpolator_id(object),
                 value: object.uint_property("value").unwrap_or(0),
+            }));
+        }
+
+        if object.type_name == "KeyFrameInt" {
+            let Some((
+                owner_animation_index,
+                keyed_object_index,
+                keyed_property_index,
+                fps_animation_index,
+            )) = current_keyed_property
+            else {
+                continue;
+            };
+            let frame = object.uint_property("frame").unwrap_or(0);
+            let seconds = retained_key_frame_seconds(frame, animations[fps_animation_index].fps);
+            runtime_keyed_property_mut(
+                &mut animations,
+                owner_animation_index,
+                keyed_object_index,
+                keyed_property_index,
+            )
+            .key_frames
+            .push(RuntimeKeyFrame::Int(RuntimeKeyFrameInt {
+                global_id: global_id as u32,
+                frame,
+                seconds,
+                interpolation_type: object.uint_property("interpolationType").unwrap_or(0),
+                interpolator_id: normalized_interpolator_id(object),
+                value: object.int_property("value").unwrap_or(0),
             }));
         }
 
@@ -573,6 +604,7 @@ include!("animation/keyframe_double.rs");
 include!("animation/keyframe_color.rs");
 include!("animation/keyframe_bool.rs");
 include!("animation/keyframe_uint.rs");
+include!("animation/keyframe_int.rs");
 include!("animation/keyframe_string.rs");
 include!("animation/keyframe_callback.rs");
 

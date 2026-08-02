@@ -17,12 +17,12 @@ use nuxie::{
     RecordingFactory, RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags,
     RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene,
     SceneClippingFillRule, SceneEvent, SceneEventStringProperty, SceneFeatherSpace,
-    SceneLayoutAlign, SceneLayoutAlignment, SceneLayoutAnimationStyle,
-    SceneLayoutCubicInterpolator, SceneLayoutCubicInterpolatorField, SceneLayoutDirection,
-    SceneLayoutDisplay, SceneLayoutElasticEasing, SceneLayoutElasticInterpolator,
-    SceneLayoutElasticInterpolatorField, SceneLayoutFlexDirection, SceneLayoutInterpolation,
-    SceneLayoutInterpolator, SceneLayoutJustify, SceneLayoutOverflow, SceneLayoutPosition,
-    SceneLayoutScale, SceneLayoutScriptedInterpolator, SceneLayoutScriptedInterpolatorField,
+    SceneLayoutAlignment, SceneLayoutAnimationStyle, SceneLayoutCubicInterpolator,
+    SceneLayoutCubicInterpolatorField, SceneLayoutDirection, SceneLayoutDisplay,
+    SceneLayoutElasticEasing, SceneLayoutElasticInterpolator, SceneLayoutElasticInterpolatorField,
+    SceneLayoutFlexDirection, SceneLayoutInterpolation, SceneLayoutInterpolator,
+    SceneLayoutJustify, SceneLayoutOverflow, SceneLayoutPosition, SceneLayoutScale,
+    SceneLayoutScriptedInterpolator, SceneLayoutScriptedInterpolatorField, SceneLayoutType,
     SceneLayoutUnit, SceneLayoutWrap, SceneStrokeCap, SceneStrokeJoin, SceneTextAlign,
     SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec,
     ScriptedDrawableSpec, ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec,
@@ -266,9 +266,6 @@ fn ordinary_layout_component_authors_the_complete_typed_cpp_style_domain() -> Re
                     position_right: 20.0,
                     position_top: 21.0,
                     position_bottom: 22.0,
-                    flex: 23.0,
-                    flex_grow: 24.0,
-                    flex_shrink: 25.0,
                     flex_basis: 26.0,
                     aspect_ratio: 27.0,
                     animation_style: SceneLayoutAnimationStyle::Custom,
@@ -287,10 +284,6 @@ fn ordinary_layout_component_authors_the_complete_typed_cpp_style_domain() -> Re
                     position_type: SceneLayoutPosition::Absolute,
                     flex_direction: SceneLayoutFlexDirection::ColumnReverse,
                     direction: SceneLayoutDirection::LeftToRight,
-                    align_content: SceneLayoutAlign::Center,
-                    align_items: SceneLayoutAlign::Stretch,
-                    align_self: SceneLayoutAlign::FlexEnd,
-                    justify_content: SceneLayoutJustify::SpaceEvenly,
                     flex_wrap: SceneLayoutWrap::WrapReverse,
                     overflow: SceneLayoutOverflow::Scroll,
                     intrinsically_sized: true,
@@ -327,6 +320,9 @@ fn ordinary_layout_component_authors_the_complete_typed_cpp_style_domain() -> Re
                     layout_width_scale: SceneLayoutScale::Fill,
                     layout_height_scale: SceneLayoutScale::Hug,
                     flex_basis_units: SceneLayoutUnit::Point,
+                    justify_self: SceneLayoutJustify::End,
+                    justify_items: SceneLayoutJustify::End,
+                    layout_type: SceneLayoutType::Grid,
                     present: Default::default(),
                 },
             }),
@@ -368,8 +364,8 @@ fn ordinary_layout_component_authors_the_complete_typed_cpp_style_domain() -> Re
     let style = &exported.records()[3];
     assert_eq!(
         style.properties.len(),
-        77,
-        "Name, parent, and all 75 LayoutComponentStyleBase properties must be authored"
+        73,
+        "Name, parent, and all 71 runtime LayoutComponentStyle properties must be authored"
     );
     Ok(())
 }

@@ -1570,6 +1570,7 @@ fn runtime_object_target_value(
             crate::properties::runtime_object_double_property_by_key(target, property_key)
                 .map(RuntimeConverterPropertyValue::Double)
         }
+        nuxie_schema::FieldKind::Int => None,
         nuxie_schema::FieldKind::Uint => {
             crate::properties::runtime_object_uint_property_by_key(target, property_key)
                 .map(RuntimeConverterPropertyValue::Uint)
@@ -1645,6 +1646,7 @@ fn normalize_converter_property_value(
         Some(nuxie_schema::FieldKind::Double) => {
             number(value).map(RuntimeConverterPropertyValue::Double)
         }
+        Some(nuxie_schema::FieldKind::Int) => None,
         Some(nuxie_schema::FieldKind::Uint) => uint(value).map(RuntimeConverterPropertyValue::Uint),
         // C++ `DataBindContextValueString` writes CoreString only. A Bytes
         // field such as OperationViewModel::sourcePathIds is not a compatible

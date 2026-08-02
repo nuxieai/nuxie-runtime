@@ -4694,6 +4694,22 @@ impl ArtboardInstance {
         self.after_double_property_set(local_id, property_key, value)
     }
 
+    pub(crate) fn set_int_property(
+        &mut self,
+        local_id: usize,
+        property_key: u16,
+        value: i32,
+    ) -> bool {
+        let changed = self.objects.set_int_property(local_id, property_key, value);
+        if changed {
+            self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
+            self.mark_changed_unless_view_model_instance(local_id);
+            self.mark_prepared_changed_for_property(local_id, property_key);
+            self.mark_layout_changed();
+        }
+        changed
+    }
+
     pub(crate) fn set_keyed_double_property(
         &mut self,
         local_id: usize,
@@ -8598,6 +8614,7 @@ impl ArtboardInstance {
     ) -> bool {
         if !dirt.contains(ComponentDirt::RENDER_OPACITY)
             && !dirt.contains(ComponentDirt::COMPONENTS)
+            && !dirt.contains(ComponentDirt::WORLD_TRANSFORM)
         {
             return false;
         }
@@ -8663,6 +8680,42 @@ impl ArtboardInstance {
                         nested.child.retain_latest_unrealized_shape_gradient_state();
                     }
                 }
+            }
+        }
+        if dirt.contains(ComponentDirt::WORLD_TRANSFORM)
+            && self.runtime_object_type_name(host_local_id) == Some("NestedArtboardLeaf")
+            && property_key_for_name("NestedArtboardLeaf", "fit")
+                .and_then(|key| self.uint_property(host_local_id, key))
+                == Some(7)
+        {
+            let child_dimensions = self
+                .nested_artboards
+                .get(&host_local_id)
+                .map(|nested| nested.child.artboard_dimensions());
+            let frame_dimensions = self
+                .component_parent_local(host_local_id)
+                .filter(|parent_local| {
+                    self.runtime_object_type_name(*parent_local) == Some("LayoutComponent")
+                })
+                .and_then(|parent_local| self.layout_bounds(parent_local))
+                .map(|bounds| (bounds.width, bounds.height))
+                .or(child_dimensions);
+            let child_root_transform = root_transform.multiply(
+                self.component(host_local_id)
+                    .map(|component| component.transform.world_transform)
+                    .unwrap_or(Mat2D::IDENTITY),
+            );
+            if let (Some((width, height)), Some(nested)) = (
+                frame_dimensions,
+                self.nested_artboards.get_mut(&host_local_id),
+            ) && nested.child.set_artboard_dimensions(width, height)
+            {
+                // The mounted instance already advanced; use one non-root
+                // child update pass to reflow now or this frame would draw
+                // the old layout at the new bounds.
+                changed |= nested
+                    .child
+                    .update_pass_with_script_mode(script_mode, child_root_transform);
             }
         }
         changed
@@ -9360,6 +9413,9 @@ impl ArtboardInstance {
         let owner_callback = owner_callback.or_else(|| {
             crate::draw_target::uint_property_changed(self, local_id, type_name, property_key)
         });
+        let owner_callback = owner_callback.or_else(|| {
+            nested_artboard_leaf_uint_property_changed(self, local_id, type_name, property_key)
+        });
         *owner_callback_handled = owner_callback.is_some();
         let owner_changed = owner_callback.unwrap_or(false);
         if self.slot(local_id).and_then(|slot| slot.type_name) == Some("Image")
@@ -10012,27 +10068,37 @@ impl ArtboardInstance {
                     false,
                 )
             }
-            Some("NestedArtboardOrigin")
-                if property_key_for_name("NestedArtboardOrigin", "originX")
-                    == Some(property_key)
-                    || property_key_for_name("NestedArtboardOrigin", "originY")
+            Some("ComponentOrigin")
+                if property_key_for_name("ComponentOrigin", "originX") == Some(property_key)
+                    || property_key_for_name("ComponentOrigin", "originY")
                         == Some(property_key) =>
             {
                 let Some(host_local_id) = self.component_parent_local(local_id) else {
                     return false;
                 };
+                if self
+                    .component(host_local_id)
+                    .is_some_and(|host| host.type_name == "LayoutComponent")
+                {
+                    self.add_dirt(
+                        host_local_id,
+                        ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH,
+                        true,
+                    );
+                    return true;
+                }
                 let Some(origin_x_key) = property_key_for_name("Artboard", "originX") else {
                     return false;
                 };
                 let Some(origin_y_key) = property_key_for_name("Artboard", "originY") else {
                     return false;
                 };
-                let Some(origin_x) = property_key_for_name("NestedArtboardOrigin", "originX")
+                let Some(origin_x) = property_key_for_name("ComponentOrigin", "originX")
                     .and_then(|key| self.double_property(local_id, key))
                 else {
                     return false;
                 };
-                let Some(origin_y) = property_key_for_name("NestedArtboardOrigin", "originY")
+                let Some(origin_y) = property_key_for_name("ComponentOrigin", "originY")
                     .and_then(|key| self.double_property(local_id, key))
                 else {
                     return false;
@@ -12213,6 +12279,59 @@ mod tests {
             quantize: -1.0,
             cumulated_seconds: 0.0,
         }
+    }
+
+    #[test]
+    fn layout_fit_leaf_resizes_its_mounted_artboard_from_the_parent_layout_frame() {
+        let mut root = synthetic_component_for_type(0, "Artboard");
+        root.dirt = ComponentDirt::COMPONENTS;
+        let mut layout = synthetic_component_for_type(1, "LayoutComponent");
+        layout.dirt = ComponentDirt::COMPONENTS;
+        let mut leaf = synthetic_component_for_type(2, "NestedArtboardLeaf");
+        leaf.dirt = ComponentDirt::WORLD_TRANSFORM;
+        let mut instance = synthetic_instance(vec![root, layout, leaf], vec![0, 1, 2]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+
+        let bounds = Arc::new(BTreeMap::from([(
+            1,
+            RuntimeLayoutBounds {
+                x: 11.0,
+                y: 13.0,
+                width: 120.0,
+                height: 80.0,
+            },
+        )]));
+        instance.layout_constraint_bounds_enabled = true;
+        instance.layout_constraint_bounds = Some(Arc::clone(&bounds));
+        instance.solved_layout_bounds = Some(bounds);
+
+        let mut child =
+            synthetic_instance(vec![synthetic_component_for_type(0, "Artboard")], vec![0]);
+        child.set_artboard_dimensions(10.0, 20.0);
+        child.update_pass_data_bind_call_count = 0;
+        let mut nested = synthetic_nested_artboard_instance(7);
+        nested.child = Box::new(child);
+        instance.nested_artboards.insert(2, nested);
+        instance.nested_artboard_locals.push(2);
+
+        let fit_key = property_key_for_name("NestedArtboardLeaf", "fit").unwrap();
+        assert!(instance.set_uint_property(2, fit_key, 7));
+        assert!(
+            instance
+                .component(2)
+                .is_some_and(|component| component.dirt.contains(ComponentDirt::WORLD_TRANSFORM))
+        );
+
+        instance.update_pass();
+
+        let child = &instance.nested_artboards[&2].child;
+        assert_eq!(child.artboard_dimensions(), (120.0, 80.0));
+        assert_eq!(
+            child.update_pass_data_bind_call_count, 2,
+            "NestedArtboard::update performs the ordinary mounted-child pass, then the resized \
+             layout-fit leaf performs exactly one same-frame reflow pass"
+        );
     }
 
     #[test]

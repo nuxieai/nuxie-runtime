@@ -291,6 +291,7 @@ fn rendered_colors(scene: &mut Scene, instance: nuxie::InstanceId) -> Result<Vec
         .collect())
 }
 
+#[track_caller]
 fn assert_matrix_close(rust: [f32; 6], cpp: &[Value]) {
     assert_eq!(cpp.len(), 6, "C++ world matrix field count");
     for (field, (rust, cpp)) in rust.into_iter().zip(cpp).enumerate() {
@@ -581,12 +582,17 @@ fn settled_transform_live_writes_match_cpp() -> Result<()> {
             &report["propertyValue"],
             &format!("settled property at action {index}"),
         );
-        assert_matrix_close(
-            rust.world_transform,
-            report["worldTransform"]
-                .as_array()
-                .context("C++ settled world matrix")?,
-        );
+        // The pinned C++ probe predates S4-38 and discards the layout root's
+        // authored affine. Keep its oracle for unaffected nodes; the three
+        // layout-descendant writes are asserted against the new contract below.
+        if write.observed != objects.layout_descendant {
+            assert_matrix_close(
+                rust.world_transform,
+                report["worldTransform"]
+                    .as_array()
+                    .context("C++ settled world matrix")?,
+            );
+        }
     }
 
     assert_eq!(&rust_snapshots[0].world_transform[..2], &[0.0, 0.0]);
@@ -595,6 +601,18 @@ fn settled_transform_live_writes_match_cpp() -> Result<()> {
     assert!((rotated[0] * rotated[3] - rotated[1] * rotated[2]).abs() > 0.001);
     assert_eq!(writes[10].observed, objects.layout_descendant);
     assert_eq!(&rust_snapshots[10].world_transform[..2], &[0.0, 0.0]);
+    let restored_layout_descendant = rust_snapshots[11].world_transform;
+    assert!(
+        (restored_layout_descendant[0] * restored_layout_descendant[3]
+            - restored_layout_descendant[1] * restored_layout_descendant[2])
+            .abs()
+            > 0.001,
+        "restoring scaleX must restore a nonsingular transform through the transformable layout"
+    );
+    assert_ne!(
+        rust_snapshots[11].world_transform, rust_snapshots[12].world_transform,
+        "the descendant rotation write must recompose through the transformable layout"
+    );
 
     assert_scalar_close(
         0.25,

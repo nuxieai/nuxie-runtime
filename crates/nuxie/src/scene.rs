@@ -22147,16 +22147,34 @@ fn lower_artboard(
         let mut properties = vec![
             ExportedProperty::ParentId(parent_id),
             ExportedProperty::LayoutFlexDirection(flow.axis.wire_value(flow.reverse)),
+        ];
+        if flow.layout_hosted {
+            // An authoring layout Item hosts this list inside an authored
+            // flex tree. The wrapper participates in that parent's flow and
+            // hugs the mounted rows, so flex siblings reserve the list's
+            // real extent; the list's own translate stays zero.
+            properties.extend([
+                ExportedProperty::LayoutComponentStyle(
+                    LayoutComponentStyleProperty::LayoutWidthScale(SceneLayoutScale::Hug),
+                ),
+                ExportedProperty::LayoutComponentStyle(
+                    LayoutComponentStyleProperty::LayoutHeightScale(SceneLayoutScale::Hug),
+                ),
+                ExportedProperty::LayoutComponentStyle(
+                    LayoutComponentStyleProperty::IntrinsicallySized(true),
+                ),
+            ]);
+        } else {
             // The wrapper is a flow container for the list's generated rows,
             // not a flex item of the list's parent. Absolute positioning
             // (insets default to 0) keeps it at its parent's origin so the
             // ArtboardComponentList's own x/y places the rows; without this a
             // root-level list joins the artboard root's flow and is flowed a
             // full artboard-width to the right of the document tree.
-            ExportedProperty::LayoutComponentStyle(LayoutComponentStyleProperty::PositionType(
-                SceneLayoutPosition::Absolute,
-            )),
-        ];
+            properties.push(ExportedProperty::LayoutComponentStyle(
+                LayoutComponentStyleProperty::PositionType(SceneLayoutPosition::Absolute),
+            ));
+        }
         if flow.gap != 0.0 {
             properties.push(match flow.axis {
                 ArtboardComponentListAxis::Horizontal => {
@@ -36772,6 +36790,7 @@ mod tests {
                         axis: ArtboardComponentListAxis::Horizontal,
                         reverse: false,
                         gap: 0.0,
+                        layout_hosted: false,
                     }),
                     source: ViewModelListSource::direct(items),
                     map_rules: vec![ArtboardListMapRuleSpec {

@@ -4988,6 +4988,7 @@ fn typed_vertical_component_list_exports_imports_advances_and_draws_two_view_mod
                     axis: ArtboardComponentListAxis::Vertical,
                     reverse: false,
                     gap: 6.0,
+                    layout_hosted: false,
                 }),
                 source: ViewModelListSource::direct(root_items),
                 map_rules: vec![ArtboardListMapRuleSpec {
@@ -5350,6 +5351,7 @@ fn flowed_component_list_wrapper_stays_out_of_the_artboard_root_flow() -> Result
                     axis: ArtboardComponentListAxis::Vertical,
                     reverse: false,
                     gap: 6.0,
+                    layout_hosted: false,
                 }),
                 source: ViewModelListSource::direct(root_items),
                 map_rules: vec![ArtboardListMapRuleSpec {
@@ -12752,6 +12754,7 @@ fn component_list_padding_binds_use_the_stable_style_target_and_survive_rollback
                     axis: ArtboardComponentListAxis::Vertical,
                     reverse: false,
                     gap: 0.0,
+                    layout_hosted: false,
                 }),
                 source: ViewModelListSource::direct(root_items),
                 map_rules: vec![ArtboardListMapRuleSpec {
@@ -13030,6 +13033,7 @@ fn component_list_occurrences_execute_one_authored_numeric_bind_in_item_local_co
                     axis: ArtboardComponentListAxis::Horizontal,
                     reverse: false,
                     gap: 0.0,
+                    layout_hosted: false,
                 }),
                 source: ViewModelListSource::direct(items),
                 map_rules: vec![ArtboardListMapRuleSpec {
@@ -15054,5 +15058,236 @@ fn clipping_shape_remove_and_restore_preserves_identity_and_protects_its_source(
     assert_eq!(error.diagnostic().reason, EditReason::UnknownObject);
     assert_eq!(scene.epoch(), epoch_before_rejected_remove);
     assert_eq!(scene.export_records(), records_before);
+    Ok(())
+}
+
+#[test]
+fn layout_hosted_component_list_wrapper_reserves_row_extent_in_its_parent_flow() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((root_artboard, item_shape, component_list, footer_shape), _) = scene.edit(|tx| {
+        let root_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Root".into(),
+            width: 120.0,
+            height: 100.0,
+        })?;
+        let mut column_style = LayoutComponentStyleSpec::default();
+        column_style.flex_direction = SceneLayoutFlexDirection::Column;
+        column_style
+            .present
+            .insert(LayoutComponentStyleField::FlexDirection);
+        let column = tx.create(
+            Parent::Artboard(root_artboard),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Document column".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 120.0,
+                height: 100.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: column_style,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(column),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Header".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 120.0,
+                height: 20.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec::default(),
+            }),
+        )?;
+        let item_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Item".into(),
+            width: 20.0,
+            height: 20.0,
+        })?;
+        let item_shape = tx.create(
+            Parent::Artboard(item_artboard),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Item shape".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(item_shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Item bounds", 20.0, 20.0)),
+        )?;
+        let fill = tx.create(
+            Parent::Object(item_shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Item fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Item color".into(),
+                color: 0xffab_cdef,
+            }),
+        )?;
+
+        let (item_model, root_items) = {
+            let mut view_models = tx.view_models();
+            let root_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Root model".into(),
+            })?;
+            let item_model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Item model".into(),
+            })?;
+            let root_items = view_models.create_list(
+                root_model,
+                ViewModelListSpec {
+                    name: "items".into(),
+                },
+            )?;
+            let root_defaults = view_models.create_instance(
+                root_model,
+                ViewModelInstanceSpec {
+                    name: Some("Root defaults".into()),
+                },
+            )?;
+            let item_a = view_models.create_instance(
+                item_model,
+                ViewModelInstanceSpec {
+                    name: Some("Item A".into()),
+                },
+            )?;
+            let item_b = view_models.create_instance(
+                item_model,
+                ViewModelInstanceSpec {
+                    name: Some("Item B".into()),
+                },
+            )?;
+            view_models.set_list_items(root_defaults, root_items, &[item_a, item_b])?;
+            view_models.set_artboard_default(root_artboard, root_defaults)?;
+            view_models.set_artboard_default(item_artboard, item_a)?;
+            (item_model, root_items)
+        };
+
+        let component_list = tx.create_component_list(
+            root_artboard,
+            ArtboardComponentListSpec {
+                name: "Items".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                flow: Some(ArtboardComponentListFlow {
+                    axis: ArtboardComponentListAxis::Vertical,
+                    reverse: false,
+                    gap: 6.0,
+                    layout_hosted: true,
+                }),
+                source: ViewModelListSource::direct(root_items),
+                map_rules: vec![ArtboardListMapRuleSpec {
+                    view_model: item_model,
+                    artboard: item_artboard,
+                }],
+            },
+        )?;
+        tx.reparent(
+            component_list.object_id(),
+            Parent::Object(column),
+            ChildIndex::Last,
+        )?;
+        let footer = tx.create(
+            Parent::Object(column),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Footer".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 120.0,
+                height: 20.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec::default(),
+            }),
+        )?;
+        let footer_shape = tx.create(
+            Parent::Object(footer),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Footer shape".into(),
+                x: 10.0,
+                y: 10.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(footer_shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Footer bounds", 20.0, 20.0)),
+        )?;
+        let footer_fill = tx.create(
+            Parent::Object(footer_shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Footer fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(footer_fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Footer color".into(),
+                color: 0xff12_3456,
+            }),
+        )?;
+        Ok((root_artboard, item_shape, component_list, footer_shape))
+    })?;
+
+    let instance = scene.instantiate(root_artboard)?;
+    let mut events = Vec::new();
+    let _ = scene.frame().advance(instance, 0.0, &mut events);
+    // Column flow: header 0..20, hosted rows 20..40 and 46..66, footer 66..86.
+    let occurrences = [
+        (nuxie::Vec2D::new(6.0, 26.0), 0),
+        (nuxie::Vec2D::new(6.0, 52.0), 1),
+    ];
+    for (point, item_index) in occurrences {
+        let hits = scene.frame().hit_test_paths_with_bounds(instance, point);
+        assert_eq!(hits.len(), 1, "expected one hit at {point:?}");
+        assert_eq!(
+            hits[0].path().objects(),
+            [component_list.object_id(), item_shape]
+        );
+        assert_eq!(hits[0].occurrence().len(), 1);
+        assert_eq!(hits[0].occurrence()[0].item_index(), item_index);
+    }
+    assert_eq!(
+        scene
+            .frame()
+            .hit_test(instance, nuxie::Vec2D::new(16.0, 70.0)),
+        vec![footer_shape],
+        "footer must flow below the hosted rows' reserved extent",
+    );
     Ok(())
 }

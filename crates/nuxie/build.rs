@@ -3183,6 +3183,12 @@ fn render_scene_schema() -> String {
              pub axis: ArtboardComponentListAxis,\n\
              pub reverse: bool,\n\
              pub gap: f32,\n\
+             /// The synthesized flow wrapper participates in its parent\n\
+             /// layout's flow and hugs the mounted rows, instead of pinning\n\
+             /// absolutely at the parent origin while the list's own\n\
+             /// translate places the rows. Set when an authoring layout Item\n\
+             /// hosts the list inside an authored flex tree.\n\
+             pub layout_hosted: bool,\n\
          }\n\n\
          #[derive(Debug, Clone, Copy, PartialEq)]\n\
          pub struct ImageCropRect {\n\

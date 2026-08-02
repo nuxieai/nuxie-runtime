@@ -13,7 +13,7 @@ recursion unwind, falls back to the retained 2-channel/48 kHz runtime engine
 when no external Artboard engine is configured, and ignores the reported event
 delay exactly like C++.
 
-D18 is deliberately narrower:
+D17 is deliberately narrower:
 
 - Symphonia replaces miniaudio only for encoded decode, channel conversion,
   and resampling.

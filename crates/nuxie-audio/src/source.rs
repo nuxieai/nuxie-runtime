@@ -273,7 +273,7 @@ impl AudioReader {
         self.sample_rate
     }
 
-    /// Resampled frame count. D18 permits a ±2-frame difference from
+    /// Resampled frame count. D17 permits a ±2-frame difference from
     /// miniaudio; callers must not use this as a byte-exact PCM oracle.
     pub fn length_in_frames(&self) -> u64 {
         (self.samples.len() / self.channels as usize) as u64
@@ -480,7 +480,7 @@ mod tests {
         let native = source.make_reader(2, 44_100).expect("native reader");
         assert_eq!(native.length_in_frames(), 9_688);
 
-        // D18's decoder/resampler adaptation permits a two-frame length
+        // D17's decoder/resampler adaptation permits a two-frame length
         // difference; sample payloads are intentionally never byte-pinned.
         let mono_48k = source.make_reader(1, 48_000).expect("48 kHz reader");
         assert!(mono_48k.length_in_frames().abs_diff(10_544) <= 2);

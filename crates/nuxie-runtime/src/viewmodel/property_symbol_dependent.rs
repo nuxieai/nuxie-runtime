@@ -78,3 +78,67 @@ impl RuntimeOwnedViewModelParentRelay {
         visit(this, &mut BTreeSet::new());
     }
 }
+
+/// Retained property subscriptions owned by one runtime core-object listener.
+///
+/// C++ stores heap-allocated `PropertySymbolDependent` objects here. Rust
+/// stores their source cells directly, but keeps the same explicit teardown:
+/// every remap must unregister the old properties while their old instance is
+/// still retained by the concrete listener.
+#[derive(Debug, Default)]
+pub(crate) struct RuntimeCoreObjectListener {
+    properties: Vec<RuntimeViewModelCell>,
+    sink: RuntimeCellDirtSink,
+}
+
+impl RuntimeCoreObjectListener {
+    pub(crate) fn create_properties(
+        &mut self,
+        properties: impl IntoIterator<Item = RuntimeViewModelCell>,
+    ) {
+        self.delete_properties();
+        for property in properties {
+            property.add_dependent(&self.sink);
+            self.properties.push(property);
+        }
+    }
+
+    pub(crate) fn delete_properties(&mut self) {
+        for property in self.properties.drain(..) {
+            property.remove_dependent(&self.sink);
+        }
+        self.sink.take_dirt();
+    }
+
+    pub(crate) fn take_changed(&self) -> bool {
+        self.sink.take_dirt().contains(RuntimeCellDirt::BINDINGS)
+    }
+}
+
+impl Drop for RuntimeCoreObjectListener {
+    fn drop(&mut self) {
+        self.delete_properties();
+    }
+}
+
+#[cfg(test)]
+mod property_symbol_listener_tests {
+    use super::*;
+
+    #[test]
+    fn creating_properties_deletes_the_previous_subscriptions_first() {
+        let old = RuntimeViewModelCell::new(RuntimeViewModelCellValue::String(Vec::new().into()));
+        let next = RuntimeViewModelCell::new(RuntimeViewModelCellValue::String(Vec::new().into()));
+        let mut listener = RuntimeCoreObjectListener::default();
+
+        listener.create_properties([old.clone()]);
+        old.notify_bindings_value_changed();
+        assert!(listener.take_changed());
+
+        listener.create_properties([next.clone()]);
+        old.notify_bindings_value_changed();
+        assert!(!listener.take_changed());
+        next.notify_bindings_value_changed();
+        assert!(listener.take_changed());
+    }
+}

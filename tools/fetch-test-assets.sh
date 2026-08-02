@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
 ref=${RIVE_RUNTIME_REF:-d788e8ec6e8b598526607d6a1e8818e8b637b60c}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
-base_url="https://raw.githubusercontent.com/rive-app/rive-runtime/$ref/tests/unit_tests/assets"
+base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
   "animation/smi_test.riv|51fb2ef2ca7a2014b4f4586df1c0894fef7d92d422a27ac82fef1459407b73f8"
@@ -17,6 +17,7 @@ assets=(
   "graph/draw_rule_cycle.riv|db0cf30b8df689dc1d29dfbf4316b69c61270743a7eb94bcd3ac27600a00c9c3"
   "minimal/long_name.riv|9f4b5f73afdd9223e7351fe853afa587f242868298576320ac6556ae91c54e9f"
   "minimal/two_artboards.riv|480472d9942711492ce37cdba9aea6266f254633f5a2ac4a9e30f9d0eca70e8c"
+  "sync/databind_null_artboard_swap.riv|0160b4572f217271df84072b08476d433a71c5bf78a9917f39fbc03239560a1f|30a0e2d42e2e6d091350d6edb816e165e27f7988"
 )
 
 sha256() {
@@ -29,7 +30,12 @@ sha256() {
 
 for entry in "${assets[@]}"; do
   relative=${entry%%|*}
-  expected=${entry##*|}
+  remainder=${entry#*|}
+  expected=${remainder%%|*}
+  source_ref=$ref
+  if [[ "$remainder" == *'|'* ]]; then
+    source_ref=${remainder#*|}
+  fi
   name=${relative##*/}
   destination="$repo_root/fixtures/$relative"
   mkdir -p "$(dirname "$destination")"
@@ -37,7 +43,9 @@ for entry in "${assets[@]}"; do
   if [[ -n "$runtime_dir" && -f "$runtime_dir/tests/unit_tests/assets/$name" ]]; then
     cp "$runtime_dir/tests/unit_tests/assets/$name" "$destination"
   elif [[ ! -f "$destination" || "$(sha256 "$destination")" != "$expected" ]]; then
-    curl --fail --location --silent --show-error "$base_url/$name" --output "$destination"
+    curl --fail --location --silent --show-error \
+      "$base_url/$source_ref/tests/unit_tests/assets/$name" \
+      --output "$destination"
   fi
 
   actual=$(sha256 "$destination")

@@ -2,10 +2,12 @@
 
 use luaur_compiler::functions::luau_compile::luau_compile;
 use luaur_rt::{Function, Table, Value};
-use nuxie_scripting::vm::ScriptVm;
+use nuxie_scripting::vm::{ScriptVm, ScriptingLogLevel};
+use std::cell::RefCell;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::rc::Rc;
 
 #[derive(Clone, Copy)]
 enum Expected {
@@ -143,6 +145,37 @@ fn promise_scenarios_match_live_cpp_oracle() {
         assert_scenario(scenario, &cpp_actual);
         assert_eq!(actual, cpp_actual, "{}", scenario.name);
     }
+}
+
+#[test]
+fn async_coroutine_inherits_thread_data_for_host_print() {
+    // The async coroutine must carry the parent thread's host context on both
+    // its initial and post-await resumes.
+    let lines = Rc::new(RefCell::new(Vec::new()));
+    let captured = Rc::clone(&lines);
+    let vm = ScriptVm::new_with_log_sink(move |level, line| {
+        captured.borrow_mut().push((level, line.to_vec()));
+    });
+    vm.install_rive_globals().unwrap();
+
+    vm.eval::<()>(
+        r#"
+        async(function()
+            print("first resume")
+            await(Promise.resolve(1))
+            print("post-await resume")
+        end)
+        "#,
+    )
+    .expect("async host APIs remain context-safe");
+
+    assert_eq!(
+        lines.borrow().as_slice(),
+        [
+            (ScriptingLogLevel::Info, b"first resume".to_vec()),
+            (ScriptingLogLevel::Info, b"post-await resume".to_vec()),
+        ]
+    );
 }
 
 #[test]

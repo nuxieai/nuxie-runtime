@@ -6,14 +6,11 @@
 //! and resampled reader lengths may differ from miniaudio by up to two frames
 //! under approved adaptation D17.
 
-mod engine;
+mod audio_engine;
 mod source;
 
-#[cfg(feature = "audio-device")]
-mod device;
-
-pub use engine::{AudioArtboardId, AudioEngine, AudioEngineError, AudioSound};
+pub use audio_engine::{AudioArtboardId, AudioEngine, AudioEngineError, AudioSound};
 pub use source::{AudioDecodeError, AudioFormat, AudioReader, AudioSource};
 
 #[cfg(feature = "audio-device")]
-pub use device::{AudioDeviceError, AudioDeviceSink};
+pub use audio_engine::{AudioDeviceError, AudioDeviceSink};

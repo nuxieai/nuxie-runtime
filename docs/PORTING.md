@@ -1406,6 +1406,16 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   (F13), or a passing golden alone is not a decision and cannot promote a row.
   Adding any ceiling behavior later reopens the corresponding D-row and
   requires ordinary owner-family closure under §0 steps 1–5 and FLR-16.
+- **FLR-21 Profiler capture backend is an approved implementation ceiling.**
+  The **profiler-capture-backend** ceiling is bound to D17 and the approved
+  P1-m decomposition-question-4 decision. The pinned
+  `src/profiler/profiler.cpp` MicroProfile wrapper is replaced by an open,
+  pluggable pure-Rust `ProfileCapture` trait; Nuxie does not link MicroProfile
+  or add C++ FFI. This ceiling is limited to the capture backend. The
+  `RiveProfile` record layouts, stable string ids, capture lifecycle and frame
+  delay/history behavior, version-2 BinaryWriter stream, and transition and
+  listener hook semantics remain faithful port obligations under the direct
+  `src/profiler/rive_profile.cpp` owner.
 
 **Script-advance error lifecycle is ported, not a support ceiling.** Pinned C++
 `ScriptedObject::scriptAdvance` converts a failed

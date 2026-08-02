@@ -184,6 +184,10 @@ fn inert_state_machine_listener(
     listener: &nuxie_binary::RuntimeStateMachineListener<'_>,
 ) -> RuntimeStateMachineListener {
     RuntimeStateMachineListener {
+        name: listener
+            .object
+            .string_property("name")
+            .map(ToOwned::to_owned),
         target_local_id: listener
             .object
             .uint_property("targetId")
@@ -1130,6 +1134,7 @@ mod tests {
 
     fn fl_c5_empty_listener(target_local_id: usize) -> RuntimeStateMachineListener {
         RuntimeStateMachineListener {
+            name: None,
             target_local_id,
             is_single: false,
             listener_types: Vec::new(),
@@ -1612,7 +1617,7 @@ mod tests {
             any_state_index: None,
             exit_state_index: None,
         };
-        let layer_occurrence = StateMachineLayerInstance::new(&layer, &artboard, &[], &[], &[]);
+        let layer_occurrence = StateMachineLayerInstance::new(&layer, "", &artboard, &[], &[], &[]);
         let empty_state_animation = layer_occurrence
             .current_animation()
             .expect("AnimationState always creates an animation occurrence");

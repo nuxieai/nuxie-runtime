@@ -159,6 +159,7 @@ struct ReadyFileScripts {
     programs: BTreeMap<usize, ScriptProgram>,
     vm: ScriptVm,
     factory_domain: usize,
+    default_context_initialized: bool,
 }
 
 #[cfg(feature = "scripting")]
@@ -399,7 +400,66 @@ impl FileScriptRuntime {
             programs,
             vm,
             factory_domain: render_factory_domain(factory),
+            default_context_initialized: false,
         })
+    }
+
+    fn has_executable_script_assets(&self) -> bool {
+        self.assets
+            .iter()
+            .any(|asset| asset.type_name == "ScriptAsset" && !asset.is_project_data_converter)
+    }
+
+    fn configure_candidate_assets(
+        candidate: &mut ReadyFileScripts,
+        runtime: &RuntimeFile,
+        file_asset_owners: &nuxie_runtime::RuntimeFileAssetOwners,
+    ) {
+        candidate
+            .vm
+            .set_image_asset_owners(file_asset_owners.image_assets());
+        candidate
+            .vm
+            .set_audio_asset_owners(file_asset_owners.audio_assets());
+        for asset in runtime
+            .file_assets()
+            .into_iter()
+            .filter(|asset| asset.type_name == "AudioAsset")
+        {
+            let name = asset.string_property("name").unwrap_or_default();
+            candidate.vm.register_audio_asset_identity(name, asset.id);
+        }
+    }
+
+    fn prepare_runtime(
+        &mut self,
+        runtime: &RuntimeFile,
+        file_asset_owners: &nuxie_runtime::RuntimeFileAssetOwners,
+        factory: &mut dyn Factory,
+    ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
+        if !self.has_executable_script_assets() {
+            return Ok(false);
+        }
+        if !self.scripts_are_authenticated() {
+            return Err(nuxie_runtime::ScriptError::new(
+                "this File has no authenticated script authority",
+            ));
+        }
+
+        let domain = render_factory_domain(factory);
+        if let Some(ready) = self.ready.as_ref() {
+            if ready.factory_domain != domain {
+                return Err(nuxie_runtime::ScriptError::new(
+                    "scripted File was used with a different renderer Factory domain",
+                ));
+            }
+            return Ok(true);
+        }
+
+        let mut candidate = self.build_candidate(runtime, factory)?;
+        Self::configure_candidate_assets(&mut candidate, runtime, file_asset_owners);
+        self.ready = Some(candidate);
+        Ok(true)
     }
 
     fn prepare_mounts(
@@ -412,20 +472,25 @@ impl FileScriptRuntime {
         root_view_model: Option<&RuntimeOwnedViewModelHandle>,
     ) -> std::result::Result<PreparedFileScriptMounts, nuxie_runtime::ScriptError> {
         let domain = render_factory_domain(factory);
-        if let Some(ready) = self.ready.as_ref() {
+        if let Some(ready) = self.ready.as_mut() {
             if ready.factory_domain != domain {
                 return Err(nuxie_runtime::ScriptError::new(
                     "scripted File was used with a different renderer Factory domain",
                 ));
             }
+            let initialize_default_context = !ready.default_context_initialized;
+            if initialize_default_context {
+                ready
+                    .vm
+                    .set_default_context_view_model(default_context_view_model);
+            }
+            let groups =
+                instantiate_script_mounts(ready, runtime, groups, factory, root_view_model)?;
+            if initialize_default_context {
+                ready.default_context_initialized = true;
+            }
             return Ok(PreparedFileScriptMounts {
-                groups: instantiate_script_mounts(
-                    ready,
-                    runtime,
-                    groups,
-                    factory,
-                    root_view_model,
-                )?,
+                groups,
                 candidate: None,
             });
         }
@@ -437,19 +502,8 @@ impl FileScriptRuntime {
         candidate
             .vm
             .set_default_context_view_model(default_context_view_model);
-        candidate
-            .vm
-            .set_image_asset_owners(file_asset_owners.image_assets());
-        let audio_assets = file_asset_owners.audio_assets();
-        candidate.vm.set_audio_asset_owners(audio_assets);
-        for asset in runtime
-            .file_assets()
-            .into_iter()
-            .filter(|asset| asset.type_name == "AudioAsset")
-        {
-            let name = asset.string_property("name").unwrap_or_default();
-            candidate.vm.register_audio_asset_identity(name, asset.id);
-        }
+        candidate.default_context_initialized = true;
+        Self::configure_candidate_assets(&mut candidate, runtime, file_asset_owners);
         let groups =
             instantiate_script_mounts(&candidate, runtime, groups, factory, root_view_model)?;
         Ok(PreparedFileScriptMounts {
@@ -3217,6 +3271,228 @@ fn rehydrate_bound_layout_inputs(
     Ok(())
 }
 
+/// Kind of one entry in a [`File`]'s dense, file-order asset catalog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileAssetKind {
+    Image,
+    Font,
+    Audio,
+    Blob,
+    Script,
+    Shader,
+    Library,
+}
+
+/// Borrowed handle to one entry in a [`File`]'s dense asset catalog.
+///
+/// The index is the authored `FileAsset` ordinal used by referencers. As in
+/// C++ `File::assets`, `ManifestAsset` is not part of this catalog.
+#[derive(Debug, Clone, Copy)]
+pub struct FileAsset<'a> {
+    file: &'a File,
+    index: usize,
+    descriptor: &'a nuxie_binary::RuntimeObject,
+    contents: Option<&'a [u8]>,
+    has_contents_record: bool,
+}
+
+impl<'a> FileAsset<'a> {
+    fn from_catalog(file: &'a File, entry: nuxie_binary::RuntimeFileAssetContents<'a>) -> Self {
+        Self {
+            file,
+            index: entry.ordinal,
+            descriptor: entry.asset,
+            contents: entry.contents,
+            has_contents_record: entry.has_contents_record,
+        }
+    }
+
+    pub fn index(self) -> usize {
+        self.index
+    }
+
+    pub fn kind(self) -> FileAssetKind {
+        match self.descriptor().type_name {
+            "ImageAsset" => FileAssetKind::Image,
+            "FontAsset" => FileAssetKind::Font,
+            "AudioAsset" => FileAssetKind::Audio,
+            "BlobAsset" => FileAssetKind::Blob,
+            "ScriptAsset" => FileAssetKind::Script,
+            "ShaderAsset" => FileAssetKind::Shader,
+            "LibraryAsset" => FileAssetKind::Library,
+            other => unreachable!("RuntimeFile published unsupported FileAsset kind {other}"),
+        }
+    }
+
+    pub fn name(self) -> Option<&'a str> {
+        self.descriptor().string_property("name")
+    }
+
+    pub fn asset_id(self) -> Option<u32> {
+        u32::try_from(self.descriptor().uint_property("assetId")?).ok()
+    }
+
+    /// The final in-band payload selected by the import stack for this asset.
+    pub fn contents(self) -> Option<&'a [u8]> {
+        self.contents
+    }
+
+    /// Whether the importer observed a `FileAssetContents` record, including
+    /// a record with no serialized bytes property.
+    pub fn has_contents_record(self) -> bool {
+        self.has_contents_record
+    }
+
+    /// Loader-visible retained resource handle for image, font, and audio
+    /// assets. Textual/script catalog entries deliberately have no decoded
+    /// renderer resource owner.
+    pub fn resource(self) -> Option<RuntimeFileAsset> {
+        self.file.file_asset_owners.asset(self.descriptor())
+    }
+
+    pub fn descriptor(self) -> &'a nuxie_binary::RuntimeObject {
+        self.descriptor
+    }
+}
+
+/// Borrowed handle to one authored view model in file-definition order.
+#[derive(Debug, Clone)]
+pub struct FileViewModel<'a> {
+    file: &'a File,
+    index: usize,
+    runtime: nuxie_binary::RuntimeViewModel<'a>,
+}
+
+/// Borrowed schema property in one [`FileViewModel`].
+#[derive(Debug, Clone, Copy)]
+pub struct FileViewModelProperty<'a> {
+    index: usize,
+    descriptor: &'a nuxie_binary::RuntimeObject,
+}
+
+impl<'a> FileViewModelProperty<'a> {
+    pub fn index(self) -> usize {
+        self.index
+    }
+
+    pub fn name(self) -> Option<&'a str> {
+        self.descriptor.string_property("name")
+    }
+
+    /// Generated runtime type name such as `ViewModelPropertyNumber`.
+    pub fn type_name(self) -> &'static str {
+        self.descriptor.type_name
+    }
+
+    pub fn descriptor(self) -> &'a nuxie_binary::RuntimeObject {
+        self.descriptor
+    }
+}
+
+impl PartialEq for FileViewModel<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index && std::ptr::eq(self.file, other.file)
+    }
+}
+
+impl Eq for FileViewModel<'_> {}
+
+impl<'a> FileViewModel<'a> {
+    fn from_runtime(
+        file: &'a File,
+        index: usize,
+        runtime: nuxie_binary::RuntimeViewModel<'a>,
+    ) -> Self {
+        Self {
+            file,
+            index,
+            runtime,
+        }
+    }
+
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    pub fn name(&self) -> Option<&'a str> {
+        self.runtime.object.string_property("name")
+    }
+
+    pub fn property_count(&self) -> usize {
+        self.runtime.properties.len()
+    }
+
+    pub fn properties(&self) -> impl ExactSizeIterator<Item = FileViewModelProperty<'a>> + '_ {
+        self.runtime
+            .properties
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(index, descriptor)| FileViewModelProperty { index, descriptor })
+    }
+
+    pub fn property(&self, index: usize) -> Option<FileViewModelProperty<'a>> {
+        Some(FileViewModelProperty {
+            index,
+            descriptor: *self.runtime.properties.get(index)?,
+        })
+    }
+
+    pub fn property_named(&self, name: &str) -> Option<FileViewModelProperty<'a>> {
+        self.properties()
+            .find(|property| property.name() == Some(name))
+    }
+
+    pub fn instance_count(&self) -> usize {
+        self.runtime.instances.len()
+    }
+
+    pub fn instance_name(&self, instance_index: usize) -> Option<&'a str> {
+        self.runtime
+            .instances
+            .get(instance_index)?
+            .object
+            .string_property("name")
+    }
+
+    pub fn is_global(&self) -> bool {
+        self.runtime.object.uint_property("viewModelType") == Some(2)
+    }
+
+    /// Construct a new instance initialized from the view-model schema.
+    pub fn instantiate(&self) -> Option<ViewModelInstance> {
+        let raw = RuntimeOwnedViewModelInstance::new(&self.file.runtime, self.index)?;
+        Some(ViewModelInstance {
+            raw: RuntimeOwnedViewModelHandle::new(raw),
+        })
+    }
+
+    /// Clone the first authored instance, or construct schema defaults when
+    /// the view model has no authored instances.
+    pub fn instantiate_default(&self) -> Option<ViewModelInstance> {
+        self.instantiate_instance(0).or_else(|| self.instantiate())
+    }
+
+    pub fn instantiate_instance(&self, instance_index: usize) -> Option<ViewModelInstance> {
+        let raw = RuntimeOwnedViewModelInstance::from_instance(
+            &self.file.runtime,
+            self.index,
+            instance_index,
+        )?;
+        Some(ViewModelInstance {
+            raw: RuntimeOwnedViewModelHandle::new(raw),
+        })
+    }
+
+    pub fn instantiate_instance_named(&self, name: &str) -> Option<ViewModelInstance> {
+        let instance = self
+            .file
+            .runtime
+            .view_model_instance_named(self.index, name)?;
+        self.instantiate_instance(instance.instance_index)
+    }
+}
+
 /// Imported Rive file plus its runtime graph projection.
 pub struct File {
     runtime: Arc<RuntimeFile>,
@@ -3574,6 +3850,39 @@ impl Clone for File {
 }
 
 impl File {
+    /// Whether this file contains at least one executable ScriptAsset.
+    ///
+    /// Pure-Rust project-data-converter envelopes use the same binary carrier
+    /// but are intentionally not registered with the Luau VM.
+    #[cfg(feature = "scripting")]
+    pub fn has_script_assets(&self) -> bool {
+        self.scripts.borrow().has_executable_script_assets()
+    }
+
+    /// Whether this file has constructed and registered its live scripting
+    /// VM. A VM remains cold until explicit preparation or the first
+    /// factory-bearing scripted artboard operation.
+    #[cfg(feature = "scripting")]
+    pub fn scripting_runtime_is_ready(&self) -> bool {
+        self.scripts.borrow().ready.is_some()
+    }
+
+    /// Construct this file's scripting VM and register all module/protocol,
+    /// blob, shader, library-import, image, and audio catalog wiring.
+    ///
+    /// This is the safe facade counterpart of C++ `File::registerScripts`.
+    /// Rust requires the renderer Factory explicitly because script renderer
+    /// objects are installed into the VM at construction. Visual-only imports
+    /// fail closed. Repeated preparation is idempotent for the same persistent
+    /// Factory domain and rejects a different domain.
+    #[cfg(feature = "scripting")]
+    pub fn prepare_scripting_runtime(&self, factory: &mut dyn Factory) -> Result<bool> {
+        self.scripts
+            .borrow_mut()
+            .prepare_runtime(&self.runtime, &self.file_asset_owners, factory)
+            .context("failed to prepare File scripting runtime")
+    }
+
     /// Route this File's script console output and Lua failures to the host.
     ///
     /// The sink is retained by the File and applied to its lazy scripting VM.
@@ -4017,6 +4326,73 @@ impl File {
             })?
             .id;
         self.file_asset_owners.audio_assets().get(global_id)
+    }
+
+    pub fn asset_count(&self) -> usize {
+        self.runtime.file_assets().len()
+    }
+
+    pub fn assets(&self) -> impl ExactSizeIterator<Item = FileAsset<'_>> + '_ {
+        self.runtime
+            .scripting_file_assets_with_contents()
+            .into_iter()
+            .map(|entry| FileAsset::from_catalog(self, entry))
+    }
+
+    pub fn asset(&self, index: usize) -> Option<FileAsset<'_>> {
+        let entry = self
+            .runtime
+            .scripting_file_assets_with_contents()
+            .get(index)
+            .copied()?;
+        Some(FileAsset::from_catalog(self, entry))
+    }
+
+    pub fn has_audio(&self) -> bool {
+        self.runtime
+            .file_assets()
+            .into_iter()
+            .any(|asset| asset.type_name == "AudioAsset")
+    }
+
+    pub fn view_model_count(&self) -> usize {
+        self.runtime.view_models().len()
+    }
+
+    pub fn view_models(&self) -> impl ExactSizeIterator<Item = FileViewModel<'_>> + '_ {
+        self.runtime
+            .view_models()
+            .into_iter()
+            .enumerate()
+            .map(|(index, runtime)| FileViewModel::from_runtime(self, index, runtime))
+    }
+
+    pub fn view_model(&self, index: usize) -> Option<FileViewModel<'_>> {
+        let runtime = self.runtime.view_model(index)?;
+        Some(FileViewModel::from_runtime(self, index, runtime))
+    }
+
+    pub fn view_model_index_named(&self, name: &str) -> Option<usize> {
+        self.runtime
+            .view_models()
+            .into_iter()
+            .position(|view_model| view_model.object.string_property("name") == Some(name))
+    }
+
+    pub fn view_model_named(&self, name: &str) -> Option<FileViewModel<'_>> {
+        self.view_models()
+            .find(|view_model| view_model.name() == Some(name))
+    }
+
+    pub fn global_view_models(&self) -> impl Iterator<Item = FileViewModel<'_>> + '_ {
+        self.view_models()
+            .filter(|view_model| view_model.is_global())
+    }
+
+    pub fn global_view_model_names(&self) -> Vec<&str> {
+        self.global_view_models()
+            .filter_map(|view_model| view_model.name())
+            .collect()
     }
 
     #[cfg(feature = "scripting")]
@@ -5685,6 +6061,16 @@ mod inert_script_import_tests {
         imported_script_assets_bytes(&[&[0, 1, 2, 3]])
     }
 
+    fn external_fixture(relative: &str) -> Vec<u8> {
+        let path = std::path::PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        )
+        .join("tests/unit_tests/assets")
+        .join(relative);
+        std::fs::read(path).expect("read external fixture")
+    }
+
     fn imported_script_asset_with_repeated_contents_bytes(payloads: &[&[u8]]) -> Vec<u8> {
         let mut bytes = b"RIVE".to_vec();
         push_var_uint(&mut bytes, 7);
@@ -6042,6 +6428,82 @@ mod inert_script_import_tests {
             }
         }
     }
+
+    #[test]
+    fn file_facade_prepares_one_authenticated_script_runtime_per_factory_domain() {
+        let bytes = external_fixture("script_inputs_test_1.riv");
+        let file = File::import_with_unsigned_scripts(&bytes).expect("trusted script fixture");
+        assert!(file.has_script_assets());
+        assert!(
+            file.assets()
+                .any(|asset| asset.kind() == FileAssetKind::Script)
+        );
+        assert!(!file.scripting_runtime_is_ready());
+
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        assert!(
+            file.prepare_scripting_runtime(&mut factory)
+                .expect("script modules and protocols register")
+        );
+        assert!(file.scripting_runtime_is_ready());
+        assert!(
+            file.prepare_scripting_runtime(&mut factory)
+                .expect("preparation is idempotent in one Factory domain")
+        );
+
+        let mut instance = file
+            .default_artboard()
+            .expect("script fixture has a default artboard")
+            .instantiate()
+            .expect("instantiate script fixture");
+        instance
+            .try_advance_with_factory(&mut factory, 0.0)
+            .expect("an eagerly prepared VM mounts and executes on first artboard use");
+
+        let mut other_factory = PersistentFactory::new(RecordingFactory::new());
+        let error = file
+            .prepare_scripting_runtime(&mut other_factory)
+            .expect_err("a live File VM cannot move to a different Factory domain");
+        assert!(
+            format!("{error:#}").contains("different renderer Factory domain"),
+            "{error:#}"
+        );
+
+        let clone = file.clone();
+        assert!(clone.has_script_assets());
+        assert!(!clone.scripting_runtime_is_ready());
+    }
+
+    #[test]
+    fn file_facade_refuses_to_prepare_visual_only_scripts() {
+        let bytes = external_fixture("script_inputs_test_1.riv");
+        let file = File::import(&bytes).expect("visual-only script fixture");
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+
+        let error = file
+            .prepare_scripting_runtime(&mut factory)
+            .expect_err("visual-only imports cannot create a VM");
+        assert!(
+            format!("{error:#}").contains("authenticated script authority"),
+            "{error:#}"
+        );
+        assert!(!file.scripting_runtime_is_ready());
+    }
+
+    #[test]
+    fn file_facade_leaves_a_scriptless_file_runtime_cold() {
+        let file = File::import(&external_fixture("dependency_test.riv"))
+            .expect("scriptless fixture imports");
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+
+        assert!(!file.has_script_assets());
+        assert!(
+            !file
+                .prepare_scripting_runtime(&mut factory)
+                .expect("a scriptless file needs no VM")
+        );
+        assert!(!file.scripting_runtime_is_ready());
+    }
 }
 
 #[cfg(test)]
@@ -6174,6 +6636,82 @@ mod owned_instance_tests {
             asset.file_asset_unique_filename().as_deref(),
             Some("Inter-43276.ttf")
         );
+    }
+
+    #[test]
+    fn file_facade_lists_dense_assets_with_contents_and_live_resource_handles() {
+        let mut loader =
+            |_asset: &RuntimeFileAsset, _in_band: &[u8], _factory: &mut dyn Factory| false;
+        let mut factory = RecordingFactory::new();
+        let file = File::import_with_asset_loader(
+            &external_fixture("in_band_asset.riv"),
+            &mut factory,
+            &mut loader,
+        )
+        .expect("in-band image fixture imports");
+
+        assert_eq!(file.asset_count(), 1);
+        let assets = file.assets().collect::<Vec<_>>();
+        assert_eq!(assets.len(), 1);
+        let asset = assets[0];
+        assert_eq!(asset.index(), 0);
+        assert_eq!(asset.kind(), FileAssetKind::Image);
+        assert_eq!(asset.name(), Some("1x1.png"));
+        assert_eq!(asset.asset_id(), Some(45022));
+        assert_eq!(asset.contents().map(<[u8]>::len), Some(308));
+        assert!(asset.has_contents_record());
+        assert_eq!(
+            asset.resource().map(|resource| resource.kind()),
+            Some(RuntimeFileAssetKind::Image)
+        );
+        assert!(file.asset(1).is_none());
+        assert!(
+            file.has_audio()
+                == file
+                    .runtime()
+                    .file_assets()
+                    .iter()
+                    .any(|asset| asset.type_name == "AudioAsset")
+        );
+    }
+
+    #[test]
+    fn file_facade_reports_audio_from_the_dense_asset_catalog() {
+        let file = File::import(&external_fixture("sound.riv")).expect("audio fixture imports");
+
+        assert!(file.has_audio());
+        assert!(
+            file.assets()
+                .any(|asset| asset.kind() == FileAssetKind::Audio)
+        );
+    }
+
+    #[test]
+    fn upstream_file_artboards_can_be_counted_and_accessed_via_index_or_name() {
+        let file = File::import(&external_fixture("dependency_test.riv"))
+            .expect("dependency fixture imports");
+
+        assert_eq!(file.artboard_count(), 1);
+        assert!(file.artboard(0).is_some());
+        assert!(file.artboard_named("Blue").is_some());
+    }
+
+    #[test]
+    fn upstream_file_can_be_read() {
+        let file = File::import(&external_fixture("two_artboards.riv"))
+            .expect("two-artboard fixture imports");
+
+        assert_eq!(
+            file.default_artboard().and_then(Artboard::name),
+            Some("Two")
+        );
+        assert!(file.artboard_named("One").is_some());
+    }
+
+    #[test]
+    fn upstream_file_with_bad_blend_mode_fails_to_load() {
+        File::import(&external_fixture("solar-system.riv"))
+            .expect_err("bad blend-mode fixture is malformed");
     }
 
     #[test]
@@ -6480,6 +7018,76 @@ mod owned_instance_tests {
                 .instantiate_default_view_model_instance()
                 .expect("owned authored default"),
         );
+    }
+
+    #[test]
+    fn file_facade_lists_and_instantiates_view_models_by_index_and_name() {
+        let file = facade_view_model_file();
+
+        assert_eq!(file.view_model_count(), 1);
+        let view_models = file.view_models().collect::<Vec<_>>();
+        assert_eq!(view_models.len(), 1);
+        let view_model = &view_models[0];
+        assert_eq!(view_model.index(), 0);
+        assert_eq!(view_model.name(), Some("Root"));
+        assert_eq!(view_model.property_count(), 3);
+        assert_eq!(view_model.instance_count(), 1);
+        assert_eq!(view_model.instance_name(0), Some("Authored defaults"));
+        assert_eq!(
+            view_model
+                .properties()
+                .map(|property| (property.index(), property.name(), property.type_name()))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, Some("tint"), "ViewModelPropertyColor"),
+                (1, Some("submit"), "ViewModelPropertyTrigger"),
+                (2, Some("destination"), "ViewModelPropertyArtboard"),
+            ]
+        );
+        assert_eq!(
+            view_model
+                .property_named("submit")
+                .map(|property| property.index()),
+            Some(1)
+        );
+        assert!(!view_model.is_global());
+        assert_eq!(file.view_model_named("Root"), Some(view_model.clone()));
+        assert_eq!(file.view_model_index_named("Root"), Some(0));
+        assert!(file.view_model_named("missing").is_none());
+        assert!(file.global_view_models().next().is_none());
+        assert!(file.global_view_model_names().is_empty());
+
+        assert_extended_view_model_facade(
+            view_model
+                .instantiate_default()
+                .expect("authored default instance"),
+        );
+        assert_extended_view_model_facade(
+            view_model
+                .instantiate_instance_named("Authored defaults")
+                .expect("named authored instance"),
+        );
+        assert!(view_model.instantiate_instance(1).is_none());
+    }
+
+    #[test]
+    fn upstream_file_global_view_model_names_lists_globals_in_file_order() {
+        let file = File::import(&external_fixture("global_variables_test.riv"))
+            .expect("global view-model fixture imports");
+        let expected = nuxie_runtime::runtime_global_view_model_names(file.runtime());
+        let names = file.global_view_model_names();
+
+        assert!(!names.is_empty());
+        assert_eq!(
+            names,
+            expected.iter().map(String::as_str).collect::<Vec<_>>()
+        );
+        for name in names {
+            let view_model = file
+                .view_model_named(name)
+                .expect("every listed global name resolves");
+            assert!(view_model.is_global());
+        }
     }
 
     #[cfg(not(feature = "scripting"))]

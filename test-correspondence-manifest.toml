@@ -13,12 +13,12 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 [expected_status_counts]
 ported-differential = 5
 ported-direct = 37
-partial = 19
-pending = 85
+partial = 21
+pending = 83
 n-a = 2
 
 [ratchet]
-max_pending = 85
+max_pending = 83
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -271,9 +271,10 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/file_test.cpp"
 test_case_count = 12
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "partial"
+evidence = ["crates/nuxie/src/lib.rs::{upstream_file_can_be_read,upstream_file_artboards_can_be_counted_and_accessed_via_index_or_name,upstream_file_with_bad_blend_mode_fails_to_load}"]
+covered_test_cases = ["file can be read", "file with bad blend mode fails to load", "artboards can be counted and accessed via index or name"]
+note = "The listed public File facade cases are direct Rust ports over the same pinned fixtures. The remaining nine TEST_CASEs are unclaimed."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/focus_test.cpp"
@@ -308,9 +309,10 @@ note = "The six focused decoder/device-lifecycle cases are direct Rust ports. Th
 [[file]]
 upstream = "tests/unit_tests/runtime/global_view_model_binding_test.cpp"
 test_case_count = 9
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "partial"
+evidence = ["crates/nuxie/src/lib.rs::upstream_file_global_view_model_names_lists_globals_in_file_order"]
+covered_test_cases = ["File::globalViewModelNames lists globals in file order"]
+note = "The listed File catalog case is a direct Rust port over global_variables_test.riv. The eight state-machine binding cases remain unclaimed."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/global_viewmodels_test.cpp"

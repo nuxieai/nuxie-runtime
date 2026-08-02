@@ -12522,6 +12522,7 @@ fn cpp_file_read_loop_matches_import_stack_model() {
             "caseArtboard::typeKey:{Artboard*ab=object->as<Artboard>();ab->m_Factory=m_factory;m_artboards.push_back(ab);}",
             "caseImageAsset::typeKey:caseFontAsset::typeKey:caseAudioAsset::typeKey:caseBlobAsset::typeKey:caseScriptAsset::typeKey:caseShaderAsset::typeKey:",
             "m_fileAssets.push_back(rcp<FileAsset>(fa));",
+            "if(object->coreType()==AudioAsset::typeKey){m_hasAudio=true;}",
             "caseViewModel::typeKey:",
             "m_ViewModels.push_back(vmc);",
             "caseDataEnum::typeKey:caseDataEnumCustom::typeKey:",
@@ -12629,6 +12630,98 @@ fn cpp_file_read_loop_matches_import_stack_model() {
             "return!reader.hasError()&&resolved==StatusCode::Ok?ImportResult::success:ImportResult::malformed;",
         ],
         "File::read stack/finalization flow changed; audit Rust importer context validation and final error mapping",
+    );
+}
+
+#[test]
+fn cpp_file_facade_catalog_and_script_wiring_matches_runtime_model() {
+    let path = reference_runtime_dir().join("src/file.cpp");
+    if !path.exists() {
+        eprintln!(
+            "skipping C++ File facade audit; reference file.cpp not found at {}; set RIVE_RUNTIME_DIR",
+            path.display()
+        );
+        return;
+    }
+
+    let source = std::fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
+    let compact = compact_cpp_source(&source);
+
+    for (signature, expected, message) in [
+        (
+            "File::viewModel(std::stringname)",
+            &[
+                "for(auto&viewModel:m_ViewModels){",
+                "if(viewModel->name()==name){returnviewModel;}",
+                "returnnullptr;",
+            ][..],
+            "File::viewModel(name) changed; audit Rust file-order named lookup",
+        ),
+        (
+            "File::globalViewModels()const",
+            &[
+                "std::vector<ViewModel*>viewModels;",
+                "for(ViewModel*vm:m_ViewModels){",
+                "ViewModelType::global",
+                "viewModels.push_back(vm);",
+                "returnviewModels;",
+            ][..],
+            "File::globalViewModels changed; audit Rust global catalog filtering and order",
+        ),
+        (
+            "File::globalViewModelNames()const",
+            &[
+                "std::vector<std::string>names;",
+                "for(ViewModel*vm:globalViewModels()){",
+                "names.push_back(vm->name());",
+                "returnnames;",
+            ][..],
+            "File::globalViewModelNames changed; audit Rust global name projection",
+        ),
+        (
+            "File::asset(size_tindex)",
+            &[
+                "if(index>=0&&index<m_fileAssets.size()){",
+                "returnm_fileAssets[index];",
+                "returnnullptr;",
+            ][..],
+            "File::asset changed; audit Rust dense asset catalog indexing",
+        ),
+    ] {
+        let body = compact_cpp_function_body(&compact, signature)
+            .unwrap_or_else(|| panic!("missing {signature} in {}", path.display()));
+        assert_compact_contains_in_order(&body, expected, message);
+    }
+
+    assert!(
+        compact.contains("Span<constrcp<FileAsset>>File::assets()const{returnm_fileAssets;}"),
+        "File::assets changed; audit Rust dense asset catalog projection"
+    );
+
+    let register = compact_cpp_function_body(&compact, "File::registerScripts()")
+        .unwrap_or_else(|| panic!("missing File::registerScripts in {}", path.display()));
+    assert_compact_contains_in_order(
+        &register,
+        &[
+            "std::vector<ScriptAsset*>scripts;",
+            "std::vector<LibraryAsset*>libraries;",
+            "for(autoasset:m_fileAssets){",
+            "if(asset->is<ScriptAsset>()){scripts.push_back(asset->as<ScriptAsset>());}",
+            "elseif(asset->is<LibraryAsset>()){libraries.push_back(asset->as<LibraryAsset>());}",
+            "if(!scripts.empty()){",
+            "if(m_scriptingVM==nullptr){makeScriptingVM();}",
+            "initializeLuaData(vm->state(),m_ViewModels);",
+            "for(autolibrary:libraries){",
+            "vm->context()->addImport(",
+            "for(autoscriptAsset:scripts){",
+            "if(scriptAsset->verified()){vm->addModule(scriptAsset);}",
+            "vm->performRegistration();",
+            "for(auto&interpolator:m_scriptedInterpolators){",
+            "autoscriptAsset=interpolator->scriptAsset();",
+            "scriptAsset->initScriptedObject(interpolator);",
+        ],
+        "File::registerScripts changed; audit Rust authenticated module/import registration and the tracked ScriptedInterpolator gap",
     );
 }
 

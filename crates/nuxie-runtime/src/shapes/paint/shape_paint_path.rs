@@ -2,6 +2,46 @@
 //! construction performs `addRawPath` before `fillRule`; later dirt performs
 //! `rewind` then `addRawPath` without replaying construction-only fill rules.
 
+use std::cell::{Cell, RefCell};
+
+use crate::draw::{RuntimePathBackendSlot, RuntimeShapePathState};
+
+/// Clone-owned counterpart of C++ `ShapePaintPath`. RawPath is the sole CPU
+/// geometry source; the backend RenderPath remains in its one-to-one sidecar.
+#[derive(Debug)]
+pub(crate) struct RuntimeShapePaintPathOwner {
+    pub(crate) dirty: Cell<bool>,
+    pub(crate) retained: RefCell<Option<RuntimeShapePathState>>,
+    pub(crate) backend: RuntimePathBackendSlot,
+}
+
+impl Clone for RuntimeShapePaintPathOwner {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl Default for RuntimeShapePaintPathOwner {
+    fn default() -> Self {
+        Self {
+            dirty: Cell::new(true),
+            retained: RefCell::new(None),
+            backend: RuntimePathBackendSlot::default(),
+        }
+    }
+}
+
+impl RuntimeShapePaintPathOwner {
+    pub(crate) fn mark_dirty(&self) {
+        self.dirty.set(true);
+    }
+
+    pub(crate) fn replace_retained(&self, retained: RuntimeShapePathState) {
+        *self.retained.borrow_mut() = Some(retained);
+        self.dirty.set(false);
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Materialization {
     Create,

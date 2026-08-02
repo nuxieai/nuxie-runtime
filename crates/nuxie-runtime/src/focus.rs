@@ -1360,15 +1360,16 @@ fn collect_component_focus_descriptors(
             None,
         );
         if let Some(items) = artboard.component_list_items(local_id) {
-            let host_transform_local = if crate::constraints::component_list_virtualization(
-                artboard, local_id,
-            )
-            .is_some()
-            {
-                component.parent_local.unwrap_or(local_id)
-            } else {
-                local_id
-            };
+            let host_transform_local =
+                if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
+                    artboard, local_id,
+                )
+                .is_some()
+                {
+                    component.parent_local.unwrap_or(local_id)
+                } else {
+                    local_id
+                };
             let host_world = artboard
                 .component(host_transform_local)
                 .map_or(Mat2D::IDENTITY, |host| host.transform.world_transform);

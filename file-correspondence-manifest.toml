@@ -837,7 +837,7 @@ b6_row_id = "B6-0068"
 b6_verdict = "ADAPTED"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/results/animation.md"
-note = "Consolidated Rust port for animation."
+note = "Consolidated Rust port for animation. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/animation/scripted_transition_condition.cpp"
@@ -945,7 +945,7 @@ b6_row_id = "B6-0077"
 b6_verdict = "DIVERGENT"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/results/animation.md"
-note = "Direct FL-C5 owner correspondence independently accepted with joint candidate 14b18765 after eleven review rounds; acceptance, residual risk, and final verdicts are indexed by docs/runtime-frame-loop-fl-c5-closure.md and docs/runtime-frame-loop-fl-c5-evidence/."
+note = "Direct FL-C5 owner correspondence independently accepted with joint candidate 14b18765 after eleven review rounds; acceptance, residual risk, and final verdicts are indexed by docs/runtime-frame-loop-fl-c5-closure.md and docs/runtime-frame-loop-fl-c5-evidence/. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/animation/state_machine_layer.cpp"
@@ -1149,7 +1149,7 @@ b6_row_id = "B6-0094"
 b6_verdict = "DIVERGENT"
 b6_cluster = "artboard"
 audit_record = "docs/b6-audit/results/artboard.md"
-note = "FL-D7 closes the whole-file Artboard owner: updatePass polls live DataBinds before each late joystick and final component pass, root advance owns advanceInternal/updatePass/Components-dirt settlement, and defaultStateMachine/defaultScene follow pinned selection semantics."
+note = "FL-D7 closes the whole-file Artboard owner: updatePass polls live DataBinds before each late joystick and final component pass, root advance owns advanceInternal/updatePass/Components-dirt settlement, and defaultStateMachine/defaultScene follow pinned selection semantics. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/artboard_component_list.cpp"
@@ -1293,7 +1293,7 @@ b6_row_id = "B6-0106"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "P1-n faithful closure at d788e8ec: ScriptInput destruction/type dispatch/default hydration (script_asset.cpp:23-66), file-owned VM lookup plus module/protocol registration (69-113), occurrence initialization and serialized method-mask transfer (85-165), and signed-content decode/bytecode ownership (167-221) are retained by the FileScriptRuntime catalog, ScriptVm module/protocol programs, RuntimeScriptedObjectOccurrence, and occurrence-owned typed inputs. Anchors: optional_script_method_bits_are_masked_and_independently_gated_like_cpp; ordinary_import_keeps_the_bounded_script_catalog_inert_and_shared; upstream_script_ownership_fixtures_remain_on_the_luau_vm_path; luaur_loads_bytecode_across_scripting_corpus; repeated_scripted_data_converter_occurrences_match_cpp_probe. Accepted AF-1/AF-5 adaptation: one retained Rust file catalog/VM replaces ScriptAsset back-pointers and refs, Rust ownership replaces explicit deletes, and explicit authenticated/visual-only File authorization replaces the asset-local verified bit while SignedContent preserves envelope parsing."
+note = "P1-n faithful closure at d788e8ec: ScriptInput destruction/type dispatch/default hydration (script_asset.cpp:23-66), file-owned VM lookup plus module/protocol registration (69-113), occurrence initialization and serialized method-mask transfer (85-165), and signed-content decode/bytecode ownership (167-221) are retained by the FileScriptRuntime catalog, ScriptVm module/protocol programs, RuntimeScriptedObjectOccurrence, and occurrence-owned typed inputs. Anchors: optional_script_method_bits_are_masked_and_independently_gated_like_cpp; ordinary_import_keeps_the_bounded_script_catalog_inert_and_shared; upstream_script_ownership_fixtures_remain_on_the_luau_vm_path; luaur_loads_bytecode_across_scripting_corpus; repeated_scripted_data_converter_occurrences_match_cpp_probe. Accepted AF-1/AF-5 adaptation: one retained Rust file catalog/VM replaces ScriptAsset back-pointers and refs, Rust ownership replaces explicit deletes, and explicit authenticated/visual-only File authorization replaces the asset-local verified bit while SignedContent preserves envelope parsing. Public host API, runtime trait implementation, and Luau VM adapter intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/assets/shader_asset.cpp"
@@ -1305,7 +1305,7 @@ b6_row_id = "B6-0107"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/results/assets-importers.md"
-note = "P1-b faithful candidate: pinned ShaderAsset SignedContent/RSTB header, descriptor last-wins indexing, tagged-section skipping, widened range validation, and exact target lookup span src/assets/shader_asset.cpp:6-125; binary metadata is owned at crates/nuxie-binary/src/assets/shader_asset.rs:1 and the strong direct decode owner is crates/nuxie-scripting/src/shader_asset.rs:36-132. Anchors: scripting_reader_gives_script_and_shader_contents_their_file_asset_importers plus shader_asset tests decodes_pinned_cpp_webgpu_whole_module_and_binding_map, validates_only_final_last_wins_descriptors_like_cpp, accepts_cpp_descriptor_aliases_gaps_and_trailing_bytes, and requires_wgsl_source_and_binding_map_targets."
+note = "P1-b faithful candidate: pinned ShaderAsset SignedContent/RSTB header, descriptor last-wins indexing, tagged-section skipping, widened range validation, and exact target lookup span src/assets/shader_asset.cpp:6-125; binary metadata is owned at crates/nuxie-binary/src/assets/shader_asset.rs:1 and the strong direct decode owner is crates/nuxie-scripting/src/shader_asset.rs:36-132. Anchors: scripting_reader_gives_script_and_shader_contents_their_file_asset_importers plus shader_asset tests decodes_pinned_cpp_webgpu_whole_module_and_binding_map, validates_only_final_last_wins_descriptors_like_cpp, accepts_cpp_descriptor_aliases_gaps_and_trailing_bytes, and requires_wgsl_source_and_binding_map_targets. Serialized asset representation and Luau VM host resource intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/async/work_pool.cpp"
@@ -1381,7 +1381,7 @@ b6_row_id = "B6-0113"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "2026-08-02 correspondence reconciliation: faithful after aa397468. AudioEvent asset resolution, retained source/engine ownership, clone behavior, multiplied volume, playback scheduling, root-first event ordering, and Artboard-scoped teardown are covered by crates/nuxie-runtime/tests/cpp_probe.rs::audio_riv_load_playback_volume_and_has_audio_match_pinned_cpp, state_machine_instance.rs::audio_event_seam_plays_the_resolved_sound_fixture_asset, and crates/nuxie/tests/audio_core.rs::{audio_event_playback_multiplies_artboard_volume_and_stops_with_its_artboard,audio_event_artboard_clone_retains_its_asset_and_stops_independently}. The live C++ probe and required reconciliation gates are recorded green in RECON-report.md."
+note = "2026-08-02 correspondence reconciliation: faithful after aa397468. AudioEvent asset resolution, retained source/engine ownership, clone behavior, multiplied volume, playback scheduling, root-first event ordering, and Artboard-scoped teardown are covered by crates/nuxie-runtime/tests/cpp_probe.rs::audio_riv_load_playback_volume_and_has_audio_match_pinned_cpp, state_machine_instance.rs::audio_event_seam_plays_the_resolved_sound_fixture_asset, and crates/nuxie/tests/audio_core.rs::{audio_event_playback_multiplies_artboard_volume_and_stops_with_its_artboard,audio_event_artboard_clone_retains_its_asset_and_stops_independently}. The live C++ probe and required reconciliation gates are recorded green in RECON-report.md. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/bindable_artboard.cpp"
@@ -2101,7 +2101,7 @@ b6_row_id = "B6-0172"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_boolean_negate.cpp"
@@ -2113,7 +2113,7 @@ b6_row_id = "B6-0173"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_formula.cpp"
@@ -2125,7 +2125,7 @@ b6_row_id = "B6-0174"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_group.cpp"
@@ -2137,7 +2137,7 @@ b6_row_id = "B6-0175"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_group_item.cpp"
@@ -2149,7 +2149,7 @@ b6_row_id = "B6-0176"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_interpolator.cpp"
@@ -2161,7 +2161,7 @@ b6_row_id = "B6-0177"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_list_to_length.cpp"
@@ -2173,7 +2173,7 @@ b6_row_id = "B6-0178"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_number_to_list.cpp"
@@ -2185,7 +2185,7 @@ b6_row_id = "B6-0179"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_operation.cpp"
@@ -2197,7 +2197,7 @@ b6_row_id = "B6-0180"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_operation_value.cpp"
@@ -2209,7 +2209,7 @@ b6_row_id = "B6-0181"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_operation_viewmodel.cpp"
@@ -2221,7 +2221,7 @@ b6_row_id = "B6-0182"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_range_mapper.cpp"
@@ -2233,7 +2233,7 @@ b6_row_id = "B6-0183"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_rounder.cpp"
@@ -2245,7 +2245,7 @@ b6_row_id = "B6-0184"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_string_pad.cpp"
@@ -2257,7 +2257,7 @@ b6_row_id = "B6-0185"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_string_remove_zeros.cpp"
@@ -2269,7 +2269,7 @@ b6_row_id = "B6-0186"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_string_trim.cpp"
@@ -2281,7 +2281,7 @@ b6_row_id = "B6-0187"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_system_degs_to_rads.cpp"
@@ -2293,7 +2293,7 @@ b6_row_id = "B6-0188"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_system_normalizer.cpp"
@@ -2305,7 +2305,7 @@ b6_row_id = "B6-0189"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_to_number.cpp"
@@ -2317,7 +2317,7 @@ b6_row_id = "B6-0190"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_to_string.cpp"
@@ -2329,7 +2329,7 @@ b6_row_id = "B6-0191"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/data_converter_trigger.cpp"
@@ -2341,7 +2341,7 @@ b6_row_id = "B6-0192"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/converters/formula/formula_token.cpp"
@@ -2353,7 +2353,7 @@ b6_row_id = "B6-0193"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/data_bind.cpp"
@@ -2365,7 +2365,7 @@ b6_row_id = "B6-0194"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/data_bind_container.cpp"
@@ -2377,7 +2377,7 @@ b6_row_id = "B6-0195"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/data_bind_context.cpp"
@@ -2389,7 +2389,7 @@ b6_row_id = "B6-0196"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind/data_bind_list_item_consumer.cpp"
@@ -2437,7 +2437,7 @@ b6_row_id = "B6-0200"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for data_bind."
+note = "Consolidated Rust port for data_bind. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/data_bind_path_referencer.cpp"
@@ -2533,7 +2533,7 @@ b6_row_id = "B6-0208"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "2026-08-02 correspondence reconciliation: faithful after a5ea0980 plus 60dbc545. The public File owns bounded import, dense assets and retained resources, artboard and view-model catalogs/instances/globals, deterministic mode, and authenticated one-VM-per-Factory script registration; the later ScriptedInterpolator landing closes the stale transform/transformValue blocker in the C8 note. Evidence: crates/nuxie/src/lib.rs::{upstream_file_can_be_read,upstream_file_artboards_can_be_counted_and_accessed_via_index_or_name,upstream_file_with_bad_blend_mode_fails_to_load,file_facade_prepares_one_authenticated_script_runtime_per_factory_domain}, crates/nuxie/src/scripted_interpolator_tests.rs, crates/nuxie-binary/tests/cpp_import.rs File::readRuntimeObject source ratchets, and the exact corpus.toml::scripted_interpolator differential. Rust deliberately requires explicit authenticated script authority and a Factory rather than accepting a raw external ScriptingVM; WITH_RIVE_TOOLS stripAssets and registrar members remain configuration exclusions. Required gates are recorded green in RECON-report.md."
+note = "2026-08-02 correspondence reconciliation: faithful after a5ea0980 plus 60dbc545. The public File owns bounded import, dense assets and retained resources, artboard and view-model catalogs/instances/globals, deterministic mode, and authenticated one-VM-per-Factory script registration; the later ScriptedInterpolator landing closes the stale transform/transformValue blocker in the C8 note. Evidence: crates/nuxie/src/lib.rs::{upstream_file_can_be_read,upstream_file_artboards_can_be_counted_and_accessed_via_index_or_name,upstream_file_with_bad_blend_mode_fails_to_load,file_facade_prepares_one_authenticated_script_runtime_per_factory_domain}, crates/nuxie/src/scripted_interpolator_tests.rs, crates/nuxie-binary/tests/cpp_import.rs File::readRuntimeObject source ratchets, and the exact corpus.toml::scripted_interpolator differential. Rust deliberately requires explicit authenticated script authority and a Factory rather than accepting a raw external ScriptingVM; WITH_RIVE_TOOLS stripAssets and registrar members remain configuration exclusions. Required gates are recorded green in RECON-report.md. Public façade, binary loader surface, and runtime implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/focus_data.cpp"
@@ -2593,7 +2593,7 @@ b6_row_id = "B6-0213"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/results/assets-importers.md"
-note = "P1-c direct importer owner split at d788e8ec: pinned behavior is at src/importers/backboard_importer.cpp:1-192; Backboard creation plus its data-converter catalog; artboard, file-asset, and view-model resolution are called across their direct owner modules now live at crates/nuxie-binary/src/importers/backboard_importer.rs:3-43. Shared ordered ImportContext/CppImportStack replay, accept/drop dispatch, and final context updates are at crates/nuxie-binary/src/importers/mod.rs:1-507; the existing importer ratchets and C++ differentials remain unmodified. Reverse attribution also includes authored-order DataBind templates and the centralized binary import attachment/validation regions."
+note = "P1-c direct importer owner split at d788e8ec: pinned behavior is at src/importers/backboard_importer.cpp:1-192; Backboard creation plus its data-converter catalog; artboard, file-asset, and view-model resolution are called across their direct owner modules now live at crates/nuxie-binary/src/importers/backboard_importer.rs:3-43. Shared ordered ImportContext/CppImportStack replay, accept/drop dispatch, and final context updates are at crates/nuxie-binary/src/importers/mod.rs:1-507; the existing importer ratchets and C++ differentials remain unmodified. Reverse attribution also includes authored-order DataBind templates and the centralized binary import attachment/validation regions. Public façade, binary loader surface, and runtime implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/importers/bindable_property_importer.cpp"
@@ -2605,7 +2605,7 @@ b6_row_id = "B6-0214"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/results/assets-importers.md"
-note = "P1-c direct importer owner split at d788e8ec: pinned behavior is at src/importers/bindable_property_importer.cpp:1-10; latest BindableProperty ownership and the exact pre-super pointer-consumption reconstruction now live at crates/nuxie-binary/src/importers/bindable_property_importer.rs:3-77. Shared ordered ImportContext/CppImportStack replay, accept/drop dispatch, and final context updates are at crates/nuxie-binary/src/importers/mod.rs:1-507; the existing importer ratchets and C++ differentials remain unmodified. Reverse attribution: runtime bindable occurrence/value ownership is in crates/nuxie-runtime/src/state_machine/bindables.rs; pinned generated anchors are include/rive/generated/data_bind/bindable_property_*_base.hpp."
+note = "P1-c direct importer owner split at d788e8ec: pinned behavior is at src/importers/bindable_property_importer.cpp:1-10; latest BindableProperty ownership and the exact pre-super pointer-consumption reconstruction now live at crates/nuxie-binary/src/importers/bindable_property_importer.rs:3-77. Shared ordered ImportContext/CppImportStack replay, accept/drop dispatch, and final context updates are at crates/nuxie-binary/src/importers/mod.rs:1-507; the existing importer ratchets and C++ differentials remain unmodified. Reverse attribution: runtime bindable occurrence/value ownership is in crates/nuxie-runtime/src/state_machine/bindables.rs; pinned generated anchors are include/rive/generated/data_bind/bindable_property_*_base.hpp. Binary importer ownership and runtime trait/state implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/importers/data_bind_path_importer.cpp"
@@ -2773,7 +2773,7 @@ b6_row_id = "B6-0228"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/results/assets-importers.md"
-note = "The shared binary import-stack decoder remains in lib.rs because null-object routing is inseparable from the ordered stream parser; focused runtime input definition/occurrence owners preserve nullable slots exactly. Wrong-type, bad-index, and null-slot importer evidence is indexed by docs/runtime-frame-loop-fl-c2-closure.md. Independently verified for the complete FL-C2 family at 7546f4f15b05e582c62aa52ecc93430a7048e143."
+note = "The shared binary import-stack decoder remains in lib.rs because null-object routing is inseparable from the ordered stream parser; focused runtime input definition/occurrence owners preserve nullable slots exactly. Wrong-type, bad-index, and null-slot importer evidence is indexed by docs/runtime-frame-loop-fl-c2-closure.md. Independently verified for the complete FL-C2 family at 7546f4f15b05e582c62aa52ecc93430a7048e143. Binary importer ownership and runtime trait/state implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/importers/state_machine_layer_component_importer.cpp"
@@ -2821,7 +2821,7 @@ b6_row_id = "B6-0232"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/results/assets-importers.md"
-note = "The shared ordered-stream attachment stays in the binary decoder; the focused state_transition.rs owner retains authored condition order. Live differentials and permanent structural ratchets are indexed by docs/runtime-frame-loop-fl-c2-closure.md. Independently verified for the complete FL-C2 family at 7546f4f15b05e582c62aa52ecc93430a7048e143."
+note = "The shared ordered-stream attachment stays in the binary decoder; the focused state_transition.rs owner retains authored condition order. Live differentials and permanent structural ratchets are indexed by docs/runtime-frame-loop-fl-c2-closure.md. Independently verified for the complete FL-C2 family at 7546f4f15b05e582c62aa52ecc93430a7048e143. Binary importer ownership and runtime trait/state implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/importers/text_asset_importer.cpp"
@@ -2845,7 +2845,7 @@ b6_row_id = "B6-0234"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/results/assets-importers.md"
-note = "The shared ordered-stream attachment stays in the binary decoder; the focused ViewModel-condition owner retains left-before-right comparator occurrence ownership. Live matrix evidence is indexed by docs/runtime-frame-loop-fl-c2-closure.md. Independently verified for the complete FL-C2 family at 7546f4f15b05e582c62aa52ecc93430a7048e143."
+note = "The shared ordered-stream attachment stays in the binary decoder; the focused ViewModel-condition owner retains left-before-right comparator occurrence ownership. Live matrix evidence is indexed by docs/runtime-frame-loop-fl-c2-closure.md. Independently verified for the complete FL-C2 family at 7546f4f15b05e582c62aa52ecc93430a7048e143. Binary importer ownership and runtime trait/state implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/importers/viewmodel_importer.cpp"
@@ -3157,7 +3157,7 @@ b6_row_id = "B6-0260"
 b6_verdict = "ADAPTED"
 b6_cluster = "lua-scripting"
 audit_record = "P1G-report.md"
-note = "P1G faithful candidate: pinned src/lua/logging_scripting_context.cpp:17-68 assembles one context-owned info line per print call and forwards unprefixed Lua error text as error lines; crates/nuxie-scripting/src/vm/logging_scripting_context.rs owns the matching shared line buffer and replaceable sink, while crates/nuxie/src/lib.rs exposes the File host route. Assertions are crates/nuxie-scripting/tests/host_logging.rs and the File-path test in crates/nuxie/src/lib.rs."
+note = "P1G faithful candidate: pinned src/lua/logging_scripting_context.cpp:17-68 assembles one context-owned info line per print call and forwards unprefixed Lua error text as error lines; crates/nuxie-scripting/src/vm/logging_scripting_context.rs owns the matching shared line buffer and replaceable sink, while crates/nuxie/src/lib.rs exposes the File host route. Assertions are crates/nuxie-scripting/tests/host_logging.rs and the File-path test in crates/nuxie/src/lib.rs. Public host integration and Luau VM binding intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/lua/lua_artboards.cpp"
@@ -3169,7 +3169,7 @@ b6_row_id = "B6-0261"
 b6_verdict = "ADAPTED"
 b6_cluster = "lua-scripting"
 audit_record = "docs/b6-audit/results/lua-scripting.md"
-note = "P1-d direct owner split at d788e8ec: the existing adapted ScriptedArtboard, ScriptedAnimation, and ScriptedNode bindings moved without behavioral rewrite to crates/nuxie-scripting/src/vm/lua_artboards.rs:24-241; the existing artboard owner-lifetime tests moved with them at lines 243-360."
+note = "P1-d direct owner split at d788e8ec: the existing adapted ScriptedArtboard, ScriptedAnimation, and ScriptedNode bindings moved without behavioral rewrite to crates/nuxie-scripting/src/vm/lua_artboards.rs:24-241; the existing artboard owner-lifetime tests moved with them at lines 243-360. Public host integration and Luau VM binding intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/lua/lua_audio.cpp"
@@ -3181,7 +3181,7 @@ b6_row_id = "B6-0262"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "P2F3 faithful candidate: Context:audio exact-name lookup, Audio play/playAt/playIn seconds and frames, engine time/sample-rate queries, AudioSource duration, and AudioSound play/pause/resume/stop/seek/completed/time/volume are directly owned in Rust. The pinned audio_script.riv interaction is ported end-to-end in crates/nuxie/tests/audio_core.rs::scripted_audio_plays_and_updates_volume_from_the_pinned_fixture."
+note = "P2F3 faithful candidate: Context:audio exact-name lookup, Audio play/playAt/playIn seconds and frames, engine time/sample-rate queries, AudioSource duration, and AudioSound play/pause/resume/stop/seek/completed/time/volume are directly owned in Rust. The pinned audio_script.riv interaction is ported end-to-end in crates/nuxie/tests/audio_core.rs::scripted_audio_plays_and_updates_volume_from_the_pinned_fixture. Public host integration and Luau VM binding intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/lua/lua_buffer_ext.cpp"
@@ -3229,7 +3229,7 @@ b6_row_id = "B6-0266"
 b6_verdict = "ADAPTED"
 b6_cluster = "lua-scripting"
 audit_record = "P2A-report.md"
-note = "P2A faithful candidate: Context:decodeImage copies the input, submits an owner-scoped WorkPool task through the swappable ScriptImageDecoder seam, performs unbounded low-level PNG/JPEG/WebP decode to premultiplied RGBA, and settles the Promise from the VM thread at the root-frame WorkPool boundary even for parked scripts. It releases buffers promptly, preserves the pinned failure string, and cancels/drops pending ownership with the Promise or VM. The queue handoff replaces the pinned task's direct main-thread lua_State callback."
+note = "P2A faithful candidate: Context:decodeImage copies the input, submits an owner-scoped WorkPool task through the swappable ScriptImageDecoder seam, performs unbounded low-level PNG/JPEG/WebP decode to premultiplied RGBA, and settles the Promise from the VM thread at the root-frame WorkPool boundary even for parked scripts. It releases buffers promptly, preserves the pinned failure string, and cancels/drops pending ownership with the Promise or VM. The queue handoff replaces the pinned task's direct main-thread lua_State callback. Image codec backend and Luau VM binding intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/lua/lua_listener_invocation.cpp"
@@ -3421,7 +3421,7 @@ b6_row_id = "B6-0282"
 b6_verdict = "ADAPTED"
 b6_cluster = "lua-scripting"
 audit_record = "P2A-report.md"
-note = "P2A/P2B faithful candidate: decoded asset- and factory-backed Image userdata expose read-only width/height, Context:image and Image properties return nil until a resource exists, every Image assignment retains its RenderImage identity through runtime properties and bound Image draw owners, and ImageSampler preserves the pinned wrap/filter surface. This build has no RIVE_ORE GPU host, so it matches the pinned non-ORE configuration by omitting the conditional view member."
+note = "P2A/P2B faithful candidate: decoded asset- and factory-backed Image userdata expose read-only width/height, Context:image and Image properties return nil until a resource exists, every Image assignment retains its RenderImage identity through runtime properties and bound Image draw owners, and ImageSampler preserves the pinned wrap/filter surface. This build has no RIVE_ORE GPU host, so it matches the pinned non-ORE configuration by omitting the conditional view member. Runtime renderer state and Luau VM binding intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/lua/renderer/lua_mesh.cpp"
@@ -3613,7 +3613,7 @@ b6_row_id = "B6-0298"
 b6_verdict = "ADAPTED"
 b6_cluster = "bones-math-components"
 audit_record = "docs/b6-audit/results/bones-math-components.md"
-note = "W120 faithful candidate under FLR-18: pinned process-global TESTING counters/results are at src/math/random.cpp:8-15 and the complete provider contract at include/rive/math/random.hpp:13-51; crates/nuxie-runtime/src/math/random.rs:55-172 owns one mutex-serialized provider, native.rs:1-111 preserves platform rand/srand and clock seeding, and wasm.rs:1-45 preserves the pinned Emscripten musl stream. Both transition and the formerly separate formula consumer now call that owner at state_machine/state_machine_layer_instance.rs:74,585 and data_bind/context/context_value.rs:196."
+note = "W120 faithful candidate under FLR-18: pinned process-global TESTING counters/results are at src/math/random.cpp:8-15 and the complete provider contract at include/rive/math/random.hpp:13-51; crates/nuxie-runtime/src/math/random.rs:55-172 owns one mutex-serialized provider, native.rs:1-111 preserves platform rand/srand and clock seeding, and wasm.rs:1-45 preserves the pinned Emscripten musl stream. Both transition and the formerly separate formula consumer now call that owner at state_machine/state_machine_layer_instance.rs:74,585 and data_bind/context/context_value.rs:196. Portable random API and cfg-specific native/Wasm implementations intentionally remain split by target."
 
 [[file]]
 upstream = "src/math/raw_path.cpp"
@@ -3867,7 +3867,7 @@ b6_row_id = "B6-0319"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Direct filename correspondence and complete scripted-listener occurrence lifecycle are implemented in FL-C4; independently accepted at 0eb48976755d759c078f1f1a032bd88590e223f7."
+note = "Direct filename correspondence and complete scripted-listener occurrence lifecycle are implemented in FL-C4; independently accepted at 0eb48976755d759c078f1f1a032bd88590e223f7. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/script_input_viewmodel_property.cpp"
@@ -3879,7 +3879,7 @@ b6_row_id = "B6-0320"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Direct filename correspondence and complete scripted-listener occurrence lifecycle are implemented in FL-C4; independently accepted at 0eb48976755d759c078f1f1a032bd88590e223f7."
+note = "Direct filename correspondence and complete scripted-listener occurrence lifecycle are implemented in FL-C4; independently accepted at 0eb48976755d759c078f1f1a032bd88590e223f7. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/scripted/scripted_data_converter.cpp"
@@ -3891,7 +3891,7 @@ b6_row_id = "B6-0321"
 b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "P1-n faithful closure at d788e8ec: occurrence teardown/input disposal (scripted_data_converter.cpp:18-41), hydration dirt plus typed push/convert/reverse-convert/cached output (45-168), context bind/reinit and child-bind hydration (170-188), AdvanceNested/zero-time/dirty scheduling (190-213), property ownership/import registration (215-233), complete occurrence clone with ordered child DataBinds (235-274), and scripted-object bind enrollment (276-280) map to RuntimeScriptedDataConverterDefinition/State, occurrence-keyed VM handles, retained DataBind traversal, and StateMachineInstance hydration/advance. Anchors: conversion_uses_one_optional_lookup_before_input_push; conversion_mask_missing_method_and_occurrence_cache_match_cpp; advance_mask_and_lua_truthiness_match_cpp; inherited_unbind_releases_every_scripted_custom_input_source; source_owner_unbinds_scripted_custom_inputs_before_destroying_table; scripted_converter_self_binds_keep_order_fields_and_live_table_identity; repeated_scripted_data_converter_occurrences_match_cpp_probe; upstream_script_ownership_fixtures_remain_on_the_luau_vm_path. Accepted AF-1/AF-5 adaptation: every artboard/DataBind occurrence retains a distinct Rust VM table and owned input graph rather than cloning C++ objects/pointers. PR 144's is_project_data_converter envelope distinction is solely a product-layer carrier/router and must not change upstream ScriptedDataConverter semantics; the named upstream converter fixtures are asserted non-envelope and registered through the Luau VM path."
+note = "P1-n faithful closure at d788e8ec: occurrence teardown/input disposal (scripted_data_converter.cpp:18-41), hydration dirt plus typed push/convert/reverse-convert/cached output (45-168), context bind/reinit and child-bind hydration (170-188), AdvanceNested/zero-time/dirty scheduling (190-213), property ownership/import registration (215-233), complete occurrence clone with ordered child DataBinds (235-274), and scripted-object bind enrollment (276-280) map to RuntimeScriptedDataConverterDefinition/State, occurrence-keyed VM handles, retained DataBind traversal, and StateMachineInstance hydration/advance. Anchors: conversion_uses_one_optional_lookup_before_input_push; conversion_mask_missing_method_and_occurrence_cache_match_cpp; advance_mask_and_lua_truthiness_match_cpp; inherited_unbind_releases_every_scripted_custom_input_source; source_owner_unbinds_scripted_custom_inputs_before_destroying_table; scripted_converter_self_binds_keep_order_fields_and_live_table_identity; repeated_scripted_data_converter_occurrences_match_cpp_probe; upstream_script_ownership_fixtures_remain_on_the_luau_vm_path. Accepted AF-1/AF-5 adaptation: every artboard/DataBind occurrence retains a distinct Rust VM table and owned input graph rather than cloning C++ objects/pointers. PR 144's is_project_data_converter envelope distinction is solely a product-layer carrier/router and must not change upstream ScriptedDataConverter semantics; the named upstream converter fixtures are asserted non-envelope and registered through the Luau VM path. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/scripted/scripted_drawable.cpp"
@@ -3903,7 +3903,7 @@ b6_row_id = "B6-0322"
 b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. This reconciliation completes scripted-drawable lifecycle parity: protected-call failure preserves pinned C++ clear-before-call parking, while Rust additionally surfaces typed ScriptError to the host without rearming the owner."
+note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. This reconciliation completes scripted-drawable lifecycle parity: protected-call failure preserves pinned C++ clear-before-call parking, while Rust additionally surfaces typed ScriptError to the host without rearming the owner. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/scripted/scripted_interpolator.cpp"
@@ -3915,7 +3915,7 @@ b6_row_id = "B6-0323"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "2026-08-02 C1/F7 reconciliation: remains pending after 60dbc545. The landed seam covers ScriptAsset resolution/registration, DataContext projection, input-before-init hydration, per-animation/per-keyframe stateful tables, shared apply, transform/transformValue coercion/fallback, clone-cold caches and bounded diagnostics; corpus.toml::scripted_interpolator is an exact C++/Rust differential and focused Rust suites are green. Whole-file closure is still blocked by generic cloned ScriptInput DataBind/converter ownership and ordered teardown from ScriptedObject::cloneProperties, which P2-d explicitly did not port. Pinned upstream has no direct ScriptedInterpolator unit-test row, so no test-correspondence count changes."
+note = "2026-08-02 C1/F7 reconciliation: remains pending after 60dbc545. The landed seam covers ScriptAsset resolution/registration, DataContext projection, input-before-init hydration, per-animation/per-keyframe stateful tables, shared apply, transform/transformValue coercion/fallback, clone-cold caches and bounded diagnostics; corpus.toml::scripted_interpolator is an exact C++/Rust differential and focused Rust suites are green. Whole-file closure is still blocked by generic cloned ScriptInput DataBind/converter ownership and ordered teardown from ScriptedObject::cloneProperties, which P2-d explicitly did not port. Pinned upstream has no direct ScriptedInterpolator unit-test row, so no test-correspondence count changes. Runtime, VM adapter, public façade, and golden-runner shim intentionally remain split across crate/tool boundaries."
 
 [[file]]
 upstream = "src/scripted/scripted_layout.cpp"
@@ -3927,7 +3927,7 @@ b6_row_id = "B6-0324"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "F7 closure via P2C: ScriptedLayout's direct parent-layout lookup, post-hydration forced layout dirt, serialized measure/resize method bits, contained single-lookup Lua measure/resize callbacks, Taffy leaf measurement hook, and settled/animated layout-size propagation are ported. Five upstream Lua-call cases are direct ports; the sixth 20+20-frame Rows/Columns scenario compares normalized draw semantics against pinned script_layout_grid.sriv, and the script_layout_test exact corpus entry independently covers the live C++ stream."
+note = "F7 closure via P2C: ScriptedLayout's direct parent-layout lookup, post-hydration forced layout dirt, serialized measure/resize method bits, contained single-lookup Lua measure/resize callbacks, Taffy leaf measurement hook, and settled/animated layout-size propagation are ported. Five upstream Lua-call cases are direct ports; the sixth 20+20-frame Rows/Columns scenario compares normalized draw semantics against pinned script_layout_grid.sriv, and the script_layout_test exact corpus entry independently covers the live C++ stream. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/scripted/scripted_object.cpp"
@@ -3939,7 +3939,7 @@ b6_row_id = "B6-0325"
 b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. This reconciliation completes the remaining scripted-object error lifecycle: failed protected calls park the owner exactly like C++ false, while Rust's typed ScriptError remains only an additive host signal and performs no automatic rearm."
+note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32. This reconciliation completes the remaining scripted-object error lifecycle: failed protected calls park the owner exactly like C++ false, while Rust's typed ScriptError remains only an additive host signal and performs no automatic rearm. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/scripted/scripted_path_effect.cpp"
@@ -4635,7 +4635,7 @@ b6_row_id = "B6-0383"
 b6_verdict = "DIVERGENT"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/results/text.md"
-note = "W124 faithful candidate: D-RT-API and D-RT-COLOR-188/402/423/457/474 execute the live pinned C++ RawText owner against the public Rust facade; the retained Rust owner preserves construction, paint-identity append/clear/setters, lazy update, bounds, clip/render lifecycle, bidi/ellipsis, command coalescing/order, and nonfinite setter behavior. Shared color classification/extraction lives in text_engine.rs; standalone replay remains flat COLR-path-only while integrated Text owns retained bitmap decode/cache replay in text.rs/draw.rs. GM fixtures remain the directed nonblocking follow-up lane."
+note = "W124 faithful candidate: D-RT-API and D-RT-COLOR-188/402/423/457/474 execute the live pinned C++ RawText owner against the public Rust facade; the retained Rust owner preserves construction, paint-identity append/clear/setters, lazy update, bounds, clip/render lifecycle, bidi/ellipsis, command coalescing/order, and nonfinite setter behavior. Shared color classification/extraction lives in text_engine.rs; standalone replay remains flat COLR-path-only while integrated Text owns retained bitmap decode/cache replay in text.rs/draw.rs. GM fixtures remain the directed nonblocking follow-up lane. Public façade/integration API and runtime implementation intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/text/raw_text_input.cpp"
@@ -4947,7 +4947,7 @@ b6_row_id = "B6-0409"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/data_enum_value.cpp"
@@ -4959,7 +4959,7 @@ b6_row_id = "B6-0410"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/property_symbol_dependent.cpp"
@@ -4971,7 +4971,7 @@ b6_row_id = "B6-0411"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/runtime/viewmodel_instance_artboard_runtime.cpp"
@@ -5151,7 +5151,7 @@ b6_row_id = "B6-0426"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance.cpp"
@@ -5163,7 +5163,7 @@ b6_row_id = "B6-0427"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_artboard.cpp"
@@ -5175,7 +5175,7 @@ b6_row_id = "B6-0428"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_asset.cpp"
@@ -5187,7 +5187,7 @@ b6_row_id = "B6-0429"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_asset_font.cpp"
@@ -5199,7 +5199,7 @@ b6_row_id = "B6-0430"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_asset_image.cpp"
@@ -5211,7 +5211,7 @@ b6_row_id = "B6-0431"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_boolean.cpp"
@@ -5223,7 +5223,7 @@ b6_row_id = "B6-0432"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_color.cpp"
@@ -5235,7 +5235,7 @@ b6_row_id = "B6-0433"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_enum.cpp"
@@ -5247,7 +5247,7 @@ b6_row_id = "B6-0434"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_list.cpp"
@@ -5259,7 +5259,7 @@ b6_row_id = "B6-0435"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_list_item.cpp"
@@ -5271,7 +5271,7 @@ b6_row_id = "B6-0436"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_number.cpp"
@@ -5283,7 +5283,7 @@ b6_row_id = "B6-0437"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_string.cpp"
@@ -5295,7 +5295,7 @@ b6_row_id = "B6-0438"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_symbol_list_index.cpp"
@@ -5307,7 +5307,7 @@ b6_row_id = "B6-0439"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_trigger.cpp"
@@ -5319,7 +5319,7 @@ b6_row_id = "B6-0440"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_value.cpp"
@@ -5331,7 +5331,7 @@ b6_row_id = "B6-0441"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_viewmodel.cpp"
@@ -5343,7 +5343,7 @@ b6_row_id = "B6-0442"
 b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_property.cpp"
@@ -5355,7 +5355,7 @@ b6_row_id = "B6-0443"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_property_enum.cpp"
@@ -5367,7 +5367,7 @@ b6_row_id = "B6-0444"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_property_enum_system.cpp"
@@ -5379,7 +5379,7 @@ b6_row_id = "B6-0445"
 b6_verdict = "ADAPTED"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
-note = "Consolidated Rust port for viewmodel."
+note = "Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
 
 [[file]]
 upstream = "src/virtualizing_component.cpp"

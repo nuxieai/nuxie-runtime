@@ -281,11 +281,6 @@ pub(crate) struct GpuCanvasImage {
 
 impl UserData for GpuCanvasImage {}
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct ScriptedImageSampler(pub(crate) nuxie_render_api::ImageSampler);
-
-impl UserData for ScriptedImageSampler {}
-
 #[derive(Debug)]
 pub(crate) struct RegisteredGpuCanvasShaderAsset {
     asset: RegisteredGpuCanvasShaderAssetState,
@@ -1107,34 +1102,6 @@ fn install_gpu_canvas_globals_with_budget(
             uniforms,
         })
     })?;
-    lua.globals().set(
-        "ImageSampler",
-        lua.create_function(|lua, (wrap_x, wrap_y, filter): (String, String, String)| {
-            use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap};
-            let parse_wrap = |value: &str| match value {
-                "clamp" => Ok(ImageWrap::Clamp),
-                "repeat" => Ok(ImageWrap::Repeat),
-                "mirror" => Ok(ImageWrap::Mirror),
-                other => Err(Error::runtime(format!(
-                    "unsupported image sampler wrap '{other}'"
-                ))),
-            };
-            let filter = match filter.as_str() {
-                "linear" => ImageFilter::Bilinear,
-                "nearest" => ImageFilter::Nearest,
-                other => {
-                    return Err(Error::runtime(format!(
-                        "unsupported image sampler filter '{other}'"
-                    )));
-                }
-            };
-            lua.create_userdata(ScriptedImageSampler(ImageSampler {
-                wrap_x: parse_wrap(&wrap_x)?,
-                wrap_y: parse_wrap(&wrap_y)?,
-                filter,
-            }))
-        })?,
-    )?;
     Ok(())
 }
 

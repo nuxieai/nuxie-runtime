@@ -249,7 +249,7 @@ fn runtime_color_glyph_path(
         ]);
         crate::draw::transform_path_commands(&mut pen.commands, mapped);
     }
-    crate::draw::runtime_raw_path_from_commands(&pen.commands)
+    crate::math::raw_path::runtime_raw_path_from_commands(&pen.commands)
 }
 
 struct RuntimeColorLayerCollector<'font> {

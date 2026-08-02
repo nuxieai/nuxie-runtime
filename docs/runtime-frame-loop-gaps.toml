@@ -2324,7 +2324,10 @@ max_occurrences = 1
 
 [[ratchet]]
 id = "fl_e7_shape_paint_container_invalidate_effects_production_required"
-globs = ["crates/nuxie-runtime/src/draw.rs"]
+globs = [
+  "crates/nuxie-runtime/src/draw.rs",
+  "crates/nuxie-runtime/src/shapes/path_composer.rs",
+]
 pattern = "shape_paint_container::invalidate_stroke_effects\\s*\\("
 min_occurrences = 4
 max_occurrences = 4

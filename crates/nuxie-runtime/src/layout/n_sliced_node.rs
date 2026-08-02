@@ -48,7 +48,7 @@ pub(crate) fn size_changed(
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct RuntimeNSlicedNodeContext {
+pub(crate) struct RuntimeNSlicedNodeContext {
     world: Mat2D,
     inverse_world: Mat2D,
     width: f32,
@@ -113,7 +113,7 @@ impl RuntimeNSlicedNodeContext {
     }
 }
 
-pub(super) fn runtime_nsliced_node_context_for_shape(
+pub(crate) fn runtime_nsliced_node_context_for_shape(
     instance: &ArtboardInstance,
     graph: &ArtboardGraph,
     shape_local: usize,

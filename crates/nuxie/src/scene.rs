@@ -32808,6 +32808,13 @@ mod tests {
             !hidden.contains("drawPath "),
             "container world opacity must suppress its nested occurrence: {hidden}"
         );
+        let hidden_geometry = runtime.geometry_path_segments_with_bounds();
+        assert!(
+            hidden_geometry.iter().all(|hit| {
+                hit.path.len() != 2 || hit.path.last().is_none_or(|segment| segment.local_id != 1)
+            }),
+            "visible geometry must suppress the nested occurrence after the live ancestor hide: {hidden_geometry:#?}",
+        );
         let retained = runtime.retained_geometry_path_segments_with_bounds();
         assert!(
             retained.iter().any(|hit| {
@@ -32821,6 +32828,407 @@ mod tests {
                 .iter()
                 .all(|path| path.last().is_none_or(|local_id| *local_id != 5)),
             "retained occurrence enumeration must not make the opacity-zero child point-interactive",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn scene_geometry_excludes_direct_shape_after_live_zero_opacity_write() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((artboard, shape), _) = scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Direct opacity".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let shape = create_colored_rect(
+                tx,
+                artboard,
+                "Direct shape",
+                10.0,
+                20.0,
+                30.0,
+                40.0,
+                0xff33_6699,
+            )?;
+            Ok((artboard, shape))
+        })?;
+        let instance = scene.instantiate(artboard)?;
+        let opacity = scene.cursor(instance, shape, props::WORLD_OPACITY)?;
+
+        assert!(
+            scene
+                .frame()
+                .geometry_paths_with_bounds(instance)
+                .iter()
+                .any(|hit| hit.path.objects().last() == Some(&shape))
+        );
+        assert!(scene.frame().set(opacity, 0.0)?);
+
+        assert!(
+            scene
+                .frame()
+                .geometry_paths_with_bounds(instance)
+                .iter()
+                .all(|hit| hit.path.objects().last() != Some(&shape)),
+            "visible geometry must exclude a direct zero-opacity Shape after the live write settles",
+        );
+        assert!(
+            scene
+                .frame()
+                .retained_geometry_paths_with_bounds(instance)
+                .iter()
+                .any(|hit| hit.path.objects().last() == Some(&shape)),
+            "retained geometry must preserve the direct Shape occurrence",
+        );
+
+        scene.frame().advance(instance, 0.0, &mut Vec::new());
+        assert!(
+            scene
+                .frame()
+                .geometry_paths_with_bounds(instance)
+                .iter()
+                .all(|hit| hit.path.objects().last() != Some(&shape)),
+            "the direct Shape must remain hidden after an explicit advance",
+        );
+        assert!(scene.frame().set(opacity, 1.0)?);
+        assert!(
+            scene
+                .frame()
+                .geometry_paths_with_bounds(instance)
+                .iter()
+                .any(|hit| hit.path.objects().last() == Some(&shape)),
+            "the direct Shape must return after restoring opacity",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn scene_geometry_excludes_parent_composed_shape_after_live_zero_opacity_write() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((artboard, parent, child), _) = scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Composed opacity".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let parent = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Opacity parent".into(),
+                    x: 5.0,
+                    y: 7.0,
+                    opacity: 0.8,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let child = tx.create(
+                Parent::Object(parent),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Opacity child".into(),
+                    x: 10.0,
+                    y: 20.0,
+                    opacity: 0.5,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            tx.create(
+                Parent::Object(child),
+                NodeSpec::Rectangle(RectangleSpec::new("Child bounds", 30.0, 40.0)),
+            )?;
+            let fill = tx.create(
+                Parent::Object(child),
+                NodeSpec::Fill(FillSpec {
+                    name: "Child fill".into(),
+                }),
+            )?;
+            tx.create(
+                Parent::Object(fill),
+                NodeSpec::SolidColor(SolidColorSpec {
+                    name: "Child color".into(),
+                    color: 0xff33_6699,
+                }),
+            )?;
+            Ok((artboard, parent, child))
+        })?;
+        let instance = scene.instantiate(artboard)?;
+        let opacity = scene.cursor(instance, parent, props::WORLD_OPACITY)?;
+
+        assert!(
+            scene
+                .frame()
+                .geometry_paths_with_bounds(instance)
+                .iter()
+                .any(|hit| hit.path.objects().last() == Some(&child)),
+            "the child Shape must be visible before its parent opacity is zeroed",
+        );
+        assert!(scene.frame().set(opacity, 0.0)?);
+
+        assert!(
+            scene
+                .frame()
+                .geometry_paths_with_bounds(instance)
+                .iter()
+                .all(|hit| hit.path.objects().last() != Some(&child)),
+            "visible geometry must exclude a child Shape at zero parent-composed opacity",
+        );
+        assert!(
+            scene
+                .frame()
+                .retained_geometry_paths_with_bounds(instance)
+                .iter()
+                .any(|hit| hit.path.objects().last() == Some(&child)),
+            "retained geometry must preserve the parent-composed child Shape",
+        );
+
+        scene.frame().advance(instance, 0.0, &mut Vec::new());
+        assert!(
+            scene
+                .frame()
+                .geometry_paths_with_bounds(instance)
+                .iter()
+                .all(|hit| hit.path.objects().last() != Some(&child)),
+            "the parent-composed child must remain hidden after an explicit advance",
+        );
+        assert!(scene.frame().set(opacity, 0.8)?);
+        assert!(
+            scene
+                .frame()
+                .geometry_paths_with_bounds(instance)
+                .iter()
+                .any(|hit| hit.path.objects().last() == Some(&child)),
+            "the parent-composed child must return after restoring opacity",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn scene_geometry_excludes_nested_artboard_after_live_zero_opacity_write() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((root, host, child_shape), _) = scene.edit(|tx| {
+            let root = tx.create_artboard(ArtboardSpec {
+                name: "Nested opacity root".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let child = tx.create_artboard(ArtboardSpec {
+                name: "Nested opacity child".into(),
+                width: 40.0,
+                height: 40.0,
+            })?;
+            let child_shape = create_colored_rect(
+                tx,
+                child,
+                "Nested child shape",
+                0.0,
+                0.0,
+                40.0,
+                40.0,
+                0xff33_6699,
+            )?;
+            let host = tx.create(
+                Parent::Artboard(root),
+                NodeSpec::NestedArtboard(NestedArtboardSpec {
+                    name: "Nested host".into(),
+                    x: 5.0,
+                    y: 7.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    artboard: child,
+                    view_model_source: None,
+                    view_model_instance: None,
+                    state_machines: Vec::new(),
+                    state_machine_inputs: Vec::new(),
+                }),
+            )?;
+            Ok((root, host, child_shape))
+        })?;
+        let instance = scene.instantiate(root)?;
+        let opacity = scene.cursor(instance, host.into(), props::WORLD_OPACITY)?;
+
+        assert!(
+            scene
+                .frame()
+                .geometry_paths_with_bounds(instance)
+                .iter()
+                .any(|hit| hit.path.objects().last() == Some(&child_shape)),
+            "the nested child must be visible before its host opacity is zeroed",
+        );
+        assert!(scene.frame().set(opacity, 0.0)?);
+
+        assert!(
+            scene
+                .frame()
+                .geometry_paths_with_bounds(instance)
+                .iter()
+                .all(|hit| hit.path.objects().last() != Some(&child_shape)),
+            "visible geometry must exclude nested child geometry at zero host opacity",
+        );
+        assert!(
+            scene
+                .frame()
+                .retained_geometry_paths_with_bounds(instance)
+                .iter()
+                .any(|hit| hit.path.objects().last() == Some(&child_shape)),
+            "retained geometry must preserve the nested child occurrence",
+        );
+
+        scene.frame().advance(instance, 0.0, &mut Vec::new());
+        assert!(
+            scene
+                .frame()
+                .geometry_paths_with_bounds(instance)
+                .iter()
+                .all(|hit| hit.path.objects().last() != Some(&child_shape)),
+            "the nested child must remain hidden after an explicit advance",
+        );
+        assert!(scene.frame().set(opacity, 1.0)?);
+        assert!(
+            scene
+                .frame()
+                .geometry_paths_with_bounds(instance)
+                .iter()
+                .any(|hit| hit.path.objects().last() == Some(&child_shape)),
+            "the nested child must return after restoring host opacity",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn scene_geometry_excludes_component_list_after_live_zero_opacity_write() -> Result<()> {
+        let mut scene = Scene::new();
+        let ((root, host, item_shape), _) = scene.edit(|tx| {
+            let root = tx.create_artboard(ArtboardSpec {
+                name: "List opacity root".into(),
+                width: 100.0,
+                height: 100.0,
+            })?;
+            let item = tx.create_artboard(ArtboardSpec {
+                name: "List opacity item".into(),
+                width: 20.0,
+                height: 20.0,
+            })?;
+            let item_shape = create_colored_rect(
+                tx,
+                item,
+                "List item shape",
+                0.0,
+                0.0,
+                20.0,
+                20.0,
+                0xff33_6699,
+            )?;
+            let (item_model, items) = {
+                let mut view_models = tx.view_models();
+                let root_model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
+                    name: "List root model".into(),
+                })?;
+                let item_model = view_models.create(ViewModelSpec {
+                    scope: ViewModelScope::Local,
+                    name: "List item model".into(),
+                })?;
+                let items = view_models.create_list(
+                    root_model,
+                    ViewModelListSpec {
+                        name: "items".into(),
+                    },
+                )?;
+                let root_defaults = view_models
+                    .create_instance(root_model, ViewModelInstanceSpec { name: None })?;
+                let first = view_models
+                    .create_instance(item_model, ViewModelInstanceSpec { name: None })?;
+                let second = view_models
+                    .create_instance(item_model, ViewModelInstanceSpec { name: None })?;
+                view_models.set_list_items(root_defaults, items, &[first, second])?;
+                view_models.set_artboard_default(root, root_defaults)?;
+                view_models.set_artboard_default(item, first)?;
+                (item_model, items)
+            };
+            let host = tx.create_component_list(
+                root,
+                ArtboardComponentListSpec {
+                    name: "Opacity list".into(),
+                    x: 5.0,
+                    y: 7.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                    flow: None,
+                    source: ViewModelListSource::direct(items),
+                    map_rules: vec![ArtboardListMapRuleSpec {
+                        view_model: item_model,
+                        artboard: item,
+                    }],
+                },
+            )?;
+            Ok((root, host, item_shape))
+        })?;
+        let instance = scene.instantiate(root)?;
+        scene.frame().advance(instance, 0.0, &mut Vec::new());
+        let opacity = scene.cursor(instance, host.into(), props::WORLD_OPACITY)?;
+
+        let visible_before = scene
+            .frame()
+            .geometry_paths_with_bounds(instance)
+            .into_iter()
+            .filter(|hit| hit.path.objects().last() == Some(&item_shape))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            visible_before.len(),
+            2,
+            "both component-list occurrences must be visible before host opacity is zeroed: {visible_before:#?}",
+        );
+        assert!(scene.frame().set(opacity, 0.0)?);
+
+        assert!(
+            scene
+                .frame()
+                .geometry_paths_with_bounds(instance)
+                .iter()
+                .all(|hit| hit.path.objects().last() != Some(&item_shape)),
+            "visible geometry must exclude component-list items at zero host opacity",
+        );
+        let retained = scene
+            .frame()
+            .retained_geometry_paths_with_bounds(instance)
+            .into_iter()
+            .filter(|hit| hit.path.objects().last() == Some(&item_shape))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            retained.len(),
+            2,
+            "retained geometry must preserve both component-list occurrences: {retained:#?}",
+        );
+        assert!(retained.iter().all(|hit| hit.occurrence().len() == 1));
+
+        scene.frame().advance(instance, 0.0, &mut Vec::new());
+        assert!(
+            scene
+                .frame()
+                .geometry_paths_with_bounds(instance)
+                .iter()
+                .all(|hit| hit.path.objects().last() != Some(&item_shape)),
+            "the component-list items must remain hidden after an explicit advance",
+        );
+        assert!(scene.frame().set(opacity, 1.0)?);
+        let visible_restored = scene
+            .frame()
+            .geometry_paths_with_bounds(instance)
+            .into_iter()
+            .filter(|hit| hit.path.objects().last() == Some(&item_shape))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            visible_restored.len(),
+            2,
+            "both component-list occurrences must return after restoring host opacity: {visible_restored:#?}",
         );
         Ok(())
     }

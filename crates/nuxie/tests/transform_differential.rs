@@ -1,12 +1,14 @@
 use anyhow::{Context, Result};
 use nuxie::{
-    ArtboardSpec, FillSpec, LayoutComponentSpec, LayoutComponentStyleSpec, NodeSpec, ObjectId,
-    Parent, RecordingFactory, RectangleSpec, Scene, ShapeSpec, SolidColorSpec, props,
+    ArtboardSpec, File, FillSpec, LayoutComponentSpec, LayoutComponentStyleSpec, NodeSpec,
+    ObjectId, OwnedArtboardInstance, Parent, RecordingFactory, RectangleSpec, Scene, ShapeSpec,
+    SolidColorSpec, props,
 };
 use nuxie_render_stream::{Command as RenderCommand, RenderStream};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 
 const SCALE_X_KEY: u16 = 16;
 const TRANSLATE_X_KEY: u16 = 13;
@@ -64,6 +66,10 @@ fn cpp_probe_path() -> Option<PathBuf> {
 
 fn transform_fixture_path() -> PathBuf {
     repo_root().join("fixtures/univ-1275/transform_live_write.riv")
+}
+
+fn parent_child_opacity_fixture_path() -> PathBuf {
+    repo_root().join("fixtures/univ-1278/parent_child_opacity.riv")
 }
 
 fn cpp_live_writes(probe: &Path, writes: &[LiveWrite]) -> Result<Value> {
@@ -251,6 +257,89 @@ fn assert_scalar_close(rust: f32, cpp: &Value, label: &str) {
         (rust - cpp).abs() <= 0.000_01,
         "{label} differs: Rust {rust}, C++ {cpp}"
     );
+}
+
+fn render_opacity(instance: &OwnedArtboardInstance, local_id: usize) -> f32 {
+    instance
+        .raw()
+        .component(local_id)
+        .unwrap_or_else(|| panic!("component {local_id} retains runtime state"))
+        .transform
+        .render_opacity
+}
+
+#[test]
+fn parent_child_opacity_initial_live_write_and_timeline_match_cpp() -> Result<()> {
+    let Some(probe) = cpp_probe_path() else {
+        eprintln!("skipping C++ parent-child opacity comparison; run make cpp-probe");
+        return Ok(());
+    };
+    let fixture = parent_child_opacity_fixture_path();
+    let bytes = std::fs::read(&fixture).context("read generated parent-child opacity fixture")?;
+    let file = Arc::new(File::import(&bytes)?);
+    let mut instance = OwnedArtboardInstance::instantiate_default(file)?;
+    instance.advance(0.0);
+    let rust_initial = render_opacity(&instance, 2);
+
+    assert!(instance.raw_mut().set_double_property(1, OPACITY_KEY, 0.6));
+    instance.advance(0.0);
+    let rust_live_write = render_opacity(&instance, 2);
+
+    assert!(instance.raw_mut().apply_linear_animation(0, 1.0, 1.0));
+    instance.advance(0.0);
+    let rust_timeline = render_opacity(&instance, 2);
+
+    let output = Command::new(probe)
+        .args(["--file"])
+        .arg(&fixture)
+        .args([
+            "--runtime-settle-double",
+            "1",
+            "18",
+            "0.6",
+            "2",
+            "--runtime-apply-animation",
+            "0",
+            "1.0",
+            "1.0",
+            "--runtime-update",
+        ])
+        .output()
+        .context("run C++ parent-child opacity differential")?;
+    anyhow::ensure!(
+        output.status.success(),
+        "C++ parent-child opacity differential failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let cpp: Value =
+        serde_json::from_slice(&output.stdout).context("parse C++ parent-child opacity report")?;
+    let live_report = &cpp["artboards"][0]["runtimeSettledDoubleMutations"][0];
+    let timeline_component = cpp["artboards"][0]["runtimeUpdate"]["components"]
+        .as_array()
+        .context("C++ component reports")?
+        .iter()
+        .find(|component| component["localId"].as_u64() == Some(2))
+        .context("C++ child component report")?;
+
+    assert_scalar_close(
+        rust_initial,
+        &live_report["beforeRenderOpacity"],
+        "initial child render opacity",
+    );
+    assert_scalar_close(
+        rust_live_write,
+        &live_report["renderOpacity"],
+        "live-write child render opacity",
+    );
+    assert_scalar_close(
+        rust_timeline,
+        &timeline_component["renderOpacity"],
+        "timeline child render opacity",
+    );
+    assert!((rust_initial - 0.4).abs() <= 0.000_01);
+    assert!((rust_live_write - 0.3).abs() <= 0.000_01);
+    assert!((rust_timeline - 0.2).abs() <= 0.000_01);
+    Ok(())
 }
 
 #[test]

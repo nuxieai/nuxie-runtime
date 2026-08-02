@@ -90,7 +90,7 @@ impl FixtureArgs {
                 "--out" => out = args.next().map(PathBuf::from),
                 "--help" | "-h" => {
                     println!(
-                        "usage: nuxie-codegen fixture --name <text-style-feature|text-variation-modifier|transform-live-write> [--font <font.ttf>] --out <fixture.riv>"
+                        "usage: nuxie-codegen fixture --name <text-style-feature|text-variation-modifier|transform-live-write|parent-child-opacity> [--font <font.ttf>] --out <fixture.riv>"
                     );
                     std::process::exit(0);
                 }
@@ -110,6 +110,7 @@ fn emit_fixture(args: FixtureArgs) -> Result<()> {
         "text-style-feature" => text_style_feature_fixture(read_fixture_font(&args)?),
         "text-variation-modifier" => text_variation_modifier_fixture(read_fixture_font(&args)?),
         "transform-live-write" => transform_live_write_fixture(),
+        "parent-child-opacity" => parent_child_opacity_fixture(),
         other => bail!("unknown fixture name {other:?}"),
     };
     RuntimeFile::from_authoring_records(records.clone())
@@ -502,6 +503,98 @@ fn transform_live_write_fixture() -> Vec<AuthoringRecord> {
     ]
 }
 
+fn parent_child_opacity_fixture() -> Vec<AuthoringRecord> {
+    vec![
+        fixture_record("Backboard", vec![]),
+        fixture_record(
+            "Artboard",
+            vec![
+                (
+                    "name",
+                    AuthoringValue::String("UNIV-1278 parent child opacity".to_owned()),
+                ),
+                ("width", AuthoringValue::Double(100.0)),
+                ("height", AuthoringValue::Double(100.0)),
+            ],
+        ),
+        fixture_record(
+            "Shape",
+            vec![
+                ("name", AuthoringValue::String("Opacity parent".to_owned())),
+                ("parentId", AuthoringValue::Uint(0)),
+                ("x", AuthoringValue::Double(10.0)),
+                ("y", AuthoringValue::Double(10.0)),
+                ("opacity", AuthoringValue::Double(0.8)),
+            ],
+        ),
+        fixture_record(
+            "Shape",
+            vec![
+                ("name", AuthoringValue::String("Opacity child".to_owned())),
+                ("parentId", AuthoringValue::Uint(1)),
+                ("x", AuthoringValue::Double(5.0)),
+                ("y", AuthoringValue::Double(5.0)),
+                ("opacity", AuthoringValue::Double(0.5)),
+            ],
+        ),
+        fixture_record(
+            "Rectangle",
+            vec![
+                ("name", AuthoringValue::String("Opacity bounds".to_owned())),
+                ("parentId", AuthoringValue::Uint(2)),
+                ("width", AuthoringValue::Double(40.0)),
+                ("height", AuthoringValue::Double(40.0)),
+            ],
+        ),
+        fixture_record(
+            "Fill",
+            vec![
+                ("name", AuthoringValue::String("Opacity fill".to_owned())),
+                ("parentId", AuthoringValue::Uint(2)),
+            ],
+        ),
+        fixture_record(
+            "SolidColor",
+            vec![
+                ("name", AuthoringValue::String("Opacity color".to_owned())),
+                ("parentId", AuthoringValue::Uint(4)),
+                ("colorValue", AuthoringValue::Color(0xff33_6699)),
+            ],
+        ),
+        fixture_record(
+            "LinearAnimation",
+            vec![
+                (
+                    "name",
+                    AuthoringValue::String("Parent opacity timeline".to_owned()),
+                ),
+                ("fps", AuthoringValue::Uint(10)),
+                ("duration", AuthoringValue::Uint(10)),
+            ],
+        ),
+        fixture_record("KeyedObject", vec![("objectId", AuthoringValue::Uint(1))]),
+        fixture_record(
+            "KeyedProperty",
+            vec![("propertyKey", AuthoringValue::Uint(18))],
+        ),
+        fixture_record(
+            "KeyFrameDouble",
+            vec![
+                ("frame", AuthoringValue::Uint(0)),
+                ("interpolationType", AuthoringValue::Uint(1)),
+                ("value", AuthoringValue::Double(0.8)),
+            ],
+        ),
+        fixture_record(
+            "KeyFrameDouble",
+            vec![
+                ("frame", AuthoringValue::Uint(10)),
+                ("value", AuthoringValue::Double(0.4)),
+            ],
+        ),
+    ]
+}
+
 fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
     loop {
         let mut byte = (value & 0x7f) as u8;
@@ -585,6 +678,9 @@ mod fixture_tests {
             encode_authoring_records(&transform)
         );
         assert!(transform.iter().any(|record| record.type_key == 409));
+
+        let opacity = parent_child_opacity_fixture();
+        assert!(opacity.iter().any(|record| record.type_key == 31));
     }
 }
 

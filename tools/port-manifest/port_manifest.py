@@ -166,8 +166,16 @@ FEATURE_ROWS.update(
             "",
             "F5/F6: semantic input runtime is absent.",
         ),
-        "src/profiler/profiler.cpp": ("absent", "", "F12: profiler is absent."),
-        "src/profiler/rive_profile.cpp": ("absent", "", "F12: profiler is absent."),
+        "src/profiler/profiler.cpp": (
+            "ported",
+            "crates/nuxie-runtime/src/profiler.rs",
+            "P1-m/F12 approved D16/PORTING-FLR-21 adaptation: the pinned MicroProfile implementation wrapper is replaced by the pluggable pure-Rust ProfileCapture seam; no C++ FFI is linked.",
+        ),
+        "src/profiler/rive_profile.cpp": (
+            "ported",
+            "crates/nuxie-runtime/src/profiler.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/state_machine/state_machine_layer_instance.rs; crates/nuxie-runtime/src/state_machine/state_machine_instance.rs",
+            "P1-m/F12 faithful RiveProfile records, lifecycle, nested-host paths, transition/listener hooks, and exact BinaryWriter wire bytes checked by a source-derived oracle compiled against the pinned C++ types and VectorBinaryWriter.",
+        ),
         "src/nested_artboard.cpp": (
             "partial",
             "crates/nuxie-runtime/src/artboard.rs",

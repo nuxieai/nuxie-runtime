@@ -117,6 +117,7 @@ mod nested_number;
 mod nested_trigger;
 mod objects;
 mod parent_traversal;
+mod profiler;
 mod project_data_converter;
 mod properties;
 mod rectangles_to_contour;
@@ -204,6 +205,13 @@ pub use math::random::{
     set_runtime_random_test_values,
 };
 pub use objects::InstanceSlot;
+pub use profiler::{
+    ArtboardPathSegment, ListenerFlushCallback, ListenerPerformChangeRecord,
+    PROFILE_LOG_LISTENER_PERFORM_CHANGES, PROFILE_LOG_NONE, PROFILE_LOG_TRANSITION_RECORDS,
+    ProfileCapture, ProfileCaptureEvent, ProfileCaptureFrame, ProfileCaptureMetadata,
+    ProfileCaptureTimer, ProfilePathSegment, RiveProfile, TransitionFlushCallback,
+    TransitionRecord, with_rive_profile,
+};
 pub use project_data_converter::{
     ProjectDataConverterCatalog, ProjectDataConverterCompileError, ProjectDataConverterContext,
     ProjectDataConverterDefinition, ProjectDataConverterEasing, ProjectDataConverterFormat,

@@ -4,6 +4,7 @@
 /fuzz/seeds/**/*.riv
 /tools/cpp-probe/build/Makefile
 /tools/cpp-probe/build/*.make
+/tools/cpp-probe/build/generated/
 /tools/cpp-probe/build/linux/
 /tools/cpp-probe/build/macosx/
 /tools/cpp-probe/build/windows/

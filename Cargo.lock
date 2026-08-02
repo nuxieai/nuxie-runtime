@@ -1047,6 +1047,7 @@ dependencies = [
  "nuxie-schema",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -1067,6 +1068,7 @@ dependencies = [
  "nuxie-schema",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -1136,6 +1138,7 @@ dependencies = [
  "nuxie-schema",
  "serde",
  "serde_json",
+ "sha2",
  "skrifa",
  "taffy",
  "unicode-properties",

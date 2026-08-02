@@ -28,6 +28,10 @@ tools/cpp-probe/build/macosx/bin/debug/rive_cpp_probe --file fixtures/graph/depe
 
 Useful probe switches:
 
+- `--fingerprint` prints the SHA-256 fingerprint of the probe's build inputs
+  that `build.sh` embedded at compile time. The Rust comparison harnesses check
+  it before spawning the probe and fail with "cpp-probe binary is stale — run
+  make cpp-probe" when the binary no longer matches the sources.
 - `--property-values` emits `CoreRegistry` getter-backed property values for file-level objects and artboard-local object slots.
 - `--file-property-values` emits those getter-backed values only for file-level objects: file assets, view models, view-model properties/instances, data enums, and enum values.
 - `--no-advance` skips the `Artboard::advance(0)` call before dumping artboard state, which is useful when comparing import-time member values instead of graph-updated values.

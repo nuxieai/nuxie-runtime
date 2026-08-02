@@ -2,24 +2,62 @@
 // Image asset value identity, sentinel handling, import, and clone behavior.
 
 /// Retained safe-Rust analogue of one decoded `RenderImage*`.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RuntimeViewModelImage {
-    bytes: Arc<[u8]>,
+    bytes: Option<Arc<[u8]>>,
+    render_image: Option<Rc<dyn RenderImage>>,
 }
 
 impl RuntimeViewModelImage {
     pub fn new(bytes: impl Into<Arc<[u8]>>) -> Self {
         Self {
-            bytes: bytes.into(),
+            bytes: Some(bytes.into()),
+            render_image: None,
         }
     }
 
     pub fn bytes(&self) -> &[u8] {
-        &self.bytes
+        self.bytes.as_deref().unwrap_or_default()
+    }
+
+    pub(crate) fn from_render_image(image: Rc<dyn RenderImage>) -> Self {
+        Self {
+            bytes: None,
+            render_image: Some(image),
+        }
+    }
+
+    pub(crate) fn render_image(&self) -> Option<Rc<dyn RenderImage>> {
+        self.render_image.as_ref().map(Rc::clone)
     }
 
     pub fn ptr_eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.bytes, &other.bytes)
+        match (
+            &self.bytes,
+            &other.bytes,
+            &self.render_image,
+            &other.render_image,
+        ) {
+            (Some(left), Some(right), _, _) => Arc::ptr_eq(left, right),
+            (_, _, Some(left), Some(right)) => Rc::ptr_eq(left, right),
+            _ => false,
+        }
+    }
+}
+
+impl std::fmt::Debug for RuntimeViewModelImage {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RuntimeViewModelImage")
+            .field("byte_len", &self.bytes.as_ref().map_or(0, |bytes| bytes.len()))
+            .field(
+                "dimensions",
+                &self
+                    .render_image
+                    .as_ref()
+                    .map(|image| (image.width(), image.height())),
+            )
+            .finish()
     }
 }
 

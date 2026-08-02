@@ -3,6 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
+use nuxie_render_api::RenderImage;
+
 use nuxie_binary::{
     RuntimeDataValue, RuntimeFile, RuntimeObject, RuntimeViewModel, RuntimeViewModelInstance,
     RuntimeViewModelInstanceReference,

@@ -711,6 +711,82 @@ impl RuntimeOwnedViewModelViewModel {
         }
     }
 
+    fn active_runtime_image_by_property_index(
+        &self,
+        property_index: usize,
+    ) -> Option<RuntimeViewModelImage> {
+        if let Some(linked) = self.endpoint.linked_instance() {
+            return linked
+                .try_borrow()
+                .ok()?
+                .runtime_image_by_property_index(property_index);
+        }
+        let assets = match self.endpoint.value() {
+            RuntimeViewModelPointer::OwnedGenerated { .. } => &self.assets,
+            RuntimeViewModelPointer::Imported { object_id } => self.imported_assets.get(&object_id)?,
+            _ => return None,
+        };
+        assets
+            .iter()
+            .find(|asset| asset.property_index == property_index)?
+            .runtime_state
+            .borrow()
+            .live_image
+            .clone()
+    }
+
+    fn active_runtime_image_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<RuntimeViewModelImage> {
+        if property_path.len() == 1 {
+            return self.active_runtime_image_by_property_index(property_path[0]);
+        }
+        let (view_model_index, rest) = property_path.split_first()?;
+        self.active_children()?
+            .iter()
+            .find(|view_model| view_model.property_index == *view_model_index)?
+            .active_runtime_image_by_property_path(rest)
+    }
+
+    fn set_active_runtime_image_by_property_index(
+        &mut self,
+        property_index: usize,
+        image: Option<RuntimeViewModelImage>,
+    ) -> bool {
+        if let Some(linked) = self.endpoint.linked_instance() {
+            return linked
+                .try_borrow_mut()
+                .ok()
+                .is_some_and(|mut linked| {
+                    linked.set_runtime_image_by_property_index(property_index, image)
+                });
+        }
+        let RuntimeViewModelPointer::OwnedGenerated { .. } = self.endpoint.value() else {
+            return false;
+        };
+        let Some(asset) = self
+            .assets
+            .iter_mut()
+            .find(|asset| asset.property_index == property_index)
+        else {
+            return false;
+        };
+        let same = match (&asset.runtime_state.borrow().live_image, &image) {
+            (Some(current), Some(next)) => current.ptr_eq(next),
+            (None, None) => true,
+            _ => false,
+        };
+        if same {
+            return false;
+        }
+        asset.runtime_state.borrow_mut().live_image = image;
+        if !asset.set_value(u64::from(u32::MAX)) {
+            asset.cell.notify_bindings_value_changed();
+        }
+        true
+    }
+
     fn font_asset_value_by_property_index(
         &self,
         property_index: usize,

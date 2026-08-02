@@ -12,13 +12,10 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 
 [expected_status_counts]
 ported-differential = 5
-ported-direct = 36
-partial = 18
-pending = 87
+ported-direct = 37
+partial = 19
+pending = 85
 n-a = 2
-
-[ratchet]
-max_pending = 87
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -693,9 +690,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_image_decode_test.cpp"
 test_case_count = 3
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/src/vm/lua_image_decode.rs::tests::upstream_decode_image_cancel_sets_promise_to_cancelled", "crates/nuxie-scripting/src/vm/lua_image_decode.rs::tests::upstream_decode_image_cancel_does_not_fire_and_then", "crates/nuxie-scripting/src/vm/lua_image_decode.rs::tests::upstream_decode_image_cancel_fires_on_cancel_hook"]
+note = "P2A directly ports all three upstream cancellation TEST_CASEs. Supplemental Rust cases exercise WorkPool-delayed success with premultiplied RGBA bytes, the pinned invalid-image rejection string, and root-frame settlement for parked scripts."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_input_test.cpp"
@@ -771,9 +768,10 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 test_case_count = 16
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "partial"
+evidence = ["corpus.toml::scripted_property_image", "corpus.toml::image_scripting_property_value", "crates/nuxie-scripting/src/vm/view_model.rs::scripted_images_round_trip_between_context_and_view_model_properties", "crates/nuxie-runtime/src/data_bind/data_bind_context.rs::factory_backed_view_model_image_reaches_the_bound_image_draw_owner"]
+covered_test_cases = ["Scripted image properties", "Image read from propertyValue"]
+note = "P2A ports both upstream Image-property cases through exact C++/Rust scripted-golden differentials, with direct coverage for decoded asset identity, factory-backed assignment, retained data-binding propagation, and the bound Image draw owner. The remaining 14 non-Image property cases retain their prior disposition, so this file row is honestly partial."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_renderer_test.cpp"

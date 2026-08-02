@@ -607,15 +607,15 @@ faithful, upstream-conformance-verified port (HarfRust, luaur) counts as the
 *same* engine. Each swappable subsystem sits behind a trait so the engine can be
 changed without touching runtime code.
 
-Only **3 of 6** planned substitutions are wired as dependencies today. Bidi,
-image decoders, and audio remain paper decisions.
+Image decoding is now wired for both renderer factories and the scripting
+decode queue. Bidi and audio retain their separately tracked status below.
 
 | Subsystem | Crate | Present? | Version | Trait seam |
 |---|---|---|---|---|
 | Layout | `taffy` | **Yes** | 0.12.1 | `RuntimeLayoutEngine` (`draw.rs:4024`) |
 | Text shaping | `harfrust` + `skrifa`/`read-fonts` | **Yes** | harfrust 0.12, skrifa 0.44 | none (concrete in `text.rs`) |
 | Bidi | `unicode-bidi` | No | — | — |
-| Image decode | `image`/`png`/`zune-jpeg`/`image-webp` | No (headers only) | — | `Factory::decode_image` (render-api:365) |
+| Image decode | `png`/`jpeg-decoder`/`image-webp` + `moxcms` | **Yes** | png 0.18, jpeg-decoder 0.3, image-webp 0.2.4, moxcms 0.8.1 | `Factory::decode_image`; `ScriptImageDecoder` (`lua_image_decode.rs`) |
 | Audio | `cpal`/`rodio`/`kira` | No (schema enums only) | — | — |
 | Scripting | `luaur-rt` (+ common/vm) | **Yes** (feat `luau`, default) | =0.1.8 | `ScriptingVm`/`ScriptInstance`/`ScriptHost` in `nuxie-runtime/src/scripting.rs` |
 

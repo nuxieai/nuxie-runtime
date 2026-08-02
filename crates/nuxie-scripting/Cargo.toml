@@ -17,6 +17,7 @@ luau = [
     "dep:luaur-common",
     "dep:luaur-rt",
     "dep:luaur-vm",
+    "dep:nuxie-image-codec",
     "dep:nuxie-render-api",
 ]
 
@@ -30,6 +31,7 @@ luaur-rt = { version = "=0.1.8", optional = true }
 # The raw C-style VM API (luau_load for precompiled bytecode). Same pinned
 # version as luaur-rt's own dependency so cargo unifies to one copy.
 luaur-vm = { version = "=0.1.8", optional = true }
+nuxie-image-codec = { path = "../nuxie-image-codec", optional = true }
 
 [dev-dependencies]
 # Read-only use of the corpus reader to pull ScriptAsset payloads out of
@@ -37,4 +39,5 @@ luaur-vm = { version = "=0.1.8", optional = true }
 # part of nuxie-scripting's public dependency surface.
 nuxie-binary = { path = "../nuxie-binary" }
 luaur-compiler = "=0.1.8"
+image-webp = "0.2.4"
 sha2 = "0.10"

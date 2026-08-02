@@ -44,3 +44,8 @@
 /.parity-decomp/
 /*.log
 /UNIV-*
+
+# Orchestration scratch: worker reports and PR body files (session-local)
+*-report.md
+.*-body.txt
+*.log

@@ -454,6 +454,12 @@ fn run() -> Result<String> {
             None,
         )?;
         registered_script_file = registration_result.transpose()?;
+        if let (Some(registered), Some(image_assets)) = (
+            registered_script_file.as_ref(),
+            instance.scripted_runtime_image_assets(),
+        ) {
+            registered.vm.set_image_asset_owners(image_assets);
+        }
         initialize_scripted_drawables_and_realize(
             &runtime,
             artboard_index,

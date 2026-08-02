@@ -41,18 +41,23 @@ fn select_default_scene(
 
 /// Root C++ `Artboard::advance` settlement boundary.
 ///
-/// C++ polls retained decoder promises immediately before this call.
-/// Rust decoders are synchronously resolved by the owning host/File seam,
-/// so this occurrence has no additional async queue to poll.
+/// C++ polls retained decoder promises immediately before this call. Rust's
+/// WorkPool uses the same boundary, then drains each VM-owned completion queue
+/// before advancing components so parked/event-only scripts can settle.
 pub(crate) fn advance(
     artboard: &mut ArtboardInstance,
     elapsed_seconds: f32,
 ) -> Result<bool, ScriptError> {
     crate::poll_async_work();
+    let async_result = artboard.poll_script_async_work_tree();
     let component_result = artboard.advance_frame_components(elapsed_seconds);
-    let mut changed = component_result.as_ref().copied().unwrap_or(false);
+    let mut changed = async_result.as_ref().copied().unwrap_or(false)
+        | component_result.as_ref().copied().unwrap_or(false);
     let update_result = artboard.update_pass_with_script_errors();
     changed |= update_result.as_ref().copied().unwrap_or(false);
+    if let Err(error) = async_result {
+        return Err(error);
+    }
     if let Err(error) = component_result {
         return Err(error);
     }

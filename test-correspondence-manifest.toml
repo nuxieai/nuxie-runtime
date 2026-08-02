@@ -13,8 +13,8 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 [expected_status_counts]
 ported-differential = 4
 ported-direct = 33
-partial = 18
-pending = 91
+partial = 19
+pending = 90
 n-a = 2
 
 [ratchet]

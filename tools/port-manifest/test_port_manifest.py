@@ -158,6 +158,25 @@ class PortManifestCliTest(unittest.TestCase):
         )
         self.assertNotIn("crates/runtime/src/lib.rs", result.stderr)
 
+    def test_check_rejects_rust_module_with_no_parseable_entries(self) -> None:
+        self.write_upstream("src/a.cpp")
+        manifest = self.write_manifest(
+            """
+            version = 1
+
+            [[file]]
+            upstream = "src/a.cpp"
+            status = "ported"
+            rust_module = "; "
+            note = "Consolidated runtime port."
+            """
+        )
+
+        result = self.run_check(manifest)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid rust_module for src/a.cpp", result.stderr)
+
     def test_check_fails_when_upstream_path_is_declared_twice(self) -> None:
         self.write_upstream("src/a.cpp")
         manifest = self.write_manifest(

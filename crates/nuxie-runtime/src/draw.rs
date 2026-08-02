@@ -39,6 +39,12 @@ use crate::properties::{
     solid_color_value_property_key,
 };
 use crate::scripting::{ScriptNode, script_paint_for_shape};
+use crate::shapes::paint::shape_paint_path::RuntimeShapePaintPathOwner;
+use crate::shapes::paint::stroke::{
+    runtime_stroke_cap, runtime_stroke_join, runtime_stroke_thickness,
+    runtime_stroke_thickness_for_local, runtime_stroke_uint_property,
+};
+use crate::shapes::shape_paint_container::runtime_shape_paint_container_is_occurrence_owned;
 use crate::text::{
     RuntimeIntegratedColorGlyphCommand, RuntimeTextDrawOrder, RuntimeTextLayoutConstraint,
     RuntimeTextLayoutDebugReport, StaticTextClipBounds, build_static_text_constraint_bounds,
@@ -147,7 +153,10 @@ fn runtime_gradient_container_is_root_artboard(container: &ShapePaintContainerNo
     container.local_id == 0 && container.type_name == "Artboard"
 }
 
-fn runtime_draw_property_key_for_name(type_name: &str, property_name: &str) -> Option<u16> {
+pub(crate) fn runtime_draw_property_key_for_name(
+    type_name: &str,
+    property_name: &str,
+) -> Option<u16> {
     match (type_name, property_name) {
         ("Artboard", "opacity") => cached_runtime_property_key!("Artboard", "opacity"),
         ("DrawRules", "drawTargetId") => {
@@ -8843,42 +8852,6 @@ impl Clone for RuntimeShape {
     }
 }
 
-/// Clone-owned counterpart of C++ `ShapePaintPath`. RawPath is the sole CPU
-/// geometry source; the backend RenderPath remains in its one-to-one sidecar.
-#[derive(Debug)]
-struct RuntimeShapePaintPathOwner {
-    dirty: Cell<bool>,
-    retained: RefCell<Option<RuntimeShapePathState>>,
-    backend: RuntimePathBackendSlot,
-}
-
-impl Clone for RuntimeShapePaintPathOwner {
-    fn clone(&self) -> Self {
-        Self::default()
-    }
-}
-
-impl Default for RuntimeShapePaintPathOwner {
-    fn default() -> Self {
-        Self {
-            dirty: Cell::new(true),
-            retained: RefCell::new(None),
-            backend: RuntimePathBackendSlot::default(),
-        }
-    }
-}
-
-impl RuntimeShapePaintPathOwner {
-    fn mark_dirty(&self) {
-        self.dirty.set(true);
-    }
-
-    fn replace_retained(&self, retained: RuntimeShapePathState) {
-        *self.retained.borrow_mut() = Some(retained);
-        self.dirty.set(false);
-    }
-}
-
 struct RuntimePathBackendState {
     path: Box<dyn RenderPath>,
     raw_mutation_id: u64,
@@ -8891,7 +8864,7 @@ struct RuntimePathBackendState {
 }
 
 #[derive(Default)]
-struct RuntimePathBackendSlot {
+pub(crate) struct RuntimePathBackendSlot {
     value: RefCell<Option<RuntimePathBackendState>>,
 }
 
@@ -8911,7 +8884,7 @@ impl Clone for RuntimePathBackendSlot {
 }
 
 impl RuntimePathBackendSlot {
-    fn with_path<R>(
+    pub(crate) fn with_path<R>(
         &self,
         context_id: u64,
         factory: &mut dyn RenderFactory,
@@ -14024,7 +13997,7 @@ fn runtime_shape_paint_path_kind_slot(path_kind: RuntimeShapePaintPathKind) -> u
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct RuntimeShapePathState {
+pub(crate) struct RuntimeShapePathState {
     raw_path: Arc<RawPath>,
 }
 
@@ -19556,24 +19529,6 @@ fn runtime_blend_mode(value: u32) -> Result<RenderBlendMode> {
     })
 }
 
-fn runtime_stroke_cap(value: u64) -> Result<RenderStrokeCap> {
-    Ok(match value {
-        0 => RenderStrokeCap::Butt,
-        1 => RenderStrokeCap::Round,
-        2 => RenderStrokeCap::Square,
-        _ => anyhow::bail!("unsupported stroke cap {value}"),
-    })
-}
-
-fn runtime_stroke_join(value: u64) -> Result<RenderStrokeJoin> {
-    Ok(match value {
-        0 => RenderStrokeJoin::Miter,
-        1 => RenderStrokeJoin::Round,
-        2 => RenderStrokeJoin::Bevel,
-        _ => anyhow::bail!("unsupported stroke join {value}"),
-    })
-}
-
 pub(crate) fn runtime_shape_paint_command(
     artboard: &ArtboardInstance,
     paint: &ShapePaintNode,
@@ -19711,41 +19666,6 @@ fn runtime_owned_shape_paint_is_visible(
             || artboard.stroke_thickness(paint.paint_local).unwrap_or(1.0) > 0.0)
 }
 
-fn runtime_stroke_thickness(
-    instance: &ArtboardInstance,
-    object: &RuntimeObject,
-    local_id: usize,
-) -> f32 {
-    let thickness_key = runtime_draw_property_key_for_name("Stroke", "thickness");
-    runtime_stroke_thickness_for_local(instance, local_id)
-        .or_else(|| {
-            thickness_key
-                .and_then(|key| runtime_object_explicit_double_property_by_key(object, key))
-        })
-        .unwrap_or(1.0)
-}
-
-fn runtime_stroke_thickness_for_local(instance: &ArtboardInstance, local_id: usize) -> Option<f32> {
-    runtime_draw_property_key_for_name("Stroke", "thickness")
-        .and_then(|key| instance.double_property(local_id, key))
-}
-
-fn runtime_stroke_uint_property(
-    instance: &ArtboardInstance,
-    object: &RuntimeObject,
-    local_id: usize,
-    property_name: &str,
-    fallback: u64,
-) -> u64 {
-    let property_key = runtime_draw_property_key_for_name("Stroke", property_name);
-    property_key
-        .and_then(|key| instance.uint_property(local_id, key))
-        .or_else(|| {
-            property_key.and_then(|key| runtime_object_explicit_uint_property_by_key(object, key))
-        })
-        .unwrap_or(fallback)
-}
-
 fn runtime_shape_paint_state_is_visible(state: &Option<RuntimeShapePaintState>) -> bool {
     // C++ skips authored-transparent Backboard/background draws, while
     // render-opacity-transparent backgrounds can still appear in the stream.
@@ -19843,11 +19763,6 @@ fn runtime_shape_paint_kind(kind: ShapePaintKind) -> RuntimeShapePaintKind {
         ShapePaintKind::Stroke => RuntimeShapePaintKind::Stroke,
         ShapePaintKind::Unknown => RuntimeShapePaintKind::Unknown,
     }
-}
-
-fn runtime_shape_paint_container_is_occurrence_owned(container: &ShapePaintContainerNode) -> bool {
-    crate::shapes::shape_paint_container::family(container.type_name)
-        .is_some_and(|family| family.owns_shape_geometry())
 }
 
 fn runtime_shape_paint_path_kind(kind: ShapePaintPathKind) -> Option<RuntimeShapePaintPathKind> {

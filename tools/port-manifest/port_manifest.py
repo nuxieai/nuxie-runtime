@@ -482,10 +482,17 @@ def check_manifest(
             raise ValueError(
                 f"{status} row must declare a Rust module: {row.get('upstream')}"
             )
-        if isinstance(rust_module, str) and rust_module and not (repo_root / rust_module).is_file():
-            raise ValueError(
-                f"missing Rust module for {row.get('upstream')}: {rust_module}"
-            )
+        if isinstance(rust_module, str) and rust_module:
+            missing_modules = [
+                module
+                for module in (part.strip() for part in rust_module.split(";"))
+                if module and not (repo_root / module).is_file()
+            ]
+            if missing_modules:
+                raise ValueError(
+                    f"missing Rust module for {row.get('upstream')}: "
+                    f"{'; '.join(missing_modules)}"
+                )
     status_counts = collections.Counter(row["status"] for row in rows)
     print(
         f"port-manifest: {len(rows)}/{len(upstream)} rows "

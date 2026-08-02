@@ -229,41 +229,21 @@ fn object_imports_successfully(
     definition: &'static Definition,
     context: &ImportContext,
 ) -> bool {
+    if let Some(decision) = enum_importer::imports_successfully(object, definition, context) {
+        return decision;
+    }
+
     match definition.name {
         "Backboard" => {
             return backboard_importer::imports_successfully(object, definition, context)
                 .expect("Backboard is owned by BackboardImporter");
         }
-        "DataEnum" | "DataEnumSystem" | "DataEnumCustom" | "DataEnumValue" => {
-            return enum_importer::imports_successfully(object, definition, context)
-                .expect("data enums are owned by EnumImporter");
-        }
         "ViewModel" => {
             return viewmodel_importer::imports_successfully(object, definition, context)
                 .expect("ViewModel is owned by ViewModelImporter");
         }
-        "Artboard" => {
-            return artboard_importer::imports_successfully(object, definition, context)
-                .expect("Artboard is owned by ArtboardImporter");
-        }
-        "FileAssetContents" => {
-            return file_asset_importer::imports_successfully(object, definition, context)
-                .expect("FileAssetContents is owned by FileAssetImporter");
-        }
-        "LinearAnimation" => {
-            return linear_animation_importer::imports_successfully(object, definition, context)
-                .expect("LinearAnimation is owned by LinearAnimationImporter");
-        }
-        "KeyedObject" => {
-            return keyed_object_importer::imports_successfully(object, definition, context)
-                .expect("KeyedObject is owned by KeyedObjectImporter");
-        }
         "KeyedProperty" => return context.latest(ImportStackKey::KeyedObject),
         "StateMachine" => return context.latest(ImportStackKey::Artboard),
-        "StateMachineLayer" => {
-            return state_machine_layer_importer::imports_successfully(object, definition, context)
-                .expect("StateMachineLayer is owned by StateMachineLayerImporter");
-        }
         "BlendState1DViewModel"
         | "ListenerViewModelChange"
         | "TransitionPropertyViewModelComparator" => {
@@ -312,13 +292,30 @@ fn object_imports_successfully(
             )
             .expect("list item is owned by ViewModelInstanceListImporter");
         }
-        "DataConverterGroupItem" => {
-            return data_converter_group_importer::imports_successfully(
-                object, definition, context,
-            )
-            .expect("group item is owned by DataConverterGroupImporter");
-        }
         _ => {}
+    }
+
+    if let Some(decision) = artboard_importer::imports_successfully(object, definition, context) {
+        return decision;
+    }
+    if let Some(decision) =
+        linear_animation_importer::imports_successfully(object, definition, context)
+    {
+        return decision;
+    }
+    if let Some(decision) = keyed_object_importer::imports_successfully(object, definition, context)
+    {
+        return decision;
+    }
+    if let Some(decision) =
+        state_machine_layer_importer::imports_successfully(object, definition, context)
+    {
+        return decision;
+    }
+    if let Some(decision) =
+        data_converter_group_importer::imports_successfully(object, definition, context)
+    {
+        return decision;
     }
 
     if definition.name.starts_with("ScriptInput") {
@@ -326,18 +323,12 @@ fn object_imports_successfully(
             .expect("ScriptInput is owned by ScriptedObjectImporter");
     }
 
-    if definition.is_a("FileAsset") {
-        if definition.name == "TextAsset" {
-            return text_asset_importer::imports_successfully(object, definition, context)
-                .expect("TextAsset is owned by TextAssetImporter");
-        }
-        return file_asset_importer::imports_successfully(object, definition, context)
-            .expect("FileAsset is owned by FileAssetImporter");
+    if definition.name == "TextAsset" {
+        return text_asset_importer::imports_successfully(object, definition, context)
+            .expect("TextAsset is owned by TextAssetImporter");
     }
-
-    if definition.is_a("KeyFrame") {
-        return keyed_object_importer::imports_successfully(object, definition, context)
-            .expect("KeyFrame is owned through KeyedObjectImporter");
+    if let Some(decision) = file_asset_importer::imports_successfully(object, definition, context) {
+        return decision;
     }
 
     if definition.is_a("StateTransition") {
@@ -368,9 +359,9 @@ fn object_imports_successfully(
             .expect("listener is owned by StateMachineListenerImporter");
     }
 
-    if definition.is_a("LayerState") || definition.is_a("BlendAnimation") {
-        return layer_state_importer::imports_successfully(object, definition, context)
-            .expect("layer state child is owned by LayerStateImporter");
+    if let Some(decision) = layer_state_importer::imports_successfully(object, definition, context)
+    {
+        return decision;
     }
 
     if definition.is_a("ListenerAction") {
@@ -399,9 +390,10 @@ fn object_imports_successfully(
             .expect("value is owned by ViewModelInstanceImporter");
     }
 
-    if definition.is_a("DataBindPath") {
-        return data_bind_path_importer::imports_successfully(object, definition, context)
-            .expect("path is owned by DataBindPathImporter");
+    if let Some(decision) =
+        data_bind_path_importer::imports_successfully(object, definition, context)
+    {
+        return decision;
     }
 
     if definition.is_a("DataBind") || definition.is_a("DataConverter") {
@@ -409,9 +401,10 @@ fn object_imports_successfully(
             .expect("Backboard owns data-bind and converter objects");
     }
 
-    if definition.is_a("FormulaToken") {
-        return data_converter_formula_importer::imports_successfully(object, definition, context)
-            .expect("token is owned by DataConverterFormulaImporter");
+    if let Some(decision) =
+        data_converter_formula_importer::imports_successfully(object, definition, context)
+    {
+        return decision;
     }
 
     if definition.is_a("ScrollPhysics") || definition.is_a("KeyFrameInterpolator") {
@@ -434,15 +427,11 @@ pub(crate) fn update_import_context(
 ) {
     match definition.name {
         "Backboard" => backboard_importer::update_context(definition, context),
-        "Artboard" => artboard_importer::update_context(definition, context),
-        "LinearAnimation" => linear_animation_importer::update_context(definition, context),
-        "KeyedObject" => keyed_object_importer::update_context(definition, context),
         "KeyedProperty" => context.make_latest(ImportStackKey::KeyedProperty),
         "StateMachine" => {
             context.state_machine_inputs.clear();
             context.make_latest(ImportStackKey::StateMachine);
         }
-        "StateMachineLayer" => state_machine_layer_importer::update_context(definition, context),
         "ListenerInputTypeGamepad" => {
             listener_input_type_gamepad_importer::update_context(definition, context);
         }
@@ -457,28 +446,24 @@ pub(crate) fn update_import_context(
         "ViewModelInstanceList" => {
             viewmodel_instance_list_importer::update_context(definition, context);
         }
-        "DataEnumCustom" => enum_importer::update_context(definition, context),
-        "DataConverterGroup" => {
-            data_converter_group_importer::update_context(definition, context);
-        }
-        "DataConverterFormula" => {
-            data_converter_formula_importer::update_context(definition, context);
-        }
         _ => {}
     }
 
-    if file_asset_creates_importer(definition.name, script_assets_create_importers) {
-        file_asset_importer::update_context(definition, context, script_assets_create_importers);
-    }
+    artboard_importer::update_context(definition, context);
+    linear_animation_importer::update_context(definition, context);
+    keyed_object_importer::update_context(definition, context);
+    state_machine_layer_importer::update_context(definition, context);
+    enum_importer::update_context(definition, context);
+    data_converter_group_importer::update_context(definition, context);
+    data_converter_formula_importer::update_context(definition, context);
+    file_asset_importer::update_context(definition, context, script_assets_create_importers);
     if definition.is_a("StateMachineLayerComponent") {
         state_machine_layer_component_importer::update_context(definition, context);
     }
     if definition.is_a("StateTransition") {
         context.make_latest(ImportStackKey::StateTransition);
     }
-    if definition.is_a("LayerState") {
-        layer_state_importer::update_context(definition, context);
-    }
+    layer_state_importer::update_context(definition, context);
     if definition.is_a("StateMachineListener") {
         state_machine_listener_importer::update_context(definition, context);
     }
@@ -496,9 +481,7 @@ pub(crate) fn update_import_context(
     if definition.is_a("BindableProperty") {
         bindable_property_importer::update_context(definition, context);
     }
-    if definition.is_a("DataBindPath") {
-        data_bind_path_importer::update_context(definition, context);
-    }
+    data_bind_path_importer::update_context(definition, context);
     if definition_is_cpp_scripted_object(definition) {
         scripted_object_importer::update_context(definition, context);
     }

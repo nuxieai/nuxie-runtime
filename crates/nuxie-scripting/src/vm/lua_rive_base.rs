@@ -6,12 +6,14 @@ use super::logging_scripting_context::LoggingScriptingContext;
 
 /// Install the host-routed `print` before the VM globals are sandboxed.
 pub(super) fn install_host_print(lua: &Lua, logging: LoggingScriptingContext) -> Result<()> {
-    let tostring: Function = lua.globals().get("tostring")?;
-    let print = lua.create_function(move |_, args: MultiValue| {
+    let print = lua.create_function(move |lua, args: MultiValue| {
         if args.is_empty() {
             return Ok(());
         }
 
+        // Resolve the function from the invoking state. A handle captured from
+        // the main thread cannot be called safely from an async coroutine.
+        let tostring: Function = lua.globals().get("tostring")?;
         logging.begin_line();
         for value in args {
             let value: LuaString = tostring.call(value)?;

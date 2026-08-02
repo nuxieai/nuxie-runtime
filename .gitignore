@@ -52,3 +52,7 @@
 !/P2D-report.md
 .*-body.txt
 *.log
+
+# Python bytecode caches (tools/ checkers run with PYTHONDONTWRITEBYTECODE, but not always)
+__pycache__/
+*.pyc

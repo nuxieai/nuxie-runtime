@@ -7,6 +7,7 @@ use luaur_rt::{
     AnyUserData, Function, Lua, MultiValue, Table, UserData, UserDataFields, UserDataMethods, Value,
 };
 use luaur_vm::functions::lua_getmetatable::lua_getmetatable;
+use nuxie_runtime::view_model_cell::RuntimeCellDirtSink;
 use nuxie_runtime::{RuntimeOwnedViewModelInstance, ScriptViewModel, ScriptViewModelProperty};
 
 use super::lua_blob::ScriptedBlobAssets;
@@ -43,6 +44,7 @@ struct ParentRelationship {
 #[derive(Clone, Default)]
 pub(crate) struct ScriptViewModelFrameContext {
     tracked: Rc<RefCell<TrackedViewModels>>,
+    trigger_watches: Rc<RefCell<Vec<Weak<ScriptedTriggerWatch>>>>,
 }
 
 impl std::fmt::Debug for ScriptViewModelFrameContext {
@@ -50,6 +52,7 @@ impl std::fmt::Debug for ScriptViewModelFrameContext {
         formatter
             .debug_struct("ScriptViewModelFrameContext")
             .field("tracked_instances", &self.tracked.borrow().instances.len())
+            .field("trigger_watches", &self.trigger_watches.borrow().len())
             .finish()
     }
 }
@@ -106,6 +109,56 @@ impl ScriptViewModelFrameContext {
             tracked: Rc::downgrade(&self.tracked),
             key,
         }
+    }
+
+    fn register_trigger_watch(&self, watch: &Rc<ScriptedTriggerWatch>) {
+        let mut watches = self.trigger_watches.borrow_mut();
+        watches.retain(|candidate| candidate.strong_count() != 0);
+        if watches
+            .iter()
+            .filter_map(Weak::upgrade)
+            .any(|candidate| Rc::ptr_eq(&candidate, watch))
+        {
+            return;
+        }
+        watches.push(Rc::downgrade(watch));
+    }
+
+    fn dispatch_trigger_watches(&self) -> bool {
+        let watches = {
+            let mut retained = self.trigger_watches.borrow_mut();
+            let watches = retained
+                .iter()
+                .filter_map(Weak::upgrade)
+                .collect::<Vec<_>>();
+            retained.retain(|watch| watch.strong_count() != 0);
+            watches
+        };
+        let mut changed = false;
+        for watch in watches {
+            if watch.sink.take_dirt().is_empty() {
+                continue;
+            }
+            changed = true;
+            let listeners = watch.listeners.borrow().clone();
+            for listener in listeners.into_iter().rev() {
+                let _ = listener
+                    .callback
+                    .call::<()>(listener.userdata.unwrap_or(Value::Nil));
+            }
+        }
+        changed
+    }
+
+    fn clear_trigger_watch_dirt(&self) {
+        let mut retained = self.trigger_watches.borrow_mut();
+        retained.retain(|watch| {
+            let Some(watch) = watch.upgrade() else {
+                return false;
+            };
+            let _ = watch.sink.take_dirt();
+            true
+        });
     }
 
     pub(crate) fn link_parent(&self, child: &ScriptViewModel, parent: &ScriptViewModel) {
@@ -229,6 +282,7 @@ impl ScriptViewModelFrameContext {
     }
 
     pub(crate) fn advance_detached(&self) -> bool {
+        let mut changed = self.dispatch_trigger_watches();
         // Lists can also change through data binding or host APIs. Refresh all
         // live parent edges here, not only in Lua list methods, before deciding
         // which registered instances are detached roots.
@@ -309,7 +363,12 @@ impl ScriptViewModelFrameContext {
         for root in roots {
             collect_registered(root, &instances, &children, &mut visited, &mut ordered);
         }
-        ScriptViewModel::advance_owned_instances(&ordered)
+        changed |= ScriptViewModel::advance_owned_instances(&ordered);
+        // Trigger reset cascades ordinary dirt even though C++ suppresses its
+        // delegate callback. Consume that reset dirt so it cannot replay the
+        // Lua listener on the next host frame.
+        self.clear_trigger_watch_dirt();
+        changed
     }
 
     #[cfg(test)]
@@ -1091,6 +1150,10 @@ impl UserData for ScriptedContext {
             this.require_live("blob")?;
             ScriptedBlobAssets::lookup(lua, &name)
         });
+        methods.add_method("audio", |lua, this, name: String| {
+            this.require_live("audio")?;
+            super::lua_audio::ScriptedAudioAssets::lookup(lua, &name)
+        });
         methods.add_method("gpuCanvas", |lua, this, ()| {
             this.require_live("gpuCanvas")?;
             let gpu_canvas = this
@@ -1158,22 +1221,32 @@ pub(super) fn install_data_global(
     lua.globals().set("Data", data)
 }
 
+struct ScriptedTriggerWatch {
+    sink: RuntimeCellDirtSink,
+    listeners: RefCell<Vec<ScriptedListener>>,
+}
+
 struct ScriptedPropertyTrigger {
     model: ScriptViewModel,
     name: String,
-    listeners: Vec<ScriptedListener>,
+    watch: Rc<ScriptedTriggerWatch>,
 }
 
 impl ScriptedPropertyTrigger {
     fn new(model: ScriptViewModel, name: String) -> Self {
+        let sink = model.property_dirt_sink(&name).unwrap_or_default();
         Self {
             model,
             name,
-            listeners: Vec::new(),
+            watch: Rc::new(ScriptedTriggerWatch {
+                sink,
+                listeners: RefCell::new(Vec::new()),
+            }),
         }
     }
 }
 
+#[derive(Clone)]
 struct ScriptedListener {
     callback: Function,
     userdata: Option<Value>,
@@ -1181,7 +1254,7 @@ struct ScriptedListener {
 
 impl UserData for ScriptedPropertyTrigger {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method_mut("addListener", |_, this, args: MultiValue| {
+        methods.add_method_mut("addListener", |lua, this, args: MultiValue| {
             let args = args.into_vec();
             let (userdata, callback) = match args.as_slice() {
                 [Value::Function(callback)] => (None, callback.clone()),
@@ -1192,7 +1265,11 @@ impl UserData for ScriptedPropertyTrigger {
                     ));
                 }
             };
-            this.listeners.push(ScriptedListener { callback, userdata });
+            this.watch
+                .listeners
+                .borrow_mut()
+                .push(ScriptedListener { callback, userdata });
+            ScriptViewModelFrameContext::for_lua(lua).register_trigger_watch(&this.watch);
             Ok(())
         });
         methods.add_method_mut("fire", |_, this, ()| {
@@ -1200,11 +1277,13 @@ impl UserData for ScriptedPropertyTrigger {
             // delegates then notify listeners synchronously. Keeping this
             // ordering means a callback observes the incremented counter.
             this.model.fire_trigger(&this.name);
-            for listener in this.listeners.iter().rev() {
+            let listeners = this.watch.listeners.borrow().clone();
+            for listener in listeners.iter().rev() {
                 listener
                     .callback
                     .call::<()>(listener.userdata.clone().unwrap_or(Value::Nil))?;
             }
+            let _ = this.watch.sink.take_dirt();
             Ok(())
         });
     }
@@ -1597,6 +1676,33 @@ mod tests {
         assert!(model.fire_trigger(&trigger));
         assert!(!context.advance_detached());
         assert_eq!(model.trigger(&trigger), Some(1));
+    }
+
+    #[test]
+    fn host_trigger_mutation_notifies_lua_listener_before_frame_reset() {
+        let (model, trigger) = model_with_property(ScriptViewModelProperty::Trigger);
+        let lua = Lua::new();
+        let context = ScriptViewModelFrameContext::for_lua(&lua);
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        lua.globals().set("model", table).expect("model global");
+        lua.globals()
+            .set("triggerName", trigger.clone())
+            .expect("trigger name global");
+        lua.load(
+            "listenerCalls = 0\n\
+             model:getTrigger(triggerName):addListener(function()\n\
+                 listenerCalls += 1\n\
+             end)",
+        )
+        .exec()
+        .expect("listener registration");
+
+        assert!(model.fire_trigger(&trigger));
+        assert!(context.advance_detached());
+        assert_eq!(lua.globals().get::<i64>("listenerCalls").unwrap(), 1);
+        assert_eq!(model.trigger(&trigger), Some(0));
+        assert!(!context.advance_detached());
+        assert_eq!(lua.globals().get::<i64>("listenerCalls").unwrap(), 1);
     }
 
     #[test]

@@ -1323,13 +1323,13 @@ note = "P1-l faithful candidate: WorkTask status/error/owner state, null-submit 
 upstream = "src/audio/audio_engine.cpp"
 status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-audio/src/engine.rs"
+rust_module = "crates/nuxie-audio/src/engine.rs; crates/nuxie-audio/src/device.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0109"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "P2F1 faithful external/headless candidate: Rive-owned frame clock, absolute scheduling/clipping, manual pull/sum, exact lifecycle cleanup, levels, and artboard-scoped stop. CPAL device output is explicitly later. Live anchor: audio_source_reader_and_headless_schedule_match_pinned_cpp."
+note = "P2F1/P2F3 faithful candidate: the Rive-owned headless frame clock/mixer remains the differential oracle, with absolute scheduling/clipping, manual pull/sum, lifecycle cleanup, levels, and artboard-scoped stop. The optional audio-device feature adds a CPAL default-device sink which drains that same mixer; hardware output is smoke-only. Live anchor: audio_source_reader_and_headless_schedule_match_pinned_cpp; direct sink anchor: device_callback_drains_the_headless_mixer_and_converts_samples."
 
 [[file]]
 upstream = "src/audio/audio_reader.cpp"
@@ -3173,15 +3173,15 @@ note = "P1-d direct owner split at d788e8ec: the existing adapted ScriptedArtboa
 
 [[file]]
 upstream = "src/lua/lua_audio.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "absent"
+rust_module = "crates/nuxie-scripting/src/vm/lua_audio.rs; crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie/src/lib.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0262"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F7: this Lua binding is absent."
+note = "P2F3 faithful candidate: Context:audio exact-name lookup, Audio play/playAt/playIn seconds and frames, engine time/sample-rate queries, AudioSource duration, and AudioSound play/pause/resume/stop/seek/completed/time/volume are directly owned in Rust. The pinned audio_script.riv interaction is ported end-to-end in crates/nuxie/tests/audio_core.rs::scripted_audio_plays_and_updates_volume_from_the_pinned_fixture."
 
 [[file]]
 upstream = "src/lua/lua_buffer_ext.cpp"

@@ -143,6 +143,13 @@ worker may act on that category.
 ## State
 
 - LAST_SYNCED_SHA: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`
+- 2026-08-02: **S4 cycle-scoped authorization (Levi).** All 30 PORT rows of
+  `docs/sync/triage-2026-08-02-e0d4913f.md` approved as listed (including the
+  partial-port splits S4-27, S4-43, S4-47 and the reviewed waves S4-23,
+  S4-38, S4-42). Luau/luaur decision: engine stays pinned (D4 WATCH,
+  staleness advances); upstream Luau 0.730-0.732 revs remain WATCH rows.
+  Ports land after the MR integrator trains, in upstream order, one commit
+  per upstream change; pin advances to `4ac7b327` on a green full ratchet.
 - Clean manual cycles completed: 2
 - Standing approvals: none
 - Current cycle authorization: closed. The user-authorized manual cycle 2

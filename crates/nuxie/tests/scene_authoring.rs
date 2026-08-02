@@ -15314,3 +15314,232 @@ fn flowless_component_list_under_an_authored_layout_reserves_row_extent() -> Res
     );
     Ok(())
 }
+
+#[test]
+fn layout_display_bind_swaps_a_flex_slot_and_relayouts_live() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((root_artboard, defaults, count, slot_shape, footer_shape), _) = scene.edit(|tx| {
+        let root_artboard = tx.create_artboard(ArtboardSpec {
+            name: "Root".into(),
+            width: 120.0,
+            height: 100.0,
+        })?;
+        let mut column_style = LayoutComponentStyleSpec::default();
+        column_style.flex_direction = SceneLayoutFlexDirection::Column;
+        column_style
+            .present
+            .insert(LayoutComponentStyleField::FlexDirection);
+        let column = tx.create(
+            Parent::Artboard(root_artboard),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Document column".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 120.0,
+                height: 100.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: column_style,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(column),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Header".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 120.0,
+                height: 20.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec::default(),
+            }),
+        )?;
+        let slot = tx.create(
+            Parent::Object(column),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Fallback slot".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 120.0,
+                height: 20.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec::default(),
+            }),
+        )?;
+        let slot_shape = tx.create(
+            Parent::Object(slot),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Slot shape".into(),
+                x: 10.0,
+                y: 10.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(slot_shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Slot bounds", 20.0, 20.0)),
+        )?;
+        let slot_fill = tx.create(
+            Parent::Object(slot_shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Slot fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(slot_fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Slot color".into(),
+                color: 0xffab_cdef,
+            }),
+        )?;
+        let footer = tx.create(
+            Parent::Object(column),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Footer".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 120.0,
+                height: 20.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: LayoutComponentStyleSpec::default(),
+            }),
+        )?;
+        let footer_shape = tx.create(
+            Parent::Object(footer),
+            NodeSpec::Shape(ShapeSpec {
+                name: "Footer shape".into(),
+                x: 10.0,
+                y: 10.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(footer_shape),
+            NodeSpec::Rectangle(RectangleSpec::new("Footer bounds", 20.0, 20.0)),
+        )?;
+        let footer_fill = tx.create(
+            Parent::Object(footer_shape),
+            NodeSpec::Fill(FillSpec {
+                name: "Footer fill".into(),
+            }),
+        )?;
+        tx.create(
+            Parent::Object(footer_fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Footer color".into(),
+                color: 0xff12_3456,
+            }),
+        )?;
+
+        let (defaults, count) = {
+            let mut view_models = tx.view_models();
+            let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "Root model".into(),
+            })?;
+            let count = view_models.create_number(
+                model,
+                ViewModelNumberSpec {
+                    name: "count".into(),
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                model,
+                ViewModelInstanceSpec {
+                    name: Some("Root defaults".into()),
+                },
+            )?;
+            view_models.set_artboard_default(root_artboard, defaults)?;
+            (defaults, count)
+        };
+        let slot_style = tx.layout_component_style(slot).ok_or_else(|| {
+            tx.abort("fallback slot must own a typed layout style")
+        })?;
+        tx.view_models().bind_number(
+            slot_style,
+            props::LAYOUT_DISPLAY,
+            ViewModelNumberSource::direct(count),
+        )?;
+        Ok((root_artboard, defaults, count, slot_shape, footer_shape))
+    })?;
+
+    let instance = scene.instantiate(root_artboard)?;
+    let mut events = Vec::new();
+    let _ = scene.frame().advance(instance, 0.0, &mut events);
+    // count=0 -> display Flex: header 0..20, slot 20..40, footer 40..60.
+    assert_eq!(
+        scene
+            .frame()
+            .hit_test(instance, nuxie::Vec2D::new(16.0, 30.0)),
+        vec![slot_shape],
+        "slot must occupy its flex position while displayed",
+    );
+    assert_eq!(
+        scene
+            .frame()
+            .hit_test(instance, nuxie::Vec2D::new(16.0, 50.0)),
+        vec![footer_shape],
+        "footer must flow below the displayed slot",
+    );
+
+    let cursor = scene.vm_cursor(instance, defaults, count)?;
+    assert_eq!(scene.frame().set_vm(cursor, 1.0), Ok(true));
+    let _ = scene.frame().advance(instance, 0.0, &mut events);
+    // count=1 -> display None: the slot leaves the flow and the footer
+    // reclaims its slot: header 0..20, footer 20..40.
+    assert_eq!(
+        scene
+            .frame()
+            .hit_test(instance, nuxie::Vec2D::new(16.0, 30.0)),
+        vec![footer_shape],
+        "footer must reclaim the slot once the bound display turns None",
+    );
+    assert!(
+        scene
+            .frame()
+            .hit_test(instance, nuxie::Vec2D::new(16.0, 50.0))
+            .is_empty(),
+        "nothing may draw below the reclaimed footer",
+    );
+
+    let restore = scene.vm_cursor(instance, defaults, count)?;
+    assert_eq!(scene.frame().set_vm(restore, 0.0), Ok(true));
+    let _ = scene.frame().advance(instance, 0.0, &mut events);
+    assert_eq!(
+        scene
+            .frame()
+            .hit_test(instance, nuxie::Vec2D::new(16.0, 30.0)),
+        vec![slot_shape],
+        "the slot must re-enter the flow when the bound display returns to Flex",
+    );
+    Ok(())
+}

@@ -77,6 +77,7 @@ class TestCorrespondenceCheckTest(unittest.TestCase):
         self,
         *,
         max_pending: int = 0,
+        alpha_status: str = "ported-direct",
         script_status: str = "partial",
         covered_test_cases: str = '["script one"]',
     ) -> None:
@@ -98,8 +99,8 @@ class TestCorrespondenceCheckTest(unittest.TestCase):
                 [[file]]
                 upstream = "tests/unit_tests/runtime/alpha_test.cpp"
                 test_case_count = 1
-                status = "ported-direct"
-                evidence = ["crates/runtime/src/lib.rs::alpha_works"]
+                status = "{alpha_status}"
+                evidence = {"[]" if alpha_status == "pending" else '["crates/runtime/src/lib.rs::alpha_works"]'}
                 note = "The one upstream case is ported directly."
 
                 [[file]]
@@ -149,18 +150,50 @@ class TestCorrespondenceCheckTest(unittest.TestCase):
 
     def test_pending_cannot_regrow_after_a_tracked_shrink(self) -> None:
         self.write_manifest(max_pending=1, script_status="pending")
-        with self.assertRaisesRegex(CheckFailure, "pending count 1 regressed from baseline 0"):
+        with self.assertRaisesRegex(
+            CheckFailure, "script_test.cpp status pending regressed from historical partial"
+        ):
             check_manifest(self.repo, self.upstream, self.manifest)
 
-    def test_ported_total_cannot_shrink_after_a_tracked_promotion(self) -> None:
+    def test_row_cannot_regress_after_a_tracked_promotion(self) -> None:
         self.write_manifest(script_status="ported-direct")
         subprocess.run(["git", "add", "."], cwd=self.repo, check=True)
         subprocess.run(
             ["git", "commit", "-qm", "promote script row"], cwd=self.repo, check=True
         )
         self.write_manifest(script_status="partial")
-        with self.assertRaisesRegex(CheckFailure, "ported count 1 regressed from baseline 2"):
+        with self.assertRaisesRegex(
+            CheckFailure, "script_test.cpp status partial regressed from historical ported-direct"
+        ):
             check_manifest(self.repo, self.upstream, self.manifest)
+
+    def test_row_regression_is_caught_even_when_totals_balance(self) -> None:
+        self.write_manifest(
+            max_pending=1, alpha_status="pending", script_status="ported-direct"
+        )
+        with self.assertRaisesRegex(
+            CheckFailure, "alpha_test.cpp status pending regressed from historical ported-direct"
+        ):
+            check_manifest(self.repo, self.upstream, self.manifest)
+
+    def test_shallow_clone_fails_closed(self) -> None:
+        shallow = pathlib.Path(self.temp.name) / "shallow"
+        subprocess.run(
+            [
+                "git",
+                "clone",
+                "-q",
+                "--depth",
+                "1",
+                f"file://{self.repo}",
+                str(shallow),
+            ],
+            check=True,
+        )
+        with self.assertRaisesRegex(CheckFailure, "clone is shallow"):
+            check_manifest(
+                shallow, self.upstream, shallow / "test-correspondence-manifest.toml"
+            )
 
     def test_partial_rows_must_name_real_strict_subset_of_cases(self) -> None:
         self.write_manifest(covered_test_cases='["not upstream"]')

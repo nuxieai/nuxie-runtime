@@ -174,20 +174,42 @@ def require_int(mapping: dict[str, Any], key: str, context: str) -> int:
     return value
 
 
-def historical_status_bounds(
-    repo_root: pathlib.Path, manifest_path: pathlib.Path
-) -> tuple[int, int] | None:
-    """Return (pending floor, ported ceiling) over the manifest's git history.
+STATUS_RANK = {
+    "pending": 0,
+    "partial": 1,
+    "ported-direct": 2,
+    "ported-differential": 2,
+}
 
-    Statuses may only move in the pending -> partial -> ported direction, so a
-    lowered pending count can never regrow and the ported-direct plus
-    ported-differential total can never shrink.
+
+def historical_row_floors(
+    repo_root: pathlib.Path, manifest_path: pathlib.Path
+) -> dict[str, str] | None:
+    """Return each row's highest-ranked historical status keyed by upstream path.
+
+    Statuses may only move in the pending -> partial -> ported direction, so
+    every row is ratcheted against the best status it ever held. n-a rows are
+    excluded: they exist exactly while the pinned upstream file has zero
+    TEST_CASEs, which only changes when the pin moves. Fails closed on shallow
+    clones, where git history would understate the floors.
     """
 
     try:
         relative = manifest_path.resolve().relative_to(repo_root.resolve()).as_posix()
     except ValueError:
         return None
+    shallow = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if shallow.returncode == 0 and shallow.stdout.strip() == "true":
+        raise CheckFailure(
+            "repository clone is shallow, so the status ratchet cannot see the "
+            "manifest's full history; run `git fetch --unshallow` first"
+        )
     history = subprocess.run(
         ["git", "log", "--format=%H", "--", relative],
         cwd=repo_root,
@@ -197,8 +219,7 @@ def historical_status_bounds(
     )
     if history.returncode != 0 or not history.stdout.strip():
         return None
-    pending_counts: list[int] = []
-    ported_counts: list[int] = []
+    floors: dict[str, str] = {}
     for revision in history.stdout.splitlines():
         baseline = git_output(repo_root, "show", f"{revision}:{relative}")
         try:
@@ -210,12 +231,17 @@ def historical_status_bounds(
         rows = previous.get("file")
         if not isinstance(rows, list):
             raise CheckFailure(f"tracked manifest {revision} has no [[file]] rows")
-        statuses = [row.get("status") for row in rows if isinstance(row, dict)]
-        pending_counts.append(statuses.count("pending"))
-        ported_counts.append(
-            statuses.count("ported-direct") + statuses.count("ported-differential")
-        )
-    return min(pending_counts), max(ported_counts)
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            path = row.get("upstream")
+            status = row.get("status")
+            if not isinstance(path, str) or status not in STATUS_RANK:
+                continue
+            best = floors.get(path)
+            if best is None or STATUS_RANK[status] > STATUS_RANK[best]:
+                floors[path] = status
+    return floors
 
 
 def check_manifest(
@@ -336,19 +362,21 @@ def check_manifest(
         raise CheckFailure(
             f"pending count {status_counts['pending']} exceeds ratchet {max_pending}"
         )
-    bounds = historical_status_bounds(repo_root, manifest_path)
-    if bounds is not None:
-        prior_pending, prior_ported = bounds
-        if status_counts["pending"] > prior_pending:
-            raise CheckFailure(
-                f"pending count {status_counts['pending']} regressed from baseline "
-                f"{prior_pending}"
-            )
-        ported = status_counts["ported-direct"] + status_counts["ported-differential"]
-        if ported < prior_ported:
-            raise CheckFailure(
-                f"ported count {ported} regressed from baseline {prior_ported}"
-            )
+    floors = historical_row_floors(repo_root, manifest_path)
+    if floors is not None:
+        for row in rows:
+            path = row["upstream"]
+            status = row["status"]
+            floor = floors.get(path)
+            if (
+                floor is not None
+                and status in STATUS_RANK
+                and STATUS_RANK[status] < STATUS_RANK[floor]
+            ):
+                raise CheckFailure(
+                    f"{path} status {status} regressed from historical {floor}; "
+                    "rows may only move pending -> partial -> ported"
+                )
 
     return CheckSummary(
         files=len(rows),

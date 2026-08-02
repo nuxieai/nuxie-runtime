@@ -5981,7 +5981,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "state_machine_keyframe_build_order_required",
-                "crates/nuxie-runtime/src/animation.rs",
+                "crates/nuxie-runtime/src/animation/linear_animation_instance.rs",
                 """
                 fn build_key_frame_data_binds() {
                     self.add_key_frame_value_holder(global_id, value);
@@ -6052,7 +6052,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "state_machine_keyframe_remove_before_holder_required",
-                "crates/nuxie-runtime/src/animation.rs",
+                "crates/nuxie-runtime/src/animation/linear_animation_instance.rs",
                 """
                 fn remove_key_frame_data_binds() {
                     for ((id, enrollment), graph) in self
@@ -6098,7 +6098,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "state_machine_keyframe_snapshot_ensure_is_construction_only",
-                "crates/nuxie-runtime/src/animation.rs",
+                "crates/nuxie-runtime/src/animation/linear_animation_instance.rs",
                 """
                 fn ensure_key_frame_data_binds() {
                     if self.key_frame_data_bind_graphs.is_empty() {
@@ -6294,7 +6294,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
         )
         self.assert_production_ratchet_case(
             "state_machine_keyframe_snapshot_ensure_prepares_existing",
-            "crates/nuxie-runtime/src/animation.rs",
+            "crates/nuxie-runtime/src/animation/linear_animation_instance.rs",
             textwrap.dedent(
                 """
                 fn ensure_key_frame_data_binds() {

@@ -257,28 +257,6 @@ fn object_imports_successfully(
                 return decision;
             }
         }
-        "ScriptInputArtboard" => {
-            return scripted_object_importer::imports_successfully(object, definition, context)
-                .expect("ScriptInputArtboard is owned by ScriptedObjectImporter");
-        }
-        "GamepadInput" => {
-            return listener_input_type_gamepad_importer::imports_successfully(
-                object, definition, context,
-            )
-            .expect("GamepadInput is owned by ListenerInputTypeGamepadImporter");
-        }
-        "KeyboardInput" => {
-            return listener_input_type_keyboard_importer::imports_successfully(
-                object, definition, context,
-            )
-            .expect("KeyboardInput is owned by ListenerInputTypeKeyboardImporter");
-        }
-        "SemanticInput" => {
-            return listener_input_type_semantic_importer::imports_successfully(
-                object, definition, context,
-            )
-            .expect("SemanticInput is owned by ListenerInputTypeSemanticImporter");
-        }
         "ViewModelInstance"
         | "ViewModelInstanceAsset"
         | "ViewModelInstanceAssetImage"
@@ -296,6 +274,26 @@ fn object_imports_successfully(
     }
 
     if let Some(decision) = artboard_importer::imports_successfully(object, definition, context) {
+        return decision;
+    }
+    if let Some(decision) =
+        scripted_object_importer::imports_successfully(object, definition, context)
+    {
+        return decision;
+    }
+    if let Some(decision) =
+        listener_input_type_gamepad_importer::imports_successfully(object, definition, context)
+    {
+        return decision;
+    }
+    if let Some(decision) =
+        listener_input_type_keyboard_importer::imports_successfully(object, definition, context)
+    {
+        return decision;
+    }
+    if let Some(decision) =
+        listener_input_type_semantic_importer::imports_successfully(object, definition, context)
+    {
         return decision;
     }
     if let Some(decision) =
@@ -318,14 +316,8 @@ fn object_imports_successfully(
         return decision;
     }
 
-    if definition.name.starts_with("ScriptInput") {
-        return scripted_object_importer::imports_successfully(object, definition, context)
-            .expect("ScriptInput is owned by ScriptedObjectImporter");
-    }
-
-    if definition.name == "TextAsset" {
-        return text_asset_importer::imports_successfully(object, definition, context)
-            .expect("TextAsset is owned by TextAssetImporter");
+    if let Some(decision) = text_asset_importer::imports_successfully(object, definition, context) {
+        return decision;
     }
     if let Some(decision) = file_asset_importer::imports_successfully(object, definition, context) {
         return decision;
@@ -343,41 +335,25 @@ fn object_imports_successfully(
         return context.latest(ImportStackKey::TransitionViewModelCondition);
     }
 
-    if definition.is_a("StateMachineFireAction") {
-        return state_machine_layer_component_importer::imports_successfully(
-            object, definition, context,
-        )
-        .expect("fire action is owned by StateMachineLayerComponentImporter");
+    if let Some(decision) =
+        state_machine_layer_component_importer::imports_successfully(object, definition, context)
+    {
+        return decision;
     }
 
     if definition.is_a("StateMachineInput") {
         return context.latest(ImportStackKey::StateMachine);
     }
 
-    if definition.is_a("StateMachineListener") {
-        return state_machine_listener_importer::imports_successfully(object, definition, context)
-            .expect("listener is owned by StateMachineListenerImporter");
+    if let Some(decision) =
+        state_machine_listener_importer::imports_successfully(object, definition, context)
+    {
+        return decision;
     }
 
     if let Some(decision) = layer_state_importer::imports_successfully(object, definition, context)
     {
         return decision;
-    }
-
-    if definition.is_a("ListenerAction") {
-        let decision = if listener_action_parent_kind_is_listener(object) {
-            state_machine_listener_importer::imports_successfully(object, definition, context)
-        } else {
-            state_machine_layer_component_importer::imports_successfully(
-                object, definition, context,
-            )
-        };
-        return decision.expect("ListenerAction has a concrete importer owner");
-    }
-
-    if definition.is_a("ListenerInputType") {
-        return state_machine_listener_importer::imports_successfully(object, definition, context)
-            .expect("ListenerInputType is owned by StateMachineListenerImporter");
     }
 
     if definition.is_a("ViewModelProperty") {
@@ -432,15 +408,6 @@ pub(crate) fn update_import_context(
             context.state_machine_inputs.clear();
             context.make_latest(ImportStackKey::StateMachine);
         }
-        "ListenerInputTypeGamepad" => {
-            listener_input_type_gamepad_importer::update_context(definition, context);
-        }
-        "ListenerInputTypeKeyboard" => {
-            listener_input_type_keyboard_importer::update_context(definition, context);
-        }
-        "ListenerInputTypeSemantic" => {
-            listener_input_type_semantic_importer::update_context(definition, context);
-        }
         "ViewModel" => viewmodel_importer::update_context(definition, context),
         "ViewModelInstance" => viewmodel_instance_importer::update_context(definition, context),
         "ViewModelInstanceList" => {
@@ -457,16 +424,15 @@ pub(crate) fn update_import_context(
     data_converter_group_importer::update_context(definition, context);
     data_converter_formula_importer::update_context(definition, context);
     file_asset_importer::update_context(definition, context, script_assets_create_importers);
-    if definition.is_a("StateMachineLayerComponent") {
-        state_machine_layer_component_importer::update_context(definition, context);
-    }
+    listener_input_type_gamepad_importer::update_context(definition, context);
+    listener_input_type_keyboard_importer::update_context(definition, context);
+    listener_input_type_semantic_importer::update_context(definition, context);
+    state_machine_layer_component_importer::update_context(definition, context);
     if definition.is_a("StateTransition") {
         context.make_latest(ImportStackKey::StateTransition);
     }
     layer_state_importer::update_context(definition, context);
-    if definition.is_a("StateMachineListener") {
-        state_machine_listener_importer::update_context(definition, context);
-    }
+    state_machine_listener_importer::update_context(definition, context);
     if let Some(kind) = state_machine_input_kind(definition) {
         context.state_machine_inputs.push(Some(kind));
     }
@@ -482,9 +448,7 @@ pub(crate) fn update_import_context(
         bindable_property_importer::update_context(definition, context);
     }
     data_bind_path_importer::update_context(definition, context);
-    if definition_is_cpp_scripted_object(definition) {
-        scripted_object_importer::update_context(definition, context);
-    }
+    scripted_object_importer::update_context(definition, context);
 
     let _ = object;
 }

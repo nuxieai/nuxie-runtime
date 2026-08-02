@@ -6480,6 +6480,8 @@ impl ArtboardInstance {
             };
             let x = parent_bounds.map_or(bounds.x, |parent| bounds.x - parent.x);
             let y = parent_bounds.map_or(bounds.y, |parent| bounds.y - parent.y);
+            let should_propagate_size = layout.should_force_update_layout_bounds()
+                || layout.target_bounds() != (x, y, bounds.width, bounds.height);
             if layout.retain_bounds(x, y, bounds.width, bounds.height) {
                 let layout_handle = self.component_handle(local_id);
                 let affected_text = self
@@ -6515,6 +6517,9 @@ impl ArtboardInstance {
                 if has_layout_draw_owner && let Some(component) = self.component(local_id) {
                     component.bump_path_revision();
                 }
+            }
+            if should_propagate_size {
+                self.propagate_scripted_layout_size(local_id);
             }
         }
     }
@@ -12246,7 +12251,7 @@ impl TaffyRuntimeLayoutEngine {
             let measured_child = runtime.is_some()
                 && matches!(
                     child_type,
-                    Some("Shape" | "Text" | "TextInput" | "Joystick")
+                    Some("Shape" | "Text" | "TextInput" | "Joystick" | "ScriptedLayout")
                 );
             let zero_sized_component_list = matches!(child_type, Some("ArtboardComponentList"))
                 && self
@@ -12475,6 +12480,21 @@ impl TaffyRuntimeLayoutEngine {
                     ) else {
                         continue;
                     };
+                    measured.width = measured.width.max(width);
+                    measured.height = measured.height.max(height);
+                }
+                "ScriptedLayout" => {
+                    let maximum_width = constrained_dimensions
+                        .width
+                        .or_else(|| definite_available_space(available_space.width));
+                    let maximum_height = constrained_dimensions
+                        .height
+                        .or_else(|| definite_available_space(available_space.height));
+                    let (width, height) = instance.measure_scripted_layout(
+                        child.local_id,
+                        maximum_width,
+                        maximum_height,
+                    );
                     measured.width = measured.width.max(width);
                     measured.height = measured.height.max(height);
                 }

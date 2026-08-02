@@ -431,6 +431,7 @@ pub enum ScriptListenerInputHydration {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ScriptMethod {
     Init,
+    Measure,
     Resize,
     Advance,
     Update,
@@ -454,6 +455,7 @@ impl ScriptMethod {
     pub fn as_str(self) -> &'static str {
         match self {
             ScriptMethod::Init => "init",
+            ScriptMethod::Measure => "measure",
             ScriptMethod::Resize => "resize",
             ScriptMethod::Advance => "advance",
             ScriptMethod::Update => "update",
@@ -593,6 +595,17 @@ pub enum ScriptValue {
     Color(u32),
     Vec2 { x: f32, y: f32 },
     Vec3 { x: f32, y: f32, z: f32 },
+}
+
+/// Result of resolving and invoking one optional script callback atomically.
+///
+/// Backends with dynamic member lookup override
+/// [`ScriptInstance::call_optional_method`] so presence and invocation observe
+/// the same resolved function value.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScriptOptionalMethodResult {
+    Missing,
+    Returned(ScriptValue),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1916,6 +1929,21 @@ pub trait ScriptInstance {
         args: &[ScriptValue],
         host: &mut dyn ScriptHost,
     ) -> Result<ScriptValue, ScriptError>;
+
+    /// Resolve an optional callback once and invoke that exact value when it
+    /// is callable. Missing and non-function fields are a no-op.
+    fn call_optional_method(
+        &mut self,
+        method: ScriptMethod,
+        args: &[ScriptValue],
+        host: &mut dyn ScriptHost,
+    ) -> Result<ScriptOptionalMethodResult, ScriptError> {
+        if !self.has_method(method)? {
+            return Ok(ScriptOptionalMethodResult::Missing);
+        }
+        self.call_method(method, args, host)
+            .map(ScriptOptionalMethodResult::Returned)
+    }
 
     /// Run `advance(self, seconds)` and apply the VM's native truthiness rules.
     ///

@@ -3919,15 +3919,15 @@ note = "C1/F7: per-keyframe scripted interpolator clone and transform lifecycle 
 
 [[file]]
 upstream = "src/scripted/scripted_layout.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/scripting.rs"
+rust_module = "crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/draw.rs; crates/nuxie-runtime/src/scripted_layout.rs; crates/nuxie-runtime/src/scripting.rs; crates/nuxie/src/lib.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0324"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "F7: RD-1 ported live traversal, but ScriptedLayout measure/resize/layout dirt ownership remains absent."
+note = "P2C ports ScriptedLayout's direct parent-layout lookup, post-hydration forced layout dirt, serialized measure/resize method bits, contained single-lookup Lua measure/resize callbacks, Taffy leaf measurement hook, and settled/animated layout-size propagation. Five upstream Lua-call cases are direct ports; the sixth 20+20-frame Rows/Columns scenario compares normalized draw semantics against pinned script_layout_grid.sriv, and the script_layout_test exact corpus entry independently covers the live C++ stream."
 
 [[file]]
 upstream = "src/scripted/scripted_object.cpp"

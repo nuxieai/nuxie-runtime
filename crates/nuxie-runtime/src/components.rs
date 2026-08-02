@@ -1226,6 +1226,20 @@ impl RuntimeLayoutComponentState {
         )
     }
 
+    pub(crate) fn current_bounds(&self) -> (f32, f32, f32, f32) {
+        let layout = self.layout.get();
+        (layout.left, layout.top, layout.width, layout.height)
+    }
+
+    pub(crate) fn target_bounds(&self) -> (f32, f32, f32, f32) {
+        let layout = if self.animates() {
+            self.current_animation_data().to
+        } else {
+            self.layout.get()
+        };
+        (layout.left, layout.top, layout.width, layout.height)
+    }
+
     pub(crate) fn position(&self) -> (f32, f32) {
         let layout = self.layout.get();
         (layout.left, layout.top)
@@ -1249,6 +1263,10 @@ impl RuntimeLayoutComponentState {
 
     pub(crate) fn force_update_layout_bounds(&self) {
         self.force_update_layout_bounds.set(true);
+    }
+
+    pub(crate) fn should_force_update_layout_bounds(&self) -> bool {
+        self.force_update_layout_bounds.get()
     }
 
     pub(crate) fn set_animation_style(

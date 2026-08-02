@@ -23,8 +23,9 @@ use std::sync::{
 };
 use taffy::prelude::{
     AlignContent, AlignItems, AlignSelf, AvailableSpace, Dimension, Display as TaffyDisplay,
-    FlexDirection, FlexWrap, JustifyContent, LengthPercentage, LengthPercentageAuto, NodeId,
-    Position, Rect, Size, Style, TaffyTree,
+    FlexDirection, FlexWrap, GridPlacement, GridTemplateComponent, JustifyContent,
+    LengthPercentage, LengthPercentageAuto, Line, MaxTrackSizingFunction, MinTrackSizingFunction,
+    NodeId, Position, Rect, Size, Style, TaffyTree, TrackSizingFunction,
 };
 use taffy::style::Direction as TaffyDirection;
 
@@ -341,6 +342,9 @@ fn runtime_layout_component_property_key_for_name(property_name: &str) -> Option
 #[derive(Clone, Copy)]
 enum RuntimeLayoutStyleProperty {
     DisplayValue,
+    JustifyItemsValue,
+    JustifySelfValue,
+    LayoutTypeValue,
     PositionTypeValue,
     DirectionValue,
     FlexDirectionValue,
@@ -411,6 +415,15 @@ impl RuntimeLayoutStyleProperty {
         match self {
             Self::DisplayValue => {
                 cached_runtime_property_key!("LayoutComponentStyle", "displayValue")
+            }
+            Self::JustifyItemsValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "justifyItemsValue")
+            }
+            Self::JustifySelfValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "justifySelfValue")
+            }
+            Self::LayoutTypeValue => {
+                cached_runtime_property_key!("LayoutComponentStyle", "layoutTypeValue")
             }
             Self::PositionTypeValue => {
                 cached_runtime_property_key!("LayoutComponentStyle", "positionTypeValue")
@@ -4876,8 +4889,7 @@ impl ArtboardInstance {
         // collapse dirt during update, while a layout component's own
         // display:none is checked locally.
         component.is_collapsed()
-            || (matches!(component.type_name, "Artboard" | "LayoutComponent")
-                && self.runtime_layout_component_is_display_none(component.local_id))
+            || self.runtime_layout_component_is_display_none(component.local_id)
     }
 
     fn runtime_drawable_dispatch_for_node(
@@ -6142,8 +6154,9 @@ impl ArtboardInstance {
     ) -> Option<RuntimeLayoutDrawPaths> {
         // Ported from C++ `src/layout_component.cpp`
         // `LayoutComponent::drawProxy/updateRenderPath`: layout components draw
-        // and clip from the retained background rectangle rebuilt by ordinary
-        // layout/path dirt.
+        // and clip from the retained background RawPath rebuilt by ordinary
+        // layout/path dirt. Unlike the pre-caa91f21 path, this does not create
+        // a virtual Rectangle/four-vertex object graph just to copy its path.
         self.runtime_drawables.layout_draw_paths(layout_local, || {
             let bounds = self.runtime_layout_component_bounds_with_bounds(
                 layout_local,
@@ -6151,10 +6164,13 @@ impl ArtboardInstance {
                 layout_bounds,
             );
             let corners = self.runtime_layout_component_corners(layout_local);
-            let paint = runtime_layout_rect_path_commands(bounds, corners);
+            let background = Arc::new(runtime_layout_rect_raw_path(bounds, corners));
+            let mut paint = runtime_path_commands_from_raw_path(background.as_ref());
+            prune_empty_path_segments(&mut paint);
             let mut clip = paint.clone();
             translate_path_commands(&mut clip, (bounds.x, bounds.y));
             RuntimeLayoutDrawPaths {
+                _background: background,
                 paint: Arc::new(paint),
                 clip: Arc::new(clip),
             }
@@ -6285,6 +6301,50 @@ impl ArtboardInstance {
         if component.type_name == "Artboard" {
             return component.transform.world_transform;
         }
+        if self.runtime_layout_participant_local(local_id).is_some()
+            && let Some(bounds) = layout_bounds.and_then(|bounds| bounds.get(&local_id).copied())
+        {
+            let parent_local = self.component_parent_local(local_id);
+            let parent_world = parent_local
+                .map(|parent| {
+                    self.runtime_component_world_transform_with_bounds_guarded(
+                        parent,
+                        graph,
+                        layout_bounds,
+                        visited,
+                    )
+                })
+                .unwrap_or(Mat2D::IDENTITY);
+            let (layout_x, layout_y) = self
+                .runtime_owning_layout_local(local_id)
+                .and_then(|layout| layout_bounds.and_then(|all| all.get(&layout).copied()))
+                .map(|owner| (bounds.x - owner.x, bounds.y - owner.y))
+                .unwrap_or((bounds.x, bounds.y));
+            let (origin_x, origin_y) = if component.type_name == "Text" {
+                (
+                    property_key_for_name("Text", "originX")
+                        .and_then(|key| self.double_property(local_id, key))
+                        .unwrap_or(0.0)
+                        * bounds.width,
+                    property_key_for_name("Text", "originY")
+                        .and_then(|key| self.double_property(local_id, key))
+                        .unwrap_or(0.0)
+                        * bounds.height,
+                )
+            } else {
+                (0.0, 0.0)
+            };
+            return parent_world
+                .multiply(Mat2D([
+                    1.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    layout_x + origin_x,
+                    layout_y + origin_y,
+                ]))
+                .multiply(component.transform.local_transform);
+        }
         if component.type_name == "LayoutComponent" {
             return self.runtime_layout_component_world_transform_with_bounds(
                 local_id,
@@ -6377,61 +6437,87 @@ impl ArtboardInstance {
         layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
         visiting: &mut BTreeSet<usize>,
     ) -> Mat2D {
+        let Some(component) = self.component(layout_local) else {
+            return Mat2D::IDENTITY;
+        };
         let stored_world = self
             .component(layout_local)
             .map(|component| component.transform.world_transform)
             .unwrap_or(Mat2D::IDENTITY);
-        if visiting.contains(&layout_local) {
+        if !visiting.insert(layout_local) {
             return stored_world;
         }
         let bounds = layout_bounds
             .and_then(|bounds| bounds.get(&layout_local).copied())
             .or_else(|| self.runtime_supported_layout_component_bounds(layout_local, graph));
         if let Some(bounds) = bounds {
-            // Taffy bounds are accumulated in untransformed artboard space. A
-            // nested layout offset therefore has to be made parent-local before
-            // its affine parent is applied, matching Yoga's parent-local
-            // left/top composition in the C++ runtime.
-            let nested_translation =
-                self.component_parent_local(layout_local)
-                    .and_then(|parent_local| {
-                        let parent = self.component(parent_local)?;
-                        if parent.type_name != "LayoutComponent" {
-                            return None;
-                        }
-                        let parent_bounds = layout_bounds
-                            .and_then(|bounds| bounds.get(&parent_local).copied())
+            // Taffy bounds are accumulated in untransformed artboard space;
+            // convert the solved slot back to parent-local coordinates before
+            // composing the affine parent.
+            let parent_local = self.component_parent_local(layout_local);
+            let (parent_world, x, y) = if let Some(parent_local) = parent_local {
+                let parent_world = self.runtime_component_world_transform_with_bounds_guarded(
+                    parent_local,
+                    graph,
+                    layout_bounds,
+                    visiting,
+                );
+                let parent_bounds = self
+                    .component(parent_local)
+                    .filter(|parent| parent.type_name != "Artboard")
+                    .and_then(|_| {
+                        layout_bounds
+                            .and_then(|all| all.get(&parent_local).copied())
                             .or_else(|| {
                                 self.runtime_supported_layout_component_bounds(parent_local, graph)
-                            })?;
-                        visiting.insert(layout_local);
-                        let parent_world = self
-                            .runtime_layout_component_world_transform_with_bounds_guarded(
-                                parent_local,
-                                graph,
-                                layout_bounds,
-                                visiting,
-                            );
-                        Some(parent_world.transform_point(
-                            bounds.x - parent_bounds.x,
-                            bounds.y - parent_bounds.y,
-                        ))
+                            })
                     });
-            let (x, y) = nested_translation.unwrap_or((
-                bounds.x - self.width * self.origin_x,
-                bounds.y - self.height * self.origin_y,
-            ));
-            let stored_world = stored_world.0;
-            return Mat2D([
-                stored_world[0],
-                stored_world[1],
-                stored_world[2],
-                stored_world[3],
-                x,
-                y,
-            ]);
+                let (x, y) = parent_bounds
+                    .map(|parent| (bounds.x - parent.x, bounds.y - parent.y))
+                    .unwrap_or((
+                        bounds.x - self.width * self.origin_x,
+                        bounds.y - self.height * self.origin_y,
+                    ));
+                (parent_world, x, y)
+            } else {
+                (Mat2D::IDENTITY, bounds.x, bounds.y)
+            };
+
+            // Match LayoutComponent::update: the solved slot owns translation,
+            // while authored rotation/scale pivot around ComponentOrigin.
+            let authored = component.transform.local_transform.0;
+            let mut local = Mat2D([authored[0], authored[1], authored[2], authored[3], 0.0, 0.0]);
+            if !mat2d_linear_is_identity(local) {
+                let (origin_x, origin_y) = self.runtime_layout_component_pivot(layout_local);
+                let px = origin_x * bounds.width;
+                let py = origin_y * bounds.height;
+                if px != 0.0 || py != 0.0 {
+                    local = Mat2D([1.0, 0.0, 0.0, 1.0, px, py])
+                        .multiply(local)
+                        .multiply(Mat2D([1.0, 0.0, 0.0, 1.0, -px, -py]));
+                }
+            }
+            return parent_world
+                .multiply(Mat2D([1.0, 0.0, 0.0, 1.0, x, y]))
+                .multiply(local);
         }
         stored_world
+    }
+
+    fn runtime_layout_component_pivot(&self, layout_local: usize) -> (f32, f32) {
+        let origin = self.components().iter().find(|component| {
+            component.type_name == "ComponentOrigin"
+                && self.component_parent_local(component.local_id) == Some(layout_local)
+        });
+        let Some(origin) = origin else {
+            return (0.0, 0.0);
+        };
+        let value = |name| {
+            property_key_for_name("ComponentOrigin", name)
+                .and_then(|key| self.double_property(origin.local_id, key))
+                .unwrap_or(0.0)
+        };
+        (value("originX"), value("originY"))
     }
 
     pub(crate) fn runtime_layout_component_bounds(
@@ -6661,7 +6747,8 @@ impl ArtboardInstance {
                             .find(|component| component.local_id == *local_id)
                             .and_then(|component| component.name.clone()),
                         parent_local: self.component_parent_local(*local_id),
-                        collapsed: component.is_collapsed(),
+                        collapsed: self
+                            .runtime_component_is_collapsed_for_draw_component(component),
                         x: bounds.x,
                         y: bounds.y,
                         width: bounds.width,
@@ -7726,6 +7813,43 @@ impl ArtboardInstance {
             .and_then(|style| self.objects.component_local_id(style))
     }
 
+    /// Return the sizing-style object which owns the delegated layout node.
+    /// Layout components reference a shared `LayoutComponentStyle`; ordinary
+    /// transform components opt in by owning a `LayoutParticipant` child,
+    /// which is itself the node style.
+    fn runtime_layout_node_style_local(&self, owner_local: usize) -> Option<usize> {
+        self.runtime_layout_component_style_local(owner_local)
+            .or_else(|| self.runtime_layout_participant_local(owner_local))
+    }
+
+    fn runtime_layout_participant_local(&self, owner_local: usize) -> Option<usize> {
+        self.component(owner_local)?
+            .children
+            .iter()
+            .find_map(|handle| {
+                let local = self.objects.component_local_id(*handle)?;
+                (self.component(local)?.type_name == "LayoutParticipant").then_some(local)
+            })
+    }
+
+    fn runtime_owning_layout_local(&self, local: usize) -> Option<usize> {
+        let mut current = self.component_parent_local(local);
+        let mut visited = BTreeSet::new();
+        while let Some(parent) = current {
+            if !visited.insert(parent) {
+                return None;
+            }
+            if self
+                .component(parent)
+                .is_some_and(|component| component.type_name == "LayoutComponent")
+            {
+                return Some(parent);
+            }
+            current = self.component_parent_local(parent);
+        }
+        None
+    }
+
     fn runtime_layout_style_uint(
         &self,
         style_local: usize,
@@ -7747,8 +7871,23 @@ impl ArtboardInstance {
     }
 
     fn runtime_layout_component_dimension(&self, layout_local: usize, name: &str) -> f32 {
-        runtime_layout_component_property_key_for_name(name)
+        let type_name = if self
+            .runtime_layout_participant_local(layout_local)
+            .is_some()
+        {
+            "LayoutParticipant"
+        } else {
+            "LayoutComponent"
+        };
+        property_key_for_name(type_name, name)
             .and_then(|key| self.double_property(layout_local, key))
+            .or_else(|| {
+                self.runtime_layout_participant_local(layout_local)
+                    .and_then(|participant| {
+                        property_key_for_name("LayoutParticipant", name)
+                            .and_then(|key| self.double_property(participant, key))
+                    })
+            })
             .unwrap_or(0.0)
     }
 
@@ -7777,7 +7916,7 @@ impl ArtboardInstance {
     }
 
     fn runtime_layout_component_is_absolute(&self, layout_local: usize) -> bool {
-        let Some(style_local) = self.runtime_layout_component_style_local(layout_local) else {
+        let Some(style_local) = self.runtime_layout_node_style_local(layout_local) else {
             return false;
         };
         const YG_POSITION_TYPE_ABSOLUTE: u64 = 2;
@@ -7789,13 +7928,7 @@ impl ArtboardInstance {
     }
 
     fn runtime_layout_component_is_display_none(&self, layout_local: usize) -> bool {
-        let Some(component) = self.component(layout_local) else {
-            return false;
-        };
-        if !matches!(component.type_name, "Artboard" | "LayoutComponent") {
-            return false;
-        }
-        let Some(style_local) = self.runtime_layout_component_style_local(layout_local) else {
+        let Some(style_local) = self.runtime_layout_node_style_local(layout_local) else {
             return false;
         };
         const YG_DISPLAY_NONE: u64 = 1;
@@ -7814,8 +7947,16 @@ impl ArtboardInstance {
         } else {
             "fractionalHeight"
         };
-        runtime_layout_component_property_key_for_name(property_name)
-            .and_then(|key| self.double_property(layout_local, key))
+        let property_owner = self
+            .runtime_layout_participant_local(layout_local)
+            .unwrap_or(layout_local);
+        let type_name = if property_owner == layout_local {
+            "LayoutComponent"
+        } else {
+            "LayoutParticipant"
+        };
+        property_key_for_name(type_name, property_name)
+            .and_then(|key| self.double_property(property_owner, key))
             .unwrap_or(1.0)
             .max(0.0)
     }
@@ -8360,6 +8501,12 @@ impl ArtboardInstance {
                 return None;
             }
             let component = self.component(current_local)?;
+            if self
+                .runtime_layout_participant_local(current_local)
+                .is_some()
+            {
+                return layout_bounds.get(&current_local).copied();
+            }
             match component.type_name {
                 "LayoutComponent" => {
                     self.runtime_layout_component_style_local(current_local)?;
@@ -9610,10 +9757,11 @@ impl RuntimeDrawableFamily {
     }
 }
 
-/// Clone-owned counterpart of `LayoutComponent::m_backgroundRect`,
+/// Clone-owned counterpart of `LayoutComponent::m_backgroundRawPath`,
 /// `m_localPath`, and `m_worldPath`.
 #[derive(Debug, Clone)]
 struct RuntimeLayoutDrawPaths {
+    _background: Arc<RawPath>,
     paint: Arc<Vec<RuntimePathCommand>>,
     clip: Arc<Vec<RuntimePathCommand>>,
 }
@@ -10430,6 +10578,9 @@ enum TaffyMeasureContext {
     LayoutComponentMeasure {
         local: usize,
     },
+    LayoutParticipantMeasure {
+        local: usize,
+    },
     ComponentListItem {
         list_local: usize,
         item_index: usize,
@@ -10660,6 +10811,18 @@ impl TaffyRuntimeLayoutEngine {
                                 )
                             })
                             .unwrap_or(Size::ZERO),
+                        Some(TaffyMeasureContext::LayoutParticipantMeasure { local }) => runtime
+                            .and_then(|runtime| {
+                                self.measure_layout_participant(
+                                    runtime,
+                                    instance,
+                                    graph,
+                                    *local,
+                                    known_dimensions,
+                                    available_space,
+                                )
+                            })
+                            .unwrap_or(Size::ZERO),
                         Some(TaffyMeasureContext::ComponentListItem {
                             list_local: _,
                             item_index: _,
@@ -10720,13 +10883,15 @@ impl TaffyRuntimeLayoutEngine {
             .components
             .iter()
             .find(|component| component.local_id == local)?;
+        let is_participant = instance.runtime_layout_participant_local(local).is_some();
         if !matches!(
             component.type_name,
             "Artboard" | "LayoutComponent" | "NestedArtboardLayout"
-        ) {
+        ) && !is_participant
+        {
             return None;
         }
-        if self.needs_unimplemented_measure(instance, graph, runtime, local)? {
+        if !is_participant && self.needs_unimplemented_measure(instance, graph, runtime, local)? {
             return None;
         }
 
@@ -10742,18 +10907,18 @@ impl TaffyRuntimeLayoutEngine {
             return Some(node);
         }
         let is_row = instance
-            .runtime_layout_component_style_local(local)
+            .runtime_layout_node_style_local(local)
             .is_none_or(|style_local| instance.runtime_layout_style_is_row(style_local));
         let mut child_nodes = Vec::new();
         let mut child_locals = Vec::new();
-        for child_local in &component.children {
+        for child_local in self.layout_provider_children(instance, graph, local)? {
             // C++ inserts layout-provider children into Yoga even when runtime
             // collapse later suppresses drawing; display:none is represented
             // by the child node's style.
             let Some(child) = graph
                 .components
                 .iter()
-                .find(|component| component.local_id == *child_local)
+                .find(|component| component.local_id == child_local)
             else {
                 continue;
             };
@@ -10763,25 +10928,25 @@ impl TaffyRuntimeLayoutEngine {
                         instance,
                         graph,
                         runtime,
-                        *child_local,
+                        child_local,
                         is_row,
                         taffy,
                         build,
                     )?;
                     child_nodes.push(child_node);
-                    child_locals.push(*child_local);
+                    child_locals.push(child_local);
                 }
                 "ArtboardComponentList" => {
-                    if !self.zero_sized_component_list_supported(graph, *child_local)? {
+                    if !self.zero_sized_component_list_supported(graph, child_local)? {
                         return None;
                     }
-                    if let Some(items) = instance.component_list_items(*child_local) {
+                    if let Some(items) = instance.component_list_items(child_local) {
                         for (item_index, item) in items.iter().enumerate() {
                             let intrinsic_size = runtime_component_list_item_layout_size(item);
                             let item_style = self.component_list_item_style(
                                 instance,
                                 graph,
-                                *child_local,
+                                child_local,
                                 item,
                                 is_row,
                             )?;
@@ -10789,7 +10954,7 @@ impl TaffyRuntimeLayoutEngine {
                                 .new_leaf_with_context(
                                     item_style,
                                     TaffyMeasureContext::ComponentListItem {
-                                        list_local: *child_local,
+                                        list_local: child_local,
                                         item_index,
                                         intrinsic_size: Size {
                                             width: intrinsic_size.0,
@@ -10801,7 +10966,7 @@ impl TaffyRuntimeLayoutEngine {
                             child_nodes.push(item_node);
                             build
                                 .component_list_item_nodes
-                                .entry(*child_local)
+                                .entry(child_local)
                                 .or_default()
                                 .push(item_node);
                         }
@@ -10812,20 +10977,43 @@ impl TaffyRuntimeLayoutEngine {
                         instance,
                         graph,
                         runtime,
-                        *child_local,
+                        child_local,
                         is_row,
                         taffy,
                         build,
                     )?;
                     child_nodes.push(child_node);
-                    child_locals.push(*child_local);
+                    child_locals.push(child_local);
+                }
+                _ if instance
+                    .runtime_layout_participant_local(child_local)
+                    .is_some() =>
+                {
+                    let child_node = self.build_node(
+                        instance,
+                        graph,
+                        runtime,
+                        child_local,
+                        is_row,
+                        taffy,
+                        build,
+                    )?;
+                    child_nodes.push(child_node);
+                    child_locals.push(child_local);
                 }
                 _ => {}
             }
         }
 
         let node = if child_nodes.is_empty() {
-            if runtime.is_some()
+            if is_participant && runtime.is_some() {
+                taffy
+                    .new_leaf_with_context(
+                        style,
+                        TaffyMeasureContext::LayoutParticipantMeasure { local },
+                    )
+                    .ok()?
+            } else if runtime.is_some()
                 && self.layout_component_registers_measure_func(instance, graph, local)?
             {
                 taffy
@@ -11142,10 +11330,21 @@ impl TaffyRuntimeLayoutEngine {
         parent_is_row: bool,
     ) -> Option<Style> {
         let is_root = local == 0;
-        let style_local = instance.runtime_layout_component_style_local(local);
+        let style_local = instance.runtime_layout_node_style_local(local);
         if style_local.is_none() && !is_root {
             return None;
         }
+
+        let layout_type = instance
+            .runtime_layout_component_style_local(local)
+            .map(|style_local| {
+                instance.runtime_layout_style_uint_default(
+                    style_local,
+                    RuntimeLayoutStyleProperty::LayoutTypeValue,
+                    0,
+                )
+            })
+            .unwrap_or(0);
 
         let mut style = Style {
             display: if style_local.is_some_and(|style_local| {
@@ -11156,6 +11355,8 @@ impl TaffyRuntimeLayoutEngine {
                 ) == 1
             }) {
                 TaffyDisplay::None
+            } else if matches!(layout_type, 1 | 2) {
+                TaffyDisplay::Grid
             } else {
                 TaffyDisplay::Flex
             },
@@ -11411,8 +11612,34 @@ impl TaffyRuntimeLayoutEngine {
             style.aspect_ratio = Some(aspect_ratio);
         }
 
-        self.apply_alignment(instance, style_local, &mut style);
-        self.apply_flex_item_style(instance, local, style_local, parent_is_row, &mut style)?;
+        if layout_type == 2 {
+            self.apply_stack_alignment(instance, style_local, &mut style);
+            let single = GridTemplateComponent::Single(TrackSizingFunction {
+                min: MinTrackSizingFunction::auto(),
+                max: MaxTrackSizingFunction::fr(1.0),
+            });
+            style.grid_template_columns = vec![single.clone()];
+            style.grid_template_rows = vec![single];
+        } else {
+            self.apply_alignment(instance, style_local, &mut style);
+            if layout_type == 1 {
+                self.apply_grid_container_style(instance, graph, local, style_local, &mut style)?;
+            }
+        }
+
+        let parent_layout_type = self.parent_layout_type(instance, graph, local);
+        if matches!(parent_layout_type, 1 | 2) {
+            self.apply_grid_item_style(
+                instance,
+                graph,
+                local,
+                style_local,
+                parent_layout_type == 2,
+                &mut style,
+            )?;
+        } else {
+            self.apply_flex_item_style(instance, local, style_local, parent_is_row, &mut style)?;
+        }
         Some(style)
     }
 
@@ -11820,6 +12047,256 @@ impl TaffyRuntimeLayoutEngine {
         Some(())
     }
 
+    fn parent_layout_type(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        local: usize,
+    ) -> u64 {
+        let mut current = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == local)
+            .and_then(|_| instance.component_parent_local(local));
+        let mut visited = BTreeSet::new();
+        while let Some(parent) = current {
+            if !visited.insert(parent) {
+                break;
+            }
+            if let Some(style_local) = instance.runtime_layout_component_style_local(parent) {
+                return instance.runtime_layout_style_uint_default(
+                    style_local,
+                    RuntimeLayoutStyleProperty::LayoutTypeValue,
+                    0,
+                );
+            }
+            current = instance.component_parent_local(parent);
+        }
+        0
+    }
+
+    fn apply_grid_container_style(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        local: usize,
+        style_local: usize,
+        style: &mut Style,
+    ) -> Option<()> {
+        style.justify_items = self.grid_align_items(instance.runtime_layout_style_uint_default(
+            style_local,
+            RuntimeLayoutStyleProperty::JustifyItemsValue,
+            7,
+        ));
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == local)?;
+        for child_local in &component.children {
+            let child = graph
+                .components
+                .iter()
+                .find(|component| component.local_id == *child_local)?;
+            if child.type_name != "GridTrack" {
+                continue;
+            }
+            let collection = property_key_for_name("GridTrack", "collection")
+                .and_then(|key| instance.uint_property(*child_local, key))
+                .unwrap_or(0);
+            let track = self.grid_track(instance, *child_local)?;
+            match collection {
+                0 => style
+                    .grid_template_columns
+                    .push(GridTemplateComponent::Single(track)),
+                1 => style
+                    .grid_template_rows
+                    .push(GridTemplateComponent::Single(track)),
+                2 => style.grid_auto_columns.push(track),
+                3 => style.grid_auto_rows.push(track),
+                _ => {}
+            }
+        }
+        Some(())
+    }
+
+    fn grid_track(&self, instance: &ArtboardInstance, local: usize) -> Option<TrackSizingFunction> {
+        let uint = |name| {
+            property_key_for_name("GridTrack", name)
+                .and_then(|key| instance.uint_property(local, key))
+        };
+        let number = |name| {
+            property_key_for_name("GridTrack", name)
+                .and_then(|key| instance.double_property(local, key))
+                .unwrap_or(0.0)
+        };
+        let track_type = uint("trackType").unwrap_or(0);
+        let value = number("trackValue").max(0.0);
+        let min = match track_type {
+            1 => MinTrackSizingFunction::length(value),
+            2 => MinTrackSizingFunction::percent(value / 100.0),
+            3 => MinTrackSizingFunction::auto(),
+            _ => MinTrackSizingFunction::auto(),
+        };
+        let default_max = match track_type {
+            1 => MaxTrackSizingFunction::length(value),
+            2 => MaxTrackSizingFunction::percent(value / 100.0),
+            3 => MaxTrackSizingFunction::fr(value),
+            _ => MaxTrackSizingFunction::auto(),
+        };
+        let max_type = uint("trackMaxType").unwrap_or(0);
+        let max_value = number("trackMaxValue").max(0.0);
+        let max = match max_type {
+            0 => default_max,
+            1 => MaxTrackSizingFunction::auto(),
+            2 => MaxTrackSizingFunction::length(max_value),
+            3 => MaxTrackSizingFunction::percent(max_value / 100.0),
+            4 => MaxTrackSizingFunction::fr(max_value),
+            _ => default_max,
+        };
+        Some(TrackSizingFunction { min, max })
+    }
+
+    fn apply_grid_item_style(
+        &self,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        local: usize,
+        style_local: usize,
+        stack: bool,
+        style: &mut Style,
+    ) -> Option<()> {
+        let width_hugs = instance.runtime_layout_axis_scale(style_local, true) == 2;
+        let justify_self = instance.runtime_layout_style_uint_default(
+            style_local,
+            RuntimeLayoutStyleProperty::JustifySelfValue,
+            6,
+        );
+        let container_justify_items = instance
+            .runtime_owning_layout_local(local)
+            .and_then(|parent| instance.runtime_layout_component_style_local(parent))
+            .map(|parent_style| {
+                instance.runtime_layout_style_uint_default(
+                    parent_style,
+                    RuntimeLayoutStyleProperty::JustifyItemsValue,
+                    7,
+                )
+            })
+            .unwrap_or(7);
+        let resolved_justify_self = if !stack
+            && width_hugs
+            && (justify_self == 7 || (justify_self == 6 && container_justify_items == 7))
+        {
+            0
+        } else {
+            justify_self
+        };
+        style.justify_self = if instance.runtime_layout_axis_scale(style_local, true) == 1 {
+            Some(AlignSelf::STRETCH)
+        } else {
+            self.grid_align_self(resolved_justify_self)
+        };
+        if instance.runtime_layout_axis_scale(style_local, false) == 1 {
+            style.align_self = Some(AlignSelf::STRETCH);
+        }
+        if stack {
+            style.grid_column = Line {
+                start: GridPlacement::Line(1.into()),
+                end: GridPlacement::Auto,
+            };
+            style.grid_row = Line {
+                start: GridPlacement::Line(1.into()),
+                end: GridPlacement::Auto,
+            };
+            return Some(());
+        }
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == local)?;
+        let placement_local = component.children.iter().find_map(|child_local| {
+            graph
+                .components
+                .iter()
+                .find(|component| component.local_id == *child_local)
+                .filter(|component| component.type_name == "GridItemPlacement")
+                .map(|_| *child_local)
+        });
+        let Some(placement_local) = placement_local else {
+            return Some(());
+        };
+        style.grid_column =
+            self.grid_item_line(instance, placement_local, "gridColumn", "gridColumnSpan")?;
+        style.grid_row =
+            self.grid_item_line(instance, placement_local, "gridRow", "gridRowSpan")?;
+        Some(())
+    }
+
+    fn grid_item_line(
+        &self,
+        instance: &ArtboardInstance,
+        local: usize,
+        cell_name: &str,
+        span_name: &str,
+    ) -> Option<Line<GridPlacement>> {
+        let cell = property_key_for_name("GridItemPlacement", cell_name)
+            .and_then(|key| instance.objects.int_property(local, key))
+            .unwrap_or(0);
+        let span = property_key_for_name("GridItemPlacement", span_name)
+            .and_then(|key| instance.uint_property(local, key))
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(1);
+        let start = if cell == 0 {
+            GridPlacement::Auto
+        } else {
+            let line = if cell < 0 { cell - 1 } else { cell };
+            GridPlacement::Line(i16::try_from(line).ok()?.into())
+        };
+        let end = if span > 1 {
+            GridPlacement::Span(span)
+        } else {
+            GridPlacement::Auto
+        };
+        Some(Line { start, end })
+    }
+
+    fn grid_align_items(&self, value: u64) -> Option<AlignItems> {
+        Some(match value {
+            1 => AlignItems::CENTER,
+            2 | 9 => AlignItems::FLEX_END,
+            7 => AlignItems::STRETCH,
+            _ => AlignItems::FLEX_START,
+        })
+    }
+
+    fn grid_align_self(&self, value: u64) -> Option<AlignSelf> {
+        match value {
+            6 => None,
+            1 => Some(AlignSelf::CENTER),
+            2 | 9 => Some(AlignSelf::FLEX_END),
+            7 => Some(AlignSelf::STRETCH),
+            _ => Some(AlignSelf::FLEX_START),
+        }
+    }
+
+    fn apply_stack_alignment(
+        &self,
+        instance: &ArtboardInstance,
+        style_local: usize,
+        style: &mut Style,
+    ) {
+        let alignment = instance.runtime_layout_alignment_type(style_local);
+        style.justify_items = Some(match alignment {
+            1 | 4 | 7 | 10 => AlignItems::CENTER,
+            2 | 5 | 8 | 11 => AlignItems::FLEX_END,
+            _ => AlignItems::FLEX_START,
+        });
+        style.align_items = Some(match alignment {
+            3..=5 => AlignItems::CENTER,
+            6..=8 => AlignItems::FLEX_END,
+            _ => AlignItems::FLEX_START,
+        });
+    }
+
     fn apply_alignment(&self, instance: &ArtboardInstance, style_local: usize, style: &mut Style) {
         let alignment = instance.runtime_layout_alignment_type(style_local);
         let is_row = instance.runtime_layout_style_is_row(style_local);
@@ -12197,6 +12674,89 @@ impl TaffyRuntimeLayoutEngine {
         })
     }
 
+    fn measure_layout_participant(
+        &self,
+        runtime: &RuntimeFile,
+        instance: &ArtboardInstance,
+        graph: &ArtboardGraph,
+        local: usize,
+        known_dimensions: Size<Option<f32>>,
+        available_space: Size<AvailableSpace>,
+    ) -> Option<Size<f32>> {
+        let component = graph
+            .components
+            .iter()
+            .find(|component| component.local_id == local)?;
+        let style_local = instance.runtime_layout_participant_local(local)?;
+        let fixed_width = self.fixed_layout_measure_dimension(
+            instance,
+            graph,
+            local,
+            style_local,
+            true,
+            available_space.width,
+        );
+        let fixed_height = self.fixed_layout_measure_dimension(
+            instance,
+            graph,
+            local,
+            style_local,
+            false,
+            available_space.height,
+        );
+        let constrained = Size {
+            width: fixed_width.or(known_dimensions.width),
+            height: fixed_height.or(known_dimensions.height),
+        };
+        let measured = match component.type_name {
+            "Shape" => self
+                .measure_shape_layout_child(instance, graph, local, constrained, available_space)
+                .map(|(width, height)| Size { width, height })
+                .unwrap_or(Size::ZERO),
+            "Text" => {
+                let constraint = RuntimeTextLayoutConstraint {
+                    width: constrained
+                        .width
+                        .or_else(|| definite_available_space(available_space.width))
+                        .unwrap_or(f32::MAX),
+                    height: constrained
+                        .height
+                        .or_else(|| definite_available_space(available_space.height))
+                        .unwrap_or(f32::MAX),
+                    width_scale_type: instance.runtime_layout_axis_scale(style_local, true),
+                    height_scale_type: instance.runtime_layout_axis_scale(style_local, false),
+                    layout_direction: instance.debug_layout_actual_direction(local).unwrap_or(0),
+                };
+                static_text_layout_measure_bounds(runtime, graph, instance, local, constraint)
+                    .map(|(_, _, width, height)| Size { width, height })
+                    .unwrap_or(Size::ZERO)
+            }
+            "TextInput" => {
+                let constraint = RuntimeTextLayoutConstraint {
+                    width: constrained
+                        .width
+                        .or_else(|| definite_available_space(available_space.width))
+                        .unwrap_or(f32::MAX),
+                    height: constrained
+                        .height
+                        .or_else(|| definite_available_space(available_space.height))
+                        .unwrap_or(f32::MAX),
+                    width_scale_type: instance.runtime_layout_axis_scale(style_local, true),
+                    height_scale_type: instance.runtime_layout_axis_scale(style_local, false),
+                    layout_direction: instance.debug_layout_actual_direction(local).unwrap_or(0),
+                };
+                text_input_layout_measure_bounds(runtime, graph, instance, local, constraint)
+                    .map(|(_, _, width, height)| Size { width, height })
+                    .unwrap_or(Size::ZERO)
+            }
+            _ => Size::ZERO,
+        };
+        Some(Size {
+            width: constrained.width.unwrap_or(measured.width),
+            height: constrained.height.unwrap_or(measured.height),
+        })
+    }
+
     fn fixed_layout_measure_dimension(
         &self,
         instance: &ArtboardInstance,
@@ -12318,35 +12878,61 @@ impl TaffyRuntimeLayoutEngine {
 
     fn layout_provider_children(
         &self,
-        _instance: &ArtboardInstance,
+        instance: &ArtboardInstance,
         graph: &ArtboardGraph,
         layout_local: usize,
     ) -> Option<Vec<usize>> {
-        let component = graph
-            .components
-            .iter()
-            .find(|component| component.local_id == layout_local)?;
-        Some(
-            component
-                .children
+        fn visit(
+            instance: &ArtboardInstance,
+            graph: &ArtboardGraph,
+            from: usize,
+            out: &mut Vec<usize>,
+            visiting: &mut BTreeSet<usize>,
+        ) -> Option<()> {
+            if !visiting.insert(from) {
+                return Some(());
+            }
+            let component = graph
+                .components
                 .iter()
-                .copied()
-                .filter(|child_local| {
-                    graph
-                        .components
-                        .iter()
-                        .find(|component| component.local_id == *child_local)
-                        .is_some_and(|child| {
-                            matches!(
-                                child.type_name,
-                                "LayoutComponent"
-                                    | "NestedArtboardLayout"
-                                    | "ArtboardComponentList"
-                            )
-                        })
-                })
-                .collect(),
-        )
+                .find(|component| component.local_id == from)?;
+            for child_local in &component.children {
+                if component.type_name == "Solo"
+                    && instance
+                        .component(*child_local)
+                        .is_some_and(RuntimeComponent::is_collapsed)
+                {
+                    continue;
+                }
+                let child = graph
+                    .components
+                    .iter()
+                    .find(|component| component.local_id == *child_local)?;
+                let provider = matches!(
+                    child.type_name,
+                    "LayoutComponent" | "NestedArtboardLayout" | "ArtboardComponentList"
+                ) || instance
+                    .runtime_layout_participant_local(*child_local)
+                    .is_some();
+                if provider {
+                    out.push(*child_local);
+                } else if matches!(child.type_name, "Node" | "Group" | "Solo") {
+                    visit(instance, graph, *child_local, out, visiting)?;
+                }
+            }
+            visiting.remove(&from);
+            Some(())
+        }
+
+        let mut providers = Vec::new();
+        visit(
+            instance,
+            graph,
+            layout_local,
+            &mut providers,
+            &mut BTreeSet::new(),
+        )?;
+        Some(providers)
     }
 
     fn dimension_style(
@@ -12471,72 +13057,109 @@ struct RuntimeLayoutCorners {
     bottom_left: f32,
 }
 
-impl RuntimeLayoutCorners {
-    fn is_square(self) -> bool {
-        self.top_left.abs() <= f32::EPSILON
-            && self.top_right.abs() <= f32::EPSILON
-            && self.bottom_right.abs() <= f32::EPSILON
-            && self.bottom_left.abs() <= f32::EPSILON
-    }
-}
-
 fn runtime_layout_rect_path_commands(
     bounds: RuntimeLayoutBounds,
     corners: RuntimeLayoutCorners,
 ) -> Vec<RuntimePathCommand> {
-    let width_is_zero = bounds.width.abs() <= f32::EPSILON;
-    let height_is_zero = bounds.height.abs() <= f32::EPSILON;
-    if width_is_zero && height_is_zero {
-        return vec![
-            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
-            RuntimePathCommand::Close,
-        ];
-    }
-    if height_is_zero {
-        return vec![
-            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
-            RuntimePathCommand::Line {
-                x: bounds.width,
-                y: 0.0,
-            },
-            RuntimePathCommand::Line { x: 0.0, y: 0.0 },
-            RuntimePathCommand::Close,
-        ];
-    }
-    if width_is_zero {
-        return vec![
-            RuntimePathCommand::Move { x: 0.0, y: 0.0 },
-            RuntimePathCommand::Line {
-                x: 0.0,
-                y: bounds.height,
-            },
-            RuntimePathCommand::Line { x: 0.0, y: 0.0 },
-            RuntimePathCommand::Close,
-        ];
-    }
-    if !corners.is_square() {
-        return runtime_rounded_layout_rect_path_commands(bounds, corners);
-    }
-    vec![
-        RuntimePathCommand::Move { x: 0.0, y: 0.0 },
-        RuntimePathCommand::Line {
-            x: bounds.width,
-            y: 0.0,
-        },
-        RuntimePathCommand::Line {
-            x: bounds.width,
-            y: bounds.height,
-        },
-        RuntimePathCommand::Line {
-            x: 0.0,
-            y: bounds.height,
-        },
-        RuntimePathCommand::Line { x: 0.0, y: 0.0 },
-        RuntimePathCommand::Close,
-    ]
+    let raw_path = runtime_layout_rect_raw_path(bounds, corners);
+    let mut commands = runtime_path_commands_from_raw_path(&raw_path);
+    prune_empty_path_segments(&mut commands);
+    commands
 }
 
-fn runtime_rounded_layout_rect_path_commands(
+/// Taffy-backed counterpart of C++ `Path::addRoundedRect`. Layout owns this
+/// small RawPath directly; it must not acquire a Rectangle/vertex dependency.
+fn runtime_layout_rect_raw_path(
+    bounds: RuntimeLayoutBounds,
+    corners: RuntimeLayoutCorners,
+) -> RawPath {
+    #[derive(Clone, Copy)]
+    struct Corner {
+        position: (f32, f32),
+        to_prev: (f32, f32),
+        to_next: (f32, f32),
+        radius: f32,
+    }
+
+    let corners = [
+        Corner {
+            position: (0.0, 0.0),
+            to_prev: (0.0, 1.0),
+            to_next: (1.0, 0.0),
+            radius: corners.top_left,
+        },
+        Corner {
+            position: (bounds.width, 0.0),
+            to_prev: (-1.0, 0.0),
+            to_next: (0.0, 1.0),
+            radius: corners.top_right,
+        },
+        Corner {
+            position: (bounds.width, bounds.height),
+            to_prev: (0.0, -1.0),
+            to_next: (-1.0, 0.0),
+            radius: corners.bottom_right,
+        },
+        Corner {
+            position: (0.0, bounds.height),
+            to_prev: (1.0, 0.0),
+            to_next: (0.0, -1.0),
+            radius: corners.bottom_left,
+        },
+    ];
+    let max_radius = bounds.width.min(bounds.height) * 0.5;
+    let mut raw_path = RawPath::new();
+    raw_path.rebuild(10, 17, |path| {
+        let mut start = (0.0, 0.0);
+        for (index, corner) in corners.into_iter().enumerate() {
+            if corner.radius != 0.0 {
+                let radius = corner.radius.abs().min(max_radius);
+                let ideal_distance =
+                    compute_ideal_control_point_distance(corner.to_prev, corner.to_next, radius);
+                let enter = scale_and_add_point(corner.position, corner.to_prev, radius);
+                if index == 0 {
+                    start = enter;
+                    path.move_to(enter.0, enter.1);
+                } else {
+                    path.line_to(enter.0, enter.1);
+                }
+                let mut out_point =
+                    scale_and_add_point(corner.position, corner.to_prev, radius - ideal_distance);
+                let mut in_point =
+                    scale_and_add_point(corner.position, corner.to_next, radius - ideal_distance);
+                let exit = scale_and_add_point(corner.position, corner.to_next, radius);
+                if corner.radius < 0.0 {
+                    rotate_rounded_points(
+                        exit,
+                        enter,
+                        corner.position,
+                        &mut out_point,
+                        &mut in_point,
+                    );
+                }
+                path.cubic_to(
+                    out_point.0,
+                    out_point.1,
+                    in_point.0,
+                    in_point.1,
+                    exit.0,
+                    exit.1,
+                );
+            } else if index == 0 {
+                start = corner.position;
+                path.move_to(corner.position.0, corner.position.1);
+            } else {
+                path.line_to(corner.position.0, corner.position.1);
+            }
+        }
+        path.line_to(start.0, start.1);
+        path.close();
+    });
+    raw_path
+}
+
+#[cfg(test)]
+fn runtime_layout_rect_path_commands_via_vertices(
     bounds: RuntimeLayoutBounds,
     corners: RuntimeLayoutCorners,
 ) -> Vec<RuntimePathCommand> {
@@ -14145,6 +14768,9 @@ impl RuntimeArtboardPathState {
             return component.transform.world_transform;
         }
         if component.type_name != "LayoutComponent"
+            && instance
+                .runtime_layout_participant_local(local_id)
+                .is_none()
             && !(component.type_name == "NestedArtboardLayout"
                 && layout_bounds.contains_key(&local_id))
         {
@@ -14199,6 +14825,17 @@ impl RuntimeArtboardPathState {
         };
         if component.type_name == "Artboard" {
             return component.transform.world_transform;
+        }
+        if instance
+            .runtime_layout_participant_local(local_id)
+            .is_some()
+            && layout_bounds.contains_key(&local_id)
+        {
+            return instance.runtime_component_world_transform_with_bounds(
+                local_id,
+                graph,
+                Some(layout_bounds),
+            );
         }
         if component.type_name == "LayoutComponent" {
             return instance.runtime_layout_component_world_transform_with_bounds(
@@ -25209,6 +25846,7 @@ mod tests {
         let build = || {
             builds.set(builds.get() + 1);
             RuntimeLayoutDrawPaths {
+                _background: Arc::new(RawPath::new()),
                 paint: Arc::new(vec![RuntimePathCommand::Move { x: 1.0, y: 2.0 }]),
                 clip: Arc::new(vec![RuntimePathCommand::Move { x: 3.0, y: 4.0 }]),
             }
@@ -25238,6 +25876,49 @@ mod tests {
             Some(23),
             "a new renderer context drops the old Layout backend members"
         );
+    }
+
+    #[test]
+    fn layout_background_raw_path_matches_the_previous_rectangle_path() {
+        // Ported from upstream rounded_rect_path_test.cpp. The production path
+        // is built directly into RawPath; this test-only path retains the old
+        // four-StraightVertex construction as the semantic oracle.
+        let cases = [
+            ("square corners", 200.0, 100.0, [0.0, 0.0, 0.0, 0.0]),
+            ("uniform radius", 200.0, 100.0, [12.0, 12.0, 12.0, 12.0]),
+            ("per-corner radii", 200.0, 100.0, [4.0, 8.0, 16.0, 32.0]),
+            ("one rounded corner", 200.0, 100.0, [20.0, 0.0, 0.0, 0.0]),
+            ("radius past clamp", 200.0, 100.0, [500.0; 4]),
+            ("radius at clamp", 200.0, 100.0, [50.0; 4]),
+            ("sub-pixel radius", 200.0, 100.0, [0.01, 0.0, 0.0, 0.0]),
+            ("tall", 40.0, 400.0, [10.0, 0.0, 10.0, 0.0]),
+            ("square", 100.0, 100.0, [25.0; 4]),
+            ("zero size", 0.0, 0.0, [0.0; 4]),
+            ("zero size with radius", 0.0, 0.0, [10.0; 4]),
+            ("degenerate width", 0.0, 100.0, [5.0; 4]),
+            ("degenerate height", 200.0, 0.0, [5.0; 4]),
+            ("negative radius", 200.0, 100.0, [-20.0; 4]),
+            ("one negative corner", 200.0, 100.0, [-20.0, 20.0, 0.0, 0.0]),
+            ("negative past clamp", 200.0, 100.0, [-500.0, 0.0, 0.0, 0.0]),
+        ];
+
+        for (label, width, height, radii) in cases {
+            let bounds = RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width,
+                height,
+            };
+            let corners = RuntimeLayoutCorners {
+                top_left: radii[0],
+                top_right: radii[1],
+                bottom_right: radii[2],
+                bottom_left: radii[3],
+            };
+            let direct = runtime_layout_rect_path_commands(bounds, corners);
+            let via_vertices = runtime_layout_rect_path_commands_via_vertices(bounds, corners);
+            assert_eq!(direct, via_vertices, "{label}");
+        }
     }
 
     #[test]
@@ -28248,7 +28929,7 @@ mod tests {
     }
 
     #[test]
-    fn settled_layout_world_transform_replaces_authored_affine_with_layout_translation() {
+    fn settled_layout_world_transform_composes_authored_affine_over_layout_translation() {
         let bytes = synthetic_affine_layout_geometry_riv();
         let file = read_runtime_file(&bytes).expect("synthetic affine layout riv imports");
         let graphs =
@@ -28265,29 +28946,27 @@ mod tests {
             .expect("second layout component is reported");
         let mut cache = RuntimeGeometryState::default();
 
-        // LayoutComponent::update replaces the ordinary Node affine with
-        // `parentWorld * translate(layout.left, layout.top)`; authored
-        // rotation/scale do not survive this owner callback
-        // (`layout_component.cpp:100-121`).
-        assert_mat2d_near(layout.world_transform, [1.0, 0.0, 0.0, 1.0, 100.0, 0.0]);
+        // S4-38 makes LayoutComponent transformable: the layout engine still
+        // owns translation, then authored rotation/scale compose over the slot.
+        assert_mat2d_near(layout.world_transform, [0.0, 2.0, -0.5, 0.0, 100.0, 0.0]);
         assert_mat2d_near(
             instance
                 .geometry_world_transform_with_context(&file, graph, 5, &mut cache)
                 .expect("child shape has a world transform")
                 .0,
-            [1.0, 0.0, 0.0, 1.0, 110.0, 20.0],
+            [0.0, 2.0, -0.5, 0.0, 90.0, 20.0],
         );
         assert_aabb_near(
             instance
                 .geometry_world_bounds_with_context(&file, graph, 5, &mut cache)
                 .expect("child shape has geometry"),
-            RenderAabb::new(60.0, -30.0, 160.0, 70.0),
+            RenderAabb::new(65.0, -80.0, 115.0, 120.0),
         );
         assert_eq!(
             instance.geometry_hit_test_with_context(
                 &file,
                 graph,
-                RenderVec2D::new(110.0, 20.0),
+                RenderVec2D::new(90.0, 20.0),
                 &mut cache,
             ),
             vec![5]
@@ -28295,7 +28974,7 @@ mod tests {
     }
 
     #[test]
-    fn nested_layout_translation_composes_through_parent_layout_translation() {
+    fn nested_layout_translation_composes_through_parent_layout_affine() {
         let bytes = synthetic_nested_affine_layout_geometry_riv();
         let file = read_runtime_file(&bytes).expect("synthetic nested affine layout riv imports");
         let graphs =
@@ -28314,32 +28993,32 @@ mod tests {
 
         assert_mat2d_near(
             child_layout.world_transform,
-            [1.0, 0.0, 0.0, 1.0, 110.0, 20.0],
+            [0.0, 2.0, -0.5, 0.0, 90.0, 20.0],
         );
         assert_mat2d_near(
             instance
                 .runtime_layout_component_world_transform(5, graph)
                 .0,
-            [1.0, 0.0, 0.0, 1.0, 110.0, 20.0],
+            [0.0, 2.0, -0.5, 0.0, 90.0, 20.0],
         );
         assert_mat2d_near(
             instance
                 .geometry_world_transform_with_context(&file, graph, 7, &mut cache)
                 .expect("nested child shape has a world transform")
                 .0,
-            [1.0, 0.0, 0.0, 1.0, 115.0, 26.0],
+            [0.0, 2.0, -0.5, 0.0, 87.0, 30.0],
         );
         assert_aabb_near(
             instance
                 .geometry_world_bounds_with_context(&file, graph, 7, &mut cache)
                 .expect("nested child shape has geometry"),
-            RenderAabb::new(95.0, 11.0, 135.0, 41.0),
+            RenderAabb::new(79.5, -10.0, 94.5, 70.0),
         );
         assert_eq!(
             instance.geometry_hit_test_with_context(
                 &file,
                 graph,
-                RenderVec2D::new(115.0, 26.0),
+                RenderVec2D::new(87.0, 30.0),
                 &mut cache,
             ),
             vec![7]

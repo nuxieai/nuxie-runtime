@@ -7,6 +7,7 @@ mod artboard_component_list_override;
 mod artboard_data_bind;
 #[path = "assets/audio_asset.rs"]
 mod audio_asset;
+mod audio_event;
 mod components;
 mod constraints;
 #[path = "data_bind/context/context_target_value.rs"]

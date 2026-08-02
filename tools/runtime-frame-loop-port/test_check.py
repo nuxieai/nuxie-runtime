@@ -3319,15 +3319,18 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                 trait AudioEventSeam {
                     fn selected();
                 }
-                impl AudioEventSeam for RecordingAudioEventSeam {
+                impl AudioEventSeam for PlaybackAudioEventSeam {
                     fn selected() {
                         *selection_count = selection_count.saturating_add(1);
                         *last_occurrence = Some(occurrence);
+                        self.playback.play(occurrence.event_local_index);
                     }
                 }
                 audio_event_selection_count: usize,
                 audio_event_last_occurrence: Option<AudioEventOccurrence>,
-                audio_event_seam: Rc::new(RecordingAudioEventSeam),
+                audio_event_seam: Rc::new(PlaybackAudioEventSeam {
+                    playback: artboard.audio_event_playback(),
+                }),
                 """,
                 """
                 fn notify_events_with_context_and_script_host() {

@@ -1845,7 +1845,8 @@ impl RuntimeArtboardDataBindSourceQueues {
                     queues.enqueue_numeric_source(index);
                     queues.push_numeric_sources.push(index);
                 }
-                RuntimeArtboardNumericSourceProperty::ShapeLength => {
+                RuntimeArtboardNumericSourceProperty::PollingDouble
+                | RuntimeArtboardNumericSourceProperty::ShapeLength => {
                     queues.persisting_numeric_sources.push(index);
                 }
             }
@@ -2303,6 +2304,7 @@ enum RuntimeArtboardConverterPropertyBindingUpdate {
 #[derive(Debug, Clone, Copy)]
 enum RuntimeArtboardNumericSourceProperty {
     DirectDouble,
+    PollingDouble,
     ShapeLength,
 }
 
@@ -3689,6 +3691,10 @@ pub(super) fn build_artboard_numeric_source_bindings(
     let shape_length_key = runtime_data_bind_property_key_for_name("Shape", "length");
     let parametric_width_key = runtime_data_bind_property_key_for_name("ParametricPath", "width");
     let parametric_height_key = runtime_data_bind_property_key_for_name("ParametricPath", "height");
+    let computed_content_width_key =
+        runtime_data_bind_property_key_for_name("ScrollConstraint", "computedContentWidth");
+    let computed_content_height_key =
+        runtime_data_bind_property_key_for_name("ScrollConstraint", "computedContentHeight");
 
     file.artboard_data_binds(artboard_index)
         .into_iter()
@@ -3719,6 +3725,12 @@ pub(super) fn build_artboard_numeric_source_bindings(
                         .contains(&Some(property_key)) =>
                 {
                     RuntimeArtboardNumericSourceProperty::DirectDouble
+                }
+                "ScrollConstraint"
+                    if [computed_content_width_key, computed_content_height_key]
+                        .contains(&Some(property_key)) =>
+                {
+                    RuntimeArtboardNumericSourceProperty::PollingDouble
                 }
                 _ => return None,
             };
@@ -7062,6 +7074,9 @@ impl ArtboardInstance {
             RuntimeArtboardNumericSourceProperty::ShapeLength => self
                 .runtime_graph()
                 .and_then(|graph| self.artboard_shape_length(target_local_id, graph)),
+            RuntimeArtboardNumericSourceProperty::PollingDouble => {
+                self.double_property(target_local_id, property_key)
+            }
         }
     }
 

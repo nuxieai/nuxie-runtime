@@ -3299,6 +3299,25 @@ impl ArtboardInstance {
         Ok(())
     }
 
+    #[doc(hidden)]
+    pub fn set_script_input_for_global_if_changed(
+        &mut self,
+        global_id: u32,
+        name: &str,
+        value: ScriptValue,
+    ) -> Result<bool, ScriptError> {
+        let handle = self
+            .script_instances_by_global
+            .get(&global_id)
+            .cloned()
+            .ok_or_else(|| ScriptError::new(format!("missing script instance {global_id}")))?;
+        if handle.borrow_mut().get_input(name)? == value {
+            return Ok(false);
+        }
+        self.set_script_input_for_global(global_id, name, value)?;
+        Ok(true)
+    }
+
     pub fn set_script_artboard_input_for_global(
         &mut self,
         global_id: u32,
@@ -6474,6 +6493,9 @@ impl ArtboardInstance {
         };
         if advance.size_changed {
             self.add_dirt(entry.local_id, ComponentDirt::PATH, false);
+        }
+        if advance.size_changed || (advance.layout_changed && !advance.keep_going) {
+            self.propagate_scripted_layout_size(entry.local_id);
         }
         if advance.layout_changed {
             // `LayoutComponent::applyInterpolation` writes `m_layout`, then
@@ -14978,6 +15000,314 @@ mod tests {
         };
         component.concrete = crate::components::RuntimeConcreteComponentState::for_type(type_name);
         component
+    }
+
+    struct ScriptedLayoutTestInstance {
+        measures: Rc<Cell<usize>>,
+        resizes: Rc<RefCell<Vec<(f32, f32)>>>,
+    }
+
+    impl ScriptInstance for ScriptedLayoutTestInstance {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(matches!(
+                method,
+                ScriptMethod::Measure | ScriptMethod::Resize
+            ))
+        }
+
+        fn call_method(
+            &mut self,
+            method: ScriptMethod,
+            args: &[ScriptValue],
+            _host: &mut dyn crate::ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            match method {
+                ScriptMethod::Measure => {
+                    self.measures.set(self.measures.get() + 1);
+                    Ok(ScriptValue::Vec2 { x: 200.0, y: 150.0 })
+                }
+                ScriptMethod::Resize => {
+                    if let Some(ScriptValue::Vec2 { x, y }) = args.first() {
+                        self.resizes.borrow_mut().push((*x, *y));
+                    }
+                    Ok(ScriptValue::Nil)
+                }
+                _ => Ok(ScriptValue::Nil),
+            }
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn scripted_layout_uses_its_parent_node_for_hydration_measure_and_resize() {
+        let root = synthetic_component_for_type(0, "Artboard");
+        let parent = synthetic_component_for_type(1, "LayoutComponent");
+        let scripted = synthetic_component_for_type(2, "ScriptedLayout");
+        let style = synthetic_component_for_type(3, "LayoutComponentStyle");
+        let mut instance =
+            synthetic_instance(vec![root, parent, scripted, style], vec![0, 1, 2, 3]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 1);
+        let style = instance.component_handle(3).expect("layout style");
+        instance
+            .component_mut(1)
+            .and_then(|component| component.concrete.layout.as_mut())
+            .expect("layout state")
+            .style = Some(style);
+        let measures = Rc::new(Cell::new(0));
+        let resizes = Rc::new(RefCell::new(Vec::new()));
+        instance.set_script_instance_for_global_with_implemented_methods(
+            2,
+            Box::new(ScriptedLayoutTestInstance {
+                measures: Rc::clone(&measures),
+                resizes: Rc::clone(&resizes),
+            }),
+            RuntimeScriptImplementedMethods::MEASURE | RuntimeScriptImplementedMethods::RESIZE,
+        );
+
+        assert_eq!(instance.scripted_layout_node(2), Some(1));
+        assert!(instance.did_hydrate_scripted_layout(2));
+        assert!(
+            instance
+                .component(2)
+                .expect("scripted layout component")
+                .dirt
+                .contains(ComponentDirt::PAINT)
+        );
+        assert!(
+            instance
+                .component(1)
+                .and_then(|component| component.concrete.layout.as_ref())
+                .is_some_and(|layout| layout.layout_node_is_dirty())
+        );
+        assert_eq!(
+            instance.measure_scripted_layout(2, Some(180.0), None),
+            (180.0, 150.0)
+        );
+        assert_eq!(measures.get(), 1);
+
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 320.0,
+                height: 240.0,
+            },
+            None,
+        );
+        assert_eq!(&*resizes.borrow(), &[(320.0, 240.0)]);
+
+        let layout = instance
+            .component(1)
+            .and_then(|component| component.concrete.layout.as_ref())
+            .expect("layout state");
+        layout.set_animation_style(2, 1, 1.0, None);
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 520.0,
+                height: 440.0,
+            },
+            None,
+        );
+        let entry = RuntimeAdvancingComponent {
+            local_id: 1,
+            object: instance.objects.object_handle(1).expect("layout object"),
+            component: instance.component_handle(1),
+            kind: AdvancingComponentKind::LayoutComponent,
+        };
+        assert!(instance.advance_layout_component_entry(entry, 0.5, true));
+        assert!(instance.advance_layout_component_entry(entry, 0.5, true));
+        assert!(!instance.advance_layout_component_entry(entry, 0.1, true));
+        assert_eq!(
+            &*resizes.borrow(),
+            &[
+                (320.0, 240.0),
+                (320.0, 240.0),
+                (420.0, 340.0),
+                (520.0, 440.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn scripted_layout_resize_requires_a_visible_styled_layout() {
+        let root = synthetic_component_for_type(0, "Artboard");
+        let parent = synthetic_component_for_type(1, "LayoutComponent");
+        let scripted = synthetic_component_for_type(2, "ScriptedLayout");
+        let style = synthetic_component_for_type(3, "LayoutComponentStyle");
+        let mut instance =
+            synthetic_instance(vec![root, parent, scripted, style], vec![0, 1, 2, 3]);
+        synthetic_link_parent(&mut instance, 1, 0);
+        synthetic_link_parent(&mut instance, 2, 1);
+        synthetic_link_parent(&mut instance, 3, 1);
+        let resizes = Rc::new(RefCell::new(Vec::new()));
+        instance.set_script_instance_for_global_with_implemented_methods(
+            2,
+            Box::new(ScriptedLayoutTestInstance {
+                measures: Rc::new(Cell::new(0)),
+                resizes: Rc::clone(&resizes),
+            }),
+            RuntimeScriptImplementedMethods::RESIZE,
+        );
+
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 80.0,
+            },
+            None,
+        );
+        assert!(
+            resizes.borrow().is_empty(),
+            "style-less layouts do not propagate"
+        );
+
+        let style = instance.component_handle(3).expect("layout style");
+        instance
+            .component_mut(1)
+            .expect("layout component")
+            .concrete
+            .layout
+            .as_mut()
+            .expect("layout state")
+            .style = Some(style);
+
+        let drawable_flags =
+            property_key_for_name("LayoutComponent", "drawableFlags").expect("drawable flags");
+        assert!(instance.set_uint_property(1, drawable_flags, 1));
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 150.0,
+                height: 120.0,
+            },
+            None,
+        );
+        assert!(
+            resizes.borrow().is_empty(),
+            "hidden drawable layouts do not propagate"
+        );
+
+        assert!(instance.set_uint_property(1, drawable_flags, 0));
+        let display =
+            property_key_for_name("LayoutComponentStyle", "displayValue").expect("display");
+        assert!(instance.set_uint_property(3, display, 1));
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 175.0,
+                height: 140.0,
+            },
+            None,
+        );
+        assert!(
+            resizes.borrow().is_empty(),
+            "display:none layouts do not propagate"
+        );
+
+        assert!(instance.set_uint_property(3, display, 0));
+        instance.component_mut(1).expect("layout component").dirt |= ComponentDirt::COLLAPSED;
+        instance.retain_runtime_layout_component_bounds(
+            1,
+            RuntimeLayoutBounds {
+                x: 0.0,
+                y: 0.0,
+                width: 200.0,
+                height: 160.0,
+            },
+            None,
+        );
+        assert!(
+            resizes.borrow().is_empty(),
+            "collapsed layouts do not propagate"
+        );
+    }
+
+    #[derive(Clone, Copy)]
+    enum ScriptedLayoutMeasureBehavior {
+        Missing,
+        Nil,
+        Error,
+    }
+
+    struct ScriptedLayoutMeasureInstance(ScriptedLayoutMeasureBehavior);
+
+    impl ScriptInstance for ScriptedLayoutMeasureInstance {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(method == ScriptMethod::Measure
+                && !matches!(self.0, ScriptedLayoutMeasureBehavior::Missing))
+        }
+
+        fn call_method(
+            &mut self,
+            method: ScriptMethod,
+            _args: &[ScriptValue],
+            _host: &mut dyn crate::ScriptHost,
+        ) -> Result<ScriptValue, ScriptError> {
+            assert_eq!(method, ScriptMethod::Measure);
+            match self.0 {
+                ScriptedLayoutMeasureBehavior::Missing => {
+                    panic!("a missing measure function must not be called")
+                }
+                ScriptedLayoutMeasureBehavior::Nil => Ok(ScriptValue::Nil),
+                ScriptedLayoutMeasureBehavior::Error => Err(ScriptError::new("measure failed")),
+            }
+        }
+
+        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
+            Ok(ScriptValue::Nil)
+        }
+
+        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn scripted_layout_measure_distinguishes_missing_from_invalid_callbacks() {
+        let measure = |behavior| {
+            let root = synthetic_component_for_type(0, "Artboard");
+            let parent = synthetic_component_for_type(1, "LayoutComponent");
+            let scripted = synthetic_component_for_type(2, "ScriptedLayout");
+            let mut instance = synthetic_instance(vec![root, parent, scripted], vec![0, 1, 2]);
+            synthetic_link_parent(&mut instance, 1, 0);
+            synthetic_link_parent(&mut instance, 2, 1);
+            instance.set_script_instance_for_global_with_implemented_methods(
+                2,
+                Box::new(ScriptedLayoutMeasureInstance(behavior)),
+                RuntimeScriptImplementedMethods::MEASURE,
+            );
+            instance.measure_scripted_layout(2, Some(180.0), None)
+        };
+
+        assert_eq!(measure(ScriptedLayoutMeasureBehavior::Missing), (0.0, 0.0));
+        assert_eq!(
+            measure(ScriptedLayoutMeasureBehavior::Nil),
+            (180.0, f32::MAX)
+        );
+        assert_eq!(
+            measure(ScriptedLayoutMeasureBehavior::Error),
+            (180.0, f32::MAX)
+        );
     }
 
     fn synthetic_typed_component(local_id: usize, type_name: &'static str) -> RuntimeComponent {

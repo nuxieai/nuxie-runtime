@@ -58,7 +58,8 @@ use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
     ScriptArtboard, ScriptCoreString, ScriptDataConverterMethod, ScriptDataConverterOptionalCall,
     ScriptError, ScriptHost, ScriptInstance, ScriptListenerActionMethod, ScriptListenerInvocation,
-    ScriptMethod, ScriptValue, ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
+    ScriptMethod, ScriptOptionalMethodResult, ScriptValue, ScriptViewModel,
+    ScriptingVm as RuntimeScriptingVm,
 };
 pub(crate) use renderer::RendererBindings;
 use view_model::{ScriptViewModelFrameContext, ScriptedContext, create_scripted_view_model};
@@ -1881,6 +1882,36 @@ impl ScriptInstance for LuaScriptInstance {
     ) -> std::result::Result<ScriptValue, ScriptError> {
         let value = self.call_method_value(method, args)?;
         script_value_from_lua(value).map_err(|error| self.script_error(error))
+    }
+
+    fn call_optional_method(
+        &mut self,
+        method: ScriptMethod,
+        args: &[ScriptValue],
+        _host: &mut dyn ScriptHost,
+    ) -> std::result::Result<ScriptOptionalMethodResult, ScriptError> {
+        self.reset_execution_budget();
+        let Some(table) = self.table.clone() else {
+            return Ok(ScriptOptionalMethodResult::Missing);
+        };
+        let value: Value = table
+            .get(method.as_str())
+            .map_err(|error| self.script_error(error))?;
+        let Value::Function(function) = value else {
+            return Ok(ScriptOptionalMethodResult::Missing);
+        };
+        let lua = table.lua();
+        let mut call_args = MultiValue::with_capacity(args.len() + 1);
+        call_args.push_back(Value::Table(table));
+        for arg in args {
+            call_args.push_back(script_value_to_lua(&lua, arg));
+        }
+        let returned: Value = function
+            .call(call_args)
+            .map_err(|error| self.script_error(error))?;
+        script_value_from_lua(returned)
+            .map(ScriptOptionalMethodResult::Returned)
+            .map_err(|error| self.script_error(error))
     }
 
     fn call_advance_truthy(

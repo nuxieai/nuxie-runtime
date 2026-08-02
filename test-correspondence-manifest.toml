@@ -11,14 +11,14 @@ test_case_count = 1316
 status_values = ["ported-differential", "ported-direct", "partial", "pending", "n-a"]
 
 [expected_status_counts]
-ported-differential = 4
+ported-differential = 5
 ported-direct = 37
 partial = 19
-pending = 86
+pending = 85
 n-a = 2
 
 [ratchet]
-max_pending = 86
+max_pending = 85
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -708,9 +708,9 @@ note = "The exhaustive FL-B/FL-C table identifies the listed names as fully cove
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_layout_test.cpp"
 test_case_count = 6
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-differential"
+evidence = ["crates/nuxie-scripting/tests/scripted_layout.rs", "crates/nuxie/tests/scripted_layout.rs::layout_grid_script_reacts_to_rows_and_columns_like_the_upstream_silver_scenario", "corpus.toml::script_layout_test"]
+note = "P2C directly ports the five Lua-call cases. The sixth case replays the exact upstream initial draw, 20 frames, Rows=8/Columns=7 mutation, and 20 further frames against pinned script_layout_grid.sriv; the comparison normalizes allocator resource IDs while retaining every frame, transform, path verb/point, fill rule, and paint value. The configured script_layout_test live C++/Rust golden remains an independent exact stream differential."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_listener_action_test.cpp"

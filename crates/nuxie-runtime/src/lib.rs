@@ -134,6 +134,7 @@ mod script_input_string;
 mod script_input_trigger;
 mod script_input_viewmodel_property;
 mod scripted_data_converter;
+mod scripted_layout;
 mod scripted_object;
 mod scripting;
 mod shapes;
@@ -252,10 +253,10 @@ pub use scripting::{
     ScriptListenerActionHydration, ScriptListenerActionMethod, ScriptListenerInputDefinition,
     ScriptListenerInputHydration, ScriptListenerInputKind, ScriptListenerInputSnapshot,
     ScriptListenerInputSnapshotValue, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptNode,
-    ScriptPaint, ScriptValue, ScriptViewModel, ScriptViewModelInputResolver,
-    ScriptViewModelProperty, ScriptedDrawableInputResult, ScriptedDrawablePointerHit,
-    ScriptedDrawablePointerResult, ScriptedStateMachineObjectKind, ScriptingVm,
-    bound_script_artboard_input, bound_script_input_value, bound_script_trigger_input,
+    ScriptOptionalMethodResult, ScriptPaint, ScriptValue, ScriptViewModel,
+    ScriptViewModelInputResolver, ScriptViewModelProperty, ScriptedDrawableInputResult,
+    ScriptedDrawablePointerHit, ScriptedDrawablePointerResult, ScriptedStateMachineObjectKind,
+    ScriptingVm, bound_script_artboard_input, bound_script_input_value, bound_script_trigger_input,
     script_node_for_artboard, script_view_model_from_owned, script_view_model_from_owned_context,
     script_view_model_from_owned_snapshot, script_view_models,
 };

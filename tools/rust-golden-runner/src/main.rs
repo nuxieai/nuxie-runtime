@@ -2868,6 +2868,7 @@ fn initialize_scripted_drawables_for_artboard(
                 .borrow_mut()
                 .defer_script_init(local_object.global_id);
         }
+        let mut hydration_succeeded = !defer_cold_hydration && !has_init;
         if !defer_cold_hydration {
             hydrate_script_inputs(
                 runtime,
@@ -2893,38 +2894,12 @@ fn initialize_scripted_drawables_for_artboard(
                     render_state
                         .borrow_mut()
                         .defer_script_init(local_object.global_id);
+                } else {
+                    hydration_succeeded = true;
                 }
             }
         } else if has_init {
             script_instance.invalidate_for_init_retry();
-        }
-        if local_object.type_name == Some("ScriptedLayout")
-            && script_instance
-                .has_method(ScriptMethod::Resize)
-                .context("failed to inspect script resize method")?
-        {
-            let artboard_object = runtime.object(artboard.global_id as usize);
-            let width = artboard_object
-                .and_then(|object| object.double_property("width"))
-                .unwrap_or(0.0);
-            let height = artboard_object
-                .and_then(|object| object.double_property("height"))
-                .unwrap_or(0.0);
-            script_instance
-                .call_method(
-                    ScriptMethod::Resize,
-                    &[ScriptValue::Vec2 {
-                        x: width,
-                        y: height,
-                    }],
-                    &mut host,
-                )
-                .with_context(|| {
-                    format!(
-                        "script resize failed for ScriptedLayout global {}",
-                        local_object.global_id
-                    )
-                })?;
         }
         if local_object.type_name == Some("ScriptedPathEffect") {
             instance.set_script_path_effect_instance_for_global(
@@ -2933,6 +2908,13 @@ fn initialize_scripted_drawables_for_artboard(
             );
         } else {
             instance.set_script_instance_for_global(local_object.global_id, script_instance);
+        }
+        if local_object.type_name == Some("ScriptedLayout") && hydration_succeeded {
+            // The runner hydrates the standalone VM table before transferring
+            // it into the Artboard occurrence. Replay the concrete C++ hook
+            // after attachment so ScriptedDrawable's paint/advance side and
+            // ScriptedLayout's parent-node dirt both reach live runtime state.
+            instance.did_hydrate_scripted_layout(local_object.local_id);
         }
     }
 
@@ -4517,6 +4499,9 @@ fn bind_scripted_drawable_context(
         )?;
         if local_object.type_name == Some("ScriptedPathEffect") {
             instance.did_hydrate_script_inputs_for_global(local_object.global_id);
+        }
+        if local_object.type_name == Some("ScriptedLayout") {
+            instance.did_hydrate_scripted_layout(local_object.local_id);
         }
         // C++'s `hydrateScriptInputs` calls user `init` only until it has
         // succeeded once. A plain root view-model bind therefore must not

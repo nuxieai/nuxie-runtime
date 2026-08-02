@@ -409,6 +409,7 @@ impl FileScriptRuntime {
         groups: &[ScriptMountGroup],
         factory: &mut dyn Factory,
         default_context_view_model: Option<nuxie_runtime::ScriptViewModel>,
+        root_view_model: Option<&RuntimeOwnedViewModelHandle>,
     ) -> std::result::Result<PreparedFileScriptMounts, nuxie_runtime::ScriptError> {
         let domain = render_factory_domain(factory);
         if let Some(ready) = self.ready.as_ref() {
@@ -418,7 +419,13 @@ impl FileScriptRuntime {
                 ));
             }
             return Ok(PreparedFileScriptMounts {
-                groups: instantiate_script_mounts(ready, groups, factory)?,
+                groups: instantiate_script_mounts(
+                    ready,
+                    runtime,
+                    groups,
+                    factory,
+                    root_view_model,
+                )?,
                 candidate: None,
             });
         }
@@ -443,7 +450,8 @@ impl FileScriptRuntime {
             let name = asset.string_property("name").unwrap_or_default();
             candidate.vm.register_audio_asset_identity(name, asset.id);
         }
-        let groups = instantiate_script_mounts(&candidate, groups, factory)?;
+        let groups =
+            instantiate_script_mounts(&candidate, runtime, groups, factory, root_view_model)?;
         Ok(PreparedFileScriptMounts {
             // Drop table handles before their candidate VM on a failed
             // topology validation.
@@ -474,6 +482,7 @@ impl FileScriptRuntime {
 #[derive(Debug, Clone, Copy)]
 enum ScriptMountTargetKind {
     Drawable,
+    Layout,
     DataConverter,
 }
 
@@ -482,6 +491,7 @@ impl ScriptMountTargetKind {
     fn label(self) -> &'static str {
         match self {
             Self::Drawable => "ScriptedDrawable",
+            Self::Layout => "ScriptedLayout",
             Self::DataConverter => "ScriptedDataConverter",
         }
     }
@@ -491,6 +501,7 @@ impl ScriptMountTargetKind {
 #[derive(Debug)]
 struct ScriptMountTarget {
     kind: ScriptMountTargetKind,
+    local_id: usize,
     global_id: u32,
     asset_ordinal: usize,
     asset_name: String,
@@ -555,8 +566,10 @@ fn render_factory_domain(factory: &mut dyn Factory) -> usize {
 #[cfg(feature = "scripting")]
 fn instantiate_script_mounts(
     ready: &ReadyFileScripts,
+    runtime: &RuntimeFile,
     groups: &[ScriptMountGroup],
     factory: &mut dyn Factory,
+    root_view_model: Option<&RuntimeOwnedViewModelHandle>,
 ) -> std::result::Result<Vec<PreparedScriptMountGroup>, nuxie_runtime::ScriptError> {
     let mut prepared = Vec::with_capacity(groups.len());
     for group in groups {
@@ -585,6 +598,15 @@ fn instantiate_script_mounts(
                         target.asset_name
                     ))
                 })?;
+            if matches!(target.kind, ScriptMountTargetKind::Layout) {
+                hydrate_prepared_layout_inputs(
+                    runtime,
+                    group.graph_global_id,
+                    target,
+                    script.as_mut(),
+                    root_view_model,
+                )?;
+            }
             if nuxie_runtime::scripted_object_inits(target.serialized_implemented_methods) {
                 // Pinned `ScriptedObject::tryLuaUserInit` resolves `init`
                 // exactly once and calls that exact value. A metatable may
@@ -622,6 +644,84 @@ fn instantiate_script_mounts(
         });
     }
     Ok(prepared)
+}
+
+#[cfg(feature = "scripting")]
+fn hydrate_prepared_layout_inputs(
+    runtime: &RuntimeFile,
+    graph_global_id: u32,
+    target: &ScriptMountTarget,
+    script: &mut dyn ScriptInstance,
+    root_view_model: Option<&RuntimeOwnedViewModelHandle>,
+) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+    for (name, value) in
+        resolved_layout_inputs(runtime, graph_global_id, target.local_id, root_view_model)?
+    {
+        script.set_input(&name, value)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "scripting")]
+fn resolved_layout_inputs(
+    runtime: &RuntimeFile,
+    graph_global_id: u32,
+    scripted_local_id: usize,
+    root_view_model: Option<&RuntimeOwnedViewModelHandle>,
+) -> std::result::Result<Vec<(String, ScriptValue)>, nuxie_runtime::ScriptError> {
+    let start = graph_global_id as usize;
+    let end = ((start + 1)..runtime.object_count())
+        .find(|global_id| {
+            runtime
+                .object(*global_id)
+                .is_some_and(|object| object.type_name == "Artboard")
+        })
+        .unwrap_or_else(|| runtime.object_count());
+    let mut values = Vec::new();
+    for global_id in start..end {
+        let Some(input) = runtime.object(global_id) else {
+            continue;
+        };
+        if !input.type_name.starts_with("ScriptInput")
+            || input.uint_property("parentId") != Some(scripted_local_id as u64)
+        {
+            continue;
+        }
+        let Some(name) = input.string_property("name") else {
+            continue;
+        };
+        let bound = root_view_model
+            .map(|root| nuxie_runtime::bound_script_input_value(runtime, &root.borrow(), input))
+            .transpose()?
+            .flatten();
+        let value = bound.or_else(|| default_script_input_value(input));
+        if let Some(value) = value {
+            values.push((name.to_owned(), value));
+        }
+    }
+    Ok(values)
+}
+
+#[cfg(feature = "scripting")]
+fn default_script_input_value(input: &nuxie_binary::RuntimeObject) -> Option<ScriptValue> {
+    match input.type_name {
+        "ScriptInputBoolean" => Some(ScriptValue::Bool(
+            input.bool_property("propertyValue").unwrap_or(false),
+        )),
+        "ScriptInputColor" => Some(ScriptValue::Color(
+            input.color_property("propertyValue").unwrap_or(0),
+        )),
+        "ScriptInputNumber" => Some(ScriptValue::Number(f64::from(
+            input.double_property("propertyValue").unwrap_or(0.0),
+        ))),
+        "ScriptInputString" => Some(ScriptValue::String(
+            input
+                .string_property("propertyValue")
+                .unwrap_or_default()
+                .to_owned(),
+        )),
+        _ => None,
+    }
 }
 
 #[cfg(feature = "scripting")]
@@ -2687,6 +2787,7 @@ fn script_mount_target(
     }
     Ok(ScriptMountTarget {
         kind,
+        local_id: 0,
         global_id: object.id,
         asset_ordinal: ordinal,
         asset_name: asset.name.clone(),
@@ -2720,13 +2821,14 @@ fn script_mount_group(
                 ))
             })?;
         if !instance.has_script_instance_for_global(component.global_id) {
-            targets.push(script_mount_target(
-                runtime,
-                scripts,
-                object,
-                ScriptMountTargetKind::Drawable,
-                &path,
-            )?);
+            let kind = if component.type_name == "ScriptedLayout" {
+                ScriptMountTargetKind::Layout
+            } else {
+                ScriptMountTargetKind::Drawable
+            };
+            let mut target = script_mount_target(runtime, scripts, object, kind, &path)?;
+            target.local_id = component.local_id;
+            targets.push(target);
         }
     }
     for global_id in instance.scripted_data_converter_global_ids() {
@@ -2857,6 +2959,14 @@ fn attach_prepared_script_mounts(
                     serialized_implemented_methods,
                 );
             }
+            ScriptMountTargetKind::Layout => {
+                instance.set_script_instance_for_global_with_implemented_methods(
+                    global_id,
+                    script,
+                    serialized_implemented_methods,
+                );
+                instance.did_hydrate_scripted_layout_for_global(global_id);
+            }
             ScriptMountTargetKind::DataConverter => {
                 instance.set_scripted_data_converter_instance_for_global(global_id, script);
             }
@@ -2945,6 +3055,7 @@ fn mount_scripted_artboard_tree(
         root_view_model.and_then(|view_model| {
             nuxie_runtime::script_view_model_from_owned(&file.runtime, view_model.handle())
         }),
+        root_view_model.map(ViewModelInstance::handle),
     )?;
     validate_prepared_script_mount_topology(instance, &prepared.groups)?;
 
@@ -3020,6 +3131,23 @@ fn advance_scripted_artboard_frame_with_factory(
     root_view_model: Option<&ViewModelInstance>,
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
     let _ = mount_scripted_artboard_tree(file, root_graph, instance, factory, root_view_model)?;
+    if let Some(root_view_model) = root_view_model {
+        rehydrate_bound_layout_inputs(file, root_graph, instance, root_view_model.handle())?;
+        let mut visitor = |_: usize, graph_global_id: u32, nested: &mut RuntimeArtboardInstance| {
+            let graph = file
+                .graph
+                .artboards
+                .iter()
+                .find(|graph| graph.global_id == graph_global_id)
+                .ok_or_else(|| {
+                    nuxie_runtime::ScriptError::new(format!(
+                        "nested scripted layout graph {graph_global_id} is unavailable"
+                    ))
+                })?;
+            rehydrate_bound_layout_inputs(file, graph, nested, root_view_model.handle())
+        };
+        instance.try_visit_artboard_tree_instances_mut(&mut visitor)?;
+    }
     for machine in state_machines.iter_mut() {
         initialize_state_machine_scripted_objects(
             file,
@@ -3055,6 +3183,38 @@ fn advance_scripted_artboard_frame_with_factory(
     };
     verify_scripted_artboard_tree_attached(file, root_graph, instance)?;
     Ok(changed)
+}
+
+#[cfg(feature = "scripting")]
+fn rehydrate_bound_layout_inputs(
+    file: &File,
+    graph: &ArtboardGraph,
+    instance: &mut RuntimeArtboardInstance,
+    root_view_model: &RuntimeOwnedViewModelHandle,
+) -> std::result::Result<(), nuxie_runtime::ScriptError> {
+    for component in graph
+        .components
+        .iter()
+        .filter(|component| component.type_name == "ScriptedLayout")
+    {
+        let mut hydrated = false;
+        for (name, value) in resolved_layout_inputs(
+            &file.runtime,
+            graph.global_id,
+            component.local_id,
+            Some(root_view_model),
+        )? {
+            hydrated |= instance.set_script_input_for_global_if_changed(
+                component.global_id,
+                &name,
+                value,
+            )?;
+        }
+        if hydrated {
+            instance.did_hydrate_scripted_layout(component.local_id);
+        }
+    }
+    Ok(())
 }
 
 /// Imported Rive file plus its runtime graph projection.

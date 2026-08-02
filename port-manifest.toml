@@ -1946,8 +1946,8 @@ note = "Consolidated Rust port for scripted."
 [[file]]
 upstream = "src/scripted/scripted_layout.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/scripting.rs"
-note = "Consolidated Rust port for scripted."
+rust_module = "crates/nuxie-runtime/src/scripted_layout.rs"
+note = "P2C scripted-layout surface: parent node access/dirt, Lua measure and resize callbacks, and settled layout-size propagation."
 
 [[file]]
 upstream = "src/scripted/scripted_object.cpp"

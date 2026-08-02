@@ -14,6 +14,7 @@ impl RuntimeScriptImplementedMethods {
     pub(crate) const LEGACY_ALL: Self = Self(Self::METHOD_MASK);
 
     pub(crate) const ADVANCE: u32 = 1 << 0;
+    pub(crate) const MEASURE: u32 = 1 << 2;
     pub(crate) const POINTER_DOWN: u32 = 1 << 3;
     pub(crate) const POINTER_MOVE: u32 = 1 << 4;
     pub(crate) const POINTER_UP: u32 = 1 << 5;
@@ -22,6 +23,7 @@ impl RuntimeScriptImplementedMethods {
     pub(crate) const INIT: u32 = 1 << 9;
     pub(crate) const DATA_CONVERT: u32 = 1 << 10;
     pub(crate) const DATA_REVERSE_CONVERT: u32 = 1 << 11;
+    pub(crate) const RESIZE: u32 = 1 << 12;
     pub(crate) const LISTENER_PERFORM: u32 = 1 << 13;
     pub(crate) const LISTENER_PERFORM_ACTION: u32 = 1 << 14;
     pub(crate) const KEYBOARD: u32 = 1 << 16;
@@ -40,6 +42,14 @@ impl RuntimeScriptImplementedMethods {
 
     pub(crate) fn advances(self) -> bool {
         self.0 & Self::ADVANCE != 0
+    }
+
+    pub(crate) fn measures(self) -> bool {
+        self.0 & Self::MEASURE != 0
+    }
+
+    pub(crate) fn resizes(self) -> bool {
+        self.0 & Self::RESIZE != 0
     }
 
     pub(crate) fn listens_to_pointer_events(self) -> bool {
@@ -153,6 +163,8 @@ mod tests {
         let legacy = RuntimeScriptImplementedMethods::from_serialized(u32::MAX);
         assert_eq!(legacy, RuntimeScriptImplementedMethods::LEGACY_ALL);
         assert!(legacy.advances());
+        assert!(legacy.measures());
+        assert!(legacy.resizes());
         assert!(legacy.listens_to_pointer_events());
         assert!(legacy.wants_pointer_down());
         assert!(legacy.wants_pointer_move());
@@ -173,6 +185,8 @@ mod tests {
         assert!(convert.data_converts());
         assert!(!convert.data_reverse_converts());
         assert!(!convert.advances());
+        assert!(!convert.measures());
+        assert!(!convert.resizes());
         assert!(!convert.inits());
 
         let reverse = RuntimeScriptImplementedMethods::from_serialized(

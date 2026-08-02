@@ -663,7 +663,7 @@ note = "P2F1/P2F3: exact headless frame clock, scheduling/clipping, manual PCM p
 upstream = "src/audio/audio_reader.cpp"
 status = "ported"
 rust_module = "crates/nuxie-audio/src/source.rs"
-note = "P2F1/D18: independent Symphonia-backed readers with channel conversion and linear resampling; PCM bytes are never pinned and resampled frame counts permit an absolute two-frame differential tolerance."
+note = "P2F1/D17: independent Symphonia-backed readers with channel conversion and linear resampling; PCM bytes are never pinned and resampled frame counts permit an absolute two-frame differential tolerance."
 
 [[file]]
 upstream = "src/audio/audio_sound.cpp"
@@ -675,7 +675,7 @@ note = "P2F1: retained sound controls, cursor, volume, completion/disposal, fade
 upstream = "src/audio/audio_source.cpp"
 status = "ported"
 rust_module = "crates/nuxie-audio/src/source.rs"
-note = "P2F1/D18: owned encoded WAV/MP3/FLAC and buffered f32 sources, lazy Symphonia PCM decode, metadata/duration, and recognized-but-unwired Vorbis."
+note = "P2F1/D17: owned encoded WAV/MP3/FLAC and buffered f32 sources, lazy Symphonia PCM decode, metadata/duration, and recognized-but-unwired Vorbis."
 
 [[file]]
 upstream = "src/audio_event.cpp"

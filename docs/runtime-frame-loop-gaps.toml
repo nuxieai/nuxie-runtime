@@ -29,7 +29,7 @@ ceiling = "profiler-capture-backend"
 approved = "User-approved P1-m decomposition question 4: replace the pinned MicroProfile wrapper with a pluggable pure-Rust capture seam and no C++ FFI, while keeping RiveProfile records, serialization, lifecycle, and runtime hooks faithful."
 
 [[decision]]
-id = "D18"
+id = "D17"
 source = "docs/parity-gap-register.md#d--deliberate-divergence-register-declare-dont-fix"
 rule = "FLR-22"
 ceiling = "decoded-pcm-resampler"

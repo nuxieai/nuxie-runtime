@@ -146,8 +146,12 @@ worker may act on that category.
 - 2026-08-02: **S4 cycle-scoped authorization (Levi).** All 30 PORT rows of
   `docs/sync/triage-2026-08-02-e0d4913f.md` approved as listed (including the
   partial-port splits S4-27, S4-43, S4-47 and the reviewed waves S4-23,
-  S4-38, S4-42). Luau/luaur decision: engine stays pinned (D4 WATCH,
-  staleness advances); upstream Luau 0.730-0.732 revs remain WATCH rows.
+  S4-38, S4-42). Luau/luaur decision (firmed by Levi 2026-08-02): the engine pin is
+  FROZEN until the parity closeout completes — "if it works today, don't
+  break it." Upstream Luau 0.730-0.732 revs stay WATCH rows with staleness
+  counters, but no sync cycle re-opens the engine question before the
+  closeout scorecard is green; skew evidence in scripted differentials is
+  the only early-reopen trigger.
   Ports land after the MR integrator trains, in upstream order, one commit
   per upstream change; pin advances to `4ac7b327` on a green full ratchet.
 - Clean manual cycles completed: 2

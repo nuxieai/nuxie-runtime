@@ -51,6 +51,10 @@ if with_scripting then
     table.insert(include_dirs, rive_runtime .. '/decoders/include')
     if luau then
         table.insert(include_dirs, luau .. '/VM/include')
+        table.insert(include_dirs, luau .. '/Compiler/include')
+        table.insert(include_dirs, luau .. '/Bytecode/include')
+        table.insert(include_dirs, luau .. '/Ast/include')
+        table.insert(include_dirs, luau .. '/Common/include')
     end
     if libhydrogen then
         table.insert(include_dirs, libhydrogen)
@@ -76,6 +80,15 @@ files({
     '../testing_random_provider.cpp',
     rive_runtime .. '/utils/no_op_factory.cpp',
 })
+if with_scripting and luau then
+    files({
+        luau .. '/Compiler/src/**.cpp',
+        luau .. '/Bytecode/src/**.cpp',
+        luau .. '/Ast/src/**.cpp',
+        luau .. '/Common/src/**.cpp',
+    })
+    exceptionhandling('On')
+end
 
 libdirs({
     -- `build.sh` creates and verifies exactly one dedicated archive with the

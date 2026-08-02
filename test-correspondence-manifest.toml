@@ -12,13 +12,13 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 
 [expected_status_counts]
 ported-differential = 4
-ported-direct = 33
+ported-direct = 34
 partial = 17
-pending = 92
+pending = 91
 n-a = 2
 
 [ratchet]
-max_pending = 92
+max_pending = 91
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -736,9 +736,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_mesh_test.cpp"
 test_case_count = 2
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/tests/wrapper_bindings.rs::{upstream_mesh_construction_case_is_available,upstream_image_sampler_construction_case_is_available}"]
+note = "P2B ports both inline Luau cases without weakening their userdata assertions; supplemental wrapper and renderer tests cover sampler vocabulary, u16 bounds, lazy factory allocation, buffer invalidation/reuse, and drawImageMesh validation."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_paint_test.cpp"

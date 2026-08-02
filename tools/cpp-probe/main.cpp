@@ -316,7 +316,11 @@ size_t randomProviderTotalCalls();
 #include "rive/transform_component.hpp"
 #include "rive/world_transform_component.hpp"
 #ifdef WITH_RIVE_SCRIPTING
+#include "luacode.h"
+#include "rive/assets/blob_asset.hpp"
+#include "rive/assets/script_asset.hpp"
 #include "rive/lua/rive_lua_libs.hpp"
+#include "rive/scripted/scripted_object.hpp"
 #endif
 #include "utils/no_op_factory.hpp"
 #include "utils/no_op_renderer.hpp"
@@ -354,6 +358,37 @@ public:
         return true;
     }
 };
+
+#ifdef WITH_RIVE_SCRIPTING
+class BlobProbeScriptedObject final : public rive::ScriptedObject
+{
+    bool addScriptedDirt(rive::ComponentDirt, bool = false) override
+    {
+        return true;
+    }
+    rive::ScriptProtocol scriptProtocol() override
+    {
+        return rive::ScriptProtocol::utility;
+    }
+    void markNeedsUpdate() override {}
+    rive::Component* component() override { return nullptr; }
+
+    rive::rcp<rive::ScriptAsset> m_scriptAsset;
+
+public:
+    void setFile(rive::File* file)
+    {
+        m_scriptAsset = rive::make_rcp<rive::ScriptAsset>();
+        m_scriptAsset->file(file);
+        setAsset(m_scriptAsset);
+    }
+
+    uint32_t assetId() override
+    {
+        return m_scriptAsset ? m_scriptAsset->assetId() : 0;
+    }
+};
+#endif
 
 struct RuntimeDoubleMutation
 {
@@ -1272,6 +1307,101 @@ rive::rcp<rive::File> open_file(const char* path,
         bytes, factory, result, nullptr, scripting_vm.get());
 #else
     return rive::File::import(bytes, factory, result);
+#endif
+}
+
+void write_positive_blob_lookup(std::ostream& out)
+{
+#ifdef WITH_RIVE_SCRIPTING
+    static rive::NoOpFactory factory;
+    auto scriptingContext =
+        std::make_unique<rive::CPPRuntimeScriptingContext>(&factory);
+    scriptingContext->setRenderContext(&factory);
+    auto vm = rive::make_rcp<rive::ScriptingVM>(std::move(scriptingContext));
+    auto file = rive::make_rcp<rive::File>(
+        &factory, rive::rcp<rive::FileAssetLoader>());
+    file->setScriptingVM(vm);
+
+    auto emptyBlob = rive::make_rcp<rive::BlobAsset>();
+    emptyBlob->name("payload.bin");
+    file->m_fileAssets.push_back(emptyBlob);
+
+    auto blob = rive::make_rcp<rive::BlobAsset>();
+    blob->name("payload.bin");
+    uint8_t payload[] = {0, 1, 2, 0xff};
+    rive::SimpleArray<uint8_t> bytes(payload, sizeof(payload));
+    if (!blob->decode(bytes, &factory))
+    {
+        throw std::runtime_error("positive Blob oracle failed to decode payload");
+    }
+    file->m_fileAssets.push_back(blob);
+
+    BlobProbeScriptedObject scriptedObject;
+    scriptedObject.setFile(file.get());
+
+    constexpr const char source[] = R"(
+return function(context)
+    local blob = context:blob("payload.bin")
+    assert(blob ~= nil)
+    local first = blob.data
+    buffer.writeu8(first, 0, 99)
+    local second = blob.data
+    return blob.name,
+        blob.size,
+        buffer.len(first),
+        buffer.readu8(second, 0),
+        buffer.readu8(second, 3),
+        context:blob("missing") == nil
+end
+)";
+    size_t bytecodeSize = 0;
+    char* bytecode =
+        luau_compile(source, sizeof(source) - 1, nullptr, &bytecodeSize);
+    if (bytecode == nullptr)
+    {
+        throw std::runtime_error("positive Blob oracle Luau compile failed");
+    }
+
+    lua_State* state = vm->state();
+    int status = luau_load(state,
+                           "positive_blob_lookup",
+                           bytecode,
+                           bytecodeSize,
+                           0);
+    free(bytecode);
+    if (status != LUA_OK)
+    {
+        std::string error = lua_tostring(state, -1);
+        lua_pop(state, 1);
+        throw std::runtime_error("positive Blob oracle load failed: " + error);
+    }
+    if (lua_pcall(state, 0, 1, 0) != LUA_OK)
+    {
+        std::string error = lua_tostring(state, -1);
+        lua_pop(state, 1);
+        throw std::runtime_error("positive Blob oracle factory failed: " +
+                                 error);
+    }
+
+    rive::lua_newrive<rive::ScriptedContext>(state, &scriptedObject);
+    if (lua_pcall(state, 1, 6, 0) != LUA_OK)
+    {
+        std::string error = lua_tostring(state, -1);
+        lua_pop(state, 1);
+        throw std::runtime_error("positive Blob oracle call failed: " + error);
+    }
+
+    out << lua_tostring(state, -6) << '\t'
+        << static_cast<uint64_t>(lua_tonumber(state, -5)) << '\t'
+        << static_cast<uint64_t>(lua_tointeger(state, -4)) << '\t'
+        << static_cast<uint64_t>(lua_tointeger(state, -3)) << '\t'
+        << static_cast<uint64_t>(lua_tointeger(state, -2)) << '\t'
+        << (lua_toboolean(state, -1) ? "true" : "false") << '\n';
+    lua_pop(state, 6);
+#else
+    (void)out;
+    throw std::runtime_error(
+        "--blob-lookup-positive requires the scripted C++ probe");
 #endif
 }
 
@@ -17412,6 +17542,7 @@ int main(int argc, const char* argv[])
     bool stateMachineDefinitionNullHoleSample = false;
     bool f14BinaryOracle = false;
     bool f12ProfilerOracle = false;
+    bool blobLookupPositive = false;
     const char* rawTextRegularFont = nullptr;
     const char* rawTextEmojiFont = nullptr;
     const char* rawTextRasterFont = nullptr;
@@ -17423,6 +17554,11 @@ int main(int argc, const char* argv[])
         {
             std::cout << PROBE_SOURCE_FINGERPRINT << '\n';
             return 0;
+        }
+        if (is_arg(argv[i], "--blob-lookup-positive"))
+        {
+            blobLookupPositive = true;
+            continue;
         }
         if (is_arg(argv[i], "--raw-text-probe"))
         {
@@ -21240,6 +21376,20 @@ int main(int argc, const char* argv[])
     {
         write_state_machine_definition_null_hole_sample(std::cout);
         return 0;
+    }
+
+    if (blobLookupPositive)
+    {
+        try
+        {
+            write_positive_blob_lookup(std::cout);
+            return 0;
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << error.what() << "\n";
+            return 1;
+        }
     }
 
     if (rawTextRegularFont != nullptr)

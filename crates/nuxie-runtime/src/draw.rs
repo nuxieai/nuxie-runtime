@@ -9826,10 +9826,15 @@ impl RuntimeTextDrawOwner {
     }
 
     fn retained_frame(&self) -> Result<RuntimeCachedTextShapePaints> {
-        assert!(
-            !self.dirty.get(),
-            "Text render styles were not rebuilt during component update"
-        );
+        // Pending dirt is legal here: setters running between the last
+        // advance and this draw (state-machine pointer listeners, data-bind
+        // writes) only publish dirt in C++ (`TextValueRun::textChanged` ->
+        // `Text::markShapeDirty` -> `addDirt`, `text_value_run.cpp:11-14`,
+        // `text.cpp:951-971`); `Text::buildRenderStyles` runs solely in the
+        // next update pass, and `Text::draw` renders whatever
+        // `m_drawCommands` the previous update built (`text.cpp:845-875`).
+        // Draw therefore consumes the stale retained frame and the dirt
+        // survives for the next component update.
         self.retained
             .borrow()
             .as_ref()
@@ -26014,6 +26019,102 @@ mod tests {
         assert!(
             !stream.contains("makeEmptyRenderPath"),
             "paint-only TextStylePaint dirt must retain unchanged glyph paths: {stream}"
+        );
+    }
+
+    #[test]
+    fn setter_dirt_between_update_and_draw_renders_the_stale_retained_text_frame() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
+        let runtime = read_runtime_file(bytes).expect("text style fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("text style graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let run_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "TextValueRun")
+            .expect("fixture has TextValueRun")
+            .local_id;
+        let text_key = property_key_for_name("TextValueRun", "text").expect("TextValueRun.text");
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        instance.update_pass();
+
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("initial retained text draws");
+        // A second settled draw replays from the warm backend without the
+        // one-time makeRenderPaint/makeEmptyRenderPath creation traffic; it
+        // is the baseline a stale replay must match exactly.
+        factory.clear();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("warm retained text draws");
+        let settled_stream = factory.stream();
+
+        // An embedder can run setters between advances -- state-machine
+        // pointer listeners and data-bind writes land exactly here. C++ only
+        // publishes dirt (`TextValueRun::textChanged` ->
+        // `Text::markShapeDirty` -> `addDirt`, `text_value_run.cpp:11-14`,
+        // `text.cpp:951-971`) and `Text::draw` renders the `m_drawCommands`
+        // the previous update built (`text.cpp:845-875`).
+        assert!(instance.set_string_property(run_local, text_key, b"changed".to_vec()));
+
+        factory.clear();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("pending text dirt draws the stale retained frame");
+        assert_eq!(
+            factory.stream(),
+            settled_stream,
+            "a draw before the next update must replay the previously built render styles"
+        );
+
+        instance.update_pass();
+        factory.clear();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("the next update rebuilds the retained frame");
+        assert_ne!(
+            factory.stream(),
+            settled_stream,
+            "the update pass after the write must rebuild the glyph paths"
         );
     }
 

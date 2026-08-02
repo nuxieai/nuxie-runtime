@@ -52,6 +52,43 @@ pre-fix revision `93ed556b` (read-fonts 0.41.0): both panic at the identical
 `glyf.rs:244` site; post-upgrade all three targets execute them cleanly, and
 the pinned C++ golden runner renders both with empty outlines (exit 0).
 
+## FIXED: retained-text assertion PANIC when setter dirt lands between advance and draw
+
+`fuzz_pointer` finding (first seen on CI run 30750657425, a branch that only
+touched manifest tooling — the crash is input-dependent, not branch-dependent).
+Replaying pointer events after an advance and then drawing panicked at
+`crates/nuxie-runtime/src/draw.rs` `RuntimeTextDrawOwner::retained_frame`:
+"Text render styles were not rebuilt during component update". A state-machine
+pointer listener / data-bind write runs a property setter
+(`ArtboardInstance::set_string_property` et al.) whose
+`mark_text_changed_for_local` marks the Text's retained owner dirty; nothing
+rebuilds before the harness's next draw, and the FL-E5 (`5522ef85`) migration
+assertion aborted.
+
+The pinned runtime never asserts here: `TextValueRun::textChanged` ->
+`Text::markShapeDirty` only publishes dirt (`text_value_run.cpp:11-14`,
+`text.cpp:951-971`), `Text::buildRenderStyles` runs solely in the next update
+pass, and `Text::draw` renders whatever `m_drawCommands` the previous update
+built (`text.cpp:845-875`). FIX: `retained_frame` returns the stale retained
+frame and the pending dirt survives for the next component update; the
+scheduling is unchanged. Pinned by the unit test
+`setter_dirt_between_update_and_draw_renders_the_stale_retained_text_frame`
+(`crates/nuxie-runtime/src/draw.rs`), which asserts the stale replay is
+byte-identical to the settled stream and that the next update rebuilds.
+
+Reproducer (replayed by `make fuzz-regressions` under `fuzz_pointer/`):
+
+- `fuzz_pointer-panic-text-render-styles-stale-draw.riv` (808,740 bytes,
+  SHA-256
+  `a8fab1dcda3f9723d6fe0d13faac34ddac7d5b795e4997f30d7fdc6938e9bfb6`) —
+  `cargo fuzz tmin` minimization of the local libFuzzer artifact
+  `crash-220ae79e6f1fe140be215c65da4b72eecf0a3f39` (833,950 bytes, SHA-256
+  `30f3724ddde8e40837296b6e20405c71bfa5136a09df1562adf1133986a87d8f`), a
+  mutation of the `data_binding_test.riv` seed. The CI artifact
+  (`crash-b662aecc0aa586b7221b12c9e1423f32c572a97c`, one InsertByte from the
+  same seed) was not uploaded by the workflow; the local find crashes at the
+  identical assertion site.
+
 ## FIXED: unbounded chain-walk HANGs on malformed input (not panics)
 
 One finding class, several reachable sites. In every case `read_runtime_file`

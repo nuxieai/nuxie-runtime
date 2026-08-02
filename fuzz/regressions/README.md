@@ -136,6 +136,20 @@ DELIBERATE divergence: where C++ hangs, we terminate the walk gracefully
 (treated as no-ancestor / no-rule). It is unreachable on any valid file, so
 golden-compare is unchanged (263/584). See the code comments at each guard site.
 
+RECURRENCE (2026-08-02): the FL-E5 landing (`52411269`) ported
+`Node::markLayoutNodeDirty`'s layout-parent walk into
+`crates/nuxie-runtime/src/layout/layout_node_provider.rs`
+`mark_layout_node_dirty` without the visited-id guard. A local timed
+`make fuzz-smoke` mutation run rediscovered the class within 20s: a
+`parentId` cycle hangs the walk, reached from
+`ArtboardInstance::set_string_property` ->
+`text_owner::mark_shape_dirty_with_layout` during the data-bind advance.
+Fixed with the same visited-set idiom. Reproducer (replayed by
+`make fuzz-regressions` under `fuzz_runtime/`):
+`fuzz_runtime-hang-layout-node-provider-parent-cycle.riv` (854,113 bytes,
+exact libFuzzer artifact `timeout-203a89819bfe1088eba52793113d446af9225546`,
+SHA-256 `bbc6fcb8047af24df147def96e70c334ae6f964db90cf6a1247e8a8e30f1691a`).
+
 RECURRENCE (2026-07-31): the FL-E3 landing (`93ed556b`) re-ported
 `Path::onAddedClean`'s shape-parent walk into
 `crates/nuxie-runtime/src/artboard.rs`

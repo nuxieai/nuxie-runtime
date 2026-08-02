@@ -134,6 +134,7 @@ mod script_input_string;
 mod script_input_trigger;
 mod script_input_viewmodel_property;
 mod scripted_data_converter;
+mod scripted_interpolator;
 mod scripted_layout;
 mod scripted_object;
 mod scripting;
@@ -245,18 +246,22 @@ pub use script_input_viewmodel_property::{
 pub use scripted_data_converter::{
     RuntimeScriptedDataConverterDataBindSnapshot, RuntimeScriptedDataConverterOccurrenceSnapshot,
 };
+pub use scripted_interpolator::{
+    RuntimeScriptedInterpolatorDiagnostic, RuntimeScriptedInterpolatorFactory,
+};
 pub use scripting::{
     NoopScriptHost, ScriptAnimation, ScriptAnimationTime, ScriptArtboard,
     ScriptArtboardDataContext, ScriptArtboardParentContext, ScriptArtboardResolver,
     ScriptCoreString, ScriptDataConverterMethod, ScriptDataConverterOptionalCall, ScriptError,
-    ScriptHost, ScriptImage, ScriptInstance, ScriptListenerActionDefinition,
-    ScriptListenerActionHydration, ScriptListenerActionMethod, ScriptListenerInputDefinition,
-    ScriptListenerInputHydration, ScriptListenerInputKind, ScriptListenerInputSnapshot,
-    ScriptListenerInputSnapshotValue, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptNode,
-    ScriptOptionalMethodResult, ScriptPaint, ScriptValue, ScriptViewModel,
-    ScriptViewModelInputResolver, ScriptViewModelProperty, ScriptedDrawableInputResult,
-    ScriptedDrawablePointerHit, ScriptedDrawablePointerResult, ScriptedStateMachineObjectKind,
-    ScriptingVm, bound_script_artboard_input, bound_script_input_value, bound_script_trigger_input,
+    ScriptHost, ScriptImage, ScriptInstance, ScriptInterpolatorMethod,
+    ScriptListenerActionDefinition, ScriptListenerActionHydration, ScriptListenerActionMethod,
+    ScriptListenerInputDefinition, ScriptListenerInputHydration, ScriptListenerInputKind,
+    ScriptListenerInputSnapshot, ScriptListenerInputSnapshotValue, ScriptMethod, ScriptModule,
+    ScriptModuleFailure, ScriptNode, ScriptOptionalMethodResult, ScriptOptionalNumberResult,
+    ScriptPaint, ScriptValue, ScriptViewModel, ScriptViewModelInputResolver,
+    ScriptViewModelProperty, ScriptedDrawableInputResult, ScriptedDrawablePointerHit,
+    ScriptedDrawablePointerResult, ScriptedStateMachineObjectKind, ScriptingVm,
+    bound_script_artboard_input, bound_script_input_value, bound_script_trigger_input,
     script_node_for_artboard, script_view_model_from_owned, script_view_model_from_owned_context,
     script_view_model_from_owned_snapshot, script_view_models,
 };

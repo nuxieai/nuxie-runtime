@@ -7,13 +7,16 @@ use crate::draw::color_lerp;
 use crate::properties::{
     artboard_index_for_graph, mix_value, solid_color_value_property_key, transform_property_for_key,
 };
+use crate::scripted_interpolator::RuntimeScriptedInterpolatorState;
 use crate::{ArtboardInstance, InstanceSlot, StateMachineReportedEvent, TransformProperty};
+use crate::{RuntimeScriptedInterpolatorDiagnostic, ScriptInterpolatorMethod};
 use nuxie_binary::{RuntimeFile, RuntimeImportStatus, RuntimeObject};
 use nuxie_graph::ArtboardGraph;
 use nuxie_schema::{
     CoreRegistryFieldKind, core_registry_field_kind_by_property_key, definition_by_type_key,
     is_callback_property_key, object_supports_property,
 };
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -28,6 +31,9 @@ pub(crate) enum RuntimeKeyFrameDataBindEnrollment {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum RuntimeInterpolator {
+    Scripted {
+        global_id: u32,
+    },
     CubicEase {
         x1: f32,
         y1: f32,
@@ -50,6 +56,9 @@ pub(crate) enum RuntimeInterpolator {
 impl RuntimeInterpolator {
     pub(crate) fn from_object(object: &RuntimeObject) -> Option<Self> {
         match object.type_name {
+            "ScriptedInterpolator" => Some(Self::Scripted {
+                global_id: object.id,
+            }),
             "CubicEaseInterpolator" => Some(Self::CubicEase {
                 x1: object.double_property("x1").unwrap_or(0.42),
                 y1: object.double_property("y1").unwrap_or(0.0),
@@ -73,6 +82,7 @@ impl RuntimeInterpolator {
 
     pub(crate) fn transform_value(self, value_from: f32, value_to: f32, factor: f32) -> f32 {
         match self {
+            Self::Scripted { .. } => value_from + (value_to - value_from) * factor,
             Self::CubicValue { x1, y1, x2, y2 } => {
                 let t = cubic_interpolator_get_t(factor, x1, x2);
                 cubic_interpolator_calc_cubic_value(t, value_from, y1, y2, value_to)
@@ -83,6 +93,7 @@ impl RuntimeInterpolator {
 
     pub(crate) fn transform(self, factor: f32) -> f32 {
         match self {
+            Self::Scripted { .. } => factor,
             Self::CubicEase { x1, y1, x2, y2 } => {
                 let t = cubic_interpolator_get_t(factor, x1, x2);
                 cubic_interpolator_calc_bezier(t, y1, y2)
@@ -811,6 +822,41 @@ struct RuntimeKeyFrameValueContext<'a> {
     holders: Option<&'a HashMap<u32, RuntimeKeyFrameValue>>,
 }
 
+#[derive(Clone, Copy)]
+enum RuntimeScriptedInterpolationContext<'a> {
+    Shared(&'a ArtboardInstance),
+    Stateful(&'a LinearAnimationInstance, &'a ArtboardInstance),
+}
+
+impl RuntimeScriptedInterpolationContext<'_> {
+    fn evaluate(
+        self,
+        key_frame_global_id: u32,
+        interpolator_global_id: u32,
+        method: ScriptInterpolatorMethod,
+        arguments: &[f32],
+        fallback: f32,
+    ) -> f32 {
+        match self {
+            Self::Shared(artboard) => artboard.evaluate_shared_scripted_interpolator(
+                key_frame_global_id,
+                interpolator_global_id,
+                method,
+                arguments,
+                fallback,
+            ),
+            Self::Stateful(animation, artboard) => animation.evaluate_scripted_interpolator(
+                artboard,
+                key_frame_global_id,
+                interpolator_global_id,
+                method,
+                arguments,
+                fallback,
+            ),
+        }
+    }
+}
+
 impl<'a> RuntimeKeyFrameValueContext<'a> {
     fn number(self, key_frame_global_id: u32) -> Option<f32> {
         match self.holders?.get(&key_frame_global_id)? {
@@ -842,6 +888,31 @@ impl<'a> RuntimeKeyFrameValueContext<'a> {
 }
 
 impl RuntimeLinearAnimation {
+    /// File-global ScriptedInterpolator ids referenced by this animation's
+    /// keyframes, in first-use order.
+    #[doc(hidden)]
+    pub fn scripted_interpolator_global_ids(&self) -> Vec<u32> {
+        let mut ids = Vec::new();
+        for interpolator in self
+            .keyed_objects
+            .iter()
+            .flat_map(|object| &object.keyed_properties)
+            .flat_map(|property| &property.key_frames)
+            .filter_map(|frame| match frame {
+                RuntimeKeyFrame::Double(frame) => frame.interpolator,
+                RuntimeKeyFrame::Color(frame) => frame.interpolator,
+                _ => None,
+            })
+        {
+            if let RuntimeInterpolator::Scripted { global_id } = interpolator
+                && !ids.contains(&global_id)
+            {
+                ids.push(global_id);
+            }
+        }
+        ids
+    }
+
     pub(crate) fn empty() -> Self {
         Self {
             global_id: u32::MAX,
@@ -866,6 +937,7 @@ impl RuntimeLinearAnimation {
             seconds,
             mix,
             RuntimeKeyFrameValueContext::default(),
+            None,
         )
     }
 
@@ -875,6 +947,7 @@ impl RuntimeLinearAnimation {
         seconds: f32,
         mix: f32,
         key_frame_values: RuntimeKeyFrameValueContext<'_>,
+        animation_instance: Option<&LinearAnimationInstance>,
     ) -> bool {
         let seconds = if self.quantize {
             let fps = self.fps as f32;
@@ -890,8 +963,19 @@ impl RuntimeLinearAnimation {
                 // matching C++ KeyedProperty's single virtual apply dispatch.
                 match &keyed_property.target {
                     RuntimeKeyedPropertyTarget::Double { transform_property } => {
-                        let Some(frame_value) =
-                            keyed_property.double_frame_value_at(seconds, key_frame_values)
+                        let Some(frame_value) = keyed_property
+                            .double_frame_value_at_with_script_context(
+                                seconds,
+                                key_frame_values,
+                                Some(match animation_instance {
+                                    Some(animation) => {
+                                        RuntimeScriptedInterpolationContext::Stateful(
+                                            animation, &*instance,
+                                        )
+                                    }
+                                    None => RuntimeScriptedInterpolationContext::Shared(&*instance),
+                                }),
+                            )
                         else {
                             continue;
                         };
@@ -932,8 +1016,19 @@ impl RuntimeLinearAnimation {
                         solid_color_property,
                         data_bind_observed,
                     } => {
-                        let Some(frame_value) =
-                            keyed_property.color_frame_value_at(seconds, key_frame_values)
+                        let Some(frame_value) = keyed_property
+                            .color_frame_value_at_with_script_context(
+                                seconds,
+                                key_frame_values,
+                                Some(match animation_instance {
+                                    Some(animation) => {
+                                        RuntimeScriptedInterpolationContext::Stateful(
+                                            animation, &*instance,
+                                        )
+                                    }
+                                    None => RuntimeScriptedInterpolationContext::Shared(&*instance),
+                                }),
+                            )
                         else {
                             continue;
                         };
@@ -1195,10 +1290,20 @@ impl RuntimeKeyedProperty {
         self.key_frames.first()?.as_color().map(|frame| frame.value)
     }
 
+    #[cfg(test)]
     fn double_frame_value_at(
         &self,
         seconds: f32,
         key_frame_values: RuntimeKeyFrameValueContext<'_>,
+    ) -> Option<f32> {
+        self.double_frame_value_at_with_script_context(seconds, key_frame_values, None)
+    }
+
+    fn double_frame_value_at_with_script_context(
+        &self,
+        seconds: f32,
+        key_frame_values: RuntimeKeyFrameValueContext<'_>,
+        script_context: Option<RuntimeScriptedInterpolationContext<'_>>,
     ) -> Option<f32> {
         if self.key_frames.is_empty() {
             return None;
@@ -1218,11 +1323,23 @@ impl RuntimeKeyedProperty {
                 from.effective_value(key_frame_values)
             } else if from.interpolator_id.is_some() {
                 let frame_mix = frame_mix(seconds, from.seconds, to.seconds);
-                from.interpolator?.transform_value(
-                    from.effective_value(key_frame_values),
-                    to.effective_value(key_frame_values),
-                    frame_mix,
-                )
+                let from_value = from.effective_value(key_frame_values);
+                let to_value = to.effective_value(key_frame_values);
+                match from.interpolator? {
+                    RuntimeInterpolator::Scripted { global_id } => script_context.map_or_else(
+                        || from_value + (to_value - from_value) * frame_mix,
+                        |context| {
+                            context.evaluate(
+                                from.global_id,
+                                global_id,
+                                ScriptInterpolatorMethod::TransformValue,
+                                &[from_value, to_value, frame_mix],
+                                from_value + (to_value - from_value) * frame_mix,
+                            )
+                        },
+                    ),
+                    interpolator => interpolator.transform_value(from_value, to_value, frame_mix),
+                }
             } else {
                 let frame_mix = frame_mix(seconds, from.seconds, to.seconds);
                 let from_value = from.effective_value(key_frame_values);
@@ -1239,10 +1356,20 @@ impl RuntimeKeyedProperty {
         Some(value)
     }
 
+    #[cfg(test)]
     fn color_frame_value_at(
         &self,
         seconds: f32,
         key_frame_values: RuntimeKeyFrameValueContext<'_>,
+    ) -> Option<u32> {
+        self.color_frame_value_at_with_script_context(seconds, key_frame_values, None)
+    }
+
+    fn color_frame_value_at_with_script_context(
+        &self,
+        seconds: f32,
+        key_frame_values: RuntimeKeyFrameValueContext<'_>,
+        script_context: Option<RuntimeScriptedInterpolationContext<'_>>,
     ) -> Option<u32> {
         if self.key_frames.is_empty() {
             return None;
@@ -1262,10 +1389,24 @@ impl RuntimeKeyedProperty {
                 from.effective_value(key_frame_values)
             } else if from.interpolator_id.is_some() {
                 let frame_mix = frame_mix(seconds, from.seconds, to.seconds);
+                let factor = match from.interpolator? {
+                    RuntimeInterpolator::Scripted { global_id } => {
+                        script_context.map_or(frame_mix, |context| {
+                            context.evaluate(
+                                from.global_id,
+                                global_id,
+                                ScriptInterpolatorMethod::Transform,
+                                &[frame_mix],
+                                frame_mix,
+                            )
+                        })
+                    }
+                    interpolator => interpolator.transform(frame_mix),
+                };
                 color_lerp(
                     from.effective_value(key_frame_values),
                     to.effective_value(key_frame_values),
-                    from.interpolator?.transform(frame_mix),
+                    factor,
                 )
             } else {
                 let frame_mix = frame_mix(seconds, from.seconds, to.seconds);
@@ -1716,6 +1857,7 @@ pub struct LinearAnimationInstance {
     key_frame_rebuild_enrollment: RuntimeKeyFrameDataBindEnrollment,
     key_frame_value_holders: Option<Box<HashMap<u32, RuntimeKeyFrameValue>>>,
     key_frame_prototype_revision: u64,
+    scripted_interpolators: RefCell<RuntimeScriptedInterpolatorState>,
     #[cfg(test)]
     removed_key_frame_data_bind_occurrences: Vec<RuntimeKeyFrameDataBindOccurrenceId>,
 }
@@ -1746,6 +1888,9 @@ impl Clone for LinearAnimationInstance {
                 .unwrap_or(self.key_frame_rebuild_enrollment),
             key_frame_value_holders: None,
             key_frame_prototype_revision: 0,
+            // C++ does not copy `m_StatefulInterpolators`: a copied LAI lazily
+            // clones fresh ScriptedInterpolator tables for its own keyframes.
+            scripted_interpolators: RefCell::new(RuntimeScriptedInterpolatorState::default()),
             #[cfg(test)]
             removed_key_frame_data_bind_occurrences: Vec::new(),
         }
@@ -1778,6 +1923,7 @@ impl LinearAnimationInstance {
             key_frame_rebuild_enrollment: RuntimeKeyFrameDataBindEnrollment::Late,
             key_frame_value_holders: None,
             key_frame_prototype_revision: 0,
+            scripted_interpolators: RefCell::new(RuntimeScriptedInterpolatorState::default()),
             #[cfg(test)]
             removed_key_frame_data_bind_occurrences: Vec::new(),
         })
@@ -2097,7 +2243,35 @@ impl LinearAnimationInstance {
             self.time,
             mix,
             self.key_frame_value_context(),
+            Some(self),
         )
+    }
+
+    fn evaluate_scripted_interpolator(
+        &self,
+        artboard: &ArtboardInstance,
+        key_frame_global_id: u32,
+        interpolator_global_id: u32,
+        method: ScriptInterpolatorMethod,
+        arguments: &[f32],
+        fallback: f32,
+    ) -> f32 {
+        let factory = artboard.scripted_interpolator_factory(interpolator_global_id);
+        self.scripted_interpolators.borrow_mut().evaluate(
+            Some(artboard),
+            factory.as_ref(),
+            key_frame_global_id,
+            key_frame_global_id,
+            interpolator_global_id,
+            method,
+            arguments,
+            fallback,
+        )
+    }
+
+    /// Script initialization/callback failures that fell back during apply.
+    pub fn scripted_interpolator_diagnostics(&self) -> Vec<RuntimeScriptedInterpolatorDiagnostic> {
+        self.scripted_interpolators.borrow().diagnostics()
     }
 
     pub fn animation_index(&self) -> usize {

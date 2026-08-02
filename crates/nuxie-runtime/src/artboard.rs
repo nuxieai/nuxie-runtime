@@ -75,6 +75,7 @@ use crate::properties::{
 };
 use crate::scene::select_default_state_machine;
 use crate::script_asset::{RuntimeScriptImplementedMethods, RuntimeScriptedObjectOccurrence};
+use crate::scripted_interpolator::RuntimeScriptedInterpolatorState;
 use crate::scripting::{
     NoopScriptHost, RuntimeScriptInstanceHandle, ScriptArtboard, ScriptError, ScriptHost,
     ScriptInstance, ScriptMethod, ScriptValue, ScriptViewModel,
@@ -93,6 +94,10 @@ use crate::view_model_cell::RuntimeFileViewModelInstanceCatalog;
 use crate::{
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
     RuntimeOwnedViewModelInstance,
+};
+use crate::{
+    RuntimeScriptedInterpolatorDiagnostic, RuntimeScriptedInterpolatorFactory,
+    ScriptInterpolatorMethod,
 };
 
 // C++ `Artboard::sm_frameId` is global across artboards and advances at each
@@ -393,6 +398,8 @@ pub struct ArtboardInstance {
     component_list_resource_pools: RuntimeComponentListResourcePools,
     pub(crate) joysticks_apply_before_update: bool,
     pub(crate) linear_animations: Arc<Vec<RuntimeLinearAnimation>>,
+    shared_scripted_interpolators: RefCell<RuntimeScriptedInterpolatorState>,
+    scripted_interpolator_factories: BTreeMap<u32, RuntimeScriptedInterpolatorFactory>,
     /// C++ uses one process-global empty LinearAnimation for unresolved
     /// AnimationState/BlendAnimation pointers. Runtime definitions can retain
     /// single-threaded script handles in Rust, so each Artboard owns one shared
@@ -561,6 +568,8 @@ impl Clone for ArtboardInstance {
             component_list_resource_pools: RuntimeComponentListResourcePools::default(),
             joysticks_apply_before_update: self.joysticks_apply_before_update,
             linear_animations: self.linear_animations.clone(),
+            shared_scripted_interpolators: RefCell::new(RuntimeScriptedInterpolatorState::default()),
+            scripted_interpolator_factories: self.scripted_interpolator_factories.clone(),
             empty_linear_animation: self.empty_linear_animation.clone(),
             state_machines: self.state_machines.clone(),
             script_instances_by_global: self.script_instances_by_global.clone(),
@@ -2341,6 +2350,8 @@ impl ArtboardInstance {
             component_list_resource_pools: RuntimeComponentListResourcePools::default(),
             joysticks_apply_before_update,
             linear_animations: Arc::new(linear_animations),
+            shared_scripted_interpolators: RefCell::new(RuntimeScriptedInterpolatorState::default()),
+            scripted_interpolator_factories: BTreeMap::new(),
             empty_linear_animation: Arc::new(RuntimeLinearAnimation::empty()),
             state_machines: Arc::new(state_machines),
             script_instances_by_global: RuntimeScriptState::default(),
@@ -3969,6 +3980,125 @@ impl ArtboardInstance {
 
     pub fn linear_animations(&self) -> &[RuntimeLinearAnimation] {
         self.linear_animations.as_slice()
+    }
+
+    /// Attach the compiled protocol factory resolved by a
+    /// `ScriptedInterpolator.scriptAssetId` occurrence.
+    #[doc(hidden)]
+    pub fn set_scripted_interpolator_factory(
+        &mut self,
+        interpolator_global_id: u32,
+        factory: RuntimeScriptedInterpolatorFactory,
+    ) {
+        self.scripted_interpolator_factories
+            .insert(interpolator_global_id, factory);
+    }
+
+    #[doc(hidden)]
+    pub fn has_scripted_interpolator_factory(&self, interpolator_global_id: u32) -> bool {
+        self.scripted_interpolator_factories
+            .contains_key(&interpolator_global_id)
+    }
+
+    pub(crate) fn scripted_interpolator_factory(
+        &self,
+        interpolator_global_id: u32,
+    ) -> Option<RuntimeScriptedInterpolatorFactory> {
+        self.scripted_interpolator_factories
+            .get(&interpolator_global_id)
+            .cloned()
+    }
+
+    pub(crate) fn evaluate_shared_scripted_interpolator(
+        &self,
+        key_frame_global_id: u32,
+        interpolator_global_id: u32,
+        method: ScriptInterpolatorMethod,
+        arguments: &[f32],
+        fallback: f32,
+    ) -> f32 {
+        let factory = self.scripted_interpolator_factory(interpolator_global_id);
+        self.shared_scripted_interpolators.borrow_mut().evaluate(
+            Some(self),
+            factory.as_ref(),
+            interpolator_global_id,
+            key_frame_global_id,
+            interpolator_global_id,
+            method,
+            arguments,
+            fallback,
+        )
+    }
+
+    /// Script initialization/callback failures from definition-level
+    /// `LinearAnimation::apply`, which uses the shared authored interpolator.
+    pub fn shared_scripted_interpolator_diagnostics(
+        &self,
+    ) -> Vec<RuntimeScriptedInterpolatorDiagnostic> {
+        self.shared_scripted_interpolators.borrow().diagnostics()
+    }
+
+    /// Resolve the concrete artboard occurrence DataContext used by a lazily
+    /// cloned ScriptedInterpolator table.
+    #[doc(hidden)]
+    pub fn scripted_interpolator_data_context_view_models(
+        &self,
+        file: &RuntimeFile,
+        fallback_root: Option<&RuntimeOwnedViewModelHandle>,
+    ) -> (Option<ScriptViewModel>, Vec<ScriptViewModel>) {
+        if let Some(data_context) = self.artboard_owned_data_context.as_ref() {
+            let mut contexts = data_context.main_context_chain(file).into_iter();
+            if let Some(main) = contexts.next() {
+                let main = crate::script_view_model_from_owned_context(file, &main);
+                let parents = contexts
+                    .filter_map(|context| {
+                        crate::script_view_model_from_owned_context(file, &context)
+                    })
+                    .collect();
+                return (main, parents);
+            }
+            return (None, Vec::new());
+        }
+        if let Some(context) = self.artboard_owned_view_model_handle.as_ref() {
+            return (
+                crate::script_view_model_from_owned_context(file, context),
+                Vec::new(),
+            );
+        }
+        if let Some(context) = self.artboard_owned_view_model_context.as_ref() {
+            if let Some(main) = context.main_handle() {
+                return (crate::script_view_model_from_owned(file, main), Vec::new());
+            }
+            return (None, Vec::new());
+        }
+        (
+            fallback_root.and_then(|root| crate::script_view_model_from_owned(file, root)),
+            Vec::new(),
+        )
+    }
+
+    /// Root handle matching the DataContext above, used to hydrate scalar
+    /// ScriptInput values before the first interpolation callback.
+    #[doc(hidden)]
+    pub fn scripted_interpolator_root_view_model(
+        &self,
+        file: &RuntimeFile,
+        fallback_root: Option<&RuntimeOwnedViewModelHandle>,
+    ) -> Option<RuntimeOwnedViewModelHandle> {
+        if let Some(data_context) = self.artboard_owned_data_context.as_ref() {
+            return data_context
+                .main_context_chain(file)
+                .into_iter()
+                .next()
+                .map(|context| context.root_handle());
+        }
+        if let Some(context) = self.artboard_owned_view_model_handle.as_ref() {
+            return Some(context.root_handle());
+        }
+        if let Some(context) = self.artboard_owned_view_model_context.as_ref() {
+            return context.main_handle().cloned();
+        }
+        fallback_root.cloned()
     }
 
     pub fn state_machine(&self, index: usize) -> Option<&RuntimeStateMachine> {
@@ -12314,6 +12444,8 @@ mod tests {
             component_list_resource_pools: RuntimeComponentListResourcePools::default(),
             joysticks_apply_before_update: true,
             linear_animations: Arc::new(Vec::new()),
+            shared_scripted_interpolators: RefCell::new(RuntimeScriptedInterpolatorState::default()),
+            scripted_interpolator_factories: BTreeMap::new(),
             empty_linear_animation: Arc::new(RuntimeLinearAnimation::empty()),
             state_machines: Arc::new(Vec::new()),
             script_instances_by_global: RuntimeScriptState::default(),

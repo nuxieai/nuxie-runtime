@@ -1,5 +1,34 @@
 use super::*;
 
+pub(super) fn dispatch_imports_successfully(
+    object: &RuntimeObject,
+    definition: &'static Definition,
+    context: &ImportContext,
+) -> Option<bool> {
+    if definition.name == "ScriptInputArtboard" {
+        return Some(
+            imports_successfully(object, definition, context)
+                .expect("ScriptInputArtboard is owned by ScriptedObjectImporter"),
+        );
+    }
+    if definition.name.starts_with("ScriptInput") {
+        return Some(
+            imports_successfully(object, definition, context)
+                .expect("ScriptInput is owned by ScriptedObjectImporter"),
+        );
+    }
+    None
+}
+
+pub(super) fn dispatch_update_context(
+    definition: &'static Definition,
+    context: &mut ImportContext,
+) {
+    if definition_is_cpp_scripted_object(definition) {
+        update_context(definition, context);
+    }
+}
+
 pub(super) fn imports_successfully(
     _object: &RuntimeObject,
     definition: &'static Definition,

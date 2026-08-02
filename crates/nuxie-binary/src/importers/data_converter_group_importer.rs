@@ -1,5 +1,28 @@
 use super::*;
 
+pub(super) fn dispatch_imports_successfully(
+    object: &RuntimeObject,
+    definition: &'static Definition,
+    context: &ImportContext,
+) -> Option<bool> {
+    if definition.name == "DataConverterGroupItem" {
+        return Some(
+            imports_successfully(object, definition, context)
+                .expect("group item is owned by DataConverterGroupImporter"),
+        );
+    }
+    None
+}
+
+pub(super) fn dispatch_update_context(
+    definition: &'static Definition,
+    context: &mut ImportContext,
+) {
+    if definition.name == "DataConverterGroup" {
+        update_context(definition, context);
+    }
+}
+
 pub(super) fn imports_successfully(
     _object: &RuntimeObject,
     definition: &'static Definition,

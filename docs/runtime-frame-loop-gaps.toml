@@ -1193,7 +1193,7 @@ globs = ["crates/nuxie-runtime/tests/public_api_fl_c5.rs"]
 pattern = "\\A(?=[\\s\\S]*macro_rules!\\s+exact_public_signature\\s*\\{[\\s\\S]{0,240}let\\s+_\\s*:\\s*\\$signature\\s*=\\s*\\$method\\s*;)(?=[\\s\\S]*BEGIN exhaustive W4 exact signatures[\\s\\S]*fn\\s+definition_global_id_is_exact\\s*\\([^)]*RuntimeStateMachine[^)]*\\)\\s*->\\s*u32\\s*\\{\\s*machine\\.global_id\\s*\\}[\\s\\S]*fn\\s+definition_name_is_exact\\s*\\([^)]*RuntimeStateMachine[^)]*\\)\\s*->\\s*Option<Arc<str>>\\s*\\{\\s*machine\\.name\\s*\\}[\\s\\S]*fn\\s+definition_inputs_are_exact\\b[\\s\\S]*->\\s*Arc<Vec<Option<RuntimeStateMachineInput>>>\\s*\\{\\s*machine\\.inputs\\s*\\}[\\s\\S]*fn\\s+definition_layers_are_exact\\b[\\s\\S]*->\\s*Arc<Vec<RuntimeStateMachineLayer>>\\s*\\{\\s*machine\\.layers\\s*\\})(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}try_pointer_down_with_timestamp_and_script_host)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}scripted_listener_data_converter_occurrences)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}bind_owned_view_model_context_handle)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}bindable_view_model_instance_index_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}default_view_model_symbol_list_index_source_handle_by_property_name_path)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}set_imported_view_model_context_list_source_item_count_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}set_owned_view_model_context_view_model_source_for_data_bind)(?=[\\s\\S]*exact_public_signature!\\([\\s\\S]{0,220}view_model_trigger_property_id)(?=[\\s\\S]*struct\\s+ExactFnOnceToken<'a>\\s*\\{[\\s\\S]{0,300}borrowed:\\s*&'a\\s+mut\\s*\\(\\)[\\s\\S]{0,300}not_send_or_sync:\\s*Rc<Cell<\\(\\)>>)(?=[\\s\\S]*fn\\s+hydration_methods_accept_fn_once\\b[\\s\\S]*exact_fn_once_token\\([\\s\\S]*move\\s*\\|_\\|[\\s\\S]{0,300}drop\\(token\\)[\\s\\S]*END exhaustive W4 exact signatures)"
 content_begin = "// BEGIN exhaustive W4 exact signatures"
 content_end = "// END exhaustive W4 exact signatures"
-content_sha256 = "fcb7bc0b16fe2824ff3c2fb0bfe02a3ae8e295476d079f1321d259ae0d178312"
+content_sha256 = "ab27a0b2b1bd8bc18ccc4c20ae4e7b8b5addec4eeaf384eea7c96b851895aae7"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1201,8 +1201,8 @@ max_occurrences = 1
 id = "state_machine_public_api_exact_signature_count_required"
 globs = ["crates/nuxie-runtime/tests/public_api_fl_c5.rs"]
 pattern = "exact_public_signature!\\s*\\("
-min_occurrences = 328
-max_occurrences = 328
+min_occurrences = 330
+max_occurrences = 330
 
 [[ratchet]]
 id = "runtime_nested_remap_probe_feature_required"

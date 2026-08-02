@@ -219,29 +219,24 @@ pointer address itself.
 
 ### `gamepad_test.cpp` — class B, 7 cases, 24 assertions
 
-#### Finding: gamepad batch buffer API
+#### P2-e closure: gamepad batch buffer API
 
-The parser/state assertions require C++
-`StateMachineInstance::submitGamepadsFromBuffer(const uint8_t*, size_t)`.
-`nuxie-runtime` currently exposes already-decoded
-`StateMachineInstance::gamepad_dispatch`; it has no byte-batch parser, wire
-version, connected-device table, or device-ID lifecycle API. Typed dispatch is
-well covered, but it cannot discharge these parser/state assertions. Because
-the requested change is tests-only, the missing production API is recorded as
-a finding at
-`cpp_probe.rs::upstream_gamepad_batch_buffer_contract_requires_missing_runtime_api`,
-which is ignored and deliberately panics. These are not class-D container
-mechanics and are not marked skipped.
+`nuxie-runtime` exposes the pinned v2 little-endian parser through
+`StateMachineInstance::submit_gamepads_from_buffer`, including validation and
+the per-device snapshot lifecycle. The first six cases below are direct Rust
+ports. The final authored-input/render sequence also executes through the
+pinned C++ silver producer and Rust action runner; it is no longer blocked and
+records the genuine renderer-stream divergence in `silver-corpus.toml`.
 
 | Upstream `TEST_CASE` (line; assertion IDs) | Disposition |
 |---|---|
-| batch accepts a single connected record (105; A1–A2) | A1 **ported-at** `cpp_probe.rs::upstream_gamepad_wire_size_and_fixture_load_contract`; A2 **finding / ignored-at** gamepad batch finding |
-| tracks multiple device IDs independently (130; A1–A2) | **finding / ignored-at** gamepad batch finding |
-| rejects update for unknown device ID (158; A1) | **finding / ignored-at** gamepad batch finding |
-| handles disconnect among several devices (179; A1–A2) | **finding / ignored-at** gamepad batch finding |
-| allows reconnecting same device ID (215; A1–A3) | **finding / ignored-at** gamepad batch finding |
-| tolerates disconnect of unknown device ID (249; A1) | **finding / ignored-at** gamepad batch finding |
-| file processes multiple gamepad input types (266; A1–A13) | A1 **ported-at** `cpp_probe.rs::upstream_gamepad_wire_size_and_fixture_load_contract`; A2–A13 **finding / ignored-at** gamepad batch finding; post-parse typed listener behavior is independently **covered-by** `C-script-gamepad` and `state_machine_instance.rs::gamepad_listener_dispatches_all_payloads_fifo_marks_advance_and_returns_false` |
+| batch accepts a single connected record (105; A1–A2) | **ported-at** `crates/nuxie-runtime/tests/gamepad_batch.rs::accepts_a_single_connected_record_with_the_pinned_wire_size` |
+| tracks multiple device IDs independently (130; A1–A2) | **ported-at** `gamepad_batch.rs::tracks_multiple_device_ids_independently` |
+| rejects update for unknown device ID (158; A1) | **ported-at** `gamepad_batch.rs::rejects_an_update_for_an_unknown_device_after_retaining_prior_records` |
+| handles disconnect among several devices (179; A1–A2) | **ported-at** `gamepad_batch.rs::disconnects_only_the_target_device` |
+| allows reconnecting same device ID (215; A1–A3) | **ported-at** `gamepad_batch.rs::allows_reconnecting_the_same_device_id` |
+| tolerates disconnect of unknown device ID (249; A1) | **ported-at** `gamepad_batch.rs::tolerates_disconnect_of_an_unknown_device_id` |
+| file processes multiple gamepad input types (266; A1–A13) | **ported-at** `silver-corpus.toml::gamepad_test`; the complete two-runtime action stream records a genuine first divergence, while payload dispatch is independently **covered-by** `C-script-gamepad` and `state_machine_instance.rs::gamepad_listener_dispatches_all_payloads_fifo_marks_advance_and_returns_false` |
 
 ### `hittest_test.cpp` — class A, 21 cases, 111 assertions
 

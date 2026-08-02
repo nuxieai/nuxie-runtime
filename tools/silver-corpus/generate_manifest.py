@@ -125,7 +125,6 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     "stateful_source_switch": "live-bindable-artboard-source-swap-with-stateful-child-borrowing",
     "transition_self_comparator_test": "runtime-owned-composite-list-and-view-model-comparator-mutation",
     "rebind_with_nested_viewmodel": "runtime-owned-nested-view-model-reference-replacement-by-handle",
-    "gamepad_test": "serialized-gamepad-buffer-ingestion-and-device-state-tracking",
     "layout_hug_artboard": "top-level-computed-layout-width-height-exposure",
     "layout_scroll_snap_carousel": "scroll-constraint-physics-running-state-exposure",
 }
@@ -1672,10 +1671,103 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
     return None
 
 
+def p2e_gamepad_actions(
+    silver_id: str,
+) -> tuple[dict[str, object], ...] | None:
+    """Replay pinned gamepad_test.cpp's complete serialized-input sequence."""
+
+    if silver_id != "gamepad_test":
+        return None
+
+    def connected(device_id: int, mapping: str = "standard") -> dict[str, object]:
+        return {"kind": "connected", "device_id": device_id, "mapping": mapping}
+
+    def update(
+        device_id: int, input_kind: str, index: int, value: float
+    ) -> dict[str, object]:
+        return {
+            "kind": "update",
+            "device_id": device_id,
+            "input": input_kind,
+            "index": index,
+            "value": value,
+        }
+
+    def batch(*records: dict[str, object]) -> dict[str, object]:
+        return {"kind": "gamepad-batch", "records": list(records)}
+
+    def advance(seconds: float) -> dict[str, object]:
+        return action("advance", target="state-machine", seconds=seconds)
+
+    frame = action("frame")
+    draw = action("draw")
+    actions = [
+        action("bind-default-view-model"),
+        advance(0.0),
+        advance(0.1),
+        draw,
+        frame,
+        batch(connected(3)),
+        advance(0.016),
+        draw,
+        frame,
+        batch(update(3, "button", 0, 1.0)),
+        advance(0.016),
+        draw,
+        frame,
+        batch(connected(5), connected(1, "unknown")),
+        advance(0.016),
+        draw,
+        frame,
+        batch(update(5, "button", 2, 1.0), update(1, "button", 2, 1.0)),
+        advance(0.016),
+        draw,
+    ]
+    for index in range(1, 10):
+        actions += [
+            frame,
+            batch(
+                update(3, "axis", 0, index * 0.1),
+                update(5, "axis", 1, index * -0.1),
+            ),
+            advance(0.016),
+            draw,
+        ]
+    actions += [
+        frame,
+        batch({"kind": "disconnected", "device_id": 1}),
+        advance(0.016),
+        draw,
+        action("focus-next"),
+        frame,
+        batch(update(3, "button", 0, 0.0)),
+        advance(0.016),
+        draw,
+        frame,
+        batch(update(3, "button", 0, 1.0)),
+        advance(0.016),
+        draw,
+        frame,
+        batch(update(3, "button", 0, 0.0)),
+        advance(0.016),
+        draw,
+        frame,
+        batch(update(3, "button", 1, 1.0)),
+        advance(0.016),
+        draw,
+        frame,
+        batch(update(3, "axis", 0, 0.5), update(3, "axis", 1, 0.5)),
+        advance(0.016),
+        draw,
+    ]
+    return tuple(actions)
+
+
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
 animated_clipping-nodes|frame 10, op 328 (drawPath): expected drawPath, got makeRenderPath
+gamepad_test|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
 component_list_hit_order|frame 1, op 106 (color): expected color, got save
 component_list_grouped|frame 13, op 746 (color): expected color, got save
 component_list_virtualized_scroll_manual|frame 2, op 384 (color): expected color, got makeRenderPaint
@@ -2109,6 +2201,8 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                     or "bindViewModelInstance" in chunk
                     else "none"
                 )
+                if silver_id == "gamepad_test":
+                    view_model = "cpp-test-defined"
                 actions: str | tuple[dict[str, object], ...] = "cpp-test-body"
                 status = "pending-scripted" if lane == "scripted" else "pending"
                 blocker = None
@@ -2123,6 +2217,8 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                     if (ported_actions := fl_e8_list_path_actions(silver_id)) is not None:
                         actions, blocker = ported_actions, None
                     if (ported_actions := p1q_round2_actions(silver_id)) is not None:
+                        actions, blocker = ported_actions, None
+                    if (ported_actions := p2e_gamepad_actions(silver_id)) is not None:
                         actions, blocker = ported_actions, None
                     if silver_id == "sorted_listeners":
                         # The C++ producer calls
@@ -2365,6 +2461,8 @@ def render_action_value(value: object) -> str:
             for key, item in value.items()
         )
         return "{ " + fields + " }"
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(render_action_value(item) for item in value) + "]"
     raise TypeError(f"unsupported action value {value!r}")
 
 

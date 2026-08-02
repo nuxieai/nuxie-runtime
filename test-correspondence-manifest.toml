@@ -12,13 +12,13 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 
 [expected_status_counts]
 ported-differential = 4
-ported-direct = 34
+ported-direct = 35
 partial = 19
-pending = 89
+pending = 88
 n-a = 2
 
 [ratchet]
-max_pending = 91
+max_pending = 88
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -302,9 +302,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/gamepad_test.cpp"
 test_case_count = 7
-status = "pending"
-evidence = []
-note = "Wire size and typed dispatch are covered, but the missing byte-batch parser means no complete upstream TEST_CASE is ported."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/gamepad_batch.rs", "silver-corpus.toml::gamepad_test"]
+note = "The six focused decoder/device-lifecycle cases are direct Rust ports. The complete authored-input/render case executes through both runtimes and records its first genuine renderer-stream divergence; because the other six cases are not dual-runtime executions, the file remains ported-direct."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/global_view_model_binding_test.cpp"

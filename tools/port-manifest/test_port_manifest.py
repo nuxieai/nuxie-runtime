@@ -490,7 +490,7 @@ class PortManifestCliTest(unittest.TestCase):
             "src/animation/listener_types/listener_input_type_gamepad.cpp": ("absent", "F5"),
             "src/animation/listener_types/listener_input_type_keyboard.cpp": ("absent", "F5"),
             "src/animation/listener_types/listener_input_type_semantic.cpp": ("absent", "F5"),
-            "src/input/gamepad_batch.cpp": ("absent", "F5"),
+            "src/input/gamepad_batch.cpp": ("ported", "P2-e/F5"),
             "src/inputs/gamepad_input.cpp": ("absent", "F5"),
             "src/inputs/keyboard_input.cpp": ("absent", "F5"),
             "src/inputs/semantic_input.cpp": ("absent", "F5"),

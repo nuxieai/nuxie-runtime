@@ -24,6 +24,7 @@ mod focus_action_target;
 mod focus_action_traversal;
 mod focus_listener_group;
 mod focused_input_dispatch;
+mod gamepad_batch;
 mod gamepad_listener_group;
 mod instance;
 mod keyboard_listener_group;
@@ -104,6 +105,9 @@ use data_converter_binding::runtime_state_machine_data_converter_bind_steps;
 use event_report::open_url_target;
 pub use event_report::{
     StateMachineEventContext, StateMachineEventStringProperty, StateMachineReportedEvent,
+};
+pub use gamepad_batch::{
+    GAMEPAD_BATCH_MAX_AXES, GAMEPAD_BATCH_MAX_BUTTONS, GAMEPAD_BATCH_WIRE_VERSION,
 };
 pub use instance::{FocusState, StateMachineInstance};
 pub use layer_state::RuntimeLayerState;

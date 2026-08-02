@@ -167,9 +167,9 @@ FEATURE_ROWS.update(
             "F5/F6: semantic listener input runtime is absent.",
         ),
         "src/input/gamepad_batch.cpp": (
-            "absent",
-            "",
-            "F5: gamepad batch input runtime is absent.",
+            "ported",
+            "crates/nuxie-runtime/src/state_machine/gamepad_batch.rs",
+            "P2-e/F5: v2 little-endian decoding, validation, per-device snapshots, focused/scripted dispatch, and public runtime/facade submission are ported.",
         ),
         "src/inputs/gamepad_input.cpp": (
             "absent",

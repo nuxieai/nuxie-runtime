@@ -20557,7 +20557,7 @@ fn upstream_gamepad_wire_size_and_fixture_load_contract() {
     let button_count = 17usize;
     let axis_count = 4usize;
     let mut wire = Vec::new();
-    wire.extend_from_slice(&1u32.to_le_bytes());
+    wire.extend_from_slice(&nuxie_runtime::GAMEPAD_BATCH_WIRE_VERSION.to_le_bytes());
     wire.push(0);
     wire.extend_from_slice(&0i32.to_le_bytes());
     wire.extend_from_slice(&[0, button_count as u8, axis_count as u8, 0]);
@@ -20580,12 +20580,9 @@ fn upstream_gamepad_wire_size_and_fixture_load_contract() {
 }
 
 #[test]
-#[ignore = "finding: docs/runtime-frame-loop-test-backfill-bc.md#finding-gamepad-batch-buffer-api"]
-fn upstream_gamepad_batch_buffer_contract_requires_missing_runtime_api() {
-    panic!(
-        "pinned gamepad_test.cpp requires StateMachineInstance::submitGamepadsFromBuffer; \
-         nuxie-runtime exposes typed gamepad_dispatch only"
-    );
+fn upstream_gamepad_batch_buffer_contract_is_public() {
+    let _: fn(&mut StateMachineInstance, &mut ArtboardInstance, &[u8]) -> bool =
+        StateMachineInstance::submit_gamepads_from_buffer;
 }
 
 #[test]

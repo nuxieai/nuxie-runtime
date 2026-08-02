@@ -262,7 +262,8 @@ pub use shapes::list_path::{RuntimeListPathDebugReport, RuntimeListPathDebugVert
 #[doc(hidden)]
 pub use state_machine::RuntimeFileStateMachineActionCatalog;
 pub use state_machine::{
-    FocusState, RuntimeLayerState, RuntimeNestedStateMachineReport,
+    FocusState, GAMEPAD_BATCH_MAX_AXES, GAMEPAD_BATCH_MAX_BUTTONS, GAMEPAD_BATCH_WIRE_VERSION,
+    RuntimeLayerState, RuntimeNestedStateMachineReport,
     RuntimeScriptedListenerDataConverterBindStep, RuntimeStateMachine,
     RuntimeStateMachineDataConverterBindStep, RuntimeStateMachineInput, RuntimeStateMachineLayer,
     ScriptGamepadInputChange, ScriptGamepadMappingKind, ScriptGamepadSnapshot,
@@ -418,6 +419,7 @@ fn fl_c5_public_reexports_survive_file_split() {
         key_input,
         text_input,
         gamepad_dispatch,
+        submit_gamepads_from_buffer,
         pointer_down,
         pointer_down_with_event_context,
         pointer_down_with_owned_view_model_context,

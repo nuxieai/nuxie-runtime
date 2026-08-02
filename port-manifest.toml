@@ -1675,9 +1675,9 @@ note = "P1-e direct filename owner; the unchanged Vector binding is anchored by 
 
 [[file]]
 upstream = "src/lua/renderer/lua_blob.cpp"
-status = "absent"
-rust_module = ""
-note = "F7: this Lua binding is absent."
+status = "ported"
+rust_module = "crates/nuxie-scripting/src/vm/lua_blob.rs"
+note = "P2B faithful candidate: Blob userdata exposes pinned name/size/fresh-copy data fields, and exact-name Context lookup preserves file order while skipping empty BlobAssets; the previously missing positive path has a live pinned-C++ differential."
 
 [[file]]
 upstream = "src/lua/renderer/lua_gpu.cpp"
@@ -1693,15 +1693,15 @@ note = "F7/P1G: Gradient constructors are present with tracked non-table stop an
 
 [[file]]
 upstream = "src/lua/renderer/lua_image.cpp"
-status = "absent"
-rust_module = ""
-note = "F7: this Lua binding is absent."
+status = "partial"
+rust_module = "crates/nuxie-scripting/src/vm/lua_image.rs"
+note = "P2B partial: asset-backed and factory-backed Image handles plus the exact clamp/repeat/mirror and bilinear/nearest ImageSampler surface are ported. The existing lazy-decode runtime requires asset-backed userdata to preserve file-asset identity before a RenderImage is available; direct rendering resolves the resource once the decode owner is populated. Tightening pre-decode Context:image/property reads to pinned nil behavior, Image width/height/view, and decode scheduling remain assigned to the concurrent image-decode lane; factory-backed assignment into identity-only runtime image properties also remains a tracked gap."
 
 [[file]]
 upstream = "src/lua/renderer/lua_mesh.cpp"
-status = "absent"
-rust_module = ""
-note = "F7: this Lua binding is absent."
+status = "ported"
+rust_module = "crates/nuxie-scripting/src/vm/lua_mesh.rs"
+note = "P2B faithful candidate under the backend-neutral render-factory adaptation: callable vertex/triangle userdata, add/reset invalidation, mapped-once native buffer upload, u16 index bounds, and renderer drawImageMesh wiring are present; both upstream cases are direct ports."
 
 [[file]]
 upstream = "src/lua/renderer/lua_paint.cpp"

@@ -7,9 +7,10 @@ use luaur_rt::{
     AnyUserData, Function, Lua, MultiValue, Table, UserData, UserDataFields, UserDataMethods, Value,
 };
 use luaur_vm::functions::lua_getmetatable::lua_getmetatable;
-use nuxie_runtime::{
-    RuntimeOwnedViewModelInstance, ScriptImage, ScriptViewModel, ScriptViewModelProperty,
-};
+use nuxie_runtime::{RuntimeOwnedViewModelInstance, ScriptViewModel, ScriptViewModelProperty};
+
+use super::lua_blob::ScriptedBlobAssets;
+use super::lua_image::{ScriptedImage, create_asset_image};
 
 type ViewModelInstance = Rc<RefCell<RuntimeOwnedViewModelInstance>>;
 type ViewModelInstanceWeak = Weak<RefCell<RuntimeOwnedViewModelInstance>>;
@@ -744,10 +745,6 @@ impl UserData for ScriptedPropertyString {
     }
 }
 
-struct ScriptedImage(ScriptImage);
-
-impl UserData for ScriptedImage {}
-
 struct ScriptedPropertyImage {
     model: ScriptViewModel,
     name: String,
@@ -763,14 +760,25 @@ impl UserData for ScriptedPropertyImage {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("value", |lua, this| {
             Ok(match this.model.image(&this.name) {
-                Some(image) => Value::UserData(lua.create_userdata(ScriptedImage(image))?),
+                Some(image) => create_asset_image(lua, image)?
+                    .map(Value::UserData)
+                    .unwrap_or(Value::Nil),
                 None => Value::Nil,
             })
         });
         fields.add_field_method_set("value", |_, this, value: Value| {
             let image = match value {
                 Value::Nil => None,
-                Value::UserData(image) => Some(image.borrow::<ScriptedImage>()?.0),
+                Value::UserData(image) => Some(
+                    image
+                        .borrow::<ScriptedImage>()?
+                        .asset_identity()
+                        .ok_or_else(|| {
+                            luaur_rt::Error::runtime(
+                                "factory-backed Image cannot be assigned to this runtime image property",
+                            )
+                        })?,
+                ),
                 _ => return Err(luaur_rt::Error::runtime("expected Image userdata or nil")),
             };
             this.model.set_image(&this.name, image);
@@ -1073,9 +1081,15 @@ impl UserData for ScriptedContext {
                 return Ok(Value::Nil);
             };
             Ok(match model.image_asset_named(&name) {
-                Some(image) => Value::UserData(lua.create_userdata(ScriptedImage(image))?),
+                Some(image) => create_asset_image(lua, image)?
+                    .map(Value::UserData)
+                    .unwrap_or(Value::Nil),
                 None => Value::Nil,
             })
+        });
+        methods.add_method("blob", |lua, this, name: String| {
+            this.require_live("blob")?;
+            ScriptedBlobAssets::lookup(lua, &name)
         });
         methods.add_method("gpuCanvas", |lua, this, ()| {
             this.require_live("gpuCanvas")?;
@@ -1696,7 +1710,18 @@ mod tests {
             })
             .expect("fixture has a replacement image");
 
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+        let mut loader = |_: &nuxie_runtime::RuntimeFileAsset,
+                          _: &[u8],
+                          _: &mut dyn nuxie_render_api::Factory| false;
+        let owners = nuxie_runtime::RuntimeFileAssetOwners::import_with_loader(
+            &file,
+            None,
+            &mut factory,
+            &mut loader,
+        );
         let lua = Lua::new();
+        crate::vm::lua_image::set_image_asset_owners(&lua, owners.image_assets());
         let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
         let missing_requested_data = Rc::new(Cell::new(false));
         let context = lua
@@ -1728,5 +1753,89 @@ mod tests {
             expected
         );
         assert!(!missing_requested_data.get());
+    }
+
+    fn positive_blob_lookup_surface() -> String {
+        let lua = Lua::new();
+        let assets = ScriptedBlobAssets::install(&lua);
+        assets
+            .register("payload.bin", &[])
+            .expect("empty duplicate registration");
+        assets
+            .register("payload.bin", &[0, 1, 2, 0xff])
+            .expect("blob registration");
+        let context = lua
+            .create_userdata(ScriptedContext::new(
+                Rc::new(RefCell::new(None)),
+                Vec::new(),
+                Rc::new(Cell::new(false)),
+                None,
+            ))
+            .expect("scripted context");
+        lua.globals().set("context", context).unwrap();
+
+        let result: Table = lua
+            .load(
+                r#"
+                local blob = context:blob("payload.bin")
+                assert(blob ~= nil)
+                local first = blob.data
+                buffer.writeu8(first, 0, 99)
+                local second = blob.data
+                return {
+                    blob.name,
+                    blob.size,
+                    buffer.len(first),
+                    buffer.readu8(second, 0),
+                    buffer.readu8(second, 3),
+                    context:blob("missing") == nil,
+                }
+                "#,
+            )
+            .eval()
+            .expect("positive Blob lookup");
+
+        format!(
+            "{}\t{}\t{}\t{}\t{}\t{}\n",
+            result.get::<String>(1).unwrap(),
+            result.get::<usize>(2).unwrap(),
+            result.get::<usize>(3).unwrap(),
+            result.get::<u8>(4).unwrap(),
+            result.get::<u8>(5).unwrap(),
+            result.get::<bool>(6).unwrap(),
+        )
+    }
+
+    #[test]
+    fn context_blob_positive_lookup_matches_pinned_copy_surface() {
+        assert_eq!(
+            positive_blob_lookup_surface(),
+            "payload.bin\t4\t4\t0\t255\ttrue\n"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires pinned C++ libraries; run `make blob-differential`"]
+    fn context_blob_positive_lookup_matches_live_cpp_oracle() {
+        let oracle = std::path::PathBuf::from(
+            std::env::var_os("NUXIE_CPP_BLOB_ORACLE")
+                .expect("NUXIE_CPP_BLOB_ORACLE is unset; run `make blob-differential`"),
+        );
+        assert!(
+            oracle.is_file(),
+            "C++ Blob oracle does not exist at {}",
+            oracle.display()
+        );
+        let output = std::process::Command::new(&oracle)
+            .arg("--blob-lookup-positive")
+            .output()
+            .expect("start C++ Blob oracle");
+        assert!(
+            output.status.success(),
+            "C++ Blob oracle failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let cpp = String::from_utf8(output.stdout).expect("C++ Blob oracle UTF-8");
+        assert_eq!(positive_blob_lookup_surface(), cpp);
     }
 }

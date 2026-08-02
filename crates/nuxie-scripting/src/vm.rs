@@ -17,9 +17,12 @@ mod command_server;
 mod host_commands;
 mod listener_invocation;
 mod logging_scripting_context;
+mod lua_blob;
 mod lua_color;
+mod lua_image;
 mod lua_mat4;
 mod lua_math;
+mod lua_mesh;
 mod lua_rive_base;
 mod lua_vec2d;
 mod promise;
@@ -201,6 +204,7 @@ pub struct ScriptVm {
     script_safepoints: Rc<Cell<usize>>,
     host_cycle_active: Rc<Cell<bool>>,
     resource_limits: resource_limits::ResourceLimitTracker,
+    blob_assets: lua_blob::ScriptedBlobAssets,
     gpu_canvas_shaders: ImportedGpuCanvasShaderAssets,
     logging: LoggingScriptingContext,
 }
@@ -923,6 +927,7 @@ impl ScriptVm {
         let lua = Lua::new();
         let view_model_frame_context = ScriptViewModelFrameContext::default();
         lua.set_app_data(view_model_frame_context.clone());
+        let blob_assets = lua_blob::ScriptedBlobAssets::install(&lua);
         let initialization_error = lua
             .set_memory_limit(SCRIPT_VM_MEMORY_LIMIT_BYTES)
             .err()
@@ -955,6 +960,7 @@ impl ScriptVm {
             script_safepoints,
             host_cycle_active,
             resource_limits,
+            blob_assets,
             gpu_canvas_shaders: Rc::new(RefCell::new(BTreeMap::new())),
             logging: LoggingScriptingContext::default(),
         }
@@ -1041,6 +1047,26 @@ impl ScriptVm {
         payload: &[u8],
     ) -> std::result::Result<(), ScriptError> {
         self.register_gpu_canvas_shader_asset_aliases(&[name], payload)
+    }
+
+    /// Retain one imported BlobAsset for exact-name `Context:blob` lookup.
+    pub fn register_blob_asset(
+        &self,
+        name: &str,
+        payload: &[u8],
+    ) -> std::result::Result<(), ScriptError> {
+        self.blob_assets
+            .register(name, payload)
+            .map_err(|error| ScriptError::new(error.to_string()))
+    }
+
+    /// Attach the file-owned decoded ImageAsset catalog without performing or
+    /// scheduling any decode work.
+    pub fn set_image_asset_owners(
+        &self,
+        owners: std::sync::Arc<nuxie_runtime::RuntimeImageAssetOwners>,
+    ) {
+        lua_image::set_image_asset_owners(&self.lua, owners);
     }
 
     /// Retain one imported ShaderAsset owner under all of its file lookup

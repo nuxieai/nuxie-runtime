@@ -32,6 +32,8 @@ impl RendererBindings {
         super::lua_color::install_color_global(lua)?;
         super::lua_mat2d::install_mat2d_global(lua)?;
         super::lua_path::install_path_global(lua)?;
+        super::lua_image::install_image_globals(lua)?;
+        super::lua_mesh::install_mesh_globals(lua)?;
         self.install_gradient_global(lua)?;
         self.install_paint_global(lua)?;
         Ok(())

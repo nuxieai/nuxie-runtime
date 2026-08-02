@@ -306,6 +306,17 @@ impl FileScriptRuntime {
         }
         vm.install_render_factory(factory)?;
         vm.set_view_models(nuxie_runtime::script_view_models(runtime));
+        for asset in self
+            .assets
+            .iter()
+            .filter(|asset| asset.type_name == "BlobAsset")
+        {
+            vm.register_blob_asset(
+                &asset.bare_name,
+                asset.payload.as_deref().unwrap_or_default(),
+            )
+            .map_err(|error| asset_phase_error(asset, "blob registration", error))?;
+        }
         // LibraryAsset records are serialized import edges. Seed every pin
         // before executing any module so both eager and lazy requires observe
         // the exact per-caller dependency graph from the file.
@@ -393,6 +404,7 @@ impl FileScriptRuntime {
     fn prepare_mounts(
         &mut self,
         runtime: &RuntimeFile,
+        file_asset_owners: &nuxie_runtime::RuntimeFileAssetOwners,
         groups: &[ScriptMountGroup],
         factory: &mut dyn Factory,
     ) -> std::result::Result<PreparedFileScriptMounts, nuxie_runtime::ScriptError> {
@@ -413,6 +425,9 @@ impl FileScriptRuntime {
         // generated table and successful init. Any error drops all tables and
         // the candidate VM, leaving this File retryable with zero attachments.
         let candidate = self.build_candidate(runtime, factory)?;
+        candidate
+            .vm
+            .set_image_asset_owners(file_asset_owners.image_assets());
         let groups = instantiate_script_mounts(&candidate, groups, factory)?;
         Ok(PreparedFileScriptMounts {
             // Drop table handles before their candidate VM on a failed
@@ -2906,10 +2921,12 @@ fn mount_scripted_artboard_tree(
         }
     }
     let (has_script_target, groups) = collect_script_mount_groups(file, root_graph, instance)?;
-    let mut prepared = file
-        .scripts
-        .borrow_mut()
-        .prepare_mounts(&file.runtime, &groups, factory)?;
+    let mut prepared = file.scripts.borrow_mut().prepare_mounts(
+        &file.runtime,
+        &file.file_asset_owners,
+        &groups,
+        factory,
+    )?;
     validate_prepared_script_mount_topology(instance, &prepared.groups)?;
 
     // Validation is the final fallible step. Publish a cold candidate before

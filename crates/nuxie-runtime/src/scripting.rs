@@ -747,11 +747,17 @@ pub struct ScriptViewModel {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScriptImage {
     file_asset_index: u64,
+    asset_global_id: u32,
 }
 
 impl ScriptImage {
     pub fn file_asset_index(self) -> u64 {
         self.file_asset_index
+    }
+
+    #[doc(hidden)]
+    pub fn asset_global_id(self) -> u32 {
+        self.asset_global_id
     }
 }
 
@@ -882,7 +888,10 @@ impl ScriptViewModel {
         let asset = self
             .file
             .file_asset(usize::try_from(file_asset_index).ok()?)?;
-        (asset.type_name == "ImageAsset").then_some(ScriptImage { file_asset_index })
+        (asset.type_name == "ImageAsset").then_some(ScriptImage {
+            file_asset_index,
+            asset_global_id: asset.id,
+        })
     }
 
     pub fn image_asset_named(&self, name: &str) -> Option<ScriptImage> {
@@ -893,10 +902,13 @@ impl ScriptViewModel {
             .find(|(_, asset)| {
                 asset.type_name == "ImageAsset" && asset.string_property("name") == Some(name)
             })
-            .and_then(|(file_asset_index, _)| {
+            .and_then(|(file_asset_index, asset)| {
                 u64::try_from(file_asset_index)
                     .ok()
-                    .map(|file_asset_index| ScriptImage { file_asset_index })
+                    .map(|file_asset_index| ScriptImage {
+                        file_asset_index,
+                        asset_global_id: asset.id,
+                    })
             })
     }
 

@@ -243,7 +243,6 @@ for _path in {
     "src/lua/lua_buffer_ext.cpp",
     "src/lua/lua_image_decode.cpp",
     "src/lua/lua_scripted_context.cpp",
-    "src/lua/math/lua_input.cpp",
     "src/lua/renderer/lua_blob.cpp",
     "src/lua/renderer/lua_image.cpp",
     "src/lua/renderer/lua_mesh.cpp",
@@ -286,6 +285,16 @@ FEATURE_ROWS.update(
             "ported",
             "crates/nuxie-scripting/src/vm/lua_rive_base.rs",
             "P1G: direct host-routed _G.print binding is ported.",
+        ),
+        "src/lua/lua_listener_invocation.cpp": (
+            "ported",
+            "crates/nuxie-scripting/src/vm/listener_invocation.rs",
+            "P1J: complete owned Invocation classification/conversion and pointer, keyboard, text, focus, reported-event, view-model, none, and gamepad payload surface.",
+        ),
+        "src/lua/math/lua_input.cpp": (
+            "ported",
+            "crates/nuxie-scripting/src/vm/listener_invocation.rs",
+            "F7/P1J: PointerEvent fields, constructor, event labels, and end-to-end VM-to-state-machine tri-state hit propagation are ported.",
         ),
     }
 )

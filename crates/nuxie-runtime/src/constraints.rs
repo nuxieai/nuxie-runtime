@@ -17,6 +17,43 @@ use crate::properties::property_key_for_name;
 use crate::text::static_text_constraint_bounds;
 use crate::{ArtboardInstance, Mat2D};
 
+/// Read-only state of one imported `ScrollConstraint` in one concrete
+/// [`ArtboardInstance`] occurrence.
+///
+/// `lower_bound`/`upper_bound` are the legal offset interval. They correspond
+/// to pinned C++ `maxOffsetX/Y()` and `minOffsetX/Y()` respectively; the C++
+/// names describe scroll extent rather than numeric ordering. `clamped_offset`
+/// is the live `clampedOffsetX/Y()` result, including elastic physics while it
+/// is enabled. `physics_running` is exactly `physics()->isRunning()`, not the
+/// broader artboard advancing state.
+///
+/// Pinned C++: `scroll_constraint.hpp:99-130`,
+/// `scroll_constraint.cpp:93-167`, and `scroll_physics.hpp:40-41` at
+/// `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RuntimeScrollConstraintSnapshot {
+    /// Local identity of this concrete constraint occurrence.
+    pub constraint_local_id: usize,
+    /// File-global authored identity from which this occurrence was cloned.
+    pub constraint_authored_id: u32,
+    /// Local identity of the constrained content component in this occurrence.
+    pub content_local_id: usize,
+    /// File-global authored identity of the constrained content component.
+    pub content_authored_id: u32,
+    /// Unclamped live `offsetX()`/`offsetY()` values.
+    pub offset: (f32, f32),
+    /// Numerically lower legal offset bound on each axis.
+    pub lower_bound: (f32, f32),
+    /// Numerically upper legal offset bound on each axis.
+    pub upper_bound: (f32, f32),
+    /// Physics-aware `clampedOffsetX()`/`clampedOffsetY()` values.
+    pub clamped_offset: (f32, f32),
+    /// Whether this constraint occurrence owns imported scroll physics.
+    pub physics_present: bool,
+    /// The owned physics occurrence's `isRunning()` value.
+    pub physics_running: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeScrollProperty {
     Offset(RuntimeScrollAxis),
@@ -431,6 +468,111 @@ fn clamped_scroll_constraint_offsets(
         return physics.clamp(range_min, (0.0, 0.0), raw);
     }
     (raw.0.clamp(range_min.0, 0.0), raw.1.clamp(range_min.1, 0.0))
+}
+
+impl ArtboardInstance {
+    /// Snapshot every imported ScrollConstraint owned by this exact artboard
+    /// occurrence, preserving authored/local order.
+    pub fn scroll_constraint_occurrences(&self) -> Vec<RuntimeScrollConstraintSnapshot> {
+        self.slots
+            .iter()
+            .filter(|slot| slot.type_name == Some("ScrollConstraint"))
+            .filter_map(|slot| self.scroll_constraint_snapshot(slot.local_id))
+            .collect()
+    }
+
+    /// Find the ScrollConstraint occurrence that constrains `content_local_id`.
+    pub fn scroll_constraint_for_content(
+        &self,
+        content_local_id: usize,
+    ) -> Option<RuntimeScrollConstraintSnapshot> {
+        self.slots
+            .iter()
+            .filter(|slot| slot.type_name == Some("ScrollConstraint"))
+            .find_map(|slot| {
+                self.scroll_constraint_snapshot(slot.local_id)
+                    .filter(|snapshot| snapshot.content_local_id == content_local_id)
+            })
+    }
+
+    /// Find the occurrence cloned from one authored ScrollConstraint object.
+    pub fn scroll_constraint_for_authored_id(
+        &self,
+        constraint_authored_id: u32,
+    ) -> Option<RuntimeScrollConstraintSnapshot> {
+        self.slots
+            .iter()
+            .find(|slot| {
+                slot.type_name == Some("ScrollConstraint")
+                    && slot.source_global_id == constraint_authored_id
+            })
+            .and_then(|slot| self.scroll_constraint_snapshot(slot.local_id))
+    }
+
+    /// Find the ScrollConstraint occurrence whose constrained component was
+    /// cloned from `content_authored_id`.
+    pub fn scroll_constraint_for_content_authored_id(
+        &self,
+        content_authored_id: u32,
+    ) -> Option<RuntimeScrollConstraintSnapshot> {
+        self.slots
+            .iter()
+            .filter(|slot| slot.type_name == Some("ScrollConstraint"))
+            .find_map(|slot| {
+                self.scroll_constraint_snapshot(slot.local_id)
+                    .filter(|snapshot| snapshot.content_authored_id == content_authored_id)
+            })
+    }
+
+    fn scroll_constraint_snapshot(
+        &self,
+        constraint_local_id: usize,
+    ) -> Option<RuntimeScrollConstraintSnapshot> {
+        let constraint_handle = self.component_handle(constraint_local_id)?;
+        let constraint = self
+            .objects
+            .component(constraint_handle)?
+            .concrete
+            .scroll
+            .as_ref()?;
+        let content_handle = constraint.content?;
+        let content_local_id = self.objects.component_local_id(content_handle)?;
+        let metrics = runtime_scroll_layout_metrics(self, constraint_handle, constraint, false)
+            .unwrap_or_else(|| {
+                build_runtime_scroll_layout_metrics(
+                    self,
+                    constraint_handle,
+                    constraint,
+                    None,
+                    false,
+                )
+            });
+        let lower_bound = (
+            metrics.max_offset(RuntimeScrollAxis::X),
+            metrics.max_offset(RuntimeScrollAxis::Y),
+        );
+        let upper_bound = if metrics.infinite {
+            match metrics.main_axis() {
+                RuntimeScrollAxis::X => (f32::INFINITY, 0.0),
+                RuntimeScrollAxis::Y => (0.0, f32::INFINITY),
+            }
+        } else {
+            (0.0, 0.0)
+        };
+        let physics = constraint.physics.as_ref();
+        Some(RuntimeScrollConstraintSnapshot {
+            constraint_local_id,
+            constraint_authored_id: self.slot(constraint_local_id)?.source_global_id,
+            content_local_id,
+            content_authored_id: self.slot(content_local_id)?.source_global_id,
+            offset: (constraint.offset_x, constraint.offset_y),
+            lower_bound,
+            upper_bound,
+            clamped_offset: clamped_scroll_constraint_offsets(self, constraint_handle, &metrics),
+            physics_present: physics.is_some(),
+            physics_running: physics.is_some_and(RuntimeScrollPhysicsState::is_running),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -5597,6 +5739,65 @@ mod tests {
              constrainChild apply the retained translation in the same \
              update pass (`scroll_constraint.cpp:170-208,244-255`)"
         );
+    }
+
+    #[test]
+    fn public_scroll_observation_finds_the_occurrence_and_reports_live_state() {
+        let (mut instance, constraint_local) = scroll_intent_fixture();
+        instance.update_pass();
+        let content_local = instance
+            .scroll_constraint_occurrences()
+            .first()
+            .expect("imported ScrollConstraint occurrence")
+            .content_local_id;
+        let constraint_source_id = instance
+            .slot(constraint_local)
+            .expect("authored ScrollConstraint slot")
+            .source_global_id;
+
+        let offset_y = property_key_for_name("ScrollConstraint", "scrollOffsetY").unwrap();
+        assert!(instance.set_double_property(constraint_local, offset_y, -700.0));
+        instance.update_pass();
+        let constraint = instance
+            .component_handle(constraint_local)
+            .expect("ScrollConstraint handle");
+        let scroll = instance
+            .objects
+            .component_mut(constraint)
+            .and_then(|component| component.concrete.scroll.as_mut())
+            .expect("retained ScrollConstraint");
+        let mut physics = crate::components::RuntimeScrollPhysicsState::clamped();
+        physics.run(
+            (0.0, -610.0),
+            (0.0, 0.0),
+            (0.0, scroll.offset_y),
+            &[],
+            1_110.0,
+            500.0,
+        );
+        scroll.physics = Some(physics);
+
+        let by_content = instance
+            .scroll_constraint_for_content(content_local)
+            .expect("query by constrained component");
+        let by_authored = instance
+            .scroll_constraint_for_authored_id(constraint_source_id)
+            .expect("query by authored identity");
+        let by_content_authored = instance
+            .scroll_constraint_for_content_authored_id(by_content.content_authored_id)
+            .expect("query by constrained component authored identity");
+
+        assert_eq!(by_content, by_authored);
+        assert_eq!(by_content, by_content_authored);
+        assert_eq!(by_content.constraint_local_id, constraint_local);
+        assert_eq!(by_content.constraint_authored_id, constraint_source_id);
+        assert_eq!(by_content.content_local_id, content_local);
+        assert_eq!(by_content.offset, (0.0, -700.0));
+        assert_eq!(by_content.lower_bound, (0.0, -610.0));
+        assert_eq!(by_content.upper_bound, (0.0, 0.0));
+        assert_eq!(by_content.clamped_offset, (0.0, -610.0));
+        assert!(by_content.physics_present);
+        assert!(by_content.physics_running);
     }
 
     #[test]

@@ -31,13 +31,21 @@ impl PointerCoordinate {
     fn resolve(&self, width: f32, height: f32) -> anyhow::Result<f32> {
         match self {
             Self::Literal(value) => Ok(*value),
-            Self::Expression(expression) => Ok(match expression.as_str() {
-                "artboard-width/2" => width / 2.0,
-                "artboard-height/2" => height / 2.0,
-                "artboard-width*0.8" => width * 0.8,
-                "artboard-height-20" => height - 20.0,
-                _ => bail!("unsupported pointer coordinate expression {expression}"),
-            }),
+            Self::Expression(expression) => {
+                if let Some(distance) = expression.strip_prefix("artboard-height/2-") {
+                    let distance = distance.parse::<f32>().with_context(|| {
+                        format!("invalid pointer coordinate expression {expression}")
+                    })?;
+                    return Ok(height / 2.0 - distance);
+                }
+                Ok(match expression.as_str() {
+                    "artboard-width/2" => width / 2.0,
+                    "artboard-height/2" => height / 2.0,
+                    "artboard-width*0.8" => width * 0.8,
+                    "artboard-height-20" => height - 20.0,
+                    _ => bail!("unsupported pointer coordinate expression {expression}"),
+                })
+            }
         }
     }
 }
@@ -192,6 +200,10 @@ pub enum Action {
     SetArtboardSize {
         width: f32,
         height: f32,
+    },
+    AdvanceDrawUntilScrollPhysicsStops {
+        max_frames: usize,
+        seconds: f32,
     },
 }
 
@@ -874,6 +886,63 @@ impl Execution {
                 Action::SetArtboardSize { width, height } => {
                     instance.set_artboard_dimensions(*width, *height);
                 }
+                Action::AdvanceDrawUntilScrollPhysicsStops {
+                    max_frames,
+                    seconds,
+                } => {
+                    // Pinned layout_scroll_test.cpp:412-416 and 447-455
+                    // (drag helper: 499-503 and 535-543) resolve
+                    // find<ScrollConstraint>()[0] once, then capture each frame
+                    // before testing physics()->isRunning(). Retain the
+                    // constrained component identity so this remains scoped to
+                    // the same concrete occurrence throughout settlement.
+                    let scroll = instance
+                        .scroll_constraint_occurrences()
+                        .into_iter()
+                        .next()
+                        .context("selected artboard has no ScrollConstraint occurrence")?;
+                    if !scroll.physics_present {
+                        bail!("selected ScrollConstraint occurrence has no physics");
+                    }
+                    for _ in 0..*max_frames {
+                        factory.add_frame();
+                        advance_state_machine(
+                            &mut instance,
+                            state_machine
+                                .as_mut()
+                                .context("no selected state machine")?,
+                            *seconds,
+                            &mut factory,
+                        )?;
+                        instance.synchronize_artboard_renderer(
+                            &runtime,
+                            artboard,
+                            &graph.artboards,
+                            &external_images,
+                            &mut factory,
+                            None,
+                        )?;
+                        instance.draw_artboard(
+                            &runtime,
+                            artboard,
+                            &graph.artboards,
+                            &mut factory,
+                            &mut renderer,
+                            &external_images,
+                            None,
+                            true,
+                        )?;
+                        let current = instance
+                            .scroll_constraint_for_content(scroll.content_local_id)
+                            .context("selected ScrollConstraint occurrence disappeared")?;
+                        if !current.physics_present {
+                            bail!("selected ScrollConstraint occurrence lost its physics");
+                        }
+                        if !current.physics_running {
+                            break;
+                        }
+                    }
+                }
             }
         }
         drop(renderer);
@@ -1069,6 +1138,12 @@ repeat = false
                 .unwrap(),
             460.0
         );
+        assert_eq!(
+            PointerCoordinate::Expression("artboard-height/2-375".to_owned())
+                .resolve(640.0, 480.0)
+                .unwrap(),
+            -135.0
+        );
     }
 
     #[test]
@@ -1203,6 +1278,25 @@ source = "custom.ttf"
     }
 
     #[test]
+    fn deserializes_bounded_scroll_physics_settlement() {
+        let action: Action = toml::from_str(
+            r#"kind = "advance-draw-until-scroll-physics-stops"
+max_frames = 56
+seconds = 0.016
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            action,
+            Action::AdvanceDrawUntilScrollPhysicsStops {
+                max_frames: 56,
+                seconds: 0.016,
+            }
+        );
+    }
+
+    #[test]
     fn executes_each_new_view_model_mutation_kind_against_pinned_fixtures() {
         let runtime_dir = Path::new("/Users/levi/dev/oss/rive-runtime");
         if !runtime_dir.is_dir() {
@@ -1274,5 +1368,36 @@ source = "custom.ttf"
         };
         Execution::run(&artboard_case, runtime_dir)
             .expect("raw artboard-value mutation action should execute");
+    }
+
+    #[test]
+    fn executes_six_dynamic_scroll_bodies_against_pinned_fixtures() {
+        let runtime_dir = Path::new("/Users/levi/dev/oss/rive-runtime");
+        if !runtime_dir.is_dir() {
+            return;
+        }
+        let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("silver-corpus crate is nested under the workspace")
+            .to_owned();
+        let manifest = read_manifest(&workspace.join("silver-corpus.toml")).unwrap();
+
+        for id in [
+            "layout_scroll_snap_padding_layouts",
+            "layout_scroll_snap_padding_list",
+            "layout_scroll_snap_padding_virtualized",
+            "layout_scroll_drag_multiplier_layouts",
+            "layout_scroll_drag_multiplier_list",
+            "layout_scroll_drag_multiplier_virtualized",
+        ] {
+            let case = manifest
+                .cases
+                .iter()
+                .find(|case| case.id == id)
+                .unwrap_or_else(|| panic!("missing dynamic scroll case {id}"));
+            Execution::run(case, runtime_dir)
+                .unwrap_or_else(|error| panic!("{id} action execution failed: {error:#}"));
+        }
     }
 }

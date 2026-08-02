@@ -174,6 +174,7 @@ pub use components::{
     ComponentDirt, Mat2D, RuntimeComponent, RuntimeComponentCapabilities, TransformProperty,
     TransformRuntimeState, UpdateComponentsReport,
 };
+pub use constraints::RuntimeScrollConstraintSnapshot;
 pub use custom_property_container::{RuntimeEventProperty, RuntimeEventPropertyValue};
 pub(crate) use data_bind_graph::{
     RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase, RuntimeDataBindGraphConverter,
@@ -244,8 +245,9 @@ pub use scripting::{
     ScriptListenerInputHydration, ScriptListenerInputKind, ScriptListenerInputSnapshot,
     ScriptListenerInputSnapshotValue, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptNode,
     ScriptPaint, ScriptValue, ScriptViewModel, ScriptViewModelInputResolver,
-    ScriptViewModelProperty, ScriptedDrawableInputResult, ScriptedStateMachineObjectKind,
-    ScriptingVm, bound_script_artboard_input, bound_script_input_value, bound_script_trigger_input,
+    ScriptViewModelProperty, ScriptedDrawableInputResult, ScriptedDrawablePointerHit,
+    ScriptedDrawablePointerResult, ScriptedStateMachineObjectKind, ScriptingVm,
+    bound_script_artboard_input, bound_script_input_value, bound_script_trigger_input,
     script_node_for_artboard, script_view_model_from_owned, script_view_model_from_owned_context,
     script_view_model_from_owned_snapshot, script_view_models,
 };

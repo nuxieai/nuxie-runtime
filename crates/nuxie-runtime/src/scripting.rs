@@ -504,6 +504,26 @@ pub struct ScriptedDrawableInputResult {
     pub handled: bool,
 }
 
+/// Exact result written by a scripted drawable's `PointerEvent:hit()` call.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ScriptedDrawablePointerHit {
+    #[default]
+    None,
+    Hit,
+    HitOpaque,
+}
+
+/// Outcome of one direct scripted-drawable pointer callback.
+///
+/// `invoked` is distinct from `hit`: native code wakes the scripted owner
+/// whenever the selected function is attempted, even when it leaves the
+/// pointer event at `none` or raises an ordinary protected-call error.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ScriptedDrawablePointerResult {
+    pub invoked: bool,
+    pub hit: ScriptedDrawablePointerHit,
+}
+
 /// Byte-preserving Rive `CoreString` storage.
 ///
 /// The binary format and C++ `std::string` retain arbitrary bytes, including
@@ -1952,6 +1972,23 @@ pub trait ScriptInstance {
         _host: &mut dyn ScriptHost,
     ) -> Result<ScriptedDrawableInputResult, ScriptError> {
         Ok(ScriptedDrawableInputResult::default())
+    }
+
+    /// Invoke one pointer method selected by a scripted-drawable hit owner.
+    ///
+    /// The owner has already transformed the world position into the
+    /// drawable's local coordinates. Concrete VMs create a fresh
+    /// `PointerEvent` with the pinned constructor defaults and return the
+    /// tri-state mutation after the callback completes.
+    fn call_scripted_drawable_pointer(
+        &mut self,
+        _method: ScriptMethod,
+        _pointer_id: i32,
+        _local_x: f32,
+        _local_y: f32,
+        _host: &mut dyn ScriptHost,
+    ) -> Result<ScriptedDrawablePointerResult, ScriptError> {
+        Ok(ScriptedDrawablePointerResult::default())
     }
 
     /// Invoke an authored `ScriptInputTrigger` callback by its input name.

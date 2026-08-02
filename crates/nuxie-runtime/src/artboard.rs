@@ -1919,6 +1919,43 @@ impl ArtboardInstance {
             objects.add_dependent(source, dependent);
         }
 
+        // `TransformComponent::onAddedClean` retains its typed parent and
+        // immediately calls `parent->addDependent(this)`. Keep both halves of
+        // that construction invariant together: parent-composed world opacity
+        // and transforms cannot be dirtied reliably if either relationship is
+        // missing (`src/transform_component.cpp:14-23`).
+        for component in &graph.components {
+            let handle = objects
+                .component_handle(component.local_id)
+                .expect("authored Transform invariant requires its retained handle");
+            let retained = objects
+                .component(handle)
+                .expect("authored Transform invariant requires its retained component");
+            if !retained.capabilities.transform {
+                continue;
+            }
+            let Some(parent) = retained.parent else {
+                continue;
+            };
+            if !objects
+                .component(parent)
+                .is_some_and(|parent| parent.capabilities.world_transform)
+            {
+                continue;
+            }
+            assert_eq!(
+                retained.parent_transform,
+                Some(parent),
+                "authored Transform child must retain its typed parent_transform",
+            );
+            assert!(
+                (0..objects.dependent_len(parent))
+                    .filter_map(|index| objects.dependent_at(parent, index))
+                    .any(|dependent| dependent == handle),
+                "authored Transform child must remain in parent.dependents",
+            );
+        }
+
         // Skin allocates exactly one transform slot for identity plus one per
         // retained Tendon after dependencies are built. Initial FILTHY update
         // settles the non-identity slots before they are consumed.

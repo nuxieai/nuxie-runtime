@@ -21,6 +21,7 @@ use crate::draw::{runtime_path_geometry_hit_test, runtime_text_value_run_hit_tes
 use crate::focus::RuntimeFocusTree;
 use crate::listener_group::{ListenerGroup, ListenerGroupKind, select_listener_action};
 use crate::properties::property_key_for_name;
+use crate::script_asset::RuntimeScriptImplementedMethods;
 use crate::scripting::RuntimeScriptInstanceHandle;
 use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelAdvanceContext};
 use crate::view_model_cell::{
@@ -40,8 +41,9 @@ use crate::{
     RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
     RuntimeOwnedViewModelInstance, ScriptArtboardDataContext, ScriptArtboardParentContext,
     ScriptArtboardResolver, ScriptCoreString, ScriptError, ScriptHost, ScriptInstance,
-    ScriptListenerActionDefinition, ScriptListenerInvocation, ScriptPointerEventKind, ScriptValue,
-    ScriptViewModel, runtime_default_view_model_artboard_property_path_for_name,
+    ScriptListenerActionDefinition, ScriptListenerInvocation, ScriptMethod, ScriptPointerEventKind,
+    ScriptValue, ScriptViewModel, ScriptedDrawablePointerHit,
+    runtime_default_view_model_artboard_property_path_for_name,
     runtime_default_view_model_artboard_property_path_for_name_path,
     runtime_default_view_model_asset_property_path_for_name,
     runtime_default_view_model_asset_property_path_for_name_path,
@@ -71,7 +73,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 #[cfg(test)]
-use crate::{ScriptListenerActionMethod, ScriptMethod};
+use crate::ScriptListenerActionMethod;
 
 #[cfg(any(test, feature = "tools"))]
 thread_local! {
@@ -365,6 +367,9 @@ trait HitComponent: std::fmt::Debug {
         false
     }
     fn set_explicit_opaque(&mut self, _opaque: bool) {}
+    fn scripted_global_id(&self) -> Option<u32> {
+        None
+    }
 }
 
 impl Clone for Box<dyn HitComponent> {
@@ -557,6 +562,123 @@ impl HitDrawable {
                 group.disable(pointer_id);
             }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct HitScriptedDrawable {
+    component: Option<ComponentHandle>,
+    global_id: u32,
+    implemented_methods: RuntimeScriptImplementedMethods,
+}
+
+impl HitScriptedDrawable {
+    fn method_for_event(
+        &self,
+        can_hit: bool,
+        hit_type: RuntimeListenerType,
+    ) -> Option<ScriptMethod> {
+        if !can_hit {
+            return self
+                .implemented_methods
+                .wants_pointer_exit()
+                .then_some(ScriptMethod::PointerExit);
+        }
+        match hit_type {
+            RuntimeListenerType::Down => self
+                .implemented_methods
+                .wants_pointer_down()
+                .then_some(ScriptMethod::PointerDown),
+            RuntimeListenerType::Up => self
+                .implemented_methods
+                .wants_pointer_up()
+                .then_some(ScriptMethod::PointerUp),
+            RuntimeListenerType::DragStart | RuntimeListenerType::DragEnd => None,
+            _ => self
+                .implemented_methods
+                .wants_pointer_move()
+                .then_some(ScriptMethod::PointerMove),
+        }
+    }
+}
+
+impl HitComponent for HitScriptedDrawable {
+    fn clone_box(&self) -> Box<dyn HitComponent> {
+        Box::new(self.clone())
+    }
+
+    fn component(&self) -> Option<ComponentHandle> {
+        self.component
+    }
+
+    fn prepare_event(
+        &mut self,
+        _artboard: &ArtboardInstance,
+        _groups: &mut [ListenerGroup],
+        _position: (f32, f32),
+        _hit_type: RuntimeListenerType,
+        _pointer_id: i32,
+    ) {
+    }
+
+    fn process_event(
+        &mut self,
+        _instance: &mut StateMachineInstance,
+        artboard: &mut ArtboardInstance,
+        _groups: &mut [ListenerGroup],
+        position: (f32, f32),
+        hit_type: RuntimeListenerType,
+        can_hit: bool,
+        _timestamp_seconds: f32,
+        pointer_id: i32,
+        _owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
+        _event_context: Option<&StateMachineEventContext>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<HitResult, ScriptError> {
+        let Some(method) = self.method_for_event(can_hit, hit_type) else {
+            return Ok(HitResult::None);
+        };
+        let Some(component) = self.component else {
+            return Ok(HitResult::None);
+        };
+        let owner = artboard.component_at(component);
+        let world = artboard
+            .runtime_graph()
+            .map(|graph| artboard.runtime_component_world_transform(owner.local_id, graph))
+            .unwrap_or(owner.transform.world_transform);
+        if world.determinant() == 0.0 {
+            return Ok(HitResult::None);
+        }
+        let local = world
+            .invert_or_identity()
+            .transform_point(position.0, position.1);
+        let Some(script) = artboard.script_instance_for_global(self.global_id) else {
+            return Ok(HitResult::None);
+        };
+        let outcome = script
+            .borrow_mut()
+            .call_scripted_drawable_pointer(method, pointer_id, local.0, local.1, host)?;
+        if outcome.invoked {
+            artboard.wake_script_advance_for_global(self.global_id);
+        }
+        Ok(match outcome.hit {
+            ScriptedDrawablePointerHit::None => HitResult::None,
+            ScriptedDrawablePointerHit::Hit => HitResult::Hit,
+            ScriptedDrawablePointerHit::HitOpaque => HitResult::HitOpaque,
+        })
+    }
+
+    fn hit_test(
+        &self,
+        _instance: &StateMachineInstance,
+        _artboard: &ArtboardInstance,
+        _position: (f32, f32),
+    ) -> bool {
+        true
+    }
+
+    fn scripted_global_id(&self) -> Option<u32> {
+        Some(self.global_id)
     }
 }
 
@@ -3352,6 +3474,13 @@ impl StateMachineInstance {
             let wants_gamepad_connected = implemented.wants_gamepad_connect();
             let wants_gamepad_event = implemented.wants_gamepad_event();
             let wants_gamepad_disconnected = implemented.wants_gamepad_disconnect();
+            if implemented.listens_to_pointer_events() {
+                self.hit_components.push(Box::new(HitScriptedDrawable {
+                    component: artboard.component_handle(component.local_id),
+                    global_id: component.global_id,
+                    implemented_methods: implemented,
+                }));
+            }
             if (wants_keyboard || wants_text)
                 && let Some(focus_data_local_id) =
                     listener_target_direct_child(artboard, component.local_id, "FocusData")
@@ -3390,7 +3519,10 @@ impl StateMachineInstance {
         self.keyboard_listener_groups
             .retain(|group| group.scripted_global_id.is_none());
         self.gamepad_scripted_drawables.clear();
+        self.hit_components
+            .retain(|hit| hit.scripted_global_id().is_none());
         self.initialize_scripted_input_groups(artboard);
+        self.sort_hit_components(artboard);
         self.scripted_input_group_generation = artboard.script_attachment_generation();
     }
 
@@ -6005,6 +6137,7 @@ impl StateMachineInstance {
             result = HitResult::Hit;
         }
 
+        let mut callback_error = None;
         for hit in &mut hit_components {
             let item = hit.process_event(
                 self,
@@ -6018,11 +6151,20 @@ impl StateMachineInstance {
                 owned_context.as_deref_mut(),
                 event_context,
                 host,
-            )?;
-            result = result.strongest(item);
+            );
+            match item {
+                Ok(item) => result = result.strongest(item),
+                Err(error) => {
+                    callback_error = Some(error);
+                    break;
+                }
+            }
         }
         self.hit_components = hit_components;
         self.listener_groups = groups;
+        if let Some(error) = callback_error {
+            return Err(error);
+        }
         if hit_type == RuntimeListenerType::Exit {
             for group in &mut self.listener_groups {
                 group.release_event(pointer_id);
@@ -13782,6 +13924,115 @@ mod scripted_listener_action_tests {
         calls: Rc<RefCell<Vec<RecordedDrawableInputCall>>>,
     }
 
+    #[derive(Debug, Clone, PartialEq)]
+    struct RecordedDrawablePointerCall {
+        method: ScriptMethod,
+        pointer_id: i32,
+        local_x: f32,
+        local_y: f32,
+    }
+
+    struct RecordingDrawablePointerScript {
+        hit: crate::ScriptedDrawablePointerHit,
+        calls: Rc<RefCell<Vec<RecordedDrawablePointerCall>>>,
+    }
+
+    struct ResourceFailingDrawablePointerScript;
+
+    impl ScriptInstance for ResourceFailingDrawablePointerScript {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(method == ScriptMethod::PointerDown)
+        }
+
+        fn call_method(
+            &mut self,
+            _method: ScriptMethod,
+            _args: &[crate::ScriptValue],
+            _host: &mut dyn ScriptHost,
+        ) -> Result<crate::ScriptValue, ScriptError> {
+            unreachable!("typed scripted-drawable pointer dispatch owns this callback")
+        }
+
+        fn call_scripted_drawable_pointer(
+            &mut self,
+            _method: ScriptMethod,
+            _pointer_id: i32,
+            _local_x: f32,
+            _local_y: f32,
+            _host: &mut dyn ScriptHost,
+        ) -> Result<crate::ScriptedDrawablePointerResult, ScriptError> {
+            Err(ScriptError::with_resource_code(
+                "terminal pointer resource fence",
+                "script.resource.pointer",
+            ))
+        }
+
+        fn get_input(&self, _name: &str) -> Result<crate::ScriptValue, ScriptError> {
+            Ok(crate::ScriptValue::Nil)
+        }
+
+        fn set_input(
+            &mut self,
+            _name: &str,
+            _value: crate::ScriptValue,
+        ) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
+    impl ScriptInstance for RecordingDrawablePointerScript {
+        fn has_method(&self, method: ScriptMethod) -> Result<bool, ScriptError> {
+            Ok(matches!(
+                method,
+                ScriptMethod::PointerDown
+                    | ScriptMethod::PointerMove
+                    | ScriptMethod::PointerUp
+                    | ScriptMethod::PointerExit
+            ))
+        }
+
+        fn call_method(
+            &mut self,
+            _method: ScriptMethod,
+            _args: &[crate::ScriptValue],
+            _host: &mut dyn ScriptHost,
+        ) -> Result<crate::ScriptValue, ScriptError> {
+            unreachable!("typed scripted-drawable pointer dispatch owns this callback")
+        }
+
+        fn call_scripted_drawable_pointer(
+            &mut self,
+            method: ScriptMethod,
+            pointer_id: i32,
+            local_x: f32,
+            local_y: f32,
+            _host: &mut dyn ScriptHost,
+        ) -> Result<crate::ScriptedDrawablePointerResult, ScriptError> {
+            self.calls.borrow_mut().push(RecordedDrawablePointerCall {
+                method,
+                pointer_id,
+                local_x,
+                local_y,
+            });
+            Ok(crate::ScriptedDrawablePointerResult {
+                invoked: true,
+                hit: self.hit,
+            })
+        }
+
+        fn get_input(&self, _name: &str) -> Result<crate::ScriptValue, ScriptError> {
+            Ok(crate::ScriptValue::Nil)
+        }
+
+        fn set_input(
+            &mut self,
+            _name: &str,
+            _value: crate::ScriptValue,
+        ) -> Result<(), ScriptError> {
+            Ok(())
+        }
+    }
+
     fn scripted_input_method(invocation: &ScriptListenerInvocation) -> Option<ScriptMethod> {
         match invocation {
             ScriptListenerInvocation::Keyboard { .. } => Some(ScriptMethod::KeyboardEvent),
@@ -15833,6 +16084,51 @@ mod scripted_listener_action_tests {
         script: Box<dyn ScriptInstance>,
     ) -> (ArtboardInstance, StateMachineInstance, u32) {
         scripted_drawable_subtype_input_artboard_and_machine("ScriptedDrawable", script)
+    }
+
+    #[test]
+    fn scripted_drawable_pointer_hit_flows_through_the_state_machine_hit_aggregate() {
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let (mut artboard, mut machine, _) = scripted_drawable_input_artboard_and_machine(
+            Box::new(RecordingDrawablePointerScript {
+                hit: crate::ScriptedDrawablePointerHit::HitOpaque,
+                calls: Rc::clone(&calls),
+            }),
+        );
+
+        assert!(machine.pointer_down(&mut artboard, 11.0, 12.0, 7));
+        assert_eq!(
+            calls.borrow().as_slice(),
+            [RecordedDrawablePointerCall {
+                method: ScriptMethod::PointerDown,
+                pointer_id: 7,
+                local_x: 11.0,
+                local_y: 12.0,
+            }]
+        );
+    }
+
+    #[test]
+    fn scripted_drawable_pointer_resource_error_restores_hit_ownership_before_returning() {
+        let (mut artboard, mut machine, _) = scripted_drawable_input_artboard_and_machine(
+            Box::new(ResourceFailingDrawablePointerScript),
+        );
+        let hit_count = machine.hit_components.len();
+
+        for pointer_id in [1, 2] {
+            let error = machine
+                .try_pointer_down_with_timestamp_and_script_host(
+                    &mut artboard,
+                    1.0,
+                    2.0,
+                    pointer_id,
+                    0.0,
+                    &mut NoopScriptHost,
+                )
+                .expect_err("resource-coded callback failure remains terminal");
+            assert_eq!(error.resource_code(), Some("script.resource.pointer"));
+            assert_eq!(machine.hit_components.len(), hit_count);
+        }
     }
 
     fn scripted_drawable_subtype_input_artboard_and_machine(

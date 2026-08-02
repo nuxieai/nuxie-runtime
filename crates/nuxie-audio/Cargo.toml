@@ -1,0 +1,12 @@
+[package]
+name = "nuxie-audio"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+symphonia = { version = "0.5.4", default-features = false, features = ["flac", "mp3", "pcm", "wav"] }
+
+[lints]
+workspace = true

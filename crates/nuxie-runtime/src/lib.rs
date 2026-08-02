@@ -5,6 +5,8 @@ mod artboard_component_list_order;
 mod artboard_component_list_override;
 #[path = "data_bind/data_bind_context.rs"]
 mod artboard_data_bind;
+#[path = "assets/audio_asset.rs"]
+mod audio_asset;
 mod components;
 mod constraints;
 #[path = "data_bind/context/context_target_value.rs"]
@@ -170,6 +172,7 @@ pub use artboard::{
     ArtboardInstance, ExternalFontAssetError, RuntimeArtboardOccurrenceSegment, RuntimeComponents,
     artboard_draw_frame_id,
 };
+pub use audio_asset::RuntimeAudioAssetOwners;
 pub use components::{
     ComponentDirt, Mat2D, RuntimeComponent, RuntimeComponentCapabilities, TransformProperty,
     TransformRuntimeState, UpdateComponentsReport,
@@ -204,6 +207,10 @@ pub use hittest_command_path::{HitTestArea, HitTestCommandPath};
 pub use math::random::{
     RuntimeRandomTestValuesGuard, runtime_random_call_count, set_runtime_deterministic_mode,
     set_runtime_random_test_values,
+};
+pub use nuxie_audio::{
+    AudioArtboardId, AudioDecodeError, AudioEngine, AudioEngineError, AudioFormat, AudioReader,
+    AudioSound, AudioSource,
 };
 pub use objects::InstanceSlot;
 pub use profiler::{

@@ -189,7 +189,7 @@ runtime-frame-loop-port-closed: runtime-frame-loop-port-test
 # nuxie-scripting. NOTE: `cargo clippy -- -D lint` is not used because trailing
 # flags leak to dependency crates; the per-crate lints tables scope correctly.
 LINT_GATE_DENY_CRATES = nuxie nuxie-schema
-LINT_GATE_WARN_CRATES = nuxie-runtime nuxie-binary nuxie-graph nux-capi
+LINT_GATE_WARN_CRATES = nuxie-audio nuxie-runtime nuxie-binary nuxie-graph nux-capi
 
 .PHONY: lint-gate
 lint-gate:

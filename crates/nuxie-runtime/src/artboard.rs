@@ -3488,6 +3488,30 @@ impl ArtboardInstance {
         }
     }
 
+    /// Whether this concrete artboard occurrence or a mounted descendant
+    /// contains an AudioEvent. This is query-only: firing remains owned by the
+    /// later AudioEvent activation package.
+    pub fn has_audio(&self) -> bool {
+        if self
+            .components()
+            .iter()
+            .any(|component| component.type_name == "AudioEvent")
+        {
+            return true;
+        }
+        if self
+            .nested_artboards
+            .values()
+            .any(|nested| nested.child.has_audio())
+        {
+            return true;
+        }
+        self.component_list_locals().any(|local_id| {
+            self.component_list_items(local_id)
+                .is_some_and(|items| items.iter().any(|item| item.child.has_audio()))
+        })
+    }
+
     pub(crate) fn component_at(&self, handle: ComponentHandle) -> &RuntimeComponent {
         self.objects
             .component(handle)

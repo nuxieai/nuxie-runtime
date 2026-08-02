@@ -71,6 +71,26 @@ FEATURE_ROWS = {
         "crates/nuxie-binary/src/binary_writer.rs",
         "P1-p/F14: direct exact-wire BinaryWriter owner with pinned C++ differential coverage.",
     ),
+    "src/audio/audio_engine.cpp": (
+        "partial",
+        "crates/nuxie-audio/src/engine.rs",
+        "P2F1/F1: the external headless frame-clock, mixer, scheduling, lifecycle, levels, and manual PCM pull are ported; device output is a later package.",
+    ),
+    "src/audio/audio_reader.cpp": (
+        "ported",
+        "crates/nuxie-audio/src/source.rs",
+        "P2F1/D18: Symphonia-backed independent readers are ported under the approved decoder/resampler tolerance boundary.",
+    ),
+    "src/audio/audio_sound.cpp": (
+        "ported",
+        "crates/nuxie-audio/src/engine.rs",
+        "P2F1: retained sound control, volume, completion, and disposal behavior is ported.",
+    ),
+    "src/audio/audio_source.cpp": (
+        "ported",
+        "crates/nuxie-audio/src/source.rs",
+        "P2F1/D18: owned WAV/MP3/FLAC and buffered sources are ported under the approved decoder/resampler tolerance boundary.",
+    ),
     "src/math/hit_test.cpp": (
         "ported",
         "crates/nuxie-runtime/src/math/hit_test.rs",
@@ -80,9 +100,9 @@ FEATURE_ROWS = {
 FEATURE_ROWS.update(
     {
         "src/assets/audio_asset.cpp": (
-            "partial",
-            "crates/nuxie-runtime/src/objects.rs",
-            "F1: audio asset object data is ported, but playback is absent.",
+            "ported",
+            "crates/nuxie-runtime/src/assets/audio_asset.rs; crates/nuxie-runtime/src/assets/file_asset_loader.rs",
+            "P2F1: embedded and host-loaded AudioAsset bytes resolve to file-owned AudioSource values.",
         ),
         "src/audio_event.cpp": ("absent", "", "F1: audio event firing is absent."),
         "src/command_server.cpp": ("absent", "", "F3: command server is absent."),

@@ -120,6 +120,14 @@ size_t randomProviderTotalCalls();
 #undef protected
 #undef private
 #include "rive/assets/file_asset.hpp"
+#ifdef WITH_RIVE_AUDIO
+#define private public
+#include "rive/audio/audio_engine.hpp"
+#include "rive/audio/audio_reader.hpp"
+#include "rive/audio/audio_sound.hpp"
+#include "rive/audio/audio_source.hpp"
+#undef private
+#endif
 #include "rive/assets/library_asset.hpp"
 #include "rive/bones/skin.hpp"
 #include "rive/bones/tendon.hpp"
@@ -17179,6 +17187,189 @@ void write_f12_profiler_oracle(std::ostream& out)
     out << ",\"pointerId\":" << listener.pointerId;
     out << ",\"tick\":" << listener.tick << "}}\n";
 }
+
+#ifdef WITH_RIVE_AUDIO
+size_t audio_playing_sound_count(const rive::rcp<rive::AudioEngine>& engine)
+{
+    size_t count = 0;
+    auto sound = engine->m_playingSoundsHead;
+    while (sound != nullptr)
+    {
+        ++count;
+        sound = sound->m_nextPlaying;
+    }
+    return count;
+}
+
+void write_audio_oracle(std::ostream& out, const char* filename)
+{
+    std::ifstream input(filename, std::ios::binary);
+    if (!input)
+    {
+        throw std::runtime_error(std::string("failed to open audio fixture ") +
+                                 filename);
+    }
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(input)),
+                               std::istreambuf_iterator<char>());
+    auto source = rive::AudioSource::MakeAudioSource(
+        rive::SimpleArray<uint8_t>(bytes.data(), bytes.size()));
+    if (source == nullptr)
+    {
+        throw std::runtime_error("pinned runtime rejected audio fixture");
+    }
+    auto native = source->makeReader(2, 44100);
+    auto mono48 = source->makeReader(1, 48000);
+    auto stereo32 = source->makeReader(2, 32000);
+
+    auto engine = rive::AudioEngine::Make(2, 44100);
+    auto sound = engine->play(source, 512, 1024, 0);
+    sound->volume(0.5f);
+    std::vector<float> scheduled(1536 * 2);
+    uint64_t framesRead = 0;
+    bool readSucceeded = true;
+    for (size_t block = 0; block < 3; ++block)
+    {
+        uint64_t blockFramesRead = 0;
+        readSucceeded =
+            engine->readAudioFrames(scheduled.data() + block * 512 * 2,
+                                    512,
+                                    &blockFramesRead) &&
+            readSucceeded;
+        framesRead += blockFramesRead;
+    }
+    float windowEnergy[3] = {};
+    for (size_t frame = 0; frame < 1536; ++frame)
+    {
+        const size_t window = frame / 512;
+        windowEnergy[window] += std::abs(scheduled[frame * 2]);
+        windowEnergy[window] += std::abs(scheduled[frame * 2 + 1]);
+    }
+
+    auto interiorEngine = rive::AudioEngine::Make(2, 44100);
+    auto interiorSound = interiorEngine->play(source, 513, 1025, 0);
+    std::vector<float> interiorScheduled(1536 * 2);
+    uint64_t interiorFramesRead = 0;
+    bool interiorReadSucceeded = interiorEngine->readAudioFrames(
+        interiorScheduled.data(), 1536, &interiorFramesRead);
+    float interiorWindowEnergy[3] = {};
+    for (size_t frame = 0; frame < 1536; ++frame)
+    {
+        const size_t window = frame / 512;
+        interiorWindowEnergy[window] +=
+            std::abs(interiorScheduled[frame * 2]);
+        interiorWindowEnergy[window] +=
+            std::abs(interiorScheduled[frame * 2 + 1]);
+    }
+
+    std::vector<float> controlSamples = {0, 1, 2, 3, 4, 5, 6, 7};
+    auto controlSource = rive::rcp<rive::AudioSource>(new rive::AudioSource(
+        rive::Span<float>(controlSamples.data(), controlSamples.size()), 1, 4));
+    auto secondsEngine = rive::AudioEngine::Make(1, 4);
+    auto secondsSound =
+        secondsEngine->playSeconds(controlSource, 0.5f, 6, 1);
+    float secondsSamples[16] = {};
+    uint64_t secondsFramesRead = 0;
+    bool secondsReadSucceeded = true;
+    for (size_t block = 0; block < 2; ++block)
+    {
+        uint64_t blockFramesRead = 0;
+        secondsReadSucceeded =
+            secondsEngine->readAudioFrames(secondsSamples + block * 8,
+                                            8,
+                                            &blockFramesRead) &&
+            secondsReadSucceeded;
+        secondsFramesRead += blockFramesRead;
+    }
+
+    auto lifecycleEngine = rive::AudioEngine::Make(1, 4);
+    auto artboard1 = reinterpret_cast<rive::Artboard*>(uintptr_t(1));
+    auto artboard2 = reinterpret_cast<rive::Artboard*>(uintptr_t(2));
+    auto stopped = lifecycleEngine->play(controlSource, 0, 0, 0, artboard1);
+    auto stopped2 = lifecycleEngine->play(controlSource, 0, 0, 0, artboard1);
+    auto retained = lifecycleEngine->play(controlSource, 0, 0, 0, artboard2);
+    stopped->volume(0.25f);
+    float stoppedVolume = stopped->volume();
+    size_t beforeArtboardStop = audio_playing_sound_count(lifecycleEngine);
+    lifecycleEngine->stop(artboard1);
+    size_t afterArtboardStop = audio_playing_sound_count(lifecycleEngine);
+    bool stoppedCompletedBeforeDispose = stopped->completed();
+    stopped->play();
+    size_t afterStoppedReplay = audio_playing_sound_count(lifecycleEngine);
+    auto cleanup = lifecycleEngine->play(controlSource, 0, 0, 0);
+    bool stoppedCompletedAfterDispose = stopped->completed();
+    size_t afterDeferredDispose = audio_playing_sound_count(lifecycleEngine);
+    bool seekSucceeded = retained->seek(3);
+    uint64_t seekCursor = retained->timeInFrames();
+    float lifecycleFrame = 0;
+    lifecycleEngine->readAudioFrames(&lifecycleFrame, 1);
+    uint64_t seekCursorAfterRead = retained->timeInFrames();
+
+    rive::rcp<rive::AudioSound> outlivingSound;
+    {
+        auto temporaryEngine = rive::AudioEngine::Make(1, 4);
+        outlivingSound = temporaryEngine->play(controlSource, 0, 0, 0);
+    }
+    outlivingSound->stop();
+
+    out << "{\"channels\":" << source->channels();
+    out << ",\"sampleRate\":" << source->sampleRate();
+    out << ",\"format\":" << static_cast<unsigned>(source->format());
+    out << ",\"duration\":" << std::setprecision(9) << source->duration();
+    out << ",\"nativeFrames\":" << native->lengthInFrames();
+    out << ",\"mono48Frames\":" << mono48->lengthInFrames();
+    out << ",\"stereo32Frames\":" << stereo32->lengthInFrames();
+    out << ",\"readSucceeded\":" << (readSucceeded ? "true" : "false");
+    out << ",\"framesRead\":" << framesRead;
+    out << ",\"frameClock\":" << engine->timeInFrames();
+    out << ",\"completed\":" << (sound->completed() ? "true" : "false");
+    out << ",\"windowEnergy\":[";
+    for (size_t i = 0; i < 3; ++i)
+    {
+        if (i != 0)
+            out << ',';
+        out << windowEnergy[i];
+    }
+    out << "],\"interiorReadSucceeded\":"
+        << (interiorReadSucceeded ? "true" : "false");
+    out << ",\"interiorFramesRead\":" << interiorFramesRead;
+    out << ",\"interiorCompleted\":"
+        << (interiorSound->completed() ? "true" : "false");
+    out << ",\"interiorWindowEnergy\":[";
+    for (size_t i = 0; i < 3; ++i)
+    {
+        if (i != 0)
+            out << ',';
+        out << interiorWindowEnergy[i];
+    }
+    out << "],\"secondsReadSucceeded\":"
+        << (secondsReadSucceeded ? "true" : "false");
+    out << ",\"secondsFramesRead\":" << secondsFramesRead;
+    out << ",\"secondsCompleted\":"
+        << (secondsSound->completed() ? "true" : "false");
+    out << ",\"secondsSamples\":[";
+    for (size_t i = 0; i < 16; ++i)
+    {
+        if (i != 0)
+            out << ',';
+        out << secondsSamples[i];
+    }
+    out << "],\"beforeArtboardStop\":" << beforeArtboardStop;
+    out << ",\"afterArtboardStop\":" << afterArtboardStop;
+    out << ",\"stoppedCompletedBeforeDispose\":"
+        << (stoppedCompletedBeforeDispose ? "true" : "false");
+    out << ",\"afterStoppedReplay\":" << afterStoppedReplay;
+    out << ",\"stoppedCompletedAfterDispose\":"
+        << (stoppedCompletedAfterDispose ? "true" : "false");
+    out << ",\"afterDeferredDispose\":" << afterDeferredDispose;
+    out << ",\"stoppedVolume\":" << stoppedVolume;
+    out << ",\"seekSucceeded\":" << (seekSucceeded ? "true" : "false");
+    out << ",\"seekCursor\":" << seekCursor;
+    out << ",\"seekCursorAfterRead\":" << seekCursorAfterRead;
+    out << ",\"outlivingCompleted\":"
+        << (outlivingSound->completed() ? "true" : "false");
+    out << "}\n";
+}
+#endif
 } // namespace
 
 int main(int argc, const char* argv[])
@@ -17192,6 +17383,7 @@ int main(int argc, const char* argv[])
     bool stateMachineDefinitionNullHoleSample = false;
     bool f14BinaryOracle = false;
     bool f12ProfilerOracle = false;
+    const char* audioOracle = nullptr;
     const char* rawTextRegularFont = nullptr;
     const char* rawTextEmojiFont = nullptr;
     const char* rawTextRasterFont = nullptr;
@@ -17231,6 +17423,17 @@ int main(int argc, const char* argv[])
         if (is_arg(argv[i], "--f12-profiler-oracle"))
         {
             f12ProfilerOracle = true;
+            continue;
+        }
+
+        if (is_arg(argv[i], "--audio-oracle"))
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "--audio-oracle requires an encoded audio path\n";
+                return 2;
+            }
+            audioOracle = argv[++i];
             continue;
         }
 
@@ -20984,6 +21187,25 @@ int main(int argc, const char* argv[])
     {
         write_f12_profiler_oracle(std::cout);
         return 0;
+    }
+
+    if (audioOracle != nullptr)
+    {
+#ifdef WITH_RIVE_AUDIO
+        try
+        {
+            write_audio_oracle(std::cout, audioOracle);
+            return 0;
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << error.what() << "\n";
+            return 1;
+        }
+#else
+        std::cerr << "probe was built without audio support\n";
+        return 1;
+#endif
     }
 
     if (animationResetColorRoundtrip)

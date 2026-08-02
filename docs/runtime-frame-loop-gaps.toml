@@ -22,11 +22,18 @@ ceiling = "layout-engine"
 approved = "FLR-20 layout-engine ceiling: Taffy remains the supported layout engine instead of Yoga; known edge and interpolation differences are declared rather than patched behavior-by-behavior."
 
 [[decision]]
-id = "D17"
+id = "D16"
 source = "docs/parity-gap-register.md#d--deliberate-divergence-register-declare-dont-fix"
 rule = "FLR-21"
 ceiling = "profiler-capture-backend"
 approved = "User-approved P1-m decomposition question 4: replace the pinned MicroProfile wrapper with a pluggable pure-Rust capture seam and no C++ FFI, while keeping RiveProfile records, serialization, lifecycle, and runtime hooks faithful."
+
+[[decision]]
+id = "D18"
+source = "docs/parity-gap-register.md#d--deliberate-divergence-register-declare-dont-fix"
+rule = "FLR-22"
+ceiling = "decoded-pcm-resampler"
+approved = "Levi-approved P2-f decomposition question 5 on 2026-08-01: use Symphonia for WAV/MP3/FLAC decode and resampling, keep Vorbis recognized but unwired, never byte-pin PCM, and permit at most a two-frame resampled-length difference while all engine behavior remains exact."
 
 [[gap]]
 id = "FL-G01"

@@ -82,19 +82,20 @@ pub use nuxie_renderer::{
     WgpuFactory as DefaultRendererFactory, WgpuFrame as DefaultRendererFrame,
 };
 pub use nuxie_runtime::{
-    ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost, ProjectDataConverterCatalog,
-    ProjectDataConverterCompileError, ProjectDataConverterContext, ProjectDataConverterDefinition,
-    ProjectDataConverterEasing, ProjectDataConverterFormat, ProjectDataConverterKind,
-    ProjectDataConverterMathOperation, ProjectDataConverterOutputType, ProjectDataConverterProgram,
-    ProjectDataConverterProgramError, ProjectDataConverterRangeClamp, ProjectDataConverterResolver,
-    ProjectDataConverterReverseResult, ProjectDataConverterRuntimeError, ProjectDataConverterSpec,
-    ProjectDataConverterState, ProjectDataConverterStringPadSide,
-    ProjectDataConverterStringTrimMode, ProjectDataConverterValidationRule, ProjectDataValue,
-    ProjectDataValuePath, RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetLoader,
-    RuntimeLayerState, RuntimeOwnedViewModelContext, RuntimeScrollConstraintSnapshot,
-    RuntimeStateMachineInput, ScriptCoreString, ScriptError, ScriptHost, ScriptInstance,
-    ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue, ScriptingVm,
-    StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
+    AudioArtboardId, AudioDecodeError, AudioEngine, AudioEngineError, AudioFormat, AudioReader,
+    AudioSound, AudioSource, ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost,
+    ProjectDataConverterCatalog, ProjectDataConverterCompileError, ProjectDataConverterContext,
+    ProjectDataConverterDefinition, ProjectDataConverterEasing, ProjectDataConverterFormat,
+    ProjectDataConverterKind, ProjectDataConverterMathOperation, ProjectDataConverterOutputType,
+    ProjectDataConverterProgram, ProjectDataConverterProgramError, ProjectDataConverterRangeClamp,
+    ProjectDataConverterResolver, ProjectDataConverterReverseResult,
+    ProjectDataConverterRuntimeError, ProjectDataConverterSpec, ProjectDataConverterState,
+    ProjectDataConverterStringPadSide, ProjectDataConverterStringTrimMode,
+    ProjectDataConverterValidationRule, ProjectDataValue, ProjectDataValuePath, RuntimeFileAsset,
+    RuntimeFileAssetKind, RuntimeFileAssetLoader, RuntimeLayerState, RuntimeOwnedViewModelContext,
+    RuntimeScrollConstraintSnapshot, RuntimeStateMachineInput, ScriptCoreString, ScriptError,
+    ScriptHost, ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue,
+    ScriptingVm, StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
     StateMachineReportedEvent,
 };
 use nuxie_runtime::{RuntimeFileStateMachineActionCatalog, RuntimeFileViewModelInstanceCatalog};
@@ -3450,8 +3451,8 @@ impl File {
 
     /// Import a file through the C++-equivalent FileAssetLoader seam.
     ///
-    /// The callback runs once for each supported imported ImageAsset and
-    /// FontAsset. Returning `true` claims loading responsibility; returning
+    /// The callback runs once for each supported imported ImageAsset,
+    /// FontAsset, and AudioAsset. Returning `true` claims loading responsibility; returning
     /// `false` decodes any in-band payload as the fallback. A loader may clone
     /// the supplied [`RuntimeFileAsset`] and complete decoding later.
     pub fn import_with_asset_loader(
@@ -3807,6 +3808,20 @@ impl File {
         self.graph.as_ref()
     }
 
+    /// Resolve a decoded AudioAsset by serialized `FileAsset.assetId`.
+    pub fn audio_asset_source(&self, asset_id: u32) -> Option<Arc<AudioSource>> {
+        let global_id = self
+            .runtime
+            .file_assets()
+            .into_iter()
+            .find(|asset| {
+                asset.type_name == "AudioAsset"
+                    && asset.uint_property("assetId") == Some(u64::from(asset_id))
+            })?
+            .id;
+        self.file_asset_owners.audio_assets().get(global_id)
+    }
+
     #[cfg(feature = "scripting")]
     fn advance_detached_view_models(&self) -> bool {
         self.scripts
@@ -3973,6 +3988,10 @@ impl<'a> ArtboardInstance<'a> {
 
     pub fn artboard_bounds(&self) -> (f32, f32, f32, f32) {
         self.raw.artboard_bounds()
+    }
+
+    pub fn has_audio(&self) -> bool {
+        self.raw.has_audio()
     }
 
     /// Snapshot imported ScrollConstraints in this concrete artboard occurrence.
@@ -4585,6 +4604,10 @@ impl OwnedArtboardInstance {
 
     pub fn artboard_bounds(&self) -> (f32, f32, f32, f32) {
         self.raw.artboard_bounds()
+    }
+
+    pub fn has_audio(&self) -> bool {
+        self.raw.has_audio()
     }
 
     /// Snapshot imported ScrollConstraints in this concrete artboard occurrence.

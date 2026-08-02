@@ -10,6 +10,7 @@ import tomllib
 
 
 CRATE_ROOTS = (
+    "crates/nuxie-audio/src",
     "crates/nuxie-runtime/src",
     "crates/nuxie/src",
     "crates/nuxie-scripting/src",

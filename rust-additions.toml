@@ -3,6 +3,10 @@ schema_version = 1
 category_values = ["scene-api", "flowsession-abi", "retained-render", "codegen", "test-infra"]
 
 [[addition]]
+path = "crates/nuxie-audio/src/lib.rs"
+category = "scene-api"
+
+[[addition]]
 path = "crates/nuxie-binary/src/assets/mod.rs"
 category = "codegen"
 

@@ -2466,14 +2466,14 @@ deterministic = "enabled"
 random = "deterministic"
 view_model = "bind-default-if-present"
 sample_times = [0, 0.016]
-actions = []
+actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2", seconds = 1.0, pointer_id = 0 }, { kind = "pointer-down", x = "artboard-width/2", y = "artboard-height/2", pointer_id = 0 }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-75", seconds = 2.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-150", seconds = 3.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-225", seconds = 4.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-300", seconds = 5.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-375", seconds = 6.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-450", seconds = 7.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-525", seconds = 8.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-600", seconds = 9.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-up", x = "artboard-width/2", y = "artboard-height/2-600", pointer_id = 0 }, { kind = "advance-draw-until-scroll-physics-stops", max_frames = 56, seconds = 0.016 }]
 verification = "sriv-v1-epsilon"
-status = "unsupported-feature"
+status = "diverges"
 producer_class = "layout-scroll-dynamic"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "Scroll drag multiplier (layouts)"
 producer_line = 569
-note = "Unsupported feature: scroll-constraint-physics-running-state-exposure; the pinned helper terminates from ScrollConstraint::physics()->isRunning(), which has no public Rust runtime surface."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize."
 
 [[case]]
 id = "layout_scroll_drag_multiplier_list"
@@ -2488,14 +2488,14 @@ deterministic = "enabled"
 random = "deterministic"
 view_model = "bind-default-if-present"
 sample_times = [0, 0.016]
-actions = []
+actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2", seconds = 1.0, pointer_id = 0 }, { kind = "pointer-down", x = "artboard-width/2", y = "artboard-height/2", pointer_id = 0 }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-75", seconds = 2.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-150", seconds = 3.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-225", seconds = 4.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-300", seconds = 5.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-375", seconds = 6.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-450", seconds = 7.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-525", seconds = 8.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-600", seconds = 9.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-up", x = "artboard-width/2", y = "artboard-height/2-600", pointer_id = 0 }, { kind = "advance-draw-until-scroll-physics-stops", max_frames = 56, seconds = 0.016 }]
 verification = "sriv-v1-epsilon"
-status = "unsupported-feature"
+status = "diverges"
 producer_class = "layout-scroll-dynamic"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "Scroll drag multiplier (list)"
 producer_line = 575
-note = "Unsupported feature: scroll-constraint-physics-running-state-exposure; the pinned helper terminates from ScrollConstraint::physics()->isRunning(), which has no public Rust runtime surface."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize."
 
 [[case]]
 id = "layout_scroll_drag_multiplier_virtualized"
@@ -2510,14 +2510,14 @@ deterministic = "enabled"
 random = "deterministic"
 view_model = "bind-default-if-present"
 sample_times = [0, 0.016]
-actions = []
+actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2", seconds = 1.0, pointer_id = 0 }, { kind = "pointer-down", x = "artboard-width/2", y = "artboard-height/2", pointer_id = 0 }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-75", seconds = 2.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-150", seconds = 3.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-225", seconds = 4.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-300", seconds = 5.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-375", seconds = 6.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-450", seconds = 7.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-525", seconds = 8.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-600", seconds = 9.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-up", x = "artboard-width/2", y = "artboard-height/2-600", pointer_id = 0 }, { kind = "advance-draw-until-scroll-physics-stops", max_frames = 56, seconds = 0.016 }]
 verification = "sriv-v1-epsilon"
-status = "unsupported-feature"
+status = "diverges"
 producer_class = "layout-scroll-dynamic"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "Scroll drag multiplier (virtualized list)"
 producer_line = 581
-note = "Unsupported feature: scroll-constraint-physics-running-state-exposure; the pinned helper terminates from ScrollConstraint::physics()->isRunning(), which has no public Rust runtime surface."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize."
 
 [[case]]
 id = "layout_scroll_snap_carousel"
@@ -2554,14 +2554,14 @@ deterministic = "enabled"
 random = "deterministic"
 view_model = "bind-default-if-present"
 sample_times = [0, 0.016]
-actions = []
+actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2", seconds = 1.0, pointer_id = 0 }, { kind = "pointer-down", x = "artboard-width/2", y = "artboard-height/2", pointer_id = 0 }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-375", seconds = 2.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-750", seconds = 3.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-1125", seconds = 4.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-1500", seconds = 5.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-up", x = "artboard-width/2", y = "artboard-height/2-1500", pointer_id = 0 }, { kind = "advance-draw-until-scroll-physics-stops", max_frames = 56, seconds = 0.016 }]
 verification = "sriv-v1-epsilon"
-status = "unsupported-feature"
+status = "diverges"
 producer_class = "layout-scroll-dynamic"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "Scroll snap respects viewport padding (layouts)"
 producer_line = 550
-note = "Unsupported feature: scroll-constraint-physics-running-state-exposure; the pinned helper terminates from ScrollConstraint::physics()->isRunning(), which has no public Rust runtime surface."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize."
 
 [[case]]
 id = "layout_scroll_snap_padding_list"
@@ -2576,14 +2576,14 @@ deterministic = "enabled"
 random = "deterministic"
 view_model = "bind-default-if-present"
 sample_times = [0, 0.016]
-actions = []
+actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2", seconds = 1.0, pointer_id = 0 }, { kind = "pointer-down", x = "artboard-width/2", y = "artboard-height/2", pointer_id = 0 }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-375", seconds = 2.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-750", seconds = 3.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-1125", seconds = 4.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-1500", seconds = 5.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-up", x = "artboard-width/2", y = "artboard-height/2-1500", pointer_id = 0 }, { kind = "advance-draw-until-scroll-physics-stops", max_frames = 56, seconds = 0.016 }]
 verification = "sriv-v1-epsilon"
-status = "unsupported-feature"
+status = "diverges"
 producer_class = "layout-scroll-dynamic"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "Scroll snap respects viewport padding (list)"
 producer_line = 556
-note = "Unsupported feature: scroll-constraint-physics-running-state-exposure; the pinned helper terminates from ScrollConstraint::physics()->isRunning(), which has no public Rust runtime surface."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize."
 
 [[case]]
 id = "layout_scroll_snap_padding_virtualized"
@@ -2598,14 +2598,14 @@ deterministic = "enabled"
 random = "deterministic"
 view_model = "bind-default-if-present"
 sample_times = [0, 0.016]
-actions = []
+actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2", seconds = 1.0, pointer_id = 0 }, { kind = "pointer-down", x = "artboard-width/2", y = "artboard-height/2", pointer_id = 0 }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-375", seconds = 2.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-750", seconds = 3.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-1125", seconds = 4.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-move", x = "artboard-width/2", y = "artboard-height/2-1500", seconds = 5.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "pointer-up", x = "artboard-width/2", y = "artboard-height/2-1500", pointer_id = 0 }, { kind = "advance-draw-until-scroll-physics-stops", max_frames = 56, seconds = 0.016 }]
 verification = "sriv-v1-epsilon"
-status = "unsupported-feature"
+status = "diverges"
 producer_class = "layout-scroll-dynamic"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "Scroll snap respects viewport padding (virtualized list)"
 producer_line = 562
-note = "Unsupported feature: scroll-constraint-physics-running-state-exposure; the pinned helper terminates from ScrollConstraint::physics()->isRunning(), which has no public Rust runtime surface."
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize."
 
 [[case]]
 id = "layout_scroll_visibility"

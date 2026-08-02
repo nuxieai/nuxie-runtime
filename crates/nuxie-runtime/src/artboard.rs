@@ -423,6 +423,8 @@ pub struct ArtboardInstance {
     pub(crate) nested_artboard_locals: Vec<usize>,
     newly_uncollapsed_nested_artboards: BTreeSet<usize>,
     pub(crate) graph_global_id: u32,
+    pub(crate) profile_name: String,
+    pub(crate) profile_path: Vec<crate::ProfilePathSegment>,
     build_context: Option<RuntimeArtboardBuildContext>,
     pub(crate) nested_context_source_tree_cache: Cell<Option<(u64, bool)>>,
     nested_layout_bounds: Option<RuntimeNestedLayoutBoundsFrame>,
@@ -564,6 +566,8 @@ impl Clone for ArtboardInstance {
             nested_artboard_locals: self.nested_artboard_locals.clone(),
             newly_uncollapsed_nested_artboards: self.newly_uncollapsed_nested_artboards.clone(),
             graph_global_id: self.graph_global_id,
+            profile_name: self.profile_name.clone(),
+            profile_path: self.profile_path.clone(),
             build_context: self.build_context.clone(),
             nested_context_source_tree_cache: self.nested_context_source_tree_cache.clone(),
             nested_layout_bounds: self.nested_layout_bounds.clone(),
@@ -823,6 +827,38 @@ pub(crate) enum RuntimeNestedAnimationInstance {
 }
 
 impl ArtboardInstance {
+    fn replace_profile_path_prefix(
+        &mut self,
+        old_prefix: &[crate::ProfilePathSegment],
+        new_prefix: &[crate::ProfilePathSegment],
+    ) {
+        if let Some(suffix) = self.profile_path.strip_prefix(old_prefix) {
+            let mut path = Vec::with_capacity(new_prefix.len().saturating_add(suffix.len()));
+            path.extend_from_slice(new_prefix);
+            path.extend_from_slice(suffix);
+            self.profile_path = path;
+        }
+        for nested in self.nested_artboards.values_mut() {
+            nested
+                .child
+                .replace_profile_path_prefix(old_prefix, new_prefix);
+        }
+        let list_locals = self
+            .component_lists
+            .iter()
+            .filter_map(|handle| self.component_local_id(*handle))
+            .collect::<Vec<_>>();
+        for list_local in list_locals {
+            let Some(items) = self.component_list_items_mut(list_local) else {
+                continue;
+            };
+            for item in items {
+                item.child
+                    .replace_profile_path_prefix(old_prefix, new_prefix);
+            }
+        }
+    }
+
     /// Thin borrow-model hook for C++
     /// `Artboard::clearDataContext` as called by the StateMachineInstance bind
     /// family. Substantive bind ordering remains owned by
@@ -1974,6 +2010,7 @@ impl ArtboardInstance {
             &mut BTreeSet::new(),
             Some(context),
             true,
+            Vec::new(),
         )
     }
 
@@ -2052,6 +2089,7 @@ impl ArtboardInstance {
             &mut BTreeSet::new(),
             Some(context),
             true,
+            Vec::new(),
         )
     }
 
@@ -2062,6 +2100,7 @@ impl ArtboardInstance {
         visiting: &mut BTreeSet<u32>,
         build_context: Option<RuntimeArtboardBuildContext>,
         layout_constraint_bounds_enabled: bool,
+        profile_path: Vec<crate::ProfilePathSegment>,
     ) -> Result<Self> {
         let external_font_assets = build_context
             .as_ref()
@@ -2228,6 +2267,7 @@ impl ArtboardInstance {
                 &objects,
                 visiting,
                 build_context.clone(),
+                &profile_path,
             )?
         } else {
             RuntimeNestedArtboards::default()
@@ -2286,6 +2326,8 @@ impl ArtboardInstance {
             nested_artboard_locals,
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
             graph_global_id: graph.global_id,
+            profile_name: graph.name.clone().unwrap_or_default(),
+            profile_path,
             build_context,
             nested_context_source_tree_cache: Cell::new(None),
             nested_layout_bounds: None,
@@ -5046,6 +5088,15 @@ impl ArtboardInstance {
                     item.consume_context_rebind_dirt();
                     item_context_changed = true;
                 }
+                let old_profile_path = item.child.profile_path.clone();
+                let new_profile_path = component_list_profile_path(
+                    &self.profile_path,
+                    &item.child.profile_name,
+                    component_list.name.as_deref().unwrap_or_default(),
+                    logical_index,
+                );
+                item.child
+                    .replace_profile_path_prefix(&old_profile_path, &new_profile_path);
                 item.logical_index = logical_index;
                 items.push(item);
                 continue;
@@ -5107,6 +5158,12 @@ impl ArtboardInstance {
         })?;
         let context = logical.context;
         let mut visiting = BTreeSet::from([self.graph_global_id]);
+        let profile_path = component_list_profile_path(
+            &self.profile_path,
+            child_graph.name.as_deref().unwrap_or_default(),
+            component_list.name.as_deref().unwrap_or_default(),
+            logical_index,
+        );
         let mut child = ArtboardInstance::from_graph_inner(
             file,
             child_graph,
@@ -5114,6 +5171,7 @@ impl ArtboardInstance {
             &mut visiting,
             Some(build_context.clone()),
             false,
+            profile_path,
         )
         .ok()?;
         child.set_frame_origin(false);
@@ -10125,6 +10183,7 @@ impl ArtboardInstance {
                 property_key_for_name("NestedArtboard", "quantize")?,
             )
             .unwrap_or(-1.0),
+            &self.profile_path,
         )
         .ok()?;
         Some(nested)
@@ -10943,6 +11002,21 @@ impl RuntimeNestedAnimationInstance {
     }
 }
 
+fn component_list_profile_path(
+    parent_path: &[crate::ProfilePathSegment],
+    child_name: &str,
+    component_list_name: &str,
+    logical_index: usize,
+) -> Vec<crate::ProfilePathSegment> {
+    let mut path = parent_path.to_vec();
+    path.push(crate::ProfilePathSegment::nested_artboard(child_name));
+    path.push(crate::ProfilePathSegment::component_list(
+        component_list_name,
+        i32::try_from(logical_index).unwrap_or(i32::MAX),
+    ));
+    path
+}
+
 fn build_runtime_nested_artboard_instances(
     file: &RuntimeFile,
     graph: &ArtboardGraph,
@@ -10951,6 +11025,7 @@ fn build_runtime_nested_artboard_instances(
     objects: &InstanceObjectArena,
     visiting: &mut BTreeSet<u32>,
     build_context: Option<RuntimeArtboardBuildContext>,
+    parent_profile_path: &[crate::ProfilePathSegment],
 ) -> Result<RuntimeNestedArtboards> {
     if artboards.is_empty() {
         return Ok(RuntimeNestedArtboards::default());
@@ -10991,6 +11066,7 @@ fn build_runtime_nested_artboard_instances(
             host_object.bool_property("isPaused").unwrap_or(false),
             host_object.double_property("speed").unwrap_or(1.0),
             host_object.double_property("quantize").unwrap_or(-1.0),
+            parent_profile_path,
         )?;
         nested_artboards.insert(host.local_id, instance);
     }
@@ -11013,7 +11089,18 @@ fn build_runtime_nested_artboard_instance(
     is_paused: bool,
     speed: f32,
     quantize: f32,
+    parent_profile_path: &[crate::ProfilePathSegment],
 ) -> Result<RuntimeNestedArtboardInstance> {
+    let mut profile_path = parent_profile_path.to_vec();
+    profile_path.push(crate::ProfilePathSegment::nested_artboard(
+        child_graph.name.clone().unwrap_or_default(),
+    ));
+    let host_name = parent_slots
+        .iter()
+        .find(|slot| slot.local_id == host_local_id)
+        .and_then(|slot| slot.name.clone())
+        .unwrap_or_default();
+    profile_path.push(crate::ProfilePathSegment::nested_artboard(host_name));
     let mut child = Box::new(ArtboardInstance::from_graph_inner(
         file,
         child_graph,
@@ -11021,6 +11108,7 @@ fn build_runtime_nested_artboard_instance(
         visiting,
         build_context,
         false,
+        profile_path,
     )?);
     apply_nested_artboard_origin_override(parent_objects, host_local_id, &mut child);
     child.set_frame_origin(false);
@@ -11351,6 +11439,26 @@ mod tests {
     use std::path::PathBuf;
     use std::rc::Rc;
     use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[test]
+    fn profiler_component_list_path_is_root_to_leaf_with_logical_index() {
+        let parent = vec![
+            crate::ProfilePathSegment::nested_artboard("Outer"),
+            crate::ProfilePathSegment::component_list("Cards", 2),
+        ];
+
+        let path = component_list_profile_path(&parent, "Inner", "Rows", 7);
+
+        assert_eq!(
+            path,
+            vec![
+                crate::ProfilePathSegment::nested_artboard("Outer"),
+                crate::ProfilePathSegment::component_list("Cards", 2),
+                crate::ProfilePathSegment::nested_artboard("Inner"),
+                crate::ProfilePathSegment::component_list("Rows", 7),
+            ]
+        );
+    }
 
     struct ArtboardPollTask {
         state: crate::WorkTaskState,
@@ -11984,6 +12092,8 @@ mod tests {
             nested_artboard_locals: Vec::new(),
             newly_uncollapsed_nested_artboards: BTreeSet::new(),
             graph_global_id: 0,
+            profile_name: String::new(),
+            profile_path: Vec::new(),
             build_context: None,
             nested_context_source_tree_cache: Cell::new(None),
             nested_layout_bounds: None,
@@ -12432,6 +12542,7 @@ mod tests {
         root.nested_artboards.insert(1, nested);
         let mut root_definition = empty_state_machine(100);
         root_definition.listeners = Arc::new(vec![RuntimeStateMachineListener {
+            name: None,
             target_local_id: 1,
             is_single: true,
             listener_types: vec![RuntimeListenerType::Event],
@@ -12676,6 +12787,7 @@ mod tests {
         let shape = synthetic_component_for_type(0, "Shape");
         let mut artboard = synthetic_instance(vec![shape], vec![0]);
         let listener = RuntimeStateMachineListener {
+            name: None,
             target_local_id: 0,
             is_single: false,
             listener_types: vec![RuntimeListenerType::Down],
@@ -15171,6 +15283,7 @@ mod tests {
             0.0,
         ))]);
         definition.listeners = Arc::new(vec![RuntimeStateMachineListener {
+            name: None,
             target_local_id: 1,
             is_single: true,
             listener_types: vec![RuntimeListenerType::Event],

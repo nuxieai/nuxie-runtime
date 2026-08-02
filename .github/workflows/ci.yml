@@ -59,6 +59,9 @@ jobs:
       - name: Verify upstream C++ port manifest
         run: make port-manifest-check
 
+      - name: Verify Rust attribution coverage
+        run: make rust-attribution-check
+
   # The hosted reusable workflow above owns the existing V2 gate but does not
   # export its raw summaries. Run the same floor separately so the scorecard
   # consumes real per-commit output and exit codes, never an inferred green
@@ -508,7 +511,11 @@ jobs:
         run: |
           mkdir -p target/parity-scorecard/evidence
           set +e
-          make parity-scorecard > target/parity-scorecard/scorecard.md
+          python3 tools/parity-scorecard/parity_scorecard.py check \
+            --repo-root "${GITHUB_WORKSPACE}" \
+            --evidence-dir target/parity-scorecard/evidence \
+            --json target/parity-scorecard/scorecard.json \
+            > target/parity-scorecard/scorecard.md
           scorecard_status=$?
           set -e
           cat target/parity-scorecard/scorecard.md

@@ -25,6 +25,29 @@ pub(crate) enum RuntimeListenerType {
 }
 
 impl RuntimeListenerType {
+    pub(crate) fn value(self) -> u32 {
+        match self {
+            Self::Enter => 0,
+            Self::Exit => 1,
+            Self::Down => 2,
+            Self::Up => 3,
+            Self::Move => 4,
+            Self::Event => 5,
+            Self::Click => 6,
+            Self::ComponentProvided => 7,
+            Self::TextInput => 8,
+            Self::DragStart => 9,
+            Self::DragEnd => 10,
+            Self::ViewModel => 11,
+            Self::Drag => 12,
+            Self::Focus => 13,
+            Self::Blur => 14,
+            Self::Keyboard => 15,
+            Self::SemanticAction => 16,
+            Self::Gamepad => 17,
+        }
+    }
+
     pub(in crate::state_machine) fn from_value(value: u64) -> Option<Self> {
         match value {
             0 => Some(Self::Enter),

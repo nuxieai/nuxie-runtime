@@ -47,6 +47,36 @@ TEST_CASE("renders selected board", "[silver]")
             all(producer.producer_class == "layout-scroll-dynamic" for producer in producers)
         )
 
+        snap = next(
+            producer
+            for producer in producers
+            if producer.id == "layout_scroll_snap_padding_layouts"
+        )
+        drag = next(
+            producer
+            for producer in producers
+            if producer.id == "layout_scroll_drag_multiplier_layouts"
+        )
+        self.assertEqual(
+            sum(action["kind"] == "pointer-move" for action in snap.actions), 5
+        )
+        self.assertEqual(
+            sum(action["kind"] == "pointer-move" for action in drag.actions), 9
+        )
+        self.assertEqual(
+            snap.actions[-1],
+            {
+                "kind": "advance-draw-until-scroll-physics-stops",
+                "max_frames": 56,
+                "seconds": 0.016,
+            },
+        )
+        self.assertEqual(drag.actions[-1], snap.actions[-1])
+        self.assertTrue(all(producer.status == "diverges" for producer in producers))
+        self.assertTrue(
+            all("first difference:" in producer.note for producer in producers)
+        )
+
     def test_expands_constant_cpp_frame_loops_into_ordered_actions(self):
         chunk = """
         stateMachine->bindViewModelInstance(vmi);

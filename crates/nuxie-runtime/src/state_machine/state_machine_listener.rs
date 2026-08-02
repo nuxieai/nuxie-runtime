@@ -17,6 +17,7 @@ use nuxie_graph::{ArtboardGraph, ParametricPathNode};
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeStateMachineListener {
+    pub(crate) name: Option<String>,
     pub(crate) target_local_id: usize,
     /// C++ gives `StateMachineListenerSingle` distinct event-loop semantics:
     /// one matching report ends the report scan, while a multi-input listener
@@ -193,6 +194,10 @@ pub(super) fn runtime_state_machine_listener(
     let view_model_path = runtime_listener_single_view_model_path(file, listener);
 
     Some(RuntimeStateMachineListener {
+        name: listener
+            .object
+            .string_property("name")
+            .map(ToOwned::to_owned),
         target_local_id,
         is_single: listener.object.type_name == "StateMachineListenerSingle",
         listener_types,

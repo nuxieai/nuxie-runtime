@@ -21,6 +21,13 @@ rule = "FLR-20"
 ceiling = "layout-engine"
 approved = "FLR-20 layout-engine ceiling: Taffy remains the supported layout engine instead of Yoga; known edge and interpolation differences are declared rather than patched behavior-by-behavior."
 
+[[decision]]
+id = "D17"
+source = "docs/parity-gap-register.md#d--deliberate-divergence-register-declare-dont-fix"
+rule = "FLR-21"
+ceiling = "profiler-capture-backend"
+approved = "User-approved P1-m decomposition question 4: replace the pinned MicroProfile wrapper with a pluggable pure-Rust capture seam and no C++ FFI, while keeping RiveProfile records, serialization, lifecycle, and runtime hooks faithful."
+
 [[gap]]
 id = "FL-G01"
 status = "closed"

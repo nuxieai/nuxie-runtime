@@ -57,36 +57,157 @@ fn default_probe_path() -> PathBuf {
 }
 
 fn probe_path() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("RIVE_CPP_PROBE") {
+    let path = if let Some(path) = std::env::var_os("RIVE_CPP_PROBE") {
         let path = PathBuf::from(path);
         if path.is_absolute() {
-            return Some(path);
+            path
+        } else {
+            repo_root().join(path)
         }
-        return Some(repo_root().join(path));
-    }
+    } else {
+        let path = default_probe_path();
+        if !path.exists() {
+            return None;
+        }
+        path
+    };
 
-    let path = default_probe_path();
-    path.exists().then_some(path)
+    verify_probe_fingerprint(&path, "make cpp-probe");
+    Some(path)
 }
 
 fn scripted_probe_path() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("RIVE_CPP_PROBE_SCRIPTED") {
+    let path = if let Some(path) = std::env::var_os("RIVE_CPP_PROBE_SCRIPTED") {
         let path = PathBuf::from(path);
         if path.is_absolute() {
-            return Some(path);
+            path
+        } else {
+            repo_root().join(path)
         }
-        return Some(repo_root().join(path));
-    }
-
-    let os = match std::env::consts::OS {
-        "macos" => "macosx",
-        other => other,
+    } else {
+        let os = match std::env::consts::OS {
+            "macos" => "macosx",
+            other => other,
+        };
+        let path = repo_root()
+            .join("tools/cpp-probe/build")
+            .join(os)
+            .join("bin/debug/rive_cpp_probe_scripted");
+        if !path.exists() {
+            return None;
+        }
+        path
     };
-    let path = repo_root()
-        .join("tools/cpp-probe/build")
-        .join(os)
-        .join("bin/debug/rive_cpp_probe_scripted");
-    path.exists().then_some(path)
+
+    verify_probe_fingerprint(&path, "make cpp-probe-scripted");
+    Some(path)
+}
+
+/// Input list and hash construction must stay in lockstep with the
+/// fingerprint block in tools/cpp-probe/build.sh.
+fn expected_probe_fingerprint() -> &'static str {
+    static FINGERPRINT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    FINGERPRINT.get_or_init(|| {
+        use sha2::{Digest, Sha256};
+
+        let probe_dir = repo_root().join("tools/cpp-probe");
+        let mut manifest = String::from("nuxie-cpp-probe-source/v1\n");
+        for input in [
+            "main.cpp",
+            "testing_random_provider.cpp",
+            "build/premake5.lua",
+            "build.sh",
+        ] {
+            let path = probe_dir.join(input);
+            let bytes = std::fs::read(&path).unwrap_or_else(|error| {
+                panic!("cannot read cpp-probe source {}: {error}", path.display())
+            });
+            manifest.push_str(&format!("{input}:{:x}\n", Sha256::digest(&bytes)));
+        }
+        format!("{:x}", Sha256::digest(manifest.as_bytes()))
+    })
+}
+
+fn probe_staleness_error(probe: &Path, rebuild: &str) -> Option<String> {
+    let output = match Command::new(probe).arg("--fingerprint").output() {
+        Ok(output) => output,
+        Err(error) => {
+            return Some(format!("cannot run cpp-probe {}: {error}", probe.display()));
+        }
+    };
+    let reported = String::from_utf8_lossy(&output.stdout);
+    if !output.status.success() || reported.trim() != expected_probe_fingerprint() {
+        return Some(format!("cpp-probe binary is stale — run {rebuild}"));
+    }
+    None
+}
+
+fn verify_probe_fingerprint(probe: &Path, rebuild: &str) {
+    if let Some(message) = probe_staleness_error(probe, rebuild) {
+        panic!("{message}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn probe_fingerprint_guard_flags_stale_binaries() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = std::env::temp_dir().join(format!("nuxie-probe-guard-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create guard fixture dir");
+    let write_fake_probe = |name: &str, script: &str| {
+        let path = dir.join(name);
+        std::fs::write(&path, script).expect("write fake probe");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            .expect("mark fake probe executable");
+        path
+    };
+
+    // An out-of-date binary rejects --fingerprint as an unrecognized argument.
+    let unrecognized = write_fake_probe(
+        "probe-unrecognized-argument.sh",
+        "#!/bin/sh\necho 'unrecognized argument --fingerprint' >&2\nexit 2\n",
+    );
+    assert_eq!(
+        probe_staleness_error(&unrecognized, "make cpp-probe").as_deref(),
+        Some("cpp-probe binary is stale — run make cpp-probe")
+    );
+
+    // A binary built from different sources reports a mismatched fingerprint.
+    let mismatched = write_fake_probe(
+        "probe-mismatched-fingerprint.sh",
+        "#!/bin/sh\necho 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n",
+    );
+    assert_eq!(
+        probe_staleness_error(&mismatched, "make cpp-probe-scripted").as_deref(),
+        Some("cpp-probe binary is stale — run make cpp-probe-scripted")
+    );
+
+    // A binary reporting the current source fingerprint passes.
+    let fresh = write_fake_probe(
+        "probe-fresh.sh",
+        &format!("#!/bin/sh\necho {}\n", expected_probe_fingerprint()),
+    );
+    assert_eq!(probe_staleness_error(&fresh, "make cpp-probe"), None);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn built_probe_reports_current_source_fingerprint() {
+    let Some(probe) = probe_path() else {
+        return;
+    };
+
+    let output = Command::new(&probe)
+        .arg("--fingerprint")
+        .output()
+        .expect("run cpp-probe --fingerprint");
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        expected_probe_fingerprint()
+    );
 }
 
 #[derive(Debug, Deserialize)]

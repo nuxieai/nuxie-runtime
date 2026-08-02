@@ -1,4 +1,0 @@
-Golden runner: enable pinned Lua audio in the scripted oracle
-The scripted C++ golden runner was built without --with_rive_audio, so scripts calling context:audio errored (":: audio is not a valid method of Context") and aborted mid-script — the audio_script corpus entry compared a completed Rust script against a half-run C++ script (y=500 vs y=0). The pin fully supports Lua audio (src/lua/lua_audio.cpp); this enables it in the harness: --with_rive_audio=external (headless, MA_NO_DEVICE_IO — matching the D18 oracle model), the miniaudio build/link targets, and the provenance guard's scripted-mode define set extended to match. Also makes scripted-golden-compare an unconditional gate in tools/land.sh — this escape happened because audio lanes omitted the golden gate as "not rendering-related", and a script that queries audio state moves geometry. Full corpus: 320/320 exact, zero divergences.
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

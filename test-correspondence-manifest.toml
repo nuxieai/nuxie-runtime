@@ -12,7 +12,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 
 [expected_status_counts]
 ported-differential = 4
-ported-direct = 35
+ported-direct = 36
 partial = 18
 pending = 88
 n-a = 2

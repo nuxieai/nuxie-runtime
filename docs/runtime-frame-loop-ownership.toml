@@ -281,6 +281,7 @@ rust_modules = [
   "crates/nuxie-runtime/src/bones/skinnable.rs",
   "crates/nuxie-runtime/src/bones/tendon.rs",
   "crates/nuxie-runtime/src/components.rs",
+  "crates/nuxie-runtime/src/bones/weight.rs",
   "crates/nuxie-runtime/src/constraints.rs",
   "crates/nuxie-runtime/src/constraints/constraint.rs",
   "crates/nuxie-runtime/src/constraints/constrainable_list.rs",
@@ -1347,7 +1348,7 @@ status = "faithful"
 upstream = "src/bones/weight.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/components.rs"]
+rust_modules = ["crates/nuxie-runtime/src/bones/weight.rs", "crates/nuxie-runtime/src/components.rs"]
 dynamically_reached = true
 status = "faithful"
 

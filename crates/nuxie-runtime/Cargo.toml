@@ -35,6 +35,7 @@ nuxie-schema = { path = "../nuxie-schema" }
 
 [dev-dependencies]
 png = "0.18"
+sha2 = "0.10"
 
 [[test]]
 name = "cpp_probe"

@@ -29,6 +29,7 @@ pub(super) fn layer_construction_number_snapshots() -> Vec<Vec<Option<f32>>> {
 
 #[derive(Debug, Clone)]
 pub(crate) struct StateMachineLayerInstance {
+    profile_state_machine_name: Arc<str>,
     /// C++ keys trigger consumption by `StateMachineLayerInstance*`. A fresh
     /// monotonic token gives every Rust layer occurrence the same identity
     /// boundary, including cloned state machines that share a retained VM.
@@ -66,6 +67,7 @@ pub(crate) struct StateMachineLayerAdvance {
 impl StateMachineLayerInstance {
     pub(crate) fn new(
         layer: &RuntimeStateMachineLayer,
+        state_machine_name: &str,
         artboard: &ArtboardInstance,
         inputs: &[StateMachineInputInstance],
         bindable_numbers: &[StateMachineBindableNumberInstance],
@@ -116,6 +118,7 @@ impl StateMachineLayerInstance {
             );
         }
         Self {
+            profile_state_machine_name: Arc::from(state_machine_name),
             view_model_trigger_layer_id: next_view_model_trigger_layer_id(),
             animation_definitions: Arc::clone(&artboard.linear_animations),
             empty_animation_definition: Arc::clone(&artboard.empty_linear_animation),
@@ -634,6 +637,12 @@ impl StateMachineLayerInstance {
         // outgoing state's end actions and constructs the replacement
         // occurrence (`state_machine_instance.cpp:528-540`).
         self.transition_animation_reset = None;
+        let previous_state_name = self
+            .current_state
+            .as_ref()
+            .map(|state| self.profile_state_name(layer, state.state_index()))
+            .unwrap_or("(null)")
+            .to_owned();
         let previous_state = self.current_state.take();
         let previous_state_index = previous_state
             .as_ref()
@@ -689,6 +698,16 @@ impl StateMachineLayerInstance {
                 executor,
             )?;
         }
+
+        let current_state_name = self.profile_state_name(layer, state_to_index).to_owned();
+        crate::profiler::record_global_transition(
+            &artboard.profile_name,
+            &self.profile_state_machine_name,
+            layer.name.as_deref().unwrap_or_default(),
+            &previous_state_name,
+            &current_state_name,
+            &artboard.profile_path,
+        );
 
         self.active_transition = Some(transition_handle);
         let previous_runtime_animation = previous_state
@@ -805,6 +824,32 @@ impl StateMachineLayerInstance {
             self.clear_transition_source();
         }
         Ok(())
+    }
+
+    fn profile_state_name<'a>(
+        &'a self,
+        layer: &'a RuntimeStateMachineLayer,
+        state_index: usize,
+    ) -> &'a str {
+        let Some(state) = layer.states.get(state_index) else {
+            return "(null)";
+        };
+        match state.type_name {
+            Some("AnimationState") => state
+                .animation
+                .and_then(|animation| {
+                    animation.resolve(
+                        &self.animation_definitions,
+                        &self.empty_animation_definition,
+                    )
+                })
+                .and_then(|animation| animation.name.as_deref())
+                .unwrap_or("Animation"),
+            Some("EntryState") => "Entry",
+            Some("ExitState") => "Exit",
+            Some("AnyState") => "Any",
+            _ => "Blend",
+        }
     }
 
     fn clear_transition_source(&mut self) {

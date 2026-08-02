@@ -443,6 +443,7 @@ parity-scorecard: parity-scorecard-test
 
 cpp-binary-compare: cpp-probe
 	RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_CORPUS=1 cargo test -p nuxie-binary --test cpp_import -- --nocapture
+	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nuxie-runtime --test profiler_cpp_probe -- --nocapture
 
 cpp-graph-compare: cpp-probe
 	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nuxie-graph --test cpp_probe -- --nocapture

@@ -19,20 +19,71 @@ fn repo_root() -> PathBuf {
 }
 
 fn probe_path() -> Option<PathBuf> {
-    std::env::var_os("RIVE_CPP_PROBE")
-        .map(PathBuf::from)
-        .or_else(|| {
-            let os = if std::env::consts::OS == "macos" {
-                "macosx"
-            } else {
-                std::env::consts::OS
-            };
-            let path = repo_root()
-                .join("tools/cpp-probe/build")
-                .join(os)
-                .join("bin/debug/rive_cpp_probe");
-            path.exists().then_some(path)
-        })
+    let path = if let Some(path) = std::env::var_os("RIVE_CPP_PROBE") {
+        PathBuf::from(path)
+    } else {
+        let os = if std::env::consts::OS == "macos" {
+            "macosx"
+        } else {
+            std::env::consts::OS
+        };
+        let path = repo_root()
+            .join("tools/cpp-probe/build")
+            .join(os)
+            .join("bin/debug/rive_cpp_probe");
+        if !path.exists() {
+            return None;
+        }
+        path
+    };
+
+    verify_probe_fingerprint(&path, "make cpp-probe");
+    Some(path)
+}
+
+/// Input list and hash construction must stay in lockstep with the
+/// fingerprint block in tools/cpp-probe/build.sh.
+fn expected_probe_fingerprint() -> &'static str {
+    static FINGERPRINT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    FINGERPRINT.get_or_init(|| {
+        use sha2::{Digest, Sha256};
+
+        let probe_dir = repo_root().join("tools/cpp-probe");
+        let mut manifest = String::from("nuxie-cpp-probe-source/v1\n");
+        for input in [
+            "main.cpp",
+            "testing_random_provider.cpp",
+            "build/premake5.lua",
+            "build.sh",
+        ] {
+            let path = probe_dir.join(input);
+            let bytes = std::fs::read(&path).unwrap_or_else(|error| {
+                panic!("cannot read cpp-probe source {}: {error}", path.display())
+            });
+            manifest.push_str(&format!("{input}:{:x}\n", Sha256::digest(&bytes)));
+        }
+        format!("{:x}", Sha256::digest(manifest.as_bytes()))
+    })
+}
+
+fn probe_staleness_error(probe: &Path, rebuild: &str) -> Option<String> {
+    let output = match Command::new(probe).arg("--fingerprint").output() {
+        Ok(output) => output,
+        Err(error) => {
+            return Some(format!("cannot run cpp-probe {}: {error}", probe.display()));
+        }
+    };
+    let reported = String::from_utf8_lossy(&output.stdout);
+    if !output.status.success() || reported.trim() != expected_probe_fingerprint() {
+        return Some(format!("cpp-probe binary is stale — run {rebuild}"));
+    }
+    None
+}
+
+fn verify_probe_fingerprint(probe: &Path, rebuild: &str) {
+    if let Some(message) = probe_staleness_error(probe, rebuild) {
+        panic!("{message}");
+    }
 }
 
 fn asset(name: &str) -> PathBuf {

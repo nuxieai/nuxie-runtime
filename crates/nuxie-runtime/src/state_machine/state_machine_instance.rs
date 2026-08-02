@@ -1442,6 +1442,7 @@ pub(crate) enum RuntimeDataContextBindError {
 #[derive(Debug)]
 pub struct StateMachineInstance {
     state_machine_index: usize,
+    profile_name: Arc<str>,
     /// Retained authored definition owner. C++ stores `const StateMachine*
     /// m_machine` on the instance and reuses it for every advance
     /// (`state_machine_instance.hpp:123,386`;
@@ -2105,6 +2106,7 @@ impl Clone for StateMachineInstance {
             .collect();
         let mut cloned = Self {
             state_machine_index: self.state_machine_index,
+            profile_name: Arc::clone(&self.profile_name),
             state_machine_definitions: self.state_machine_definitions.as_ref().map(Arc::clone),
             listener_definitions: Arc::clone(&self.listener_definitions),
             default_view_model_index: self.default_view_model_index,
@@ -2941,6 +2943,7 @@ impl StateMachineInstance {
         let focus = RuntimeFocusTree::new_unsynchronized(artboard);
         let mut instance = Self {
             state_machine_index,
+            profile_name: state_machine.name.clone().unwrap_or_default(),
             state_machine_definitions,
             listener_definitions,
             default_view_model_index: state_machine.default_view_model_index,
@@ -3554,6 +3557,7 @@ impl StateMachineInstance {
             // input-consuming constructor.
             self.layers.push(StateMachineLayerInstance::new(
                 layer,
+                state_machine.name.as_deref().unwrap_or_default(),
                 artboard,
                 &self.inputs,
                 &self.bindable_numbers,
@@ -4972,6 +4976,10 @@ impl StateMachineInstance {
         self.state_machine_index
     }
 
+    fn profile_name(&self) -> &str {
+        &self.profile_name
+    }
+
     pub(crate) fn retained_state_machine_definitions(
         &self,
     ) -> Option<Arc<Vec<RuntimeStateMachine>>> {
@@ -6020,6 +6028,14 @@ impl StateMachineInstance {
                     )?;
                     self.needs_advance = true;
                     group.is_consumed = true;
+                    crate::profiler::record_global_listener_perform_change(
+                        &artboard.profile_name,
+                        self.profile_name(),
+                        listener.name.as_deref().unwrap_or_default(),
+                        action_type.value(),
+                        hit_type.value(),
+                        pointer_id as u32,
+                    );
                 }
                 group.record_position(pointer_id, position);
                 Ok(captured_drag || pointer_state.drag_ended)
@@ -13556,6 +13572,39 @@ mod scripted_listener_action_tests {
     use std::path::PathBuf;
     use std::rc::Rc;
 
+    #[derive(Default)]
+    struct ProfilerListenerCapture {
+        tick: u64,
+    }
+
+    impl crate::ProfileCapture for ProfilerListenerCapture {
+        fn tick(&mut self) -> u64 {
+            let tick = self.tick;
+            self.tick += 1;
+            tick
+        }
+
+        fn metadata(&self) -> crate::ProfileCaptureMetadata {
+            crate::ProfileCaptureMetadata::default()
+        }
+
+        fn current_frame_index(&self) -> u64 {
+            0
+        }
+
+        fn gpu_frame_delay(&self) -> u64 {
+            1
+        }
+
+        fn max_frame_history(&self) -> u64 {
+            8
+        }
+
+        fn captured_frame(&self, _frame_index: u64) -> Option<crate::ProfileCaptureFrame> {
+            None
+        }
+    }
+
     #[derive(Debug, Clone, PartialEq)]
     struct RecordedCall {
         label: &'static str,
@@ -14903,6 +14952,7 @@ mod scripted_listener_action_tests {
             .find_map(|component| artboard.component_handle(component.local_id))
             .expect("component");
         let listener = RuntimeStateMachineListener {
+            name: None,
             target_local_id: artboard.component_at(target).local_id,
             is_single: false,
             listener_types: vec![RuntimeListenerType::Click],
@@ -15046,6 +15096,7 @@ mod scripted_listener_action_tests {
         let (mut artboard, _) = scripted_listener_artboard_and_machine();
         let mut definition = reset_input_state_machine(reset_input_actions());
         definition.listeners = Arc::new(vec![RuntimeStateMachineListener {
+            name: None,
             target_local_id: usize::MAX,
             is_single: false,
             listener_types: vec![RuntimeListenerType::Down],
@@ -15095,6 +15146,7 @@ mod scripted_listener_action_tests {
             .expect("fixture pointer target")
             .local_id;
         let listener = RuntimeStateMachineListener {
+            name: None,
             target_local_id,
             is_single: false,
             listener_types: vec![RuntimeListenerType::Down],
@@ -15632,6 +15684,7 @@ mod scripted_listener_action_tests {
         machine.focus.take_owner_events();
         machine.queued_focus_events.clear();
         machine.listener_definitions = Arc::new(vec![RuntimeStateMachineListener {
+            name: None,
             target_local_id: 1,
             is_single: false,
             listener_types: vec![RuntimeListenerType::Focus, RuntimeListenerType::Blur],
@@ -15993,6 +16046,7 @@ mod scripted_listener_action_tests {
                 calls: Rc::new(RefCell::new(Vec::new())),
             }));
         machine.listener_definitions = Arc::new(vec![RuntimeStateMachineListener {
+            name: None,
             target_local_id: 1,
             is_single: false,
             listener_types: vec![RuntimeListenerType::Event],
@@ -16876,6 +16930,7 @@ mod scripted_listener_action_tests {
             .expect("TextInput precedence state machine");
         assert!(machine.focus.set_focus_target(1));
         let listener = RuntimeStateMachineListener {
+            name: None,
             target_local_id: 1,
             is_single: false,
             listener_types: vec![
@@ -16921,6 +16976,7 @@ mod scripted_listener_action_tests {
                 calls: Rc::new(RefCell::new(Vec::new())),
             }));
         machine.listener_definitions = Arc::new(vec![RuntimeStateMachineListener {
+            name: None,
             target_local_id: 1,
             is_single: false,
             listener_types: vec![
@@ -16991,6 +17047,7 @@ mod scripted_listener_action_tests {
                 calls: Rc::new(RefCell::new(Vec::new())),
             }));
         machine.listener_definitions = Arc::new(vec![RuntimeStateMachineListener {
+            name: None,
             target_local_id: 1,
             is_single: false,
             listener_types: vec![RuntimeListenerType::Down, RuntimeListenerType::Blur],
@@ -17202,6 +17259,7 @@ mod scripted_listener_action_tests {
         // Discard the constructor fixture's unregistered initial focus event.
         machine.focus.take_owner_events();
         let listener = |listener_types| RuntimeStateMachineListener {
+            name: None,
             target_local_id: 1,
             is_single: false,
             listener_types,
@@ -17314,6 +17372,7 @@ mod scripted_listener_action_tests {
         assert!(machine.focus.set_focus_target(1));
         machine.focus.take_owner_events();
         machine.listener_definitions = Arc::new(vec![RuntimeStateMachineListener {
+            name: None,
             target_local_id: 1,
             is_single: false,
             listener_types: vec![RuntimeListenerType::Focus, RuntimeListenerType::Blur],
@@ -17363,6 +17422,7 @@ mod scripted_listener_action_tests {
                 calls: Rc::new(RefCell::new(Vec::new())),
             }));
         machine.listener_definitions = Arc::new(vec![RuntimeStateMachineListener {
+            name: None,
             target_local_id: 1,
             is_single: false,
             listener_types: vec![RuntimeListenerType::Focus, RuntimeListenerType::Blur],
@@ -17544,6 +17604,7 @@ mod scripted_listener_action_tests {
                 calls: Rc::new(RefCell::new(Vec::new())),
             }));
         machine.listener_definitions = Arc::new(vec![RuntimeStateMachineListener {
+            name: None,
             target_local_id: 1,
             is_single: false,
             listener_types: vec![RuntimeListenerType::Gamepad],
@@ -17586,6 +17647,7 @@ mod scripted_listener_action_tests {
                 true,
             );
         machine.listener_definitions = Arc::new(vec![RuntimeStateMachineListener {
+            name: None,
             target_local_id: 1,
             is_single: false,
             listener_types: vec![RuntimeListenerType::Gamepad],
@@ -17784,6 +17846,7 @@ mod scripted_listener_action_tests {
             fire_event_local_id: Option<usize>,
         ) -> RuntimeStateMachineListener {
             RuntimeStateMachineListener {
+                name: None,
                 target_local_id: 0,
                 is_single: false,
                 listener_types: vec![RuntimeListenerType::Event],
@@ -17916,6 +17979,7 @@ mod scripted_listener_action_tests {
         );
 
         let vm_listener_definition = RuntimeStateMachineListener {
+            name: None,
             target_local_id: 0,
             is_single: false,
             listener_types: vec![RuntimeListenerType::ViewModel],
@@ -18001,6 +18065,7 @@ mod scripted_listener_action_tests {
         let event_to_vm_definitions = Arc::new(vec![
             event_to_vm,
             RuntimeStateMachineListener {
+                name: None,
                 target_local_id: 0,
                 is_single: false,
                 listener_types: vec![RuntimeListenerType::ViewModel],
@@ -18677,6 +18742,7 @@ mod scripted_listener_action_tests {
             )
             .expect("attach scripted test listener");
         RuntimeStateMachineListener {
+            name: None,
             target_local_id: 1,
             is_single: false,
             listener_types,
@@ -19149,6 +19215,74 @@ mod scripted_listener_action_tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn profiler_listener_hook_records_the_runtime_listener_callsite() {
+        let (mut artboard, mut machine) = scripted_listener_artboard_and_machine();
+        Arc::make_mut(&mut machine.listener_definitions)[0].name =
+            Some("Profiler Listener Hook".to_owned());
+        let action = machine
+            .scripted_listener_actions()
+            .first()
+            .expect("fixture scripted listener action")
+            .clone();
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        machine
+            .set_scripted_listener_action_instance(
+                action.action_global_id(),
+                script("profiler", true, false, ListenerFailure::None, &calls),
+            )
+            .expect("attach profiler listener action");
+
+        let records = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        crate::with_rive_profile(|profile| {
+            profile.set_capture(Box::new(ProfilerListenerCapture::default()));
+            profile.set_listener_perform_change_flush_callback(Some(Box::new({
+                let records = std::sync::Arc::clone(&records);
+                move |incoming| records.lock().unwrap().extend_from_slice(incoming)
+            })));
+            profile.start();
+        });
+
+        machine
+            .try_pointer_down_with_timestamp_and_script_host(
+                &mut artboard,
+                200.0,
+                20.0,
+                101,
+                1.25,
+                &mut NoopScriptHost,
+            )
+            .expect("profiler pointer down");
+        machine
+            .try_pointer_up_with_timestamp_and_script_host(
+                &mut artboard,
+                200.0,
+                20.0,
+                101,
+                1.5,
+                &mut NoopScriptHost,
+            )
+            .expect("profiler pointer up");
+
+        let strings = crate::with_rive_profile(|profile| {
+            profile.flush_listener_perform_change_records();
+            profile.stop();
+            let strings = profile.string_table().to_vec();
+            profile.set_listener_perform_change_flush_callback(None);
+            strings
+        });
+        let records = records.lock().unwrap();
+        assert!(records.iter().any(|record| {
+            strings
+                .get(record.listener_name_id as usize)
+                .map(String::as_str)
+                == Some("Profiler Listener Hook")
+                && record.listener_type == RuntimeListenerType::Click.value()
+                && record.hit_event == RuntimeListenerType::Up.value()
+                && record.pointer_id == 101
+        }));
     }
 
     #[test]
@@ -19701,6 +19835,7 @@ mod scripted_listener_action_tests {
                 calls: event_calls,
             }));
         let event_listener = |target_local_id| RuntimeStateMachineListener {
+            name: None,
             target_local_id,
             is_single: false,
             listener_types: vec![RuntimeListenerType::Event],

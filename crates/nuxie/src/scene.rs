@@ -27156,6 +27156,90 @@ mod tests {
         Ok(())
     }
 
+    /// A File whose only `ScriptAsset` records are project-converter carriers
+    /// owns no Luau work, so drawing it must not construct a scripting VM or
+    /// demand a `PersistentFactory` renderer context. Regression: the editor
+    /// product surface draws with a plain factory, and converter-carrying
+    /// scenes (every repeated-list/expression document) failed every frame
+    /// with "scripted files require a PersistentFactory renderer context".
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn project_converter_only_scene_draws_with_a_plain_factory() -> Result<()> {
+        let catalog =
+            crate::ProjectDataConverterCatalog::compile([crate::ProjectDataConverterDefinition {
+                id: "strict-number".into(),
+                spec: crate::ProjectDataConverterSpec {
+                    output_type: None,
+                    kind: crate::ProjectDataConverterKind::ToNumber,
+                },
+            }])?;
+        let mut scene = Scene::new();
+        let artboard = scene.edit(|tx| {
+            let artboard = tx.create_artboard(ArtboardSpec {
+                name: "Project converter".into(),
+                width: 10.0,
+                height: 10.0,
+            })?;
+            let converted = tx.create(
+                Parent::Artboard(artboard),
+                NodeSpec::Shape(ShapeSpec {
+                    name: "Converted".into(),
+                    x: 0.0,
+                    y: 0.0,
+                    opacity: 1.0,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                }),
+            )?;
+            let converter = tx.create_project_data_converter(
+                "Strict number",
+                &catalog,
+                "strict-number",
+                [],
+                [],
+            )?;
+            let mut view_models = tx.view_models();
+            let model = view_models.create(ViewModelSpec {
+                scope: ViewModelScope::Local,
+                name: "State".into(),
+            })?;
+            let value = view_models.create_string(
+                model,
+                ViewModelStringSpec {
+                    name: "value".into(),
+                },
+            )?;
+            let defaults = view_models.create_instance(
+                model,
+                ViewModelInstanceSpec {
+                    name: Some("Defaults".into()),
+                },
+            )?;
+            view_models.set_string(defaults, value, "7")?;
+            view_models.set_artboard_default(artboard, defaults)?;
+            view_models.bind_opacity_with_converter(
+                converted,
+                ViewModelValueSource::String(ViewModelStringSource::direct(value)),
+                converter,
+                ViewModelDataBindingDirection::ToTarget,
+            )?;
+            Ok(artboard)
+        })?;
+
+        let (artboard, _receipt) = artboard;
+        let instance = scene.instantiate(artboard)?;
+        // Deliberately a bare RecordingFactory: no persistent context exists.
+        let mut factory = RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        let mut token = scene.new_draw_token(instance)?;
+        scene
+            .frame()
+            .draw(instance, &mut factory, &mut renderer, &mut token)
+            .map_err(|error| anyhow::anyhow!("converter-only scene draw failed: {error}"))?;
+        Ok(())
+    }
+
     #[test]
     fn project_converter_value_path_refreshes_from_the_retained_view_model_context() -> Result<()> {
         let semantic_path = crate::ProjectDataValuePath::Path {

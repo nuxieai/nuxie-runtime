@@ -404,6 +404,19 @@ impl AudioEngine {
         lock(&self.shared.state).playing.len()
     }
 
+    /// Current newest playing sound, mirroring the pinned TESTING seam.
+    #[doc(hidden)]
+    pub fn playing_sounds_head(&self) -> Option<AudioSound> {
+        lock(&self.shared.state)
+            .playing
+            .first()
+            .cloned()
+            .map(|state| AudioSound {
+                state,
+                engine: Arc::downgrade(&self.shared),
+            })
+    }
+
     /// Return and reset the peak-positive sample for one channel.
     pub fn level(&self, channel: u32) -> f32 {
         let mut engine = lock(&self.shared.state);

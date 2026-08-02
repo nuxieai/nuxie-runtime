@@ -6,7 +6,11 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+cpal = { version = "0.16", optional = true }
 symphonia = { version = "0.5.4", default-features = false, features = ["flac", "mp3", "pcm", "wav"] }
 
 [lints]
 workspace = true
+
+[features]
+audio-device = ["dep:cpal"]

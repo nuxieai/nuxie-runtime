@@ -408,6 +408,7 @@ impl FileScriptRuntime {
         file_asset_owners: &nuxie_runtime::RuntimeFileAssetOwners,
         groups: &[ScriptMountGroup],
         factory: &mut dyn Factory,
+        default_context_view_model: Option<nuxie_runtime::ScriptViewModel>,
     ) -> std::result::Result<PreparedFileScriptMounts, nuxie_runtime::ScriptError> {
         let domain = render_factory_domain(factory);
         if let Some(ready) = self.ready.as_ref() {
@@ -425,10 +426,23 @@ impl FileScriptRuntime {
         // Keep the candidate cold until every concrete occurrence has a
         // generated table and successful init. Any error drops all tables and
         // the candidate VM, leaving this File retryable with zero attachments.
-        let candidate = self.build_candidate(runtime, factory)?;
+        let mut candidate = self.build_candidate(runtime, factory)?;
+        candidate
+            .vm
+            .set_default_context_view_model(default_context_view_model);
         candidate
             .vm
             .set_image_asset_owners(file_asset_owners.image_assets());
+        let audio_assets = file_asset_owners.audio_assets();
+        candidate.vm.set_audio_asset_owners(audio_assets);
+        for asset in runtime
+            .file_assets()
+            .into_iter()
+            .filter(|asset| asset.type_name == "AudioAsset")
+        {
+            let name = asset.string_property("name").unwrap_or_default();
+            candidate.vm.register_audio_asset_identity(name, asset.id);
+        }
         let groups = instantiate_script_mounts(&candidate, groups, factory)?;
         Ok(PreparedFileScriptMounts {
             // Drop table handles before their candidate VM on a failed
@@ -2904,6 +2918,7 @@ fn mount_scripted_artboard_tree(
     root_graph: &ArtboardGraph,
     instance: &mut RuntimeArtboardInstance,
     factory: &mut dyn Factory,
+    root_view_model: Option<&ViewModelInstance>,
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
     {
         let scripts = file.scripts.borrow();
@@ -2927,6 +2942,9 @@ fn mount_scripted_artboard_tree(
         &file.file_asset_owners,
         &groups,
         factory,
+        root_view_model.and_then(|view_model| {
+            nuxie_runtime::script_view_model_from_owned(&file.runtime, view_model.handle())
+        }),
     )?;
     validate_prepared_script_mount_topology(instance, &prepared.groups)?;
 
@@ -2976,7 +2994,8 @@ fn prepare_scripted_artboard_tree(
     instance: &mut RuntimeArtboardInstance,
     factory: &mut dyn Factory,
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
-    let has_script_target = mount_scripted_artboard_tree(file, root_graph, instance, factory)?;
+    let has_script_target =
+        mount_scripted_artboard_tree(file, root_graph, instance, factory, None)?;
     let changed = if has_script_target {
         flush_scripted_artboard_tree(instance, factory)?
     } else {
@@ -3000,7 +3019,7 @@ fn advance_scripted_artboard_frame_with_factory(
     factory: &mut dyn Factory,
     root_view_model: Option<&ViewModelInstance>,
 ) -> std::result::Result<bool, nuxie_runtime::ScriptError> {
-    let _ = mount_scripted_artboard_tree(file, root_graph, instance, factory)?;
+    let _ = mount_scripted_artboard_tree(file, root_graph, instance, factory, root_view_model)?;
     for machine in state_machines.iter_mut() {
         initialize_state_machine_scripted_objects(
             file,

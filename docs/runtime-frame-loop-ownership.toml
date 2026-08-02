@@ -282,6 +282,23 @@ rust_modules = [
   "crates/nuxie-runtime/src/bones/tendon.rs",
   "crates/nuxie-runtime/src/components.rs",
   "crates/nuxie-runtime/src/constraints.rs",
+  "crates/nuxie-runtime/src/constraints/constraint.rs",
+  "crates/nuxie-runtime/src/constraints/constrainable_list.rs",
+  "crates/nuxie-runtime/src/constraints/distance_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/draggable_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/follow_path_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/ik_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/list_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/list_follow_path_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/rotation_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/scale_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/scrolling/scroll_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/scrolling/scroll_constraint_proxy.rs",
+  "crates/nuxie-runtime/src/constraints/scrolling/scroll_physics.rs",
+  "crates/nuxie-runtime/src/constraints/scrolling/scroll_virtualizer.rs",
+  "crates/nuxie-runtime/src/constraints/targeted_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/transform_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/translation_constraint.rs",
   "crates/nuxie-runtime/src/artboard.rs",
   "crates/nuxie-runtime/src/draw.rs",
   "crates/nuxie-runtime/src/layout/n_sliced_node.rs",
@@ -1356,7 +1373,7 @@ status = "faithful"
 upstream = "src/constraints/constrainable_list.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/constrainable_list.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1364,7 +1381,7 @@ status = "faithful"
 upstream = "src/constraints/constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/constraints/constraint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1372,7 +1389,7 @@ status = "faithful"
 upstream = "src/constraints/distance_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/distance_constraint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1380,7 +1397,7 @@ status = "faithful"
 upstream = "src/constraints/draggable_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/draggable_constraint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1388,7 +1405,7 @@ status = "faithful"
 upstream = "src/constraints/follow_path_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/follow_path_constraint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1396,7 +1413,7 @@ status = "faithful"
 upstream = "src/constraints/ik_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/constraints/ik_constraint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1404,7 +1421,7 @@ status = "faithful"
 upstream = "src/constraints/list_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/list_constraint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1412,7 +1429,7 @@ status = "faithful"
 upstream = "src/constraints/list_follow_path_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/constraints/list_follow_path_constraint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1420,7 +1437,7 @@ status = "faithful"
 upstream = "src/constraints/rotation_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/rotation_constraint.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -1428,7 +1445,7 @@ status = "faithful"
 upstream = "src/constraints/scale_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/scale_constraint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1436,7 +1453,7 @@ status = "faithful"
 upstream = "src/constraints/scrolling/clamped_scroll_physics.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/scrolling/scroll_physics.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1468,7 +1485,7 @@ status = "faithful"
 upstream = "src/constraints/scrolling/scroll_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints.rs", "crates/nuxie-runtime/src/constraints/scrolling/scroll_constraint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1476,7 +1493,7 @@ status = "faithful"
 upstream = "src/constraints/scrolling/scroll_constraint_proxy.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/scrolling/scroll_constraint_proxy.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1484,7 +1501,7 @@ status = "faithful"
 upstream = "src/constraints/scrolling/scroll_physics.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/scrolling/scroll_physics.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1492,7 +1509,7 @@ status = "faithful"
 upstream = "src/constraints/scrolling/scroll_virtualizer.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/scrolling/scroll_virtualizer.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1500,7 +1517,7 @@ status = "faithful"
 upstream = "src/constraints/targeted_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/constraints/targeted_constraint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1508,7 +1525,7 @@ status = "faithful"
 upstream = "src/constraints/transform_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/transform_constraint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1516,7 +1533,7 @@ status = "faithful"
 upstream = "src/constraints/translation_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/translation_constraint.rs"]
 dynamically_reached = true
 status = "faithful"
 

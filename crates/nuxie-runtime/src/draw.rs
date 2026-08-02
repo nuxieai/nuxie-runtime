@@ -1152,7 +1152,7 @@ impl ArtboardInstance {
                     continue;
                 };
                 let host_transform_local =
-                    if crate::constraints::component_list_virtualization(self, host_local_id)
+                    if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(self, host_local_id)
                         .is_some()
                     {
                         self.component_parent_local(host_local_id)
@@ -2610,7 +2610,10 @@ impl ArtboardInstance {
             return Ok(());
         };
         let is_virtualized =
-            crate::constraints::component_list_virtualization(self, local_id).is_some();
+            crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
+                self, local_id,
+            )
+            .is_some();
         let (start, end) = match (phase, is_virtualized) {
             (RuntimeComponentListPreparationPhase::Initial, true) => (0, items.len().min(1)),
             (RuntimeComponentListPreparationPhase::Initial, false) => (0, items.len()),
@@ -2951,7 +2954,7 @@ impl ArtboardInstance {
                     continue;
                 };
                 let is_virtualized =
-                    crate::constraints::component_list_virtualization(self, local_id).is_some();
+                    crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(self, local_id).is_some();
                 let (start, end) = match (phase, is_virtualized) {
                     (RuntimeComponentListPreparationPhase::Initial, true) => {
                         (0, items.len().min(1))
@@ -6597,7 +6600,7 @@ impl ArtboardInstance {
         list_locals
             .into_iter()
             .map(|list_local| {
-                let host_transform_local = if crate::constraints::component_list_virtualization(
+                let host_transform_local = if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
                     self, list_local,
                 )
                 .is_some()
@@ -17916,7 +17919,11 @@ pub(crate) fn runtime_component_list_item_base_transforms(
         // Yoga leaf size (`artboard_component_list.cpp:1307-1330`;
         // `artboard.cpp:1729-1734`).
         let item_size = runtime_component_list_item_layout_size(item);
-        if crate::constraints::component_list_virtualization(instance, local_id).is_some() {
+        if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
+            instance, local_id,
+        )
+        .is_some()
+        {
             // `ScrollVirtualizer` writes the retained
             // ArtboardComponentList transform directly through
             // `setVirtualizablePosition`; draw performs no second window or
@@ -18039,7 +18046,11 @@ fn runtime_draw_component_list_with_state(
     // C++ therefore draws it in its parent's world space; non-virtualized
     // lists continue to use their own world transform.
     let host_transform_local =
-        if crate::constraints::component_list_virtualization(instance, local_id).is_some() {
+        if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
+            instance, local_id,
+        )
+        .is_some()
+        {
             instance
                 .component_parent_local(local_id)
                 .unwrap_or(local_id)

@@ -48,9 +48,10 @@ use crate::components::{
     retain_runtime_layout_component_styles, retain_runtime_solos,
     retain_runtime_text_input_scroll_constraints,
 };
+use crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization;
 use crate::constraints::{
-    apply_scroll_offset_changed, component_list_virtualization, retain_runtime_scroll_constraints,
-    runtime_scroll_double_property, set_runtime_scroll_double_property,
+    apply_scroll_offset_changed, retain_runtime_scroll_constraints, runtime_scroll_double_property,
+    set_runtime_scroll_double_property,
 };
 use crate::custom_property_container::{
     RuntimeArtboardCustomPropertyBindingInstance, build_artboard_custom_property_bindings,
@@ -1214,7 +1215,7 @@ impl ArtboardInstance {
                 if constraint_state.targeted {
                     let target_local = constraint_state
                         .targeted
-                        .then(crate::constraints::targeted_constraint_target_id_property_key)
+                        .then(crate::constraints::targeted_constraint::targeted_constraint_target_id_property_key)
                         .flatten()
                         .and_then(|key| objects.uint_property(component.local_id, key))
                         .and_then(|target| usize::try_from(target).ok());
@@ -5823,7 +5824,10 @@ impl ArtboardInstance {
             let bounds = assigned_bounds.remove(&list_local).unwrap_or_default();
             let mut measured_sizes = Vec::new();
             let virtualized =
-                crate::constraints::component_list_virtualization(self, list_local).is_some();
+                crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
+                    self, list_local,
+                )
+                .is_some();
             if let Some(items) = self.component_list_items_mut(list_local) {
                 for (item, bounds) in items.iter_mut().zip(bounds) {
                     let previous_size = runtime_component_list_item_layout_size(item);
@@ -5880,7 +5884,10 @@ impl ArtboardInstance {
                 // `updateArtboardsWorldTransform`; otherwise the refreshed
                 // hosted-layout bases overwrite FollowPath's retained result
                 // (`artboard_component_list.cpp:1300-1358`).
-                changed |= crate::constraints::apply_list_constraints(self, list_component);
+                changed |= crate::constraints::constrainable_list::apply_list_constraints(
+                    self,
+                    list_component,
+                );
             }
 
             let style_local = self.layout_component_style_local(list_local);
@@ -5932,7 +5939,10 @@ impl ArtboardInstance {
                 list.layout_size = (width, height);
             }
             if let Some(constraint) = scroll_constraint {
-                changed |= crate::constraints::constrain_scroll_virtualizer(self, constraint, true);
+                changed |=
+                    crate::constraints::scrolling::scroll_virtualizer::constrain_scroll_virtualizer(
+                        self, constraint, true,
+                    );
             }
             let roots = self
                 .runtime_component_list_child_root_transforms(root_transform)
@@ -9202,7 +9212,10 @@ impl ArtboardInstance {
             .and_then(|component| component.concrete.follow_path.as_ref())
             .is_some()
         {
-            crate::constraints::update_follow_path_constraint(self, component_handle);
+            crate::constraints::follow_path_constraint::update_follow_path_constraint(
+                self,
+                component_handle,
+            );
         }
         if dirt.contains(ComponentDirt::TRANSFORM) {
             let authored = self.authored_transform(local_id);
@@ -9260,8 +9273,11 @@ impl ArtboardInstance {
                     .expect("component handle must remain live")
                     .update_world_transform(parent_world);
                 crate::constraints::apply_parent_layout_constraints(self, component_handle);
-                crate::constraints::apply_list_constraints(self, component_handle);
-                crate::constraints::apply_constraints(self, component_handle);
+                crate::constraints::constrainable_list::apply_list_constraints(
+                    self,
+                    component_handle,
+                );
+                crate::constraints::constraint::apply_constraints(self, component_handle);
 
                 // The parent Artboard's normalized origin is removed in the
                 // LayoutComponent-owned replacement world.
@@ -9290,8 +9306,8 @@ impl ArtboardInstance {
             // before ordinary Transform constraints, and the ordinary pass
             // skips ListConstraint subtypes
             // (`artboard_component_list.cpp:1333-1358`).
-            crate::constraints::apply_list_constraints(self, component_handle);
-            crate::constraints::apply_constraints(self, component_handle);
+            crate::constraints::constrainable_list::apply_list_constraints(self, component_handle);
+            crate::constraints::constraint::apply_constraints(self, component_handle);
         }
         if dirt.contains(ComponentDirt::RENDER_OPACITY) {
             let previous_opacity = self
@@ -9558,7 +9574,7 @@ impl ArtboardInstance {
             .component(local_id)
             .and_then(|component| component.concrete.constraint)
             .is_some_and(|constraint| {
-                crate::constraints::constraint_uint_change_marks_parent_dirty(
+                crate::constraints::constraint::constraint_uint_change_marks_parent_dirty(
                     constraint.kind,
                     property_key,
                 ) && self.mark_constraint_parent_transform_dirty(local_id)
@@ -10075,7 +10091,7 @@ impl ArtboardInstance {
             .component(local_id)
             .and_then(|component| component.concrete.constraint)
             .is_some_and(|constraint| {
-                crate::constraints::constraint_is_ik_strength_property(
+                crate::constraints::constraint::constraint_is_ik_strength_property(
                     constraint.kind,
                     property_key,
                 )
@@ -10087,7 +10103,7 @@ impl ArtboardInstance {
             .component(local_id)
             .and_then(|component| component.concrete.constraint)
             .is_some_and(|constraint| {
-                crate::constraints::constraint_double_change_marks_parent_dirty(
+                crate::constraints::constraint::constraint_double_change_marks_parent_dirty(
                     constraint.kind,
                     property_key,
                 )
@@ -17616,10 +17632,12 @@ mod tests {
             false,
         );
 
-        assert!(crate::constraints::update_follow_path_constraint(
-            &mut instance,
-            constraint_handle
-        ));
+        assert!(
+            crate::constraints::follow_path_constraint::update_follow_path_constraint(
+                &mut instance,
+                constraint_handle
+            )
+        );
         let follow = instance
             .component(3)
             .unwrap()
@@ -17641,10 +17659,12 @@ mod tests {
             ],
             false,
         );
-        assert!(crate::constraints::update_follow_path_constraint(
-            &mut instance,
-            constraint_handle
-        ));
+        assert!(
+            crate::constraints::follow_path_constraint::update_follow_path_constraint(
+                &mut instance,
+                constraint_handle
+            )
+        );
         let follow = instance
             .component(3)
             .unwrap()
@@ -17673,10 +17693,12 @@ mod tests {
             .as_mut()
             .unwrap()
             .target = Some(instance.component_handle(4).unwrap());
-        assert!(!crate::constraints::update_follow_path_constraint(
-            &mut instance,
-            constraint_handle
-        ));
+        assert!(
+            !crate::constraints::follow_path_constraint::update_follow_path_constraint(
+                &mut instance,
+                constraint_handle
+            )
+        );
         let follow = instance
             .component(3)
             .unwrap()

@@ -2360,13 +2360,6 @@ fn validate_pointer_timestamp(timestamp_seconds: f32) -> Result<(), ScriptError>
     }
 }
 
-fn validate_pointer_move(x: f32, y: f32, timestamp_seconds: f32) -> Result<(), ScriptError> {
-    if !x.is_finite() || !y.is_finite() {
-        return Err(ScriptError::new("pointer position must be finite"));
-    }
-    validate_pointer_timestamp(timestamp_seconds)
-}
-
 #[derive(Debug)]
 struct RuntimeViewModelListenerInstance {
     /// Stable authored listener-definition arena plus index, matching C++'s
@@ -6719,9 +6712,6 @@ impl StateMachineInstance {
         seconds: f32,
         pointer_id: i32,
     ) -> bool {
-        if validate_pointer_move(x, y, seconds).is_err() {
-            return false;
-        }
         crate::scene::pointer_move(self, artboard, x, y, seconds, pointer_id)
     }
 
@@ -6734,19 +6724,18 @@ impl StateMachineInstance {
         pointer_id: i32,
         context: &mut RuntimeOwnedViewModelInstance,
     ) -> bool {
-        if validate_pointer_move(x, y, seconds).is_err() {
-            return false;
-        }
-        let result = self.update_pointer_listeners_with_script_host(
-            artboard,
-            RuntimeListenerType::Move,
-            x,
-            y,
-            pointer_id,
-            seconds,
-            Some(context),
-            &mut NoopScriptHost,
-        );
+        let result = validate_pointer_timestamp(seconds).and_then(|()| {
+            self.update_pointer_listeners_with_script_host(
+                artboard,
+                RuntimeListenerType::Move,
+                x,
+                y,
+                pointer_id,
+                seconds,
+                Some(context),
+                &mut NoopScriptHost,
+            )
+        });
         self.retain_script_result(result)
     }
 
@@ -17832,22 +17821,6 @@ mod scripted_listener_action_tests {
         assert!(machine.take_reported_events(&artboard).is_empty());
         assert_eq!(machine.reported_event_count(), 1);
         assert_eq!(machine.next_unapplied_reported_event_index(), 0);
-    }
-
-    #[test]
-    fn pointer_move_validation_rejects_nonfinite_coordinates_and_timestamps() {
-        assert!(validate_pointer_move(0.0, 0.0, 0.0).is_ok());
-        for (x, y, timestamp) in [
-            (f32::NAN, 0.0, 0.0),
-            (0.0, f32::INFINITY, 0.0),
-            (0.0, 0.0, f32::NAN),
-            (0.0, 0.0, -0.001),
-        ] {
-            assert!(
-                validate_pointer_move(x, y, timestamp).is_err(),
-                "invalid pointer move ({x}, {y}, {timestamp}) must fail closed",
-            );
-        }
     }
 
     #[test]

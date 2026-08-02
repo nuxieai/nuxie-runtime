@@ -16,8 +16,9 @@ use nuxie_runtime::{
     RuntimeImageDimensionConflict, RuntimeOwnedViewModelBooleanSourceHandle,
     RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
     RuntimeOwnedViewModelListStringMatchBooleanHandle, RuntimeOwnedViewModelNumberSourceHandle,
-    RuntimeOwnedViewModelStringSourceHandle, StateMachineEventContext, StateMachineInputKind,
-    StateMachineInstance, StateMachineReportedEvent, embedded_font_is_parseable,
+    RuntimeOwnedViewModelStringSourceHandle, RuntimeScrollConstraintSnapshot,
+    StateMachineEventContext, StateMachineInputKind, StateMachineInstance,
+    StateMachineReportedEvent, embedded_font_is_parseable,
 };
 
 use crate::{File, OwnedArtboardInstance, RuntimeOwnedViewModelContext, ViewModelInstance};
@@ -8454,6 +8455,79 @@ impl Scene {
             inputs,
             active_animation_names,
         })
+    }
+
+    /// Snapshot every imported ScrollConstraint owned by one exact live Scene
+    /// artboard occurrence.
+    ///
+    /// This is observation-only. `instance` supplies the occurrence boundary;
+    /// authored identities in the returned snapshots are resolved only inside
+    /// that retained runtime artboard. Pinned C++ discovery uses
+    /// `ArtboardInstance::find<ScrollConstraint>()` before reading the
+    /// occurrence (`layout_scroll_test.cpp:412-416,498-502`).
+    pub fn scroll_constraint_occurrences(
+        &self,
+        instance: InstanceId,
+    ) -> std::result::Result<Vec<RuntimeScrollConstraintSnapshot>, ResolveError> {
+        let live = self
+            .instances
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|candidate| candidate.id == instance)
+            .ok_or(ResolveError::UnknownInstance)?;
+        Ok(live.runtime.scroll_constraint_occurrences())
+    }
+
+    /// Read the imported ScrollConstraint that owns one concrete content local
+    /// in one exact live Scene artboard occurrence.
+    pub fn scroll_constraint_for_content(
+        &self,
+        instance: InstanceId,
+        content_local_id: usize,
+    ) -> std::result::Result<Option<RuntimeScrollConstraintSnapshot>, ResolveError> {
+        let live = self
+            .instances
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|candidate| candidate.id == instance)
+            .ok_or(ResolveError::UnknownInstance)?;
+        Ok(live.runtime.scroll_constraint_for_content(content_local_id))
+    }
+
+    /// Read one imported constraint authored identity inside one exact live
+    /// Scene artboard occurrence.
+    pub fn scroll_constraint_for_authored_id(
+        &self,
+        instance: InstanceId,
+        constraint_authored_id: u32,
+    ) -> std::result::Result<Option<RuntimeScrollConstraintSnapshot>, ResolveError> {
+        let live = self
+            .instances
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|candidate| candidate.id == instance)
+            .ok_or(ResolveError::UnknownInstance)?;
+        Ok(live
+            .runtime
+            .scroll_constraint_for_authored_id(constraint_authored_id))
+    }
+
+    /// Read the imported constraint for one authored content identity inside
+    /// one exact live Scene artboard occurrence.
+    pub fn scroll_constraint_for_content_authored_id(
+        &self,
+        instance: InstanceId,
+        content_authored_id: u32,
+    ) -> std::result::Result<Option<RuntimeScrollConstraintSnapshot>, ResolveError> {
+        let live = self
+            .instances
+            .iter()
+            .filter_map(Option::as_ref)
+            .find(|candidate| candidate.id == instance)
+            .ok_or(ResolveError::UnknownInstance)?;
+        Ok(live
+            .runtime
+            .scroll_constraint_for_content_authored_id(content_authored_id))
     }
 
     /// Read one authored layout view's retained solved border box.

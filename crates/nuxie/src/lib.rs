@@ -91,10 +91,11 @@ pub use nuxie_runtime::{
     ProjectDataConverterState, ProjectDataConverterStringPadSide,
     ProjectDataConverterStringTrimMode, ProjectDataConverterValidationRule, ProjectDataValue,
     ProjectDataValuePath, RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetLoader,
-    RuntimeLayerState, RuntimeOwnedViewModelContext, RuntimeStateMachineInput, ScriptCoreString,
-    ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure,
-    ScriptValue, ScriptingVm, StateMachineInputInstance, StateMachineInputKind,
-    StateMachineInstance, StateMachineReportedEvent,
+    RuntimeLayerState, RuntimeOwnedViewModelContext, RuntimeScrollConstraintSnapshot,
+    RuntimeStateMachineInput, ScriptCoreString, ScriptError, ScriptHost, ScriptInstance,
+    ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue, ScriptingVm,
+    StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
+    StateMachineReportedEvent,
 };
 use nuxie_runtime::{RuntimeFileStateMachineActionCatalog, RuntimeFileViewModelInstanceCatalog};
 
@@ -3969,6 +3970,37 @@ impl<'a> ArtboardInstance<'a> {
         self.raw.artboard_bounds()
     }
 
+    /// Snapshot imported ScrollConstraints in this concrete artboard occurrence.
+    pub fn scroll_constraint_occurrences(&self) -> Vec<RuntimeScrollConstraintSnapshot> {
+        self.raw.scroll_constraint_occurrences()
+    }
+
+    /// Find the imported ScrollConstraint that owns one local content component.
+    pub fn scroll_constraint_for_content(
+        &self,
+        content_local_id: usize,
+    ) -> Option<RuntimeScrollConstraintSnapshot> {
+        self.raw.scroll_constraint_for_content(content_local_id)
+    }
+
+    /// Find the occurrence cloned from one file-global authored constraint.
+    pub fn scroll_constraint_for_authored_id(
+        &self,
+        constraint_authored_id: u32,
+    ) -> Option<RuntimeScrollConstraintSnapshot> {
+        self.raw
+            .scroll_constraint_for_authored_id(constraint_authored_id)
+    }
+
+    /// Find the imported ScrollConstraint for an authored content component.
+    pub fn scroll_constraint_for_content_authored_id(
+        &self,
+        content_authored_id: u32,
+    ) -> Option<RuntimeScrollConstraintSnapshot> {
+        self.raw
+            .scroll_constraint_for_content_authored_id(content_authored_id)
+    }
+
     pub fn advance_nested_artboards(&mut self, elapsed_seconds: f32) -> bool {
         self.raw.advance_nested_artboards(elapsed_seconds)
     }
@@ -4548,6 +4580,37 @@ impl OwnedArtboardInstance {
 
     pub fn artboard_bounds(&self) -> (f32, f32, f32, f32) {
         self.raw.artboard_bounds()
+    }
+
+    /// Snapshot imported ScrollConstraints in this concrete artboard occurrence.
+    pub fn scroll_constraint_occurrences(&self) -> Vec<RuntimeScrollConstraintSnapshot> {
+        self.raw.scroll_constraint_occurrences()
+    }
+
+    /// Find the imported ScrollConstraint that owns one local content component.
+    pub fn scroll_constraint_for_content(
+        &self,
+        content_local_id: usize,
+    ) -> Option<RuntimeScrollConstraintSnapshot> {
+        self.raw.scroll_constraint_for_content(content_local_id)
+    }
+
+    /// Find the occurrence cloned from one file-global authored constraint.
+    pub fn scroll_constraint_for_authored_id(
+        &self,
+        constraint_authored_id: u32,
+    ) -> Option<RuntimeScrollConstraintSnapshot> {
+        self.raw
+            .scroll_constraint_for_authored_id(constraint_authored_id)
+    }
+
+    /// Find the imported ScrollConstraint for an authored content component.
+    pub fn scroll_constraint_for_content_authored_id(
+        &self,
+        content_authored_id: u32,
+    ) -> Option<RuntimeScrollConstraintSnapshot> {
+        self.raw
+            .scroll_constraint_for_content_authored_id(content_authored_id)
     }
 
     /// Compatibility attachment path for an already-owned instance.
@@ -6146,6 +6209,68 @@ mod owned_instance_tests {
                 )
                 .expect("pointer up succeeds")
         );
+    }
+
+    #[cfg(not(feature = "scripting"))]
+    #[test]
+    fn borrowed_and_owned_artboards_expose_scroll_constraint_observations() {
+        let file =
+            File::import(&external_fixture("scroll_test.riv")).expect("scroll fixture imports");
+        let mut borrowed = file
+            .artboard_named("Artboard 2")
+            .expect("scroll fixture has Artboard 2")
+            .instantiate()
+            .expect("borrowed scroll artboard instantiates");
+        borrowed.advance(0.0);
+        let observed = borrowed.scroll_constraint_occurrences();
+        let first = observed.first().expect("imported scroll occurrence");
+        assert!(first.physics_present);
+        assert!(!first.physics_running);
+        assert_eq!(
+            borrowed.scroll_constraint_for_content(first.content_local_id),
+            Some(*first)
+        );
+        assert_eq!(
+            borrowed.scroll_constraint_for_authored_id(first.constraint_authored_id),
+            Some(*first)
+        );
+        assert_eq!(
+            borrowed.scroll_constraint_for_content_authored_id(first.content_authored_id),
+            Some(*first)
+        );
+
+        let content_local_id = first.content_local_id;
+        let mut machine = borrowed
+            .state_machine_instance(0)
+            .expect("scroll fixture has a state machine");
+        start_clamped_scroll_physics(borrowed.raw_mut(), &mut machine);
+        assert!(
+            borrowed
+                .scroll_constraint_for_content(content_local_id)
+                .expect("live imported scroll occurrence")
+                .physics_running,
+            "pointer release exposes the imported physics owner's running state"
+        );
+        borrowed.advance_with_state_machine(&mut machine, 0.1);
+        assert!(
+            !borrowed
+                .scroll_constraint_for_content(content_local_id)
+                .expect("settled imported scroll occurrence")
+                .physics_running,
+            "the observation follows the imported physics owner through settlement"
+        );
+
+        let file = Arc::new(
+            File::import(&external_fixture("scroll_test.riv")).expect("scroll fixture imports"),
+        );
+        let index = file
+            .artboard_named("Artboard 2")
+            .expect("scroll fixture has Artboard 2")
+            .index();
+        let mut owned = OwnedArtboardInstance::instantiate(file, index)
+            .expect("owned scroll artboard instantiates");
+        owned.advance(0.0);
+        assert_eq!(owned.scroll_constraint_occurrences(), observed);
     }
 
     #[cfg(not(feature = "scripting"))]

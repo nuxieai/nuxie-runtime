@@ -1695,6 +1695,12 @@ interpolate_to_end|frame 1, op 63 (addRawPath): expected 954 fields, got 975
 keyboard_listener|frame 0, op 85 (color): expected color, got save
 keyboard_listener-KeyboardInput|frame 1, op 214 (color): expected color, got save
 juice|frame 0, op 40 (blendMode): expected blendMode, got makeRenderPaint
+layout_scroll_drag_multiplier_layouts|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
+layout_scroll_drag_multiplier_list|frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize
+layout_scroll_drag_multiplier_virtualized|frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize
+layout_scroll_snap_padding_layouts|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
+layout_scroll_snap_padding_list|frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize
+layout_scroll_snap_padding_virtualized|frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize
 list_focus_order|frame 0, op 78 (addRawPath), field point: expected (-0.0 (0x80000000), 137.20052), got (-0.0 (0x80000000), 137.20053)
 layout_scroll_visibility|frame 0, op 130 (transform), field xy: expected -0.0 (0x80000000), got 0
 multitouch_enter-MainList|frame 1, op 179 (color): expected color, got save
@@ -2199,6 +2205,59 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
 
 
 def dynamic_producers() -> list[Producer]:
+    def actions_for(silver_id: str) -> tuple[dict[str, object], ...]:
+        drag_multiplier = "drag_multiplier" in silver_id
+        distance = 600.0 if drag_multiplier else 1500.0
+        steps = 8 if drag_multiplier else 4
+        start_y = "artboard-height/2"
+        actions = [
+            action("bind-default-view-model"),
+            action("advance", target="state-machine", seconds=0.0),
+            action("draw"),
+            action(
+                "pointer-move",
+                x="artboard-width/2",
+                y=start_y,
+                seconds=1.0,
+                pointer_id=0,
+            ),
+            action(
+                "pointer-down",
+                x="artboard-width/2",
+                y=start_y,
+                pointer_id=0,
+            ),
+        ]
+        for step in range(1, steps + 1):
+            offset = distance * step / steps
+            y = f"artboard-height/2-{offset:g}"
+            actions += [
+                action("frame"),
+                action(
+                    "pointer-move",
+                    x="artboard-width/2",
+                    y=y,
+                    seconds=float(step + 1),
+                    pointer_id=0,
+                ),
+                action("advance", target="state-machine", seconds=0.016),
+                action("draw"),
+            ]
+        actions += [
+            action(
+                "pointer-up",
+                x="artboard-width/2",
+                y=f"artboard-height/2-{distance:g}",
+                pointer_id=0,
+            ),
+            action(
+                "advance-draw-until-scroll-physics-stops",
+                max_frames=56,
+                seconds=0.016,
+            ),
+        ]
+        return tuple(actions)
+
     return [
         Producer(
             id=silver_id,
@@ -2212,16 +2271,16 @@ def dynamic_producers() -> list[Producer]:
             random="deterministic",
             view_model="bind-default-if-present",
             sample_times=(0.0, 0.016),
-            actions=(),
-            status="unsupported-feature",
+            actions=actions_for(silver_id),
+            status="diverges",
             producer_class="layout-scroll-dynamic",
             provenance_file="tests/unit_tests/runtime/layout_scroll_test.cpp",
             provenance_test=test_name,
             producer_line=line,
             note=(
-                "Unsupported feature: scroll-constraint-physics-running-state-exposure; "
-                "the pinned helper terminates from ScrollConstraint::physics()->isRunning(), "
-                "which has no public Rust runtime surface."
+                "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE "
+                "actions; first difference: "
+                f"{DIVERGENCES[silver_id]}."
             ),
         )
         for silver_id, source, artboard, test_name, line in DYNAMIC_LAYOUT_SCROLL

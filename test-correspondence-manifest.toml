@@ -17,6 +17,9 @@ partial = 19
 pending = 85
 n-a = 2
 
+[ratchet]
+max_pending = 85
+
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
 test_case_count = 9

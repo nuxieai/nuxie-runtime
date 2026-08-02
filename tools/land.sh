@@ -4,6 +4,7 @@
 # Usage: tools/land.sh <branch> <pr-title-file> [extra-gate ...]
 set -euo pipefail
 branch="$1"; body="$2"; shift 2
+[[ -f "$body" ]] || { echo "land.sh: body file $body missing" >&2; exit 1; }
 make cpp-probe
 cargo test -p nuxie-runtime
 cargo test -p nuxie --features scripting

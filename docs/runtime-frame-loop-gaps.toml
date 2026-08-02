@@ -477,7 +477,7 @@ max_occurrences = 0
 
 [[ratchet]]
 id = "keyframe_read_time_seconds"
-globs = ["crates/nuxie-runtime/src/animation.rs"]
+globs = ["crates/nuxie-runtime/src/animation/keyframe.rs"]
 pattern = "fn\\s+seconds\\s*\\(\\s*&self\\s*,\\s*fps"
 max_occurrences = 0
 
@@ -489,7 +489,7 @@ max_occurrences = 0
 
 [[ratchet]]
 id = "keyed_property_family_sidecars"
-globs = ["crates/nuxie-runtime/src/animation.rs"]
+globs = ["crates/nuxie-runtime/src/animation/keyed_property.rs"]
 pattern = "\\b(?:double_source_value|color_source_value|bool_source_value|double_property|color_property|bool_property|uint_property|string_property|callback_event)\\s*:"
 max_occurrences = 0
 
@@ -507,7 +507,7 @@ max_occurrences = 0
 
 [[ratchet]]
 id = "linear_animation_local_zero_guard"
-globs = ["crates/nuxie-runtime/src/animation.rs"]
+globs = ["crates/nuxie-runtime/src/animation/linear_animation.rs", "crates/nuxie-runtime/src/animation/linear_animation_instance.rs"]
 pattern = "if\\s+(?:self\\.fps\\s*==\\s*0|fps\\s*==\\s*0\\.0|duration\\s*==\\s*0\\.0|range\\s*!=\\s*0\\.0)"
 max_occurrences = 0
 
@@ -1986,7 +1986,7 @@ max_occurrences = 1
 
 [[ratchet]]
 id = "state_machine_keyframe_build_order_required"
-globs = ["crates/nuxie-runtime/src/animation.rs"]
+globs = ["crates/nuxie-runtime/src/animation/linear_animation_instance.rs"]
 pattern = "fn\\s+build_key_frame_data_binds\\b[\\s\\S]{0,2200}add_key_frame_value_holder\\([\\s\\S]{0,500}key_frame_data_bind_graphs\\s*\\.\\s*push\\(prototype\\.clone_for_key_frame_instance\\(\\)\\)[\\s\\S]{0,900}take_key_frame_binding_updates"
 min_occurrences = 1
 max_occurrences = 1
@@ -2013,7 +2013,7 @@ max_occurrences = 1
 
 [[ratchet]]
 id = "state_machine_keyframe_remove_before_holder_required"
-globs = ["crates/nuxie-runtime/src/animation.rs"]
+globs = ["crates/nuxie-runtime/src/animation/linear_animation_instance.rs"]
 pattern = "fn\\s+remove_key_frame_data_binds\\b[\\s\\S]{0,600}key_frame_data_bind_occurrences[\\s\\S]{0,180}\\.drain\\(\\.\\.\\)[\\s\\S]{0,180}\\.zip\\(self\\.key_frame_data_bind_graphs\\.drain\\(\\.\\.\\)\\)[\\s\\S]{0,500}drop\\(graph\\);[\\s\\S]{0,180}key_frame_value_holders\\s*=\\s*None"
 min_occurrences = 1
 max_occurrences = 1
@@ -2027,14 +2027,14 @@ max_occurrences = 1
 
 [[ratchet]]
 id = "state_machine_keyframe_snapshot_ensure_is_construction_only"
-globs = ["crates/nuxie-runtime/src/animation.rs"]
+globs = ["crates/nuxie-runtime/src/animation/linear_animation_instance.rs"]
 pattern = "fn\\s+ensure_key_frame_data_binds\\b[\\s\\S]{0,600}if\\s+self\\.key_frame_data_bind_graphs\\.is_empty\\(\\)[\\s\\S]{0,500}build_key_frame_data_binds_internal\\([\\s\\S]{0,250}false"
 min_occurrences = 1
 max_occurrences = 1
 
 [[ratchet]]
 id = "state_machine_keyframe_snapshot_ensure_prepares_existing"
-globs = ["crates/nuxie-runtime/src/animation.rs"]
+globs = ["crates/nuxie-runtime/src/animation/linear_animation_instance.rs"]
 pattern = "fn\\s+ensure_key_frame_data_binds\\b(?:(?!\\n    (?:pub(?:\\(crate\\))?\\s+)?fn\\b)[\\s\\S]){0,1200}(?:prepare_key_frame_data_binds|take_key_frame_binding_updates)\\s*\\("
 max_occurrences = 0
 
@@ -2324,7 +2324,10 @@ max_occurrences = 1
 
 [[ratchet]]
 id = "fl_e7_shape_paint_container_invalidate_effects_production_required"
-globs = ["crates/nuxie-runtime/src/draw.rs"]
+globs = [
+  "crates/nuxie-runtime/src/draw.rs",
+  "crates/nuxie-runtime/src/shapes/path_composer.rs",
+]
 pattern = "shape_paint_container::invalidate_stroke_effects\\s*\\("
 min_occurrences = 4
 max_occurrences = 4

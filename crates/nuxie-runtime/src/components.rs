@@ -15,6 +15,33 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 use std::sync::OnceLock;
 
+mod bones {
+    pub(crate) mod bone {
+        include!("bones/bone.rs");
+    }
+
+    pub(crate) mod root_bone {
+        include!("bones/root_bone.rs");
+    }
+
+    pub(crate) mod skinnable {
+        include!("bones/skinnable.rs");
+    }
+
+    pub(crate) mod tendon {
+        include!("bones/tendon.rs");
+    }
+}
+
+pub use crate::math::mat2d::Mat2D;
+use bones::bone::RuntimeBoneState;
+use bones::root_bone::{
+    x_property_key as root_bone_x_property_key, y_property_key as root_bone_y_property_key,
+};
+pub(crate) use bones::skinnable::RuntimeSkinnableKind;
+use bones::skinnable::RuntimeSkinnableState;
+use bones::tendon::RuntimeTendonState;
+
 /// Occurrence-local equivalent of a retained C++ `Component*`.
 ///
 /// The handle addresses the one object slot that owns both the generated
@@ -67,9 +94,8 @@ impl GraphOrder {
 
 /// Runtime component dirt and transform state.
 ///
-/// Ported from C++ `src/component.cpp`, `src/transform_component.cpp`, and
-/// `src/math/mat2d.cpp` for the update-order and matrix semantics that M2
-/// exercises.
+/// Ported from C++ `src/component.cpp` and `src/transform_component.cpp` for
+/// the update-order semantics that M2 exercises.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ComponentDirt(pub u16);
 
@@ -261,16 +287,6 @@ fn node_y_property_key() -> Option<u16> {
     cached_property_key_for_name(&KEY, "Node", "y")
 }
 
-fn root_bone_x_property_key() -> Option<u16> {
-    static KEY: OnceLock<Option<u16>> = OnceLock::new();
-    cached_property_key_for_name(&KEY, "RootBone", "x")
-}
-
-fn root_bone_y_property_key() -> Option<u16> {
-    static KEY: OnceLock<Option<u16>> = OnceLock::new();
-    cached_property_key_for_name(&KEY, "RootBone", "y")
-}
-
 fn transform_component_rotation_property_key() -> Option<u16> {
     static KEY: OnceLock<Option<u16>> = OnceLock::new();
     cached_property_key_for_name(&KEY, "TransformComponent", "rotation")
@@ -366,35 +382,6 @@ impl RuntimeNodeState {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct RuntimeBoneState {
-    /// Concrete C++ subtype identity used by the `Bone::x/y` versus
-    /// `RootBoneBase::x/y` virtual dispatch.
-    pub(crate) is_root: bool,
-    pub(crate) child_bones: Vec<ComponentHandle>,
-    pub(crate) peer_constraints: Vec<ComponentHandle>,
-}
-
-impl RuntimeBoneState {
-    fn new(is_root: bool) -> Self {
-        Self {
-            is_root,
-            child_bones: Vec::new(),
-            peer_constraints: Vec::new(),
-        }
-    }
-
-    fn clone_for_occurrence(&self) -> Self {
-        Self::new(self.is_root)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RuntimeSkinnableKind {
-    PointsPath,
-    Mesh,
-}
-
-#[derive(Debug, Clone)]
 pub(crate) struct RuntimeSkinState {
     pub(crate) world_transform: Mat2D,
     pub(crate) tendons: Vec<ComponentHandle>,
@@ -414,42 +401,6 @@ impl Default for RuntimeSkinState {
             #[cfg(test)]
             buffer_rebuilds: 0,
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeTendonState {
-    pub(crate) inverse_bind: Mat2D,
-    pub(crate) bone: Option<ComponentHandle>,
-}
-
-impl Default for RuntimeTendonState {
-    fn default() -> Self {
-        Self {
-            inverse_bind: Mat2D::IDENTITY,
-            bone: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RuntimeSkinnableState {
-    pub(crate) kind: RuntimeSkinnableKind,
-    pub(crate) skin: Option<ComponentHandle>,
-    pub(crate) vertices: Vec<ComponentHandle>,
-}
-
-impl RuntimeSkinnableState {
-    fn new(kind: RuntimeSkinnableKind) -> Self {
-        Self {
-            kind,
-            skin: None,
-            vertices: Vec::new(),
-        }
-    }
-
-    fn clone_for_occurrence(&self) -> Self {
-        Self::new(self.kind)
     }
 }
 
@@ -1587,15 +1538,10 @@ impl RuntimeConcreteComponentState {
                 .then(RuntimeScrollBarConstraintState::default),
             path: type_is_a(type_name, "Path").then(RuntimePathState::default),
             shape: type_is_a(type_name, "Shape").then(RuntimeShapeState::default),
-            bone: type_is_a(type_name, "Bone")
-                .then(|| RuntimeBoneState::new(type_name == "RootBone")),
+            bone: RuntimeBoneState::for_type(type_name),
             skin: (type_name == "Skin").then(RuntimeSkinState::default),
-            tendon: (type_name == "Tendon").then(RuntimeTendonState::default),
-            skinnable: match type_name {
-                "PointsPath" => Some(RuntimeSkinnableState::new(RuntimeSkinnableKind::PointsPath)),
-                "Mesh" => Some(RuntimeSkinnableState::new(RuntimeSkinnableKind::Mesh)),
-                _ => None,
-            },
+            tendon: RuntimeTendonState::for_type(type_name),
+            skinnable: RuntimeSkinnableState::for_type(type_name),
             weight: type_is_a(type_name, "Weight").then(|| RuntimeWeightState {
                 is_cubic: type_name == "CubicWeight",
                 ..RuntimeWeightState::default()
@@ -1705,245 +1651,6 @@ impl Default for TransformRuntimeState {
             world_transform: Mat2D::IDENTITY,
             render_opacity: 0.0,
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Mat2D(pub [f32; 6]);
-
-impl Mat2D {
-    pub const IDENTITY: Self = Self([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
-
-    pub fn from_rotation(radians: f32) -> Self {
-        let (sin, cos) = if radians == 0.0 {
-            (0.0, 1.0)
-        } else {
-            radians.sin_cos()
-        };
-        Self([cos, sin, -sin, cos, 0.0, 0.0])
-    }
-
-    pub fn multiply(self, rhs: Self) -> Self {
-        let a = self.0;
-        let b = rhs.0;
-        Self([
-            a[0].mul_add(b[0], a[2] * b[1]),
-            a[1].mul_add(b[0], a[3] * b[1]),
-            a[0].mul_add(b[2], a[2] * b[3]),
-            a[1].mul_add(b[2], a[3] * b[3]),
-            a[0].mul_add(b[4], a[2] * b[5]) + a[4],
-            a[1].mul_add(b[4], a[3] * b[5]) + a[5],
-        ])
-    }
-
-    pub fn scale_by_values(&mut self, scale_x: f32, scale_y: f32) {
-        self.0[0] *= scale_x;
-        self.0[1] *= scale_x;
-        self.0[2] *= scale_y;
-        self.0[3] *= scale_y;
-    }
-
-    pub(crate) fn decompose(self) -> TransformComponents {
-        // Ported from C++ `src/math/mat2d.cpp`.
-        let [m0, m1, m2, m3, x, y] = self.0;
-        let rotation = m1.atan2(m0);
-        let denom = m0 * m0 + m1 * m1;
-        let scale_x = denom.sqrt();
-        let scale_y = if scale_x == 0.0 {
-            0.0
-        } else {
-            (m0 * m3 - m2 * m1) / scale_x
-        };
-        let skew = (m0 * m2 + m1 * m3).atan2(denom);
-        TransformComponents {
-            x,
-            y,
-            scale_x,
-            scale_y,
-            rotation,
-            skew,
-        }
-    }
-
-    pub(crate) fn compose(components: TransformComponents) -> Self {
-        // Ported from C++ `src/math/mat2d.cpp`.
-        let mut result = Self::from_rotation(components.rotation);
-        result.0[4] = components.x;
-        result.0[5] = components.y;
-        result.scale_by_values(components.scale_x, components.scale_y);
-
-        if components.skew != 0.0 {
-            result.0[2] = result.0[0] * components.skew + result.0[2];
-            result.0[3] = result.0[1] * components.skew + result.0[3];
-        }
-        result
-    }
-
-    pub fn determinant(self) -> f32 {
-        self.0[0].mul_add(self.0[3], -(self.0[1] * self.0[2]))
-    }
-
-    pub fn invert_or_identity(self) -> Self {
-        let determinant = self.determinant();
-        if determinant == 0.0 {
-            return Self::IDENTITY;
-        }
-
-        let [a, b, c, d, e, f] = self.0;
-        let determinant = 1.0 / determinant;
-        Self([
-            d * determinant,
-            -b * determinant,
-            -c * determinant,
-            a * determinant,
-            c.mul_add(f, -(d * e)) * determinant,
-            b.mul_add(e, -(a * f)) * determinant,
-        ])
-    }
-
-    pub fn transform_point(self, x: f32, y: f32) -> (f32, f32) {
-        (
-            self.0[0] * x + self.0[2] * y + self.0[4],
-            self.0[1] * x + self.0[3] * y + self.0[5],
-        )
-    }
-
-    pub fn map_point(self, x: f32, y: f32) -> (f32, f32) {
-        let [a, b, c, d, e, f] = self.0;
-        // Ported from src/math/mat2d.cpp Mat2D::mapPoints. The grouping matters
-        // for cancellation-heavy local path composition.
-        if b == 0.0 && c == 0.0 {
-            (a.mul_add(x, e), d.mul_add(y, f))
-        } else {
-            (a.mul_add(x, c.mul_add(y, e)), d.mul_add(y, b.mul_add(x, f)))
-        }
-    }
-
-    pub fn transform_direction(self, x: f32, y: f32) -> (f32, f32) {
-        (self.0[0] * x + self.0[2] * y, self.0[1] * x + self.0[3] * y)
-    }
-
-    /// Largest singular value of this matrix's linear 2×2 portion.
-    ///
-    /// Literal port of pinned C++ `Mat2D::findMaxScale`
-    /// (`src/math/mat2d_find_max_scale.cpp:25-71`). Translation is ignored,
-    /// the axis-aligned fast path is preserved, and a non-finite intermediate
-    /// returns zero exactly like the oracle.
-    #[allow(clippy::arithmetic_side_effects)]
-    pub fn find_max_scale(self) -> f32 {
-        let [xx, xy, yx, yy, _, _] = self.0;
-        if xy == 0.0 && yx == 0.0 {
-            return xx.abs().max(yy.abs());
-        }
-
-        let a = xx * xx + xy * xy;
-        let b = xx * yx + yy * xy;
-        let c = yx * yx + yy * yy;
-        let b_squared = b * b;
-        const CPP_EPSILON: f32 = 1.0 / 4096.0;
-        let mut result = if b_squared <= CPP_EPSILON * CPP_EPSILON {
-            a.max(c)
-        } else {
-            let a_minus_c = a - c;
-            let a_plus_c_over_two = (a + c) * 0.5;
-            let x = (a_minus_c * a_minus_c + 4.0 * b_squared).sqrt() * 0.5;
-            a_plus_c_over_two + x
-        };
-        if !result.is_finite() {
-            result = 0.0;
-        }
-        result.max(0.0).sqrt()
-    }
-}
-
-impl Default for Mat2D {
-    fn default() -> Self {
-        Self::IDENTITY
-    }
-}
-
-#[cfg(test)]
-mod mat2d_tests {
-    use super::Mat2D;
-
-    #[test]
-    fn find_max_scale_matches_cpp_direct_fixtures() {
-        // Direct fixtures from pinned C++
-        // `tests/unit_tests/runtime/mat2d_test.cpp:49-101`.
-        assert_eq!(Mat2D::IDENTITY.find_max_scale(), 1.0);
-        assert_eq!(Mat2D([2.0, 0.0, 0.0, 4.0, 0.0, 0.0]).find_max_scale(), 4.0);
-        assert_eq!(
-            Mat2D([0.0, 3.0, 6.0, 0.0, f32::NAN, f32::INFINITY]).find_max_scale(),
-            6.0
-        );
-
-        let rotate = Mat2D::from_rotation(128.0 * std::f32::consts::PI / 180.0);
-        assert!((rotate.find_max_scale() - 1.0).abs() <= 1.0 / 4096.0);
-        assert_eq!(
-            Mat2D([1.0, 0.0, 0.0, 1.0, 10.0, -5.0]).find_max_scale(),
-            1.0
-        );
-        assert_eq!(
-            Mat2D([
-                2.393_940_9e36,
-                3.915_962e36,
-                8.853_478e36,
-                1.448_234_5e37,
-                9.265_262e36,
-                1.515_593_4e37,
-            ])
-            .find_max_scale(),
-            0.0
-        );
-    }
-
-    #[test]
-    fn inverse_and_multiply_match_cpp_contraction_order() {
-        // Values from the first local path in joel_signed.riv. These expected
-        // bits come from C++ Mat2D::invert and Mat2D::multiply compiled with
-        // the release runner's default `-ffp-contract=on` on arm64.
-        let shape_world = Mat2D([
-            0.6845234,
-            0.35772082,
-            -0.35772082,
-            0.6845234,
-            -130.04749,
-            -135.59448,
-        ]);
-        let path_world = Mat2D([
-            0.6845234,
-            0.35772082,
-            -0.35772082,
-            0.6845234,
-            6.7375793,
-            -313.59125,
-        ]);
-
-        let inverse = shape_world.invert_or_identity();
-        assert_eq!(
-            inverse.0.map(f32::to_bits),
-            [
-                0x3f92_e129,
-                0xbf19_8383,
-                0x3f19_8383,
-                0x3f92_e129,
-                0x4366_8a3d,
-                0x429b_3811,
-            ]
-        );
-
-        let local = inverse.multiply(path_world);
-        assert_eq!(
-            local.0.map(f32::to_bits),
-            [
-                0x3f80_0000,
-                0x2fc5_dc80,
-                0xb19c_ac38,
-                0x3f80_0000,
-                0x4248_e3a0,
-                0xc38f_2347,
-            ]
-        );
     }
 }
 

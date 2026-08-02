@@ -48,9 +48,10 @@ use crate::components::{
     retain_runtime_layout_component_styles, retain_runtime_solos,
     retain_runtime_text_input_scroll_constraints,
 };
+use crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization;
 use crate::constraints::{
-    apply_scroll_offset_changed, component_list_virtualization, retain_runtime_scroll_constraints,
-    runtime_scroll_double_property, set_runtime_scroll_double_property,
+    apply_scroll_offset_changed, retain_runtime_scroll_constraints, runtime_scroll_double_property,
+    set_runtime_scroll_double_property,
 };
 use crate::custom_property_container::{
     RuntimeArtboardCustomPropertyBindingInstance, build_artboard_custom_property_bindings,
@@ -128,35 +129,6 @@ fn generated_mat2d(
         value("tx", 0.0),
         value("ty", 0.0),
     ])
-}
-
-fn deform_point_from_skin(
-    point: (f32, f32),
-    indices: u32,
-    weights: u32,
-    skin_world: Mat2D,
-    bone_transforms: &[Mat2D],
-) -> Option<(f32, f32)> {
-    let mut blended = [0.0; 6];
-    for index in 0..4 {
-        let shift = index * 8;
-        let weight = ((weights >> shift) & 0xff) as u8;
-        if weight == 0 {
-            continue;
-        }
-        let bone_index = ((indices >> shift) & 0xff) as usize;
-        let bone_transform = bone_transforms.get(bone_index)?;
-        let normalized_weight = f32::from(weight) / 255.0;
-        for (target, value) in blended.iter_mut().zip(bone_transform.0) {
-            // Clang contracts each C++ `accumulator += value * weight` in
-            // `Weight::deform`; Rust does not contract implicitly. Preserve
-            // that per-site rounding exactly (`src/bones/weight.cpp:35-48`;
-            // `docs/PORTING.md` §4.2).
-            *target = value.mul_add(normalized_weight, *target);
-        }
-    }
-    let skinned = skin_world.transform_point(point.0, point.1);
-    Some(Mat2D(blended).transform_point(skinned.0, skinned.1))
 }
 
 /// Rejection from attaching host-supplied bytes to one external `FontAsset`.
@@ -744,6 +716,8 @@ include!("bindable_artboard.rs");
 include!("nested_artboard_layout.rs");
 include!("nested_artboard_leaf.rs");
 include!("nested_artboard_origin.rs");
+include!("bones/weight.rs");
+include!("profiler/rive_profile.rs");
 
 /// One exact descent edge from a retained root artboard to a nested occurrence.
 ///
@@ -856,38 +830,6 @@ pub(crate) enum RuntimeNestedAnimationInstance {
 }
 
 impl ArtboardInstance {
-    fn replace_profile_path_prefix(
-        &mut self,
-        old_prefix: &[crate::ProfilePathSegment],
-        new_prefix: &[crate::ProfilePathSegment],
-    ) {
-        if let Some(suffix) = self.profile_path.strip_prefix(old_prefix) {
-            let mut path = Vec::with_capacity(new_prefix.len().saturating_add(suffix.len()));
-            path.extend_from_slice(new_prefix);
-            path.extend_from_slice(suffix);
-            self.profile_path = path;
-        }
-        for nested in self.nested_artboards.values_mut() {
-            nested
-                .child
-                .replace_profile_path_prefix(old_prefix, new_prefix);
-        }
-        let list_locals = self
-            .component_lists
-            .iter()
-            .filter_map(|handle| self.component_local_id(*handle))
-            .collect::<Vec<_>>();
-        for list_local in list_locals {
-            let Some(items) = self.component_list_items_mut(list_local) else {
-                continue;
-            };
-            for item in items {
-                item.child
-                    .replace_profile_path_prefix(old_prefix, new_prefix);
-            }
-        }
-    }
-
     /// Thin borrow-model hook for C++
     /// `Artboard::clearDataContext` as called by the StateMachineInstance bind
     /// family. Substantive bind ordering remains owned by
@@ -1214,7 +1156,7 @@ impl ArtboardInstance {
                 if constraint_state.targeted {
                     let target_local = constraint_state
                         .targeted
-                        .then(crate::constraints::targeted_constraint_target_id_property_key)
+                        .then(crate::constraints::targeted_constraint::targeted_constraint_target_id_property_key)
                         .flatten()
                         .and_then(|key| objects.uint_property(component.local_id, key))
                         .and_then(|target| usize::try_from(target).ok());
@@ -5823,7 +5765,10 @@ impl ArtboardInstance {
             let bounds = assigned_bounds.remove(&list_local).unwrap_or_default();
             let mut measured_sizes = Vec::new();
             let virtualized =
-                crate::constraints::component_list_virtualization(self, list_local).is_some();
+                crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
+                    self, list_local,
+                )
+                .is_some();
             if let Some(items) = self.component_list_items_mut(list_local) {
                 for (item, bounds) in items.iter_mut().zip(bounds) {
                     let previous_size = runtime_component_list_item_layout_size(item);
@@ -5880,7 +5825,10 @@ impl ArtboardInstance {
                 // `updateArtboardsWorldTransform`; otherwise the refreshed
                 // hosted-layout bases overwrite FollowPath's retained result
                 // (`artboard_component_list.cpp:1300-1358`).
-                changed |= crate::constraints::apply_list_constraints(self, list_component);
+                changed |= crate::constraints::constrainable_list::apply_list_constraints(
+                    self,
+                    list_component,
+                );
             }
 
             let style_local = self.layout_component_style_local(list_local);
@@ -5932,7 +5880,10 @@ impl ArtboardInstance {
                 list.layout_size = (width, height);
             }
             if let Some(constraint) = scroll_constraint {
-                changed |= crate::constraints::constrain_scroll_virtualizer(self, constraint, true);
+                changed |=
+                    crate::constraints::scrolling::scroll_virtualizer::constrain_scroll_virtualizer(
+                        self, constraint, true,
+                    );
             }
             let roots = self
                 .runtime_component_list_child_root_transforms(root_transform)
@@ -7331,146 +7282,6 @@ impl ArtboardInstance {
             .and_then(|parent| self.objects.component(parent))
             .map(|parent| parent.transform.world_transform);
         Some(node.computed_local_transform(parent_world, component.transform.world_transform))
-    }
-
-    pub(crate) fn runtime_vertex_weight_state(
-        &self,
-        vertex_local: usize,
-    ) -> Option<crate::components::RuntimeWeightState> {
-        let vertex = self.component_handle(vertex_local)?;
-        let weight = self
-            .objects
-            .component(vertex)?
-            .concrete
-            .vertex
-            .as_ref()?
-            .weight?;
-        self.objects.component(weight)?.concrete.weight
-    }
-
-    /// Settle one retained Weight/CubicWeight from the Skin-owned transform
-    /// buffer. The caller supplies live Vertex points; packed indices/values
-    /// are always read from this occurrence's generated storage.
-    pub(crate) fn deform_runtime_vertex_weight(
-        &mut self,
-        vertex_local: usize,
-        point: (f32, f32),
-        cubic_points: Option<((f32, f32), (f32, f32))>,
-    ) -> bool {
-        let Some(vertex) = self.component_handle(vertex_local) else {
-            return false;
-        };
-        let Some(weight) = self
-            .objects
-            .component(vertex)
-            .and_then(|component| component.concrete.vertex.as_ref())
-            .and_then(|vertex| vertex.weight)
-        else {
-            return false;
-        };
-        let Some(skinnable) = self
-            .objects
-            .component(vertex)
-            .and_then(|component| component.parent)
-        else {
-            return false;
-        };
-        let Some(skin) = self
-            .objects
-            .component(skinnable)
-            .and_then(|component| component.concrete.skinnable.as_ref())
-            .and_then(|skinnable| skinnable.skin)
-        else {
-            return false;
-        };
-        let Some(weight_local) = self.objects.component_local_id(weight) else {
-            return false;
-        };
-        let Some(is_cubic_weight) = self
-            .objects
-            .component(weight)
-            .and_then(|component| component.concrete.weight.as_ref())
-            .map(|weight| weight.is_cubic)
-        else {
-            return false;
-        };
-        let values = property_key_for_name("Weight", "values")
-            .and_then(|key| self.uint_property(weight_local, key))
-            .and_then(|value| u32::try_from(value).ok())
-            .unwrap_or(255);
-        let indices = property_key_for_name("Weight", "indices")
-            .and_then(|key| self.uint_property(weight_local, key))
-            .and_then(|value| u32::try_from(value).ok())
-            .unwrap_or(1);
-
-        let Some(skin_state) = self
-            .objects
-            .component(skin)
-            .and_then(|component| component.concrete.skin.as_ref())
-        else {
-            return false;
-        };
-        let Some(translation) = deform_point_from_skin(
-            point,
-            indices,
-            values,
-            skin_state.world_transform,
-            &skin_state.bone_transforms,
-        ) else {
-            return false;
-        };
-        let cubic_translations = if is_cubic_weight {
-            let (in_point, out_point) = cubic_points.unwrap_or((point, point));
-            let in_values = property_key_for_name("CubicWeight", "inValues")
-                .and_then(|key| self.uint_property(weight_local, key))
-                .and_then(|value| u32::try_from(value).ok())
-                .unwrap_or(255);
-            let in_indices = property_key_for_name("CubicWeight", "inIndices")
-                .and_then(|key| self.uint_property(weight_local, key))
-                .and_then(|value| u32::try_from(value).ok())
-                .unwrap_or(1);
-            let out_values = property_key_for_name("CubicWeight", "outValues")
-                .and_then(|key| self.uint_property(weight_local, key))
-                .and_then(|value| u32::try_from(value).ok())
-                .unwrap_or(255);
-            let out_indices = property_key_for_name("CubicWeight", "outIndices")
-                .and_then(|key| self.uint_property(weight_local, key))
-                .and_then(|value| u32::try_from(value).ok())
-                .unwrap_or(1);
-            let Some(in_translation) = deform_point_from_skin(
-                in_point,
-                in_indices,
-                in_values,
-                skin_state.world_transform,
-                &skin_state.bone_transforms,
-            ) else {
-                return false;
-            };
-            let Some(out_translation) = deform_point_from_skin(
-                out_point,
-                out_indices,
-                out_values,
-                skin_state.world_transform,
-                &skin_state.bone_transforms,
-            ) else {
-                return false;
-            };
-            Some((in_translation, out_translation))
-        } else {
-            None
-        };
-
-        let state = self
-            .objects
-            .component_mut(weight)
-            .and_then(|component| component.concrete.weight.as_mut())
-            .expect("validated Weight handle owns Weight state");
-        state.translation = translation;
-        if let Some((in_translation, out_translation)) = cubic_translations {
-            state.in_translation = in_translation;
-            state.out_translation = out_translation;
-        }
-        true
     }
 
     pub fn has_dirt(&self, dirt: ComponentDirt) -> bool {
@@ -9202,7 +9013,10 @@ impl ArtboardInstance {
             .and_then(|component| component.concrete.follow_path.as_ref())
             .is_some()
         {
-            crate::constraints::update_follow_path_constraint(self, component_handle);
+            crate::constraints::follow_path_constraint::update_follow_path_constraint(
+                self,
+                component_handle,
+            );
         }
         if dirt.contains(ComponentDirt::TRANSFORM) {
             let authored = self.authored_transform(local_id);
@@ -9260,8 +9074,11 @@ impl ArtboardInstance {
                     .expect("component handle must remain live")
                     .update_world_transform(parent_world);
                 crate::constraints::apply_parent_layout_constraints(self, component_handle);
-                crate::constraints::apply_list_constraints(self, component_handle);
-                crate::constraints::apply_constraints(self, component_handle);
+                crate::constraints::constrainable_list::apply_list_constraints(
+                    self,
+                    component_handle,
+                );
+                crate::constraints::constraint::apply_constraints(self, component_handle);
 
                 // The parent Artboard's normalized origin is removed in the
                 // LayoutComponent-owned replacement world.
@@ -9290,8 +9107,8 @@ impl ArtboardInstance {
             // before ordinary Transform constraints, and the ordinary pass
             // skips ListConstraint subtypes
             // (`artboard_component_list.cpp:1333-1358`).
-            crate::constraints::apply_list_constraints(self, component_handle);
-            crate::constraints::apply_constraints(self, component_handle);
+            crate::constraints::constrainable_list::apply_list_constraints(self, component_handle);
+            crate::constraints::constraint::apply_constraints(self, component_handle);
         }
         if dirt.contains(ComponentDirt::RENDER_OPACITY) {
             let previous_opacity = self
@@ -9558,7 +9375,7 @@ impl ArtboardInstance {
             .component(local_id)
             .and_then(|component| component.concrete.constraint)
             .is_some_and(|constraint| {
-                crate::constraints::constraint_uint_change_marks_parent_dirty(
+                crate::constraints::constraint::constraint_uint_change_marks_parent_dirty(
                     constraint.kind,
                     property_key,
                 ) && self.mark_constraint_parent_transform_dirty(local_id)
@@ -10075,7 +9892,7 @@ impl ArtboardInstance {
             .component(local_id)
             .and_then(|component| component.concrete.constraint)
             .is_some_and(|constraint| {
-                crate::constraints::constraint_is_ik_strength_property(
+                crate::constraints::constraint::constraint_is_ik_strength_property(
                     constraint.kind,
                     property_key,
                 )
@@ -10087,7 +9904,7 @@ impl ArtboardInstance {
             .component(local_id)
             .and_then(|component| component.concrete.constraint)
             .is_some_and(|constraint| {
-                crate::constraints::constraint_double_change_marks_parent_dirty(
+                crate::constraints::constraint::constraint_double_change_marks_parent_dirty(
                     constraint.kind,
                     property_key,
                 )
@@ -17616,10 +17433,12 @@ mod tests {
             false,
         );
 
-        assert!(crate::constraints::update_follow_path_constraint(
-            &mut instance,
-            constraint_handle
-        ));
+        assert!(
+            crate::constraints::follow_path_constraint::update_follow_path_constraint(
+                &mut instance,
+                constraint_handle
+            )
+        );
         let follow = instance
             .component(3)
             .unwrap()
@@ -17641,10 +17460,12 @@ mod tests {
             ],
             false,
         );
-        assert!(crate::constraints::update_follow_path_constraint(
-            &mut instance,
-            constraint_handle
-        ));
+        assert!(
+            crate::constraints::follow_path_constraint::update_follow_path_constraint(
+                &mut instance,
+                constraint_handle
+            )
+        );
         let follow = instance
             .component(3)
             .unwrap()
@@ -17673,10 +17494,12 @@ mod tests {
             .as_mut()
             .unwrap()
             .target = Some(instance.component_handle(4).unwrap());
-        assert!(!crate::constraints::update_follow_path_constraint(
-            &mut instance,
-            constraint_handle
-        ));
+        assert!(
+            !crate::constraints::follow_path_constraint::update_follow_path_constraint(
+                &mut instance,
+                constraint_handle
+            )
+        );
         let follow = instance
             .component(3)
             .unwrap()
@@ -18312,7 +18135,7 @@ mod tests {
     fn weight_deformation_reads_live_packed_occurrence_fields() {
         // Weight decodes four packed bytes from the live generated fields and
         // writes its retained translation without normalization beyond
-        // weight/255 (`src/bones/weight.cpp:24-56`;
+        // weight/255 (see the direct Weight owner in `bones/weight.rs`;
         // `src/shapes/vertex.cpp:17-23`).
         let path = synthetic_component_for_type(0, "PointsPath");
         let skin = synthetic_component_for_type(1, "Skin");
@@ -18371,7 +18194,7 @@ mod tests {
         // counterexample for the one-ulp difference between separate
         // multiply/add and the C++ geometry pipeline's default contraction.
         // Preserve Weight::deform's source loop and clang rounding exactly
-        // (`src/bones/weight.cpp:24-55`; `docs/PORTING.md` §4.2).
+        // (see `bones/weight.rs`; `docs/PORTING.md` §4.2).
         let f = f32::from_bits;
         let bones = [
             Mat2D::IDENTITY,
@@ -18479,7 +18302,7 @@ mod tests {
         // Generated fields clone, but Bone/Skin/Tendon/Skinnable/Weight
         // runtime pointers, buffers, and lazy outputs are defaulted and later
         // rebuilt against clone-owned objects (`artboard.hpp:548-601`;
-        // `src/bones/{bone,skin,tendon,weight}.cpp`).
+        // the direct bone owner modules).
         let bone = synthetic_component_for_type(0, "RootBone");
         let tendon = synthetic_component_for_type(1, "Tendon");
         let skin = synthetic_component_for_type(2, "Skin");

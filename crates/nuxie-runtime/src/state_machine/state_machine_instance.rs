@@ -1660,6 +1660,7 @@ pub struct StateMachineInstance {
     keyboard_listener_groups: Vec<keyboard_listener_group::RuntimeKeyboardListenerGroup>,
     gamepad_listener_groups: Vec<gamepad_listener_group::RuntimeGamepadListenerGroup>,
     gamepad_scripted_drawables: Vec<gamepad_listener_group::RuntimeGamepadScriptedDrawable>,
+    pub(super) embedder_gamepads: BTreeMap<i32, ScriptGamepadSnapshot>,
     scripted_input_group_generation: u64,
     semantic_listener_groups: Vec<semantic_listener_group::RuntimeSemanticListenerGroup>,
     queued_focus_events: Vec<RuntimeQueuedFocusEvent>,
@@ -2247,6 +2248,7 @@ impl Clone for StateMachineInstance {
             keyboard_listener_groups: self.keyboard_listener_groups.clone(),
             gamepad_listener_groups: self.gamepad_listener_groups.clone(),
             gamepad_scripted_drawables: self.gamepad_scripted_drawables.clone(),
+            embedder_gamepads: self.embedder_gamepads.clone(),
             scripted_input_group_generation: self.scripted_input_group_generation,
             semantic_listener_groups: self.semantic_listener_groups.clone(),
             // Snapshot pending callback values without aliasing their queues.
@@ -3060,6 +3062,7 @@ impl StateMachineInstance {
             keyboard_listener_groups: Vec::new(),
             gamepad_listener_groups: Vec::new(),
             gamepad_scripted_drawables: Vec::new(),
+            embedder_gamepads: BTreeMap::new(),
             scripted_input_group_generation: 0,
             semantic_listener_groups: Vec::new(),
             queued_focus_events: Vec::new(),

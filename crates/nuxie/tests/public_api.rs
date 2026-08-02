@@ -9,15 +9,20 @@
 use nuxie::{
     AnimationId, ArtboardSpec, BlendMode, ColorInt, EditErrorKind, EditId, EditReason,
     ExportedAnimatableProperty, ExportedObjectKind, ExportedProperty, Factory, File, FillRule,
-    ImageDecodeError, LinearAnimationSpec, NodeSpec, ObjectId, Parent, RawPath, RecordingFactory,
-    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle,
-    RenderPath, RenderShader, Renderer, Scene, ShapeSpec, StateMachineInputKind, StrokeCap,
-    StrokeJoin, ViewModelBooleanSpec, ViewModelInstanceSpec, ViewModelScope, ViewModelSpec,
-    VisibilityCondition, props,
+    Frame, ImageDecodeError, LinearAnimationSpec, NodeSpec, ObjectId, Parent, RawPath,
+    RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
+    RenderPaintStyle, RenderPath, RenderShader, Renderer, Scene, ShapeSpec, StateMachineInputKind,
+    StrokeCap, StrokeJoin, ViewModelBooleanSpec, ViewModelInstanceSpec, ViewModelScope,
+    ViewModelSpec, VisibilityCondition, props,
 };
 use std::cell::Cell;
 use std::path::PathBuf;
 use std::rc::Rc;
+
+#[test]
+fn gamepad_batch_submission_is_public_through_the_scene_facade() {
+    let _public_method = Frame::submit_gamepads_from_buffer;
+}
 
 #[test]
 fn scene_animation_authoring_surface_is_typed_key_free_and_upsert_shaped() {

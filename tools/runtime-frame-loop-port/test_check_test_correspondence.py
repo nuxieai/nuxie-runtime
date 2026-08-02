@@ -76,7 +76,6 @@ class TestCorrespondenceCheckTest(unittest.TestCase):
     def write_manifest(
         self,
         *,
-        expected_pending: int = 0,
         max_pending: int = 0,
         script_status: str = "partial",
         covered_test_cases: str = '["script one"]',
@@ -92,13 +91,6 @@ class TestCorrespondenceCheckTest(unittest.TestCase):
                 row_count = 2
                 test_case_count = 3
                 status_values = ["ported-differential", "ported-direct", "partial", "pending", "n-a"]
-
-                [expected_status_counts]
-                ported-differential = 0
-                ported-direct = 1
-                partial = {1 if script_status == "partial" else 0}
-                pending = {expected_pending}
-                n-a = 0
 
                 [ratchet]
                 max_pending = {max_pending}
@@ -134,21 +126,40 @@ class TestCorrespondenceCheckTest(unittest.TestCase):
         with self.assertRaisesRegex(CheckFailure, "alpha_test.cpp.*declares 2.*pin has 1"):
             check_manifest(self.repo, self.upstream, self.manifest)
 
-    def test_expected_status_counts_are_exact(self) -> None:
+    def test_expected_status_counts_block_is_rejected(self) -> None:
         self.manifest.write_text(
-            self.manifest.read_text().replace("partial = 1", "partial = 0")
+            self.manifest.read_text().replace(
+                "[ratchet]",
+                "[expected_status_counts]\n"
+                'ported-differential = 0\n'
+                "ported-direct = 1\n"
+                "partial = 1\n"
+                "pending = 0\n"
+                '"n-a" = 0\n'
+                "\n[ratchet]",
+            )
         )
-        with self.assertRaisesRegex(CheckFailure, "expected_status_counts.partial=0.*actual=1"):
+        with self.assertRaisesRegex(CheckFailure, "expected_status_counts.*delete the block"):
             check_manifest(self.repo, self.upstream, self.manifest)
 
     def test_pending_count_cannot_exceed_ratchet(self) -> None:
-        self.write_manifest(expected_pending=1, max_pending=0, script_status="pending")
+        self.write_manifest(max_pending=0, script_status="pending")
         with self.assertRaisesRegex(CheckFailure, "pending count 1 exceeds ratchet 0"):
             check_manifest(self.repo, self.upstream, self.manifest)
 
     def test_pending_cannot_regrow_after_a_tracked_shrink(self) -> None:
-        self.write_manifest(expected_pending=1, max_pending=1, script_status="pending")
+        self.write_manifest(max_pending=1, script_status="pending")
         with self.assertRaisesRegex(CheckFailure, "pending count 1 regressed from baseline 0"):
+            check_manifest(self.repo, self.upstream, self.manifest)
+
+    def test_ported_total_cannot_shrink_after_a_tracked_promotion(self) -> None:
+        self.write_manifest(script_status="ported-direct")
+        subprocess.run(["git", "add", "."], cwd=self.repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-qm", "promote script row"], cwd=self.repo, check=True
+        )
+        self.write_manifest(script_status="partial")
+        with self.assertRaisesRegex(CheckFailure, "ported count 1 regressed from baseline 2"):
             check_manifest(self.repo, self.upstream, self.manifest)
 
     def test_partial_rows_must_name_real_strict_subset_of_cases(self) -> None:

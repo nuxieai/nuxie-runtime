@@ -174,10 +174,15 @@ def require_int(mapping: dict[str, Any], key: str, context: str) -> int:
     return value
 
 
-def prior_pending_count(
+def historical_status_bounds(
     repo_root: pathlib.Path, manifest_path: pathlib.Path
-) -> int | None:
-    """Return the historical pending floor so a lowered count cannot regrow."""
+) -> tuple[int, int] | None:
+    """Return (pending floor, ported ceiling) over the manifest's git history.
+
+    Statuses may only move in the pending -> partial -> ported direction, so a
+    lowered pending count can never regrow and the ported-direct plus
+    ported-differential total can never shrink.
+    """
 
     try:
         relative = manifest_path.resolve().relative_to(repo_root.resolve()).as_posix()
@@ -192,7 +197,8 @@ def prior_pending_count(
     )
     if history.returncode != 0 or not history.stdout.strip():
         return None
-    counts: list[int] = []
+    pending_counts: list[int] = []
+    ported_counts: list[int] = []
     for revision in history.stdout.splitlines():
         baseline = git_output(repo_root, "show", f"{revision}:{relative}")
         try:
@@ -204,14 +210,12 @@ def prior_pending_count(
         rows = previous.get("file")
         if not isinstance(rows, list):
             raise CheckFailure(f"tracked manifest {revision} has no [[file]] rows")
-        counts.append(
-            sum(
-                1
-                for row in rows
-                if isinstance(row, dict) and row.get("status") == "pending"
-            )
+        statuses = [row.get("status") for row in rows if isinstance(row, dict)]
+        pending_counts.append(statuses.count("pending"))
+        ported_counts.append(
+            statuses.count("ported-direct") + statuses.count("ported-differential")
         )
-    return min(counts)
+    return min(pending_counts), max(ported_counts)
 
 
 def check_manifest(
@@ -318,19 +322,11 @@ def check_manifest(
         elif covered is not None:
             raise CheckFailure(f"{path} may only set covered_test_cases when partial")
 
-    expected = manifest.get("expected_status_counts")
-    if not isinstance(expected, dict):
-        raise CheckFailure("missing [expected_status_counts]")
-    if set(expected) != set(STATUSES):
+    if "expected_status_counts" in manifest:
         raise CheckFailure(
-            f"expected_status_counts keys must be exactly {list(STATUSES)!r}"
+            "[expected_status_counts] was replaced by the [ratchet] floor and the "
+            "recensused monotonic guards; delete the block"
         )
-    for status in STATUSES:
-        count = require_int(expected, status, "expected_status_counts")
-        if count != status_counts[status]:
-            raise CheckFailure(
-                f"expected_status_counts.{status}={count}, actual={status_counts[status]}"
-            )
 
     ratchet = manifest.get("ratchet")
     if not isinstance(ratchet, dict):
@@ -340,12 +336,19 @@ def check_manifest(
         raise CheckFailure(
             f"pending count {status_counts['pending']} exceeds ratchet {max_pending}"
         )
-    prior_pending = prior_pending_count(repo_root, manifest_path)
-    if prior_pending is not None and status_counts["pending"] > prior_pending:
-        raise CheckFailure(
-            f"pending count {status_counts['pending']} regressed from baseline "
-            f"{prior_pending}"
-        )
+    bounds = historical_status_bounds(repo_root, manifest_path)
+    if bounds is not None:
+        prior_pending, prior_ported = bounds
+        if status_counts["pending"] > prior_pending:
+            raise CheckFailure(
+                f"pending count {status_counts['pending']} regressed from baseline "
+                f"{prior_pending}"
+            )
+        ported = status_counts["ported-direct"] + status_counts["ported-differential"]
+        if ported < prior_ported:
+            raise CheckFailure(
+                f"ported count {ported} regressed from baseline {prior_ported}"
+            )
 
     return CheckSummary(
         files=len(rows),

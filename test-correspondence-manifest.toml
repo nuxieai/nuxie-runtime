@@ -10,13 +10,9 @@ row_count = 148
 test_case_count = 1316
 status_values = ["ported-differential", "ported-direct", "partial", "pending", "n-a"]
 
-[expected_status_counts]
-ported-differential = 5
-ported-direct = 37
-partial = 21
-pending = 83
-n-a = 2
-
+# Status counts are recensused from the [[file]] rows on every check; only the
+# monotonic guards below are pinned. Concurrent lanes moving rows never edit
+# this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
 max_pending = 83
 

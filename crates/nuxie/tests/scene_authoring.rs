@@ -4988,7 +4988,6 @@ fn typed_vertical_component_list_exports_imports_advances_and_draws_two_view_mod
                     axis: ArtboardComponentListAxis::Vertical,
                     reverse: false,
                     gap: 6.0,
-                    layout_hosted: false,
                 }),
                 source: ViewModelListSource::direct(root_items),
                 map_rules: vec![ArtboardListMapRuleSpec {
@@ -5351,7 +5350,6 @@ fn flowed_component_list_wrapper_stays_out_of_the_artboard_root_flow() -> Result
                     axis: ArtboardComponentListAxis::Vertical,
                     reverse: false,
                     gap: 6.0,
-                    layout_hosted: false,
                 }),
                 source: ViewModelListSource::direct(root_items),
                 map_rules: vec![ArtboardListMapRuleSpec {
@@ -12754,7 +12752,6 @@ fn component_list_padding_binds_use_the_stable_style_target_and_survive_rollback
                     axis: ArtboardComponentListAxis::Vertical,
                     reverse: false,
                     gap: 0.0,
-                    layout_hosted: false,
                 }),
                 source: ViewModelListSource::direct(root_items),
                 map_rules: vec![ArtboardListMapRuleSpec {
@@ -13033,7 +13030,6 @@ fn component_list_occurrences_execute_one_authored_numeric_bind_in_item_local_co
                     axis: ArtboardComponentListAxis::Horizontal,
                     reverse: false,
                     gap: 0.0,
-                    layout_hosted: false,
                 }),
                 source: ViewModelListSource::direct(items),
                 map_rules: vec![ArtboardListMapRuleSpec {
@@ -15062,7 +15058,7 @@ fn clipping_shape_remove_and_restore_preserves_identity_and_protects_its_source(
 }
 
 #[test]
-fn layout_hosted_component_list_wrapper_reserves_row_extent_in_its_parent_flow() -> Result<()> {
+fn flowless_component_list_under_an_authored_layout_reserves_row_extent() -> Result<()> {
     let mut scene = Scene::new();
     let ((root_artboard, item_shape, component_list, footer_shape), _) = scene.edit(|tx| {
         let root_artboard = tx.create_artboard(ArtboardSpec {
@@ -15109,6 +15105,39 @@ fn layout_hosted_component_list_wrapper_reserves_row_extent_in_its_parent_flow()
                 fractional_width: 1.0,
                 fractional_height: 1.0,
                 style: LayoutComponentStyleSpec::default(),
+            }),
+        )?;
+        // The authored list host: hugs its rows and owns the flow gap, the
+        // way an authoring layout Item would.
+        let mut host_style = LayoutComponentStyleSpec::default();
+        host_style.flex_direction = SceneLayoutFlexDirection::Column;
+        host_style.gap_vertical = 6.0;
+        host_style.intrinsically_sized = true;
+        host_style.layout_width_scale = SceneLayoutScale::Hug;
+        host_style.layout_height_scale = SceneLayoutScale::Hug;
+        host_style.present.extend([
+            LayoutComponentStyleField::FlexDirection,
+            LayoutComponentStyleField::GapVertical,
+            LayoutComponentStyleField::IntrinsicallySized,
+            LayoutComponentStyleField::LayoutWidthScale,
+            LayoutComponentStyleField::LayoutHeightScale,
+        ]);
+        let host = tx.create(
+            Parent::Object(column),
+            NodeSpec::LayoutComponent(LayoutComponentSpec {
+                name: "Items Layout".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                clip: false,
+                width: 0.0,
+                height: 0.0,
+                fractional_width: 1.0,
+                fractional_height: 1.0,
+                style: host_style,
             }),
         )?;
         let item_artboard = tx.create_artboard(ArtboardSpec {
@@ -15196,12 +15225,7 @@ fn layout_hosted_component_list_wrapper_reserves_row_extent_in_its_parent_flow()
                 rotation: 0.0,
                 scale_x: 1.0,
                 scale_y: 1.0,
-                flow: Some(ArtboardComponentListFlow {
-                    axis: ArtboardComponentListAxis::Vertical,
-                    reverse: false,
-                    gap: 6.0,
-                    layout_hosted: true,
-                }),
+                flow: None,
                 source: ViewModelListSource::direct(root_items),
                 map_rules: vec![ArtboardListMapRuleSpec {
                     view_model: item_model,
@@ -15211,7 +15235,7 @@ fn layout_hosted_component_list_wrapper_reserves_row_extent_in_its_parent_flow()
         )?;
         tx.reparent(
             component_list.object_id(),
-            Parent::Object(column),
+            Parent::Object(host),
             ChildIndex::Last,
         )?;
         let footer = tx.create(
@@ -15267,7 +15291,6 @@ fn layout_hosted_component_list_wrapper_reserves_row_extent_in_its_parent_flow()
     let instance = scene.instantiate(root_artboard)?;
     let mut events = Vec::new();
     let _ = scene.frame().advance(instance, 0.0, &mut events);
-    // Column flow: header 0..20, hosted rows 20..40 and 46..66, footer 66..86.
     let occurrences = [
         (nuxie::Vec2D::new(6.0, 26.0), 0),
         (nuxie::Vec2D::new(6.0, 52.0), 1),
@@ -15287,7 +15310,7 @@ fn layout_hosted_component_list_wrapper_reserves_row_extent_in_its_parent_flow()
             .frame()
             .hit_test(instance, nuxie::Vec2D::new(16.0, 70.0)),
         vec![footer_shape],
-        "footer must flow below the hosted rows' reserved extent",
+        "footer must flow below the rows hosted by the authored layout",
     );
     Ok(())
 }

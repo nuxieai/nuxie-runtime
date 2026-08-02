@@ -15827,6 +15827,32 @@ impl Frame<'_> {
         Ok(())
     }
 
+    /// Submit one v2 little-endian gamepad batch through every retained state
+    /// machine on an existing live instance.
+    ///
+    /// Every machine receives the batch even if an earlier occurrence rejects
+    /// it, keeping per-device snapshots aligned across the retained instance.
+    /// The result is true only when at least one machine exists and all of them
+    /// accept the batch.
+    pub fn submit_gamepads_from_buffer(&mut self, instance: InstanceId, data: &[u8]) -> bool {
+        let Some(live) = self
+            .scene
+            .instances
+            .iter_mut()
+            .filter_map(Option::as_mut)
+            .find(|candidate| candidate.id == instance)
+        else {
+            return false;
+        };
+        if live.machines.is_empty() {
+            return false;
+        }
+        let (runtime, machines) = (&mut live.runtime, &mut live.machines);
+        machines.values.iter_mut().fold(true, |accepted, machine| {
+            machine.submit_gamepads_from_buffer(runtime.raw_mut(), data) & accepted
+        })
+    }
+
     /// Route one pointer-down through every retained state machine on an
     /// existing live instance. The point is expressed in artboard space.
     pub fn pointer_down(&mut self, instance: InstanceId, point: Vec2D, pointer_id: i32) -> bool {

@@ -83,7 +83,8 @@ pub use nuxie_renderer::{
 };
 pub use nuxie_runtime::{
     AudioArtboardId, AudioDecodeError, AudioEngine, AudioEngineError, AudioFormat, AudioReader,
-    AudioSound, AudioSource, ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost,
+    AudioSound, AudioSource, ExternalFontAssetError, GAMEPAD_BATCH_MAX_AXES,
+    GAMEPAD_BATCH_MAX_BUTTONS, GAMEPAD_BATCH_WIRE_VERSION, LinearAnimationInstance, NoopScriptHost,
     ProjectDataConverterCatalog, ProjectDataConverterCompileError, ProjectDataConverterContext,
     ProjectDataConverterDefinition, ProjectDataConverterEasing, ProjectDataConverterFormat,
     ProjectDataConverterKind, ProjectDataConverterMathOperation, ProjectDataConverterOutputType,

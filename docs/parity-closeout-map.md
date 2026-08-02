@@ -505,6 +505,35 @@ perf ratio measured and reported to the user.
 
 ---
 
+## Phase 5 — Module regrouping (#MR) — opens when the scorecard is green
+
+Restructure aggregate Rust modules into a 1:1 grouping with their upstream
+C++ source files, so upstream-sync triage and the correspondence manifest
+become mechanical. Baseline (2026-08-01): 448 upstream rows → 276 map to a
+single Rust file, 158 scatter across 2+; hotspots `nuxie-binary/src/lib.rs`
+(57 rows), `artboard.rs` (42), `animation.rs` (41), `draw.rs` (28),
+`importers/mod.rs` (22), `components.rs` (19), `constraints.rs` (19).
+
+- **Gate to open:** five-tier scorecard green AND all writer lanes landed —
+  #MR runs under a write-freeze; no concurrent feature lanes.
+- **#MR-1 Split plan** — scout emits a per-hotspot move plan: target module
+  path per upstream row, plus the justified-exception list (rows that
+  should legitimately stay multi-file, e.g. trait impls split by crate
+  boundary). Exceptions are recorded in the manifest note field.
+- **#MR-2 Hotspot splits** — one worker per hotspot cluster, pure-move
+  commits only (no behavior edits, no signature changes); the
+  correspondence manifest `rust_module` field updates in lockstep in the
+  same commit; full gate battery green per landing; goldens byte-stable.
+- **#MR-3 Ratchet** — add a scatter ratchet to the manifest checker:
+  rows-mapping-to->1-rust-file may only decrease (target: exceptions
+  only). Wire into `runtime-frame-loop-port-check` alongside the existing
+  count ratchets.
+- **Attribution invariant:** every move preserves the `rust_ref` trace —
+  move commits carry the same ticket tag and the manifest row's
+  `audit_record` is not invalidated (pure moves keep B6 verdicts).
+
+---
+
 ## Tripwires (check at every commit; confess in the status log and requeue)
 
 1. Three commits on one divergence with no entry changing status —

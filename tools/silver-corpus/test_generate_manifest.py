@@ -6,6 +6,17 @@ import generate_manifest
 
 
 class SilverManifestGeneratorTests(unittest.TestCase):
+    def test_gamepad_actions_replay_the_complete_pinned_sequence(self):
+        actions = generate_manifest.p2e_gamepad_actions("gamepad_test")
+        self.assertIsNotNone(actions)
+        self.assertEqual(actions[0]["kind"], "bind-default-view-model")
+        self.assertEqual(
+            sum(action["kind"] == "gamepad-batch" for action in actions), 19
+        )
+        self.assertEqual(sum(action["kind"] == "frame" for action in actions), 19)
+        self.assertEqual(actions[-1]["kind"], "draw")
+        self.assertIsNone(generate_manifest.p2e_gamepad_actions("another_case"))
+
     def test_discovers_literal_producer_metadata(self):
         source = """
 TEST_CASE("renders selected board", "[silver]")

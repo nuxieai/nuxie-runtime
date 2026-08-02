@@ -106,6 +106,10 @@ fn fl_c5_public_reexports_are_downstream_visible_after_file_split() {
             => fn(&mut StateMachineInstance, &mut ArtboardInstance, ScriptListenerInvocation) -> bool
     );
     exact_public_signature!(
+        StateMachineInstance::submit_gamepads_from_buffer
+            => fn(&mut StateMachineInstance, &mut ArtboardInstance, &[u8]) -> bool
+    );
+    exact_public_signature!(
         StateMachineInstance::pointer_down
             => fn(&mut StateMachineInstance, &mut ArtboardInstance, f32, f32, i32) -> bool
     );
@@ -519,6 +523,7 @@ fn fl_c5_public_reexports_are_downstream_visible_after_file_split() {
     exact_public_signature!(StateMachineInstance::key_input => fn(&mut StateMachineInstance, &mut ArtboardInstance, u32, u32, bool, bool) -> bool);
     exact_public_signature!(StateMachineInstance::text_input => fn(&mut StateMachineInstance, &mut ArtboardInstance, &str) -> bool);
     exact_public_signature!(StateMachineInstance::gamepad_dispatch => fn(&mut StateMachineInstance, &mut ArtboardInstance, ScriptListenerInvocation) -> bool);
+    exact_public_signature!(StateMachineInstance::submit_gamepads_from_buffer => fn(&mut StateMachineInstance, &mut ArtboardInstance, &[u8]) -> bool);
     exact_public_signature!(StateMachineInstance::pointer_down => fn(&mut StateMachineInstance, &mut ArtboardInstance, f32, f32, i32) -> bool);
     exact_public_signature!(StateMachineInstance::pointer_down_with_event_context => fn(&mut StateMachineInstance, &mut ArtboardInstance, f32, f32, i32, &StateMachineEventContext) -> bool);
     exact_public_signature!(StateMachineInstance::pointer_down_with_owned_view_model_context => fn(&mut StateMachineInstance, &mut ArtboardInstance, f32, f32, i32, &mut RuntimeOwnedViewModelInstance) -> bool);
@@ -741,6 +746,7 @@ fn fl_c5_public_reexports_are_downstream_visible_after_file_split() {
         key_input,
         text_input,
         gamepad_dispatch,
+        submit_gamepads_from_buffer,
         pointer_down,
         pointer_down_with_event_context,
         pointer_down_with_owned_view_model_context,

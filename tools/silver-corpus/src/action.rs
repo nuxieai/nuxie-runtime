@@ -4,8 +4,9 @@ use nuxie_binary::{RuntimeFile, read_runtime_file};
 use nuxie_graph::{ArtboardGraph, GraphFile};
 use nuxie_render_api::SerializingFactory;
 use nuxie_runtime::{
-    ArtboardInstance, LinearAnimationInstance, RuntimeOwnedViewModelContext,
-    RuntimeOwnedViewModelInstance, StateMachineInstance, set_runtime_deterministic_mode,
+    ArtboardInstance, GAMEPAD_BATCH_WIRE_VERSION, LinearAnimationInstance,
+    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelInstance, StateMachineInstance,
+    set_runtime_deterministic_mode,
 };
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -18,6 +19,52 @@ pub enum ActionTarget {
     Artboard,
     StateMachine,
     Animation,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum GamepadMapping {
+    #[default]
+    Standard,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum GamepadInputKind {
+    Button,
+    Axis,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum GamepadRecord {
+    Connected {
+        device_id: i32,
+        #[serde(default = "default_gamepad_button_count")]
+        button_count: u8,
+        #[serde(default = "default_gamepad_axis_count")]
+        axis_count: u8,
+        #[serde(default)]
+        mapping: GamepadMapping,
+    },
+    Update {
+        device_id: i32,
+        input: GamepadInputKind,
+        index: u8,
+        value: f32,
+    },
+    Disconnected {
+        device_id: i32,
+    },
+}
+
+const fn default_gamepad_button_count() -> u8 {
+    17
+}
+
+const fn default_gamepad_axis_count() -> u8 {
+    4
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -196,6 +243,9 @@ pub enum Action {
         modifiers: u32,
         pressed: bool,
         repeat: bool,
+    },
+    GamepadBatch {
+        records: Vec<GamepadRecord>,
     },
     SetArtboardSize {
         width: f32,
@@ -883,6 +933,16 @@ impl Execution {
                         .context("no selected state machine")?
                         .key_input(&mut instance, *key, *modifiers, *pressed, *repeat);
                 }
+                Action::GamepadBatch { records } => {
+                    let bytes = encode_gamepad_batch(records);
+                    if !state_machine
+                        .as_mut()
+                        .context("no selected state machine")?
+                        .submit_gamepads_from_buffer(&mut instance, &bytes)
+                    {
+                        bail!("gamepad batch was rejected");
+                    }
+                }
                 Action::SetArtboardSize { width, height } => {
                     instance.set_artboard_dimensions(*width, *height);
                 }
@@ -949,6 +1009,47 @@ impl Execution {
         let bytes = factory.bytes().to_vec();
         Ok(Self { bytes })
     }
+}
+
+fn encode_gamepad_batch(records: &[GamepadRecord]) -> Vec<u8> {
+    let mut bytes = GAMEPAD_BATCH_WIRE_VERSION.to_le_bytes().to_vec();
+    for record in records {
+        match *record {
+            GamepadRecord::Connected {
+                device_id,
+                button_count,
+                axis_count,
+                mapping,
+            } => {
+                bytes.push(0);
+                bytes.extend_from_slice(&device_id.to_le_bytes());
+                bytes.extend_from_slice(&[
+                    u8::from(mapping == GamepadMapping::Unknown),
+                    button_count,
+                    axis_count,
+                    0,
+                ]);
+                bytes.resize(bytes.len() + usize::from(button_count) * 4, 0);
+                bytes.resize(bytes.len() + usize::from(axis_count) * 4, 0);
+            }
+            GamepadRecord::Update {
+                device_id,
+                input,
+                index,
+                value,
+            } => {
+                bytes.push(1);
+                bytes.extend_from_slice(&device_id.to_le_bytes());
+                bytes.extend_from_slice(&[1, u8::from(input == GamepadInputKind::Axis), index]);
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+            GamepadRecord::Disconnected { device_id } => {
+                bytes.push(2);
+                bytes.extend_from_slice(&device_id.to_le_bytes());
+            }
+        }
+    }
+    bytes
 }
 
 fn select_artboard<'a>(
@@ -1098,6 +1199,25 @@ mod tests {
     use super::{Action, ActionTarget, Execution, PointerCoordinate};
     use crate::{Actions, Case, Lane, Status, read_manifest};
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn deserializes_gamepad_batch_records() {
+        let action: Action = toml::from_str(
+            r#"kind = "gamepad-batch"
+records = [
+  { kind = "connected", device_id = 3 },
+  { kind = "update", device_id = 3, input = "axis", index = 1, value = -0.5 },
+  { kind = "disconnected", device_id = 3 },
+]
+"#,
+        )
+        .unwrap();
+
+        assert!(matches!(
+            action,
+            Action::GamepadBatch { records } if records.len() == 3
+        ));
+    }
 
     #[test]
     fn deserializes_focus_and_keyboard_actions() {

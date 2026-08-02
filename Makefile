@@ -18,6 +18,8 @@ RUNTIME_FRAME_LOOP_TRACE_EVIDENCE ?= $(CURDIR)/docs/runtime-frame-loop-trace.jso
 SILVER_CORPUS_MANIFEST ?= $(CURDIR)/silver-corpus.toml
 SILVER_CORPUS_GENERATOR ?= $(CURDIR)/tools/silver-corpus/generate_manifest.py
 FILE_CORRESPONDENCE_MANIFEST ?= $(CURDIR)/file-correspondence-manifest.toml
+RUST_ADDITIONS ?= $(CURDIR)/rust-additions.toml
+RUST_ATTRIBUTION_TOOL ?= $(CURDIR)/tools/b6-audit/rust_attribution.py
 PARITY_SCORECARD_TOOL ?= $(CURDIR)/tools/parity-scorecard/parity_scorecard.py
 PARITY_SCORECARD_EVIDENCE_DIR ?= $(CURDIR)/target/parity-scorecard/evidence
 PARITY_SCORECARD_JSON ?= $(CURDIR)/target/parity-scorecard/scorecard.json
@@ -124,7 +126,7 @@ check:
 test: fixtures
 	cargo test --workspace
 
-.PHONY: port-manifest-generate port-manifest-test port-manifest-check
+.PHONY: port-manifest-generate port-manifest-test port-manifest-check rust-attribution-test rust-attribution-check
 port-manifest-generate:
 	python3 "$(PORT_MANIFEST_TOOL)" generate --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --upstream-ref "$(PORT_MANIFEST_UPSTREAM_REF)" --output "$(PORT_MANIFEST)"
 
@@ -133,6 +135,12 @@ port-manifest-test:
 
 port-manifest-check: port-manifest-test
 	python3 "$(PORT_MANIFEST_TOOL)" check --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --upstream-ref "$(PORT_MANIFEST_UPSTREAM_REF)" --repo-root "$(CURDIR)" --manifest "$(PORT_MANIFEST)"
+
+rust-attribution-test:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/b6-audit -p 'test_rust_attribution.py' -v
+
+rust-attribution-check: rust-attribution-test
+	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUST_ATTRIBUTION_TOOL)" --repo-root "$(CURDIR)" --manifest "$(FILE_CORRESPONDENCE_MANIFEST)" --additions "$(RUST_ADDITIONS)"
 
 b6-audit-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/b6-audit/check.py

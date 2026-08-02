@@ -59,6 +59,9 @@ jobs:
       - name: Verify upstream C++ port manifest
         run: make port-manifest-check
 
+      - name: Verify Rust attribution coverage
+        run: make rust-attribution-check
+
   # The hosted reusable workflow above owns the existing V2 gate but does not
   # export its raw summaries. Run the same floor separately so the scorecard
   # consumes real per-commit output and exit codes, never an inferred green

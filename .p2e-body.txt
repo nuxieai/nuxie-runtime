@@ -1,4 +1,0 @@
-P2-e: gamepad batch decoder and submission surface
-Ports the F5 gamepad batch remainder: the v2 little-endian batch decoder with validation and per-device snapshot map, and the public submission entry point wired through runtime and the Frame facade mirroring pointer batches (Lua dispatch landed earlier in P1-j). Eight decoder/lifecycle tests plus the upstream gamepad and scripting-payload cases as scenario differentials. The silver case previously blocked on serialized-gamepad-buffer ingestion now ingests and records an honest render divergence for follow-up instead of a blocker. Manifests, correspondence counts, generator sources, and ratchets updated; Cargo.lock untouched.
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)

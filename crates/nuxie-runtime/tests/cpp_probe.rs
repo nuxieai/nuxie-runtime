@@ -1,4 +1,4 @@
-use nuxie_binary::{RuntimeFile, read_runtime_file};
+use nuxie_binary::{FieldValue, RuntimeFile, RuntimeProperty, read_runtime_file};
 use nuxie_graph::GraphFile;
 use nuxie_image_codec::{decoded_rgba_len, preflight_encoded_image, validate_encoded_image};
 use nuxie_render_api::{RawPath, RecordingFactory};
@@ -6,14 +6,14 @@ use nuxie_runtime::{
     ArtboardInstance, AudioEngine, AudioSource, ComponentDirt, Mat2D, RuntimeArtboardDefaultScene,
     RuntimeComponent, RuntimeDataContext, RuntimeDataContextLookupKind,
     RuntimeDataContextLookupReport, RuntimeDrawableDispatchKind, RuntimeFeatherState,
-    RuntimeGradientStop, RuntimeImportedViewModelInstanceContext, RuntimeKeyFrame,
-    RuntimeNestedEventChainPhase, RuntimeNestedEventChainTrace, RuntimeNestedNotifyBatchTrace,
-    RuntimeOwnedViewModelContext, RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle,
-    RuntimeOwnedViewModelInstance, RuntimePathCommand, RuntimeShapePaintKind,
-    RuntimeShapePaintPathKind, RuntimeShapePaintState, RuntimeStateMachineDataConverterBindStep,
-    RuntimeViewModelLinkError, ScriptError, ScriptHost, ScriptInputViewModelPropertyPath,
-    ScriptInstance, ScriptMethod, ScriptValue, ScriptedStateMachineObjectKind,
-    StateMachineInputKind, StateMachineInstance, TransformProperty,
+    RuntimeFileAssetOwners, RuntimeGradientStop, RuntimeImportedViewModelInstanceContext,
+    RuntimeKeyFrame, RuntimeNestedEventChainPhase, RuntimeNestedEventChainTrace,
+    RuntimeNestedNotifyBatchTrace, RuntimeOwnedViewModelContext,
+    RuntimeOwnedViewModelContextHandle, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance,
+    RuntimePathCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind, RuntimeShapePaintState,
+    RuntimeStateMachineDataConverterBindStep, RuntimeViewModelLinkError, ScriptError, ScriptHost,
+    ScriptInputViewModelPropertyPath, ScriptInstance, ScriptMethod, ScriptValue,
+    ScriptedStateMachineObjectKind, StateMachineInputKind, StateMachineInstance, TransformProperty,
     bound_script_view_model_from_owned_context, bound_script_view_model_from_owned_path,
     bound_script_view_model_snapshot, bound_script_view_model_snapshot_from_path,
     runtime_data_context_lookup_reports, runtime_random_call_count, script_view_model_from_owned,
@@ -87,6 +87,9 @@ struct CppAudioOracle {
     native_frames: u64,
     mono48_frames: u64,
     stereo32_frames: u64,
+    buffered_duration: f32,
+    mp3_duration_positive: bool,
+    mp3_duration_cached: bool,
     read_succeeded: bool,
     frames_read: u64,
     frame_clock: u64,
@@ -111,6 +114,36 @@ struct CppAudioOracle {
     seek_cursor: u64,
     seek_cursor_after_read: u64,
     outliving_completed: bool,
+    many_outliving_count: usize,
+    many_outliving_completed: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CppAudioRivOracle {
+    sound_import: bool,
+    event_count: usize,
+    dense_asset_ordinal: u32,
+    semantic_asset_id: u32,
+    has_audio_source: bool,
+    playing_after_play: usize,
+    event_volume: f32,
+    playing_after_zero_volume: usize,
+    playing_after_second_play: usize,
+    playing_after_drop: usize,
+    fallback_playing_after_play: usize,
+    fallback_playing_after_drop: usize,
+    sound2_import: bool,
+    child_has_audio: bool,
+    child_event_count: usize,
+    grand_parent_has_audio: bool,
+    grand_parent_event_count: usize,
+    nested_engine_propagated: bool,
+    nested_volume_propagated: f32,
+    nested_playing_after_play: usize,
+    nested_event_volume: f32,
+    no_audio_has_audio: bool,
+    no_audio_event_count: usize,
 }
 
 #[test]
@@ -119,8 +152,13 @@ fn audio_source_reader_and_headless_schedule_match_pinned_cpp() {
         return;
     };
     let fixture = cpp_runtime_fixture("audio/what.wav");
+    let mp3_fixture = cpp_runtime_fixture("audio/song.mp3");
     let output = Command::new(probe)
-        .args(["--audio-oracle", fixture.to_string_lossy().as_ref()])
+        .args([
+            "--audio-oracle",
+            fixture.to_string_lossy().as_ref(),
+            mp3_fixture.to_string_lossy().as_ref(),
+        ])
         .output()
         .expect("run pinned audio oracle");
     assert!(
@@ -163,8 +201,9 @@ fn audio_source_reader_and_headless_schedule_match_pinned_cpp() {
 
     let engine = AudioEngine::new(2, 44_100).expect("Rust headless engine");
     let source = Arc::new(source);
+
     let sound = engine
-        .play(source, 512, 1024, 0, None)
+        .play(Arc::clone(&source), 512, 1024, 0, None)
         .expect("scheduled sound");
     sound.set_volume(0.5);
     let mut scheduled = vec![0.0; 1536 * 2];
@@ -218,8 +257,22 @@ fn audio_source_reader_and_headless_schedule_match_pinned_cpp() {
     assert_eq!(interior_sound.completed(), cpp.interior_completed);
 
     let control_source = Arc::new(
-        AudioSource::from_buffered((0..8).map(|sample| sample as f32).collect(), 1, 4)
+        AudioSource::from_buffered((0..8).map(|sample| sample as f32).collect::<Vec<_>>(), 1, 4)
             .expect("control source"),
+    );
+    let buffered_duration = AudioSource::from_buffered(vec![0.0; 48_000 * 2], 2, 48_000)
+        .expect("buffered duration source")
+        .duration();
+    assert_eq!(buffered_duration, cpp.buffered_duration);
+    let mp3_source = AudioSource::from_encoded(
+        std::fs::read(&mp3_fixture).expect("read pinned MP3 duration fixture"),
+    )
+    .expect("Rust MP3 source");
+    let mp3_duration = mp3_source.duration();
+    assert_eq!(mp3_duration > 0.0, cpp.mp3_duration_positive);
+    assert_eq!(
+        mp3_source.duration() == mp3_duration,
+        cpp.mp3_duration_cached
     );
     let seconds_engine = AudioEngine::new(1, 4).expect("seconds engine");
     let seconds_sound = seconds_engine
@@ -301,6 +354,233 @@ fn audio_source_reader_and_headless_schedule_match_pinned_cpp() {
     };
     outliving.stop(0);
     assert_eq!(outliving.completed(), cpp.outliving_completed);
+
+    let many_outliving = {
+        let temporary_engine = AudioEngine::new(2, 44_100).expect("many-sound engine");
+        let sounds = (0..20)
+            .map(|_| {
+                temporary_engine
+                    .play(Arc::clone(&source), 0, 0, 0, None)
+                    .expect("many outliving sound")
+            })
+            .collect::<Vec<_>>();
+        temporary_engine.read_audio_frames(&mut vec![0.0; 512 * 2]);
+        sounds
+    };
+    for sound in &many_outliving {
+        sound.stop(0);
+    }
+    assert_eq!(many_outliving.len(), cpp.many_outliving_count);
+    assert_eq!(
+        many_outliving.iter().all(|sound| sound.completed()),
+        cpp.many_outliving_completed
+    );
+}
+
+#[test]
+fn audio_riv_load_playback_volume_and_has_audio_match_pinned_cpp() {
+    let Some(probe) = probe_path() else {
+        return;
+    };
+    let sound_fixture = cpp_runtime_fixture("sound.riv");
+    let sound2_fixture = cpp_runtime_fixture("sound2.riv");
+    let output = Command::new(probe)
+        .args([
+            "--audio-riv-oracle",
+            sound_fixture.to_string_lossy().as_ref(),
+            sound2_fixture.to_string_lossy().as_ref(),
+        ])
+        .output()
+        .expect("run pinned AudioEvent fixture oracle");
+    assert!(
+        output.status.success(),
+        "AudioEvent fixture oracle failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let cpp: CppAudioRivOracle =
+        serde_json::from_slice(&output.stdout).expect("decode AudioEvent fixture oracle JSON");
+
+    let mut sound = read_runtime_file(&std::fs::read(&sound_fixture).expect("read sound.riv"))
+        .expect("Rust imports sound.riv");
+    assert!(cpp.sound_import);
+    let audio_asset = sound
+        .objects
+        .iter_mut()
+        .flatten()
+        .find(|object| object.type_name == "AudioAsset")
+        .expect("sound.riv AudioAsset");
+    // The live C++ oracle mutates this generated property before playback so
+    // the differential binds the non-trivial asset × Artboard multiplication.
+    audio_asset.properties.push(RuntimeProperty {
+        key: 530,
+        name: "volume",
+        owner: "ExportAudio",
+        value: FieldValue::Double(0.5),
+    });
+    let sound_graph = GraphFile::from_runtime_file(&sound).expect("graph sound.riv");
+    let owners = RuntimeFileAssetOwners::from_runtime(&sound, None);
+    let mut artboard = ArtboardInstance::from_graph_with_artboards(
+        &sound,
+        sound_graph.artboards.first().expect("sound artboard"),
+        &sound_graph.artboards,
+    )
+    .expect("instantiate sound artboard");
+    artboard.attach_runtime_file_asset_owners(&owners);
+    let engine = AudioEngine::new(2, 44_100).expect("Rust headless engine");
+    artboard.set_audio_engine(Some(engine.clone()));
+    artboard.set_volume(0.25);
+    let audio_events = artboard
+        .components()
+        .iter()
+        .filter(|component| component.type_name == "AudioEvent")
+        .collect::<Vec<_>>();
+    assert_eq!(audio_events.len(), cpp.event_count);
+    let event_local = audio_events[0].local_id;
+    let event_global = artboard
+        .slot(event_local)
+        .expect("AudioEvent slot")
+        .source_global_id;
+    let event = sound
+        .object(event_global as usize)
+        .expect("AudioEvent object");
+    assert_eq!(
+        event.uint_property("assetId"),
+        Some(u64::from(cpp.dense_asset_ordinal))
+    );
+    let asset = sound
+        .file_asset(cpp.dense_asset_ordinal as usize)
+        .expect("dense AudioAsset ordinal");
+    assert_eq!(
+        asset.uint_property("assetId"),
+        Some(u64::from(cpp.semantic_asset_id))
+    );
+    assert_eq!(
+        owners.audio_assets().get(asset.id).is_some(),
+        cpp.has_audio_source
+    );
+
+    let first = artboard
+        .play_audio_event(event_local)
+        .expect("Rust AudioEvent plays");
+    assert_eq!(engine.playing_sound_count(), cpp.playing_after_play);
+    assert_eq!(first.volume(), cpp.event_volume);
+    artboard.set_volume(0.0);
+    assert!(artboard.play_audio_event(event_local).is_none());
+    assert_eq!(engine.playing_sound_count(), cpp.playing_after_zero_volume);
+    artboard.set_volume(0.25);
+    artboard
+        .play_audio_event(event_local)
+        .expect("Rust AudioEvent second play");
+    assert_eq!(engine.playing_sound_count(), cpp.playing_after_second_play);
+    drop(artboard);
+    assert_eq!(engine.playing_sound_count(), cpp.playing_after_drop);
+
+    let fallback_engine = AudioEngine::make_and_store(2, 44_100).expect("runtime fallback engine");
+    let mut fallback_artboard = ArtboardInstance::from_graph_with_artboards(
+        &sound,
+        sound_graph.artboards.first().expect("sound artboard"),
+        &sound_graph.artboards,
+    )
+    .expect("instantiate runtime-fallback artboard");
+    fallback_artboard.attach_runtime_file_asset_owners(&owners);
+    let fallback_event = fallback_artboard
+        .components()
+        .iter()
+        .find(|component| component.type_name == "AudioEvent")
+        .expect("fallback AudioEvent")
+        .local_id;
+    fallback_artboard
+        .play_audio_event(fallback_event)
+        .expect("AudioEvent uses the stored runtime engine");
+    assert_eq!(
+        fallback_engine.playing_sound_count(),
+        cpp.fallback_playing_after_play
+    );
+    drop(fallback_artboard);
+    assert_eq!(
+        fallback_engine.playing_sound_count(),
+        cpp.fallback_playing_after_drop
+    );
+    fallback_engine.stop_all_sounds();
+
+    let sound2 = read_runtime_file(&std::fs::read(&sound2_fixture).expect("read sound2.riv"))
+        .expect("Rust imports sound2.riv");
+    assert!(cpp.sound2_import);
+    let sound2_graph = GraphFile::from_runtime_file(&sound2).expect("graph sound2.riv");
+    for (name, cpp_has_audio, cpp_event_count) in [
+        ("child", cpp.child_has_audio, cpp.child_event_count),
+        (
+            "grand-parent",
+            cpp.grand_parent_has_audio,
+            cpp.grand_parent_event_count,
+        ),
+        ("no-audio", cpp.no_audio_has_audio, cpp.no_audio_event_count),
+    ] {
+        let graph = sound2_graph
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some(name))
+            .unwrap_or_else(|| panic!("missing {name} graph"));
+        let instance =
+            ArtboardInstance::from_graph_with_artboards(&sound2, graph, &sound2_graph.artboards)
+                .unwrap_or_else(|error| panic!("instantiate {name}: {error:#}"));
+        assert_eq!(instance.has_audio(), cpp_has_audio, "{name} hasAudio");
+        assert_eq!(
+            instance
+                .components()
+                .iter()
+                .filter(|component| component.type_name == "AudioEvent")
+                .count(),
+            cpp_event_count,
+            "{name} direct AudioEvent count"
+        );
+    }
+
+    let grand_parent_graph = sound2_graph
+        .artboards
+        .iter()
+        .find(|graph| graph.name.as_deref() == Some("grand-parent"))
+        .expect("grand-parent graph");
+    let mut grand_parent = ArtboardInstance::from_graph_with_artboards(
+        &sound2,
+        grand_parent_graph,
+        &sound2_graph.artboards,
+    )
+    .expect("instantiate grand-parent audio chain");
+    let nested_engine = AudioEngine::new(2, 44_100).expect("nested-chain engine");
+    grand_parent.set_audio_engine(Some(nested_engine.clone()));
+    grand_parent.set_volume(0.125);
+    let mut nested_engine_propagated = false;
+    let mut nested_volume = None;
+    let mut nested_sound = None;
+    grand_parent
+        .try_visit_nested_artboard_instances_mut(&mut |_depth, _global_id, child| {
+            let event_local = child
+                .components()
+                .iter()
+                .find(|component| component.type_name == "AudioEvent")
+                .map(|component| component.local_id);
+            if let Some(event_local) = event_local {
+                nested_engine_propagated = child.audio_engine().is_some();
+                nested_volume = Some(child.volume());
+                nested_sound = child.play_audio_event(event_local);
+            }
+            Ok::<(), ()>(())
+        })
+        .expect("visit grand-parent audio descendants");
+    assert_eq!(nested_engine_propagated, cpp.nested_engine_propagated);
+    assert_eq!(
+        nested_volume.expect("nested AudioEvent Artboard volume"),
+        cpp.nested_volume_propagated
+    );
+    assert_eq!(
+        nested_engine.playing_sound_count(),
+        cpp.nested_playing_after_play
+    );
+    assert_eq!(
+        nested_sound.expect("nested AudioEvent sound").volume(),
+        cpp.nested_event_volume
+    );
 }
 
 fn scripted_probe_path() -> Option<PathBuf> {

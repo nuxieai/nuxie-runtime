@@ -567,7 +567,7 @@ note = "Consolidated Rust port for animation."
 upstream = "src/artboard.cpp"
 status = "partial"
 rust_module = "crates/nuxie-runtime/src/artboard.rs"
-note = "F1: core artboard behavior is ported; Artboard::volume remains absent."
+note = "P2F2: core Artboard behavior includes retained volume/audio-engine configuration, recursive propagation to nested and component-list occurrences, and Artboard-scoped sound teardown. Other historical Artboard ceilings keep this legacy row partial."
 
 [[file]]
 upstream = "src/artboard_component_list.cpp"
@@ -591,7 +591,7 @@ note = "Consolidated runtime port."
 upstream = "src/assets/audio_asset.cpp"
 status = "ported"
 rust_module = "crates/nuxie-runtime/src/assets/audio_asset.rs; crates/nuxie-runtime/src/assets/file_asset_loader.rs"
-note = "P2F1: embedded and host-loader AudioAsset resolution retains an owned decoded AudioSource; invalid audio clears the source without failing import, matching pinned AudioAsset::decode."
+note = "P2F1/P2F2: embedded and host-loader AudioAsset resolution retains an owned decoded AudioSource; invalid audio clears the source without failing import, and sound.riv differentially proves the retained source feeds dense-ordinal AudioEvent playback."
 
 [[file]]
 upstream = "src/assets/blob_asset.cpp"
@@ -679,9 +679,9 @@ note = "P2F1/D18: owned encoded WAV/MP3/FLAC and buffered f32 sources, lazy Symp
 
 [[file]]
 upstream = "src/audio_event.cpp"
-status = "absent"
-rust_module = ""
-note = "F1: audio event firing is absent."
+status = "ported"
+rust_module = "crates/nuxie-runtime/src/audio_event.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/state_machine/state_machine_instance.rs; crates/nuxie/src/lib.rs"
+note = "P2F2: resolves AudioEvent.assetId as a dense File::assets ordinal, multiplies AudioAsset and Artboard volume, schedules on the configured or retained default headless engine during event unwind, and stops configured-engine sounds with the owning Artboard."
 
 [[file]]
 upstream = "src/bindable_artboard.cpp"

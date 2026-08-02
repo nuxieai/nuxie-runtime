@@ -271,7 +271,7 @@ struct RuntimeLocalEventListenerBatch {
     resume_view_model_listeners: bool,
 }
 
-/// Instance-owned production boundary later replaced by `AudioEvent::play`.
+/// Instance-owned production boundary for `AudioEvent::play`.
 trait AudioEventSeam: std::fmt::Debug {
     fn selected(
         &self,
@@ -282,9 +282,11 @@ trait AudioEventSeam: std::fmt::Debug {
 }
 
 #[derive(Debug)]
-struct RecordingAudioEventSeam;
+struct PlaybackAudioEventSeam {
+    playback: crate::audio_event::RuntimeAudioEventPlayback,
+}
 
-impl AudioEventSeam for RecordingAudioEventSeam {
+impl AudioEventSeam for PlaybackAudioEventSeam {
     fn selected(
         &self,
         occurrence: AudioEventOccurrence,
@@ -293,6 +295,7 @@ impl AudioEventSeam for RecordingAudioEventSeam {
     ) {
         *selection_count = selection_count.saturating_add(1);
         *last_occurrence = Some(occurrence);
+        let _ = self.playback.play(occurrence.event_local_index);
     }
 }
 
@@ -3016,7 +3019,9 @@ impl StateMachineInstance {
             event_settlement_total_order_trace: None,
             #[cfg(test)]
             nested_event_forward_test: None,
-            audio_event_seam: Rc::new(RecordingAudioEventSeam),
+            audio_event_seam: Rc::new(PlaybackAudioEventSeam {
+                playback: artboard.audio_event_playback(),
+            }),
             audio_event_selection_count: 0,
             audio_event_last_occurrence: None,
             #[cfg(test)]
@@ -7331,9 +7336,8 @@ impl StateMachineInstance {
     /// Select C++ `AudioEvent` occurrences after local dispatch and bubbling,
     /// then invoke the production handoff once per occurrence.
     ///
-    /// Playback internals remain owned by deferred `audio_event.cpp`; the
-    /// production default records the selected occurrence until that row
-    /// replaces this boundary with `play()`
+    /// The production seam retains selection receipts for order probes and
+    /// invokes the resolved `AudioEvent::play` owner
     /// (`state_machine_instance.cpp:3155-3169`).
     fn reach_recorded_audio_event_seam(&mut self, events: &[StateMachineReportedEvent]) {
         for event in events.iter().filter(|event| event.is_audio_event()) {
@@ -14724,6 +14728,42 @@ mod scripted_listener_action_tests {
 
     fn scripted_listener_machine() -> StateMachineInstance {
         scripted_listener_artboard_and_machine().1
+    }
+
+    #[test]
+    fn audio_event_seam_plays_the_resolved_sound_fixture_asset() {
+        let fixture = PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        )
+        .join("tests/unit_tests/assets/sound.riv");
+        let file = read_runtime_file(&std::fs::read(fixture).expect("read sound fixture"))
+            .expect("import sound fixture");
+        let graph = GraphFile::from_runtime_file(&file).expect("build sound graph");
+        let mut artboard = ArtboardInstance::from_graph_with_artboards(
+            &file,
+            graph.artboards.first().expect("sound artboard"),
+            &graph.artboards,
+        )
+        .expect("instantiate sound artboard");
+        let owners = crate::RuntimeFileAssetOwners::from_runtime(&file, None);
+        artboard.attach_runtime_file_asset_owners(&owners);
+        let engine = crate::AudioEngine::new(2, 44_100).expect("headless audio engine");
+        artboard.set_audio_engine(Some(engine.clone()));
+        let event_local_id = artboard
+            .components()
+            .iter()
+            .find(|component| component.type_name == "AudioEvent")
+            .expect("sound AudioEvent")
+            .local_id;
+        let mut machine = artboard
+            .state_machine_instance(0)
+            .expect("sound state machine");
+        let (event, _) = fl_c5_test_audio_event(event_local_id);
+
+        assert_eq!(engine.playing_sound_count(), 0);
+        machine.notify_events(&mut artboard, None, &[event]);
+        assert_eq!(engine.playing_sound_count(), 1);
     }
 
     #[derive(Debug, Clone)]

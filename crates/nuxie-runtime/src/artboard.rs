@@ -40,6 +40,7 @@ use crate::artboard_data_bind::{
     build_nested_host_view_model_instance_locals,
     reunite_artboard_shared_data_bind_converter_states,
 };
+use crate::audio_event::RuntimeAudioEventPlayback;
 use crate::components::{
     AuthoredTransform, ComponentDirt, ComponentHandle, Mat2D, RuntimeComponent,
     RuntimeConstrainableListState, RuntimeIkChainLink, RuntimeSkinnableKind, TransformComponents,
@@ -356,6 +357,10 @@ struct RuntimeTextStyleFeatureOption {
 #[derive(Debug)]
 pub struct ArtboardInstance {
     instance_identity: RuntimeArtboardInstanceIdentity,
+    audio_event_playback: RuntimeAudioEventPlayback,
+    /// Transient layout clones share the mounted occurrence's playback owner
+    /// but must not run its destructor-side stop hook.
+    audio_lifecycle_armed: bool,
     pub(crate) width: f32,
     pub(crate) height: f32,
     pub(crate) origin_x: f32,
@@ -528,8 +533,13 @@ pub struct ArtboardInstance {
 
 impl Clone for ArtboardInstance {
     fn clone(&self) -> Self {
+        let instance_identity = self.instance_identity.clone();
         let mut cloned = Self {
-            instance_identity: self.instance_identity.clone(),
+            audio_event_playback: self
+                .audio_event_playback
+                .cold_clone(crate::AudioArtboardId(instance_identity.0)),
+            instance_identity,
+            audio_lifecycle_armed: true,
             width: self.width,
             height: self.height,
             origin_x: self.origin_x,
@@ -703,6 +713,14 @@ impl Clone for ArtboardInstance {
         }
         cloned.refresh_runtime_font_asset_referencers();
         cloned
+    }
+}
+
+impl Drop for ArtboardInstance {
+    fn drop(&mut self) {
+        if self.audio_lifecycle_armed {
+            self.audio_event_playback.stop_artboard();
+        }
     }
 }
 
@@ -1051,6 +1069,9 @@ impl ArtboardInstance {
         // that occurrence in place, so occurrence-keyed render state (notably
         // TextStylePaint's opacity paint pool) survives across frames.
         self.instance_identity = RuntimeArtboardInstanceIdentity(source.instance_identity.0);
+        self.audio_event_playback
+            .replace_with_transient_view_of(&source.audio_event_playback);
+        self.audio_lifecycle_armed = false;
         for (local_id, source_nested) in source.nested_artboards.iter() {
             if let Some(cloned_nested) = self.nested_artboards.get_mut(local_id) {
                 cloned_nested
@@ -2287,8 +2308,17 @@ impl ArtboardInstance {
                 .map_or(0, |local_id| local_id.saturating_add(1))
         ];
         let runtime_drawables = RuntimeDrawableList::from_graph(graph, &objects);
+        let instance_identity = RuntimeArtboardInstanceIdentity::next();
+        let audio_event_playback = RuntimeAudioEventPlayback::new(
+            crate::AudioArtboardId(instance_identity.0),
+            file,
+            &slots,
+            Arc::new(crate::RuntimeAudioAssetOwners::from_runtime(file)),
+        );
         let mut instance = Self {
-            instance_identity: RuntimeArtboardInstanceIdentity::next(),
+            instance_identity,
+            audio_event_playback,
+            audio_lifecycle_armed: true,
             width: dimensions.width,
             height: dimensions.height,
             origin_x: dimensions.origin_x,
@@ -2593,13 +2623,32 @@ impl ArtboardInstance {
         self.register_runtime_font_asset_referencers(file, graph);
     }
 
-    /// Attach the file-owned ImageAsset/FontAsset owner set to this complete
+    /// Attach the file-owned ImageAsset/FontAsset/AudioAsset owner set to this complete
     /// occurrence tree and to contexts that may materialize children later.
     pub fn attach_runtime_file_asset_owners(&mut self, owners: &crate::RuntimeFileAssetOwners) {
         if let Some(images) = owners.loader_image_assets() {
             self.attach_runtime_image_assets_tree(images);
         }
         self.attach_runtime_font_assets_tree(owners.font_assets());
+        self.attach_runtime_audio_assets_tree(owners.audio_assets());
+    }
+
+    fn attach_runtime_audio_assets_tree(&mut self, owners: Arc<crate::RuntimeAudioAssetOwners>) {
+        self.audio_event_playback.set_assets(Arc::clone(&owners));
+        for nested in self.nested_artboards.values_mut() {
+            nested
+                .child
+                .attach_runtime_audio_assets_tree(Arc::clone(&owners));
+        }
+        let list_locals = self.component_list_locals().collect::<Vec<_>>();
+        for local_id in list_locals {
+            if let Some(items) = self.component_list_items_mut(local_id) {
+                for item in items {
+                    item.child
+                        .attach_runtime_audio_assets_tree(Arc::clone(&owners));
+                }
+            }
+        }
     }
 
     fn attach_runtime_font_assets_tree(&mut self, owners: Arc<crate::RuntimeFontAssetOwners>) {
@@ -3489,8 +3538,7 @@ impl ArtboardInstance {
     }
 
     /// Whether this concrete artboard occurrence or a mounted descendant
-    /// contains an AudioEvent. This is query-only: firing remains owned by the
-    /// later AudioEvent activation package.
+    /// contains an AudioEvent.
     pub fn has_audio(&self) -> bool {
         if self
             .components()
@@ -3510,6 +3558,71 @@ impl ArtboardInstance {
             self.component_list_items(local_id)
                 .is_some_and(|items| items.iter().any(|item| item.child.has_audio()))
         })
+    }
+
+    /// Headless engine selected for this Artboard occurrence.
+    pub fn audio_engine(&self) -> Option<crate::AudioEngine> {
+        self.audio_event_playback.engine()
+    }
+
+    /// Install an external/headless engine on this complete Artboard tree.
+    pub fn set_audio_engine(&mut self, engine: Option<crate::AudioEngine>) {
+        self.audio_event_playback.set_engine(engine.clone());
+        for nested in self.nested_artboards.values_mut() {
+            nested.child.set_audio_engine(engine.clone());
+        }
+        let list_locals = self.component_list_locals().collect::<Vec<_>>();
+        for local_id in list_locals {
+            if let Some(items) = self.component_list_items_mut(local_id) {
+                for item in items {
+                    item.child.set_audio_engine(engine.clone());
+                }
+            }
+        }
+    }
+
+    pub fn volume(&self) -> f32 {
+        self.audio_event_playback.volume()
+    }
+
+    /// Set the Artboard audio multiplier and propagate it to mounted children.
+    pub fn set_volume(&mut self, volume: f32) {
+        self.audio_event_playback.set_volume(volume);
+        for nested in self.nested_artboards.values_mut() {
+            nested.child.set_volume(volume);
+        }
+        let list_locals = self.component_list_locals().collect::<Vec<_>>();
+        for local_id in list_locals {
+            if let Some(items) = self.component_list_items_mut(local_id) {
+                for item in items {
+                    item.child.set_volume(volume);
+                }
+            }
+        }
+    }
+
+    /// Invoke the concrete event's public C++ `AudioEvent::play` counterpart.
+    pub fn play_audio_event(&self, event_local_id: usize) -> Option<crate::AudioSound> {
+        self.audio_event_playback.play(event_local_id)
+    }
+
+    pub(crate) fn audio_event_playback(&self) -> RuntimeAudioEventPlayback {
+        self.audio_event_playback.clone()
+    }
+
+    fn inherit_audio_configuration_from(&mut self, source: &RuntimeAudioEventPlayback) {
+        self.audio_event_playback.inherit_configuration_from(source);
+        for nested in self.nested_artboards.values_mut() {
+            nested.child.inherit_audio_configuration_from(source);
+        }
+        let list_locals = self.component_list_locals().collect::<Vec<_>>();
+        for local_id in list_locals {
+            if let Some(items) = self.component_list_items_mut(local_id) {
+                for item in items {
+                    item.child.inherit_audio_configuration_from(source);
+                }
+            }
+        }
     }
 
     pub(crate) fn component_at(&self, handle: ComponentHandle) -> &RuntimeComponent {
@@ -5198,6 +5311,7 @@ impl ArtboardInstance {
             profile_path,
         )
         .ok()?;
+        child.inherit_audio_configuration_from(&self.audio_event_playback);
         child.set_frame_origin(false);
         let parent_data_context = self.artboard_owned_data_context.clone().unwrap_or_default();
         let child_data_context = RuntimeOwnedDataContext::with_local_handles(
@@ -10180,7 +10294,7 @@ impl ArtboardInstance {
             .unwrap_or((None, false));
         let mut visiting = BTreeSet::new();
         visiting.insert(self.graph_global_id);
-        let nested = build_runtime_nested_artboard_instance(
+        let mut nested = build_runtime_nested_artboard_instance(
             &context.file,
             parent_graph,
             context.artboards.as_slice(),
@@ -10210,6 +10324,9 @@ impl ArtboardInstance {
             &self.profile_path,
         )
         .ok()?;
+        nested
+            .child
+            .inherit_audio_configuration_from(&self.audio_event_playback);
         Some(nested)
     }
 
@@ -12080,8 +12197,13 @@ mod tests {
                 .max()
                 .map_or(0, |local_id| local_id.saturating_add(1))
         ];
+        let instance_identity = RuntimeArtboardInstanceIdentity::next();
         ArtboardInstance {
-            instance_identity: RuntimeArtboardInstanceIdentity::next(),
+            audio_event_playback: RuntimeAudioEventPlayback::empty(crate::AudioArtboardId(
+                instance_identity.0,
+            )),
+            instance_identity,
+            audio_lifecycle_armed: true,
             width: 0.0,
             height: 0.0,
             origin_x: 0.0,
@@ -12233,6 +12355,25 @@ mod tests {
         assert!(nested_artboards.get(&2).is_none());
         assert_eq!(nested_artboards.keys().copied().collect::<Vec<_>>(), [5, 9]);
         assert_eq!(nested_artboards.get(&9).unwrap().child.graph_global_id, 90);
+    }
+
+    #[test]
+    fn artboard_audio_engine_and_volume_propagate_to_nested_occurrences() {
+        let mut root = synthetic_instance(Vec::new(), Vec::new());
+        root.nested_artboards
+            .insert(2, synthetic_nested_artboard_instance(20));
+        let engine = crate::AudioEngine::new(2, 44_100).expect("headless engine");
+
+        root.set_audio_engine(Some(engine));
+        root.set_volume(0.125);
+
+        let child = &root.nested_artboards.get(&2).expect("nested child").child;
+        assert_eq!(root.volume(), 0.125);
+        assert_eq!(child.volume(), 0.125);
+        assert_eq!(
+            child.audio_engine().expect("propagated engine").channels(),
+            2
+        );
     }
 
     fn authoring_record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {

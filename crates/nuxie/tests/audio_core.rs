@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use nuxie::{Factory, File, RuntimeFileAssetKind};
+use nuxie::{AudioEngine, Factory, File, RuntimeFileAssetKind};
 use nuxie_render_api::NullFactory;
 
 fn pinned_fixture(relative: &str) -> Vec<u8> {
@@ -93,4 +93,93 @@ fn sound_fixtures_match_direct_nested_and_no_audio_queries() {
             .unwrap_or_else(|error| panic!("instantiate {name}: {error:#}"));
         assert_eq!(instance.has_audio(), expected, "{name} hasAudio");
     }
+}
+
+#[test]
+fn audio_event_playback_multiplies_artboard_volume_and_stops_with_its_artboard() {
+    let file = File::import(&pinned_fixture("sound.riv")).expect("sound.riv imports");
+    let engine = AudioEngine::new(2, 44_100).expect("headless engine");
+    let mut first = file
+        .default_artboard()
+        .expect("default artboard")
+        .instantiate()
+        .expect("first artboard instance");
+    let mut second = file
+        .default_artboard()
+        .expect("default artboard")
+        .instantiate()
+        .expect("second artboard instance");
+    first.set_audio_engine(Some(engine.clone()));
+    second.set_audio_engine(Some(engine.clone()));
+    first.set_volume(0.25);
+    let first_event = first
+        .raw()
+        .components()
+        .iter()
+        .find(|component| component.type_name == "AudioEvent")
+        .expect("first AudioEvent")
+        .local_id;
+    let second_event = second
+        .raw()
+        .components()
+        .iter()
+        .find(|component| component.type_name == "AudioEvent")
+        .expect("second AudioEvent")
+        .local_id;
+
+    let first_sound = first
+        .play_audio_event(first_event)
+        .expect("dense asset ordinal resolves and plays");
+    assert_eq!(first_sound.volume(), 0.25);
+    first
+        .play_audio_event(first_event)
+        .expect("second first sound");
+    second
+        .play_audio_event(second_event)
+        .expect("second artboard sound");
+    first
+        .play_audio_event(first_event)
+        .expect("third first sound");
+    assert_eq!(engine.playing_sound_count(), 4);
+
+    first.set_volume(0.0);
+    assert!(first.play_audio_event(first_event).is_none());
+    assert_eq!(engine.playing_sound_count(), 4);
+    drop(first);
+    assert_eq!(engine.playing_sound_count(), 1);
+    drop(second);
+    assert_eq!(engine.playing_sound_count(), 0);
+}
+
+#[test]
+fn audio_event_artboard_clone_retains_its_asset_and_stops_independently() {
+    let file = File::import(&pinned_fixture("sound.riv")).expect("sound.riv imports");
+    let engine = AudioEngine::new(2, 44_100).expect("headless engine");
+    let mut original = file
+        .default_artboard()
+        .expect("default artboard")
+        .instantiate()
+        .expect("original artboard instance");
+    original.set_audio_engine(Some(engine.clone()));
+    let event_local = original
+        .raw()
+        .components()
+        .iter()
+        .find(|component| component.type_name == "AudioEvent")
+        .expect("AudioEvent")
+        .local_id;
+    let cloned = original.raw().clone();
+
+    original
+        .play_audio_event(event_local)
+        .expect("original retains AudioAsset");
+    cloned
+        .play_audio_event(event_local)
+        .expect("clone retains AudioAsset");
+    assert_eq!(engine.playing_sound_count(), 2);
+
+    drop(original);
+    assert_eq!(engine.playing_sound_count(), 1);
+    drop(cloned);
+    assert_eq!(engine.playing_sound_count(), 0);
 }

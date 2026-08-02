@@ -102,9 +102,13 @@ FEATURE_ROWS.update(
         "src/assets/audio_asset.cpp": (
             "ported",
             "crates/nuxie-runtime/src/assets/audio_asset.rs; crates/nuxie-runtime/src/assets/file_asset_loader.rs",
-            "P2F1: embedded and host-loaded AudioAsset bytes resolve to file-owned AudioSource values.",
+            "P2F1/P2F2: embedded and host-loaded AudioAsset bytes resolve to file-owned AudioSource values that feed dense-ordinal AudioEvent playback.",
         ),
-        "src/audio_event.cpp": ("absent", "", "F1: audio event firing is absent."),
+        "src/audio_event.cpp": (
+            "ported",
+            "crates/nuxie-runtime/src/audio_event.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/state_machine/state_machine_instance.rs; crates/nuxie/src/lib.rs",
+            "P2F2: dense-ordinal AudioEvent resolution, multiplied asset/Artboard volume, configured/default-engine event-unwind playback, and Artboard-scoped teardown are ported.",
+        ),
         "src/command_server.cpp": ("absent", "", "F3: command server is absent."),
         "src/constraints/scrolling/clamped_scroll_physics.cpp": (
             "partial",

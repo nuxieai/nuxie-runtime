@@ -348,7 +348,7 @@ PREFIX_MODULES = (
     ("src/bones/", "crates/nuxie-runtime/src/components.rs"),
     ("src/constraints/", "crates/nuxie-runtime/src/constraints.rs"),
     ("src/core/", "crates/nuxie-binary/src/lib.rs"),
-    ("src/data_bind/", "crates/nuxie-runtime/src/artboard_data_bind.rs"),
+    ("src/data_bind/", "crates/nuxie-runtime/src/data_bind/data_bind_context.rs"),
     ("src/importers/", "crates/nuxie-runtime/src/objects.rs"),
     ("src/input/", "crates/nuxie-runtime/src/focus.rs"),
     ("src/inputs/", "crates/nuxie-runtime/src/state_machine.rs"),

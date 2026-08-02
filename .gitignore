@@ -1,6 +1,8 @@
 /target/
 /vendor/*/target/
 /fixtures/**/*.riv
+!/fixtures/p2d/
+!/fixtures/p2d/scripted_interpolator.riv
 !/fixtures/fl-e8/
 !/fixtures/fl-e8/text_style_feature.riv
 !/fixtures/fl-e8/text_variation_modifier.riv
@@ -47,5 +49,6 @@
 
 # Orchestration scratch: worker reports and PR body files (session-local)
 *-report.md
+!/P2D-report.md
 .*-body.txt
 *.log

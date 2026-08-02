@@ -2674,7 +2674,17 @@ fn initialize_nested_scripted_drawables(
                 .rev()
                 .filter_map(Clone::clone)
                 .collect();
-            if !artboard_scripts_request_context(runtime, &artboards[child_index], &script_assets) {
+            let has_scripted_interpolator = child_instance
+                .linear_animations()
+                .iter()
+                .any(|animation| !animation.scripted_interpolator_global_ids().is_empty());
+            if !has_scripted_interpolator
+                && !artboard_scripts_request_context(
+                    runtime,
+                    &artboards[child_index],
+                    &script_assets,
+                )
+            {
                 context_models_by_depth.push(child_context_model);
                 return Ok::<(), anyhow::Error>(());
             }
@@ -2733,10 +2743,9 @@ fn artboard_script_payloads_contain(
     marker: &[u8],
 ) -> bool {
     artboard.local_objects.iter().any(|local_object| {
-        if !local_object
-            .type_name
-            .is_some_and(is_scripted_drawable_type)
-        {
+        if !local_object.type_name.is_some_and(|type_name| {
+            is_scripted_drawable_type(type_name) || type_name == "ScriptedInterpolator"
+        }) {
             return false;
         }
         let Some(script_asset_id) = runtime
@@ -2771,15 +2780,21 @@ fn initialize_scripted_drawables_for_artboard(
     initialize_only_missing: bool,
     registered_file: Option<&RegisteredScriptFile>,
 ) -> Result<bool> {
-    if initialize_only_missing
-        && !artboard.local_objects.iter().any(|local_object| {
+    if initialize_only_missing {
+        let missing_drawable = artboard.local_objects.iter().any(|local_object| {
             local_object
                 .type_name
                 .is_some_and(is_scripted_drawable_type)
                 && !instance.has_script_instance_for_global(local_object.global_id)
-        })
-    {
-        return Ok(false);
+        });
+        let missing_interpolator = instance
+            .linear_animations()
+            .iter()
+            .flat_map(|animation| animation.scripted_interpolator_global_ids())
+            .any(|global_id| !instance.has_scripted_interpolator_factory(global_id));
+        if !missing_drawable && !missing_interpolator {
+            return Ok(false);
+        }
     }
 
     let local_registered_file;
@@ -2810,6 +2825,7 @@ fn initialize_scripted_drawables_for_artboard(
         script_programs,
         &mut host,
     )?;
+    initialize_scripted_interpolators(runtime, instance, script_assets, vm, script_programs)?;
     for local_object in &artboard.local_objects {
         if !local_object
             .type_name
@@ -2932,6 +2948,88 @@ fn initialize_scripted_drawables_for_artboard(
         .retain_registered_view_model_frame(registered_file);
 
     Ok(true)
+}
+
+#[cfg(feature = "scripting")]
+fn initialize_scripted_interpolators(
+    runtime: &RuntimeFile,
+    instance: &mut ArtboardInstance,
+    script_assets: &BTreeMap<u64, ExtractedScriptAsset>,
+    vm: &Rc<ScriptVm>,
+    script_programs: &Rc<BTreeMap<u64, ScriptProgram>>,
+) -> Result<()> {
+    let global_ids = instance
+        .linear_animations()
+        .iter()
+        .flat_map(|animation| animation.scripted_interpolator_global_ids())
+        .collect::<BTreeSet<_>>();
+    for global_id in global_ids {
+        if instance.has_scripted_interpolator_factory(global_id) {
+            continue;
+        }
+        let interpolator = runtime
+            .object(global_id as usize)
+            .with_context(|| format!("missing ScriptedInterpolator global {global_id}"))?;
+        let script = resolved_scripted_data_converter_asset(runtime, script_assets, interpolator)
+            .with_context(|| {
+            format!("ScriptedInterpolator global {global_id} has no resolved protocol ScriptAsset")
+        })?;
+        let asset_ordinal = script.asset_id;
+        let asset_name = script.name.clone();
+        let implemented_methods = runtime
+            .object(script.global_id as usize)
+            .and_then(|asset| asset.uint_property("serializedImplementedMethods"))
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(u32::MAX);
+        let inits = nuxie_runtime::scripted_object_inits(implemented_methods);
+        let inputs = scripted_data_converter_inputs(runtime, global_id)
+            .into_iter()
+            .filter_map(|input| {
+                Some((
+                    input.string_property("name")?.to_owned(),
+                    default_script_input_value(input)?,
+                ))
+            })
+            .collect::<Vec<_>>();
+        let vm = Rc::clone(vm);
+        let programs = Rc::clone(script_programs);
+        instance.set_scripted_interpolator_factory(
+            global_id,
+            nuxie_runtime::RuntimeScriptedInterpolatorFactory::new(move |_| {
+                let program = programs.get(&asset_ordinal).ok_or_else(|| {
+                    ScriptError::new(format!(
+                        "ScriptedInterpolator global {global_id} references unregistered protocol ordinal {asset_ordinal} name '{asset_name}'"
+                    ))
+                })?;
+                let mut script = vm.instantiate_registered_script(program).map_err(|error| {
+                    error.with_context(format!(
+                        "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase generator failed"
+                    ))
+                })?;
+                for (name, value) in &inputs {
+                    script.set_input(name, value.clone()).map_err(|error| {
+                        error.with_context(format!(
+                            "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase ScriptInput hydration failed for '{name}'"
+                        ))
+                    })?;
+                }
+                if inits {
+                    let initialized = script.call_init(&mut NoopScriptHost).map_err(|error| {
+                        error.with_context(format!(
+                            "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase init failed"
+                        ))
+                    })?;
+                    if !initialized {
+                        return Err(ScriptError::new(format!(
+                            "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase init returned false or nil"
+                        )));
+                    }
+                }
+                Ok(script)
+            }),
+        );
+    }
+    Ok(())
 }
 
 #[cfg(feature = "scripting")]

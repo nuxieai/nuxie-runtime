@@ -1,5 +1,5 @@
 use crate::StringValue;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 pub(crate) struct BinaryReader<'a> {
     pub(crate) bytes: &'a [u8],
@@ -25,14 +25,17 @@ impl<'a> BinaryReader<'a> {
     }
 
     pub(crate) fn read_bytes_exact(&mut self, len: usize) -> Result<&'a [u8]> {
-        let end = self
-            .offset
-            .checked_add(len)
-            .context("byte offset overflow")?;
-        let bytes = self
-            .bytes
-            .get(self.offset..end)
-            .with_context(|| format!("read {len} bytes past end at byte {}", self.offset))?;
+        // Lengths come directly from the file. Reject a corrupt or truncated
+        // span before advancing so no sub-reader can point beyond the buffer.
+        let remaining = self.bytes.len().saturating_sub(self.offset);
+        if len > remaining {
+            let offset = self.offset;
+            self.offset = self.bytes.len();
+            bail!("read {len} bytes past end at byte {offset}");
+        }
+
+        let end = self.offset + len;
+        let bytes = &self.bytes[self.offset..end];
         self.offset = end;
         Ok(bytes)
     }
@@ -73,5 +76,38 @@ impl<'a> BinaryReader<'a> {
 
             shift = shift.wrapping_add(7);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BinaryReader;
+
+    #[test]
+    fn read_bytes_overflows_on_a_length_past_the_end_of_the_buffer() {
+        let storage = [1, 2, 3, 4];
+        let mut reader = BinaryReader::new(&storage);
+
+        let error = reader
+            .read_bytes_exact(1000)
+            .expect_err("an overlong file-controlled span must overflow");
+
+        assert!(error.to_string().contains("past end"), "{error:#}");
+        assert!(reader.reached_end());
+    }
+
+    #[test]
+    fn read_bytes_returns_exactly_the_in_range_bytes_requested() {
+        let storage = [1, 2, 3, 4];
+        let mut reader = BinaryReader::new(&storage);
+
+        let bytes = reader.read_bytes_exact(3).expect("in-range bytes");
+        assert_eq!(bytes, [1, 2, 3]);
+        assert!(!reader.reached_end());
+
+        reader
+            .read_bytes_exact(100)
+            .expect_err("only one byte remains");
+        assert!(reader.reached_end());
     }
 }

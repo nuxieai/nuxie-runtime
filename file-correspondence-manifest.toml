@@ -3542,7 +3542,7 @@ note = "Consolidated Rust port for math."
 [[file]]
 upstream = "src/math/hit_test.cpp"
 status = "faithful"
-verification = "pending-verification"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/math/hit_test.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0293"

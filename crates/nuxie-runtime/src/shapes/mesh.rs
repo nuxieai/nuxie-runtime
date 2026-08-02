@@ -4,7 +4,27 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use super::slice_mesh::RuntimeSliceMeshOwner;
+use crate::components::ComponentHandle;
 use crate::{ArtboardInstance, ComponentDirt};
+
+impl ArtboardInstance {
+    pub(crate) fn runtime_skinnable_handle_has_skin(&self, handle: ComponentHandle) -> bool {
+        self.objects
+            .component(handle)
+            .and_then(|component| component.concrete.skinnable.as_ref())
+            .is_some_and(|skinnable| skinnable.skin.is_some())
+    }
+
+    pub(crate) fn runtime_skinnable_skin_local(&self, handle: ComponentHandle) -> Option<usize> {
+        self.objects
+            .component(handle)?
+            .concrete
+            .skinnable
+            .as_ref()?
+            .skin
+            .and_then(|skin| self.objects.component_local_id(skin))
+    }
+}
 
 /// Direct `Mesh::onAddedDirty`: validate the Image parent and install this
 /// clone-owned Mesh on the Image through `Image::setMesh`.

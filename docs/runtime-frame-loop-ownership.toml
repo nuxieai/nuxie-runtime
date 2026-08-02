@@ -933,7 +933,7 @@ status = "faithful"
 upstream = "src/animation/nested_bool.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs", "crates/nuxie-runtime/src/nested_bool.rs"]
+rust_modules = ["crates/nuxie-runtime/src/nested_bool.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -949,7 +949,7 @@ status = "faithful"
 upstream = "src/animation/nested_number.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs", "crates/nuxie-runtime/src/nested_number.rs"]
+rust_modules = ["crates/nuxie-runtime/src/nested_number.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -981,7 +981,7 @@ status = "faithful"
 upstream = "src/animation/nested_trigger.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs", "crates/nuxie-runtime/src/nested_trigger.rs"]
+rust_modules = ["crates/nuxie-runtime/src/nested_trigger.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -2357,7 +2357,7 @@ status = "faithful"
 upstream = "src/shapes/mesh.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/artboard.rs", "crates/nuxie-runtime/src/shapes/mesh.rs"]
+rust_modules = ["crates/nuxie-runtime/src/shapes/mesh.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -2469,7 +2469,7 @@ status = "faithful"
 upstream = "src/shapes/paint/shape_paint_path.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/shapes/paint/shape_paint_path.rs"]
+rust_modules = ["crates/nuxie-runtime/src/shapes/paint/shape_paint_path.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -2485,7 +2485,7 @@ status = "faithful"
 upstream = "src/shapes/paint/stroke.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/draw.rs", "crates/nuxie-runtime/src/shapes/paint/stroke.rs"]
+rust_modules = ["crates/nuxie-runtime/src/shapes/paint/stroke.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -2589,7 +2589,7 @@ status = "faithful"
 upstream = "src/shapes/shape_paint_container.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/shapes/shape_paint_container.rs", "crates/nuxie-runtime/src/draw.rs"]
+rust_modules = ["crates/nuxie-runtime/src/shapes/shape_paint_container.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -2637,7 +2637,7 @@ status = "faithful"
 upstream = "src/solo.cpp"
 source_set = "live-draw-boundary"
 wave = "FL-E"
-rust_modules = ["crates/nuxie-runtime/src/solo.rs", "crates/nuxie-runtime/src/artboard.rs"]
+rust_modules = ["crates/nuxie-runtime/src/solo.rs"]
 dynamically_reached = false
 status = "faithful"
 

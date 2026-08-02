@@ -1,6 +1,6 @@
 //! Direct polymorphic owner for pinned `src/shapes/shape_paint_container.cpp`.
 
-use nuxie_graph::ArtboardGraph;
+use nuxie_graph::{ArtboardGraph, ShapePaintContainerNode};
 
 pub(crate) const PATH_FLAG_LOCAL: u64 = 1 << 1;
 pub(crate) const PATH_FLAG_WORLD: u64 = 1 << 2;
@@ -46,6 +46,13 @@ impl RuntimeShapePaintContainerFamily {
 
 pub(crate) fn family(type_name: &str) -> Option<RuntimeShapePaintContainerFamily> {
     RuntimeShapePaintContainerFamily::from_type_name(type_name)
+}
+
+pub(crate) fn runtime_shape_paint_container_is_occurrence_owned(
+    container: &ShapePaintContainerNode,
+) -> bool {
+    crate::shapes::shape_paint_container::family(container.type_name)
+        .is_some_and(|family| family.owns_shape_geometry())
 }
 
 /// Direct owner for C++ `ShapePaintContainer::addPaint`.

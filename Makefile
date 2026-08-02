@@ -21,6 +21,7 @@ FILE_CORRESPONDENCE_MANIFEST ?= $(CURDIR)/file-correspondence-manifest.toml
 RUST_ADDITIONS ?= $(CURDIR)/rust-additions.toml
 RUST_ATTRIBUTION_TOOL ?= $(CURDIR)/tools/b6-audit/rust_attribution.py
 PARITY_SCORECARD_TOOL ?= $(CURDIR)/tools/parity-scorecard/parity_scorecard.py
+PARITY_SCORECARD_DOC ?= $(CURDIR)/docs/parity-scorecard.md
 PARITY_SCORECARD_EVIDENCE_DIR ?= $(CURDIR)/target/parity-scorecard/evidence
 PARITY_SCORECARD_JSON ?= $(CURDIR)/target/parity-scorecard/scorecard.json
 CPP_CONFIG ?= debug
@@ -439,7 +440,7 @@ parity-scorecard-test:
 	@PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/parity-scorecard -p 'test_*.py' -v
 
 parity-scorecard: parity-scorecard-test
-	@python3 "$(PARITY_SCORECARD_TOOL)" check --repo-root "$(CURDIR)" --evidence-dir "$(PARITY_SCORECARD_EVIDENCE_DIR)" --json "$(PARITY_SCORECARD_JSON)"
+	@PYTHONDONTWRITEBYTECODE=1 python3 "$(PARITY_SCORECARD_TOOL)" snapshot --repo-root "$(CURDIR)" --output "$(PARITY_SCORECARD_DOC)"
 
 cpp-binary-compare: cpp-probe
 	RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_CORPUS=1 cargo test -p nuxie-binary --test cpp_import -- --nocapture

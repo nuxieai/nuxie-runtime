@@ -1,8 +1,23 @@
 # Parity scorecard
 
-`make parity-scorecard` validates recorded output from the three parity-floor
-ratchets and prints the five tiers from `docs/parity-closeout-map.md`. It also
-writes `target/parity-scorecard/scorecard.json` using schema
+`make parity-scorecard` prints one deterministic view of the checked-in parity
+ledgers and regenerates `docs/parity-scorecard.md`. The snapshot contains no
+generation timestamp, so it changes only when a source ledger changes.
+
+The snapshot aggregates these existing sources without adding verdicts:
+
+- `file-correspondence-manifest.toml` and its Rust-module inversion
+- `rust-additions.toml`
+- `test-correspondence-manifest.toml`
+- `silver-corpus.toml` and its minimum-exact ratchet
+- `corpus.toml`
+- `docs/runtime-frame-loop-ownership.toml`
+- `docs/runtime-frame-loop-gaps.toml`
+- the D section of `docs/parity-gap-register.md`
+
+The older recorded-gate scorecard remains available explicitly through
+`parity_scorecard.py check`. It validates recorded output from the parity-floor
+ratchets and can write `target/parity-scorecard/scorecard.json` using schema
 `nuxie-parity-scorecard-v1`.
 
 The required evidence files are:

@@ -43,4 +43,4 @@ The corresponding manifest note names the entangled siblings and explains why no
 - Final `cargo check --workspace --exclude nux-capi`: passed, with existing warnings.
 - `make runtime-frame-loop-port-check`: passed (108 tests plus test-correspondence and ownership-ledger validation).
 - `make rust-attribution-check`: passed (10 tests; every in-scope Rust source classified).
-- Git commit `6caa235a` contains B6-0126, B6-0132, B6-0133, B6-0143, and B6-0144. Later commit attempts were blocked by shared-worktree Git metadata permissions (`index.lock: Operation not permitted`); the remaining verified changes are left in the worktree.
+- Git commit `6caa235a` contains B6-0126, B6-0132, B6-0133, B6-0143, and B6-0144. Git commit `c982b285` contains the remaining moved rows, the B6-0134 exception attribution, importer redirects, ownership updates, and this report.

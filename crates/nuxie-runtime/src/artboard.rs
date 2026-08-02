@@ -7498,8 +7498,22 @@ impl ArtboardInstance {
                 // styles. In particular, TextValueRun setters do not
                 // invalidate sibling Text occurrences
                 // (`text_value_run.cpp:90-113`, `text.cpp:534-543`).
-                self.runtime_drawables
-                    .mark_text_render_styles_dirty_for_local(text_local);
+                if self
+                    .runtime_shapes
+                    .text_style_paint_container_for_component(local_id)
+                    .is_some_and(|container_local| container_local != local_id)
+                {
+                    // ShapePaint mutators under TextStylePaint change the
+                    // retained paint frame, not the glyph paths. FL-E7 routes
+                    // the container's Paint dirt back to this Text during the
+                    // dependency update, matching C++'s ordinary ShapePaint
+                    // lifecycle without rewinding unchanged opacity paths.
+                    self.runtime_drawables
+                        .mark_text_resource_dirty_for_local(text_local);
+                } else {
+                    self.runtime_drawables
+                        .mark_text_render_styles_dirty_for_local(text_local);
+                }
                 return;
             }
             let Some(parent_local) = self

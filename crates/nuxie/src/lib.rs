@@ -5754,6 +5754,57 @@ mod inert_script_import_tests {
         assert!(scripts.is_project_data_converter_asset(1));
         assert!(!scripts.is_project_data_converter_asset(2));
     }
+
+    #[test]
+    fn upstream_script_ownership_fixtures_remain_on_the_luau_vm_path() {
+        let root = std::path::PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        )
+        .join("tests/unit_tests/assets");
+
+        for fixture in [
+            "script_inputs_test_1.riv",
+            "script_string_converter_test.riv",
+            "scripted_data_converter_bound_input.riv",
+            "scripted_memory_leak.riv",
+        ] {
+            let bytes = std::fs::read(root.join(fixture))
+                .unwrap_or_else(|error| panic!("failed to read {fixture}: {error}"));
+            let file = File::import_with_unsigned_scripts(&bytes)
+                .unwrap_or_else(|error| panic!("failed to import {fixture}: {error:#}"));
+            let scripts = file.scripts.borrow();
+            let protocol_ordinals = scripts
+                .assets
+                .iter()
+                .filter(|asset| asset.type_name == "ScriptAsset" && !asset.is_module)
+                .map(|asset| {
+                    assert!(
+                        !asset.is_project_data_converter,
+                        "{fixture} protocol asset {} was diverted into the PR 144 product envelope path",
+                        asset.ordinal
+                    );
+                    asset.ordinal
+                })
+                .collect::<Vec<_>>();
+            assert!(
+                !protocol_ordinals.is_empty(),
+                "{fixture} has no protocol ScriptAsset fixture witness"
+            );
+
+            let mut factory =
+                nuxie_render_api::PersistentFactory::new(nuxie_render_api::RecordingFactory::new());
+            let ready = scripts
+                .build_candidate(&file.runtime, &mut factory)
+                .unwrap_or_else(|error| panic!("failed to register {fixture} scripts: {error}"));
+            for ordinal in protocol_ordinals {
+                assert!(
+                    ready.programs.contains_key(&ordinal),
+                    "{fixture} protocol asset {ordinal} did not enter the file Luau VM"
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]

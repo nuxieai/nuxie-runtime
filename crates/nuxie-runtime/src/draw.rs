@@ -5306,7 +5306,7 @@ impl ArtboardInstance {
     }
 
     fn invalidate_runtime_non_shape_paint_container_effects(
-        &self,
+        &mut self,
         local_id: usize,
         dirt: ComponentDirt,
         graph: &ArtboardGraph,
@@ -5341,6 +5341,13 @@ impl ArtboardInstance {
                     .map(|container| container.local_id)
                     .collect()
             }
+            "TextStylePaint"
+                if !(dirt
+                    & (ComponentDirt::PATH | ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT))
+                    .is_empty() =>
+            {
+                vec![local_id]
+            }
             "TextInput"
                 if !(dirt
                     & (ComponentDirt::PATH | ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT))
@@ -5365,6 +5372,21 @@ impl ArtboardInstance {
         for container_local in container_locals {
             self.runtime_shapes
                 .invalidate_container_stroke_effects(container_local);
+            if type_name == "TextStylePaint"
+                && self
+                    .runtime_shapes
+                    .get(container_local)
+                    .and_then(|container| container.paint_container_family)
+                    == Some(
+                        crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily::TextStylePaint,
+                    )
+            {
+                let text_local =
+                    crate::shapes::shape_paint_container::opacity_owner_local(graph, container_local);
+                self.runtime_drawables
+                    .mark_text_resource_dirty_for_local(text_local);
+                self.add_dirt(text_local, ComponentDirt::PAINT, false);
+            }
         }
     }
 
@@ -9137,6 +9159,23 @@ struct RuntimeShapeEffectOwnerRef {
 }
 
 impl RuntimeShapeList {
+    pub(crate) fn text_style_paint_container_for_component(
+        &self,
+        local_id: usize,
+    ) -> Option<usize> {
+        self.paint_owners_by_component_local
+            .get(local_id)?
+            .iter()
+            .find_map(|owner| {
+                let shape = self.get(owner.shape_local)?;
+                (shape.paint_container_family
+                    == Some(
+                        crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily::TextStylePaint,
+                    ))
+                .then_some(owner.shape_local)
+            })
+    }
+
     fn backend_paints_need_realization(&self, context_id: u64) -> bool {
         self.backend_context_id.get() != Some(context_id)
             || !self.pending_backend_paints.borrow().is_empty()
@@ -9766,9 +9805,10 @@ impl RuntimeTextDrawOwner {
     }
 
     fn retained_frame(&self) -> Result<RuntimeCachedTextShapePaints> {
-        if self.dirty.get() {
-            anyhow::bail!("Text render styles were not rebuilt during component update");
-        }
+        assert!(
+            !self.dirty.get(),
+            "Text render styles were not rebuilt during component update"
+        );
         self.retained
             .borrow()
             .as_ref()
@@ -25850,6 +25890,95 @@ mod tests {
 
         assert_eq!(owner.backend.borrow().paths.len(), 1);
         assert_eq!(stats.make_empty_paths.get(), 1);
+    }
+
+    #[test]
+    fn text_style_paint_dirt_rebuilds_retained_text_in_the_same_component_update() {
+        let bytes = include_bytes!("../../../fixtures/fl-e8/text_style_feature.riv");
+        let runtime = read_runtime_file(bytes).expect("text style fixture imports");
+        let graphs = GraphFile::from_runtime_file(&runtime).expect("text style graph builds");
+        let graph = graphs.artboards.first().expect("fixture has an artboard");
+        let text_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "Text")
+            .expect("fixture has Text")
+            .local_id;
+        let style_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "TextStylePaint")
+            .expect("fixture has TextStylePaint")
+            .local_id;
+        let color_local = graph
+            .components
+            .iter()
+            .find(|component| component.type_name == "SolidColor")
+            .expect("fixture has SolidColor")
+            .local_id;
+        let color_key =
+            property_key_for_name("SolidColor", "colorValue").expect("SolidColor.colorValue");
+        let mut instance = ArtboardInstance::from_graph(&runtime, graph).expect("instance builds");
+        instance.update_pass();
+
+        let mut factory = nuxie_render_api::RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("initial retained text draws");
+
+        instance.add_dirt(text_local, ComponentDirt::WORLD_TRANSFORM, false);
+        let mut wrote_style = false;
+        let mut text_updates = 0;
+        instance.update_components_with_hook(|instance, local_id, _| {
+            if local_id != text_local {
+                return;
+            }
+            text_updates += 1;
+            if wrote_style {
+                return;
+            }
+            wrote_style = true;
+            assert!(instance.set_color_property(color_local, color_key, 0xff44_5566));
+            instance.add_dirt(style_local, ComponentDirt::PAINT, false);
+        });
+        assert!(
+            wrote_style,
+            "the Text update must execute the live write hook"
+        );
+        assert_eq!(
+            text_updates, 2,
+            "TextStylePaint dirt must schedule exactly one retained-paint rebuild"
+        );
+
+        factory.clear();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("TextStylePaint dirt must rebuild retained text before draw");
+        let stream = factory.stream();
+        assert!(stream.contains("color=0xff445566"), "{stream}");
+        assert!(
+            !stream.contains("makeEmptyRenderPath"),
+            "paint-only TextStylePaint dirt must retain unchanged glyph paths: {stream}"
+        );
     }
 
     #[test]

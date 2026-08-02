@@ -400,6 +400,123 @@ struct RuntimeUintMutation
     uint32_t value;
 };
 
+struct RuntimeTextStyleColorWrite
+{
+    size_t localId;
+    uint32_t value;
+};
+
+struct RuntimeTextStyleColorPhaseReport
+{
+    size_t localId;
+    uint32_t colorValue = 0;
+    bool applied = false;
+    bool advanced = false;
+    size_t drawPaths = 0;
+    std::vector<uint32_t> drawColors;
+};
+
+class RuntimeTextStyleColorRenderPaint final : public rive::RenderPaint
+{
+public:
+    uint32_t colorValue() const { return m_colorValue; }
+
+    void color(rive::ColorInt value) override { m_colorValue = value; }
+    void style(rive::RenderPaintStyle) override {}
+    void thickness(float) override {}
+    void join(rive::StrokeJoin) override {}
+    void cap(rive::StrokeCap) override {}
+    void blendMode(rive::BlendMode) override {}
+    void shader(rive::rcp<rive::RenderShader>) override {}
+    void invalidateStroke() override {}
+    void feather(float) override {}
+
+private:
+    uint32_t m_colorValue = 0xff000000;
+};
+
+class RuntimeTextStyleColorFactory final : public rive::Factory
+{
+public:
+    rive::rcp<rive::RenderBuffer> makeRenderBuffer(
+        rive::RenderBufferType type,
+        rive::RenderBufferFlags flags,
+        size_t sizeInBytes) override
+    {
+        return base().makeRenderBuffer(type, flags, sizeInBytes);
+    }
+
+    rive::rcp<rive::RenderShader> makeLinearGradient(
+        float sx,
+        float sy,
+        float ex,
+        float ey,
+        const rive::ColorInt colors[],
+        const float stops[],
+        size_t count) override
+    {
+        return base().makeLinearGradient(
+            sx, sy, ex, ey, colors, stops, count);
+    }
+
+    rive::rcp<rive::RenderShader> makeRadialGradient(
+        float cx,
+        float cy,
+        float radius,
+        const rive::ColorInt colors[],
+        const float stops[],
+        size_t count) override
+    {
+        return base().makeRadialGradient(
+            cx, cy, radius, colors, stops, count);
+    }
+
+    rive::rcp<rive::RenderPath> makeRenderPath(
+        rive::RawPath& path,
+        rive::FillRule fillRule) override
+    {
+        return base().makeRenderPath(path, fillRule);
+    }
+
+    rive::rcp<rive::RenderPath> makeEmptyRenderPath() override
+    {
+        return base().makeEmptyRenderPath();
+    }
+
+    rive::rcp<rive::RenderPaint> makeRenderPaint() override
+    {
+        return rive::make_rcp<RuntimeTextStyleColorRenderPaint>();
+    }
+
+    rive::rcp<rive::RenderImage> decodeImage(
+        rive::Span<const uint8_t> bytes) override
+    {
+        return base().decodeImage(bytes);
+    }
+
+private:
+    rive::Factory& base() { return m_base; }
+
+    rive::NoOpFactory m_base;
+};
+
+class RuntimeTextStyleColorCountingRenderer final
+    : public rive::NoOpRenderer
+{
+public:
+    size_t drawPaths = 0;
+    std::vector<uint32_t> drawColors;
+
+    void drawPath(rive::RenderPath*, rive::RenderPaint* paint) override
+    {
+        ++drawPaths;
+        assert(paint != nullptr);
+        drawColors.push_back(
+            static_cast<RuntimeTextStyleColorRenderPaint*>(paint)
+                ->colorValue());
+    }
+};
+
 struct RuntimeCollapseMutation
 {
     size_t localId;
@@ -1099,6 +1216,7 @@ struct ProbeOptions
     std::vector<RuntimeDoubleMutation> runtimeDoubleMutations;
     std::vector<RuntimeSettledDoubleMutation> runtimeSettledDoubleMutations;
     std::vector<RuntimeUintMutation> runtimeUintMutations;
+    std::vector<RuntimeTextStyleColorWrite> runtimeTextStyleColorWrites;
     std::vector<RuntimeCollapseMutation> runtimeCollapseMutations;
     std::vector<RuntimeArtboardSizeMutation> runtimeArtboardSizeMutations;
     std::vector<RuntimeAnimationApplication> runtimeAnimationApplications;
@@ -1141,20 +1259,27 @@ const char* import_result_name(rive::ImportResult result)
     return "unknown";
 }
 
-rive::rcp<rive::File> open_file(const char* path, rive::ImportResult* result)
+rive::rcp<rive::File> open_file(const char* path,
+                                rive::ImportResult* result,
+                                bool trackTextStyleColors)
 {
     std::vector<uint8_t> bytes = read_bytes(path);
-    static rive::NoOpFactory factory;
+    static rive::NoOpFactory noOpFactory;
+    static RuntimeTextStyleColorFactory textStyleColorFactory;
+    rive::Factory* factory = trackTextStyleColors
+                                 ? static_cast<rive::Factory*>(
+                                       &textStyleColorFactory)
+                                 : static_cast<rive::Factory*>(&noOpFactory);
 #ifdef WITH_RIVE_SCRIPTING
     auto scripting_context =
-        std::make_unique<rive::CPPRuntimeScriptingContext>(&factory);
-    scripting_context->setRenderContext(&factory);
+        std::make_unique<rive::CPPRuntimeScriptingContext>(factory);
+    scripting_context->setRenderContext(factory);
     auto scripting_vm =
         rive::make_rcp<rive::ScriptingVM>(std::move(scripting_context));
     return rive::File::import(
-        bytes, &factory, result, nullptr, scripting_vm.get());
+        bytes, factory, result, nullptr, scripting_vm.get());
 #else
-    return rive::File::import(bytes, &factory, result);
+    return rive::File::import(bytes, factory, result);
 #endif
 }
 
@@ -2550,6 +2675,92 @@ void apply_runtime_uint_mutations(const std::vector<rive::Core*>& objects,
         rive::CoreRegistry::setUint(
             object, mutation.propertyKey, mutation.value);
     }
+}
+
+std::vector<RuntimeTextStyleColorPhaseReport>
+apply_runtime_text_style_color_writes(
+    rive::Artboard* artboard,
+    const std::vector<rive::Core*>& objects,
+    const ProbeOptions& options)
+{
+    std::vector<RuntimeTextStyleColorPhaseReport> reports;
+    if (options.runtimeTextStyleColorWrites.empty())
+    {
+        return reports;
+    }
+
+    const auto localId = options.runtimeTextStyleColorWrites.front().localId;
+    if (localId >= objects.size() || objects[localId] == nullptr ||
+        !objects[localId]->is<rive::SolidColor>())
+    {
+        return reports;
+    }
+
+    auto* color = objects[localId]->as<rive::SolidColor>();
+    RuntimeTextStyleColorCountingRenderer initialRenderer;
+    artboard->draw(&initialRenderer);
+    reports.push_back(RuntimeTextStyleColorPhaseReport{
+        localId,
+        static_cast<uint32_t>(color->colorValue()),
+        false,
+        false,
+        initialRenderer.drawPaths,
+        initialRenderer.drawColors,
+    });
+
+    for (const auto& write : options.runtimeTextStyleColorWrites)
+    {
+        RuntimeTextStyleColorPhaseReport report;
+        report.localId = write.localId;
+        if (write.localId < objects.size() && objects[write.localId] != nullptr &&
+            objects[write.localId]->is<rive::SolidColor>())
+        {
+            auto* writeColor = objects[write.localId]->as<rive::SolidColor>();
+            writeColor->colorValue(static_cast<int>(write.value));
+            report.applied = true;
+            report.advanced = artboard->advance(0.0f);
+            report.colorValue =
+                static_cast<uint32_t>(writeColor->colorValue());
+            RuntimeTextStyleColorCountingRenderer renderer;
+            artboard->draw(&renderer);
+            report.drawPaths = renderer.drawPaths;
+            report.drawColors = renderer.drawColors;
+        }
+        reports.push_back(report);
+    }
+    return reports;
+}
+
+void write_runtime_text_style_color_phase_reports(
+    std::ostream& out,
+    const std::vector<RuntimeTextStyleColorPhaseReport>& reports)
+{
+    out << '[';
+    for (size_t i = 0; i < reports.size(); ++i)
+    {
+        if (i != 0)
+        {
+            out << ',';
+        }
+        const auto& report = reports[i];
+        out << "{\"localId\":" << report.localId;
+        out << ",\"colorValue\":" << report.colorValue;
+        out << ",\"applied\":" << (report.applied ? "true" : "false");
+        out << ",\"advanced\":" << (report.advanced ? "true" : "false");
+        out << ",\"drawPaths\":" << report.drawPaths;
+        out << ",\"drawColors\":[";
+        for (size_t colorIndex = 0; colorIndex < report.drawColors.size();
+             ++colorIndex)
+        {
+            if (colorIndex != 0)
+            {
+                out << ',';
+            }
+            out << report.drawColors[colorIndex];
+        }
+        out << "]}";
+    }
+    out << ']';
 }
 
 void apply_runtime_collapse_mutations(const std::vector<rive::Core*>& objects,
@@ -14831,7 +15042,8 @@ void write_artboard(std::ostream& out,
                     const ProbeOptions& options)
 {
     if (options.advanceArtboards ||
-        !options.runtimeSettledDoubleMutations.empty())
+        !options.runtimeSettledDoubleMutations.empty() ||
+        !options.runtimeTextStyleColorWrites.empty())
     {
         artboard->advance(0.0f);
     }
@@ -14891,6 +15103,8 @@ void write_artboard(std::ostream& out,
     auto flE8VariationCycleReport = options.runtimeFlE8VariationCycle
                                         ? run_fl_e8_variation_cycle(artboard)
                                         : FlE8VariationCycleReport{};
+    auto runtimeTextStyleColorPhaseReports =
+        apply_runtime_text_style_color_writes(artboard, objects, options);
 
     bool runtimeUpdateDidUpdate = false;
     if (options.runtimeUpdate)
@@ -14934,6 +15148,12 @@ void write_artboard(std::ostream& out,
         out << ",\"runtimeSettledDoubleMutations\":";
         write_runtime_settled_double_mutation_reports(
             out, runtimeSettledDoubleMutationReports);
+    }
+    if (!options.runtimeTextStyleColorWrites.empty())
+    {
+        out << ",\"runtimeTextStyleColorPhases\":";
+        write_runtime_text_style_color_phase_reports(
+            out, runtimeTextStyleColorPhaseReports);
     }
     if (options.runtimeLayoutBounds)
     {
@@ -17667,6 +17887,23 @@ int main(int argc, const char* argv[])
             mutation.value =
                 static_cast<uint32_t>(std::strtoul(argv[++i], nullptr, 10));
             options.runtimeUintMutations.push_back(mutation);
+            continue;
+        }
+
+        if (is_arg(argv[i], "--runtime-text-style-color-write"))
+        {
+            if (i + 2 >= argc)
+            {
+                std::cerr << "--runtime-text-style-color-write requires localId colorBits\n";
+                return 2;
+            }
+            RuntimeTextStyleColorWrite write;
+            write.localId =
+                static_cast<size_t>(std::strtoull(argv[++i], nullptr, 10));
+            write.value =
+                static_cast<uint32_t>(std::strtoull(argv[++i], nullptr, 0));
+            options.runtimeTextStyleColorWrites.push_back(write);
+            options.instanceArtboards = true;
             continue;
         }
 
@@ -21333,7 +21570,9 @@ int main(int argc, const char* argv[])
         }
 
         rive::ImportResult result = rive::ImportResult::success;
-        auto file = open_file(filename, &result);
+        auto file = open_file(filename,
+                              &result,
+                              !options.runtimeTextStyleColorWrites.empty());
         if (file == nullptr || result != rive::ImportResult::success)
         {
             std::cerr << "failed to import " << filename

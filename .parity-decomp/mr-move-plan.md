@@ -438,8 +438,8 @@ This grouped table is the per-hotspot plan for every remaining Rust file referen
 | `crates/nuxie-scripting/src/vm.rs` (7) | `B6-0265` · `src/lua/lua_data_value.cpp` | `crates/nuxie-scripting/src/vm/lua_data_value.rs` | split-needed |
 | `crates/nuxie-scripting/src/vm.rs` (7) | `B6-0266` · `src/lua/lua_image_decode.cpp` | — (see E-B6-0266) | exception |
 | `crates/nuxie-scripting/src/vm.rs` (7) | `B6-0268` · `src/lua/lua_promise.cpp` | `crates/nuxie-scripting/src/vm/lua_promise.rs` | split-needed |
-| `crates/nuxie-scripting/src/vm.rs` (7) | `B6-0269` · `src/lua/lua_properties.cpp` | `crates/nuxie-scripting/src/vm/lua_properties.rs` | split-needed |
-| `crates/nuxie-scripting/src/vm.rs` (7) | `B6-0288` · `src/lua/rive_lua_libs.cpp` | `crates/nuxie-scripting/src/vm/rive_lua_libs.rs` | split-needed |
+| `crates/nuxie-scripting/src/vm.rs` (7) | `B6-0269` · `src/lua/lua_properties.cpp` | — (see E-B6-0269) | exception |
+| `crates/nuxie-scripting/src/vm.rs` (7) | `B6-0288` · `src/lua/rive_lua_libs.cpp` | — (see E-B6-0288) | exception |
 | `crates/nuxie-scripting/src/vm.rs` (7) | `B6-0323` · `src/scripted/scripted_interpolator.cpp` | — (see E-B6-0323) | exception |
 | `crates/nuxie-scripting/src/vm/listener_invocation.rs` (2) | `B6-0267` · `src/lua/lua_listener_invocation.cpp` | `crates/nuxie-scripting/src/vm/lua_listener_invocation.rs` | split-needed |
 | `crates/nuxie-scripting/src/vm/listener_invocation.rs` (2) | `B6-0274` · `src/lua/math/lua_input.cpp` | `crates/nuxie-scripting/src/vm/math/lua_input.rs` | split-needed |
@@ -615,7 +615,9 @@ Each note below is deliberately one line and is suitable for appending to that m
 | E-B6-0261 | `src/lua/lua_artboards.cpp` | crate-bound trait/adapter split | Public host integration and Luau VM binding intentionally remain split across crate boundaries. |
 | E-B6-0262 | `src/lua/lua_audio.cpp` | crate-bound trait/adapter split | Public host integration and Luau VM binding intentionally remain split across crate boundaries. |
 | E-B6-0266 | `src/lua/lua_image_decode.cpp` | crate-bound trait/adapter split | Image codec backend and Luau VM binding intentionally remain split across crate boundaries. |
+| E-B6-0269 | `src/lua/lua_properties.cpp` | shared VM lifecycle seam | ScriptViewModel property wrappers and parent-edge lifecycle share one retained state seam with E-B6-0288 across the VM root and view-model module; a per-row extraction would misattribute that shared state. |
 | E-B6-0282 | `src/lua/renderer/lua_image.cpp` | crate-bound trait/adapter split | Runtime renderer state and Luau VM binding intentionally remain split across crate boundaries. |
+| E-B6-0288 | `src/lua/rive_lua_libs.cpp` | shared VM lifecycle seam | Umbrella registration and retained view-model lifecycle share one state seam with E-B6-0269 across the VM root and view-model module; no behavior-neutral per-row owner can be isolated. |
 | E-B6-0298 | `src/math/random.cpp` | target-specific impl split | Portable random API and cfg-specific native/Wasm implementations intentionally remain split by target. |
 | E-B6-0319 | `src/script_input_trigger.cpp` | crate-bound trait/adapter split | Public façade/integration API and runtime implementation intentionally remain split across crate boundaries. |
 | E-B6-0320 | `src/script_input_viewmodel_property.cpp` | crate-bound trait/adapter split | Public façade/integration API and runtime implementation intentionally remain split across crate boundaries. |
@@ -697,7 +699,9 @@ These sets are the expected final `rust_module` values after same-boundary aggre
 | E-B6-0261 | `crates/nuxie/src/lib.rs`; `crates/nuxie-scripting/src/vm/lua_artboards.rs` |
 | E-B6-0262 | `crates/nuxie/src/lib.rs`; `crates/nuxie-scripting/src/vm/lua_audio.rs` |
 | E-B6-0266 | `crates/nuxie-image-codec/src/lib.rs`; `crates/nuxie-scripting/src/vm/lua_image_decode.rs` |
+| E-B6-0269 | `crates/nuxie-scripting/src/vm.rs`; `crates/nuxie-scripting/src/vm/view_model.rs` |
 | E-B6-0282 | `crates/nuxie-runtime/src/lua/renderer/lua_image.rs`; `crates/nuxie-scripting/src/vm/lua_image.rs` |
+| E-B6-0288 | `crates/nuxie-scripting/src/vm.rs`; `crates/nuxie-scripting/src/vm/view_model.rs` |
 | E-B6-0298 | `crates/nuxie-runtime/src/math/random.rs`; `crates/nuxie-runtime/src/math/random/native.rs`; `crates/nuxie-runtime/src/math/random/wasm.rs` |
 | E-B6-0319 | `crates/nuxie/src/lib.rs`; `crates/nuxie-runtime/src/script_input_trigger.rs` |
 | E-B6-0320 | `crates/nuxie/src/lib.rs`; `crates/nuxie-runtime/src/script_input_viewmodel_property.rs` |

@@ -1,7 +1,56 @@
 use crate::{
     artboard::ArtboardInstance, components::ComponentDirt, layout_node_provider,
     properties::property_key_for_name,
+    view_model::{RuntimeCoreObjectListener, RuntimeOwnedViewModelHandle},
 };
+
+#[derive(Debug)]
+pub(crate) struct RuntimeTextValueRunListener {
+    instance: RuntimeOwnedViewModelHandle,
+    core: RuntimeCoreObjectListener,
+}
+
+impl RuntimeTextValueRunListener {
+    pub(crate) fn new(instance: RuntimeOwnedViewModelHandle) -> Self {
+        let mut listener = Self {
+            instance,
+            core: RuntimeCoreObjectListener::default(),
+        };
+        listener.create_properties();
+        listener
+    }
+
+    pub(crate) fn remap(&mut self, instance: RuntimeOwnedViewModelHandle) -> bool {
+        if self.instance.ptr_eq(&instance) {
+            return false;
+        }
+
+        // Delete the old property dependents while `self.instance` still owns
+        // their source values. Replacing the instance first is the upstream
+        // use-after-free ordering this port guards against.
+        self.core.delete_properties();
+        self.instance = instance;
+        self.create_properties();
+        true
+    }
+
+    fn create_properties(&mut self) {
+        let properties = {
+            let instance = self.instance.borrow();
+            ["textStyle", "textContent"]
+                .into_iter()
+                .filter_map(|name| instance.string_cell_by_property_name(name))
+                .collect::<Vec<_>>()
+        };
+        // TextValueRunListener::createProperties invokes the inherited base
+        // cleanup before installing its text-style and text-content listeners.
+        self.core.create_properties(properties);
+    }
+
+    pub(crate) fn take_changed(&self) -> bool {
+        self.core.take_changed()
+    }
+}
 
 pub(crate) fn mark_shape_dirty(instance: &mut ArtboardInstance, text_local_id: usize) -> bool {
     mark_shape_dirty_with_layout(instance, text_local_id, true)

@@ -3051,12 +3051,13 @@ impl ArtboardInstance {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(super) struct RuntimeArtboardTextListBindingInstance {
     target_local_id: usize,
     path: Vec<u32>,
     path_is_name_based: bool,
     source: Option<RuntimeOwnedViewModelListHandle>,
+    listeners: Vec<crate::text_owner::RuntimeTextValueRunListener>,
 }
 
 impl RuntimeArtboardTextListBindingInstance {
@@ -3069,6 +3070,53 @@ impl RuntimeArtboardTextListBindingInstance {
             .as_ref()
             .map(RuntimeOwnedViewModelListHandle::text_runs)
             .unwrap_or_default()
+    }
+
+    fn remap_source(&mut self, source: Option<RuntimeOwnedViewModelListHandle>) -> bool {
+        let source_changed = match (&self.source, &source) {
+            (Some(current), Some(next)) => !current.ptr_eq(next),
+            (None, None) => false,
+            _ => true,
+        };
+        let items = source
+            .as_ref()
+            .map(RuntimeOwnedViewModelListHandle::items)
+            .unwrap_or_default();
+        let item_count = items.len();
+        let mut changed = source_changed || self.listeners.len() != item_count;
+        for (index, instance) in items.into_iter().enumerate() {
+            if let Some(listener) = self.listeners.get_mut(index) {
+                changed |= listener.remap(instance);
+            } else {
+                self.listeners
+                    .push(crate::text_owner::RuntimeTextValueRunListener::new(
+                        instance,
+                    ));
+            }
+        }
+        self.listeners.truncate(item_count);
+        self.source = source;
+        changed
+    }
+
+    fn take_listener_changed(&self) -> bool {
+        self.listeners.iter().fold(false, |changed, listener| {
+            listener.take_changed() || changed
+        })
+    }
+}
+
+impl Clone for RuntimeArtboardTextListBindingInstance {
+    fn clone(&self) -> Self {
+        let mut cloned = Self {
+            target_local_id: self.target_local_id,
+            path: self.path.clone(),
+            path_is_name_based: self.path_is_name_based,
+            source: None,
+            listeners: Vec::new(),
+        };
+        cloned.remap_source(self.source.clone());
+        cloned
     }
 }
 
@@ -3104,6 +3152,7 @@ pub(super) fn build_artboard_text_list_bindings(
                     .data_bind_is_name_based_for_object(data_bind.object)
                     .unwrap_or(false),
                 source: None,
+                listeners: Vec::new(),
             })
         })
         .collect()
@@ -5666,7 +5715,7 @@ impl ArtboardInstance {
             }
         }
         for binding in &mut self.artboard_text_list_bindings {
-            binding.source = None;
+            binding.remap_source(None);
         }
         true
     }
@@ -5911,8 +5960,7 @@ impl ArtboardInstance {
                     )?;
                 context.list_handle_by_property_path(&property_path)
             });
-            text_lists_changed |= source.is_some();
-            binding.source = source;
+            text_lists_changed |= binding.remap_source(source);
         }
         if text_lists_changed {
             self.mark_path_changed();
@@ -6146,8 +6194,7 @@ impl ArtboardInstance {
                         .borrow()
                         .list_handle_by_property_path(&property_path)
                 });
-            text_lists_changed |= source.is_some();
-            binding.source = source;
+            text_lists_changed |= binding.remap_source(source);
         }
         if text_lists_changed {
             self.mark_path_changed();
@@ -6727,6 +6774,25 @@ impl ArtboardInstance {
                 .any(RuntimeArtboardRetainedSubordinateConverterOperands::has_dirt)
     }
 
+    fn flush_runtime_text_run_listener_changes(&mut self) -> bool {
+        let dirty_text = self
+            .artboard_text_list_bindings
+            .iter_mut()
+            .filter_map(|binding| {
+                let remapped = binding.remap_source(binding.source.clone());
+                let listener_changed = binding.take_listener_changed();
+                (remapped || listener_changed).then_some(binding.target_local_id())
+            })
+            .collect::<Vec<_>>();
+        if dirty_text.is_empty() {
+            return false;
+        }
+        for text_local_id in dirty_text {
+            crate::text_owner::mark_shape_dirty(self, text_local_id);
+        }
+        true
+    }
+
     #[inline]
     pub(crate) fn advance_artboard_data_binds_with_root_transform(
         &mut self,
@@ -6737,6 +6803,7 @@ impl ArtboardInstance {
         // mutation order before list reconciliation. This preserves C++'s
         // old-source-write-then-remap behavior within one advance turn.
         let list_path_property_changed = self.flush_runtime_list_path_changes();
+        let text_run_property_changed = self.flush_runtime_text_run_listener_changes();
         // Match C++'s cheap clean `DataBindContainer::updateDataBinds` return
         // before entering the active reconciliation routine. Source cells,
         // converter operands, and structural owners enroll their retained
@@ -6748,7 +6815,7 @@ impl ArtboardInstance {
             && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch
             && self.artboard_list_bindings.is_empty();
         if clean_identity_pass && !self.has_retained_owned_view_model_artboard_work() {
-            return list_path_property_changed;
+            return list_path_property_changed || text_run_property_changed;
         }
         // Subordinate converter-property/formula operands push their own
         // authored occurrence dirt. Drain them beside the unified outer-bind
@@ -6759,7 +6826,8 @@ impl ArtboardInstance {
         let retained_converter_dirt = self.collect_artboard_owned_converter_operand_dirt();
         let refreshed_owned_context = self.refresh_retained_owned_view_model_artboard_sources()
             || retained_converter_dirt
-            || list_path_property_changed;
+            || list_path_property_changed
+            || text_run_property_changed;
         if elapsed_seconds == 0.0
             && root_transform == Mat2D::IDENTITY
             && self.artboard_data_bind_dirty_epoch == self.artboard_data_bind_processed_epoch

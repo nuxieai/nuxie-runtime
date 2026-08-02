@@ -4641,13 +4641,13 @@ note = "W124 faithful candidate: D-RT-API and D-RT-COLOR-188/402/423/457/474 exe
 upstream = "src/text/raw_text_input.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/text/raw_text_input.rs"
+rust_module = "crates/nuxie-runtime/src/text/raw_text_input.rs; crates/nuxie-runtime/src/text.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0384"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "F2 closure via FL-E6 ports the retained edit buffer, cursor and selection mutation, grapheme deletion, word/subword/line movement, journal undo/redo, shaped caret/hit/selection geometry, and W65 class-C assertions."
+note = "F2 closure via FL-E6 ports the retained edit buffer, cursor and selection mutation, grapheme deletion, word/subword/line movement, journal undo/redo, shaped caret/hit/selection geometry, and W65 class-C assertions. MR exception: draw-path half is jointly implemented with text_input_drawable.cpp in text.rs; forcing a move would scatter the sibling row."
 
 [[file]]
 upstream = "src/text/text.cpp"

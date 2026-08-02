@@ -12,8 +12,8 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 
 [expected_status_counts]
 ported-differential = 4
-ported-direct = 36
-partial = 20
+ported-direct = 37
+partial = 19
 pending = 86
 n-a = 2
 
@@ -37,10 +37,9 @@ note = "All 14 cases and 30 assertions are mapped directly in the FL-B/FL-C back
 [[file]]
 upstream = "tests/unit_tests/runtime/audio_test.cpp"
 test_case_count = 13
-status = "partial"
-evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::audio_source_reader_and_headless_schedule_match_pinned_cpp", "crates/nuxie-runtime/tests/cpp_probe.rs::audio_riv_load_playback_volume_and_has_audio_match_pinned_cpp", "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs::audio_event_seam_plays_the_resolved_sound_fixture_asset", "crates/nuxie-audio/src/source.rs", "crates/nuxie-audio/src/engine.rs", "crates/nuxie/tests/audio_core.rs::audio_event_playback_multiplies_artboard_volume_and_stops_with_its_artboard", "crates/nuxie/tests/audio_core.rs::audio_event_artboard_clone_retains_its_asset_and_stops_independently", "docs/audio-core-parity.md"]
-covered_test_cases = ["audio engine initializes", "audio source can be opened", "file with audio loads correctly", "audio sound can outlive engine", "many audio sounds can outlive engine", "audio sounds from different artboards stop accordingly", "Artboard has audio", "Artboard has audio in nested artboard", "Artboard does not have audio", "audio source duration from file", "audio source duration from buffered samples", "audio source duration mp3"]
-note = "P2F1/P2F2 port the listed 12 applicable headless cases. The live headless and sound.riv/sound2.riv differentials cover source metadata and D18 reader lengths, scheduling/control/lifecycle, buffered and MP3 duration caching, many outliving handles, dense AudioEvent asset resolution, source availability, configured/default engines, asset-times-Artboard volume, zero-volume suppression, nested mixer propagation, per-Artboard playback teardown, and direct/nested/no-audio queries. The upstream level monitor is test-tools-only and remains a direct behavioral Rust port. Only the Lua-only `Scripted audio plays` case remains for the later Lua-audio package, so this row honestly remains partial and the expected status counts intentionally remain unchanged."
+status = "ported-direct"
+evidence = ["crates/nuxie-runtime/tests/cpp_probe.rs::audio_source_reader_and_headless_schedule_match_pinned_cpp", "crates/nuxie-runtime/tests/cpp_probe.rs::audio_riv_load_playback_volume_and_has_audio_match_pinned_cpp", "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs::audio_event_seam_plays_the_resolved_sound_fixture_asset", "crates/nuxie-audio/src/source.rs", "crates/nuxie-audio/src/engine.rs", "crates/nuxie-scripting/src/vm/lua_audio.rs::audio_source_sound_and_static_queries_match_the_pinned_lua_surface", "crates/nuxie/tests/audio_core.rs::audio_event_playback_multiplies_artboard_volume_and_stops_with_its_artboard", "crates/nuxie/tests/audio_core.rs::audio_event_artboard_clone_retains_its_asset_and_stops_independently", "crates/nuxie/tests/audio_core.rs::scripted_audio_plays_and_updates_volume_from_the_pinned_fixture", "docs/audio-core-parity.md"]
+note = "P2F1/P2F2/P2F3 directly port all 13 cases. The two live headless differentials cover source metadata and D18 reader lengths, scheduling/control/lifecycle, fixture asset resolution, volume, and hasAudio. Direct Rust coverage additionally binds level monitoring, buffered and MP3 duration caching, outliving handles, per-Artboard teardown, and the pinned audio_script.riv Context:audio/Audio.play/volume interaction. CPAL remains deliberately outside this upstream headless test row and has smoke-only coverage."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/bezier_utils_test.cpp"

@@ -30,6 +30,7 @@ mod promise;
 mod renderer;
 
 mod lua_artboards;
+mod lua_audio;
 mod lua_mat2d;
 mod lua_paint;
 mod lua_path;
@@ -206,6 +207,7 @@ pub struct ScriptVm {
     host_cycle_active: Rc<Cell<bool>>,
     resource_limits: resource_limits::ResourceLimitTracker,
     blob_assets: lua_blob::ScriptedBlobAssets,
+    audio_assets: lua_audio::ScriptedAudioAssets,
     gpu_canvas_shaders: ImportedGpuCanvasShaderAssets,
     logging: LoggingScriptingContext,
 }
@@ -939,6 +941,7 @@ impl ScriptVm {
         let view_model_frame_context = ScriptViewModelFrameContext::default();
         lua.set_app_data(view_model_frame_context.clone());
         let blob_assets = lua_blob::ScriptedBlobAssets::install(&lua);
+        let audio_assets = lua_audio::ScriptedAudioAssets::install(&lua);
         let initialization_error = lua
             .set_memory_limit(SCRIPT_VM_MEMORY_LIMIT_BYTES)
             .err()
@@ -972,6 +975,7 @@ impl ScriptVm {
             host_cycle_active,
             resource_limits,
             blob_assets,
+            audio_assets,
             gpu_canvas_shaders: Rc::new(RefCell::new(BTreeMap::new())),
             logging: LoggingScriptingContext::default(),
         }
@@ -1072,6 +1076,29 @@ impl ScriptVm {
         self.blob_assets
             .register(name, payload)
             .map_err(|error| ScriptError::new(error.to_string()))
+    }
+
+    /// Retain one decoded AudioAsset for exact-name `Context:audio` lookup.
+    pub fn register_audio_asset(
+        &self,
+        name: &str,
+        source: std::sync::Arc<nuxie_runtime::AudioSource>,
+    ) {
+        self.audio_assets.register(name, source);
+    }
+
+    /// Attach the current file-owned AudioAsset sources. Lookups consult the
+    /// owner on every call so host-loader completion after VM boot is visible.
+    pub fn set_audio_asset_owners(
+        &self,
+        owners: std::sync::Arc<nuxie_runtime::RuntimeAudioAssetOwners>,
+    ) {
+        self.audio_assets.set_file_owners(owners);
+    }
+
+    /// Register one serialized AudioAsset identity for exact-name lookup.
+    pub fn register_audio_asset_identity(&self, name: &str, global_id: u32) {
+        self.audio_assets.register_file_asset(name, global_id);
     }
 
     /// Attach the file-owned decoded ImageAsset catalog without performing or
@@ -1178,6 +1205,7 @@ impl ScriptVm {
         buffer_ext::install_buffer_extensions(&self.lua)?;
         promise::install_promise_globals(&self.lua)?;
         lua_image_decode::install(&self.lua);
+        lua_audio::install_audio_global(&self.lua)?;
 
         let late = self
             .lua

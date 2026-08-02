@@ -655,9 +655,9 @@ note = "F12: async work pool is absent."
 
 [[file]]
 upstream = "src/audio/audio_engine.cpp"
-status = "partial"
-rust_module = "crates/nuxie-audio/src/engine.rs"
-note = "P2F1 headless/external build: exact frame clock, absolute scheduling/clipping, manual PCM pull/sum, levels, completion cleanup, start/stop, and artboard-scoped unlink; device output is a later package."
+status = "ported"
+rust_module = "crates/nuxie-audio/src/engine.rs; crates/nuxie-audio/src/device.rs"
+note = "P2F1/P2F3: exact headless frame clock, scheduling/clipping, manual PCM pull/sum, levels, lifecycle, and artboard stop; optional CPAL output drains that same authoritative mixer through the default device."
 
 [[file]]
 upstream = "src/audio/audio_reader.cpp"
@@ -1573,9 +1573,9 @@ note = "Consolidated Rust port for lua."
 
 [[file]]
 upstream = "src/lua/lua_audio.cpp"
-status = "absent"
-rust_module = ""
-note = "F7: this Lua binding is absent."
+status = "ported"
+rust_module = "crates/nuxie-scripting/src/vm/lua_audio.rs; crates/nuxie-scripting/src/vm/view_model.rs; crates/nuxie/src/lib.rs"
+note = "P2F3: Context:audio, the Audio static playback/time API, AudioSource duration, and AudioSound control/query/volume bindings are direct pure-Rust Luau ports."
 
 [[file]]
 upstream = "src/lua/lua_buffer_ext.cpp"

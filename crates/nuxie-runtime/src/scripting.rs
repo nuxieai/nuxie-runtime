@@ -16,6 +16,7 @@ use crate::data_bind_graph::{
 };
 use crate::properties::property_key_for_name;
 use crate::state_machine::ScriptListenerInvocation;
+use crate::view_model_cell::RuntimeCellDirtSink;
 use crate::{
     ArtboardInstance, LinearAnimationInstance, RuntimeOwnedViewModelContextHandle,
     RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeViewModelImage,
@@ -768,6 +769,22 @@ impl ScriptViewModel {
 
     pub fn properties(&self) -> &BTreeMap<String, ScriptViewModelProperty> {
         &self.properties
+    }
+
+    /// Retain a dirt observer for one named property on this scoped instance.
+    ///
+    /// Lua property delegates use this to observe host/state-machine writes
+    /// before the end-of-frame reset consumes transient trigger values.
+    pub fn property_dirt_sink(&self, name: &str) -> Option<RuntimeCellDirtSink> {
+        let path = self.scoped_property_path(name)?;
+        let cell = self
+            .context
+            .root_handle()
+            .borrow()
+            .cell_by_property_path(&path)?;
+        let sink = RuntimeCellDirtSink::new();
+        cell.add_dependent(&sink);
+        Some(sink)
     }
 
     pub fn named_instance(&self, name: Option<&str>) -> Option<Self> {

@@ -183,3 +183,98 @@ fn audio_event_artboard_clone_retains_its_asset_and_stops_independently() {
     drop(cloned);
     assert_eq!(engine.playing_sound_count(), 0);
 }
+
+#[cfg(feature = "scripting")]
+#[test]
+fn scripted_audio_plays_and_updates_volume_from_the_pinned_fixture() {
+    use std::sync::Arc;
+
+    use nuxie::{OwnedArtboardInstance, PersistentFactory, RecordingFactory};
+
+    let engine = AudioEngine::make_and_store(2, 44_100).expect("runtime audio engine");
+    let file = Arc::new(
+        File::import_with_unsigned_scripts(&pinned_fixture("audio_script.riv"))
+            .expect("audio_script.riv imports with trusted scripts"),
+    );
+    let mut instance =
+        OwnedArtboardInstance::instantiate_default(file).expect("default artboard instance");
+    instance.set_audio_engine(Some(engine.clone()));
+    let mut machine = instance
+        .default_state_machine_instance()
+        .expect("default state machine");
+    let mut view_model = instance
+        .instantiate_default_view_model_instance()
+        .or_else(|| instance.instantiate_view_model())
+        .expect("audio script view model");
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+
+    instance
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.016,
+            &mut view_model,
+            &mut factory,
+        )
+        .expect("initialize audio script");
+    assert_eq!(engine.playing_sound_count(), 0);
+
+    {
+        let mut context = view_model.raw_mut();
+        assert!(machine.pointer_down_with_owned_view_model_context(
+            instance.raw_mut(),
+            25.0,
+            25.0,
+            1,
+            &mut context,
+        ));
+        assert!(machine.pointer_up_with_owned_view_model_context(
+            instance.raw_mut(),
+            25.0,
+            25.0,
+            1,
+            &mut context,
+        ));
+    }
+    instance
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.016,
+            &mut view_model,
+            &mut factory,
+        )
+        .expect("run scripted play callback");
+    assert_eq!(engine.playing_sound_count(), 1);
+
+    {
+        let mut context = view_model.raw_mut();
+        machine.pointer_down_with_owned_view_model_context(
+            instance.raw_mut(),
+            200.0,
+            200.0,
+            2,
+            &mut context,
+        );
+        machine.pointer_up_with_owned_view_model_context(
+            instance.raw_mut(),
+            200.0,
+            200.0,
+            2,
+            &mut context,
+        );
+    }
+    instance
+        .try_advance_with_state_machines_and_view_model_and_factory(
+            std::slice::from_mut(&mut machine),
+            0.016,
+            &mut view_model,
+            &mut factory,
+        )
+        .expect("run scripted volume callback");
+    assert_eq!(
+        engine
+            .playing_sounds_head()
+            .expect("scripted sound remains live")
+            .volume(),
+        0.1
+    );
+}

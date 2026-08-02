@@ -9,5 +9,11 @@
 mod engine;
 mod source;
 
+#[cfg(feature = "audio-device")]
+mod device;
+
 pub use engine::{AudioArtboardId, AudioEngine, AudioEngineError, AudioSound};
 pub use source::{AudioDecodeError, AudioFormat, AudioReader, AudioSource};
+
+#[cfg(feature = "audio-device")]
+pub use device::{AudioDeviceError, AudioDeviceSink};

@@ -5,6 +5,7 @@ local rive_runtime = os.getenv('RIVE_RUNTIME_DIR') or '/Users/levi/dev/oss/rive-
 local runtime_libdir = os.getenv('RIVE_CPP_PROBE_RUNTIME_LIBDIR')
 local decoders_libdir = os.getenv('RIVE_CPP_PROBE_DECODERS_LIBDIR')
 local with_scripting = os.getenv('RIVE_CPP_PROBE_WITH_SCRIPTING') == '1'
+local with_audio = os.getenv('RIVE_CPP_PROBE_WITH_AUDIO') == '1'
 local runner_name = os.getenv('RIVE_CPP_PROBE_RUNNER_NAME') or 'rive_cpp_probe'
 if not runtime_libdir then
     error('RIVE_CPP_PROBE_RUNTIME_LIBDIR must name a provenance-verified archive directory')
@@ -70,6 +71,9 @@ targetdir('%{cfg.system}/bin/%{cfg.buildcfg}')
 objdir('%{cfg.system}/obj/%{cfg.buildcfg}' .. (with_scripting and '/scripting' or '/ordinary'))
 includedirs(include_dirs)
 defines({ '_RIVE_INTERNAL_', 'WITH_RIVE_TEXT', 'WITH_RIVE_LAYOUT', 'RIVE_MACOSX', 'YOGA_EXPORT=' })
+if with_audio then
+    defines({ 'WITH_RIVE_AUDIO', 'EXTERNAL_RIVE_AUDIO_ENGINE', 'MA_NO_DEVICE_IO', 'MA_NO_RESOURCE_MANAGER' })
+end
 if with_scripting then
     defines({ 'WITH_RIVE_SCRIPTING', 'RIVE_DECODERS', 'HYDRO_SIGN_VERIFY_ONLY=1' })
     forceincludes({ 'rive_luau.hpp' })
@@ -120,6 +124,9 @@ if os.host() == 'macosx' then
         'lzma',
         'z',
     }
+    if with_audio then
+        table.insert(mac_links, 2, 'miniaudio')
+    end
     if with_scripting then
         table.insert(mac_links, 2, 'rive_decoders')
         table.insert(mac_links, 3, 'luau_vm')
@@ -139,6 +146,9 @@ else
         'z',
         'dl',
     }
+    if with_audio then
+        table.insert(unix_links, 2, 'miniaudio')
+    end
     if with_scripting then
         table.insert(unix_links, 2, 'rive_decoders')
         table.insert(unix_links, 3, 'luau_vm')

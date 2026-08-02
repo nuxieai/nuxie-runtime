@@ -1,4 +1,4 @@
-use crate::{RuntimeFontAssetOwners, RuntimeImageAssetOwners};
+use crate::{RuntimeAudioAssetOwners, RuntimeFontAssetOwners, RuntimeImageAssetOwners};
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 use nuxie_render_api::Factory as RenderFactory;
 use std::sync::Arc;
@@ -8,12 +8,14 @@ use std::sync::Arc;
 pub enum RuntimeFileAssetKind {
     Image,
     Font,
+    Audio,
 }
 
 #[derive(Clone)]
 enum RuntimeFileAssetOwner {
     Image(Arc<RuntimeImageAssetOwners>),
     Font(Arc<RuntimeFontAssetOwners>),
+    Audio(Arc<RuntimeAudioAssetOwners>),
 }
 
 /// A retained FileAsset handle passed to [`RuntimeFileAssetLoader`].
@@ -46,6 +48,7 @@ impl RuntimeFileAsset {
         match self.owner {
             RuntimeFileAssetOwner::Image(_) => RuntimeFileAssetKind::Image,
             RuntimeFileAssetOwner::Font(_) => RuntimeFileAssetKind::Font,
+            RuntimeFileAssetOwner::Audio(_) => RuntimeFileAssetKind::Audio,
         }
     }
 
@@ -55,6 +58,17 @@ impl RuntimeFileAsset {
                 owners.decode(self.descriptor.id, bytes, factory).is_ok()
             }
             RuntimeFileAssetOwner::Font(owners) => owners.decode(self.descriptor.id, bytes),
+            RuntimeFileAssetOwner::Audio(owners) => {
+                owners.decode(self.descriptor.id, bytes, factory)
+            }
+        }
+    }
+
+    /// Current decoded source for an AudioAsset handle.
+    pub fn audio_source(&self) -> Option<Arc<nuxie_audio::AudioSource>> {
+        match &self.owner {
+            RuntimeFileAssetOwner::Audio(owners) => owners.get(self.descriptor.id),
+            RuntimeFileAssetOwner::Image(_) | RuntimeFileAssetOwner::Font(_) => None,
         }
     }
 }
@@ -87,13 +101,13 @@ where
     }
 }
 
-/// File-owned ImageAsset and FontAsset resources imported through one loader
-/// seam. Audio and command-queue resource types intentionally remain outside
-/// this self-contained A1 module.
+/// File-owned ImageAsset, FontAsset, and AudioAsset resources imported through
+/// one loader seam. Command-queue resources remain outside this module.
 #[derive(Debug)]
 pub struct RuntimeFileAssetOwners {
     images: Arc<RuntimeImageAssetOwners>,
     fonts: Arc<RuntimeFontAssetOwners>,
+    audio: Arc<RuntimeAudioAssetOwners>,
     loader_owns_images: bool,
 }
 
@@ -107,6 +121,7 @@ impl RuntimeFileAssetOwners {
                 max_retained_decoded_image_bytes,
             )),
             fonts: Arc::new(RuntimeFontAssetOwners::from_runtime(runtime)),
+            audio: Arc::new(RuntimeAudioAssetOwners::from_runtime(runtime)),
             loader_owns_images: false,
         }
     }
@@ -122,12 +137,14 @@ impl RuntimeFileAssetOwners {
                 max_retained_decoded_image_bytes,
             )),
             fonts: Arc::new(RuntimeFontAssetOwners::default()),
+            audio: Arc::new(RuntimeAudioAssetOwners::default()),
             loader_owns_images: true,
         };
         for entry in runtime.imported_file_assets_with_contents() {
             let owner = match entry.asset.type_name {
                 "ImageAsset" => RuntimeFileAssetOwner::Image(Arc::clone(&owners.images)),
                 "FontAsset" => RuntimeFileAssetOwner::Font(Arc::clone(&owners.fonts)),
+                "AudioAsset" => RuntimeFileAssetOwner::Audio(Arc::clone(&owners.audio)),
                 _ => continue,
             };
             let asset = RuntimeFileAsset {
@@ -157,10 +174,15 @@ impl RuntimeFileAssetOwners {
         Arc::clone(&self.fonts)
     }
 
+    pub fn audio_assets(&self) -> Arc<RuntimeAudioAssetOwners> {
+        Arc::clone(&self.audio)
+    }
+
     pub fn asset(&self, descriptor: &RuntimeObject) -> Option<RuntimeFileAsset> {
         let owner = match descriptor.type_name {
             "ImageAsset" => RuntimeFileAssetOwner::Image(Arc::clone(&self.images)),
             "FontAsset" => RuntimeFileAssetOwner::Font(Arc::clone(&self.fonts)),
+            "AudioAsset" => RuntimeFileAssetOwner::Audio(Arc::clone(&self.audio)),
             _ => return None,
         };
         Some(RuntimeFileAsset {

@@ -6,7 +6,7 @@ schema="nuxie-golden-librive-provenance-v2"
 
 usage() {
     echo "usage: $0 source <runtime-dir>" >&2
-    echo "       $0 write|verify <runtime-dir> <archive> <rive.make> <stamp> <debug|release> <ordinary|scripted>" >&2
+    echo "       $0 write|verify <runtime-dir> <archive> <rive.make> <stamp> <debug|release> <ordinary|scripted|audio>" >&2
     exit 2
 }
 
@@ -63,6 +63,13 @@ expected_defines() {
             "RIVE_DECODERS"
             "WITH_RIVE_SCRIPTING"
         )
+    elif [[ "$mode" == "audio" ]]; then
+        defines+=(
+            "EXTERNAL_RIVE_AUDIO_ENGINE"
+            "MA_NO_DEVICE_IO"
+            "MA_NO_RESOURCE_MANAGER"
+            "WITH_RIVE_AUDIO"
+        )
     fi
     printf '%s\n' "${defines[@]}" | LC_ALL=C sort | paste -sd, -
 }
@@ -104,7 +111,7 @@ validate_inputs() {
     if [[ "$config" != "debug" && "$config" != "release" ]]; then
         usage
     fi
-    if [[ "$mode" != "ordinary" && "$mode" != "scripted" ]]; then
+    if [[ "$mode" != "ordinary" && "$mode" != "scripted" && "$mode" != "audio" ]]; then
         usage
     fi
     if [[ ! -f "$archive" ]]; then

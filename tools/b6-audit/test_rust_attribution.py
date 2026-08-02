@@ -58,6 +58,20 @@ class RustAttributionCliTest(unittest.TestCase):
             result.stderr,
         )
 
+    def test_audio_crate_source_is_in_scope(self) -> None:
+        audio_source = self.root / "crates/nuxie-audio/src/lib.rs"
+        audio_source.parent.mkdir(parents=True)
+        audio_source.write_text("// audio\n")
+        self.manifest.write_text(
+            '[[file]]\nrust_module = "crates/nuxie-runtime/src/lib.rs"\n'
+        )
+        self.additions.write_text(ADDITIONS_HEADER)
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("crates/nuxie-audio/src/lib.rs", result.stderr)
+
     def test_manifest_rust_module_list_classifies_source(self) -> None:
         self.manifest.write_text(
             textwrap.dedent(

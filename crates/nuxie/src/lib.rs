@@ -82,19 +82,20 @@ pub use nuxie_renderer::{
     WgpuFactory as DefaultRendererFactory, WgpuFrame as DefaultRendererFrame,
 };
 pub use nuxie_runtime::{
-    ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost, ProjectDataConverterCatalog,
-    ProjectDataConverterCompileError, ProjectDataConverterContext, ProjectDataConverterDefinition,
-    ProjectDataConverterEasing, ProjectDataConverterFormat, ProjectDataConverterKind,
-    ProjectDataConverterMathOperation, ProjectDataConverterOutputType, ProjectDataConverterProgram,
-    ProjectDataConverterProgramError, ProjectDataConverterRangeClamp, ProjectDataConverterResolver,
-    ProjectDataConverterReverseResult, ProjectDataConverterRuntimeError, ProjectDataConverterSpec,
-    ProjectDataConverterState, ProjectDataConverterStringPadSide,
-    ProjectDataConverterStringTrimMode, ProjectDataConverterValidationRule, ProjectDataValue,
-    ProjectDataValuePath, RuntimeFileAsset, RuntimeFileAssetKind, RuntimeFileAssetLoader,
-    RuntimeLayerState, RuntimeOwnedViewModelContext, RuntimeScrollConstraintSnapshot,
-    RuntimeStateMachineInput, ScriptCoreString, ScriptError, ScriptHost, ScriptInstance,
-    ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue, ScriptingVm,
-    StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
+    AudioArtboardId, AudioDecodeError, AudioEngine, AudioEngineError, AudioFormat, AudioReader,
+    AudioSound, AudioSource, ExternalFontAssetError, LinearAnimationInstance, NoopScriptHost,
+    ProjectDataConverterCatalog, ProjectDataConverterCompileError, ProjectDataConverterContext,
+    ProjectDataConverterDefinition, ProjectDataConverterEasing, ProjectDataConverterFormat,
+    ProjectDataConverterKind, ProjectDataConverterMathOperation, ProjectDataConverterOutputType,
+    ProjectDataConverterProgram, ProjectDataConverterProgramError, ProjectDataConverterRangeClamp,
+    ProjectDataConverterResolver, ProjectDataConverterReverseResult,
+    ProjectDataConverterRuntimeError, ProjectDataConverterSpec, ProjectDataConverterState,
+    ProjectDataConverterStringPadSide, ProjectDataConverterStringTrimMode,
+    ProjectDataConverterValidationRule, ProjectDataValue, ProjectDataValuePath, RuntimeFileAsset,
+    RuntimeFileAssetKind, RuntimeFileAssetLoader, RuntimeLayerState, RuntimeOwnedViewModelContext,
+    RuntimeScrollConstraintSnapshot, RuntimeStateMachineInput, ScriptCoreString, ScriptError,
+    ScriptHost, ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue,
+    ScriptingVm, StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
     StateMachineReportedEvent,
 };
 use nuxie_runtime::{RuntimeFileStateMachineActionCatalog, RuntimeFileViewModelInstanceCatalog};
@@ -3467,8 +3468,8 @@ impl File {
 
     /// Import a file through the C++-equivalent FileAssetLoader seam.
     ///
-    /// The callback runs once for each supported imported ImageAsset and
-    /// FontAsset. Returning `true` claims loading responsibility; returning
+    /// The callback runs once for each supported imported ImageAsset,
+    /// FontAsset, and AudioAsset. Returning `true` claims loading responsibility; returning
     /// `false` decodes any in-band payload as the fallback. A loader may clone
     /// the supplied [`RuntimeFileAsset`] and complete decoding later.
     pub fn import_with_asset_loader(
@@ -3824,6 +3825,20 @@ impl File {
         self.graph.as_ref()
     }
 
+    /// Resolve a decoded AudioAsset by serialized `FileAsset.assetId`.
+    pub fn audio_asset_source(&self, asset_id: u32) -> Option<Arc<AudioSource>> {
+        let global_id = self
+            .runtime
+            .file_assets()
+            .into_iter()
+            .find(|asset| {
+                asset.type_name == "AudioAsset"
+                    && asset.uint_property("assetId") == Some(u64::from(asset_id))
+            })?
+            .id;
+        self.file_asset_owners.audio_assets().get(global_id)
+    }
+
     #[cfg(feature = "scripting")]
     fn advance_detached_view_models(&self) -> bool {
         self.scripts
@@ -3990,6 +4005,10 @@ impl<'a> ArtboardInstance<'a> {
 
     pub fn artboard_bounds(&self) -> (f32, f32, f32, f32) {
         self.raw.artboard_bounds()
+    }
+
+    pub fn has_audio(&self) -> bool {
+        self.raw.has_audio()
     }
 
     /// Snapshot imported ScrollConstraints in this concrete artboard occurrence.
@@ -4602,6 +4621,10 @@ impl OwnedArtboardInstance {
 
     pub fn artboard_bounds(&self) -> (f32, f32, f32, f32) {
         self.raw.artboard_bounds()
+    }
+
+    pub fn has_audio(&self) -> bool {
+        self.raw.has_audio()
     }
 
     /// Snapshot imported ScrollConstraints in this concrete artboard occurrence.
@@ -5747,6 +5770,57 @@ mod inert_script_import_tests {
         assert!(!scripts.is_project_data_converter_asset(0));
         assert!(scripts.is_project_data_converter_asset(1));
         assert!(!scripts.is_project_data_converter_asset(2));
+    }
+
+    #[test]
+    fn upstream_script_ownership_fixtures_remain_on_the_luau_vm_path() {
+        let root = std::path::PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        )
+        .join("tests/unit_tests/assets");
+
+        for fixture in [
+            "script_inputs_test_1.riv",
+            "script_string_converter_test.riv",
+            "scripted_data_converter_bound_input.riv",
+            "scripted_memory_leak.riv",
+        ] {
+            let bytes = std::fs::read(root.join(fixture))
+                .unwrap_or_else(|error| panic!("failed to read {fixture}: {error}"));
+            let file = File::import_with_unsigned_scripts(&bytes)
+                .unwrap_or_else(|error| panic!("failed to import {fixture}: {error:#}"));
+            let scripts = file.scripts.borrow();
+            let protocol_ordinals = scripts
+                .assets
+                .iter()
+                .filter(|asset| asset.type_name == "ScriptAsset" && !asset.is_module)
+                .map(|asset| {
+                    assert!(
+                        !asset.is_project_data_converter,
+                        "{fixture} protocol asset {} was diverted into the PR 144 product envelope path",
+                        asset.ordinal
+                    );
+                    asset.ordinal
+                })
+                .collect::<Vec<_>>();
+            assert!(
+                !protocol_ordinals.is_empty(),
+                "{fixture} has no protocol ScriptAsset fixture witness"
+            );
+
+            let mut factory =
+                nuxie_render_api::PersistentFactory::new(nuxie_render_api::RecordingFactory::new());
+            let ready = scripts
+                .build_candidate(&file.runtime, &mut factory)
+                .unwrap_or_else(|error| panic!("failed to register {fixture} scripts: {error}"));
+            for ordinal in protocol_ordinals {
+                assert!(
+                    ready.programs.contains_key(&ordinal),
+                    "{fixture} protocol asset {ordinal} did not enter the file Luau VM"
+                );
+            }
+        }
     }
 }
 

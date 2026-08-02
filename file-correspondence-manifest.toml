@@ -1189,15 +1189,15 @@ note = "FL-D5 filename-corresponding Artboard referencer and DataBind-path owner
 
 [[file]]
 upstream = "src/assets/audio_asset.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-binary/src/lib.rs; crates/nuxie-runtime/src/state_machine/state_machine_input.rs; crates/nuxie-runtime/src/state_machine/state_machine_input_instance.rs"
-legacy_port_status = "partial"
+rust_module = "crates/nuxie-runtime/src/assets/audio_asset.rs; crates/nuxie-runtime/src/assets/file_asset_loader.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0098"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "F1/A2: audio asset object data is imported, but decode/playback ownership is absent."
+note = "P2F1 faithful candidate: loader first-refusal/fallback, owned encoded bytes, invalid-decode null-source behavior, and retained AudioSource replacement match pinned AudioAsset ownership. Anchors: sound_fixture_installs_an_owned_embedded_audio_source and sound_fixture_loads_embedded_audio_and_host_loader_gets_first_refusal."
 
 [[file]]
 upstream = "src/assets/blob_asset.cpp"
@@ -1285,15 +1285,15 @@ note = "P1-b faithful candidate: pinned ManifestAsset section framing, exact-siz
 
 [[file]]
 upstream = "src/assets/script_asset.cpp"
-status = "pending"
-verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/script_asset.rs; crates/nuxie/src/lib.rs; crates/nuxie-scripting/src/vm.rs"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/script_asset.rs; crates/nuxie-runtime/src/scripted_data_converter.rs; crates/nuxie-runtime/src/state_machine/scripted_listener_action.rs; crates/nuxie/src/lib.rs; crates/nuxie-scripting/src/vm.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0106"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "AF-1/AF-5: the file script catalog and scripting VM retain ScriptAsset module/protocol ownership."
+note = "P1-n faithful closure at d788e8ec: ScriptInput destruction/type dispatch/default hydration (script_asset.cpp:23-66), file-owned VM lookup plus module/protocol registration (69-113), occurrence initialization and serialized method-mask transfer (85-165), and signed-content decode/bytecode ownership (167-221) are retained by the FileScriptRuntime catalog, ScriptVm module/protocol programs, RuntimeScriptedObjectOccurrence, and occurrence-owned typed inputs. Anchors: optional_script_method_bits_are_masked_and_independently_gated_like_cpp; ordinary_import_keeps_the_bounded_script_catalog_inert_and_shared; upstream_script_ownership_fixtures_remain_on_the_luau_vm_path; luaur_loads_bytecode_across_scripting_corpus; repeated_scripted_data_converter_occurrences_match_cpp_probe. Accepted AF-1/AF-5 adaptation: one retained Rust file catalog/VM replaces ScriptAsset back-pointers and refs, Rust ownership replaces explicit deletes, and explicit authenticated/visual-only File authorization replaces the asset-local verified bit while SignedContent preserves envelope parsing."
 
 [[file]]
 upstream = "src/assets/shader_asset.cpp"
@@ -1321,51 +1321,55 @@ note = "P1-l faithful candidate: WorkTask status/error/owner state, null-submit 
 
 [[file]]
 upstream = "src/audio/audio_engine.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "absent"
+rust_module = "crates/nuxie-audio/src/engine.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0109"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F1: audio runtime is absent."
+note = "P2F1 faithful external/headless candidate: Rive-owned frame clock, absolute scheduling/clipping, manual pull/sum, exact lifecycle cleanup, levels, and artboard-scoped stop. CPAL device output is explicitly later. Live anchor: audio_source_reader_and_headless_schedule_match_pinned_cpp."
 
 [[file]]
 upstream = "src/audio/audio_reader.cpp"
-status = "pending"
+status = "divergent-by-decision"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "absent"
+decision = "D18"
+ceiling = "decoded-pcm-resampler"
+rust_module = "crates/nuxie-audio/src/source.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0110"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F1: audio runtime is absent."
+note = "P2F1/D18 adapted decoder seam: independent readers expose exact channels/rate/read cursor while resampled lengths permit only the documented two-frame tolerance and never byte-pin PCM. Live anchor: audio_source_reader_and_headless_schedule_match_pinned_cpp."
 
 [[file]]
 upstream = "src/audio/audio_sound.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "absent"
+rust_module = "crates/nuxie-audio/src/engine.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0111"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F1: audio runtime is absent."
+note = "P2F1 faithful candidate: seek/time/stop/play/pause/resume/volume/completion, deferred disposal, fade, and safe engine-outliving handles. Anchors: audio_source_reader_and_headless_schedule_match_pinned_cpp plus nuxie-audio engine lifecycle tests."
 
 [[file]]
 upstream = "src/audio/audio_source.cpp"
-status = "pending"
+status = "divergent-by-decision"
 verification = "pending-verification"
-rust_module = ""
-legacy_port_status = "absent"
+decision = "D18"
+ceiling = "decoded-pcm-resampler"
+rust_module = "crates/nuxie-audio/src/source.rs"
+legacy_port_status = "ported"
 b6_row_id = "B6-0112"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F1: audio runtime is absent."
+note = "P2F1/D18 adapted decoder candidate: owned encoded WAV/MP3/FLAC, owned buffered f32, lazy Symphonia decode, metadata/duration caching, independent readers, and recognized-but-unwired Vorbis. Anchors: audio_source_reader_and_headless_schedule_match_pinned_cpp and source tests."
 
 [[file]]
 upstream = "src/audio_event.cpp"
@@ -3735,7 +3739,7 @@ note = "Consolidated runtime port."
 upstream = "src/profiler/profiler.cpp"
 status = "divergent-by-decision"
 verification = "pending-verification"
-decision = "D17"
+decision = "D16"
 ceiling = "profiler-capture-backend"
 rust_module = "crates/nuxie-runtime/src/profiler.rs"
 legacy_port_status = "ported"
@@ -3743,7 +3747,7 @@ b6_row_id = "B6-0309"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "P1-m/F12 divergent candidate under D17 and PORTING FLR-21: the pinned 16-line MicroProfile implementation wrapper is intentionally replaced by the pluggable pure-Rust ProfileCapture lifecycle/tick/metadata/history seam, with no C++ FFI; awaiting orchestrator verification."
+note = "P1-m/F12 divergent candidate under D16 and PORTING FLR-21: the pinned 16-line MicroProfile implementation wrapper is intentionally replaced by the pluggable pure-Rust ProfileCapture lifecycle/tick/metadata/history seam, with no C++ FFI; awaiting orchestrator verification."
 
 [[file]]
 upstream = "src/profiler/rive_profile.cpp"
@@ -3879,15 +3883,15 @@ note = "Direct filename correspondence and complete scripted-listener occurrence
 
 [[file]]
 upstream = "src/scripted/scripted_data_converter.cpp"
-status = "pending"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/scripted_data_converter.rs; crates/nuxie-runtime/src/data_bind_graph.rs; crates/nuxie-runtime/src/artboard_data_bind.rs; crates/nuxie/src/lib.rs; crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0321"
 b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "AF-1/AF-5: retained per-artboard scripted converter VMs are invoked by the retained DataBind graph."
+note = "P1-n faithful closure at d788e8ec: occurrence teardown/input disposal (scripted_data_converter.cpp:18-41), hydration dirt plus typed push/convert/reverse-convert/cached output (45-168), context bind/reinit and child-bind hydration (170-188), AdvanceNested/zero-time/dirty scheduling (190-213), property ownership/import registration (215-233), complete occurrence clone with ordered child DataBinds (235-274), and scripted-object bind enrollment (276-280) map to RuntimeScriptedDataConverterDefinition/State, occurrence-keyed VM handles, retained DataBind traversal, and StateMachineInstance hydration/advance. Anchors: conversion_uses_one_optional_lookup_before_input_push; conversion_mask_missing_method_and_occurrence_cache_match_cpp; advance_mask_and_lua_truthiness_match_cpp; inherited_unbind_releases_every_scripted_custom_input_source; source_owner_unbinds_scripted_custom_inputs_before_destroying_table; scripted_converter_self_binds_keep_order_fields_and_live_table_identity; repeated_scripted_data_converter_occurrences_match_cpp_probe; upstream_script_ownership_fixtures_remain_on_the_luau_vm_path. Accepted AF-1/AF-5 adaptation: every artboard/DataBind occurrence retains a distinct Rust VM table and owned input graph rather than cloning C++ objects/pointers. PR 144's is_project_data_converter envelope distinction is solely a product-layer carrier/router and must not change upstream ScriptedDataConverter semantics; the named upstream converter fixtures are asserted non-envelope and registered through the Luau VM path."
 
 [[file]]
 upstream = "src/scripted/scripted_drawable.cpp"
@@ -4527,15 +4531,15 @@ note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/ef
 
 [[file]]
 upstream = "src/simple_array.cpp"
-status = "pending"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/lib.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0375"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "AF-7: production SimpleArray unique ownership maps to owned Vec/slice storage; the C++ .cpp is testing-only counters."
+note = "P1-n faithful closure at d788e8ec under AF-7: simple_array.cpp:1-18 defines only TESTING malloc/realloc/free counters; production SimpleArray/SimpleArrayBuilder ownership and views are header-only and map to Rust Vec<T>, borrowed slices, and Arc<[T]>. API-contract anchors in crates/nuxie-runtime/tests/simple_array_adaptation.rs exercise runtime-owned ScriptCoreString and nested ProjectDataValue storage plus an imported ArtboardInstance's borrowed state-machine catalog and cloned Arc<Vec<_>> definitions; they cover empty/owned/borrowed storage, byte size, order/iteration, growth/reset, nested ownership, shared immutable definitions, fallible overflow rejection, post-failure composability, and normal allocation. Exact allocator-count parity and forced system-OOM behavior are allocator-specific and intentionally inapplicable, recorded on the partial simple_array_test.cpp correspondence row."
 
 [[file]]
 upstream = "src/solo.cpp"

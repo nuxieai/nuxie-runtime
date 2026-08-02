@@ -1396,9 +1396,9 @@ lifecycle. They apply to the complete runtime frame loop through the existing
 - **FLR-20 Declare support ceilings as decisions; never call them faithful.**
   A direct Rust owner can close a file-correspondence row even when the product
   intentionally stops below the complete pinned C++ surface, but only as
-  `divergent-by-decision`. The only approved named support ceiling is
-  **layout-engine**, bound to D3: Taffy replaces Yoga, including its known
-  edge/interpolation differences. A new ceiling requires an explicit,
+  `divergent-by-decision`. Approved named support ceilings are
+  **layout-engine**, bound to D3, and **decoded-pcm-resampler**, bound to D18.
+  A new ceiling requires an explicit,
   user-approved D-row before any manifest row may use
   `divergent-by-decision`.
   The supported portion must still live in its direct filename owner and cite
@@ -1407,7 +1407,7 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   Adding any ceiling behavior later reopens the corresponding D-row and
   requires ordinary owner-family closure under §0 steps 1–5 and FLR-16.
 - **FLR-21 Profiler capture backend is an approved implementation ceiling.**
-  The **profiler-capture-backend** ceiling is bound to D17 and the approved
+  The **profiler-capture-backend** ceiling is bound to D16 and the approved
   P1-m decomposition-question-4 decision. The pinned
   `src/profiler/profiler.cpp` MicroProfile wrapper is replaced by an open,
   pluggable pure-Rust `ProfileCapture` trait; Nuxie does not link MicroProfile
@@ -1416,6 +1416,14 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   delay/history behavior, version-2 BinaryWriter stream, and transition and
   listener hook semantics remain faithful port obligations under the direct
   `src/profiler/rive_profile.cpp` owner.
+- **FLR-22 Audio decode/resampling is an approved implementation ceiling.**
+  The **decoded-pcm-resampler** ceiling is bound to D18 and Levi's approved
+  P2-f decomposition-question-5 decision (2026-08-01). Symphonia replaces
+  miniaudio only for encoded WAV/MP3/FLAC decode, channel conversion, and
+  resampling; Vorbis remains recognized but unwired. PCM bytes and individual
+  samples are not equality-pinned, and resampled frame counts may differ by at
+  most two frames. Frame-clock scheduling/clipping, lifecycle/completion,
+  volume, levels, manual PCM pull, and per-artboard stop remain exact.
 
 **Script-advance error lifecycle is ported, not a support ceiling.** Pinned C++
 `ScriptedObject::scriptAdvance` converts a failed

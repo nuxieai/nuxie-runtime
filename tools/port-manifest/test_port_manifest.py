@@ -116,6 +116,67 @@ class PortManifestCliTest(unittest.TestCase):
             result.stderr,
         )
 
+    def test_check_accepts_semicolon_separated_rust_modules(self) -> None:
+        self.write_upstream("src/a.cpp")
+        (self.repo / "crates/runtime/src/other.rs").write_text("// other\n")
+        manifest = self.write_manifest(
+            """
+            version = 1
+
+            [[file]]
+            upstream = "src/a.cpp"
+            status = "ported"
+            rust_module = "crates/runtime/src/lib.rs; crates/runtime/src/other.rs"
+            note = "Consolidated runtime port."
+            """
+        )
+
+        result = self.run_check(manifest)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_check_reports_only_missing_modules_from_semicolon_list(self) -> None:
+        self.write_upstream("src/a.cpp")
+        manifest = self.write_manifest(
+            """
+            version = 1
+
+            [[file]]
+            upstream = "src/a.cpp"
+            status = "ported"
+            rust_module = "crates/runtime/src/lib.rs; crates/runtime/src/missing.rs"
+            note = "Consolidated runtime port."
+            """
+        )
+
+        result = self.run_check(manifest)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "missing Rust module for src/a.cpp: crates/runtime/src/missing.rs",
+            result.stderr,
+        )
+        self.assertNotIn("crates/runtime/src/lib.rs", result.stderr)
+
+    def test_check_rejects_rust_module_with_no_parseable_entries(self) -> None:
+        self.write_upstream("src/a.cpp")
+        manifest = self.write_manifest(
+            """
+            version = 1
+
+            [[file]]
+            upstream = "src/a.cpp"
+            status = "ported"
+            rust_module = "; "
+            note = "Consolidated runtime port."
+            """
+        )
+
+        result = self.run_check(manifest)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid rust_module for src/a.cpp", result.stderr)
+
     def test_check_fails_when_upstream_path_is_declared_twice(self) -> None:
         self.write_upstream("src/a.cpp")
         manifest = self.write_manifest(
@@ -243,15 +304,19 @@ class PortManifestCliTest(unittest.TestCase):
                 "src/component.cpp",
             ],
         )
-        self.assertEqual(rows[0]["status"], "absent")
-        self.assertIn("F1", rows[0]["note"])
-        self.assertEqual(rows[0]["rust_module"], "")
+        self.assertEqual(rows[0]["status"], "partial")
+        self.assertIn("P2F1", rows[0]["note"])
+        self.assertEqual(rows[0]["rust_module"], "crates/nuxie-audio/src/engine.rs")
         self.assertEqual(rows[1]["status"], "ported")
         self.assertEqual(rows[1]["rust_module"], "crates/nuxie-runtime/src/components.rs")
         self.assertEqual(document["upstream_ref"], "test-ref")
 
     def test_generate_seeds_the_register_feature_rows(self) -> None:
         expected = {
+            "src/audio/audio_engine.cpp": ("partial", "P2F1"),
+            "src/audio/audio_reader.cpp": ("ported", "D18"),
+            "src/audio/audio_sound.cpp": ("ported", "P2F1"),
+            "src/audio/audio_source.cpp": ("ported", "D18"),
             "src/text/cursor.cpp": ("ported", "FL-E6"),
             "src/command_queue.cpp": ("absent", "F3"),
             "src/constraints/scrolling/elastic_scroll_physics.cpp": ("absent", "F4"),
@@ -340,18 +405,18 @@ class PortManifestCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "register seed drift for src/audio/audio_engine.cpp: expected status=absent",
+            "register seed drift for src/audio/audio_engine.cpp: expected status=partial",
             result.stderr,
         )
 
     def test_check_rejects_the_wrong_feature_id_on_an_absent_seed(self) -> None:
-        self.write_upstream("src/audio/audio_engine.cpp")
+        self.write_upstream("src/audio_event.cpp")
         manifest = self.write_manifest(
             """
             version = 1
 
             [[file]]
-            upstream = "src/audio/audio_engine.cpp"
+            upstream = "src/audio_event.cpp"
             status = "absent"
             rust_module = ""
             note = "F2: wrong register row."
@@ -362,7 +427,7 @@ class PortManifestCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "register seed drift for src/audio/audio_engine.cpp: expected feature ids F1",
+            "register seed drift for src/audio_event.cpp: expected feature ids F1",
             result.stderr,
         )
 
@@ -393,11 +458,11 @@ class PortManifestCliTest(unittest.TestCase):
     def test_generate_seeds_every_cpp_surface_named_by_the_feature_register(self) -> None:
         expected = {
             "src/artboard.cpp": ("partial", "F1"),
-            "src/assets/audio_asset.cpp": ("partial", "F1"),
-            "src/audio/audio_engine.cpp": ("absent", "F1"),
-            "src/audio/audio_reader.cpp": ("absent", "F1"),
-            "src/audio/audio_sound.cpp": ("absent", "F1"),
-            "src/audio/audio_source.cpp": ("absent", "F1"),
+            "src/assets/audio_asset.cpp": ("ported", "P2F1"),
+            "src/audio/audio_engine.cpp": ("partial", "P2F1"),
+            "src/audio/audio_reader.cpp": ("ported", "D18"),
+            "src/audio/audio_sound.cpp": ("ported", "P2F1"),
+            "src/audio/audio_source.cpp": ("ported", "D18"),
             "src/audio_event.cpp": ("absent", "F1"),
             "src/text/cursor.cpp": ("ported", "FL-E6"),
             "src/text/raw_text_input.cpp": ("ported", "FL-E6"),

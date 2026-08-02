@@ -278,6 +278,11 @@ rust_modules = [
   "crates/nuxie-runtime/src/lib.rs",
   "crates/nuxie-runtime/src/components.rs",
   "crates/nuxie-runtime/src/constraints.rs",
+  "crates/nuxie-runtime/src/constraints/distance_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/rotation_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/scale_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/transform_constraint.rs",
+  "crates/nuxie-runtime/src/constraints/translation_constraint.rs",
   "crates/nuxie-runtime/src/artboard.rs",
   "crates/nuxie-runtime/src/draw.rs",
   "crates/nuxie-runtime/src/parent_traversal.rs",
@@ -1343,7 +1348,7 @@ status = "faithful"
 upstream = "src/constraints/distance_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/distance_constraint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1391,7 +1396,7 @@ status = "faithful"
 upstream = "src/constraints/rotation_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/rotation_constraint.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -1399,7 +1404,7 @@ status = "faithful"
 upstream = "src/constraints/scale_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/scale_constraint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1479,7 +1484,7 @@ status = "faithful"
 upstream = "src/constraints/transform_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/transform_constraint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1487,7 +1492,7 @@ status = "faithful"
 upstream = "src/constraints/translation_constraint.cpp"
 source_set = "component-update-graph"
 wave = "FL-A"
-rust_modules = ["crates/nuxie-runtime/src/constraints.rs"]
+rust_modules = ["crates/nuxie-runtime/src/constraints/translation_constraint.rs"]
 dynamically_reached = true
 status = "faithful"
 

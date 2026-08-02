@@ -2368,6 +2368,135 @@ fn hidden_text_omits_lines_that_do_not_fully_fit_the_fixed_height() -> Result<()
 }
 
 #[test]
+fn bound_text_style_color_draws_initial_and_repeated_live_writes() -> Result<()> {
+    let mut scene = Scene::new();
+    let ((artboard, color, defaults, tint), _) = scene.edit(|tx| {
+        let font = tx.create_font_asset(FontAssetSpec {
+            name: "Roboto A".into(),
+            bytes: fixture_font_bytes(),
+        })?;
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "UNIV-1291 live text style".into(),
+            width: 200.0,
+            height: 100.0,
+        })?;
+        let text = tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::Text(TextSpec {
+                name: "Live title".into(),
+                x: 10.0,
+                y: 20.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                sizing: SceneTextSizing::Fixed,
+                width: 120.0,
+                height: 40.0,
+                align: SceneTextAlign::Left,
+                wrap: SceneTextWrap::Wrap,
+                overflow: SceneTextOverflow::Visible,
+            }),
+        )?;
+        let style = tx.create(
+            Parent::Object(text),
+            NodeSpec::TextStylePaint(TextStylePaintSpec {
+                name: "Live title style".into(),
+                font_size: 24.0,
+                line_height: 30.0,
+                letter_spacing: 0.0,
+                font,
+            }),
+        )?;
+        let fill = tx.create(
+            Parent::Object(style),
+            NodeSpec::Fill(FillSpec {
+                name: "Live title fill".into(),
+            }),
+        )?;
+        let color = tx.create(
+            Parent::Object(fill),
+            NodeSpec::SolidColor(SolidColorSpec {
+                name: "Live title color".into(),
+                color: 0,
+            }),
+        )?;
+        tx.create(
+            Parent::Object(text),
+            NodeSpec::TextValueRun(TextValueRunSpec {
+                name: "Live title run".into(),
+                text: "a".into(),
+                style,
+            }),
+        )?;
+
+        let mut view_models = tx.view_models();
+        let model = view_models.create(ViewModelSpec {
+            scope: ViewModelScope::Local,
+            name: "Live title values".into(),
+        })?;
+        let tint = view_models.create_color(
+            model,
+            ViewModelColorSpec {
+                name: "tint".into(),
+            },
+        )?;
+        let defaults = view_models.create_instance(
+            model,
+            ViewModelInstanceSpec {
+                name: Some("Defaults".into()),
+            },
+        )?;
+        view_models.set_color(defaults, tint, 0xff11_2233)?;
+        view_models.set_artboard_default(artboard, defaults)?;
+        view_models.bind_color(
+            color,
+            props::COLOR_VALUE,
+            ViewModelColorSource::direct(tint),
+        )?;
+        Ok((artboard, color, defaults, tint))
+    })?;
+    let instance = scene.instantiate(artboard)?;
+    let color_cursor = scene.cursor(instance, color, props::COLOR_VALUE)?;
+    let mut factory = RecordingFactory::new();
+    let mut renderer = factory.make_renderer();
+    let mut token = scene.new_draw_token(instance)?;
+    let mut canonical_streams = Vec::new();
+
+    for (phase, expected) in [0xff11_2233, 0xff44_5566, 0xffab_cdef, 0xff77_8899]
+        .into_iter()
+        .enumerate()
+    {
+        match phase {
+            0 => {}
+            1 => assert!(scene.frame().set(color_cursor, expected)?),
+            _ => assert!(scene.set_vm_color(instance, defaults, tint, expected)?),
+        }
+        factory.clear();
+        scene
+            .frame()
+            .draw(instance, &mut factory, &mut renderer, &mut token)?;
+        assert_eq!(scene.frame().get(color_cursor)?, expected);
+        let stream = factory.stream();
+        assert!(
+            stream.contains(&format!("color=0x{expected:08x}")),
+            "text style must draw the current live color: {stream}"
+        );
+        canonical_streams.push(
+            factory
+                .canonical_recording()
+                .stream()
+                .replace(&format!("0x{expected:08x}"), "<live-color>"),
+        );
+    }
+    assert!(
+        canonical_streams.windows(2).all(|pair| pair[0] == pair[1]),
+        "initial and repeated cursor/VM writes must preserve the exact canonical draw stream apart from color: {canonical_streams:#?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn clipped_text_draws_partial_lines_through_the_fixed_text_box_clip() -> Result<()> {
     let (mut visible, visible_artboard, _) =
         overflow_text_scene(SceneTextOverflow::Visible, 40.0, 25.0, "a\na")?;

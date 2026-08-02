@@ -1,7 +1,7 @@
 use nuxie_binary::{RuntimeFile, read_runtime_file};
 use nuxie_graph::GraphFile;
 use nuxie_image_codec::{decoded_rgba_len, preflight_encoded_image, validate_encoded_image};
-use nuxie_render_api::RawPath;
+use nuxie_render_api::{RawPath, RecordingFactory};
 use nuxie_runtime::{
     ArtboardInstance, ComponentDirt, Mat2D, RuntimeArtboardDefaultScene, RuntimeComponent,
     RuntimeDataContext, RuntimeDataContextLookupKind, RuntimeDataContextLookupReport,
@@ -20,6 +20,7 @@ use nuxie_runtime::{
 };
 use nuxie_schema::definition_by_name;
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{
@@ -87503,10 +87504,23 @@ struct CppArtboard {
     fl_e8_variation_cycle: Option<CppFlE8VariationCycleReport>,
     #[serde(default, rename = "flE8ListPath")]
     fl_e8_list_path: Option<Vec<CppFlE8ListPathReport>>,
+    #[serde(default, rename = "runtimeTextStyleColorPhases")]
+    runtime_text_style_color_phases: Vec<CppRuntimeTextStyleColorPhase>,
     #[serde(default, rename = "nestedStateMachines")]
     nested_state_machines: Vec<CppNestedStateMachine>,
     #[serde(default, rename = "nestedRemapAnimations")]
     nested_remap_animations: Vec<CppNestedRemapAnimation>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct CppRuntimeTextStyleColorPhase {
+    local_id: usize,
+    color_value: u32,
+    applied: bool,
+    advanced: bool,
+    draw_paths: usize,
+    draw_colors: Vec<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -88007,6 +88021,100 @@ fn d_st_struct_live_cpp_modifier_registration_matches_rust() {
             .filter(|component| component.type_name == "Text")
             .count(),
         report.text_count
+    );
+}
+
+#[test]
+fn univ_1291_live_text_style_color_writes_match_cpp() {
+    let Some(probe) = probe_path() else {
+        eprintln!("skipping C++ text-style write comparison; set RIVE_CPP_PROBE to enable");
+        return;
+    };
+    let bytes = fl_e8_local_fixture_bytes("feature");
+    let runtime = read_runtime_file(bytes).expect("UNIV-1291 fixture imports in Rust");
+    let graphs = GraphFile::from_runtime_file(&runtime).expect("UNIV-1291 graph builds");
+    let graph = &graphs.artboards[0];
+    let color_local = graph
+        .components
+        .iter()
+        .find(|component| component.type_name == "SolidColor")
+        .expect("UNIV-1291 fixture has SolidColor")
+        .local_id;
+    let color_key = property_key_for_name("SolidColor", "colorValue");
+    let writes = [0xff44_5566, 0xffab_cdef];
+    let mut args = Vec::new();
+    for color in writes {
+        args.extend([
+            "--runtime-text-style-color-write".to_owned(),
+            color_local.to_string(),
+            format!("0x{color:08x}"),
+        ]);
+    }
+    let cpp = read_cpp_probe_bytes_with_args(&probe, "UNIV-1291", bytes, &args);
+    let cpp_phases = &cpp.artboards[0].runtime_text_style_color_phases;
+    assert_eq!(cpp_phases.len(), writes.len() + 1);
+    assert!(!cpp_phases[0].applied);
+    assert!(!cpp_phases[0].advanced);
+    assert!(cpp_phases.iter().all(|phase| phase.local_id == color_local));
+    assert!(cpp_phases[1..].iter().all(|phase| phase.applied));
+    assert!(
+        cpp_phases[1..].iter().all(|phase| !phase.advanced),
+        "C++ mutates the retained ShapePaint directly; no component update is required"
+    );
+    for (phase, expected) in cpp_phases
+        .iter()
+        .zip(std::iter::once(cpp_phases[0].color_value).chain(writes))
+    {
+        assert_eq!(phase.draw_colors.len(), phase.draw_paths);
+        assert!(
+            !phase.draw_colors.is_empty()
+                && phase.draw_colors.iter().all(|color| *color == expected),
+            "C++ must deliver the live color to every rendered TextStylePaint path: {phase:?}"
+        );
+    }
+
+    let mut instance =
+        ArtboardInstance::from_graph(&runtime, graph).expect("UNIV-1291 Rust instance builds");
+    instance.update_pass();
+    let mut factory = RecordingFactory::new();
+    let mut renderer = factory.make_renderer();
+    let mut rust_phases = Vec::new();
+    for color in std::iter::once(None).chain(writes.into_iter().map(Some)) {
+        if let Some(color) = color {
+            assert!(instance.set_color_property(color_local, color_key, color));
+            instance.update_pass();
+        }
+        factory.clear();
+        instance
+            .draw_artboard(
+                &runtime,
+                graph,
+                &graphs.artboards,
+                &mut factory,
+                &mut renderer,
+                &BTreeMap::new(),
+                None,
+                true,
+            )
+            .expect("UNIV-1291 Rust phase draws");
+        let color_value = instance
+            .color_property(color_local, color_key)
+            .expect("SolidColor has colorValue");
+        let stream = factory.stream();
+        assert!(
+            stream.contains(&format!("color=0x{color_value:08x}")),
+            "Rust must deliver the live color to the rendered TextStylePaint path: {stream}"
+        );
+        rust_phases.push((color_value, factory.stream().matches("drawPath ").count()));
+    }
+
+    assert_eq!(
+        cpp_phases
+            .iter()
+            .map(|phase| (phase.color_value, phase.draw_paths))
+            .collect::<Vec<_>>(),
+        rust_phases,
+        "C++ and Rust must render the same initial and repeated text-style color phases"
     );
 }
 

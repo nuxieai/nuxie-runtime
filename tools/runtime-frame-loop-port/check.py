@@ -689,6 +689,50 @@ def duplicate_values(values: Iterable[str]) -> list[str]:
     return sorted(value for value, count in counts.items() if count > 1)
 
 
+def manifest_rust_modules(row: dict[str, Any]) -> list[str]:
+    return [
+        value.strip()
+        for value in str(row.get("rust_module", "")).split(";")
+        if value.strip()
+    ]
+
+
+def validate_scatter_ratchet(
+    *,
+    manifest: dict[str, Any],
+    rows: list[dict[str, Any]],
+    errors: list[str],
+) -> tuple[int, int | None]:
+    multi_module_rows = [
+        row for row in rows if len(manifest_rust_modules(row)) >= 2
+    ]
+    for row in multi_module_rows:
+        note = str(row.get("note", ""))
+        if re.search(r"\b(?:MR|exception)\b", note, re.IGNORECASE) is not None:
+            continue
+        upstream = str(row.get("upstream", "")) or "<missing upstream>"
+        row_id = str(row.get("b6_row_id", ""))
+        row_name = f"{row_id} ({upstream})" if row_id else upstream
+        errors.append(
+            f"multi-module row {row_name} must have an MR or exception marker in note"
+        )
+
+    count = len(multi_module_rows)
+    ratchet = manifest.get("scatter_ratchet")
+    if not isinstance(ratchet, dict):
+        errors.append("file correspondence scatter_ratchet table is missing")
+        return count, None
+    maximum = ratchet.get("max_multi_module_rows")
+    if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum < 0:
+        errors.append(
+            "scatter_ratchet.max_multi_module_rows must be a non-negative integer"
+        )
+        return count, None
+    if count > maximum:
+        errors.append(f"scatter ratchet increased to {count} > {maximum}")
+    return count, maximum
+
+
 def validate_citation(
     citation: str,
     repo_root: pathlib.Path,
@@ -1020,11 +1064,7 @@ def validate_file_rows(
                 errors.append(f"file {path} Rust module does not exist: {rust_module}")
 
         manifest = manifest_files.get(path, {})
-        mapped = {
-            value.strip()
-            for value in str(manifest.get("rust_module", "")).split(";")
-            if value.strip()
-        }
+        mapped = set(manifest_rust_modules(manifest))
         if mapped and mapped != set(rust_modules):
             errors.append(
                 f"file {path} maps to {sorted(rust_modules)}, "
@@ -1519,6 +1559,11 @@ def check(
     manifest_files = {str(row.get("upstream", "")): row for row in manifest_rows}
     if len(manifest_files) != len(manifest_rows):
         errors.append("file correspondence contains duplicate upstream paths")
+    scatter_count, scatter_maximum = validate_scatter_ratchet(
+        manifest=file_manifest,
+        rows=manifest_rows,
+        errors=errors,
+    )
     assignments, source_set_waves = expand_source_sets(
         source_sets=list(ledger.get("source_set", [])),
         manifest_files=manifest_files,
@@ -2276,6 +2321,7 @@ def check(
         f"runtime-frame-loop-port: files={len(assignments)} ({files}); "
         f"members={len(members) + imported_member_count} ({member_summary}); "
         f"gaps={len(gap_rows)}; waves={' -> '.join(wave_order)}; "
+        f"scatter={scatter_count}/{scatter_maximum}; "
         f"ratchets[{ratchets}]"
     )
 

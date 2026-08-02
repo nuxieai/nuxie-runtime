@@ -307,6 +307,23 @@ exclude = [
 ]
 rust_modules = [
   "crates/nuxie-runtime/src/animation.rs",
+  "crates/nuxie-runtime/src/animation/cubic_interpolator.rs",
+  "crates/nuxie-runtime/src/animation/cubic_interpolator_solver.rs",
+  "crates/nuxie-runtime/src/animation/cubic_value_interpolator.rs",
+  "crates/nuxie-runtime/src/animation/elastic_ease.rs",
+  "crates/nuxie-runtime/src/animation/elastic_interpolator.rs",
+  "crates/nuxie-runtime/src/animation/keyframe_interpolator.rs",
+  "crates/nuxie-runtime/src/animation/keyed_object.rs",
+  "crates/nuxie-runtime/src/animation/keyframe.rs",
+  "crates/nuxie-runtime/src/animation/keyframe_bool.rs",
+  "crates/nuxie-runtime/src/animation/keyframe_callback.rs",
+  "crates/nuxie-runtime/src/animation/keyframe_color.rs",
+  "crates/nuxie-runtime/src/animation/keyframe_double.rs",
+  "crates/nuxie-runtime/src/animation/keyframe_string.rs",
+  "crates/nuxie-runtime/src/animation/keyframe_uint.rs",
+  "crates/nuxie-runtime/src/animation/keyed_property.rs",
+  "crates/nuxie-runtime/src/animation/linear_animation.rs",
+  "crates/nuxie-runtime/src/animation/linear_animation_instance.rs",
   "crates/nuxie-runtime/src/artboard.rs",
   "crates/nuxie-runtime/src/state_machine/animation_reset_factory.rs",
 ]
@@ -321,8 +338,10 @@ include = [
 ]
 exclude = []
 rust_modules = [
-  "crates/nuxie-runtime/src/animation.rs",
+  "crates/nuxie-runtime/src/animation/linear_animation.rs",
+  "crates/nuxie-runtime/src/animation/linear_animation_instance.rs",
   "crates/nuxie-runtime/src/state_machine.rs",
+  "crates/nuxie-runtime/src/state_machine/state_machine.rs",
   "crates/nuxie-runtime/src/state_machine/blend_state_direct_instance.rs",
 ]
 static_closure = "Blend-state definitions and instances are virtual animation owners reached through state-machine layer advance."
@@ -485,7 +504,7 @@ status = "faithful"
 upstream = "src/animation/animation_state.cpp"
 source_set = "blend-animation-states"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/state_machine/state_machine.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -493,7 +512,7 @@ status = "faithful"
 upstream = "src/animation/animation_state_instance.cpp"
 source_set = "blend-animation-states"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/state_machine/state_machine.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -501,7 +520,7 @@ status = "faithful"
 upstream = "src/animation/blend_animation.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation.rs", "crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/state_machine/state_machine.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -509,7 +528,7 @@ status = "faithful"
 upstream = "src/animation/blend_animation_1d.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation.rs", "crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/state_machine/state_machine.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -517,7 +536,7 @@ status = "faithful"
 upstream = "src/animation/blend_animation_direct.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation.rs", "crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/state_machine/state_machine.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -525,7 +544,7 @@ status = "faithful"
 upstream = "src/animation/blend_state.cpp"
 source_set = "blend-animation-states"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation.rs", "crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/state_machine/state_machine.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -533,7 +552,7 @@ status = "faithful"
 upstream = "src/animation/blend_state_1d.cpp"
 source_set = "blend-animation-states"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation.rs", "crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/state_machine/state_machine.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -541,7 +560,7 @@ status = "faithful"
 upstream = "src/animation/blend_state_1d_input.cpp"
 source_set = "blend-animation-states"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation.rs", "crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/state_machine/state_machine.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -549,7 +568,7 @@ status = "faithful"
 upstream = "src/animation/blend_state_1d_instance.cpp"
 source_set = "blend-animation-states"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation.rs", "crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/state_machine/state_machine.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -557,7 +576,7 @@ status = "faithful"
 upstream = "src/animation/blend_state_1d_viewmodel.cpp"
 source_set = "blend-animation-states"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation.rs", "crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/state_machine/state_machine.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -565,7 +584,7 @@ status = "faithful"
 upstream = "src/animation/blend_state_direct.cpp"
 source_set = "blend-animation-states"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation.rs", "crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/state_machine/state_machine.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -581,7 +600,7 @@ status = "faithful"
 upstream = "src/animation/blend_state_transition.cpp"
 source_set = "blend-animation-states"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation.rs", "crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/state_machine/state_machine.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -589,7 +608,7 @@ status = "faithful"
 upstream = "src/animation/cubic_ease_interpolator.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/keyframe_interpolator.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -597,7 +616,7 @@ status = "faithful"
 upstream = "src/animation/cubic_interpolator.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/cubic_interpolator.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -605,7 +624,7 @@ status = "faithful"
 upstream = "src/animation/cubic_interpolator_component.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/keyframe_interpolator.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -613,7 +632,7 @@ status = "faithful"
 upstream = "src/animation/cubic_interpolator_solver.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/cubic_interpolator_solver.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -621,7 +640,7 @@ status = "faithful"
 upstream = "src/animation/cubic_value_interpolator.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/cubic_value_interpolator.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -629,7 +648,7 @@ status = "faithful"
 upstream = "src/animation/elastic_ease.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/elastic_ease.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -637,7 +656,7 @@ status = "faithful"
 upstream = "src/animation/elastic_interpolator.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/elastic_interpolator.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -685,7 +704,7 @@ status = "faithful"
 upstream = "src/animation/interpolating_keyframe.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/keyed_property.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -701,7 +720,7 @@ status = "faithful"
 upstream = "src/animation/keyed_object.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/keyed_object.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -709,7 +728,7 @@ status = "faithful"
 upstream = "src/animation/keyed_property.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/keyed_property.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -717,7 +736,7 @@ status = "faithful"
 upstream = "src/animation/keyframe.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/keyframe.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -725,7 +744,7 @@ status = "faithful"
 upstream = "src/animation/keyframe_bool.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/keyframe_bool.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -733,7 +752,7 @@ status = "faithful"
 upstream = "src/animation/keyframe_callback.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/keyframe_callback.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -741,7 +760,7 @@ status = "faithful"
 upstream = "src/animation/keyframe_color.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/keyframe_color.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -749,7 +768,7 @@ status = "faithful"
 upstream = "src/animation/keyframe_double.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/keyframe_double.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -757,7 +776,7 @@ status = "faithful"
 upstream = "src/animation/keyframe_id.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation.rs", "crates/nuxie-runtime/src/animation/keyframe_uint.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -765,7 +784,7 @@ status = "faithful"
 upstream = "src/animation/keyframe_interpolator.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/keyframe_interpolator.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -773,7 +792,7 @@ status = "faithful"
 upstream = "src/animation/keyframe_string.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/keyframe_string.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -781,7 +800,7 @@ status = "faithful"
 upstream = "src/animation/keyframe_uint.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/keyframe_uint.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -797,7 +816,7 @@ status = "faithful"
 upstream = "src/animation/linear_animation.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -805,7 +824,7 @@ status = "faithful"
 upstream = "src/animation/linear_animation_instance.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation_instance.rs"]
 dynamically_reached = true
 status = "faithful"
 
@@ -925,7 +944,7 @@ status = "faithful"
 upstream = "src/animation/nested_animation.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/artboard.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -941,7 +960,7 @@ status = "faithful"
 upstream = "src/animation/nested_linear_animation.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/artboard.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -957,7 +976,7 @@ status = "faithful"
 upstream = "src/animation/nested_remap_animation.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/artboard.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -965,7 +984,7 @@ status = "faithful"
 upstream = "src/animation/nested_simple_animation.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation/linear_animation_instance.rs", "crates/nuxie-runtime/src/artboard.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1205,7 +1224,7 @@ status = "faithful"
 upstream = "src/importers/keyed_property_importer.cpp"
 source_set = "animation-values"
 wave = "FL-B"
-rust_modules = ["crates/nuxie-runtime/src/animation.rs"]
+rust_modules = ["crates/nuxie-runtime/src/animation.rs", "crates/nuxie-runtime/src/animation/keyframe.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -3311,18 +3330,18 @@ drop = ["cpp:src/artboard.cpp:79-140", "rust:crates/nuxie-runtime/src/objects.rs
 id = "keyframe.seconds"
 wave = "FL-B"
 cpp_files = ["src/animation/keyframe.cpp"]
-rust_file = "crates/nuxie-runtime/src/animation.rs"
+rust_file = "crates/nuxie-runtime/src/animation/keyframe.rs"
 rust_anchor = "pub enum RuntimeKeyFrame"
 status = "faithful"
 [member.lifecycle]
-construct = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
-retain = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
-dirty = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
-update = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
-advance = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
-draw = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
-clone = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
-drop = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
+construct = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation/keyframe.rs:1-124"]
+retain = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation/keyframe.rs:1-124"]
+dirty = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation/keyframe.rs:1-124"]
+update = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation/keyframe.rs:1-124"]
+advance = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation/keyframe.rs:1-124"]
+draw = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation/keyframe.rs:1-124"]
+clone = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation/keyframe.rs:1-124"]
+drop = ["cpp:src/animation/keyframe.cpp:1-21", "rust:crates/nuxie-runtime/src/animation/keyframe.rs:1-124"]
 
 [[member]]
 id = "keyframe.values"
@@ -3334,86 +3353,86 @@ cpp_files = [
   "src/animation/keyframe_string.cpp",
   "src/animation/keyframe_uint.cpp",
 ]
-rust_file = "crates/nuxie-runtime/src/animation.rs"
+rust_file = "crates/nuxie-runtime/src/animation/keyframe_double.rs"
 rust_anchor = "pub struct RuntimeKeyFrameDouble"
 status = "faithful"
 [member.lifecycle]
-construct = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
-retain = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
-dirty = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
-update = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
-advance = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
-draw = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
-clone = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
-drop = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation.rs:1507-1680"]
+construct = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation/keyframe_double.rs:1-16"]
+retain = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation/keyframe_double.rs:1-16"]
+dirty = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation/keyframe_double.rs:1-16"]
+update = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation/keyframe_double.rs:1-16"]
+advance = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation/keyframe_double.rs:1-16"]
+draw = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation/keyframe_double.rs:1-16"]
+clone = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation/keyframe_double.rs:1-16"]
+drop = ["cpp:src/animation/keyframe_double.cpp:1-75", "rust:crates/nuxie-runtime/src/animation/keyframe_double.rs:1-16"]
 
 [[member]]
 id = "keyed_property.targets"
 wave = "FL-B"
 cpp_files = ["src/animation/keyed_property.cpp"]
-rust_file = "crates/nuxie-runtime/src/animation.rs"
+rust_file = "crates/nuxie-runtime/src/animation/keyed_property.rs"
 rust_anchor = "pub struct RuntimeKeyedProperty"
 status = "faithful"
 [member.lifecycle]
-construct = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation.rs:1147-1505"]
-retain = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation.rs:1147-1505"]
-dirty = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation.rs:1147-1505"]
-update = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation.rs:1147-1505"]
-advance = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation.rs:1147-1505"]
-draw = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation.rs:1147-1505"]
-clone = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation.rs:1147-1505"]
-drop = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation.rs:1147-1505"]
+construct = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation/keyed_property.rs:1-349"]
+retain = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation/keyed_property.rs:1-349"]
+dirty = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation/keyed_property.rs:1-349"]
+update = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation/keyed_property.rs:1-349"]
+advance = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation/keyed_property.rs:1-349"]
+draw = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation/keyed_property.rs:1-349"]
+clone = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation/keyed_property.rs:1-349"]
+drop = ["cpp:src/animation/keyed_property.cpp:1-196", "rust:crates/nuxie-runtime/src/animation/keyed_property.rs:1-349"]
 
 [[member]]
 id = "keyed_object.membership"
 wave = "FL-B"
 cpp_files = ["src/animation/keyed_object.cpp"]
-rust_file = "crates/nuxie-runtime/src/animation.rs"
+rust_file = "crates/nuxie-runtime/src/animation/keyed_object.rs"
 rust_anchor = "pub struct RuntimeKeyedObject"
 status = "faithful"
 [member.lifecycle]
-construct = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation.rs:1139-1155"]
-retain = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation.rs:1139-1155"]
-dirty = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation.rs:1139-1155"]
-update = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation.rs:1139-1155"]
-advance = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation.rs:1139-1155"]
-draw = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation.rs:1139-1155"]
-clone = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation.rs:1139-1155"]
-drop = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation.rs:1139-1155"]
+construct = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation/keyed_object.rs:1-7"]
+retain = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation/keyed_object.rs:1-7"]
+dirty = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation/keyed_object.rs:1-7"]
+update = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation/keyed_object.rs:1-7"]
+advance = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation/keyed_object.rs:1-7"]
+draw = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation/keyed_object.rs:1-7"]
+clone = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation/keyed_object.rs:1-7"]
+drop = ["cpp:src/animation/keyed_object.cpp:1-106", "rust:crates/nuxie-runtime/src/animation/keyed_object.rs:1-7"]
 
 [[member]]
 id = "linear_animation.definition"
 wave = "FL-B"
 cpp_files = ["src/animation/linear_animation.cpp"]
-rust_file = "crates/nuxie-runtime/src/animation.rs"
+rust_file = "crates/nuxie-runtime/src/animation/linear_animation.rs"
 rust_anchor = "pub struct RuntimeLinearAnimation"
 status = "faithful"
 [member.lifecycle]
-construct = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation.rs:819-1138"]
-retain = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation.rs:819-1138"]
-dirty = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation.rs:819-1138"]
-update = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation.rs:819-1138"]
-advance = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation.rs:819-1138"]
-draw = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation.rs:819-1138"]
-clone = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation.rs:819-1138"]
-drop = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation.rs:819-1138"]
+construct = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation/linear_animation.rs:1-404"]
+retain = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation/linear_animation.rs:1-404"]
+dirty = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation/linear_animation.rs:1-404"]
+update = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation/linear_animation.rs:1-404"]
+advance = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation/linear_animation.rs:1-404"]
+draw = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation/linear_animation.rs:1-404"]
+clone = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation/linear_animation.rs:1-404"]
+drop = ["cpp:src/animation/linear_animation.cpp:1-168", "rust:crates/nuxie-runtime/src/animation/linear_animation.rs:1-404"]
 
 [[member]]
 id = "linear_animation.instance"
 wave = "FL-B"
 cpp_files = ["src/animation/linear_animation_instance.cpp"]
-rust_file = "crates/nuxie-runtime/src/animation.rs"
+rust_file = "crates/nuxie-runtime/src/animation/linear_animation_instance.rs"
 rust_anchor = "pub struct LinearAnimationInstance"
 status = "faithful"
 [member.lifecycle]
-construct = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation.rs:1738-2470"]
-retain = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation.rs:1738-2470"]
-dirty = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation.rs:1738-2470"]
-update = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation.rs:1738-2470"]
-advance = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation.rs:1738-2470"]
-draw = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation.rs:1738-2470"]
-clone = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation.rs:1738-2470"]
-drop = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation.rs:1738-2470"]
+construct = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation/linear_animation_instance.rs:1-825"]
+retain = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation/linear_animation_instance.rs:1-825"]
+dirty = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation/linear_animation_instance.rs:1-825"]
+update = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation/linear_animation_instance.rs:1-825"]
+advance = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation/linear_animation_instance.rs:1-825"]
+draw = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation/linear_animation_instance.rs:1-825"]
+clone = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation/linear_animation_instance.rs:1-825"]
+drop = ["cpp:src/animation/linear_animation_instance.cpp:1-445", "rust:crates/nuxie-runtime/src/animation/linear_animation_instance.rs:1-825"]
 
 [[member]]
 id = "animation.reset"

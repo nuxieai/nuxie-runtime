@@ -711,7 +711,7 @@ impl<'factory> RawText<'factory> {
         if let Some(style) = self.styles.get_mut(style_index) {
             let mut commands = crate::draw::runtime_path_commands_from_raw_path(&style.raw_path);
             commands.extend(pen.commands);
-            style.raw_path = crate::draw::runtime_raw_path_from_commands(&commands);
+            style.raw_path = crate::math::raw_path::runtime_raw_path_from_commands(&commands);
             if style.is_empty {
                 style.is_empty = false;
                 self.render_styles.push(style_index);

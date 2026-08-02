@@ -11,10 +11,9 @@ use nuxie_image_codec::decoded_rgba_len;
 use nuxie_render_api::{
     Aabb as RenderAabb, BlendMode as RenderBlendMode, Factory as RenderFactory,
     FillRule as RenderFillRule, ImageDecodeError, ImageSampler as RenderImageSampler,
-    Mat2D as RenderMat2D, PathVerb as RenderPathVerb, RawPath, RawPathBuilder, RenderBuffer,
-    RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath,
-    RenderShader, Renderer, StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin,
-    Vec2D as RenderVec2D,
+    Mat2D as RenderMat2D, PathVerb as RenderPathVerb, RawPath, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
+    Renderer, StrokeCap as RenderStrokeCap, StrokeJoin as RenderStrokeJoin, Vec2D as RenderVec2D,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -30,6 +29,11 @@ use taffy::prelude::{
 use taffy::style::Direction as TaffyDirection;
 
 use crate::components::ComponentHandle;
+pub use crate::math::raw_path::runtime_path_commands_from_raw_path;
+use crate::math::raw_path::{
+    path_commands_backwards, prune_empty_path_segments, prune_empty_path_segments_from,
+    runtime_raw_path_from_commands, runtime_rebuild_raw_path_from_commands,
+};
 use crate::objects::InstanceObjectArena;
 use crate::properties::{
     RuntimeLayoutComputedProperty, artboard_index_for_graph, cached_property_key_for_name,
@@ -38,12 +42,12 @@ use crate::properties::{
     runtime_object_uint_property_by_key, shape_paint_is_visible_property_key,
     solid_color_value_property_key,
 };
-use crate::scripting::{ScriptNode, script_paint_for_shape};
 use crate::shapes::paint::shape_paint_path::RuntimeShapePaintPathOwner;
 use crate::shapes::paint::stroke::{
     runtime_stroke_cap, runtime_stroke_join, runtime_stroke_thickness,
     runtime_stroke_thickness_for_local, runtime_stroke_uint_property,
 };
+use crate::shapes::paint::stroke_effect::runtime_stroke_effect_path_commands;
 use crate::shapes::shape_paint_container::runtime_shape_paint_container_is_occurrence_owned;
 use crate::text::{
     RuntimeIntegratedColorGlyphCommand, RuntimeTextDrawOrder, RuntimeTextLayoutConstraint,
@@ -4481,7 +4485,7 @@ impl ArtboardInstance {
                 && drawable.family == RuntimeDrawableFamily::Shape
                 && let Some(shape_local) = drawable.local_id
             {
-                runtime_draw_live_owned_shape(
+                crate::shapes::shape::runtime_draw_live_owned_shape(
                     self,
                     graph,
                     drawable,
@@ -4659,7 +4663,7 @@ impl ArtboardInstance {
         ])
     }
 
-    fn retained_drawable_component<'a>(
+    pub(crate) fn retained_drawable_component<'a>(
         &'a self,
         drawable: &RuntimeDrawable,
     ) -> Option<&'a RuntimeComponent> {
@@ -8197,7 +8201,7 @@ impl ArtboardInstance {
         Some(length)
     }
 
-    fn runtime_shape_path_commands_from_owners(
+    pub(crate) fn runtime_shape_path_commands_from_owners(
         &self,
         shape_local: usize,
         path_kind: ShapePaintPathKind,
@@ -8314,184 +8318,7 @@ impl ArtboardInstance {
         commands
     }
 
-    /// Direct port of pinned C++ `Path::update`
-    /// (`src/shapes/path.cpp:336-380`). The source RawPath belongs to the
-    /// runtime Path occurrence and is settled before its PathComposer node.
-    pub(crate) fn update_runtime_path_owner(
-        &mut self,
-        path_handle: ComponentHandle,
-        dirt: ComponentDirt,
-        graph: &ArtboardGraph,
-        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    ) {
-        let Some(path_local) = self.objects.component_local_id(path_handle) else {
-            return;
-        };
-        let Some(path) = graph.paths.iter().find(|path| path.local_id == path_local) else {
-            return;
-        };
-        let shape_local = self
-            .objects
-            .component(path_handle)
-            .and_then(|component| component.concrete.path.as_ref())
-            .and_then(|path| path.shape)
-            .and_then(|shape| self.objects.component_local_id(shape));
-        let has_deformer = shape_local.is_some_and(|shape_local| {
-            n_sliced_node::runtime_nsliced_node_context_for_shape(
-                self,
-                graph,
-                shape_local,
-                layout_bounds,
-            )
-            .is_some()
-        });
-        let Some((owner_dirty, owner_has_path)) = self
-            .runtime_shapes
-            .paths_by_local
-            .get(path_local)
-            .and_then(Option::as_ref)
-            .map(|owner| (owner.dirty.get(), owner.retained.borrow().is_some()))
-        else {
-            return;
-        };
-        let should_rebuild = !owner_has_path
-            || !(dirt & (ComponentDirt::PATH | ComponentDirt::N_SLICER)).is_empty()
-            || (has_deformer && dirt.contains(ComponentDirt::WORLD_TRANSFORM));
-        if !owner_dirty && !should_rebuild {
-            return;
-        }
-        if !should_rebuild {
-            if let Some(owner) = self
-                .runtime_shapes
-                .paths_by_local
-                .get(path_local)
-                .and_then(Option::as_ref)
-            {
-                owner.dirty.set(false);
-            }
-            return;
-        }
-
-        if self.runtime_path_can_defer_update(path_handle) {
-            if let Some(path) = self
-                .objects
-                .component_mut(path_handle)
-                .and_then(|component| component.concrete.path.as_mut())
-            {
-                path.deferred_path_dirt.set(true);
-            }
-            if let Some(owner) = self
-                .runtime_shapes
-                .paths_by_local
-                .get(path_local)
-                .and_then(Option::as_ref)
-            {
-                owner.dirty.set(false);
-            }
-            return;
-        }
-
-        if let Some(path) = self
-            .objects
-            .component_mut(path_handle)
-            .and_then(|component| component.concrete.path.as_mut())
-        {
-            path.deferred_path_dirt.set(false);
-        }
-
-        let runtime_path = self.runtime_path_geometry_with_layout_control(path, layout_bounds);
-        if self.runtime_skinnable_handle_has_skin(path_handle) {
-            for vertex in &runtime_path.vertices {
-                self.deform_runtime_vertex_weight(
-                    vertex.local_id,
-                    vertex_translation(vertex),
-                    cubic_vertex_points(vertex),
-                );
-            }
-        }
-        let weighted_context = self
-            .runtime_skinnable_handle_has_skin(path_handle)
-            .then_some(WeightedPathContext { instance: self });
-        let mut commands = path_commands(
-            &runtime_path,
-            ShapePaintPathKind::World,
-            Mat2D::IDENTITY,
-            weighted_context.as_ref(),
-        );
-        prune_empty_path_segments(&mut commands);
-        let owner = self
-            .runtime_shapes
-            .paths_by_local
-            .get(path_local)
-            .and_then(Option::as_ref)
-            .expect("Path owner must remain live during its update");
-        owner.retained.replace(Some(RuntimeOwnedPath {
-            path: Arc::new(runtime_path),
-            raw_path: Arc::new(runtime_raw_path_from_commands(&commands)),
-            has_weighted_context: weighted_context.is_some(),
-        }));
-        owner.dirty.set(false);
-    }
-
-    /// Literal `Path::canDeferPathUpdate` / `Shape::canDeferPathUpdate`.
-    ///
-    /// The decision reads only occurrence-owned Shape/Path pointers, flags,
-    /// opacity, and dependency relations. FollowPath and clipping producers
-    /// therefore prevent deferral at the same owner boundary as C++
-    /// (`src/shapes/path.cpp:111-125`; `src/shapes/shape.cpp:35-51`).
-    pub(crate) fn runtime_path_can_defer_update(&self, path_handle: ComponentHandle) -> bool {
-        let Some(path) = self
-            .objects
-            .component(path_handle)
-            .and_then(|component| component.concrete.path.as_ref())
-        else {
-            return false;
-        };
-        let Some(shape_handle) = path.shape else {
-            return false;
-        };
-        let Some(shape_component) = self.objects.component(shape_handle) else {
-            return false;
-        };
-        let Some(_shape) = shape_component.concrete.shape.as_ref() else {
-            return false;
-        };
-        let container_path_flags =
-            self.runtime_shape_paint_container_path_flags(shape_component.local_id);
-        let clipping_or_never_defer = container_path_flags
-            & u64::from(
-                crate::components::RuntimeShapeState::CLIPPING
-                    | crate::components::RuntimeShapeState::NEVER_DEFER_UPDATE,
-            )
-            != 0;
-        let has_skinned_path_dependent =
-            shape_component.dependents.iter().copied().any(|dependent| {
-                self.objects.component(dependent).is_some_and(|component| {
-                    component.type_name == "PointsPath"
-                        && component
-                            .concrete
-                            .skinnable
-                            .as_ref()
-                            .and_then(|skinnable| skinnable.skin)
-                            .is_some()
-                })
-            });
-        let follow_path_consumer = container_path_flags
-            & u64::from(crate::components::RuntimeShapeState::FOLLOW_PATH)
-            != 0
-            || path.is_flagged(
-                crate::components::RuntimePathState::FOLLOW_PATH
-                    | crate::components::RuntimePathState::CLIPPING,
-            );
-        crate::shapes::shape::can_defer_path_update(
-            shape_component.transform.render_opacity,
-            clipping_or_never_defer,
-            has_skinned_path_dependent,
-            follow_path_consumer,
-        )
-    }
-
-    fn runtime_shape_paint_container_path_flags(&self, shape_local: usize) -> u64 {
+    pub(crate) fn runtime_shape_paint_container_path_flags(&self, shape_local: usize) -> u64 {
         let container_flags = self
             .component(shape_local)
             .and_then(|component| component.concrete.shape.as_ref())
@@ -8512,140 +8339,6 @@ impl ArtboardInstance {
                     },
                 )
             })
-    }
-
-    /// Pinned C++ `PathComposer::update` geometry composition
-    /// (`src/shapes/path_composer.cpp:38-112`). The embedded composer is a
-    /// real dependency node; all CPU geometry settles here, never in
-    /// `Shape::draw`. Its separate `m_deferredPathDirt` lifecycle remains in
-    /// the manifest's FL-E PathComposer slice (`path_composer.cpp:29-49`).
-    pub(crate) fn update_runtime_path_composer(
-        &self,
-        shape_local: usize,
-        dirt: ComponentDirt,
-        graph: &ArtboardGraph,
-        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    ) {
-        if (dirt & (ComponentDirt::PATH | ComponentDirt::N_SLICER | ComponentDirt::FILTHY))
-            .is_empty()
-        {
-            return;
-        }
-
-        let Some(shape) = self.runtime_shapes.get(shape_local) else {
-            return;
-        };
-        shape.world_bounds.set(None);
-        shape.world_length.set(None);
-        let _path_flags = self.runtime_shape_paint_container_path_flags(shape_local);
-        for (_flag, path_kind, runtime_kind) in [
-            (
-                crate::shapes::shape_paint_container::PATH_FLAG_LOCAL,
-                ShapePaintPathKind::Local,
-                RuntimeShapePaintPathKind::Local,
-            ),
-            (
-                crate::shapes::shape_paint_container::PATH_FLAG_LOCAL_CLOCKWISE,
-                ShapePaintPathKind::LocalClockwise,
-                RuntimeShapePaintPathKind::LocalClockwise,
-            ),
-            (
-                crate::shapes::shape_paint_container::PATH_FLAG_WORLD,
-                ShapePaintPathKind::World,
-                RuntimeShapePaintPathKind::World,
-            ),
-        ] {
-            // C++ materializes only spaces named by `pathFlags`. Rust's
-            // renderer-neutral geometry and hit-test APIs share these three
-            // retained CPU slots, so they remain eagerly available even when
-            // no current paint selects one. The aggregate above is still the
-            // authoritative Shape::isFlagged value used by deferral.
-            let mut commands = self.runtime_shape_path_commands_from_owners(
-                shape_local,
-                path_kind,
-                graph,
-                layout_bounds,
-            );
-            prune_empty_path_segments(&mut commands);
-            shape.paint_paths[runtime_shape_paint_path_kind_slot(runtime_kind)].replace_retained(
-                RuntimeShapePathState {
-                    raw_path: Arc::new(runtime_raw_path_from_commands(&commands)),
-                },
-            );
-        }
-        crate::shapes::shape_paint_container::invalidate_stroke_effects(
-            shape.paint_container_family.unwrap_or(
-                crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily::Shape,
-            ),
-            &shape.paint_owners,
-            |paint| paint.invalidate_all_effects(),
-        );
-    }
-
-    /// Direct port of pinned C++ `ClippingShape::update`
-    /// (`src/shapes/clipping_shape.cpp:151-173`). The dependency node rewinds
-    /// its occurrence-owned world path only under Path/WorldTransform/NSlicer
-    /// dirt; `emptyClipCount` and draw read the retained pointer thereafter.
-    pub(crate) fn update_runtime_clipping_shape_owner(&self, local_id: usize, dirt: ComponentDirt) {
-        if (dirt & (ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER))
-            .is_empty()
-        {
-            return;
-        }
-        let Some(owner) = self.runtime_clipping_shapes.get(local_id) else {
-            return;
-        };
-
-        let fill_rule = runtime_draw_property_key_for_name("ClippingShape", "fillRule")
-            .and_then(|key| self.uint_property(local_id, key))
-            .unwrap_or(owner.authored_fill_rule);
-        owner.fill_rule.set(runtime_fill_rule_for_value(fill_rule));
-
-        let mut path = owner.path.borrow_mut();
-        path.rewind();
-        let mut has_path = false;
-        for shape_local in &owner.shape_locals {
-            let Some(shape) = self.runtime_shapes.get(*shape_local) else {
-                continue;
-            };
-            let world_path = shape.paint_paths
-                [runtime_shape_paint_path_kind_slot(RuntimeShapePaintPathKind::World)]
-            .retained
-            .borrow();
-            let Some(world_path) = world_path.as_ref() else {
-                continue;
-            };
-            if world_path.raw_path.verbs().is_empty() {
-                continue;
-            }
-            path.add_path(world_path.raw_path.as_ref(), RenderMat2D::IDENTITY);
-            has_path = true;
-        }
-        owner.has_path.set(has_path);
-    }
-
-    fn runtime_path_geometry_with_layout_control(
-        &self,
-        path: &PathGeometryNode,
-        layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    ) -> PathGeometryNode {
-        let mut runtime_path = runtime_path_geometry(self, path);
-        let Some(layout_bounds) = layout_bounds else {
-            return runtime_path;
-        };
-        let Some(control_size) =
-            self.runtime_layout_control_size_for_path(path.local_id, layout_bounds)
-        else {
-            return runtime_path;
-        };
-        if let Some(parametric) = runtime_path.parametric.take() {
-            runtime_path.parametric = Some(parametric_path_with_control_size(
-                parametric,
-                control_size.width,
-                control_size.height,
-            ));
-        }
-        runtime_path
     }
 
     pub(crate) fn runtime_layout_control_size_for_path(
@@ -8760,7 +8453,7 @@ impl ArtboardInstance {
 #[derive(Debug, Default)]
 pub(crate) struct RuntimeShapeList {
     by_local: Vec<Option<RuntimeShape>>,
-    paths_by_local: Vec<Option<RuntimePathOwner>>,
+    pub(crate) paths_by_local: Vec<Option<RuntimePathOwner>>,
     shape_by_path_local: Vec<Option<usize>>,
     paint_owners_by_component_local: Vec<Vec<RuntimeShapePaintOwnerRef>>,
     effect_owners_by_component_local: Vec<Vec<RuntimeShapeEffectOwnerRef>>,
@@ -8794,16 +8487,16 @@ impl Clone for RuntimeShapeList {
 }
 
 #[derive(Debug, Clone)]
-struct RuntimeOwnedPath {
-    path: Arc<PathGeometryNode>,
-    raw_path: Arc<RawPath>,
-    has_weighted_context: bool,
+pub(crate) struct RuntimeOwnedPath {
+    pub(crate) path: Arc<PathGeometryNode>,
+    pub(crate) raw_path: Arc<RawPath>,
+    pub(crate) has_weighted_context: bool,
 }
 
 #[derive(Debug)]
-struct RuntimePathOwner {
-    dirty: Cell<bool>,
-    retained: RefCell<Option<RuntimeOwnedPath>>,
+pub(crate) struct RuntimePathOwner {
+    pub(crate) dirty: Cell<bool>,
+    pub(crate) retained: RefCell<Option<RuntimeOwnedPath>>,
 }
 
 impl Clone for RuntimePathOwner {
@@ -8830,15 +8523,15 @@ impl Default for RuntimePathOwner {
 }
 
 #[derive(Debug)]
-struct RuntimeShape {
+pub(crate) struct RuntimeShape {
     path_locals: Vec<usize>,
     paint_container_index: Option<usize>,
-    paint_container_family:
+    pub(crate) paint_container_family:
         Option<crate::shapes::shape_paint_container::RuntimeShapePaintContainerFamily>,
-    paint_paths: [RuntimeShapePaintPathOwner; 3],
-    paint_owners: Vec<RuntimeShapePaintOwner>,
-    world_bounds: Cell<Option<RenderAabb>>,
-    world_length: Cell<Option<f32>>,
+    pub(crate) paint_paths: [RuntimeShapePaintPathOwner; 3],
+    pub(crate) paint_owners: Vec<RuntimeShapePaintOwner>,
+    pub(crate) world_bounds: Cell<Option<RenderAabb>>,
+    pub(crate) world_length: Cell<Option<f32>>,
 }
 
 impl Clone for RuntimeShape {
@@ -8947,16 +8640,16 @@ impl RuntimePathBackendSlot {
 }
 
 #[derive(Default)]
-struct RuntimePaintBackendState {
+pub(crate) struct RuntimePaintBackendState {
     context_id: Option<u64>,
-    paint: Option<Box<dyn RenderPaint>>,
+    pub(crate) paint: Option<Box<dyn RenderPaint>>,
     shader: Option<Box<dyn RenderShader>>,
     shader_state: Option<RuntimeShapePaintState>,
 }
 
 #[derive(Default)]
-struct RuntimePaintBackendSlot {
-    value: RefCell<RuntimePaintBackendState>,
+pub(crate) struct RuntimePaintBackendSlot {
+    pub(crate) value: RefCell<RuntimePaintBackendState>,
 }
 
 impl std::fmt::Debug for RuntimePaintBackendSlot {
@@ -8981,10 +8674,10 @@ impl Clone for RuntimePaintBackendSlot {
 /// C++ exactly: unsupported effects do not replace the incoming path, while a
 /// supported effect may own an empty path.
 #[derive(Debug)]
-struct RuntimeShapeEffectPathOwner {
+pub(crate) struct RuntimeShapeEffectPathOwner {
     dirty: Cell<bool>,
-    retained: RefCell<Option<Option<RuntimeShapePathState>>>,
-    backend: RuntimePathBackendSlot,
+    pub(crate) retained: RefCell<Option<Option<RuntimeShapePathState>>>,
+    pub(crate) backend: RuntimePathBackendSlot,
 }
 
 impl Clone for RuntimeShapeEffectPathOwner {
@@ -9007,14 +8700,14 @@ impl Default for RuntimeShapeEffectPathOwner {
 /// fixed at construction; mutator, feather, effect-path, and RenderPaint state
 /// live directly on this occurrence and are settled by component updates.
 #[derive(Debug)]
-struct RuntimeShapePaintOwner {
+pub(crate) struct RuntimeShapePaintOwner {
     paint_index: usize,
-    paint_local: usize,
+    pub(crate) paint_local: usize,
     paint_global_id: u32,
     mutator_local: Option<usize>,
     feather_local: Option<usize>,
-    paint_type: RuntimeShapePaintKind,
-    authored_fill_rule: RenderFillRule,
+    pub(crate) paint_type: RuntimeShapePaintKind,
+    pub(crate) authored_fill_rule: RenderFillRule,
     authored_path_kind: RuntimeShapePaintPathKind,
     authored_blend_mode_value: u32,
     container_local: usize,
@@ -9023,14 +8716,14 @@ struct RuntimeShapePaintOwner {
     feather_dirty: Cell<bool>,
     backend_queued: Cell<bool>,
     effect_dirty_from: Cell<Option<usize>>,
-    effect_paths: Vec<RuntimeShapeEffectPathOwner>,
+    pub(crate) effect_paths: Vec<RuntimeShapeEffectPathOwner>,
     paint_state: RefCell<Option<RuntimeShapePaintState>>,
     pending_gradient_states: RefCell<Vec<RuntimeShapePaintState>>,
     initial_gradient_event_supplied: Cell<bool>,
-    feather_state: RefCell<Option<RuntimeFeatherState>>,
-    inner_feather_path: RefCell<Option<RuntimeShapePathState>>,
-    backend: RuntimePaintBackendSlot,
-    inner_feather_backend: RuntimePathBackendSlot,
+    pub(crate) feather_state: RefCell<Option<RuntimeFeatherState>>,
+    pub(crate) inner_feather_path: RefCell<Option<RuntimeShapePathState>>,
+    pub(crate) backend: RuntimePaintBackendSlot,
+    pub(crate) inner_feather_backend: RuntimePathBackendSlot,
 }
 
 impl Clone for RuntimeShapePaintOwner {
@@ -9126,7 +8819,7 @@ impl RuntimeShapePaintOwner {
         );
     }
 
-    fn invalidate_all_effects(&self) {
+    pub(crate) fn invalidate_all_effects(&self) {
         self.invalidate_effects_from(0);
     }
 
@@ -9374,7 +9067,7 @@ impl RuntimeShapeList {
         })
     }
 
-    fn get(&self, shape_local: usize) -> Option<&RuntimeShape> {
+    pub(crate) fn get(&self, shape_local: usize) -> Option<&RuntimeShape> {
         self.by_local.get(shape_local)?.as_ref()
     }
 
@@ -9442,7 +9135,7 @@ impl RuntimeShapeList {
             .map(|path| path.raw_path.mutation_id())
     }
 
-    fn paint_path_owner(
+    pub(crate) fn paint_path_owner(
         &self,
         shape_local: usize,
         path_kind: RuntimeShapePaintPathKind,
@@ -9641,19 +9334,19 @@ impl RuntimeClippingShapeList {
         owners
     }
 
-    fn get(&self, local_id: usize) -> Option<&RuntimeClippingShapeOwner> {
+    pub(crate) fn get(&self, local_id: usize) -> Option<&RuntimeClippingShapeOwner> {
         self.by_local.get(local_id)?.as_ref()
     }
 }
 
 #[derive(Debug)]
-struct RuntimeClippingShapeOwner {
-    shape_locals: Vec<usize>,
-    authored_fill_rule: u64,
+pub(crate) struct RuntimeClippingShapeOwner {
+    pub(crate) shape_locals: Vec<usize>,
+    pub(crate) authored_fill_rule: u64,
     authored_is_visible: bool,
-    path: RefCell<RawPath>,
-    has_path: Cell<bool>,
-    fill_rule: Cell<RenderFillRule>,
+    pub(crate) path: RefCell<RawPath>,
+    pub(crate) has_path: Cell<bool>,
+    pub(crate) fill_rule: Cell<RenderFillRule>,
     backend: RuntimePathBackendSlot,
 }
 
@@ -13996,7 +13689,7 @@ struct RuntimeCachedPathGeometryCommands {
     has_weighted_context: bool,
 }
 
-fn runtime_shape_paint_path_kind_slot(path_kind: RuntimeShapePaintPathKind) -> usize {
+pub(crate) fn runtime_shape_paint_path_kind_slot(path_kind: RuntimeShapePaintPathKind) -> usize {
     match path_kind {
         RuntimeShapePaintPathKind::Local => 0,
         RuntimeShapePaintPathKind::LocalClockwise => 1,
@@ -14006,7 +13699,7 @@ fn runtime_shape_paint_path_kind_slot(path_kind: RuntimeShapePaintPathKind) -> u
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RuntimeShapePathState {
-    raw_path: Arc<RawPath>,
+    pub(crate) raw_path: Arc<RawPath>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15870,7 +15563,7 @@ fn runtime_draw_live_owned_artboard_paints(
         else {
             continue;
         };
-        runtime_draw_live_owned_shape_paint(
+        crate::shapes::paint::shape_paint::runtime_draw_live_owned_shape_paint(
             instance,
             shape_world,
             owner,
@@ -17411,206 +17104,6 @@ fn runtime_owned_shape_gradient_is_collapsed(
     })
 }
 
-/// Direct port of C++ `Shape::draw` and `ShapePaint::draw`
-/// (`src/shapes/shape.cpp:137-159`,
-/// `src/shapes/paint/shape_paint.cpp:78-191`). Shape memberships and paths are
-/// already retained by the clone-owned Shape; this adapter draws those live
-/// paints without constructing a `RuntimeDrawableDispatch`.
-fn runtime_draw_live_owned_shape(
-    instance: &ArtboardInstance,
-    graph: &ArtboardGraph,
-    drawable: &RuntimeDrawable,
-    shape_local: usize,
-    layout_bounds: Option<&BTreeMap<usize, RuntimeLayoutBounds>>,
-    drawable_needs_save_operation: bool,
-    backend_context_id: u64,
-    factory: &mut dyn RenderFactory,
-    renderer: &mut dyn Renderer,
-) -> Result<()> {
-    let paint_count = instance
-        .runtime_shapes
-        .get(shape_local)
-        .map_or(0, |shape| shape.paint_owners.len());
-    let needs_save_operation =
-        crate::shapes::shape::needs_save_operation(drawable_needs_save_operation, paint_count);
-
-    for owner_index in 0..paint_count {
-        // C++ `Shape::draw` reads `worldTransform()` directly from the
-        // inherited Component (`shape.cpp:137-159`). Use the retained
-        // Drawable->Component link for the ordinary path. Layout-backed
-        // transforms keep the existing compatibility adapter until their
-        // owner publishes the solved transform into Component.
-        let shape_world = instance
-            .retained_drawable_component(drawable)
-            .filter(|component| {
-                component.type_name != "LayoutComponent"
-                    && component.type_name != "NestedArtboardLayout"
-                    && (layout_bounds.is_none() || component.layout_ancestors.is_empty())
-            })
-            .map(|component| component.transform.world_transform)
-            .unwrap_or_else(|| {
-                instance.runtime_component_world_transform_with_bounds(
-                    shape_local,
-                    graph,
-                    layout_bounds,
-                )
-            });
-        let Some(owner) = instance
-            .runtime_shapes
-            .get(shape_local)
-            .and_then(|shape| shape.paint_owners.get(owner_index))
-        else {
-            continue;
-        };
-        // Direct C++ `Shape::draw` read: visibility belongs to the live
-        // ShapePaint, not to a prepared draw command.
-        if !runtime_owned_shape_paint_is_visible(instance, owner) {
-            continue;
-        }
-        let live_path_kind = runtime_live_owned_shape_paint_path_kind(instance, owner);
-        let Some(source_path) = instance
-            .runtime_shapes
-            .paint_path_owner(shape_local, live_path_kind)
-        else {
-            continue;
-        };
-        runtime_draw_live_owned_shape_paint(
-            instance,
-            shape_world,
-            owner,
-            source_path,
-            live_path_kind,
-            needs_save_operation,
-            backend_context_id,
-            factory,
-            renderer,
-        )?;
-    }
-    Ok(())
-}
-
-/// Direct port of C++ `ShapePaint::draw` for clone-owned Shape paints. The
-/// selected ShapePaintPath and RenderPaint are owner resources; no command
-/// object is constructed or consulted on a clean draw.
-fn runtime_draw_live_owned_shape_paint(
-    instance: &ArtboardInstance,
-    shape_world: Mat2D,
-    owner: &RuntimeShapePaintOwner,
-    source_path: &RuntimeShapePaintPathOwner,
-    live_path_kind: RuntimeShapePaintPathKind,
-    needs_save_operation: bool,
-    backend_context_id: u64,
-    factory: &mut dyn RenderFactory,
-    renderer: &mut dyn Renderer,
-) -> Result<()> {
-    let source_retained = source_path.retained.borrow();
-    let Some(source_retained) = source_retained.as_ref() else {
-        return Ok(());
-    };
-    let active_effect = owner.effect_paths.iter().rev().find(|effect| {
-        effect
-            .retained
-            .borrow()
-            .as_ref()
-            .is_some_and(Option::is_some)
-    });
-    let effect_retained = active_effect.map(|effect| effect.retained.borrow());
-    let effect_path = effect_retained
-        .as_ref()
-        .and_then(|retained| retained.as_ref())
-        .and_then(|path| path.as_ref());
-    let feather_state = owner.feather_state.borrow();
-    let inner_feather_path = owner.inner_feather_path.borrow();
-    let mut saved = !needs_save_operation;
-    if let Some(feather) = feather_state.as_ref()
-        && runtime_feather_uses_world_space(feather)
-        && !feather.inner
-        && runtime_feather_has_offset(feather)
-    {
-        if !saved {
-            saved = true;
-            renderer.save();
-        }
-        renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
-    }
-    if matches!(
-        live_path_kind,
-        RuntimeShapePaintPathKind::Local | RuntimeShapePaintPathKind::LocalClockwise
-    ) {
-        if !saved {
-            saved = true;
-            renderer.save();
-        }
-        renderer.transform(runtime_render_mat(shape_world));
-    }
-
-    if let Some(feather) = feather_state.as_ref() {
-        if feather.inner {
-            if feather.inner_path_commands.is_empty() {
-                return Ok(());
-            }
-            if !saved {
-                saved = true;
-                renderer.save();
-            }
-            let clip_backend = active_effect
-                .map(|effect| &effect.backend)
-                .unwrap_or(&source_path.backend);
-            let clip_raw_path = effect_path
-                .map(|path| path.raw_path.as_ref())
-                .unwrap_or_else(|| source_retained.raw_path.as_ref());
-            clip_backend.with_path(
-                backend_context_id,
-                factory,
-                clip_raw_path,
-                RenderFillRule::Clockwise,
-                None,
-                |clip_path| renderer.clip_path(clip_path),
-            );
-        } else if !runtime_feather_uses_world_space(feather) && runtime_feather_has_offset(feather)
-        {
-            if !saved {
-                saved = true;
-                renderer.save();
-            }
-            renderer.transform(runtime_translation(feather.offset_x, feather.offset_y));
-        }
-    }
-
-    let (draw_backend, draw_raw_path) = if let Some(inner_path) = inner_feather_path.as_ref() {
-        (&owner.inner_feather_backend, inner_path.raw_path.as_ref())
-    } else if let (Some(effect), Some(path)) = (active_effect, effect_path) {
-        (&effect.backend, path.raw_path.as_ref())
-    } else {
-        (&source_path.backend, source_retained.raw_path.as_ref())
-    };
-    let draw_fill_rule = (owner.paint_type == RuntimeShapePaintKind::Fill).then(|| {
-        instance
-            .fill_rule(owner.paint_local)
-            .map(runtime_fill_rule_for_value)
-            .unwrap_or(owner.authored_fill_rule)
-    });
-    draw_backend.with_path(
-        backend_context_id,
-        factory,
-        draw_raw_path,
-        RenderFillRule::Clockwise,
-        draw_fill_rule,
-        |path| {
-            let backend = owner.backend.value.borrow();
-            let render_paint = backend
-                .paint
-                .as_deref()
-                .expect("ShapePaint backend was realized before renderer side effects");
-            renderer.draw_path(path, render_paint);
-        },
-    );
-    if saved && needs_save_operation {
-        renderer.restore();
-    }
-    Ok(())
-}
-
 #[allow(clippy::too_many_arguments)]
 fn runtime_draw_layout_owner_paints(
     runtime: &RuntimeFile,
@@ -19110,7 +18603,7 @@ fn runtime_cached_gradient_shader<'a>(
         .as_ref()
 }
 
-fn runtime_fill_rule_for_value(value: u64) -> RenderFillRule {
+pub(crate) fn runtime_fill_rule_for_value(value: u64) -> RenderFillRule {
     crate::shapes::paint::fill::fill_rule(value)
 }
 
@@ -19231,12 +18724,6 @@ fn record_runtime_draw_path_command_replay() {
     RUNTIME_DRAW_PATH_COMMAND_REPLAYS.with(|calls| calls.set(calls.get() + 1));
 }
 
-pub(crate) fn runtime_raw_path_from_commands(commands: &[RuntimePathCommand]) -> RawPath {
-    let mut raw_path = RawPath::new();
-    runtime_rebuild_raw_path_from_commands(&mut raw_path, commands);
-    raw_path
-}
-
 #[cfg(test)]
 std::thread_local! {
     static RUNTIME_DRAW_PATH_COMMAND_REPLAYS: std::cell::Cell<usize> = const {
@@ -19252,46 +18739,6 @@ fn reset_runtime_draw_path_command_replays() {
 #[cfg(test)]
 fn runtime_draw_path_command_replays() -> usize {
     RUNTIME_DRAW_PATH_COMMAND_REPLAYS.with(std::cell::Cell::get)
-}
-
-fn runtime_rebuild_raw_path_from_commands(raw_path: &mut RawPath, commands: &[RuntimePathCommand]) {
-    let (verbs, points) = runtime_path_command_counts(commands);
-    raw_path.rebuild(verbs, points, |raw_path| {
-        runtime_append_commands_to_raw_path(raw_path, commands);
-    });
-}
-
-fn runtime_path_command_counts(commands: &[RuntimePathCommand]) -> (usize, usize) {
-    let mut points = 0;
-    for command in commands {
-        points += match command {
-            RuntimePathCommand::Move { .. } | RuntimePathCommand::Line { .. } => 1,
-            RuntimePathCommand::Cubic { .. } => 3,
-            RuntimePathCommand::Close => 0,
-        };
-    }
-    (commands.len(), points)
-}
-
-fn runtime_append_commands_to_raw_path(
-    raw_path: &mut RawPathBuilder<'_>,
-    commands: &[RuntimePathCommand],
-) {
-    for command in commands {
-        match *command {
-            RuntimePathCommand::Move { x, y } => raw_path.move_to(x, y),
-            RuntimePathCommand::Line { x, y } => raw_path.line_to(x, y),
-            RuntimePathCommand::Cubic {
-                x1,
-                y1,
-                x2,
-                y2,
-                x3,
-                y3,
-            } => raw_path.cubic_to(x1, y1, x2, y2, x3, y3),
-            RuntimePathCommand::Close => raw_path.close(),
-        }
-    }
 }
 
 pub(crate) fn transform_path_commands(commands: &mut [RuntimePathCommand], transform: Mat2D) {
@@ -19501,19 +18948,19 @@ fn runtime_text_clip_path_commands(
     commands
 }
 
-fn runtime_render_mat(mat: Mat2D) -> RenderMat2D {
+pub(crate) fn runtime_render_mat(mat: Mat2D) -> RenderMat2D {
     RenderMat2D(mat.0)
 }
 
-fn runtime_translation(x: f32, y: f32) -> RenderMat2D {
+pub(crate) fn runtime_translation(x: f32, y: f32) -> RenderMat2D {
     RenderMat2D([1.0, 0.0, 0.0, 1.0, x, y])
 }
 
-fn runtime_feather_uses_world_space(feather: &RuntimeFeatherState) -> bool {
+pub(crate) fn runtime_feather_uses_world_space(feather: &RuntimeFeatherState) -> bool {
     feather.space_value == 0
 }
 
-fn runtime_feather_has_offset(feather: &RuntimeFeatherState) -> bool {
+pub(crate) fn runtime_feather_has_offset(feather: &RuntimeFeatherState) -> bool {
     feather.offset_x != 0.0 || feather.offset_y != 0.0
 }
 
@@ -19667,7 +19114,7 @@ fn runtime_shape_paint_is_visible(artboard: &ArtboardInstance, paint: &ShapePain
     }
 }
 
-fn runtime_owned_shape_paint_is_visible(
+pub(crate) fn runtime_owned_shape_paint_is_visible(
     artboard: &ArtboardInstance,
     paint: &RuntimeShapePaintOwner,
 ) -> bool {
@@ -19812,7 +19259,7 @@ pub(crate) fn runtime_live_shape_paint_path_kind(
     }
 }
 
-fn runtime_live_owned_shape_paint_path_kind(
+pub(crate) fn runtime_live_owned_shape_paint_path_kind(
     artboard: &ArtboardInstance,
     paint: &RuntimeShapePaintOwner,
 ) -> RuntimeShapePaintPathKind {
@@ -21776,209 +21223,6 @@ fn rect_commands(bounds: PathBounds) -> Vec<RuntimePathCommand> {
     ]
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RawPathVerb {
-    Move,
-    Line,
-    Cubic,
-    Close,
-}
-
-fn path_commands_backwards(commands: &[RuntimePathCommand]) -> Vec<RuntimePathCommand> {
-    let (verbs, points) = raw_path_parts(commands);
-    if verbs.is_empty() {
-        return Vec::new();
-    }
-
-    let reversed_points = points.into_iter().rev().collect::<Vec<_>>();
-    let mut reversed_verbs = Vec::with_capacity(verbs.len());
-    reversed_verbs.push(RawPathVerb::Move);
-    let mut closed = false;
-    for index in (0..verbs.len()).rev() {
-        let verb = verbs[index];
-        if verb == RawPathVerb::Close {
-            closed = true;
-            continue;
-        }
-        if verb == RawPathVerb::Move && closed {
-            reversed_verbs.push(RawPathVerb::Close);
-            closed = false;
-        }
-        if index != 0 {
-            reversed_verbs.push(verb);
-        } else {
-            break;
-        }
-    }
-
-    let mut commands = raw_path_parts_to_commands(&reversed_verbs, &reversed_points);
-    prune_empty_path_segments(&mut commands);
-    commands
-}
-
-// Coarsely translated from:
-// /Users/levi/dev/oss/rive-runtime/src/math/raw_path.cpp RawPath::pruneEmptySegments
-fn prune_empty_path_segments(commands: &mut Vec<RuntimePathCommand>) {
-    prune_empty_path_segments_from(commands, 0);
-}
-
-fn prune_empty_path_segments_from(commands: &mut Vec<RuntimePathCommand>, start: usize) {
-    let mut current = None::<(f32, f32)>;
-    let mut write = start;
-    let mut pruned = false;
-    let mut multi_contour = None::<bool>;
-    for read in start..commands.len() {
-        let command = commands[read];
-        let keep = match command {
-            RuntimePathCommand::Move { x, y } => {
-                current = Some((x, y));
-                true
-            }
-            RuntimePathCommand::Line { x, y } => {
-                let keep = current != Some((x, y));
-                current = Some((x, y));
-                keep
-            }
-            RuntimePathCommand::Cubic {
-                x1,
-                y1,
-                x2,
-                y2,
-                x3,
-                y3,
-            } => {
-                let exact_empty =
-                    current == Some((x1, y1)) && (x1, y1) == (x2, y2) && (x2, y2) == (x3, y3);
-                // Rust-side reverse/transform assembly can leave sub-ulp cancellation
-                // noise in multi-contour paths that C++ has already collapsed.
-                let near_empty = !exact_empty
-                    && current.is_some_and(|current| {
-                        path_points_match(current, (x1, y1))
-                            && path_points_match(current, (x2, y2))
-                            && path_points_match(current, (x3, y3))
-                    })
-                    && *multi_contour.get_or_insert_with(|| {
-                        path_commands_have_multiple_contours(commands, start)
-                    });
-                if !exact_empty && !near_empty {
-                    current = Some((x3, y3));
-                    true
-                } else {
-                    current = Some((x3, y3));
-                    false
-                }
-            }
-            RuntimePathCommand::Close => true,
-        };
-        if keep {
-            if pruned {
-                commands[write] = command;
-            }
-            write += 1;
-        } else {
-            pruned = true;
-        }
-    }
-    if pruned {
-        commands.truncate(write);
-    }
-}
-
-fn path_commands_have_multiple_contours(commands: &[RuntimePathCommand], start: usize) -> bool {
-    commands
-        .get(start..)
-        .unwrap_or_default()
-        .iter()
-        .filter(|command| matches!(command, RuntimePathCommand::Move { .. }))
-        .take(2)
-        .count()
-        >= 2
-}
-
-fn path_points_match(left: (f32, f32), right: (f32, f32)) -> bool {
-    (left.0 - right.0).abs() <= f32::EPSILON && (left.1 - right.1).abs() <= f32::EPSILON
-}
-
-fn raw_path_parts(commands: &[RuntimePathCommand]) -> (Vec<RawPathVerb>, Vec<(f32, f32)>) {
-    let mut verbs = Vec::with_capacity(commands.len());
-    let mut points = Vec::new();
-    for command in commands {
-        match *command {
-            RuntimePathCommand::Move { x, y } => {
-                verbs.push(RawPathVerb::Move);
-                points.push((x, y));
-            }
-            RuntimePathCommand::Line { x, y } => {
-                verbs.push(RawPathVerb::Line);
-                points.push((x, y));
-            }
-            RuntimePathCommand::Cubic {
-                x1,
-                y1,
-                x2,
-                y2,
-                x3,
-                y3,
-            } => {
-                verbs.push(RawPathVerb::Cubic);
-                points.push((x1, y1));
-                points.push((x2, y2));
-                points.push((x3, y3));
-            }
-            RuntimePathCommand::Close => verbs.push(RawPathVerb::Close),
-        }
-    }
-    (verbs, points)
-}
-
-fn raw_path_parts_to_commands(
-    verbs: &[RawPathVerb],
-    points: &[(f32, f32)],
-) -> Vec<RuntimePathCommand> {
-    let mut commands = Vec::with_capacity(verbs.len());
-    let mut point_index = 0;
-    for verb in verbs {
-        match *verb {
-            RawPathVerb::Move => {
-                let Some((x, y)) = points.get(point_index).copied() else {
-                    return Vec::new();
-                };
-                point_index += 1;
-                commands.push(RuntimePathCommand::Move { x, y });
-            }
-            RawPathVerb::Line => {
-                let Some((x, y)) = points.get(point_index).copied() else {
-                    return Vec::new();
-                };
-                point_index += 1;
-                commands.push(RuntimePathCommand::Line { x, y });
-            }
-            RawPathVerb::Cubic => {
-                let Some((x1, y1)) = points.get(point_index).copied() else {
-                    return Vec::new();
-                };
-                let Some((x2, y2)) = points.get(point_index + 1).copied() else {
-                    return Vec::new();
-                };
-                let Some((x3, y3)) = points.get(point_index + 2).copied() else {
-                    return Vec::new();
-                };
-                point_index += 3;
-                commands.push(RuntimePathCommand::Cubic {
-                    x1,
-                    y1,
-                    x2,
-                    y2,
-                    x3,
-                    y3,
-                });
-            }
-            RawPathVerb::Close => commands.push(RuntimePathCommand::Close),
-        }
-    }
-    commands
-}
-
 fn translate_path_commands(commands: &mut [RuntimePathCommand], offset: (f32, f32)) {
     for command in commands {
         match command {
@@ -22035,55 +21279,18 @@ fn runtime_effect_path_commands(
     crate::shapes::paint::group_effect::update_effects(
         &source.to_vec(),
         &paint.effects,
-        |effect, current| runtime_stroke_effect_path_commands(artboard, effect, paint, current),
+        |effect, current| {
+            crate::shapes::paint::stroke_effect::runtime_stroke_effect_path_commands(
+                artboard, effect, paint, current,
+            )
+        },
     )
-}
-
-fn runtime_stroke_effect_path_commands(
-    artboard: &ArtboardInstance,
-    effect: &StrokeEffectNode,
-    paint: &ShapePaintNode,
-    source: &[RuntimePathCommand],
-) -> Option<Vec<RuntimePathCommand>> {
-    match effect.type_name {
-        "DashPath" => runtime_dash_path_effect_commands(artboard, effect, paint, source),
-        "ScriptedPathEffect" => {
-            let output = match artboard.apply_scripted_path_effect(
-                effect.global_id,
-                runtime_raw_path_from_commands(source),
-                ScriptNode {
-                    path: None,
-                    paint: Some(script_paint_for_shape(artboard, paint)),
-                },
-            ) {
-                Ok(output) => output,
-                Err(_) => {
-                    // C++ still exposes the ScriptedEffectPath when scripting
-                    // is unavailable or its update fails. That path was
-                    // rewound before the attempted update, so it is empty
-                    // rather than a signal to fall back to the source path.
-                    eprintln!("update function failed");
-                    return Some(Vec::new());
-                }
-            };
-            Some(runtime_path_commands_from_raw_path(&output))
-        }
-        "TargetEffect" => crate::shapes::paint::target_effect::update_effect(
-            &source.to_vec(),
-            &effect.group_effects,
-            |group_effect, current| {
-                runtime_stroke_effect_path_commands(artboard, group_effect, paint, current)
-            },
-        ),
-        "TrimPath" => runtime_trim_path_line_effect_commands(artboard, effect, paint, source),
-        _ => None,
-    }
 }
 
 // Coarsely translated from:
 // /Users/levi/dev/oss/rive-runtime/src/shapes/paint/dash_path.cpp DashPath::updateEffect
 // and PathDasher::applyDash.
-fn runtime_dash_path_effect_commands(
+pub(crate) fn runtime_dash_path_effect_commands(
     artboard: &ArtboardInstance,
     effect: &StrokeEffectNode,
     paint: &ShapePaintNode,
@@ -22248,86 +21455,11 @@ fn dash_normalized_length(
     crate::shapes::paint::dash::normalized_length(value, is_percentage, contour_length, wraps)
 }
 
-fn runtime_trim_path_mode_value(
-    artboard: &ArtboardInstance,
-    effect: &StrokeEffectNode,
-) -> Option<u32> {
-    runtime_draw_property_key_for_name("TrimPath", "modeValue")
-        .and_then(|key| artboard.uint_property(effect.local_id, key))
-        .and_then(|value| u32::try_from(value).ok())
-        .or(effect.trim_mode_value)
-}
-
-fn runtime_trim_path_double_property(
-    artboard: &ArtboardInstance,
-    effect: &StrokeEffectNode,
-    property_name: &str,
-    fallback: Option<f32>,
-) -> f32 {
-    runtime_draw_property_key_for_name("TrimPath", property_name)
-        .and_then(|key| artboard.double_property(effect.local_id, key))
-        .or(fallback)
-        .unwrap_or(0.0)
-}
-
-// Coarsely translated from:
-// /Users/levi/dev/oss/rive-runtime/src/shapes/paint/trim_path.cpp TrimPath::trimPath
-fn runtime_trim_path_line_effect_commands(
-    artboard: &ArtboardInstance,
-    effect: &StrokeEffectNode,
-    paint: &ShapePaintNode,
-    source: &[RuntimePathCommand],
-) -> Option<Vec<RuntimePathCommand>> {
-    let mode = runtime_trim_path_mode_value(artboard, effect)?;
-    if !matches!(mode, 1 | 2) {
-        return None;
-    }
-    let contours = TrimContour::from_commands(source);
-    if contours.is_empty() {
-        return Some(Vec::new());
-    }
-
-    let render_offset = positive_unit_mod(runtime_trim_path_double_property(
-        artboard,
-        effect,
-        "offset",
-        effect.trim_offset,
-    ));
-    let trim_start =
-        runtime_trim_path_double_property(artboard, effect, "start", effect.trim_start);
-    let trim_end = runtime_trim_path_double_property(artboard, effect, "end", effect.trim_end);
-    let close_shape = paint.paint_type == ShapePaintKind::Fill;
-    match mode {
-        1 => Some(trim_path_sequential(
-            &contours,
-            trim_start,
-            trim_end,
-            render_offset,
-            close_shape,
-        )),
-        2 => Some(trim_path_synchronized(
-            &contours,
-            trim_start,
-            trim_end,
-            render_offset,
-            close_shape,
-        )),
-        _ => None,
-    }
-}
-
-fn positive_unit_mod(value: f32) -> f32 {
-    // Match C++ `fmodf(fmodf(value, 1) + 1, 1)` exactly. The intermediate
-    // addition is observable at f32 precision even for already-positive
-    // values and feeds directly into trim distances.
-    ((value % 1.0) + 1.0) % 1.0
-}
-
 #[derive(Debug, Clone)]
-struct TrimContour {
+pub(crate) struct TrimContour {
     segments: Vec<TrimMeasuredSegment>,
-    length: f32,
-    is_closed: bool,
+    pub(crate) length: f32,
+    pub(crate) is_closed: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -22371,7 +21503,7 @@ enum TrimSegmentKind {
 }
 
 impl TrimContour {
-    fn from_commands(commands: &[RuntimePathCommand]) -> Vec<Self> {
+    pub(crate) fn from_commands(commands: &[RuntimePathCommand]) -> Vec<Self> {
         Self::from_commands_with_inv_tolerance(commands, TRIM_CONTOUR_DEFAULT_INV_TOLERANCE)
     }
 
@@ -22613,7 +21745,7 @@ impl TrimContour {
         })
     }
 
-    fn get_segment(
+    pub(crate) fn get_segment(
         &self,
         mut start_distance: f32,
         mut end_distance: f32,
@@ -22881,73 +22013,6 @@ impl RuntimePathMeasure {
     }
 }
 
-pub fn runtime_path_commands_from_raw_path(path: &RawPath) -> Vec<RuntimePathCommand> {
-    (|| {
-        let mut commands = Vec::with_capacity(path.verbs().len());
-        let mut point_index = 0usize;
-        let mut current = None;
-        for verb in path.verbs() {
-            match verb {
-                RenderPathVerb::Move => {
-                    let point = path.points().get(point_index)?;
-                    point_index += 1;
-                    current = Some((point.x, point.y));
-                    commands.push(RuntimePathCommand::Move {
-                        x: point.x,
-                        y: point.y,
-                    });
-                }
-                RenderPathVerb::Line => {
-                    let point = path.points().get(point_index)?;
-                    point_index += 1;
-                    current = Some((point.x, point.y));
-                    commands.push(RuntimePathCommand::Line {
-                        x: point.x,
-                        y: point.y,
-                    });
-                }
-                RenderPathVerb::Quad => {
-                    let from = current?;
-                    let control = path.points().get(point_index)?;
-                    let point = path.points().get(point_index + 1)?;
-                    point_index += 2;
-                    let x1 = from.0 + (control.x - from.0) * (2.0 / 3.0);
-                    let y1 = from.1 + (control.y - from.1) * (2.0 / 3.0);
-                    let x2 = point.x + (control.x - point.x) * (2.0 / 3.0);
-                    let y2 = point.y + (control.y - point.y) * (2.0 / 3.0);
-                    current = Some((point.x, point.y));
-                    commands.push(RuntimePathCommand::Cubic {
-                        x1,
-                        y1,
-                        x2,
-                        y2,
-                        x3: point.x,
-                        y3: point.y,
-                    });
-                }
-                RenderPathVerb::Cubic => {
-                    let p1 = path.points().get(point_index)?;
-                    let p2 = path.points().get(point_index + 1)?;
-                    let p3 = path.points().get(point_index + 2)?;
-                    point_index += 3;
-                    current = Some((p3.x, p3.y));
-                    commands.push(RuntimePathCommand::Cubic {
-                        x1: p1.x,
-                        y1: p1.y,
-                        x2: p2.x,
-                        y2: p2.y,
-                        x3: p3.x,
-                        y3: p3.y,
-                    });
-                }
-                RenderPathVerb::Close => commands.push(RuntimePathCommand::Close),
-            }
-        }
-        Some(commands)
-    })()
-    .unwrap_or_default()
-}
-
 impl TrimSegmentKind {
     fn extract(
         self,
@@ -23002,109 +22067,6 @@ impl TrimSegmentKind {
             }),
         }
     }
-}
-
-fn trim_path_sequential(
-    contours: &[TrimContour],
-    trim_start: f32,
-    trim_end: f32,
-    render_offset: f32,
-    close_shape: bool,
-) -> Vec<RuntimePathCommand> {
-    let total_length = contours.iter().map(|contour| contour.length).sum::<f32>();
-    if total_length == 0.0 {
-        return Vec::new();
-    }
-
-    let mut start_length = total_length * (trim_start + render_offset);
-    let mut end_length = total_length * (trim_end + render_offset);
-    if end_length < start_length {
-        std::mem::swap(&mut start_length, &mut end_length);
-    }
-    if start_length > total_length {
-        start_length -= total_length;
-        end_length -= total_length;
-    }
-
-    let mut indices = Vec::new();
-    let mut lengths = Vec::new();
-    let mut contour_index = 0usize;
-    while end_length > 0.0 {
-        let current_index = contour_index % contours.len();
-        let contour = &contours[current_index];
-        if start_length < contour.length {
-            indices.push(current_index);
-            lengths.push(start_length);
-            lengths.push(end_length);
-            end_length -= contour.length;
-            start_length = 0.0;
-        } else {
-            start_length -= contour.length;
-            end_length -= contour.length;
-        }
-        contour_index += 1;
-    }
-
-    let mut commands = Vec::new();
-    let mut starting_index = 0isize;
-    let mut index_count = 0usize;
-    let mut previous_contour_index = None::<usize>;
-    while index_count < indices.len() {
-        let index = starting_index.rem_euclid(indices.len() as isize) as usize;
-        let contour_index = indices[index];
-        let contour = &contours[contour_index];
-        let length_index = index * 2;
-        let start_length = lengths[length_index];
-        let end_length = lengths[length_index + 1];
-        contour.get_segment(
-            start_length,
-            end_length,
-            &mut commands,
-            previous_contour_index != Some(contour_index) || !contour.is_closed,
-        );
-        if (start_length == 0.0 && end_length - start_length >= contour.length && contour.is_closed)
-            || close_shape
-        {
-            commands.push(RuntimePathCommand::Close);
-        }
-        previous_contour_index = Some(contour_index);
-        index_count += 1;
-        starting_index -= 1;
-    }
-    commands
-}
-
-fn trim_path_synchronized(
-    contours: &[TrimContour],
-    trim_start: f32,
-    trim_end: f32,
-    render_offset: f32,
-    close_shape: bool,
-) -> Vec<RuntimePathCommand> {
-    let mut commands = Vec::new();
-    for contour in contours {
-        let mut start_length = contour.length * (trim_start + render_offset);
-        let mut end_length = contour.length * (trim_end + render_offset);
-        if end_length < start_length {
-            std::mem::swap(&mut start_length, &mut end_length);
-        }
-
-        if start_length >= contour.length {
-            start_length -= contour.length;
-            end_length -= contour.length;
-        }
-        contour.get_segment(start_length, end_length, &mut commands, true);
-        while end_length > contour.length {
-            start_length = 0.0;
-            end_length -= contour.length;
-            contour.get_segment(start_length, end_length, &mut commands, !contour.is_closed);
-        }
-
-        if (trim_start == 0.0 && trim_end == 1.0 && contour.is_closed) || close_shape {
-            commands.push(RuntimePathCommand::Close);
-        }
-    }
-    commands
 }
 
 const TRIM_CONTOUR_EPSILON: f32 = 1.0 / 4096.0;
@@ -23277,7 +22239,7 @@ pub(crate) fn color_lerp(from: u32, to: u32, mix: f32) -> u32 {
     crate::shapes::paint::color::lerp(from, to, mix)
 }
 
-fn path_commands(
+pub(crate) fn path_commands(
     path: &PathGeometryNode,
     path_kind: ShapePaintPathKind,
     transform: Mat2D,
@@ -23372,7 +22334,10 @@ pub(crate) fn runtime_text_value_run_hit_test(
     )
 }
 
-fn runtime_path_geometry(artboard: &ArtboardInstance, path: &PathGeometryNode) -> PathGeometryNode {
+pub(crate) fn runtime_path_geometry(
+    artboard: &ArtboardInstance,
+    path: &PathGeometryNode,
+) -> PathGeometryNode {
     let mut path = path.clone();
     path.is_closed = runtime_path_bool_property(
         artboard,
@@ -23870,7 +22835,7 @@ fn measure_parametric_path_layout(
     Some((max_width.min(width), max_height.min(height)))
 }
 
-fn parametric_path_with_control_size(
+pub(crate) fn parametric_path_with_control_size(
     parametric: ParametricPathNode,
     width: f32,
     height: f32,
@@ -24758,8 +23723,8 @@ fn is_supported_point_path_vertex(vertex: &PathVertexNode) -> bool {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct WeightedPathContext<'a> {
-    instance: &'a ArtboardInstance,
+pub(crate) struct WeightedPathContext<'a> {
+    pub(crate) instance: &'a ArtboardInstance,
 }
 
 fn runtime_component_double_property(
@@ -24826,11 +23791,11 @@ fn runtime_copysign_one(value: f32) -> f32 {
     if value.is_sign_negative() { -1.0 } else { 1.0 }
 }
 
-fn vertex_translation(vertex: &PathVertexNode) -> (f32, f32) {
+pub(crate) fn vertex_translation(vertex: &PathVertexNode) -> (f32, f32) {
     (vertex.x, vertex.y)
 }
 
-fn cubic_vertex_points(vertex: &PathVertexNode) -> Option<((f32, f32), (f32, f32))> {
+pub(crate) fn cubic_vertex_points(vertex: &PathVertexNode) -> Option<((f32, f32), (f32, f32))> {
     let point = vertex_translation(vertex);
     match vertex.type_name {
         "CubicDetachedVertex" => Some((
@@ -26331,8 +25296,14 @@ mod tests {
 
     #[test]
     fn positive_unit_mod_matches_cpp_nested_fmod_rounding() {
-        assert_eq!(positive_unit_mod(0.185).to_bits(), 0x3e3d_70a0);
-        assert_eq!(positive_unit_mod(-0.185).to_bits(), 0x3f50_a3d7);
+        assert_eq!(
+            crate::shapes::paint::trim_path::positive_unit_mod(0.185).to_bits(),
+            0x3e3d_70a0
+        );
+        assert_eq!(
+            crate::shapes::paint::trim_path::positive_unit_mod(-0.185).to_bits(),
+            0x3f50_a3d7
+        );
     }
 
     #[test]

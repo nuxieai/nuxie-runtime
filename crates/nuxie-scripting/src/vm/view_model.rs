@@ -1156,6 +1156,7 @@ impl UserData for ScriptedContext {
         methods.add_method("decodeImage", |lua, this, encoded: Buffer| {
             this.require_live("decodeImage")?;
             super::lua_image_decode::start(lua, encoded)
+        });
         methods.add_method("audio", |lua, this, name: String| {
             this.require_live("audio")?;
             super::lua_audio::ScriptedAudioAssets::lookup(lua, &name)

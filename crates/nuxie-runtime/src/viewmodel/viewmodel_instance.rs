@@ -1525,6 +1525,79 @@ impl RuntimeOwnedViewModelInstance {
             .map(RuntimeOwnedViewModelAsset::runtime_state)
     }
 
+    fn runtime_image_by_property_index(
+        &self,
+        property_index: usize,
+    ) -> Option<RuntimeViewModelImage> {
+        self.image_runtime_state_by_property_index(property_index)?
+            .borrow()
+            .live_image
+            .clone()
+    }
+
+    fn set_runtime_image_by_property_index(
+        &mut self,
+        property_index: usize,
+        image: Option<RuntimeViewModelImage>,
+    ) -> bool {
+        let Some(asset) = self
+            .assets
+            .iter_mut()
+            .find(|asset| asset.property_index == property_index)
+        else {
+            return false;
+        };
+        let same = match (&asset.runtime_state.borrow().live_image, &image) {
+            (Some(current), Some(next)) => current.ptr_eq(next),
+            (None, None) => true,
+            _ => false,
+        };
+        if same {
+            return false;
+        }
+        asset.runtime_state.borrow_mut().live_image = image;
+        if !asset.set_value(u64::from(u32::MAX)) {
+            asset.cell.notify_bindings_value_changed();
+        }
+        true
+    }
+
+    pub(crate) fn runtime_image_by_property_path(
+        &self,
+        property_path: &[usize],
+    ) -> Option<RuntimeViewModelImage> {
+        if property_path.len() == 1 {
+            return self.runtime_image_by_property_index(property_path[0]);
+        }
+        let (view_model_index, rest) = property_path.split_first()?;
+        self.view_models
+            .iter()
+            .find(|view_model| view_model.property_index == *view_model_index)?
+            .active_runtime_image_by_property_path(rest)
+    }
+
+    pub(crate) fn set_runtime_image_by_property_path(
+        &mut self,
+        property_path: &[usize],
+        image: Option<RuntimeViewModelImage>,
+    ) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.set_runtime_image_by_property_path(path, image.clone())
+        }) {
+            return changed;
+        }
+        if property_path.len() == 1 {
+            return self.set_runtime_image_by_property_index(property_path[0], image);
+        }
+        let Some((image_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        view_model.set_active_runtime_image_by_property_index(*image_index, image)
+    }
+
     pub(crate) fn artboard_runtime_state_by_property_index(
         &self,
         property_index: usize,

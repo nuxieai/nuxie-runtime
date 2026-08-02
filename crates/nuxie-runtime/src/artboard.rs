@@ -473,6 +473,7 @@ pub struct ArtboardInstance {
     pub(crate) artboard_data_bind_dirty_epoch: u64,
     pub(crate) artboard_data_bind_processed_epoch: u64,
     pub(crate) image_asset_overrides: BTreeMap<usize, Option<u32>>,
+    pub(crate) image_render_overrides: BTreeMap<usize, crate::RuntimeViewModelImage>,
     text_style_font_overrides: BTreeMap<usize, RuntimeFontAssetValue>,
     text_style_feature_options: RefCell<BTreeMap<usize, RuntimeTextStyleFeatureOption>>,
     text_variation_modifier_tags: RefCell<BTreeMap<usize, (u64, u32)>>,
@@ -625,6 +626,7 @@ impl Clone for ArtboardInstance {
             artboard_data_bind_dirty_epoch: self.artboard_data_bind_dirty_epoch,
             artboard_data_bind_processed_epoch: self.artboard_data_bind_processed_epoch,
             image_asset_overrides: self.image_asset_overrides.clone(),
+            image_render_overrides: self.image_render_overrides.clone(),
             text_style_font_overrides: self.text_style_font_overrides.clone(),
             // C++ clones generated feature fields, then builds a fresh
             // occurrence-local optioned-font cache during clean/add.
@@ -2400,6 +2402,7 @@ impl ArtboardInstance {
             artboard_data_bind_dirty_epoch: 1,
             artboard_data_bind_processed_epoch: 0,
             image_asset_overrides: BTreeMap::new(),
+            image_render_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
             text_style_feature_options: RefCell::new(BTreeMap::new()),
             text_variation_modifier_tags: RefCell::new(BTreeMap::new()),
@@ -2941,6 +2944,37 @@ impl ArtboardInstance {
         self.advance_script_instances_with(seconds, |instance, args, host| {
             instance.call_method(ScriptMethod::Advance, args, host)
         })
+    }
+
+    /// Drain VM-thread async completions for every retained scripted
+    /// occurrence, including parked owners, and recurse through occurrence
+    /// children. Multiple instances may share one VM; later polls are then
+    /// harmless no-ops.
+    pub(crate) fn poll_script_async_work_tree(&mut self) -> Result<bool, ScriptError> {
+        let handles = self
+            .script_instances_by_global
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut changed = false;
+        for handle in handles {
+            changed |= handle.borrow_mut().poll_async_work()?;
+        }
+        for nested in self.nested_artboards.values_mut() {
+            changed |= nested.child.poll_script_async_work_tree()?;
+        }
+        for list_index in 0..self.component_list_count() {
+            let Some(local_id) = self.component_list_local_at(list_index) else {
+                continue;
+            };
+            let Some(items) = self.component_list_items_mut(local_id) else {
+                continue;
+            };
+            for item in items {
+                changed |= item.child.poll_script_async_work_tree()?;
+            }
+        }
+        Ok(changed)
     }
 
     pub fn advance_script_instances_with_factory(
@@ -4274,12 +4308,46 @@ impl ArtboardInstance {
         local_id: usize,
         asset_global: Option<u32>,
     ) -> bool {
-        if self.image_asset_overrides.get(&local_id) == Some(&asset_global) {
+        self.set_image_override(local_id, asset_global, None)
+    }
+
+    pub(crate) fn set_image_render_override(
+        &mut self,
+        local_id: usize,
+        image: Option<crate::RuntimeViewModelImage>,
+    ) -> bool {
+        self.set_image_override(local_id, None, image)
+    }
+
+    fn set_image_override(
+        &mut self,
+        local_id: usize,
+        asset_global: Option<u32>,
+        image: Option<crate::RuntimeViewModelImage>,
+    ) -> bool {
+        let same_asset = self.image_asset_overrides.get(&local_id) == Some(&asset_global);
+        let same_image = match (self.image_render_overrides.get(&local_id), image.as_ref()) {
+            (Some(current), Some(next)) => current.ptr_eq(next),
+            (None, None) => true,
+            _ => false,
+        };
+        if same_asset && same_image {
             return false;
         }
         self.image_asset_overrides.insert(local_id, asset_global);
-        let dimensions = asset_global
-            .and_then(|asset_global| self.runtime_render_image(asset_global))
+        match image.as_ref() {
+            Some(image) => {
+                self.image_render_overrides.insert(local_id, image.clone());
+            }
+            None => {
+                self.image_render_overrides.remove(&local_id);
+            }
+        }
+        let dimensions = image
+            .and_then(|image| image.render_image())
+            .or_else(|| {
+                asset_global.and_then(|asset_global| self.runtime_render_image(asset_global))
+            })
             .map(|image| (image.width(), image.height()));
         self.runtime_images
             .set_asset(local_id, asset_global, dimensions);
@@ -12273,6 +12341,7 @@ mod tests {
             artboard_data_bind_dirty_epoch: 1,
             artboard_data_bind_processed_epoch: 0,
             image_asset_overrides: BTreeMap::new(),
+            image_render_overrides: BTreeMap::new(),
             text_style_font_overrides: BTreeMap::new(),
             text_style_feature_options: RefCell::new(BTreeMap::new()),
             text_variation_modifier_tags: RefCell::new(BTreeMap::new()),

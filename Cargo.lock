@@ -1233,6 +1233,7 @@ version = "0.1.0"
 dependencies = [
  "image-webp",
  "jpeg-decoder",
+ "moxcms",
  "png",
 ]
 
@@ -1332,11 +1333,13 @@ dependencies = [
 name = "nuxie-scripting"
 version = "0.1.0"
 dependencies = [
+ "image-webp",
  "luaur-common",
  "luaur-compiler",
  "luaur-rt",
  "luaur-vm",
  "nuxie-binary",
+ "nuxie-image-codec",
  "nuxie-render-api",
  "nuxie-runtime",
  "sha2",

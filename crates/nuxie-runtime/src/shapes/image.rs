@@ -619,8 +619,14 @@ pub(super) fn runtime_draw_image_with_owner(
     // Image-to-Mesh pointer installed by the child owner's onAddedDirty.
     let image_mesh = instance.runtime_images.mesh(local_id);
     let image_object = image_global_id.and_then(|global_id| runtime.object(global_id as usize));
-    let Some(image) = resolved_image_asset_global
-        .and_then(|asset_global| instance.runtime_render_image(asset_global))
+    let Some(image) = instance
+        .image_render_overrides
+        .get(&local_id)
+        .and_then(|image| image.render_image())
+        .or_else(|| {
+            resolved_image_asset_global
+                .and_then(|asset_global| instance.runtime_render_image(asset_global))
+        })
     else {
         // C++ `Image::draw` returns before saving when the asset has no
         // decoded RenderImage, e.g. hosted images with no loader.

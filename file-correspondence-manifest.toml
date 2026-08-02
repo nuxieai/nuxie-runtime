@@ -1285,15 +1285,15 @@ note = "P1-b faithful candidate: pinned ManifestAsset section framing, exact-siz
 
 [[file]]
 upstream = "src/assets/script_asset.cpp"
-status = "pending"
-verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/script_asset.rs; crates/nuxie/src/lib.rs; crates/nuxie-scripting/src/vm.rs"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/script_asset.rs; crates/nuxie-runtime/src/scripted_data_converter.rs; crates/nuxie-runtime/src/state_machine/scripted_listener_action.rs; crates/nuxie/src/lib.rs; crates/nuxie-scripting/src/vm.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0106"
 b6_verdict = "ADAPTED"
 b6_cluster = "assets-importers"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "AF-1/AF-5: the file script catalog and scripting VM retain ScriptAsset module/protocol ownership."
+note = "P1-n faithful closure at d788e8ec: ScriptInput destruction/type dispatch/default hydration (script_asset.cpp:23-66), file-owned VM lookup plus module/protocol registration (69-113), occurrence initialization and serialized method-mask transfer (85-165), and signed-content decode/bytecode ownership (167-221) are retained by the FileScriptRuntime catalog, ScriptVm module/protocol programs, RuntimeScriptedObjectOccurrence, and occurrence-owned typed inputs. Anchors: optional_script_method_bits_are_masked_and_independently_gated_like_cpp; ordinary_import_keeps_the_bounded_script_catalog_inert_and_shared; upstream_script_ownership_fixtures_remain_on_the_luau_vm_path; luaur_loads_bytecode_across_scripting_corpus; repeated_scripted_data_converter_occurrences_match_cpp_probe. Accepted AF-1/AF-5 adaptation: one retained Rust file catalog/VM replaces ScriptAsset back-pointers and refs, Rust ownership replaces explicit deletes, and explicit authenticated/visual-only File authorization replaces the asset-local verified bit while SignedContent preserves envelope parsing."
 
 [[file]]
 upstream = "src/assets/shader_asset.cpp"
@@ -3879,15 +3879,15 @@ note = "Direct filename correspondence and complete scripted-listener occurrence
 
 [[file]]
 upstream = "src/scripted/scripted_data_converter.cpp"
-status = "pending"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/scripted_data_converter.rs; crates/nuxie-runtime/src/data_bind_graph.rs; crates/nuxie-runtime/src/artboard_data_bind.rs; crates/nuxie/src/lib.rs; crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0321"
 b6_verdict = "ADAPTED"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "AF-1/AF-5: retained per-artboard scripted converter VMs are invoked by the retained DataBind graph."
+note = "P1-n faithful closure at d788e8ec: occurrence teardown/input disposal (scripted_data_converter.cpp:18-41), hydration dirt plus typed push/convert/reverse-convert/cached output (45-168), context bind/reinit and child-bind hydration (170-188), AdvanceNested/zero-time/dirty scheduling (190-213), property ownership/import registration (215-233), complete occurrence clone with ordered child DataBinds (235-274), and scripted-object bind enrollment (276-280) map to RuntimeScriptedDataConverterDefinition/State, occurrence-keyed VM handles, retained DataBind traversal, and StateMachineInstance hydration/advance. Anchors: conversion_uses_one_optional_lookup_before_input_push; conversion_mask_missing_method_and_occurrence_cache_match_cpp; advance_mask_and_lua_truthiness_match_cpp; inherited_unbind_releases_every_scripted_custom_input_source; source_owner_unbinds_scripted_custom_inputs_before_destroying_table; scripted_converter_self_binds_keep_order_fields_and_live_table_identity; repeated_scripted_data_converter_occurrences_match_cpp_probe; upstream_script_ownership_fixtures_remain_on_the_luau_vm_path. Accepted AF-1/AF-5 adaptation: every artboard/DataBind occurrence retains a distinct Rust VM table and owned input graph rather than cloning C++ objects/pointers. PR 144's is_project_data_converter envelope distinction is solely a product-layer carrier/router and must not change upstream ScriptedDataConverter semantics; the named upstream converter fixtures are asserted non-envelope and registered through the Luau VM path."
 
 [[file]]
 upstream = "src/scripted/scripted_drawable.cpp"
@@ -4527,15 +4527,15 @@ note = "FL-E3 direct file owner: pinned callback dirt and retained path/paint/ef
 
 [[file]]
 upstream = "src/simple_array.cpp"
-status = "pending"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/lib.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0375"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "AF-7: production SimpleArray unique ownership maps to owned Vec/slice storage; the C++ .cpp is testing-only counters."
+note = "P1-n faithful closure at d788e8ec under AF-7: simple_array.cpp:1-18 defines only TESTING malloc/realloc/free counters; production SimpleArray/SimpleArrayBuilder ownership and views are header-only and map to Rust Vec<T>, borrowed slices, and Arc<[T]>. API-contract anchors in crates/nuxie-runtime/tests/simple_array_adaptation.rs exercise runtime-owned ScriptCoreString and nested ProjectDataValue storage plus an imported ArtboardInstance's borrowed state-machine catalog and cloned Arc<Vec<_>> definitions; they cover empty/owned/borrowed storage, byte size, order/iteration, growth/reset, nested ownership, shared immutable definitions, fallible overflow rejection, post-failure composability, and normal allocation. Exact allocator-count parity and forced system-OOM behavior are allocator-specific and intentionally inapplicable, recorded on the partial simple_array_test.cpp correspondence row."
 
 [[file]]
 upstream = "src/solo.cpp"

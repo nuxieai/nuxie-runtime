@@ -12886,6 +12886,7 @@ impl TaffyRuntimeLayoutEngine {
             instance: &ArtboardInstance,
             graph: &ArtboardGraph,
             from: usize,
+            nested: bool,
             out: &mut Vec<usize>,
             visiting: &mut BTreeSet<usize>,
         ) -> Option<()> {
@@ -12915,9 +12916,20 @@ impl TaffyRuntimeLayoutEngine {
                     .runtime_layout_participant_local(*child_local)
                     .is_some();
                 if provider {
-                    out.push(*child_local);
+                    // S4-38 keeps an ArtboardComponentList behind a transparent
+                    // Group/Solo out of layout unless DrawableFlag bit 8 opts
+                    // it in. Existing files leave the bit unset so their
+                    // free-form x/y or follow-path placement is unchanged.
+                    let joins_through_container = child.type_name != "ArtboardComponentList"
+                        || !nested
+                        || property_key_for_name("Drawable", "drawableFlags")
+                            .and_then(|key| instance.uint_property(*child_local, key))
+                            .is_some_and(|flags| flags & (1 << 8) != 0);
+                    if joins_through_container {
+                        out.push(*child_local);
+                    }
                 } else if matches!(child.type_name, "Node" | "Group" | "Solo") {
-                    visit(instance, graph, *child_local, out, visiting)?;
+                    visit(instance, graph, *child_local, true, out, visiting)?;
                 }
             }
             visiting.remove(&from);
@@ -12929,6 +12941,7 @@ impl TaffyRuntimeLayoutEngine {
             instance,
             graph,
             layout_local,
+            false,
             &mut providers,
             &mut BTreeSet::new(),
         )?;
@@ -28925,6 +28938,45 @@ mod tests {
             (subtitle.y - (column.y + 10.0 + headline.height + 10.0)).abs() <= 0.0001,
             "subtitle y was {}",
             subtitle.y
+        );
+    }
+
+    #[test]
+    fn component_list_behind_transparent_group_requires_layout_opt_in() {
+        let bytes = cpp_runtime_fixture("nested_hug.riv");
+        let file = read_runtime_file(&bytes).expect("nested hug fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("nested hug graph builds");
+        let graph = graphs
+            .artboards
+            .first()
+            .expect("fixture has the main artboard");
+        let mut instance = ArtboardInstance::from_graph(&file, graph).expect("instance builds");
+        let engine = TaffyRuntimeLayoutEngine;
+
+        let root_providers = engine
+            .layout_provider_children(&instance, graph, 0)
+            .expect("root layout providers resolve");
+        assert!(
+            !root_providers.contains(&26),
+            "an existing-file ArtboardComponentList behind Group local 25 stays free-form"
+        );
+        assert_eq!(
+            engine
+                .layout_provider_children(&instance, graph, 28)
+                .expect("direct layout providers resolve"),
+            vec![31],
+            "a direct ArtboardComponentList remains an unconditional provider"
+        );
+
+        let flags_key =
+            property_key_for_name("Drawable", "drawableFlags").expect("Drawable.drawableFlags key");
+        assert!(instance.set_uint_property(26, flags_key, 1 << 8));
+        assert!(
+            engine
+                .layout_provider_children(&instance, graph, 0)
+                .expect("opted-in root providers resolve")
+                .contains(&26),
+            "DrawableFlag::ParticipatesInLayout opts a nested list into its owning layout"
         );
     }
 

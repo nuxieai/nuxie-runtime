@@ -57,9 +57,9 @@ use luaur_vm::functions::luau_load::luau_load;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
     ScriptArtboard, ScriptCoreString, ScriptDataConverterMethod, ScriptDataConverterOptionalCall,
-    ScriptError, ScriptHost, ScriptInstance, ScriptListenerActionMethod, ScriptListenerInvocation,
-    ScriptMethod, ScriptOptionalMethodResult, ScriptValue, ScriptViewModel,
-    ScriptingVm as RuntimeScriptingVm,
+    ScriptError, ScriptHost, ScriptInstance, ScriptInterpolatorMethod, ScriptListenerActionMethod,
+    ScriptListenerInvocation, ScriptMethod, ScriptOptionalMethodResult, ScriptOptionalNumberResult,
+    ScriptValue, ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
 };
 pub(crate) use renderer::RendererBindings;
 use view_model::{ScriptViewModelFrameContext, ScriptedContext, create_scripted_view_model};
@@ -870,6 +870,22 @@ impl ScriptVm {
             None,
             context_view_model_value,
             context_parent_view_models,
+        )
+    }
+
+    /// Invoke a registered protocol generator with the VM's retained default
+    /// DataContext and render bindings. Stateful keyframe interpolators use
+    /// this after file bootstrap, when evaluation no longer owns the caller's
+    /// mutable render-factory borrow.
+    pub fn instantiate_registered_script(
+        &self,
+        program: &ScriptProgram,
+    ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
+        self.instantiate_registered_script_with_optional_factory_and_context(
+            program,
+            None,
+            self.default_context_view_model.clone(),
+            self.default_context_parent_view_models.clone(),
         )
     }
 
@@ -1912,6 +1928,38 @@ impl ScriptInstance for LuaScriptInstance {
         script_value_from_lua(returned)
             .map(ScriptOptionalMethodResult::Returned)
             .map_err(|error| self.script_error(error))
+    }
+
+    fn call_interpolator(
+        &mut self,
+        method: ScriptInterpolatorMethod,
+        args: &[f32],
+        _host: &mut dyn ScriptHost,
+    ) -> std::result::Result<ScriptOptionalNumberResult, ScriptError> {
+        self.reset_execution_budget();
+        let Some(table) = self.table.clone() else {
+            return Ok(ScriptOptionalNumberResult::Missing);
+        };
+        let value: Value = table
+            .get(method.as_str())
+            .map_err(|error| self.script_error(error))?;
+        let Value::Function(function) = value else {
+            return Ok(ScriptOptionalNumberResult::Missing);
+        };
+        let lua = table.lua();
+        let mut call_args = MultiValue::with_capacity(args.len() + 1);
+        call_args.push_back(Value::Table(table));
+        for value in args {
+            call_args.push_back(Value::Number(f64::from(*value)));
+        }
+        let returned: Value = function
+            .call(call_args)
+            .map_err(|error| self.script_error(error))?;
+        let number = lua
+            .coerce_number(returned)
+            .map_err(|error| self.script_error(error))?
+            .unwrap_or(0.0) as f32;
+        Ok(ScriptOptionalNumberResult::Returned(number))
     }
 
     fn call_advance_truthy(

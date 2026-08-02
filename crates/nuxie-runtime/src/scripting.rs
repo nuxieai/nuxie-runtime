@@ -437,6 +437,8 @@ pub enum ScriptMethod {
     Update,
     Draw,
     Evaluate,
+    Transform,
+    TransformValue,
     PointerDown,
     PointerMove,
     PointerUp,
@@ -461,6 +463,8 @@ impl ScriptMethod {
             ScriptMethod::Update => "update",
             ScriptMethod::Draw => "draw",
             ScriptMethod::Evaluate => "evaluate",
+            ScriptMethod::Transform => "transform",
+            ScriptMethod::TransformValue => "transformValue",
             ScriptMethod::PointerDown => "pointerDown",
             ScriptMethod::PointerMove => "pointerMove",
             ScriptMethod::PointerUp => "pointerUp",
@@ -606,6 +610,29 @@ pub enum ScriptValue {
 pub enum ScriptOptionalMethodResult {
     Missing,
     Returned(ScriptValue),
+}
+
+/// Lua callbacks implemented by a `ScriptedInterpolator` protocol table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptInterpolatorMethod {
+    Transform,
+    TransformValue,
+}
+
+impl ScriptInterpolatorMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Transform => "transform",
+            Self::TransformValue => "transformValue",
+        }
+    }
+}
+
+/// Result of atomically resolving and invoking one interpolator callback.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ScriptOptionalNumberResult {
+    Missing,
+    Returned(f32),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1982,6 +2009,37 @@ pub trait ScriptInstance {
         }
         self.call_method(method, args, host)
             .map(ScriptOptionalMethodResult::Returned)
+    }
+
+    /// Resolve an interpolator callback once and invoke that exact function.
+    ///
+    /// The default adapter uses the VM-neutral value bridge. Backends override
+    /// this when they can preserve the source VM's numeric coercion rules.
+    fn call_interpolator(
+        &mut self,
+        method: ScriptInterpolatorMethod,
+        args: &[f32],
+        host: &mut dyn ScriptHost,
+    ) -> Result<ScriptOptionalNumberResult, ScriptError> {
+        let script_method = match method {
+            ScriptInterpolatorMethod::Transform => ScriptMethod::Transform,
+            ScriptInterpolatorMethod::TransformValue => ScriptMethod::TransformValue,
+        };
+        let args = args
+            .iter()
+            .map(|value| ScriptValue::Number(f64::from(*value)))
+            .collect::<Vec<_>>();
+        Ok(
+            match self.call_optional_method(script_method, &args, host)? {
+                ScriptOptionalMethodResult::Missing => ScriptOptionalNumberResult::Missing,
+                ScriptOptionalMethodResult::Returned(ScriptValue::Number(value)) => {
+                    ScriptOptionalNumberResult::Returned(value as f32)
+                }
+                ScriptOptionalMethodResult::Returned(_) => {
+                    ScriptOptionalNumberResult::Returned(0.0)
+                }
+            },
+        )
     }
 
     /// Run `advance(self, seconds)` and apply the VM's native truthiness rules.

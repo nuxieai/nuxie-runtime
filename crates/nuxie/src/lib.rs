@@ -38,6 +38,8 @@ mod scene;
 mod script_import;
 
 #[cfg(all(test, feature = "scripting"))]
+mod scripted_interpolator_tests;
+#[cfg(all(test, feature = "scripting"))]
 mod scripted_listener_action_lifecycle_tests;
 
 pub use raw_text::{
@@ -533,11 +535,12 @@ impl FileScriptRuntime {
 }
 
 #[cfg(feature = "scripting")]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ScriptMountTargetKind {
     Drawable,
     Layout,
     DataConverter,
+    Interpolator,
 }
 
 #[cfg(feature = "scripting")]
@@ -547,6 +550,7 @@ impl ScriptMountTargetKind {
             Self::Drawable => "ScriptedDrawable",
             Self::Layout => "ScriptedLayout",
             Self::DataConverter => "ScriptedDataConverter",
+            Self::Interpolator => "ScriptedInterpolator",
         }
     }
 }
@@ -574,6 +578,18 @@ struct ScriptMountGroup {
 struct PreparedScriptMountGroup {
     graph_global_id: u32,
     scripts: Vec<(ScriptMountTargetKind, u32, u32, Box<dyn ScriptInstance>)>,
+    interpolators: Vec<PreparedScriptedInterpolator>,
+}
+
+#[cfg(feature = "scripting")]
+struct PreparedScriptedInterpolator {
+    graph_global_id: u32,
+    local_id: usize,
+    global_id: u32,
+    asset_ordinal: usize,
+    asset_name: String,
+    serialized_implemented_methods: u32,
+    fallback_root: Option<RuntimeOwnedViewModelHandle>,
 }
 
 #[cfg(feature = "scripting")]
@@ -628,6 +644,7 @@ fn instantiate_script_mounts(
     let mut prepared = Vec::with_capacity(groups.len());
     for group in groups {
         let mut scripts = Vec::with_capacity(group.targets.len());
+        let mut interpolators = Vec::new();
         for target in &group.targets {
             let target_label = target.kind.label();
             let program = ready.programs.get(&target.asset_ordinal).ok_or_else(|| {
@@ -639,6 +656,19 @@ fn instantiate_script_mounts(
                     target.asset_name
                 ))
             })?;
+            if matches!(target.kind, ScriptMountTargetKind::Interpolator) {
+                let _ = program;
+                interpolators.push(PreparedScriptedInterpolator {
+                    graph_global_id: group.graph_global_id,
+                    local_id: target.local_id,
+                    global_id: target.global_id,
+                    asset_ordinal: target.asset_ordinal,
+                    asset_name: target.asset_name.clone(),
+                    serialized_implemented_methods: target.serialized_implemented_methods,
+                    fallback_root: root_view_model.cloned(),
+                });
+                continue;
+            }
             let mut host = NoopScriptHost;
             let mut script = ready
                 .vm
@@ -695,6 +725,7 @@ fn instantiate_script_mounts(
         prepared.push(PreparedScriptMountGroup {
             graph_global_id: group.graph_global_id,
             scripts,
+            interpolators,
         });
     }
     Ok(prepared)
@@ -2907,6 +2938,39 @@ fn script_mount_group(
             )?);
         }
     }
+    for global_id in instance
+        .linear_animations()
+        .iter()
+        .flat_map(|animation| animation.scripted_interpolator_global_ids())
+    {
+        has_script_target = true;
+        if instance.has_scripted_interpolator_factory(global_id)
+            || targets.iter().any(|target| {
+                target.kind == ScriptMountTargetKind::Interpolator && target.global_id == global_id
+            })
+        {
+            continue;
+        }
+        let interpolator = runtime.object(global_id as usize).ok_or_else(|| {
+            nuxie_runtime::ScriptError::new(format!(
+                "{path} ScriptedInterpolator global {global_id} is absent from the runtime file"
+            ))
+        })?;
+        let mut target = script_mount_target(
+            runtime,
+            scripts,
+            interpolator,
+            ScriptMountTargetKind::Interpolator,
+            &path,
+        )?;
+        target.local_id = graph
+            .local_objects
+            .iter()
+            .find(|object| object.global_id == global_id)
+            .map(|object| object.local_id)
+            .unwrap_or_default();
+        targets.push(target);
+    }
     Ok((
         has_script_target,
         ScriptMountGroup {
@@ -2997,6 +3061,8 @@ fn validate_prepared_script_mount_topology(
 fn attach_prepared_script_mounts(
     instance: &mut RuntimeArtboardInstance,
     prepared: Vec<PreparedScriptMountGroup>,
+    file_scripts: &Rc<RefCell<FileScriptRuntime>>,
+    runtime: &Arc<RuntimeFile>,
 ) {
     fn attach(
         instance: &mut RuntimeArtboardInstance,
@@ -3024,11 +3090,98 @@ fn attach_prepared_script_mounts(
             ScriptMountTargetKind::DataConverter => {
                 instance.set_scripted_data_converter_instance_for_global(global_id, script);
             }
+            ScriptMountTargetKind::Interpolator => {
+                unreachable!("interpolator targets install lazy factories, not eager tables")
+            }
+        }
+    }
+
+    fn attach_interpolators(
+        instance: &mut RuntimeArtboardInstance,
+        interpolators: Vec<PreparedScriptedInterpolator>,
+        file_scripts: &Rc<RefCell<FileScriptRuntime>>,
+        runtime: &Arc<RuntimeFile>,
+    ) {
+        for interpolator in interpolators {
+            let PreparedScriptedInterpolator {
+                graph_global_id,
+                local_id,
+                global_id,
+                asset_ordinal,
+                asset_name,
+                serialized_implemented_methods,
+                fallback_root,
+            } = interpolator;
+            let scripts = Rc::clone(file_scripts);
+            let runtime = Arc::clone(runtime);
+            instance.set_scripted_interpolator_factory(
+                global_id,
+                nuxie_runtime::RuntimeScriptedInterpolatorFactory::new(move |artboard| {
+                    let (context, parents) = artboard
+                        .scripted_interpolator_data_context_view_models(
+                            &runtime,
+                            fallback_root.as_ref(),
+                        );
+                    let hydration_root = artboard
+                        .scripted_interpolator_root_view_model(
+                            &runtime,
+                            fallback_root.as_ref(),
+                        );
+                    let inputs = resolved_layout_inputs(
+                        &runtime,
+                        graph_global_id,
+                        local_id,
+                        hydration_root.as_ref(),
+                    )?;
+                    let scripts = scripts.borrow();
+                    let ready = scripts.ready.as_ref().ok_or_else(|| {
+                        nuxie_runtime::ScriptError::new(format!(
+                            "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' has no live file VM"
+                        ))
+                    })?;
+                    let program = ready.programs.get(&asset_ordinal).ok_or_else(|| {
+                        nuxie_runtime::ScriptError::new(format!(
+                            "ScriptedInterpolator global {global_id} references unregistered protocol ordinal {asset_ordinal} name '{asset_name}'"
+                        ))
+                    })?;
+                    let mut script = ready
+                        .vm
+                        .instantiate_registered_script_with_context(program, context, parents)
+                        .map_err(|error| {
+                            error.with_context(format!(
+                            "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase generator failed"
+                        ))
+                        })?;
+                    for (name, value) in inputs {
+                        script.set_input(&name, value).map_err(|error| {
+                            error.with_context(format!(
+                                "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase ScriptInput hydration failed for '{name}'"
+                            ))
+                        })?;
+                    }
+                    if nuxie_runtime::scripted_object_inits(serialized_implemented_methods) {
+                        let initialized = script
+                            .call_init(&mut NoopScriptHost)
+                            .map_err(|error| {
+                                error.with_context(format!(
+                                    "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase init failed"
+                                ))
+                            })?;
+                        if !initialized {
+                            return Err(nuxie_runtime::ScriptError::new(format!(
+                                "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase init returned false or nil"
+                            )));
+                        }
+                    }
+                    Ok(script)
+                }),
+            );
         }
     }
 
     let mut groups = VecDeque::from(prepared);
     if let Some(root) = groups.pop_front() {
+        attach_interpolators(instance, root.interpolators, file_scripts, runtime);
         for (kind, global_id, serialized_implemented_methods, script) in root.scripts {
             attach(
                 instance,
@@ -3041,6 +3194,7 @@ fn attach_prepared_script_mounts(
     }
     let mut visitor = |_: usize, _: u32, nested: &mut RuntimeArtboardInstance| {
         if let Some(group) = groups.pop_front() {
+            attach_interpolators(nested, group.interpolators, file_scripts, runtime);
             for (kind, global_id, serialized_implemented_methods, script) in group.scripts {
                 attach(
                     nested,
@@ -3119,7 +3273,7 @@ fn mount_scripted_artboard_tree(
     if let Some(candidate) = prepared.candidate.take() {
         file.scripts.borrow_mut().ready = Some(candidate);
     }
-    attach_prepared_script_mounts(instance, prepared.groups);
+    attach_prepared_script_mounts(instance, prepared.groups, &file.scripts, &file.runtime);
 
     // Facade execution fails closed: every concrete scripted target must
     // have an attached table before entering the lower runtime draw path.

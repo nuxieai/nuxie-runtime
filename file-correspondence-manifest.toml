@@ -3909,13 +3909,13 @@ note = "RB-3 exact-slot scheduling and deferred-queue removal landed at d6d36a32
 upstream = "src/scripted/scripted_interpolator.cpp"
 status = "pending"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/scripting.rs"
+rust_module = "crates/nuxie-runtime/src/scripted_interpolator.rs; crates/nuxie-runtime/src/animation.rs; crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie/src/lib.rs; tools/rust-golden-runner/src/main.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0323"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "C1/F7: per-keyframe scripted interpolator clone and transform lifecycle remains absent."
+note = "P2-d requested seam candidate at d788e8ec: ScriptedInterpolator ScriptAsset resolution and Lua protocol registration, concrete Artboard DataContext projection, scalar ScriptInput hydration before user init, per-LinearAnimationInstance/per-keyframe stateful table creation, shared definition-level apply, transform/transformValue callback dispatch with pinned Lua numeric coercion, identity/linear fallback, clone-cold cache ownership, and bounded missing/generator/callback diagnostics are implemented. AF-1/AF-5 adaptation: immutable animation definitions retain the interpolator global id while each LAI owns a Rust VM-table cache keyed by keyframe global id instead of cloning C++ Core objects. Evidence: scripted_interpolator_tests::{imported_lua_transform_value_drives_keyframe_apply,definition_level_apply_uses_the_shared_scripted_interpolator,missing_and_erroring_imported_callbacks_fall_back_and_report_diagnostics}; scripted_interpolator::tests::{caches_one_script_table_per_keyframe,missing_and_erroring_transform_value_callbacks_fall_back_with_diagnostics,diagnostics_are_deduplicated_and_bounded}; nuxie-scripting scripted_interpolator callback/coercion tests; corpus.toml::scripted_interpolator exact C++/Rust scenario differential covering init-observes-input order, both callbacks, and mutable per-keyframe self state. The full scripted corpus is exact (321 entries, 657 segments, zero divergences). This whole-file row remains pending because generic cloned ScriptInput DataBind/converter ownership and ordered teardown from ScriptedObject::cloneProperties are not claimed by the scoped P2-d callback/evaluation port, and independent verification is pending. Pinned upstream contains no direct ScriptedInterpolator unit test, so the test-correspondence ledger counts and max_pending ratchet remain unchanged."
 
 [[file]]
 upstream = "src/scripted/scripted_layout.cpp"

@@ -1373,15 +1373,15 @@ note = "P2F1/D17 adapted decoder candidate: owned encoded WAV/MP3/FLAC, owned bu
 
 [[file]]
 upstream = "src/audio_event.cpp"
-status = "pending"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/audio_event.rs; crates/nuxie-runtime/src/artboard.rs; crates/nuxie-runtime/src/state_machine/state_machine_instance.rs; crates/nuxie/src/lib.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0113"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "P2F2 faithful candidate awaiting orchestrator verification: AudioEvent.assetId resolves through the dense File::assets catalog, the selected AudioAsset source and Artboard engine are retained across clones, absent external engines use the retained default runtime engine, asset and Artboard volumes multiply, non-positive volume suppresses playback, current-frame scheduling ignores report delay, event playback runs at the existing root-first unwind seam, and configured Artboard teardown stops only its tagged sounds. Anchors: audio_riv_load_playback_volume_and_has_audio_match_pinned_cpp, audio_event_seam_plays_the_resolved_sound_fixture_asset, audio_event_playback_multiplies_artboard_volume_and_stops_with_its_artboard, and audio_event_artboard_clone_retains_its_asset_and_stops_independently."
+note = "2026-08-02 correspondence reconciliation: faithful after aa397468. AudioEvent asset resolution, retained source/engine ownership, clone behavior, multiplied volume, playback scheduling, root-first event ordering, and Artboard-scoped teardown are covered by crates/nuxie-runtime/tests/cpp_probe.rs::audio_riv_load_playback_volume_and_has_audio_match_pinned_cpp, state_machine_instance.rs::audio_event_seam_plays_the_resolved_sound_fixture_asset, and crates/nuxie/tests/audio_core.rs::{audio_event_playback_multiplies_artboard_volume_and_stops_with_its_artboard,audio_event_artboard_clone_retains_its_asset_and_stops_independently}. The live C++ probe and required reconciliation gates are recorded green in RECON-report.md."
 
 [[file]]
 upstream = "src/bindable_artboard.cpp"
@@ -1477,7 +1477,7 @@ b6_row_id = "B6-0121"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F3: command queue is absent."
+note = "2026-08-02 reconciliation: remains pending. No Rust CommandQueue or CommandServer transport owner exists; the missing surface is the complete queued handle/request protocol for file and artboard lifetime, view-model mutation/subscription, state-machine input/advance, semantics, async image/audio/font decode, draw cancellation, callback delivery, and processMessages/runOnce/disconnect from pinned src/command_queue.cpp:34-2321."
 
 [[file]]
 upstream = "src/command_server.cpp"
@@ -1777,7 +1777,7 @@ b6_row_id = "B6-0146"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port."
+note = "2026-08-02 reconciliation: remains pending. Rust retained cells cover many Core property writes, but pinned src/core.cpp:12-76 synchronously notifies intrusive dependents on mutation; Rust still relies on artboard data-bind dirty epochs and candidate-generation rebind/scan lifecycles. That push-versus-reconciliation ownership gap is recorded by B6-0146 and has no approved D-row."
 
 [[file]]
 upstream = "src/core/binary_data_reader.cpp"
@@ -2521,19 +2521,19 @@ b6_row_id = "B6-0207"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port."
+note = "2026-08-02 reconciliation: remains pending. Factory::decodeAudio is now owned by nuxie-render-api and exercised by the audio oracle, but the Factory seam still has no direct equivalents for pinned Factory::makeRenderPath(AABB) and Factory::decodeFont; font decoding and rectangle-path construction are performed by downstream asset/path owners instead. B6-0207 establishes an adapted trait seam, not complete whole-file correspondence."
 
 [[file]]
 upstream = "src/file.cpp"
-status = "pending"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie/src/lib.rs; crates/nuxie-runtime/src/lib.rs; crates/nuxie-binary/src/lib.rs; crates/nuxie-binary/src/assets/file_asset.rs; crates/nuxie-binary/src/assets/file_asset_contents.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0208"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "C8 writer-gate candidate. The public nuxie File now coordinates bounded import, the dense file-order FileAsset catalog (including in-band contents and retained resources), view-model schema/instance/global catalogs, and authenticated one-VM-per-Factory script registration. nuxie-binary owns File::readRuntimeObject-compatible decoding/import-stack validation and the catalog projections; nuxie-runtime owns artboard/view-model occurrence construction. Rust deliberately requires an explicit Factory and does not expose a raw externally supplied ScriptingVM. Pending remains honest: File::read collection plus File::registerScripts initialization of ScriptedInterpolator objects is source-ratcheted but executable ScriptedInterpolator transform/value behavior is not implemented; WITH_RIVE_TOOLS stripAssets and view-model registrar members are tool-only exclusions."
+note = "2026-08-02 correspondence reconciliation: faithful after a5ea0980 plus 60dbc545. The public File owns bounded import, dense assets and retained resources, artboard and view-model catalogs/instances/globals, deterministic mode, and authenticated one-VM-per-Factory script registration; the later ScriptedInterpolator landing closes the stale transform/transformValue blocker in the C8 note. Evidence: crates/nuxie/src/lib.rs::{upstream_file_can_be_read,upstream_file_artboards_can_be_counted_and_accessed_via_index_or_name,upstream_file_with_bad_blend_mode_fails_to_load,file_facade_prepares_one_authenticated_script_runtime_per_factory_domain}, crates/nuxie/src/scripted_interpolator_tests.rs, crates/nuxie-binary/tests/cpp_import.rs File::readRuntimeObject source ratchets, and the exact corpus.toml::scripted_interpolator differential. Rust deliberately requires explicit authenticated script authority and a Factory rather than accepting a raw external ScriptingVM; WITH_RIVE_TOOLS stripAssets and registrar members remain configuration exclusions. Required gates are recorded green in RECON-report.md."
 
 [[file]]
 upstream = "src/focus_data.cpp"
@@ -2545,7 +2545,7 @@ b6_row_id = "B6-0209"
 b6_verdict = "DIVERGENT"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-2: copied focus descriptors and target lookup rebuild remain a confirmed divergence."
+note = "2026-08-02 reconciliation: remains pending. RuntimeFocusTree still rescans copied FocusData descriptors, rewrites node snapshots, rebuilds topology and target_nodes, then traverses; pinned FocusData mutates retained FocusNode/parent/listener relationships directly. Key/text/gamepad FocusData dispatch also lacks a whole-file correspondence proof. This is the B6-0209/RB-2 gap."
 
 [[file]]
 upstream = "src/foreground_layout_drawable.cpp"
@@ -2893,7 +2893,7 @@ b6_row_id = "B6-0238"
 b6_verdict = "DIVERGENT"
 b6_cluster = "focus-input"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-2: focus-tree projection and target lookup rebuild remain a confirmed divergence."
+note = "2026-08-02 reconciliation: remains pending. RuntimeFocusTree::sync projects copied descriptors and rebuilds manager topology/target lookup at advance time instead of retaining the pinned FocusManager node graph and mutation callbacks; the manager's full navigation, reparent/listener, and focus-event ownership therefore remains RB-2."
 
 [[file]]
 upstream = "src/input/focus_node.cpp"
@@ -2905,7 +2905,7 @@ b6_row_id = "B6-0239"
 b6_verdict = "DIVERGENT"
 b6_cluster = "focus-input"
 audit_record = "docs/b6-audit/results/focus-input.md"
-note = "Consolidated Rust port for input."
+note = "2026-08-02 reconciliation: remains pending. Rust FocusNode behavior is represented by RuntimeFocusNode snapshots inside RuntimeFocusTree; it does not retain the pinned FocusNode parent/children identities and direct add/remove/reparent/listener propagation. The copied-node topology mirror is the exact B6-0239 focus-cluster gap."
 
 [[file]]
 upstream = "src/input/focusable.cpp"
@@ -2917,19 +2917,19 @@ b6_row_id = "B6-0240"
 b6_verdict = "DIVERGENT"
 b6_cluster = "focus-input"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "RB-2: copied Focusable state and target lookup rebuild remain a confirmed divergence."
+note = "2026-08-02 reconciliation: remains pending. Focusable state is copied into focus descriptors and target_nodes is rebuilt during RuntimeFocusTree::sync; pinned Focusable keeps a live FocusData/FocusNode target relationship and pushes changes directly. The retained target identity and mutation callback lifecycle remain the B6-0240/RB-2 gap."
 
 [[file]]
 upstream = "src/input/gamepad_batch.cpp"
-status = "pending"
-verification = "pending-verification"
+status = "faithful"
+verification = "orchestrator-verified"
 rust_module = "crates/nuxie-runtime/src/state_machine/gamepad_batch.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0241"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "P2-e candidate: v2 little-endian batch decoding, validation, per-device snapshots, and runtime/facade submission are implemented; file-correspondence promotion remains pending orchestrator verification."
+note = "2026-08-02 correspondence reconciliation: faithful after 5eb45e67. crates/nuxie-runtime/src/state_machine/gamepad_batch.rs owns the v2 little-endian decoder, record validation, partial-application behavior, per-device snapshots, reconnect/disconnect, and scripted/listener broadcast; runtime and public facades expose submission. Evidence: all eight crates/nuxie-runtime/tests/gamepad_batch.rs cases are green, test-correspondence-manifest.toml classifies all seven pinned gamepad_test.cpp cases ported-direct, and silver-corpus.toml::gamepad_test now executes ingestion through both runtimes. Required gates are recorded green in RECON-report.md."
 
 [[file]]
 upstream = "src/inputs/gamepad_input.cpp"
@@ -2989,7 +2989,7 @@ b6_row_id = "B6-0246"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "FL-E4 direct file owner retains clone-local component/source handles, immutable animation handles, ordered nested-remap handles, world/inverse matrices, exact update/apply/controlSize and Components callbacks; joystick_flag_test.riv plus synthetic source/clone tests cover the class."
+note = "F9 closure via FL-E4: the direct file owner retains clone-local component/source handles, immutable animation handles, ordered nested-remap handles, world/inverse matrices, exact update/apply/controlSize and Components callbacks; joystick_flag_test.riv plus synthetic source/clone tests cover the class."
 
 [[file]]
 upstream = "src/layout.cpp"
@@ -3205,7 +3205,7 @@ b6_row_id = "B6-0264"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "lua-scripting"
 audit_record = "P1G-report.md"
-note = "P1G partial: crates/nuxie-scripting/src/vm/view_model.rs:1099-1122 exposes DataContext:parent() and :viewModel(). Exact missing context-state semantics versus pinned src/lua/lua_data_context.cpp:9-92: C++ parent() returns an existing parent DataContext even when that context has no main ViewModelInstance, and viewModel() independently returns nil; Rust stores parents only as Vec<ScriptViewModel>, so it cannot represent that parent-without-main-view-model state and collapses it to no parent."
+note = "2026-08-02 P1G/F7 reconciliation: remains pending. crates/nuxie-scripting/src/vm/view_model.rs exposes DataContext:parent() and :viewModel(), but stores parents only as Vec<ScriptViewModel>. It still cannot represent the pinned state where parent() returns an existing parent DataContext whose viewModel() independently returns nil (src/lua/lua_data_context.cpp:9-92). Recent image/audio/layout bindings do not close that context-identity gap."
 
 [[file]]
 upstream = "src/lua/lua_data_value.cpp"
@@ -3217,7 +3217,7 @@ b6_row_id = "B6-0265"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "lua-scripting"
 audit_record = "P1G-report.md"
-note = "P1G partial: crates/nuxie-scripting/src/vm.rs has DataValue.number/string/boolean/color, value, red/green/blue/alpha, and isNumber/isString/isBoolean/isColor. Exact missing member semantics versus pinned src/lua/lua_data_value.cpp:21-503: non-color red/green/blue/alpha reads must error (Rust returns nil); number/string/color value setters must retain luaL_check* coercion/wrapping (Rust rejects some accepted values); color-channel setters on colors must retain signed/spill behavior rather than u32 range-checking and 8-bit masking, while setters on non-colors must ignore every RHS without converting it; unknown assignments must be silently ignored rather than rejected by the Rust userdata dispatcher."
+note = "2026-08-02 P1G/F7 reconciliation: remains pending. DataValue constructors, value/channel accessors, and type queries exist, but exact pinned semantics still missing are: non-color channel reads error rather than nil; luaL_check* setter coercion/wrapping; signed/spill color-channel writes without Rust u32 range checks and masks; non-color channel setters ignore every RHS without conversion; and unknown assignments are silently ignored rather than rejected. Recent wrapper landings do not change this src/lua/lua_data_value.cpp:21-503 gap."
 
 [[file]]
 upstream = "src/lua/lua_image_decode.cpp"
@@ -3265,7 +3265,7 @@ b6_row_id = "B6-0269"
 b6_verdict = "DIVERGENT"
 b6_cluster = "lua-scripting"
 audit_record = "docs/b6-audit/results/lua-scripting.md"
-note = "Consolidated Rust port for lua."
+note = "2026-08-02 reconciliation: remains pending. Image property behavior landed, but the umbrella lua_properties.cpp row still lacks retained push-owned ScriptViewModel parent/property links: Rust mirrors parent edges and rescans/re-writes live instances before detached advance. The other 14 non-image scripting_properties_test.cpp cases remain unclaimed, so image/blob/mesh/layout/audio wrapper completion is not whole-file evidence for this 1,884-line owner."
 
 [[file]]
 upstream = "src/lua/lua_rive_base.cpp"
@@ -3289,7 +3289,7 @@ b6_row_id = "B6-0271"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F7: this Lua binding is absent."
+note = "2026-08-02 reconciliation: remains pending. There is no Rust owner for the full ScriptedContext binding: ScriptedContext construction and pushViewModel, pushRootViewModel, pushDataContext plus the Context namecall surface for artboard, animation, state-machine, event, asset, layout, audio, image/decode, timing and random access in pinned src/lua/lua_scripted_context.cpp:125-595 remain absent as one coherent binding."
 
 [[file]]
 upstream = "src/lua/lua_state.cpp"
@@ -3301,7 +3301,7 @@ b6_row_id = "B6-0272"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "lua-scripting"
 audit_record = "P1G-report.md"
-note = "P1G partial: crates/nuxie-scripting/src/vm/view_model.rs:1124-1147 installs Data.<ViewModel>.new and fresh/named-instance fallback. Exact missing Data.<ViewModel>.new semantics versus pinned src/lua/lua_state.cpp:11-99: one boolean/table argument must return nil rather than a conversion error, and calls with more than one argument must always create a fresh instance rather than interpreting the first argument as a template name."
+note = "2026-08-02 P1G/F7 reconciliation: remains pending. Data.<ViewModel>.new and fresh/named-instance fallback exist, but pinned lua_state.cpp semantics are still missing: one boolean or table argument returns nil rather than a conversion error, and every call with more than one argument creates a fresh instance instead of interpreting argument one as a template name."
 
 [[file]]
 upstream = "src/lua/math/lua_color.cpp"
@@ -3397,7 +3397,7 @@ b6_row_id = "B6-0280"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F7/F8: Lua GPU binding and ORE GPU host are absent."
+note = "2026-08-02 reconciliation: remains pending. The RIVE_ORE GPU Lua host is absent: buffer/texture/sampler construction, shader/RSTB entry selection, bind-group layouts/groups, render pipelines and passes, canvas handles, uploads, draw/drawIndexed, resize/frame lifecycle, enum coercions, and validation from pinned src/lua/renderer/lua_gpu.cpp:34-3717 have no Rust binding owner. The backend-neutral imported GPU-canvas plan is not this Lua API."
 
 [[file]]
 upstream = "src/lua/renderer/lua_gradient.cpp"
@@ -3409,7 +3409,7 @@ b6_row_id = "B6-0281"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "lua-scripting"
 audit_record = "P1G-report.md"
-note = "P1G partial: crates/nuxie-scripting/src/vm/renderer.rs:127-180,1070-1083 has Gradient.linear, Gradient.radial, position/color stop decoding, factory allocation, and shader userdata. Exact missing Gradient.linear/radial stop-list semantics versus pinned src/lua/renderer/lua_gradient.cpp:9-89: iteration must terminate silently at the first non-table (both already stop at the first hole), while Rust errors on a non-table; stop colors must retain luaL_checkunsigned wrapping/conversion semantics, while Rust u32 decoding range-checks them."
+note = "2026-08-02 P1G/F7 reconciliation: remains pending. Gradient.linear/radial, stop decoding, factory allocation and shader userdata exist. Exact remaining lua_gradient.cpp semantics: stop iteration terminates silently at the first non-table (Rust errors), and stop colors use luaL_checkunsigned wrapping/conversion (Rust u32 decoding range-checks)."
 
 [[file]]
 upstream = "src/lua/renderer/lua_image.cpp"
@@ -3493,7 +3493,7 @@ b6_row_id = "B6-0288"
 b6_verdict = "DIVERGENT"
 b6_cluster = "lua-scripting"
 audit_record = "docs/b6-audit/results/lua-scripting.md"
-note = "Consolidated Rust port for lua."
+note = "2026-08-02 reconciliation: remains pending. Recent image/blob/mesh/layout/audio registrations expanded the library surface, but rive_lua_libs.cpp still has no whole-file equivalent for retained ScriptViewModelInstance tracking and direct hasParents lifecycle: Rust mirrors parent edges and rescans live instances before detached advance. Pending lua_data_context, lua_data_value, lua_state and gradient semantics also prevent claiming the umbrella registration/userdata owner as complete."
 
 [[file]]
 upstream = "src/math/aabb.cpp"
@@ -3771,7 +3771,7 @@ b6_row_id = "B6-0311"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "Consolidated runtime port."
+note = "2026-08-02 reconciliation: remains pending. Rust owns backend-neutral render traits, buffers, paths, alignment at nested-artboard call sites, and HarfRust text shaping, but not the complete renderer.cpp surface: Renderer translate/scale/rotate convenience semantics and Factory-independent computeAlignment are not exposed as direct owners, and Font::shapeText's exact break/joiner annotation (including C++ zero-width-space classification) lacks whole-file oracle correspondence. B6-0311 is only medium-confidence adapted evidence."
 
 [[file]]
 upstream = "src/resetting_component.cpp"
@@ -3915,7 +3915,7 @@ b6_row_id = "B6-0323"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "P2-d requested seam candidate at d788e8ec: ScriptedInterpolator ScriptAsset resolution and Lua protocol registration, concrete Artboard DataContext projection, scalar ScriptInput hydration before user init, per-LinearAnimationInstance/per-keyframe stateful table creation, shared definition-level apply, transform/transformValue callback dispatch with pinned Lua numeric coercion, identity/linear fallback, clone-cold cache ownership, and bounded missing/generator/callback diagnostics are implemented. AF-1/AF-5 adaptation: immutable animation definitions retain the interpolator global id while each LAI owns a Rust VM-table cache keyed by keyframe global id instead of cloning C++ Core objects. Evidence: scripted_interpolator_tests::{imported_lua_transform_value_drives_keyframe_apply,definition_level_apply_uses_the_shared_scripted_interpolator,missing_and_erroring_imported_callbacks_fall_back_and_report_diagnostics}; scripted_interpolator::tests::{caches_one_script_table_per_keyframe,missing_and_erroring_transform_value_callbacks_fall_back_with_diagnostics,diagnostics_are_deduplicated_and_bounded}; nuxie-scripting scripted_interpolator callback/coercion tests; corpus.toml::scripted_interpolator exact C++/Rust scenario differential covering init-observes-input order, both callbacks, and mutable per-keyframe self state. The full scripted corpus is exact (321 entries, 657 segments, zero divergences). This whole-file row remains pending because generic cloned ScriptInput DataBind/converter ownership and ordered teardown from ScriptedObject::cloneProperties are not claimed by the scoped P2-d callback/evaluation port, and independent verification is pending. Pinned upstream contains no direct ScriptedInterpolator unit test, so the test-correspondence ledger counts and max_pending ratchet remain unchanged."
+note = "2026-08-02 C1/F7 reconciliation: remains pending after 60dbc545. The landed seam covers ScriptAsset resolution/registration, DataContext projection, input-before-init hydration, per-animation/per-keyframe stateful tables, shared apply, transform/transformValue coercion/fallback, clone-cold caches and bounded diagnostics; corpus.toml::scripted_interpolator is an exact C++/Rust differential and focused Rust suites are green. Whole-file closure is still blocked by generic cloned ScriptInput DataBind/converter ownership and ordered teardown from ScriptedObject::cloneProperties, which P2-d explicitly did not port. Pinned upstream has no direct ScriptedInterpolator unit-test row, so no test-correspondence count changes."
 
 [[file]]
 upstream = "src/scripted/scripted_layout.cpp"
@@ -3927,7 +3927,7 @@ b6_row_id = "B6-0324"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "P2C ports ScriptedLayout's direct parent-layout lookup, post-hydration forced layout dirt, serialized measure/resize method bits, contained single-lookup Lua measure/resize callbacks, Taffy leaf measurement hook, and settled/animated layout-size propagation. Five upstream Lua-call cases are direct ports; the sixth 20+20-frame Rows/Columns scenario compares normalized draw semantics against pinned script_layout_grid.sriv, and the script_layout_test exact corpus entry independently covers the live C++ stream."
+note = "F7 closure via P2C: ScriptedLayout's direct parent-layout lookup, post-hydration forced layout dirt, serialized measure/resize method bits, contained single-lookup Lua measure/resize callbacks, Taffy leaf measurement hook, and settled/animated layout-size propagation are ported. Five upstream Lua-call cases are direct ports; the sixth 20+20-frame Rows/Columns scenario compares normalized draw semantics against pinned script_layout_grid.sriv, and the script_layout_test exact corpus entry independently covers the live C++ stream."
 
 [[file]]
 upstream = "src/scripted/scripted_object.cpp"
@@ -3963,7 +3963,7 @@ b6_row_id = "B6-0327"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F6: semantics runtime is absent."
+note = "2026-08-02 reconciliation: remains pending. SemanticData ownership is absent: semantic-node creation/parent resolution, focus/collapse, dirt/update/inference, tree visibility, world bounds, listener registration and tap/increase/decrease dispatch from pinned src/semantic/semantic_data.cpp:21-572 have no Rust runtime owner. Existing semantic listener queue seams do not implement this file."
 
 [[file]]
 upstream = "src/semantic/semantic_inference_registry.cpp"
@@ -3975,7 +3975,7 @@ b6_row_id = "B6-0328"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F6: semantics runtime is absent."
+note = "2026-08-02 reconciliation: remains pending. The semantic inference registry is absent: inferred text labels, component inference callbacks, registry registration/removal and resolve behavior from pinned src/semantic/semantic_inference_registry.cpp:22-97 have no Rust owner."
 
 [[file]]
 upstream = "src/semantic/semantic_manager.cpp"
@@ -3987,7 +3987,7 @@ b6_row_id = "B6-0329"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F6: semantics runtime is absent."
+note = "2026-08-02 reconciliation: remains pending. SemanticManager is absent: label normalization/derivation, tree flattening and visual order, diff construction/patching/drain, node ID allocation, child mutation, dirty-boundary reconciliation, refresh, and semantic focus from pinned src/semantic/semantic_manager.cpp:33-1109 have no Rust owner. The state-machine semantic seam only queues callbacks."
 
 [[file]]
 upstream = "src/semantic/semantic_provider.cpp"
@@ -3999,7 +3999,7 @@ b6_row_id = "B6-0330"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "F6: semantics runtime is absent."
+note = "2026-08-02 reconciliation: remains pending. SemanticProvider is absent: root-transform bounds, inference eligibility/data resolution, and semantic-bounds projection from pinned src/semantic/semantic_provider.cpp:13-148 have no Rust owner."
 
 [[file]]
 upstream = "src/shapes/clipping_shape.cpp"
@@ -4575,7 +4575,7 @@ b6_row_id = "B6-0378"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "FL-E6 ports retained cursor endpoints, ordering, collapse/selection queries, saturation, and direct operator tests."
+note = "F2 closure via FL-E6 ports retained cursor endpoints, ordering, collapse/selection queries, saturation, and direct operator tests."
 
 [[file]]
 upstream = "src/text/font_hb.cpp"
@@ -4647,7 +4647,7 @@ b6_row_id = "B6-0384"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "FL-E6 ports the retained edit buffer, cursor and selection mutation, grapheme deletion, word/subword/line movement, journal undo/redo, shaped caret/hit/selection geometry, and W65 class-C assertions."
+note = "F2 closure via FL-E6 ports the retained edit buffer, cursor and selection mutation, grapheme deletion, word/subword/line movement, journal undo/redo, shaped caret/hit/selection geometry, and W65 class-C assertions."
 
 [[file]]
 upstream = "src/text/text.cpp"
@@ -4695,7 +4695,7 @@ b6_row_id = "B6-0388"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "FL-E6 ports TextInput retained source/display text, generated callbacks, key and committed-text editing, multiline behavior, cursor/selection geometry, pointer drag, edge scrolling, scroll-constraint ownership, clone-cold state, and update/draw integration."
+note = "F2/F5 closure via FL-E6 ports TextInput retained source/display text, generated callbacks, key and committed-text editing, multiline behavior, cursor/selection geometry, pointer drag, edge scrolling, scroll-constraint ownership, clone-cold state, and update/draw integration."
 
 [[file]]
 upstream = "src/text/text_input_cursor.cpp"
@@ -4707,7 +4707,7 @@ b6_row_id = "B6-0389"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "FL-E6 replaces the origin placeholder with the live shaped cursor path owned by the retained TextInput cursor."
+note = "F2 closure via FL-E6 replaces the origin placeholder with the live shaped cursor path owned by the retained TextInput cursor."
 
 [[file]]
 upstream = "src/text/text_input_drawable.cpp"
@@ -4731,7 +4731,7 @@ b6_row_id = "B6-0391"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "FL-E6 ports selected-text child discovery, separate-selection state, selected-range-only glyph drawing, and complementary exclusion from the main text drawable."
+note = "F2/C1 closure via FL-E6 ports selected-text child discovery, separate-selection state, selected-range-only glyph drawing, and complementary exclusion from the main text drawable."
 
 [[file]]
 upstream = "src/text/text_input_selection.cpp"
@@ -4743,7 +4743,7 @@ b6_row_id = "B6-0392"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "FL-E6 routes the live retained selection range through shaped selection rectangles and the direct contour path owner."
+note = "F2 closure via FL-E6 routes the live retained selection range through shaped selection rectangles and the direct contour path owner."
 
 [[file]]
 upstream = "src/text/text_input_text.cpp"
@@ -4815,7 +4815,7 @@ b6_row_id = "B6-0398"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "FL-E6 ports rectangle union, contour orientation, per-corner radius clamping, ideal cubic control points, and live selection-path draw integration."
+note = "F2 closure via FL-E6 ports rectangle union, contour orientation, per-corner radius clamping, ideal cubic control points, and live selection-path draw integration."
 
 [[file]]
 upstream = "src/text/text_style.cpp"
@@ -4851,7 +4851,7 @@ b6_row_id = "B6-0401"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "FL-E8 WP1 faithful candidate: crates/nuxie-runtime/src/text/text_style_feature.rs validates the direct style parent and snapshots ordered tag/value options (default value 1); D-ST-FEATURE and G-ST-FEATURE pin duplicate order, HarfBuzz application, and live callback inaction."
+note = "C1/F13 closure via FL-E8 WP1: crates/nuxie-runtime/src/text/text_style_feature.rs validates the direct style parent and snapshots ordered tag/value options (default value 1); D-ST-FEATURE and G-ST-FEATURE pin duplicate order, HarfBuzz application, and live callback inaction."
 
 [[file]]
 upstream = "src/text/text_style_paint.cpp"
@@ -4911,7 +4911,7 @@ b6_row_id = "B6-0406"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "text"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "FL-E8 WP1 faithful candidate: crates/nuxie-runtime/src/text/text_variation_modifier.rs preserves default-axis interpolation, duplicate sequential tags, unclamped strength, axisValue-only dirt, coverage run splitting, and per-segment variable fonts; D-ST-VARIATION and G-ST-VARIATION are evidence."
+note = "C1/F13 closure via FL-E8 WP1: crates/nuxie-runtime/src/text/text_variation_modifier.rs preserves default-axis interpolation, duplicate sequential tags, unclamped strength, axisValue-only dirt, coverage run splitting, and per-segment variable fonts; D-ST-VARIATION and G-ST-VARIATION are evidence."
 
 [[file]]
 upstream = "src/text/utf.cpp"

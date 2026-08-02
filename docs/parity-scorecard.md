@@ -3,8 +3,8 @@
 ## C++ → Rust file correspondence
 
 Files: 448
-Status counts: `divergent-by-decision`: 4; `faithful`: 420; `pending`: 24
-Named pending files: 24
+Status counts: `divergent-by-decision`: 4; `faithful`: 423; `pending`: 21
+Named pending files: 21
 
 ### focus-input
 
@@ -25,7 +25,6 @@ Named pending files: 24
 
 - `src/core.cpp`
 - `src/factory.cpp`
-- `src/file.cpp`
 - `src/focus_data.cpp`
 - `src/renderer.cpp`
 
@@ -35,9 +34,7 @@ Named pending files: 24
 
 ### unavailable
 
-- `src/audio_event.cpp`
 - `src/command_queue.cpp`
-- `src/input/gamepad_batch.cpp`
 - `src/lua/lua_scripted_context.cpp`
 - `src/lua/renderer/lua_gpu.cpp`
 - `src/semantic/semantic_data.cpp`

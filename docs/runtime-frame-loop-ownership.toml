@@ -1166,7 +1166,7 @@ status = "faithful"
 upstream = "src/animation/transition_number_condition.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_condition_op.rs", "crates/nuxie-runtime/src/state_machine/transition_number_condition.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_number_condition.rs"]
 dynamically_reached = false
 status = "faithful"
 
@@ -1198,7 +1198,7 @@ status = "faithful"
 upstream = "src/animation/transition_viewmodel_condition.cpp"
 source_set = "state-machine"
 wave = "FL-C"
-rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_condition_op.rs", "crates/nuxie-runtime/src/state_machine/transition_viewmodel_condition.rs"]
+rust_modules = ["crates/nuxie-runtime/src/state_machine/transition_viewmodel_condition.rs"]
 dynamically_reached = true
 status = "faithful"
 

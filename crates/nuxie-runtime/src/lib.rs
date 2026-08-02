@@ -173,6 +173,7 @@ pub use components::{
     ComponentDirt, Mat2D, RuntimeComponent, RuntimeComponentCapabilities, TransformProperty,
     TransformRuntimeState, UpdateComponentsReport,
 };
+pub use constraints::RuntimeScrollConstraintSnapshot;
 pub use custom_property_container::{RuntimeEventProperty, RuntimeEventPropertyValue};
 pub(crate) use data_bind_graph::{
     RuntimeDataBindGraph, RuntimeDataBindGraphApplyPhase, RuntimeDataBindGraphConverter,

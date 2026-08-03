@@ -656,7 +656,7 @@ note = "F12: async work pool is absent."
 [[file]]
 upstream = "src/audio/audio_engine.cpp"
 status = "ported"
-rust_module = "crates/nuxie-audio/src/engine.rs; crates/nuxie-audio/src/device.rs"
+rust_module = "crates/nuxie-audio/src/audio_engine.rs"
 note = "P2F1/P2F3: exact headless frame clock, scheduling/clipping, manual PCM pull/sum, levels, lifecycle, and artboard stop; optional CPAL output drains that same authoritative mixer through the default device."
 
 [[file]]
@@ -668,7 +668,7 @@ note = "P2F1/D17: independent Symphonia-backed readers with channel conversion a
 [[file]]
 upstream = "src/audio/audio_sound.cpp"
 status = "ported"
-rust_module = "crates/nuxie-audio/src/engine.rs"
+rust_module = "crates/nuxie-audio/src/audio_sound.rs"
 note = "P2F1: retained sound controls, cursor, volume, completion/disposal, fades, and engine-outliving handle safety are owned by the headless mixer."
 
 [[file]]
@@ -729,13 +729,13 @@ note = "Consolidated Rust port for bones."
 upstream = "src/command_queue.cpp"
 status = "partial"
 rust_module = "crates/nuxie/src/command_queue.rs"
-note = "P3F: typed queued transport, callbacks, resources, view models, draw coalescing, and lifecycle commands are present; semantics and unexecuted fixture-specific parity rows remain pending."
+note = "P3F partial against the advanced 4ac7b327 test oracle: the full structural queue owner provides typed transport, callbacks, resources, view models, draw coalescing, and lifecycle commands, with 14 focused Rust tests; 4/83 upstream command_queue_test.cpp cases are complete, while fixture-specific, semantic, and S4-45 blob cases remain pending, so whole-file faithful promotion is not claimed."
 
 [[file]]
 upstream = "src/command_server.cpp"
 status = "partial"
-rust_module = "crates/nuxie/src/command_server.rs"
-note = "P3F: the server-thread owner, handle maps, command loop, dependency cleanup, callbacks, draw scheduling, and resource/list/view-model structure are present; full 79-case promotion awaits remaining evidence and F6."
+rust_module = "crates/nuxie/src/command_server.rs; crates/nuxie-scripting/src/vm/command_server.rs"
+note = "P3F partial against the advanced 4ac7b327 test oracle: the full structural server owner provides the server thread, handle maps, command loop, dependency cleanup, callbacks, draw scheduling, and resource/list/view-model structure, with 14 focused Rust tests; 4/83 upstream command_queue_test.cpp cases are complete, while fixture-specific, semantic, and S4-45 blob cases remain pending, so whole-file faithful promotion is not claimed. FL-E1's independently verified scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and the scripting VM seam; render-api contract surface stays with its crate."
 
 [[file]]
 upstream = "src/component.cpp"
@@ -1598,7 +1598,7 @@ note = "F7/P1G: DataValue surface is present with tracked index/newindex, coerci
 [[file]]
 upstream = "src/lua/lua_image_decode.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm/lua_image_decode.rs; crates/nuxie-image-codec/src/lib.rs; crates/nuxie-scripting/src/vm/promise.rs; crates/nuxie-runtime/src/scene.rs"
+rust_module = "crates/nuxie-scripting/src/vm/lua_image_decode.rs; crates/nuxie-image-codec/src/lib.rs; crates/nuxie-scripting/src/vm/lua_promise.rs; crates/nuxie-runtime/src/scene.rs"
 note = "P2A: WorkPool-scheduled decode, root-frame VM-thread Promise settlement, cancellation, and unbounded premultiplied RGBA result/error behavior are ported."
 
 [[file]]
@@ -1610,7 +1610,7 @@ note = "P1J: complete owned Invocation classification/conversion and pointer, ke
 [[file]]
 upstream = "src/lua/lua_promise.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm/promise.rs; crates/nuxie-scripting/src/vm.rs"
+rust_module = "crates/nuxie-scripting/src/vm/lua_promise.rs"
 note = "P1-i: all 47 pinned Promise scenarios plus 2 invalid-yield cases pass exact live C++/Rust VM differentials; image decode is a separate lane."
 
 [[file]]

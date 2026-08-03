@@ -27,7 +27,7 @@ FEATURE_ROWS = {
     "src/command_queue.cpp": (
         "partial",
         "crates/nuxie/src/command_queue.rs",
-        "P3F: typed queued transport, callbacks, resources, view models, draw coalescing, and lifecycle commands are present; semantics and unexecuted fixture-specific parity rows remain pending.",
+        "P3F partial against the advanced 4ac7b327 test oracle: the full structural queue owner provides typed transport, callbacks, resources, view models, draw coalescing, and lifecycle commands, with 14 focused Rust tests; 4/83 upstream command_queue_test.cpp cases are complete, while fixture-specific, semantic, and S4-45 blob cases remain pending, so whole-file faithful promotion is not claimed.",
     ),
     "src/constraints/scrolling/elastic_scroll_physics.cpp": (
         "absent",
@@ -46,7 +46,7 @@ FEATURE_ROWS = {
     ),
     "src/lua/lua_promise.cpp": (
         "ported",
-        "crates/nuxie-scripting/src/vm/promise.rs; crates/nuxie-scripting/src/vm.rs",
+        "crates/nuxie-scripting/src/vm/lua_promise.rs",
         "P1-i: all 47 pinned Promise scenarios plus 2 invalid-yield cases pass exact live C++/Rust VM differentials; image decode is a separate lane.",
     ),
     "src/lua/renderer/lua_gpu.cpp": (
@@ -77,7 +77,7 @@ FEATURE_ROWS = {
     ),
     "src/audio/audio_engine.cpp": (
         "ported",
-        "crates/nuxie-audio/src/engine.rs; crates/nuxie-audio/src/device.rs",
+        "crates/nuxie-audio/src/audio_engine.rs",
         "P2F1/P2F3: exact headless frame clock, scheduling/clipping, manual PCM pull/sum, levels, lifecycle, and artboard stop; optional CPAL output drains that same authoritative mixer through the default device.",
     ),
     "src/audio/audio_reader.cpp": (
@@ -87,7 +87,7 @@ FEATURE_ROWS = {
     ),
     "src/audio/audio_sound.cpp": (
         "ported",
-        "crates/nuxie-audio/src/engine.rs",
+        "crates/nuxie-audio/src/audio_sound.rs",
         "P2F1: retained sound control, volume, completion, and disposal behavior is ported.",
     ),
     "src/audio/audio_source.cpp": (
@@ -115,8 +115,8 @@ FEATURE_ROWS.update(
         ),
         "src/command_server.cpp": (
             "partial",
-            "crates/nuxie/src/command_server.rs",
-            "P3F: the server-thread owner, handle maps, command loop, dependency cleanup, callbacks, draw scheduling, and resource/list/view-model structure are present; full 79-case promotion awaits remaining evidence and F6.",
+            "crates/nuxie/src/command_server.rs; crates/nuxie-scripting/src/vm/command_server.rs",
+            "P3F partial against the advanced 4ac7b327 test oracle: the full structural server owner provides the server thread, handle maps, command loop, dependency cleanup, callbacks, draw scheduling, and resource/list/view-model structure, with 14 focused Rust tests; 4/83 upstream command_queue_test.cpp cases are complete, while fixture-specific, semantic, and S4-45 blob cases remain pending, so whole-file faithful promotion is not claimed. FL-E1's independently verified scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and the scripting VM seam; render-api contract surface stays with its crate.",
         ),
         "src/constraints/scrolling/clamped_scroll_physics.cpp": (
             "partial",
@@ -279,9 +279,9 @@ for _path in {
 FEATURE_ROWS.update(
     {
         "src/lua/lua_data_context.cpp": (
-            "partial",
-            "crates/nuxie-scripting/src/vm/view_model.rs",
-            "F7/P1G: DataContext methods are present; parent contexts without a main view model remain unrepresentable.",
+            "ported",
+            "crates/nuxie-runtime/src/data_bind/data_bind_context.rs; crates/nuxie-scripting/src/vm/view_model.rs",
+            "P3-b: DataContext userdata preserves parent occurrences independently from optional main view models, including a nil-model parent in a longer chain.",
         ),
         "src/lua/lua_data_value.cpp": (
             "partial",
@@ -295,7 +295,7 @@ FEATURE_ROWS.update(
         ),
         "src/lua/lua_image_decode.cpp": (
             "ported",
-            "crates/nuxie-scripting/src/vm/lua_image_decode.rs; crates/nuxie-image-codec/src/lib.rs; crates/nuxie-scripting/src/vm/promise.rs; crates/nuxie-runtime/src/scene.rs",
+            "crates/nuxie-scripting/src/vm/lua_image_decode.rs; crates/nuxie-image-codec/src/lib.rs; crates/nuxie-scripting/src/vm/lua_promise.rs; crates/nuxie-runtime/src/scene.rs",
             "P2A: WorkPool-scheduled decode, root-frame VM-thread Promise settlement, cancellation, and unbounded premultiplied RGBA result/error behavior are ported.",
         ),
         "src/lua/renderer/lua_blob.cpp": (

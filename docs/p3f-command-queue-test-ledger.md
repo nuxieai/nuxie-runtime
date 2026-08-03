@@ -1,7 +1,7 @@
 # P3F CommandQueue / CommandServer test ledger
 
-Pinned oracle: `rive-runtime@d788e8ec`,
-`tests/unit_tests/runtime/command_queue_test.cpp` (79 `TEST_CASE`s).
+Advanced test oracle: `rive-runtime@4ac7b327`,
+`tests/unit_tests/runtime/command_queue_test.cpp` (83 `TEST_CASE`s).
 
 The lane-focused command is:
 
@@ -112,5 +112,16 @@ semantics** and remains outside this baseline lane.
 12. `Semantics clearSemanticFocus removes Focused bit from focused node` — depends on F6 focus mutation.
 13. `Semantics drainSemanticsDiff honors scaleFactor when the view is scaled` — depends on F6 view-space diff mapping.
 
-Ratchet accounting: **4 complete + 62 pending non-F6 + 13 pending F6 =
-79 expected upstream cases**.
+## Pending S4-45 blob WATCH rows (4)
+
+The advanced pin adds four blob command-transport cases. P3F's structural
+owners do not yet implement blob handles, callbacks, or view-model blob
+properties, so these cases receive no completion credit.
+
+1. `BlobAsset`
+2. `blob asset listener callbacks`
+3. `View Model Blob Property Set`
+4. `View Model Blob Property Subscription`
+
+Ratchet accounting: **4 complete + 62 pending non-F6 + 13 pending F6 +
+4 pending S4-45 blob WATCH = 83 expected upstream cases**.

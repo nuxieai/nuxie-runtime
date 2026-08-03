@@ -729,13 +729,13 @@ note = "Consolidated Rust port for bones."
 upstream = "src/command_queue.cpp"
 status = "partial"
 rust_module = "crates/nuxie/src/command_queue.rs"
-note = "P3F partial against the advanced 4ac7b327 test oracle: the full structural queue owner provides typed transport, callbacks, resources, view models, draw coalescing, and lifecycle commands, with 14 focused Rust tests; 4/83 upstream command_queue_test.cpp cases are complete, while fixture-specific, semantic, and S4-45 blob cases remain pending, so whole-file faithful promotion is not claimed."
+note = "P3F/F3F6: faithful equivalents cover 79/83 pinned command_queue_test.cpp cases, including all 13 former F6-gated semantic cases. The four S4-45 blob command/message cases remain WATCH, so this whole-file row stays partial."
 
 [[file]]
 upstream = "src/command_server.cpp"
 status = "partial"
 rust_module = "crates/nuxie/src/command_server.rs; crates/nuxie-scripting/src/vm/command_server.rs"
-note = "P3F partial against the advanced 4ac7b327 test oracle: the full structural server owner provides the server thread, handle maps, command loop, dependency cleanup, callbacks, draw scheduling, and resource/list/view-model structure, with 14 focused Rust tests; 4/83 upstream command_queue_test.cpp cases are complete, while fixture-specific, semantic, and S4-45 blob cases remain pending, so whole-file faithful promotion is not claimed. FL-E1's independently verified scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and the scripting VM seam; render-api contract surface stays with its crate."
+note = "P3F/F3F6: semantic command dispatch, diff delivery, and view mapping bring faithful equivalents to 79/83 pinned command_queue_test.cpp cases. The four S4-45 blob cases remain WATCH, so this whole-file row stays partial. FL-E1's scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and scripting VM seam; render-api contract surface stays with its crate."
 
 [[file]]
 upstream = "src/component.cpp"
@@ -1591,9 +1591,9 @@ note = "P3-b: DataContext userdata preserves parent occurrences independently fr
 
 [[file]]
 upstream = "src/lua/lua_data_value.cpp"
-status = "partial"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "F7/P1G: DataValue surface is present with tracked index/newindex, coercion, and color-channel gaps."
+status = "ported"
+rust_module = "crates/nuxie-scripting/src/vm/lua_data_value.rs"
+note = "LT-2: DataValue constructors, check/coercion rules, index/newindex behavior, and signed/spill color channels are ported."
 
 [[file]]
 upstream = "src/lua/lua_image_decode.cpp"
@@ -1616,8 +1616,8 @@ note = "P1-i: all 47 pinned Promise scenarios plus 2 invalid-yield cases pass ex
 [[file]]
 upstream = "src/lua/lua_properties.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "Consolidated Rust port for lua."
+rust_module = "crates/nuxie-binary/src/lib.rs; crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/lua_font.rs; crates/nuxie-scripting/src/vm/view_model.rs"
+note = "LT-2: cached property identity, authored enum values, synchronous post-borrow listeners, list operations, and asset/view-model values are ported across the binary/runtime/scripting crate boundary."
 
 [[file]]
 upstream = "src/lua/lua_rive_base.cpp"
@@ -1629,13 +1629,13 @@ note = "P1G: direct host-routed _G.print binding is ported."
 upstream = "src/lua/lua_scripted_context.cpp"
 status = "absent"
 rust_module = ""
-note = "F7: this Lua binding is absent."
+note = "F7/F3F6 audit: a partial ScriptedContext method surface exists, but pinned canvas/features and full ScriptedObject-backed markNeedsUpdate/lifecycle semantics remain absent. LT-2 commit 7f486955 is not on current origin/main and addresses lua_properties rather than this residue, so the coherent binding remains unpromoted."
 
 [[file]]
 upstream = "src/lua/lua_state.cpp"
-status = "partial"
+status = "ported"
 rust_module = "crates/nuxie-scripting/src/vm/view_model.rs"
-note = "F7/P1G: Data initialization is ported with tracked constructor-arity gaps."
+note = "LT-2: Data initialization and exact constructor argument-count/type dispatch are ported."
 
 [[file]]
 upstream = "src/lua/math/lua_color.cpp"
@@ -1687,9 +1687,9 @@ note = "P3E: GPU-prefixed Lua surface is implemented through the approved wgpu a
 
 [[file]]
 upstream = "src/lua/renderer/lua_gradient.cpp"
-status = "partial"
+status = "ported"
 rust_module = "crates/nuxie-scripting/src/vm/renderer.rs"
-note = "F7/P1G: Gradient constructors are present with tracked non-table stop and unsigned-color conversion gaps."
+note = "LT-2: Gradient constructors, first-non-table termination, and pinned numeric/unsigned stop decoding are ported."
 
 [[file]]
 upstream = "src/lua/renderer/lua_image.cpp"
@@ -1730,8 +1730,8 @@ note = "Consolidated Rust port for lua."
 [[file]]
 upstream = "src/lua/rive_lua_libs.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "Consolidated Rust port for lua."
+rust_module = "crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs"
+note = "LT-2: the corpus-gated Rive library umbrella installs completed bindings before sandboxing and produces named diagnostics for unavailable binding access."
 
 [[file]]
 upstream = "src/math/aabb.cpp"
@@ -1934,8 +1934,8 @@ note = "Consolidated Rust port for scripted."
 [[file]]
 upstream = "src/scripted/scripted_interpolator.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/scripting.rs"
-note = "Consolidated Rust port for scripted."
+rust_module = "crates/nuxie-runtime/src/scripted_interpolator.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie/src/lib.rs"
+note = "Per-keyframe ScriptedInterpolator tables, VM callback coercion, and ordinary cloned ScriptInput DataBind/converter lifecycle; scripted/stateful converter clone advancement and full DataContext rebinding remain explicit file-correspondence residue. Crate-boundary facade and VM seams are retained intentionally."
 
 [[file]]
 upstream = "src/scripted/scripted_layout.cpp"

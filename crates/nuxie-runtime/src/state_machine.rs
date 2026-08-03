@@ -132,11 +132,14 @@ pub(crate) use listener_types::RuntimeListenerType;
 pub(crate) use listener_viewmodel_change::RuntimeListenerViewModelChangeValue;
 pub(crate) use nested_state_machine::RuntimeNestedStateMachineInstance;
 pub use nested_state_machine::RuntimeNestedStateMachineReport;
-pub(crate) use scripted_listener_action::RuntimeScriptedListenerBoundValue;
 pub use scripted_listener_action::RuntimeScriptedListenerDataConverterBindStep;
-use scripted_listener_action::{
-    RuntimeScriptedListenerActionBindingDefinition, runtime_scripted_object_binding_definition,
-    runtime_scripted_object_definition,
+use scripted_listener_action::runtime_scripted_object_definition;
+pub(crate) use scripted_listener_action::{
+    RuntimeScriptedListenerActionBindingDefinition, RuntimeScriptedListenerActionBindingOccurrence,
+    runtime_scripted_object_binding_definition,
+};
+pub(crate) use scripted_listener_action::{
+    RuntimeScriptedListenerBindingUpdate, RuntimeScriptedListenerBoundValue,
 };
 use scripted_transition_condition::RuntimeScriptedTransitionCondition;
 use state_instance::RuntimeStateInstance;

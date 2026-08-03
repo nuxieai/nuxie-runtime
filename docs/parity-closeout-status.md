@@ -997,7 +997,10 @@ upstream-sync-map registry).
 - [ ] #FT-CAPI portable surface (A4/A5/A7; 4 groups)
 - [ ] #FT-PROD production-flow corpus lane (C3; USER-GATE access)
 - [ ] #FT-FIXSWEEP typeKey fixtures (F10/C1/F9)
-- [ ] #FT diagnostic spot-check: unported Lua binding → named diagnostic (from #LT-2)
+- [x] #FT diagnostic spot-check: unported Lua binding → named diagnostic (from #LT-2)
+  `view_model.rs::unported_context_binding_reports_the_script_and_binding_names`
+  loads `lt2-unported-animation.luau`, touches the still-unported
+  `Context:animation` binding, and requires both names in the runtime error.
 - [ ] #HD-1 threading-model decision (USER-GATE)
 - [ ] #HD-2 renderer oracle hardening (V7; adapter matrix 2/2 complete,
   current-runtime same-runner 1,468/1,468 local, Paravirtual CI rerun and

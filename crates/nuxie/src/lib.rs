@@ -105,8 +105,10 @@ pub use nuxie_runtime::{
     RuntimeFileAssetKind, RuntimeFileAssetLoader, RuntimeLayerState, RuntimeOwnedViewModelContext,
     RuntimeScrollConstraintSnapshot, RuntimeStateMachineInput, ScriptCoreString, ScriptError,
     ScriptHost, ScriptInstance, ScriptMethod, ScriptModule, ScriptModuleFailure, ScriptValue,
-    ScriptingVm, StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
-    StateMachineReportedEvent,
+    ScriptingVm, SemanticActionType, SemanticBounds, SemanticDrainError, SemanticRole,
+    SemanticState, SemanticTrait, SemanticsBoundsUpdate, SemanticsChildrenUpdate, SemanticsDiff,
+    SemanticsDiffNode, StateMachineInputInstance, StateMachineInputKind, StateMachineInstance,
+    StateMachineReportedEvent, has_semantic_state, has_semantic_trait,
 };
 use nuxie_runtime::{RuntimeFileStateMachineActionCatalog, RuntimeFileViewModelInstanceCatalog};
 
@@ -555,6 +557,78 @@ struct PreparedScriptedInterpolator {
     asset_name: String,
     serialized_implemented_methods: u32,
     fallback_root: Option<RuntimeOwnedViewModelHandle>,
+}
+
+#[cfg(feature = "scripting")]
+struct DataBoundScriptedInterpolatorInstance {
+    // Drop the cloned DataBind/converter occurrence before the Lua table it
+    // targets, matching LinearAnimationInstance::~LinearAnimationInstance.
+    bindings: nuxie_runtime::RuntimeScriptedInterpolatorBindingOccurrence,
+    script: Box<dyn ScriptInstance>,
+    runtime: Arc<RuntimeFile>,
+    root: Option<RuntimeOwnedViewModelHandle>,
+}
+
+#[cfg(feature = "scripting")]
+impl ScriptInstance for DataBoundScriptedInterpolatorInstance {
+    fn poll_async_work(&mut self) -> std::result::Result<bool, ScriptError> {
+        self.script.poll_async_work()
+    }
+
+    fn has_method(&self, method: ScriptMethod) -> std::result::Result<bool, ScriptError> {
+        self.script.has_method(method)
+    }
+
+    fn call_method(
+        &mut self,
+        method: ScriptMethod,
+        args: &[ScriptValue],
+        host: &mut dyn ScriptHost,
+    ) -> std::result::Result<ScriptValue, ScriptError> {
+        self.script.call_method(method, args, host)
+    }
+
+    fn call_optional_method(
+        &mut self,
+        method: ScriptMethod,
+        args: &[ScriptValue],
+        host: &mut dyn ScriptHost,
+    ) -> std::result::Result<nuxie_runtime::ScriptOptionalMethodResult, ScriptError> {
+        self.script.call_optional_method(method, args, host)
+    }
+
+    fn call_interpolator(
+        &mut self,
+        method: nuxie_runtime::ScriptInterpolatorMethod,
+        args: &[f32],
+        host: &mut dyn ScriptHost,
+    ) -> std::result::Result<nuxie_runtime::ScriptOptionalNumberResult, ScriptError> {
+        if let Some(root) = self.root.as_ref() {
+            self.bindings
+                .refresh_inputs(&self.runtime, root, self.script.as_mut())?;
+        }
+        self.script.call_interpolator(method, args, host)
+    }
+
+    fn get_input(&self, name: &str) -> std::result::Result<ScriptValue, ScriptError> {
+        self.script.get_input(name)
+    }
+
+    fn set_input(
+        &mut self,
+        name: &str,
+        value: ScriptValue,
+    ) -> std::result::Result<(), ScriptError> {
+        self.script.set_input(name, value)
+    }
+
+    fn set_input_core(
+        &mut self,
+        name: &ScriptCoreString,
+        value: ScriptValue,
+    ) -> std::result::Result<(), ScriptError> {
+        self.script.set_input_core(name, value)
+    }
 }
 
 #[cfg(feature = "scripting")]
@@ -3079,6 +3153,13 @@ fn attach_prepared_script_mounts(
             } = interpolator;
             let scripts = Rc::clone(file_scripts);
             let runtime = Arc::clone(runtime);
+            let binding_definition =
+                nuxie_runtime::RuntimeScriptedInterpolatorBindingDefinition::from_imported(
+                    &runtime,
+                    graph_global_id,
+                    local_id,
+                    global_id,
+                );
             instance.set_scripted_interpolator_factory(
                 global_id,
                 nuxie_runtime::RuntimeScriptedInterpolatorFactory::new(move |artboard| {
@@ -3092,12 +3173,6 @@ fn attach_prepared_script_mounts(
                             &runtime,
                             fallback_root.as_ref(),
                         );
-                    let inputs = resolved_layout_inputs(
-                        &runtime,
-                        graph_global_id,
-                        local_id,
-                        hydration_root.as_ref(),
-                    )?;
                     let scripts = scripts.borrow();
                     let ready = scripts.ready.as_ref().ok_or_else(|| {
                         nuxie_runtime::ScriptError::new(format!(
@@ -3117,13 +3192,21 @@ fn attach_prepared_script_mounts(
                             "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase generator failed"
                         ))
                         })?;
-                    for (name, value) in inputs {
-                        script.set_input(&name, value).map_err(|error| {
+                    let mut bindings = binding_definition
+                        .as_ref()
+                        .ok_or_else(|| {
+                            nuxie_runtime::ScriptError::new(format!(
+                                "ScriptedInterpolator global {global_id} has no imported clone binding definition"
+                            ))
+                        })?
+                        .instantiate();
+                    bindings
+                        .hydrate_inputs(&runtime, hydration_root.as_ref(), script.as_mut())
+                        .map_err(|error| {
                             error.with_context(format!(
-                                "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase ScriptInput hydration failed for '{name}'"
+                                "ScriptedInterpolator global {global_id} asset ordinal {asset_ordinal} name '{asset_name}' phase cloned ScriptInput/DataBind hydration failed"
                             ))
                         })?;
-                    }
                     if nuxie_runtime::scripted_object_inits(serialized_implemented_methods) {
                         let initialized = script
                             .call_init(&mut NoopScriptHost)
@@ -3138,7 +3221,12 @@ fn attach_prepared_script_mounts(
                             )));
                         }
                     }
-                    Ok(script)
+                    Ok(Box::new(DataBoundScriptedInterpolatorInstance {
+                        bindings,
+                        script,
+                        runtime: Arc::clone(&runtime),
+                        root: hydration_root,
+                    }) as Box<dyn ScriptInstance>)
                 }),
             );
         }

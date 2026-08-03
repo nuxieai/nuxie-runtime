@@ -308,6 +308,71 @@ fn scripted_data_values_round_trip_converter_types_and_color_channels() {
 }
 
 #[test]
+fn scripted_data_values_match_lua_check_coercion_and_index_semantics() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+
+    let result: Table = vm
+        .eval(
+            r#"
+            local number = DataValue.number()
+            number.value = "12.75"
+            number.red = {}
+            number.unportedField = "ignored"
+
+            local string = DataValue.string()
+            string.value = 42
+
+            local color = DataValue.color()
+            color.value = -1
+            color.red = 0x123
+            color.green = -1
+
+            local readOk, readError = pcall(function()
+                return number.red
+            end)
+            local writeOk, writeError = pcall(function()
+                local boolean = DataValue.boolean()
+                boolean.value = 1
+            end)
+
+            return {
+                number = number.value,
+                string = string.value,
+                color = color.value,
+                red = color.red,
+                green = color.green,
+                readOk = readOk,
+                readError = readError,
+                writeOk = writeOk,
+                writeError = writeError,
+            }
+            "#,
+        )
+        .expect("pinned DataValue scenario runs");
+
+    assert_eq!(result.get::<f64>("number").unwrap(), 12.75_f32 as f64);
+    assert_eq!(result.get::<String>("string").unwrap(), "42");
+    assert_eq!(result.get::<u32>("color").unwrap(), 0xffff_ffff);
+    assert_eq!(result.get::<u32>("red").unwrap(), 0xff);
+    assert_eq!(result.get::<u32>("green").unwrap(), 0xff);
+    assert!(!result.get::<bool>("readOk").unwrap());
+    assert!(
+        result
+            .get::<String>("readError")
+            .unwrap()
+            .contains("'red' is not a valid index of DataValue")
+    );
+    assert!(!result.get::<bool>("writeOk").unwrap());
+    assert!(
+        result
+            .get::<String>("writeError")
+            .unwrap()
+            .contains("boolean")
+    );
+}
+
+#[test]
 fn rejects_garbage_bytecode_with_an_error_not_a_crash() {
     let vm = ScriptVm::new();
     let err = vm

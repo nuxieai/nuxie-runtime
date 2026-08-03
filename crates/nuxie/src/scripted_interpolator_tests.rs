@@ -183,6 +183,100 @@ fn scripted_interpolator_file(protocol: &[u8]) -> Vec<u8> {
     bytes
 }
 
+fn data_bound_scripted_interpolator_file(protocol: &[u8]) -> Vec<u8> {
+    let payload = compile_protocol(protocol);
+    let mut bytes = b"RIVE".to_vec();
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 9_722);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "ViewModel", |bytes| {
+        push_string(bytes, "ViewModel", "name", "Root");
+    });
+    push_object(&mut bytes, "ViewModelPropertyNumber", |bytes| {
+        push_string(bytes, "ViewModelPropertyNumber", "name", "amount");
+    });
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "ScriptAsset", |bytes| {
+        push_uint(bytes, "ScriptAsset", "assetId", 0);
+        push_string(bytes, "ScriptAsset", "name", "BoundInterpolator");
+    });
+    push_object(&mut bytes, "FileAssetContents", |bytes| {
+        push_blob(bytes, "FileAssetContents", "bytes", &payload);
+    });
+    push_object(&mut bytes, "DataConverterRangeMapper", |bytes| {
+        push_f32(bytes, "DataConverterRangeMapper", "minInput", 0.0);
+        push_f32(bytes, "DataConverterRangeMapper", "maxInput", 1.0);
+        push_f32(bytes, "DataConverterRangeMapper", "minOutput", 0.0);
+        push_f32(bytes, "DataConverterRangeMapper", "maxOutput", 4.0);
+    });
+    push_object(&mut bytes, "ViewModelInstance", |bytes| {
+        push_string(bytes, "ViewModelInstance", "name", "Root default");
+        push_uint(bytes, "ViewModelInstance", "viewModelId", 0);
+    });
+    push_object(&mut bytes, "ViewModelInstanceNumber", |bytes| {
+        push_uint(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+        push_f32(bytes, "ViewModelInstanceNumber", "propertyValue", 0.5);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 100.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+        push_uint(bytes, "Artboard", "viewModelId", 0);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+    });
+    // Artboard-local id 2.
+    push_object(&mut bytes, "ScriptedInterpolator", |bytes| {
+        push_uint(bytes, "ScriptedInterpolator", "scriptAssetId", 0);
+    });
+    push_object(&mut bytes, "ScriptInputNumber", |bytes| {
+        push_uint(bytes, "Component", "parentId", 2);
+        push_string(bytes, "ScriptInputNumber", "name", "scale");
+        push_f32(bytes, "ScriptInputNumber", "propertyValue", 1.0);
+    });
+    let mut source_path = Vec::new();
+    push_var_uint(&mut source_path, 0);
+    push_var_uint(&mut source_path, 0);
+    push_object(&mut bytes, "DataBindContext", |bytes| {
+        push_uint(
+            bytes,
+            "DataBindContext",
+            "propertyKey",
+            u64::from(property_key("ScriptInputNumber", "propertyValue")),
+        );
+        push_uint(bytes, "DataBindContext", "converterId", 0);
+        push_blob(bytes, "DataBindContext", "sourcePathIds", &source_path);
+    });
+    push_object(&mut bytes, "LinearAnimation", |bytes| {
+        push_string(bytes, "LinearAnimation", "name", "Bound");
+        push_uint(bytes, "LinearAnimation", "fps", 10);
+        push_uint(bytes, "LinearAnimation", "duration", 10);
+    });
+    push_object(&mut bytes, "KeyedObject", |bytes| {
+        push_uint(bytes, "KeyedObject", "objectId", 1);
+    });
+    push_object(&mut bytes, "KeyedProperty", |bytes| {
+        push_uint(
+            bytes,
+            "KeyedProperty",
+            "propertyKey",
+            u64::from(property_key("Node", "x")),
+        );
+    });
+    push_object(&mut bytes, "KeyFrameDouble", |bytes| {
+        push_uint(bytes, "KeyFrameDouble", "frame", 0);
+        push_uint(bytes, "KeyFrameDouble", "interpolationType", 1);
+        push_uint(bytes, "KeyFrameDouble", "interpolatorId", 2);
+        push_f32(bytes, "KeyFrameDouble", "value", 10.0);
+    });
+    push_object(&mut bytes, "KeyFrameDouble", |bytes| {
+        push_uint(bytes, "KeyFrameDouble", "frame", 10);
+        push_f32(bytes, "KeyFrameDouble", "value", 30.0);
+    });
+    bytes
+}
+
 #[test]
 #[ignore = "fixture generator; set P2D_SCRIPTED_INTERPOLATOR_FIXTURE"]
 fn write_scripted_interpolator_golden_fixture() {
@@ -273,6 +367,86 @@ fn imported_lua_transform_value_drives_keyframe_apply() {
     );
     assert_eq!(value, 15.0);
     assert!(diagnostics.is_empty());
+}
+
+#[test]
+fn cloned_interpolator_hydrates_its_data_bind_and_converter_occurrence() {
+    let bytes = data_bound_scripted_interpolator_file(
+        br#"
+            return function(_context)
+                return {
+                    init = function(self)
+                        assert(self.scale > 1)
+                        return true
+                    end,
+                    transformValue = function(self, from, to, factor)
+                        return from + (to - from) * factor * self.scale
+                    end,
+                }
+            end
+        "#,
+    );
+    let file = Arc::new(File::import_with_unsigned_scripts(&bytes).expect("fixture imports"));
+    let mut artboard = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+        .expect("artboard instantiates");
+    let mut root = artboard
+        .instantiate_default_view_model_instance()
+        .expect("authored default view model instantiates");
+    artboard.bind_view_model(&root);
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    artboard
+        .try_advance_with_factory(&mut factory, 0.0)
+        .expect("script factories mount");
+    let mut animation = artboard
+        .linear_animation_instance_named("Bound")
+        .expect("animation instantiates");
+    artboard
+        .raw()
+        .advance_linear_animation_instance(&mut animation, 0.5);
+    artboard
+        .raw_mut()
+        .apply_linear_animation_instance(&animation, 1.0);
+
+    assert_eq!(
+        artboard
+            .raw()
+            .transform_property(1, nuxie_runtime::TransformProperty::X),
+        Some(30.0),
+        "the cloned DataBind reads 0.5 and its cloned RangeMapper converts it to scale 2"
+    );
+    assert!(animation.scripted_interpolator_diagnostics().is_empty());
+
+    assert!(root.set_number("amount", 0.25));
+    artboard
+        .raw_mut()
+        .apply_linear_animation_instance(&animation, 1.0);
+    assert_eq!(
+        artboard
+            .raw()
+            .transform_property(1, nuxie_runtime::TransformProperty::X),
+        Some(20.0),
+        "the retained clone observes source changes through its own converter state"
+    );
+
+    drop(animation);
+    assert!(root.set_number("amount", 0.75));
+    let mut replacement = artboard
+        .linear_animation_instance_named("Bound")
+        .expect("replacement animation instantiates after teardown");
+    artboard
+        .raw()
+        .advance_linear_animation_instance(&mut replacement, 0.5);
+    artboard
+        .raw_mut()
+        .apply_linear_animation_instance(&replacement, 1.0);
+    assert_eq!(
+        artboard
+            .raw()
+            .transform_property(1, nuxie_runtime::TransformProperty::X),
+        Some(40.0),
+        "teardown unbinds the old occurrence and a replacement clone reads the current source"
+    );
+    assert!(replacement.scripted_interpolator_diagnostics().is_empty());
 }
 
 #[test]

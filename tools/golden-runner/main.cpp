@@ -181,6 +181,8 @@ struct Options
     std::vector<float> samples = {0.0f};
     size_t benchmarkRepeat = 1;
     bool sideChannel = false;
+    bool semanticDefaultViewModel = false;
+    bool semanticSideChannelOnly = false;
 };
 
 void validateTraceOptions(const Options& options)
@@ -247,6 +249,8 @@ std::string usage()
            "           [--state-machine <name> | --animation <name>]\n"
            "           [--samples <t0,t1,...>]\n"
            "           [--input-script <path>] [--side-channel]\n"
+           "           [--semantic-default-view-model]\n"
+           "           [--semantic-side-channel-only]\n"
            "           [--benchmark] [--benchmark-repeat N]\n"
            "\n"
            "input script lines:\n"
@@ -623,6 +627,14 @@ Options parseOptions(int argc, char** argv)
         {
             options.sideChannel = true;
         }
+        else if (arg == "--semantic-default-view-model")
+        {
+            options.semanticDefaultViewModel = true;
+        }
+        else if (arg == "--semantic-side-channel-only")
+        {
+            options.semanticSideChannelOnly = true;
+        }
         else if (!arg.empty() && arg[0] == '-')
         {
             throw CliError("unknown option: " + arg);
@@ -644,6 +656,16 @@ Options parseOptions(int argc, char** argv)
     if (options.sideChannel && options.benchmark)
     {
         throw CliError("--side-channel cannot be combined with --benchmark");
+    }
+    if (options.semanticDefaultViewModel && !options.sideChannel)
+    {
+        throw CliError(
+            "--semantic-default-view-model requires --side-channel");
+    }
+    if (options.semanticSideChannelOnly && !options.sideChannel)
+    {
+        throw CliError(
+            "--semantic-side-channel-only requires --side-channel");
     }
 
     for (size_t index = 0; index < options.samples.size(); index++)
@@ -858,6 +880,7 @@ public:
               const std::string& artboardName,
               const std::string& stateMachineName,
               const std::string& animationName,
+              bool semanticDefaultViewModel,
               rive::Factory* factory)
     {
         rive::ImportResult importResult = rive::ImportResult::success;
@@ -894,7 +917,10 @@ public:
                 ? m_file->createViewModelInstance(m_artboard.get())
                 : m_file->createViewModelInstance(viewModelId, 0);
 #else
-        m_viewModelInstance = m_file->createViewModelInstance(m_artboard.get());
+        m_viewModelInstance =
+            semanticDefaultViewModel
+                ? m_file->createDefaultViewModelInstance(m_artboard.get())
+                : m_file->createViewModelInstance(m_artboard.get());
 #endif
         m_artboard->bindViewModelInstance(m_viewModelInstance);
 
@@ -1185,6 +1211,7 @@ BenchmarkTimings runBenchmarkPass(const Options& options, bool collectPhases)
                      options.artboard,
                      options.stateMachine,
                      options.animation,
+                     false,
                      &nullFactory);
     rive::Scene* scene = loader.scene();
     auto renderer = nullFactory.makeRenderer();
@@ -1307,6 +1334,7 @@ int runFile(const Options& options)
                      options.artboard,
                      options.stateMachine,
                      options.animation,
+                     options.semanticDefaultViewModel,
                      factory);
     rive::Scene* scene = loader.scene();
     rive::StateMachineInstance* sceneStateMachine = loader.stateMachine();

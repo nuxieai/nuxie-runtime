@@ -747,9 +747,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_gradient_test.cpp"
 test_case_count = 1
-status = "pending"
-evidence = []
-note = "No completed family checklist, cpp_probe provenance citation, executed silver case, or scripted corpus test ports a complete upstream TEST_CASE."
+status = "ported-direct"
+evidence = ["crates/nuxie-scripting/tests/renderer_bindings.rs::scripted_draw_can_allocate_and_apply_gradients", "crates/nuxie-scripting/tests/renderer_bindings.rs::gradient_stops_end_at_the_first_non_table_and_wrap_unsigned_colors"]
+note = "LT-2 directly constructs and applies the pinned linear-gradient shape through the recording factory; the supplemental stop test fixes and locks the first-non-table and luaL_checkunsigned edge semantics."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_image_decode_test.cpp"
@@ -841,9 +841,9 @@ note = "No completed family checklist, cpp_probe provenance citation, executed s
 upstream = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 test_case_count = 22
 status = "partial"
-evidence = ["corpus.toml::scripted_property_image", "corpus.toml::image_scripting_property_value", "crates/nuxie-scripting/src/vm/view_model.rs::scripted_images_round_trip_between_context_and_view_model_properties", "crates/nuxie-runtime/src/data_bind/data_bind_context.rs::factory_backed_view_model_image_reaches_the_bound_image_draw_owner"]
-covered_test_cases = ["Scripted image properties", "Image read from propertyValue"]
-note = "P2A ports both upstream Image-property cases through exact C++/Rust scripted-golden differentials, with direct coverage for decoded asset identity, factory-backed assignment, retained data-binding propagation, and the bound Image draw owner. The remaining 14 non-Image property cases retain their prior disposition, so this file row is honestly partial."
+evidence = ["corpus.toml::scripted_property_image", "corpus.toml::image_scripting_property_value", "crates/nuxie-scripting/src/vm/view_model.rs::property_listeners_survive_userdata_gc_while_subscribed", "crates/nuxie-scripting/src/vm/view_model.rs::scripted_string_boolean_and_enum_properties_match_upstream_luau_access", "crates/nuxie-scripting/src/vm/view_model.rs::scripted_color_property_supports_direct_and_named_access", "crates/nuxie-scripting/src/vm/view_model.rs::view_model_property_assignment_replaces_the_frame_parent_edge", "crates/nuxie-scripting/src/vm/view_model.rs::scripted_view_model_exposes_the_component_list_index", "crates/nuxie-scripting/src/vm/view_model.rs::scripted_images_round_trip_between_context_and_view_model_properties", "crates/nuxie-scripting/src/vm/view_model.rs::scripted_blob_property_reads_and_writes_bytes", "crates/nuxie-scripting/src/vm/view_model.rs::scripted_blob_property_fires_listeners_only_when_identity_changes", "crates/nuxie-scripting/src/vm/view_model.rs::font_properties_retain_the_exact_font_owner_across_lua_assignment", "crates/nuxie-runtime/src/data_bind/data_bind_context.rs::factory_backed_view_model_image_reaches_the_bound_image_draw_owner"]
+covered_test_cases = ["property listeners survive userdata gc while subscribed", "Scripted blob property value has stable identity across reads", "scripted color can be passed to luau", "scripted string can be passed to luau", "scripted boolean can be passed to luau", "scripted enum can be passed to luau", "Replace a view model property value from a script", "Expose list index to scripts and ensure the type is correct", "Scripted image properties", "Image read from propertyValue", "Scripted blob property reads and writes bytes", "Scripted image property value has stable identity across reads", "Scripted font property value has stable identity across reads", "Scripted blob property fires listeners on change"]
+note = "LT-2 expands direct coverage from 2 to 14 of 22 pinned cases: listener lifetime/dispatch, scalar/enum value surfaces, nested replacement, list index, image identity, font identity, and blob read/write/listener/stable-identity behavior. The broad composite 'scripted properties can be passed to luau' case and seven other unlisted list/silver/reset/runtime-empty cases remain honestly pending, so the row stays partial and the pending floor only tightens."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/scripting/scripting_renderer_test.cpp"

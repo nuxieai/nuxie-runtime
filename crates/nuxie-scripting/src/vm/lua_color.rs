@@ -87,7 +87,7 @@ fn rgba(red: u32, green: u32, blue: u32, alpha: u32) -> ColorInt {
     ((alpha & 0xff) << 24) | ((red & 0xff) << 16) | ((green & 0xff) << 8) | (blue & 0xff)
 }
 
-fn required_unsigned(lua: &Lua, value: Option<&Value>, name: &str) -> Result<u32> {
+pub(super) fn required_unsigned(lua: &Lua, value: Option<&Value>, name: &str) -> Result<u32> {
     let value = value
         .cloned()
         .ok_or_else(|| Error::runtime(format!("expected numeric {name}")))?;

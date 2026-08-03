@@ -1591,9 +1591,9 @@ note = "P3-b: DataContext userdata preserves parent occurrences independently fr
 
 [[file]]
 upstream = "src/lua/lua_data_value.cpp"
-status = "partial"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "F7/P1G: DataValue surface is present with tracked index/newindex, coercion, and color-channel gaps."
+status = "ported"
+rust_module = "crates/nuxie-scripting/src/vm/lua_data_value.rs"
+note = "LT-2: DataValue constructors, check/coercion rules, index/newindex behavior, and signed/spill color channels are ported."
 
 [[file]]
 upstream = "src/lua/lua_image_decode.cpp"
@@ -1616,8 +1616,8 @@ note = "P1-i: all 47 pinned Promise scenarios plus 2 invalid-yield cases pass ex
 [[file]]
 upstream = "src/lua/lua_properties.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "Consolidated Rust port for lua."
+rust_module = "crates/nuxie-binary/src/lib.rs; crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/lua_font.rs; crates/nuxie-scripting/src/vm/view_model.rs"
+note = "LT-2: cached property identity, authored enum values, synchronous post-borrow listeners, list operations, and asset/view-model values are ported across the binary/runtime/scripting crate boundary."
 
 [[file]]
 upstream = "src/lua/lua_rive_base.cpp"
@@ -1633,9 +1633,9 @@ note = "F7: this Lua binding is absent."
 
 [[file]]
 upstream = "src/lua/lua_state.cpp"
-status = "partial"
+status = "ported"
 rust_module = "crates/nuxie-scripting/src/vm/view_model.rs"
-note = "F7/P1G: Data initialization is ported with tracked constructor-arity gaps."
+note = "LT-2: Data initialization and exact constructor argument-count/type dispatch are ported."
 
 [[file]]
 upstream = "src/lua/math/lua_color.cpp"
@@ -1687,9 +1687,9 @@ note = "P3E: GPU-prefixed Lua surface is implemented through the approved wgpu a
 
 [[file]]
 upstream = "src/lua/renderer/lua_gradient.cpp"
-status = "partial"
+status = "ported"
 rust_module = "crates/nuxie-scripting/src/vm/renderer.rs"
-note = "F7/P1G: Gradient constructors are present with tracked non-table stop and unsigned-color conversion gaps."
+note = "LT-2: Gradient constructors, first-non-table termination, and pinned numeric/unsigned stop decoding are ported."
 
 [[file]]
 upstream = "src/lua/renderer/lua_image.cpp"
@@ -1730,8 +1730,8 @@ note = "Consolidated Rust port for lua."
 [[file]]
 upstream = "src/lua/rive_lua_libs.cpp"
 status = "ported"
-rust_module = "crates/nuxie-scripting/src/vm.rs"
-note = "Consolidated Rust port for lua."
+rust_module = "crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs"
+note = "LT-2: the corpus-gated Rive library umbrella installs completed bindings before sandboxing and produces named diagnostics for unavailable binding access."
 
 [[file]]
 upstream = "src/math/aabb.cpp"

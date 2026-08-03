@@ -537,6 +537,22 @@ pub(crate) enum Command {
         view_model: ViewModelInstanceHandle,
         request_id: u64,
     },
+    SetGlobalViewModel {
+        state_machine: StateMachineHandle,
+        name: String,
+        view_model: ViewModelInstanceHandle,
+        request_id: u64,
+    },
+    BindStateMachine {
+        state_machine: StateMachineHandle,
+        request_id: u64,
+    },
+    GetGlobalViewModel {
+        state_machine: StateMachineHandle,
+        name: String,
+        handle: ViewModelInstanceHandle,
+        request_id: u64,
+    },
     DecodeImage {
         handle: RenderImageHandle,
         bytes: Vec<u8>,
@@ -1162,6 +1178,43 @@ impl CommandQueue {
             view_model,
             request_id,
         });
+    }
+    pub fn set_global_view_model_instance(
+        &self,
+        state_machine: StateMachineHandle,
+        name: impl Into<String>,
+        view_model: ViewModelInstanceHandle,
+        request_id: u64,
+    ) {
+        self.enqueue(Command::SetGlobalViewModel {
+            state_machine,
+            name: name.into(),
+            view_model,
+            request_id,
+        });
+    }
+    pub fn bind_state_machine(&self, state_machine: StateMachineHandle, request_id: u64) {
+        self.enqueue(Command::BindStateMachine {
+            state_machine,
+            request_id,
+        });
+    }
+    pub fn global_view_model_instance(
+        &self,
+        state_machine: StateMachineHandle,
+        name: impl Into<String>,
+        listener: Option<&Listener>,
+        request_id: u64,
+    ) -> ViewModelInstanceHandle {
+        let handle = self.next(|c| &mut c.view_model, ViewModelInstanceHandle);
+        self.register(ListenerKey::ViewModel(handle), listener);
+        self.enqueue(Command::GetGlobalViewModel {
+            state_machine,
+            name: name.into(),
+            handle,
+            request_id,
+        });
+        handle
     }
 
     pub fn decode_image(

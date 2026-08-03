@@ -10696,7 +10696,7 @@ impl StateMachineInstance {
     /// replace or empty exactly that slot. The occupying instance may belong
     /// to a different ViewModel; slot identity comes from `name`.
     #[doc(hidden)]
-    pub(crate) fn set_global_view_model_instance(
+    pub fn set_global_view_model_instance(
         &mut self,
         file: Option<&RuntimeFile>,
         name: &str,
@@ -10782,6 +10782,15 @@ impl StateMachineInstance {
         Ok(changed)
     }
 
+    #[doc(hidden)]
+    pub fn bind_for_command_queue(
+        &mut self,
+        file: Option<&RuntimeFile>,
+        artboard: &mut ArtboardInstance,
+    ) -> bool {
+        self.bind(file, artboard).is_ok()
+    }
+
     /// Convenience C++ member with deliberately asymmetric null behavior.
     /// Null clears only the machine context/listener cells and unbinds the
     /// artboard. It must not explicitly unbind this machine's DataBinds.
@@ -10805,7 +10814,7 @@ impl StateMachineInstance {
     /// Pure C++ slot read. Unlike the setter, the lookup intentionally does
     /// not reject a non-global name before consulting that numeric slot.
     #[doc(hidden)]
-    pub(crate) fn global_view_model_instance(
+    pub fn global_view_model_instance(
         &self,
         file: Option<&RuntimeFile>,
         name: &str,

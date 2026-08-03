@@ -16,7 +16,9 @@ use std::{
 
 use nuxie::{
     AudioSource, RawTextFont, RecordingFactory, RenderImage,
-    command_queue::{CommandDataType, CommandEvent, CommandQueue, CommandValue, Listener},
+    command_queue::{
+        CommandDataType, CommandEvent, CommandQueue, CommandValue, Fit, Listener, PointerEvent,
+    },
     command_server::CommandServer,
 };
 
@@ -46,6 +48,15 @@ const DATA_BIND_FIXTURE: &[u8] =
 const IMAGE_FIXTURE: &[u8] = include_bytes!("../../../fixtures/command_queue/batdude.png");
 const AUDIO_FIXTURE: &[u8] = include_bytes!("../../../fixtures/command_queue/what.wav");
 const FONT_FIXTURE: &[u8] = include_bytes!("../../../fixtures/command_queue/OpenSans-Italic.ttf");
+const POINTER_FIXTURE: &[u8] = include_bytes!("../../../fixtures/command_queue/pointer_events.riv");
+const RAPID_POINTER_FIXTURE: &[u8] =
+    include_bytes!("../../../fixtures/command_queue/rapid_pointer_events.riv");
+const HOSTED_IMAGE_FIXTURE: &[u8] =
+    include_bytes!("../../../fixtures/command_queue/hosted_image_file.riv");
+const HOSTED_FONT_FIXTURE: &[u8] =
+    include_bytes!("../../../fixtures/command_queue/hosted_font_file.riv");
+const GLOBAL_VARIABLES_FIXTURE: &[u8] =
+    include_bytes!("../../../fixtures/command_queue/global_variables_test.riv");
 
 fn server(queue: &CommandQueue) -> CommandServer {
     CommandServer::new(queue.clone(), Box::new(RecordingFactory::new()))
@@ -917,6 +928,1326 @@ fn view_model_property_set_get() {
         event,
         CommandEvent::ImageError { handle, .. } if *handle == bad_image
     )));
+}
+
+#[test]
+fn set_and_reset_artboard_size() {
+    let queue = CommandQueue::new();
+    let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    let original = server.artboard(artboard).unwrap().artboard_dimensions();
+    queue.set_artboard_size(artboard, 1000.0, 1000.0, 1.0, 0);
+    assert!(server.process_commands());
+    assert_eq!(
+        server.artboard(artboard).unwrap().artboard_dimensions(),
+        (1000.0, 1000.0)
+    );
+    queue.set_artboard_size(artboard, 1000.0, 1000.0, 2.0, 0);
+    assert!(server.process_commands());
+    assert_eq!(
+        server.artboard(artboard).unwrap().artboard_dimensions(),
+        (500.0, 500.0)
+    );
+    queue.reset_artboard_size(artboard, 0);
+    assert!(server.process_commands());
+    assert_eq!(
+        server.artboard(artboard).unwrap().artboard_dimensions(),
+        original
+    );
+}
+
+#[test]
+fn set_and_get_artboard_volume() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, Some(&listener), 0);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.set_artboard_volume(artboard, 0.5, 0);
+    assert!(server.process_commands());
+    assert_eq!(server.artboard(artboard).unwrap().volume(), 0.5);
+    queue.set_artboard_volume(artboard, 0.0, 0);
+    assert!(server.process_commands());
+    assert_eq!(server.artboard(artboard).unwrap().volume(), 0.0);
+    queue.set_artboard_volume(artboard, 0.75, 0);
+    queue.request_artboard_volume(artboard, 0x50);
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert!(events(&log).iter().any(|event| matches!(
+        event,
+        CommandEvent::ArtboardVolume { handle, request_id: 0x50, volume }
+            if *handle == artboard && *volume == 0.75
+    )));
+}
+
+#[test]
+fn view_model_property_subscriptions() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let root = queue.instantiate_view_model_for_artboard(
+        file,
+        artboard,
+        Some(String::new()),
+        Some(&listener),
+        0,
+    );
+    queue.set_view_model_value(root, "Test Bool", CommandValue::Boolean(false), 0);
+    queue.set_view_model_value(root, "Test Color", CommandValue::Color(0), 0);
+    for (path, data_type) in [
+        ("Test Nested/Nested Number", CommandDataType::Number),
+        ("Test Bool", CommandDataType::Boolean),
+        ("Test Num", CommandDataType::Number),
+        ("Test Color", CommandDataType::Color),
+        ("Test Enum", CommandDataType::Enum),
+        ("Test String", CommandDataType::String),
+        ("Test Trigger", CommandDataType::Trigger),
+        ("Test List", CommandDataType::List),
+        ("Test Image", CommandDataType::AssetImage),
+    ] {
+        queue.subscribe_to_view_model_property(root, path, data_type, 0);
+    }
+    queue.subscribe_to_view_model_property(root, "Bad property", CommandDataType::AssetImage, 1);
+    queue.subscribe_to_view_model_property(root, "Test Image", CommandDataType::Integer, 2);
+    queue.run_once(|server| assert_eq!(server.testing_subscription_count(), 9));
+    let blank = queue.instantiate_blank_view_model_named(file, "Nested VM", None, 0);
+    let image = queue.decode_image(IMAGE_FIXTURE.to_vec(), None, 0);
+    queue.set_view_model_value(root, "Test Bool", CommandValue::Boolean(true), 0);
+    queue.set_view_model_value(root, "Test Num", CommandValue::Number(10.0), 0);
+    queue.set_view_model_value(
+        root,
+        "Test Nested/Nested Number",
+        CommandValue::Number(10.0),
+        0,
+    );
+    queue.set_view_model_value(root, "Test Color", CommandValue::Color(0xffff_0000), 0);
+    queue.set_view_model_value(root, "Test Enum", CommandValue::Enum("Value 2".into()), 0);
+    queue.set_view_model_value(
+        root,
+        "Test String",
+        CommandValue::String("Some String".into()),
+        0,
+    );
+    queue.set_view_model_value(root, "Test Trigger", CommandValue::Trigger, 0);
+    queue.set_view_model_value(root, "Test Image", CommandValue::Image(Some(image)), 0);
+    queue.set_view_model_value(root, "Test Nested", CommandValue::ViewModel(blank), 0);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    for path in [
+        "Test Nested/Nested Number",
+        "Test Bool",
+        "Test Num",
+        "Test Color",
+        "Test Enum",
+        "Test String",
+        "Test Trigger",
+        "Test Image",
+    ] {
+        assert!(
+            captured.iter().any(|event| matches!(
+                event,
+                CommandEvent::ViewModelValue { path: actual, .. } if actual == path
+            )),
+            "missing subscription callback for {path}"
+        );
+    }
+    assert_eq!(
+        captured
+            .iter()
+            .filter(|event| matches!(
+                event,
+                CommandEvent::ViewModelError {
+                    request_id: 1 | 2,
+                    ..
+                }
+            ))
+            .count(),
+        2
+    );
+    for (path, data_type) in [
+        ("Test Nested/Nested Number", CommandDataType::Number),
+        ("Test Bool", CommandDataType::Boolean),
+        ("Test Num", CommandDataType::Number),
+        ("Test Color", CommandDataType::Color),
+        ("Test Enum", CommandDataType::Enum),
+        ("Test String", CommandDataType::String),
+        ("Test Trigger", CommandDataType::Trigger),
+        ("Test List", CommandDataType::List),
+        ("Test Image", CommandDataType::AssetImage),
+    ] {
+        queue.unsubscribe_from_view_model_property(root, path, data_type);
+    }
+    queue.unsubscribe_from_view_model_property(root, "Blah", CommandDataType::Boolean);
+    queue.run_once(|server| assert_eq!(server.testing_subscription_count(), 0));
+    assert!(server.process_commands());
+}
+
+#[test]
+fn view_model_property_async_subscriptions() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let root = queue.instantiate_view_model_for_artboard(
+        file,
+        artboard,
+        Some(String::new()),
+        Some(&listener),
+        0,
+    );
+    queue.set_view_model_value(root, "Test Num", CommandValue::Number(0.0), 0);
+    queue.subscribe_to_view_model_property(root, "Test Num", CommandDataType::Number, 0);
+    queue.set_view_model_value(root, "Test Num", CommandValue::Number(10.0), 0);
+    let ready = Arc::new(AtomicUsize::new(0));
+    let ready_on_server = Arc::clone(&ready);
+    queue.run_once(move |server| {
+        assert_eq!(server.testing_subscription_count(), 1);
+        ready_on_server.store(1, Ordering::Release);
+    });
+    queue.testing_command_loop_break();
+    let worker_queue = queue.clone();
+    let worker = thread::spawn(move || {
+        let mut server = server(&worker_queue);
+        while server.wait_commands() {}
+    });
+    while ready.load(Ordering::Acquire) == 0 {
+        thread::yield_now();
+    }
+    for _ in 0..10_000 {
+        queue.process_messages();
+        if events(&log).iter().any(|event| {
+            matches!(
+                event,
+                CommandEvent::ViewModelValue { handle, path, value: CommandValue::Number(10.0), .. }
+                    if *handle == root && path == "Test Num"
+            )
+        }) {
+            break;
+        }
+        thread::yield_now();
+    }
+    assert!(events(&log).iter().any(|event| matches!(
+        event,
+        CommandEvent::ViewModelValue { handle, path, value: CommandValue::Number(10.0), .. }
+            if *handle == root && path == "Test Num"
+    )));
+    queue.unsubscribe_from_view_model_property(root, "Test Num", CommandDataType::Number);
+    queue.run_once(|server| assert_eq!(server.testing_subscription_count(), 0));
+    queue.disconnect();
+    worker.join().expect("server thread");
+}
+
+#[test]
+fn list_view_model_property_set_get() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let root = queue.instantiate_view_model_for_artboard(
+        file,
+        artboard,
+        Some(String::new()),
+        Some(&listener),
+        0,
+    );
+    let blank = queue.instantiate_blank_view_model_named(file, "Nested VM", None, 0);
+    let alternate =
+        queue.instantiate_view_model_named(file, "Nested VM", "Alternate Nested", None, 0);
+    queue.insert_view_model_list(root, "Test List", blank, None, 0);
+    queue.insert_view_model_list(root, "Test List", alternate, None, 0);
+    queue.swap_view_model_list(root, "Test List", 2, 3, 0);
+    queue.request_view_model_list_size(root, "Test List", 1);
+    queue.insert_view_model_list(root, "Test List", blank, Some(0), 0);
+    queue.insert_view_model_list(root, "Test List", alternate, Some(0), 0);
+    queue.swap_view_model_list(root, "Test List", 0, 1, 0);
+    queue.request_view_model_list_size(root, "Test List", 2);
+    let bad_blank = queue.instantiate_blank_view_model_named(file, "blah", None, 0);
+    let bad_alternate = queue.instantiate_view_model_named(file, "Nested VM", "blah", None, 0);
+    for (path, value, index) in [
+        ("Test List", bad_blank, None),
+        ("Test List", bad_alternate, Some(0)),
+        ("blah", blank, None),
+        ("blah", alternate, Some(0)),
+    ] {
+        queue.insert_view_model_list(root, path, value, index, 3);
+    }
+    for (path, a, b) in [
+        ("Test List", 10, 1),
+        ("Test List", 0, 10),
+        ("Blah", 0, 1),
+        ("Blah", 10, 1),
+        ("Blah", 0, 10),
+    ] {
+        queue.swap_view_model_list(root, path, a, b, 4);
+    }
+    queue.request_view_model_list_size(root, "Test List", 5);
+    queue.request_view_model_list_size(root, "Blah", 6);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(
+        event,
+        CommandEvent::ViewModelListSize {
+            request_id: 1,
+            size: 4,
+            ..
+        }
+    )));
+    assert!(captured.iter().any(|event| matches!(
+        event,
+        CommandEvent::ViewModelListSize {
+            request_id: 2 | 5,
+            size: 6,
+            ..
+        }
+    )));
+    assert!(
+        !captured
+            .iter()
+            .any(|event| matches!(event, CommandEvent::ViewModelListSize { request_id: 6, .. }))
+    );
+}
+
+#[test]
+fn file_error_messages() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), Some(&listener), 0);
+    queue.instantiate_artboard_named(file, "Blah", None, 0);
+    queue.instantiate_view_model_named(file, "Test All", "blah", None, 0);
+    queue.instantiate_view_model_named(file, "blah", "blah", None, 0);
+    queue.instantiate_view_model_named(file, "", "blah", None, 0);
+    queue.instantiate_view_model_named(file, "Blah", "", None, 0);
+    queue.instantiate_view_model_named(file, "", "", None, 0);
+    queue.instantiate_blank_view_model_named(file, "Blah", None, 0);
+    queue.instantiate_blank_view_model_named(file, "", None, 0);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert_eq!(
+        events(&log)
+            .iter()
+            .filter(
+                |event| matches!(event, CommandEvent::FileError { handle, .. } if *handle == file)
+            )
+            .count(),
+        8
+    );
+
+    let (bad_listener, bad_log) = event_log();
+    let bad = queue.load_file(vec![0; 100 * 1024], Some(&bad_listener), 0);
+    queue.instantiate_default_artboard(bad, None, 0);
+    queue.instantiate_blank_view_model_named(bad, "", None, 0);
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert_eq!(
+        events(&bad_log)
+            .iter()
+            .filter(
+                |event| matches!(event, CommandEvent::FileError { handle, .. } if *handle == bad)
+            )
+            .count(),
+        3
+    );
+
+    let (no_vm_listener, no_vm_log) = event_log();
+    let no_vm = queue.load_file(ENTRY_FIXTURE.to_vec(), Some(&no_vm_listener), 0);
+    let no_vm_artboard = queue.instantiate_default_artboard(no_vm, None, 0);
+    for instance in [None, Some(String::new()), Some("Nonexistent".into())] {
+        queue.instantiate_view_model_for_artboard(no_vm, no_vm_artboard, instance, None, 0);
+    }
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert_eq!(
+        events(&no_vm_log)
+            .iter()
+            .filter(
+                |event| matches!(event, CommandEvent::FileError { handle, .. } if *handle == no_vm)
+            )
+            .count(),
+        3
+    );
+}
+
+#[test]
+fn list_artboard() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let good = queue.load_file(ENTRY_FIXTURE.to_vec(), Some(&listener), 0);
+    queue.request_artboard_names(good, 0x40);
+    let bad = queue.load_file(vec![0; 100 * 1024], None, 0);
+    queue.request_artboard_names(bad, 0);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::ArtboardsListed { handle, request_id: 0x40, names } if *handle == good && names == &["New Artboard", "New Artboard"])));
+    assert!(!captured.iter().any(
+        |event| matches!(event, CommandEvent::ArtboardsListed { handle, .. } if *handle == bad)
+    ));
+}
+
+#[test]
+fn list_enums() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let good = queue.load_file(DATA_BIND_FIXTURE.to_vec(), Some(&listener), 0);
+    queue.request_view_model_enums(good, 0x40);
+    let bad = queue.load_file(vec![0; 100 * 1024], None, 0);
+    queue.request_view_model_enums(bad, 0);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::ViewModelEnumsListed { handle, request_id: 0x40, enums } if *handle == good && enums.len() == 1 && enums[0].name == "Test Enum Values" && enums[0].enumerants == ["Value 1", "Value 2"])), "{captured:?}");
+    assert!(!captured.iter().any(
+        |event| matches!(event, CommandEvent::ViewModelEnumsListed { handle, .. } if *handle == bad)
+    ));
+}
+
+#[test]
+fn request_view_model_and_instance_name() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let view_model = queue.instantiate_view_model_for_artboard(
+        file,
+        artboard,
+        Some(String::new()),
+        Some(&listener),
+        0,
+    );
+    queue.request_view_model_name(view_model, 0x50);
+    queue.request_view_model_instance_name(view_model, 0x50);
+    let (bad_listener, bad_log) = event_log();
+    let bad = queue.instantiate_view_model_named(file, "Blah", "Blah", Some(&bad_listener), 0);
+    queue.request_view_model_name(bad, 0x51);
+    queue.request_view_model_instance_name(bad, 0x52);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::ViewModelName { handle, request_id: 0x50, name } if *handle == view_model && name == "Test All")));
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::ViewModelInstanceName { handle, request_id: 0x50, name } if *handle == view_model && name == "Test Default")));
+    assert!(!events(&bad_log).iter().any(|event| matches!(
+        event,
+        CommandEvent::ViewModelName { .. } | CommandEvent::ViewModelInstanceName { .. }
+    )));
+    assert!(events(&bad_log).iter().any(|event| matches!(
+        event,
+        CommandEvent::ViewModelError {
+            request_id: 0x52,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn render_image_audio_source_font_error() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let image = queue.decode_image(vec![0; 1024], Some(&listener), 1);
+    let audio = queue.decode_audio(vec![0; 1024], Some(&listener), 2);
+    let font = queue.decode_font(vec![0; 1024], Some(&listener), 3);
+    assert!(server(&queue).process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(
+        captured.iter().any(
+            |event| matches!(event, CommandEvent::ImageError { handle, .. } if *handle == image)
+        )
+    );
+    assert!(
+        captured.iter().any(
+            |event| matches!(event, CommandEvent::AudioError { handle, .. } if *handle == audio)
+        )
+    );
+    assert!(
+        captured.iter().any(
+            |event| matches!(event, CommandEvent::FontError { handle, .. } if *handle == font)
+        )
+    );
+}
+
+#[test]
+fn state_machine_error() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(ENTRY_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let good = queue.instantiate_default_state_machine(artboard, Some(&listener), 0);
+    let bad_vm = queue.instantiate_blank_view_model_named(file, "missing", None, 0);
+    queue.bind_view_model(good, bad_vm, 1);
+    let bad = queue.instantiate_default_state_machine(
+        queue.instantiate_artboard_named(file, "missing", None, 0),
+        Some(&listener),
+        0,
+    );
+    let pointer = nuxie::command_queue::PointerEvent::default();
+    queue.advance_state_machine(bad, 0.0, 2);
+    queue.pointer_down(bad, pointer, 3);
+    queue.pointer_exit(bad, pointer, 4);
+    queue.pointer_up(bad, pointer, 5);
+    queue.pointer_move(bad, pointer, 6);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert_eq!(captured.iter().filter(|event| matches!(event, CommandEvent::StateMachineError { handle, .. } if *handle == good)).count(), 1);
+    assert_eq!(captured.iter().filter(|event| matches!(event, CommandEvent::StateMachineError { handle, .. } if *handle == bad)).count(), 5);
+}
+
+#[test]
+fn artboard_errors() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(ENTRY_FIXTURE.to_vec(), None, 0);
+    let good = queue.instantiate_artboard_named(file, "New Artboard", Some(&listener), 0);
+    queue.instantiate_state_machine_named(good, "Blah", None, 1);
+    let bad = queue.instantiate_artboard_named(file, "Blah", Some(&listener), 0);
+    queue.request_state_machine_names(bad, 2);
+    queue.instantiate_default_state_machine(bad, None, 3);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert_eq!(captured.iter().filter(|event| matches!(event, CommandEvent::ArtboardError { handle, .. } if *handle == good)).count(), 1);
+    assert_eq!(captured.iter().filter(|event| matches!(event, CommandEvent::ArtboardError { handle, .. } if *handle == bad)).count(), 2);
+}
+
+#[test]
+fn invalid_artboard_volume_errors() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    queue.set_global_artboard_listener(Some(&listener));
+    let file = queue.load_file(ENTRY_FIXTURE.to_vec(), None, 0);
+    let invalid = queue.instantiate_artboard_named(file, "missing", None, 0);
+    queue.set_artboard_volume(invalid, 0.5, 0x51);
+    queue.request_artboard_volume(invalid, 0x52);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let ids = events(&log)
+        .into_iter()
+        .filter_map(|event| match event {
+            CommandEvent::ArtboardError {
+                handle, request_id, ..
+            } if handle == invalid => Some(request_id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(ids, [0x51, 0x52]);
+}
+
+#[test]
+fn invalid_artboard_size_errors() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    queue.set_global_artboard_listener(Some(&listener));
+    let file = queue.load_file(ENTRY_FIXTURE.to_vec(), None, 0);
+    let invalid = queue.instantiate_artboard_named(file, "missing", None, 0);
+    queue.set_artboard_size(invalid, 10.0, 10.0, 1.0, 0x51);
+    queue.reset_artboard_size(invalid, 0x52);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let ids = events(&log)
+        .into_iter()
+        .filter_map(|event| match event {
+            CommandEvent::ArtboardError {
+                handle, request_id, ..
+            } if handle == invalid => Some(request_id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(ids, [0x51, 0x52]);
+}
+
+#[test]
+fn list_state_machine() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(ENTRY_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_artboard_named(file, "New Artboard", Some(&listener), 0);
+    queue.request_state_machine_names(artboard, 0x40);
+    let bad_file = queue.load_file(vec![0; 100 * 1024], None, 0);
+    let bad = queue.instantiate_default_artboard(bad_file, None, 0);
+    queue.request_state_machine_names(bad, 0x41);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::StateMachinesListed { handle, request_id: 0x40, names } if *handle == artboard && names == &["State Machine 1"])));
+    assert!(!captured.iter().any(
+        |event| matches!(event, CommandEvent::StateMachinesListed { handle, .. } if *handle == bad)
+    ));
+}
+
+#[test]
+fn request_artboard_size() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    queue.set_global_artboard_listener(Some(&listener));
+    let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, Some(&listener), 0);
+    queue.request_artboard_size(artboard, 0x50);
+    queue.set_artboard_size(artboard, 1000.0, 500.0, 1.0, 0);
+    queue.request_artboard_size(artboard, 0x51);
+    let invalid = queue.instantiate_artboard_named(file, "missing", None, 0);
+    queue.request_artboard_size(invalid, 0x52);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::ArtboardSize { handle, request_id: 0x50, .. } if *handle == artboard)));
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::ArtboardSize { handle, request_id: 0x51, width: 1000.0, height: 500.0 } if *handle == artboard)));
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::ArtboardError { handle, request_id: 0x52, .. } if *handle == invalid)));
+}
+
+#[test]
+fn request_default_view_model() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    queue.set_global_artboard_listener(Some(&listener));
+    let good_file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 0);
+    let good = queue.instantiate_artboard_named(good_file, "Test Artboard", Some(&listener), 0);
+    queue.request_default_view_model(good, good_file, 0x40);
+    let bad_file = queue.load_file(vec![0; 100 * 1024], None, 0);
+    let bad = queue.instantiate_default_artboard(bad_file, None, 0);
+    queue.request_default_view_model(bad, good_file, 0x41);
+    queue.request_default_view_model(good, bad_file, 0x42);
+    queue.request_default_view_model(bad, bad_file, 0x43);
+    let no_vm_file = queue.load_file(ENTRY_FIXTURE.to_vec(), None, 0);
+    let no_vm = queue.instantiate_default_artboard(no_vm_file, Some(&listener), 0);
+    queue.request_default_view_model(no_vm, no_vm_file, 0x44);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::DefaultViewModel { handle, request_id: 0x40, view_model, instance } if *handle == good && view_model == "Test All" && instance == "Test Default")));
+    for request_id in [0x41, 0x42, 0x43, 0x44] {
+        assert!(captured.iter().any(|event| matches!(event, CommandEvent::ArtboardError { request_id: actual, .. } if *actual == request_id)));
+    }
+}
+
+#[test]
+fn bind_view_model_instance() {
+    let queue = CommandQueue::new();
+    let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 0);
+    let view_model =
+        queue.instantiate_view_model_named(file, "Test All", "Test Alternate", None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let state_machine = queue.instantiate_default_state_machine(artboard, None, 0);
+    queue.bind_view_model(state_machine, view_model, 0);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    assert!(server.state_machine(state_machine).is_some());
+    assert!(server.view_model(view_model).is_some());
+    let bad_vm = queue.instantiate_view_model_named(file, "blah", "Test Alternate", None, 0);
+    let bad_machine = queue.instantiate_state_machine_named(artboard, "blah", None, 0);
+    queue.bind_view_model(state_machine, bad_vm, 1);
+    queue.bind_view_model(bad_machine, view_model, 2);
+    queue.bind_view_model(bad_machine, bad_vm, 3);
+    assert!(server.process_commands());
+}
+
+#[test]
+fn advance_state_machine() {
+    const SETTLER: &[u8] = include_bytes!("../../../fixtures/command_queue/settler.riv");
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(SETTLER.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let machine = queue.instantiate_default_state_machine(artboard, Some(&listener), 0);
+    queue.advance_state_machine(machine, 10.0, 0);
+    queue.advance_state_machine(machine, 10.0, 0);
+    queue.advance_state_machine(machine, 10.0, 0x50);
+    let bad = queue.instantiate_state_machine_named(artboard, "blah blah", Some(&listener), 0);
+    queue.advance_state_machine(bad, 10.0, 0x51);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::StateMachineSettled { handle, request_id: 0x50 } if *handle == machine)));
+    assert!(!captured.iter().any(
+        |event| matches!(event, CommandEvent::StateMachineSettled { handle, .. } if *handle == bad)
+    ));
+}
+
+#[test]
+fn listener_delete_callbacks() {
+    let queue = CommandQueue::new();
+    let (file_listener, file_log) = event_log();
+    let (artboard_listener, artboard_log) = event_log();
+    let (machine_listener, machine_log) = event_log();
+    let (image_listener, image_log) = event_log();
+    let file = queue.load_file(ENTRY_FIXTURE.to_vec(), Some(&file_listener), 0);
+    let artboard =
+        queue.instantiate_artboard_named(file, "New Artboard", Some(&artboard_listener), 0);
+    let machine = queue.instantiate_default_state_machine(artboard, Some(&machine_listener), 0);
+    let image = queue.decode_image(IMAGE_FIXTURE.to_vec(), Some(&image_listener), 0);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    for log in [&file_log, &artboard_log, &machine_log, &image_log] {
+        assert!(!events(log).iter().any(|event| matches!(
+            event,
+            CommandEvent::FileDeleted { .. }
+                | CommandEvent::ArtboardDeleted { .. }
+                | CommandEvent::StateMachineDeleted { .. }
+                | CommandEvent::ImageDeleted { .. }
+        )));
+    }
+    queue.delete_state_machine(machine, 0x50);
+    queue.delete_artboard(artboard, 0x51);
+    queue.delete_file(file, 0x52);
+    queue.delete_image(image, 0x53);
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert!(events(&file_log).iter().any(|event| matches!(event, CommandEvent::FileDeleted { handle, request_id: 0x52 } if *handle == file)));
+    assert!(events(&artboard_log).iter().any(|event| matches!(event, CommandEvent::ArtboardDeleted { handle, request_id: 0x51 } if *handle == artboard)));
+    assert!(events(&machine_log).iter().any(|event| matches!(event, CommandEvent::StateMachineDeleted { handle, request_id: 0x50 } if *handle == machine)));
+    assert!(events(&image_log).iter().any(|event| matches!(event, CommandEvent::ImageDeleted { handle, request_id: 0x53 } if *handle == image)));
+}
+
+#[test]
+fn file_loaded_callback() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let good = queue.load_file(ENTRY_FIXTURE.to_vec(), Some(&listener), 0x10);
+    let (bad_listener, bad_log) = event_log();
+    let bad = queue.load_file(vec![0; 1024], Some(&bad_listener), 0x10);
+    assert!(server(&queue).process_commands());
+    queue.process_messages();
+    assert!(events(&log).iter().any(|event| matches!(event, CommandEvent::FileLoaded { handle, request_id: 0x10 } if *handle == good)));
+    assert!(
+        !events(&bad_log).iter().any(
+            |event| matches!(event, CommandEvent::FileLoaded { handle, .. } if *handle == bad)
+        )
+    );
+}
+
+#[test]
+fn artboard_instantiated_callback() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(ARTBOARD_FIXTURE.to_vec(), Some(&listener), 0);
+    let good = queue.instantiate_artboard_named(file, "One", None, 0x10);
+    let bad = queue.instantiate_artboard_named(file, "Blah", None, 0x11);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::ArtboardInstantiated { file: actual_file, handle, request_id: 0x10 } if *actual_file == file && *handle == good)));
+    assert!(!captured.iter().any(
+        |event| matches!(event, CommandEvent::ArtboardInstantiated { handle, .. } if *handle == bad)
+    ));
+}
+
+#[test]
+fn state_machine_instantiated_callback() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(MULTI_MACHINE_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, Some(&listener), 0);
+    let good = queue.instantiate_state_machine_named(artboard, "one", None, 0x10);
+    let bad = queue.instantiate_state_machine_named(artboard, "blahblahblah", None, 0x11);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::StateMachineInstantiated { artboard: actual_artboard, handle, request_id: 0x10 } if *actual_artboard == artboard && *handle == good)));
+    assert!(!captured.iter().any(|event| matches!(event, CommandEvent::StateMachineInstantiated { handle, .. } if *handle == bad)));
+}
+
+#[test]
+fn view_model_instance_instantiated_callback() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), Some(&listener), 0);
+    let good = queue.instantiate_view_model_named(file, "Test All", "Test Alternate", None, 0x10);
+    let bad = queue.instantiate_view_model_named(file, "Test All", "Blah", None, 0x11);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::ViewModelInstantiated { file: actual_file, handle, request_id: 0x10 } if *actual_file == file && *handle == good)));
+    assert!(!captured.iter().any(|event| matches!(event, CommandEvent::ViewModelInstantiated { handle, .. } if *handle == bad)));
+}
+
+#[test]
+fn decoded_callbacks() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let image = queue.decode_image(IMAGE_FIXTURE.to_vec(), Some(&listener), 0x10);
+    let audio = queue.decode_audio(AUDIO_FIXTURE.to_vec(), Some(&listener), 0x10);
+    let font = queue.decode_font(FONT_FIXTURE.to_vec(), Some(&listener), 0x10);
+    let bad_image = queue.decode_image(vec![0; 1024], Some(&listener), 0x11);
+    let bad_audio = queue.decode_audio(vec![0; 1024], Some(&listener), 0x11);
+    let bad_font = queue.decode_font(vec![0; 1024], Some(&listener), 0x11);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::ImageDecoded { handle, request_id: 0x10 } if *handle == image)));
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::AudioDecoded { handle, request_id: 0x10 } if *handle == audio)));
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::FontDecoded { handle, request_id: 0x10 } if *handle == font)));
+    assert!(!captured.iter().any(
+        |event| matches!(event, CommandEvent::ImageDecoded { handle, .. } if *handle == bad_image)
+    ));
+    assert!(!captured.iter().any(
+        |event| matches!(event, CommandEvent::AudioDecoded { handle, .. } if *handle == bad_audio)
+    ));
+    assert!(!captured.iter().any(
+        |event| matches!(event, CommandEvent::FontDecoded { handle, .. } if *handle == bad_font)
+    ));
+}
+
+#[test]
+fn listener_lifetimes() {
+    let queue = CommandQueue::new();
+    let (file_listener, file_log) = event_log();
+    let (artboard_listener, artboard_log) = event_log();
+    let (machine_listener, machine_log) = event_log();
+    let file = queue.load_file(ENTRY_FIXTURE.to_vec(), Some(&file_listener), 0);
+    let artboard = queue.instantiate_default_artboard(file, Some(&artboard_listener), 0);
+    let machine = queue.instantiate_default_state_machine(artboard, Some(&machine_listener), 0);
+    queue.request_artboard_names(file, 1);
+    queue.request_state_machine_names(artboard, 2);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert!(!events(&file_log).is_empty());
+    assert!(!events(&artboard_log).is_empty());
+    let moved_file_listener = Arc::clone(&file_listener);
+    let moved_artboard_listener = Arc::clone(&artboard_listener);
+    let moved_machine_listener = Arc::clone(&machine_listener);
+    drop(file_listener);
+    drop(artboard_listener);
+    drop(machine_listener);
+    queue.delete_state_machine(machine, 3);
+    queue.delete_artboard(artboard, 4);
+    queue.delete_file(file, 5);
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert!(events(&machine_log).iter().any(|event| matches!(event, CommandEvent::StateMachineDeleted { handle, .. } if *handle == machine)));
+    assert!(events(&artboard_log).iter().any(
+        |event| matches!(event, CommandEvent::ArtboardDeleted { handle, .. } if *handle == artboard)
+    ));
+    assert!(
+        events(&file_log).iter().any(
+            |event| matches!(event, CommandEvent::FileDeleted { handle, .. } if *handle == file)
+        )
+    );
+    drop((
+        moved_file_listener,
+        moved_artboard_listener,
+        moved_machine_listener,
+    ));
+    let (ephemeral, ephemeral_log) = event_log();
+    queue.load_file(vec![0; 1024], Some(&ephemeral), 6);
+    drop(ephemeral);
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert!(events(&ephemeral_log).is_empty());
+}
+
+#[test]
+fn empty_listener_code_coverage() {
+    let queue = CommandQueue::new();
+    let listener: Listener = Arc::new(|_: &CommandEvent| {});
+    let file = queue.load_file(Vec::new(), Some(&listener), 0);
+    queue.delete_file(file, 0);
+    assert!(server(&queue).process_commands());
+    assert_eq!(queue.process_messages(), 2);
+}
+
+fn pointer_at(x: f32, y: f32) -> PointerEvent {
+    PointerEvent {
+        position: nuxie::Vec2D::new(x, y),
+        ..PointerEvent::default()
+    }
+}
+
+#[test]
+fn pointer_input() {
+    let queue = CommandQueue::new();
+    let file = queue.load_file(POINTER_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let machine = queue.instantiate_default_state_machine(artboard, None, 0);
+    queue.run_once(move |server| {
+        assert!(server.file(file).is_some());
+        assert!(server.artboard(artboard).is_some());
+        assert!(server.state_machine(machine).is_some());
+    });
+    queue.advance_state_machine(machine, 0.0, 0);
+    let assert_bool = |expected| {
+        queue.run_once(move |server| {
+            assert_eq!(
+                server
+                    .state_machine(machine)
+                    .and_then(|machine| machine.get_bool("isDown"))
+                    .and_then(|input| input.bool_value()),
+                Some(expected)
+            );
+        });
+    };
+    queue.pointer_down(machine, pointer_at(425.0, 425.0), 0);
+    assert_bool(true);
+    queue.pointer_up(machine, pointer_at(425.0, 425.0), 0);
+    assert_bool(true);
+    queue.pointer_down(machine, pointer_at(425.0, 425.0), 0);
+    assert_bool(false);
+    queue.pointer_down(machine, pointer_at(75.0, 75.0), 0);
+    assert_bool(true);
+    queue.pointer_up(machine, pointer_at(75.0, 75.0), 0);
+    assert_bool(false);
+    queue.pointer_move(machine, pointer_at(250.0, 250.0), 0);
+    assert_bool(false);
+    queue.pointer_move(machine, pointer_at(425.0, 75.0), 0);
+    assert_bool(true);
+    queue.pointer_move(machine, pointer_at(250.0, 250.0), 0);
+    assert_bool(true);
+    queue.pointer_move(machine, pointer_at(425.0, 75.0), 0);
+    assert_bool(false);
+    queue.pointer_down(machine, pointer_at(75.0, 75.0), 0);
+    assert_bool(true);
+    queue.pointer_exit(machine, pointer_at(-25.0, -25.0), 0);
+    assert_bool(true);
+    queue.pointer_up(machine, pointer_at(-25.0, -25.0), 0);
+    assert_bool(true);
+    queue.pointer_up(machine, pointer_at(75.0, 75.0), 0);
+    assert_bool(false);
+    queue.pointer_down(machine, pointer_at(75.0, 75.0), 0);
+    assert_bool(true);
+    queue.pointer_exit(machine, pointer_at(-25.0, -25.0), 0);
+    assert_bool(true);
+    queue.pointer_move(machine, pointer_at(75.0, 75.0), 0);
+    assert_bool(true);
+    queue.pointer_up(machine, pointer_at(75.0, 75.0), 0);
+    assert_bool(false);
+    assert!(server(&queue).process_commands());
+}
+
+#[test]
+fn pointer_down_advances_before_rapid_pointer_up() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(RAPID_POINTER_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let machine = queue.instantiate_default_state_machine(artboard, None, 0);
+    let view_model = queue.instantiate_view_model_for_artboard(
+        file,
+        artboard,
+        Some(String::new()),
+        Some(&listener),
+        0,
+    );
+    queue.bind_view_model(machine, view_model, 0);
+    queue.subscribe_to_view_model_property(view_model, "hasReached", CommandDataType::Boolean, 0);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert!(
+        !events(&log)
+            .iter()
+            .any(|event| matches!(event, CommandEvent::ViewModelValue { .. }))
+    );
+    queue.advance_state_machine(machine, 0.0, 0);
+    queue.pointer_down(machine, pointer_at(250.0, 250.0), 0);
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert_eq!(events(&log).iter().filter(|event| matches!(event, CommandEvent::ViewModelValue { handle, path, value: CommandValue::Boolean(true), .. } if *handle == view_model && path == "hasReached")).count(), 1);
+    queue.pointer_up(machine, pointer_at(250.0, 250.0), 0);
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert_eq!(events(&log).iter().filter(|event| matches!(event, CommandEvent::ViewModelValue { handle, path, .. } if *handle == view_model && path == "hasReached")).count(), 1);
+}
+
+#[test]
+fn pointer_input_translation() {
+    let queue = CommandQueue::new();
+    let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let machine = queue.instantiate_default_state_machine(artboard, None, 0);
+    let checks = [
+        ((50.0, 50.0), (250.0, 250.0)),
+        ((25.0, 25.0), (125.0, 125.0)),
+        ((75.0, 75.0), (375.0, 375.0)),
+        ((75.0, 25.0), (375.0, 125.0)),
+        ((25.0, 75.0), (125.0, 375.0)),
+    ];
+    for ((x, y), (expected_x, expected_y)) in checks {
+        queue.run_once(move |server| {
+            let translated = server
+                .testing_cursor_position(
+                    machine,
+                    PointerEvent {
+                        fit: Fit::Contain,
+                        screen_bounds: nuxie::Vec2D::new(100.0, 100.0),
+                        position: nuxie::Vec2D::new(x, y),
+                        ..PointerEvent::default()
+                    },
+                )
+                .expect("state machine cursor translation");
+            assert!((translated.x - expected_x).abs() < 0.0001);
+            assert!((translated.y - expected_y).abs() < 0.0001);
+        });
+    }
+    assert!(server(&queue).process_commands());
+}
+
+#[test]
+fn global_listener() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    queue.set_global_file_listener(Some(&listener));
+    queue.set_global_artboard_listener(Some(&listener));
+    queue.set_global_state_machine_listener(Some(&listener));
+    queue.set_global_view_model_listener(Some(&listener));
+    queue.set_global_image_listener(Some(&listener));
+    queue.set_global_audio_listener(Some(&listener));
+    queue.set_global_font_listener(Some(&listener));
+    let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 1);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let machine = queue.instantiate_default_state_machine(artboard, None, 0);
+    let view_model =
+        queue.instantiate_view_model_for_artboard(file, artboard, Some(String::new()), None, 0);
+    let image = queue.decode_image(IMAGE_FIXTURE.to_vec(), None, 0);
+    let audio = queue.decode_audio(AUDIO_FIXTURE.to_vec(), None, 0);
+    let font = queue.decode_font(FONT_FIXTURE.to_vec(), None, 0);
+    queue.request_artboard_names(file, 2);
+    queue.request_view_model_names(file, 3);
+    queue.request_view_model_instance_names(file, "Test All", 4);
+    queue.request_view_model_properties(file, "Test All", 5);
+    queue.request_view_model_enums(file, 6);
+    queue.request_state_machine_names(artboard, 11);
+    queue.request_default_view_model(artboard, file, 20);
+    queue.request_view_model_value(view_model, "Test Bool", CommandDataType::Boolean, 13);
+    queue.request_view_model_list_size(view_model, "Test List", 14);
+    queue.request_view_model_name(view_model, 18);
+    queue.request_view_model_instance_name(view_model, 19);
+    for _ in 0..3 {
+        queue.advance_state_machine(machine, 1.0, 16);
+    }
+    queue.delete_font(font, 10);
+    queue.delete_state_machine(machine, 17);
+    queue.delete_artboard(artboard, 12);
+    queue.delete_view_model(view_model, 15);
+    queue.delete_image(image, 8);
+    queue.delete_file(file, 7);
+    queue.delete_audio(audio, 9);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    for predicate in [
+        |event: &CommandEvent| matches!(event, CommandEvent::FileLoaded { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ArtboardInstantiated { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::StateMachineInstantiated { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ViewModelInstantiated { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ImageDecoded { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::AudioDecoded { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::FontDecoded { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ArtboardsListed { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::StateMachinesListed { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ViewModelsListed { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ViewModelInstancesListed { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ViewModelPropertiesListed { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ViewModelEnumsListed { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ViewModelValue { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ViewModelListSize { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ViewModelName { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ViewModelInstanceName { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::FontDeleted { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::StateMachineDeleted { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ArtboardDeleted { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ViewModelDeleted { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::ImageDeleted { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::FileDeleted { .. }),
+        |event: &CommandEvent| matches!(event, CommandEvent::AudioDeleted { .. }),
+    ] {
+        assert!(captured.iter().any(predicate));
+    }
+}
+
+#[test]
+fn sync_pointer_events() {
+    let queue = CommandQueue::new();
+    let file = queue.load_file(POINTER_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_artboard_named(file, "art-1", None, 0);
+    let machine = queue.instantiate_state_machine_named(artboard, "sm-1", None, 0);
+    queue.advance_state_machine(machine, 0.0, 0);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    for index in 0..20 {
+        let position = 50.0 + index as f32 * 10.0;
+        let event = pointer_at(position, position);
+        queue.pointer_down(machine, event, 0);
+        queue.pointer_up(machine, event, 0);
+        queue.pointer_move(machine, event, 0);
+        queue.advance_state_machine(machine, 0.1, 0);
+        server.pointer_down_synchronized(machine, event);
+        server.pointer_up_synchronized(machine, event);
+        server.pointer_move_synchronized(machine, event);
+        assert!(server.process_commands());
+    }
+    queue.delete_state_machine(machine, 0);
+    assert!(server.process_commands());
+    server.pointer_down_synchronized(machine, PointerEvent::default());
+    server.pointer_up_synchronized(machine, PointerEvent::default());
+    server.pointer_move_synchronized(machine, PointerEvent::default());
+}
+
+#[test]
+fn request_view_model_instance_list_clear() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let view_model = queue.instantiate_view_model_for_artboard(
+        file,
+        artboard,
+        Some(String::new()),
+        Some(&listener),
+        0,
+    );
+    let nested = queue.instantiate_blank_view_model_named(file, "ListViewModel", None, 0);
+    queue.insert_view_model_list(view_model, "Test List", nested, None, 0);
+    queue.request_view_model_list_size(view_model, "Test List", 1);
+    queue.request_view_model_list_clear(view_model, "Test List", 0x42);
+    queue.request_view_model_list_size(view_model, "Test List", 2);
+    let bad = queue.instantiate_blank_view_model_named(file, "Bad", None, 0);
+    queue.request_view_model_list_clear(bad, "Test List", 3);
+    queue.request_view_model_list_clear(view_model, "Bad", 4);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::ViewModelListSize { request_id: 1, size, .. } if *size >= 1)));
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::ViewModelListCleared { handle, request_id: 0x42, path } if *handle == view_model && path == "Test List")));
+    assert!(captured.iter().any(|event| matches!(
+        event,
+        CommandEvent::ViewModelListSize {
+            request_id: 2,
+            size: 0,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn dependency_lifetime_management() {
+    let queue = CommandQueue::new();
+    let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 1);
+    let artboards = [
+        queue.instantiate_default_artboard(file, None, 0),
+        queue.instantiate_default_artboard(file, None, 0),
+        queue.instantiate_default_artboard(file, None, 0),
+    ];
+    let machines = [
+        queue.instantiate_default_state_machine(artboards[0], None, 0),
+        queue.instantiate_default_state_machine(artboards[0], None, 0),
+        queue.instantiate_default_state_machine(artboards[1], None, 0),
+        queue.instantiate_default_state_machine(artboards[1], None, 0),
+        queue.instantiate_default_state_machine(artboards[1], None, 0),
+        queue.instantiate_default_state_machine(artboards[1], None, 0),
+    ];
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    assert!(
+        artboards
+            .iter()
+            .all(|handle| server.artboard(*handle).is_some())
+    );
+    assert!(
+        machines
+            .iter()
+            .all(|handle| server.state_machine(*handle).is_some())
+    );
+    queue.delete_artboard(artboards[0], 0);
+    assert!(server.process_commands());
+    assert!(server.artboard(artboards[0]).is_none());
+    assert!(server.artboard(artboards[1]).is_some());
+    assert!(server.artboard(artboards[2]).is_some());
+    assert!(server.state_machine(machines[0]).is_none());
+    assert!(server.state_machine(machines[1]).is_none());
+    assert!(
+        machines[2..]
+            .iter()
+            .all(|handle| server.state_machine(*handle).is_some())
+    );
+    queue.delete_state_machine(machines[2], 0);
+    assert!(server.process_commands());
+    assert!(server.state_machine(machines[2]).is_none());
+    assert!(
+        machines[3..]
+            .iter()
+            .all(|handle| server.state_machine(*handle).is_some())
+    );
+}
+
+fn listed_assets(bytes: &[u8], request_id: u64) -> Vec<nuxie::command_queue::FileAssetData> {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(bytes.to_vec(), Some(&listener), 0);
+    queue.request_file_assets(file, request_id);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    events(&log)
+        .into_iter()
+        .find_map(|event| match event {
+            CommandEvent::FileAssetsListed {
+                handle,
+                request_id: actual,
+                assets,
+            } if handle == file && actual == request_id => Some(assets),
+            _ => None,
+        })
+        .expect("file assets callback")
+}
+
+#[test]
+fn file_assets_listed_image_asset() {
+    let assets = listed_assets(HOSTED_IMAGE_FIXTURE, 42);
+    assert_eq!(assets.len(), 1);
+    let asset = &assets[0];
+    assert_eq!(asset.name, "one.png");
+    assert_eq!(asset.asset_id, 45008);
+    assert_eq!(asset.cdn_uuid, "edcb1816-8405-4983-acd2-16db48d85df4");
+    assert_eq!(asset.cdn_base_url, "https://public.uat.rive.app/cdn/uuid");
+    assert_eq!(asset.file_extension, "png");
+    assert_eq!(asset.type_id, 105);
+}
+
+#[test]
+fn file_assets_listed_font_asset() {
+    let assets = listed_assets(HOSTED_FONT_FIXTURE, 43);
+    assert_eq!(assets.len(), 1);
+    let asset = &assets[0];
+    assert_eq!(asset.name, "Inter");
+    assert_eq!(asset.asset_id, 43276);
+    assert_eq!(asset.cdn_base_url, "https://public.uat.rive.app/cdn/uuid");
+    assert_eq!(asset.file_extension, "ttf");
+    assert_eq!(asset.type_id, 141);
+}
+
+#[test]
+fn file_assets_listed_type_ids_match_runtime() {
+    assert_eq!(
+        nuxie_schema::definition_by_name("ImageAsset")
+            .unwrap()
+            .type_key
+            .int,
+        105
+    );
+    assert_eq!(
+        nuxie_schema::definition_by_name("FontAsset")
+            .unwrap()
+            .type_key
+            .int,
+        141
+    );
+    assert_eq!(
+        nuxie_schema::definition_by_name("AudioAsset")
+            .unwrap()
+            .type_key
+            .int,
+        406
+    );
+}
+
+#[test]
+fn file_assets_listed_empty_file() {
+    assert!(listed_assets(ARTBOARD_FIXTURE, 44).is_empty());
+}
+
+#[test]
+fn file_assets_listed_invalid_handle() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    queue.set_global_file_listener(Some(&listener));
+    let bad = queue.load_file(vec![0; 1024], None, 0);
+    queue.request_file_assets(bad, 45);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(!captured.iter().any(
+        |event| matches!(event, CommandEvent::FileAssetsListed { handle, .. } if *handle == bad)
+    ));
+    assert!(captured.iter().any(|event| matches!(event, CommandEvent::FileError { handle, request_id: 45, .. } if *handle == bad)));
+}
+
+#[test]
+fn file_assets_listed_all_assets_returned() {
+    let assets = listed_assets(DATA_BIND_FIXTURE, 46);
+    let file = nuxie::File::import(DATA_BIND_FIXTURE).expect("fixture import");
+    assert_eq!(assets.len(), file.assets().len());
+}
+
+#[test]
+fn global_view_model_names_listed() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    let file = queue.load_file(GLOBAL_VARIABLES_FIXTURE.to_vec(), Some(&listener), 0);
+    queue.request_global_view_model_names(file, 7);
+    let bad = queue.load_file(vec![0; 1024 * 1024], Some(&listener), 0);
+    queue.request_global_view_model_names(bad, 8);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(
+        event,
+        CommandEvent::GlobalViewModelsListed { handle, request_id: 7, names }
+            if *handle == file
+                && !names.is_empty()
+                && names.iter().all(|name| !name.is_empty())
+    )));
+    assert!(!captured.iter().any(|event| matches!(event, CommandEvent::GlobalViewModelsListed { handle, .. } if *handle == bad)));
+}
+
+#[test]
+fn set_bind_get_global_view_model_instance() {
+    let queue = CommandQueue::new();
+    let (file_listener, file_log) = event_log();
+    let file = queue.load_file(GLOBAL_VARIABLES_FIXTURE.to_vec(), Some(&file_listener), 0);
+    queue.request_global_view_model_names(file, 1);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let global_name = events(&file_log)
+        .into_iter()
+        .find_map(|event| match event {
+            CommandEvent::GlobalViewModelsListed { names, .. } => names.into_iter().next(),
+            _ => None,
+        })
+        .expect("global view model name");
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let machine = queue.instantiate_default_state_machine(artboard, None, 0);
+    let global = queue.instantiate_view_model_named(file, &global_name, "", None, 0);
+    queue.set_global_view_model_instance(machine, &global_name, global, 0);
+    queue.bind_state_machine(machine, 0);
+    let (ok_listener, ok_log) = event_log();
+    let fetched = queue.global_view_model_instance(machine, &global_name, Some(&ok_listener), 0);
+    queue.request_view_model_name(fetched, 2);
+    let (error_listener, error_log) = event_log();
+    let missing =
+        queue.global_view_model_instance(machine, "not-a-global", Some(&error_listener), 3);
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert!(events(&ok_log).iter().any(|event| matches!(event, CommandEvent::ViewModelName { handle, request_id: 2, name } if *handle == fetched && name == &global_name)));
+    assert!(events(&error_log).iter().any(|event| matches!(event, CommandEvent::ViewModelError { handle, request_id: 3, .. } if *handle == missing)));
 }
 
 #[test]

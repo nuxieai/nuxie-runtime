@@ -79,6 +79,7 @@ pub struct CommandServer {
         CommandDataType,
         u64,
         CommandValue,
+        u64,
     )>,
 }
 
@@ -168,6 +169,31 @@ impl CommandServer {
     #[doc(hidden)]
     pub fn global_font_named(&self, name: &str) -> Option<FontHandle> {
         self.global_fonts.get(name).copied()
+    }
+    #[doc(hidden)]
+    pub fn testing_subscription_count(&self) -> usize {
+        self.subscriptions.len()
+    }
+    #[doc(hidden)]
+    pub fn testing_cursor_position(
+        &self,
+        handle: StateMachineHandle,
+        event: PointerEvent,
+    ) -> Option<crate::Vec2D> {
+        let artboard = self.state_machines.get(&handle)?.artboard;
+        Some(map_pointer(&self.artboards.get(&artboard)?.instance, event))
+    }
+    #[doc(hidden)]
+    pub fn pointer_down_synchronized(&mut self, handle: StateMachineHandle, event: PointerEvent) {
+        self.process_pointer(handle, PointerKind::Down, event, 0);
+    }
+    #[doc(hidden)]
+    pub fn pointer_up_synchronized(&mut self, handle: StateMachineHandle, event: PointerEvent) {
+        self.process_pointer(handle, PointerKind::Up, event, 0);
+    }
+    #[doc(hidden)]
+    pub fn pointer_move_synchronized(&mut self, handle: StateMachineHandle, event: PointerEvent) {
+        self.process_pointer(handle, PointerKind::Move, event, 0);
     }
 
     /// Wait for at least one command, then execute one entry-bounded poll.
@@ -777,10 +803,10 @@ impl CommandServer {
                     path,
                     data_type,
                     request_id,
-                } => match self.get_view_model_value(handle, &path, data_type) {
-                    Some(value) => self
+                } => match self.subscription_value(handle, &path, data_type) {
+                    Some((value, revision)) => self
                         .subscriptions
-                        .push((handle, path, data_type, request_id, value)),
+                        .push((handle, path, data_type, request_id, value, revision)),
                     None => self.view_model_error(
                         handle,
                         request_id,
@@ -851,6 +877,131 @@ impl CommandServer {
                             "State machine not found for binding view model",
                         ),
                     };
+                }
+                Command::SetGlobalViewModel {
+                    state_machine,
+                    name,
+                    view_model,
+                    request_id,
+                } => {
+                    let model = self
+                        .view_models
+                        .get(&view_model)
+                        .map(|entry| entry.instance.handle().clone());
+                    let context = self.state_machines.get(&state_machine).and_then(|entry| {
+                        self.artboards
+                            .get(&entry.artboard)
+                            .map(|artboard| (entry.artboard, artboard.file))
+                    });
+                    let success = context
+                        .and_then(|(_, file)| self.files.get(&file))
+                        .zip(model)
+                        .is_some_and(|(file, model)| {
+                            self.state_machines
+                                .get_mut(&state_machine)
+                                .is_some_and(|entry| {
+                                    entry.instance.set_global_view_model_instance(
+                                        Some(file.runtime()),
+                                        &name,
+                                        Some(model),
+                                    )
+                                })
+                        });
+                    if !success {
+                        self.state_machine_error(
+                            state_machine,
+                            request_id,
+                            format!("Could not set global view model {name}"),
+                        );
+                    }
+                }
+                Command::BindStateMachine {
+                    state_machine,
+                    request_id,
+                } => {
+                    let context = self.state_machines.get(&state_machine).and_then(|entry| {
+                        self.artboards
+                            .get(&entry.artboard)
+                            .map(|artboard| (entry.artboard, artboard.file))
+                    });
+                    let Some((artboard, file)) = context else {
+                        self.state_machine_error(
+                            state_machine,
+                            request_id,
+                            "State machine not found for bind",
+                        );
+                        continue;
+                    };
+                    let Some(file) = self.files.get(&file) else {
+                        self.state_machine_error(
+                            state_machine,
+                            request_id,
+                            "File not found for bind",
+                        );
+                        continue;
+                    };
+                    let (machines, artboards) = (&mut self.state_machines, &mut self.artboards);
+                    let success = machines.get_mut(&state_machine).is_some_and(|machine| {
+                        artboards
+                            .get_mut(&artboard)
+                            .map(|artboard| {
+                                machine.instance.bind_for_command_queue(
+                                    Some(file.runtime()),
+                                    artboard.instance.raw_mut(),
+                                )
+                            })
+                            .unwrap_or(false)
+                    });
+                    if !success {
+                        self.state_machine_error(
+                            state_machine,
+                            request_id,
+                            "Could not bind state machine",
+                        );
+                    }
+                }
+                Command::GetGlobalViewModel {
+                    state_machine,
+                    name,
+                    handle,
+                    request_id,
+                } => {
+                    let context = self.state_machines.get(&state_machine).and_then(|entry| {
+                        self.artboards
+                            .get(&entry.artboard)
+                            .map(|artboard| (artboard.file, &entry.instance))
+                    });
+                    let resolved = context.and_then(|(file_handle, machine)| {
+                        let file = self.files.get(&file_handle)?;
+                        let raw =
+                            machine.global_view_model_instance(Some(file.runtime()), &name)?;
+                        Some((file_handle, raw))
+                    });
+                    match resolved {
+                        Some((file, raw)) => {
+                            let view_model_name = self
+                                .files
+                                .get(&file)
+                                .and_then(|file| file.view_model(raw.borrow().view_model_index()))
+                                .and_then(|model| model.name())
+                                .unwrap_or_default()
+                                .to_owned();
+                            self.view_models.insert(
+                                handle,
+                                ViewModelEntry {
+                                    file,
+                                    instance: ViewModelInstance { raw },
+                                    view_model_name,
+                                    instance_name: String::new(),
+                                },
+                            );
+                        }
+                        None => self.view_model_error(
+                            handle,
+                            request_id,
+                            format!("Could not get global view model {name}"),
+                        ),
+                    }
                 }
                 Command::DecodeImage {
                     handle,
@@ -1112,20 +1263,25 @@ impl CommandServer {
                         handle,
                         request_id,
                         enums: file
-                            .graph
-                            .enums
-                            .iter()
+                            .runtime
+                            .data_enums()
+                            .into_iter()
                             .map(|data_enum| crate::command_queue::ViewModelEnum {
-                                name: data_enum.name.clone().unwrap_or_default(),
+                                name: data_enum
+                                    .object
+                                    .string_property("name")
+                                    .unwrap_or_default()
+                                    .to_owned(),
                                 enumerants: data_enum
                                     .values
-                                    .iter()
+                                    .into_iter()
                                     .map(|value| {
                                         value
-                                            .value
-                                            .clone()
-                                            .or_else(|| value.key.clone())
+                                            .string_property("value")
+                                            .filter(|value| !value.is_empty())
+                                            .or_else(|| value.string_property("key"))
                                             .unwrap_or_default()
+                                            .to_owned()
                                     })
                                     .collect(),
                             })
@@ -1155,10 +1311,7 @@ impl CommandServer {
                                         .string_property("cdnBaseUrl")
                                         .unwrap_or_default()
                                         .to_owned(),
-                                    file_extension: descriptor
-                                        .string_property("fileExtension")
-                                        .unwrap_or_default()
-                                        .to_owned(),
+                                    file_extension: asset.file_extension().to_owned(),
                                     type_id: descriptor.type_key,
                                 }
                             })
@@ -1251,6 +1404,11 @@ impl CommandServer {
             return;
         };
         let view_model_name = model.name().unwrap_or_default().to_owned();
+        let resolved_instance_name = match instance_name.as_deref() {
+            Some("") => model.instance_name(0).unwrap_or_default().to_owned(),
+            Some(name) => name.to_owned(),
+            None => String::new(),
+        };
         let instance = match instance_name.as_deref() {
             None => model.instantiate(),
             Some("") => model.instantiate_default(),
@@ -1264,7 +1422,7 @@ impl CommandServer {
                         file,
                         instance,
                         view_model_name,
-                        instance_name: instance_name.unwrap_or_default(),
+                        instance_name: resolved_instance_name,
                     },
                 );
                 self.emit(CommandEvent::ViewModelInstantiated {
@@ -1460,7 +1618,10 @@ impl CommandServer {
                 let value = enum_value_name_for_path(file, &entry.view_model_name, path, index)?;
                 CommandValue::Enum(value)
             }
-            CommandDataType::Trigger => CommandValue::Trigger,
+            CommandDataType::Trigger => {
+                raw.trigger_value_by_property_name_path(path)?;
+                CommandValue::Trigger
+            }
             CommandDataType::ViewModel => {
                 let linked = model
                     .handle()
@@ -1469,6 +1630,44 @@ impl CommandServer {
                     entry.instance.handle().ptr_eq(&linked).then_some(*handle)
                 })?;
                 CommandValue::ViewModel(handle)
+            }
+            CommandDataType::List => {
+                model.handle().list_item_count_by_property_name_path(path)?;
+                CommandValue::None
+            }
+            CommandDataType::AssetImage => {
+                let source_exists = raw
+                    .asset_source_handle_by_property_name_path(path)
+                    .is_some();
+                if !source_exists {
+                    return None;
+                }
+                let image = raw.runtime_image_by_property_name_path(path);
+                let handle = image.as_ref().and_then(|image| {
+                    let image = image.render_image()?;
+                    self.images.iter().find_map(|(handle, entry)| {
+                        entry
+                            .shared()
+                            .is_some_and(|candidate| Rc::ptr_eq(&candidate, &image))
+                            .then_some(*handle)
+                    })
+                });
+                CommandValue::Image(handle)
+            }
+            CommandDataType::Artboard => {
+                let source_exists = raw
+                    .artboard_source_handle_by_property_name_path(path)
+                    .is_some();
+                if !source_exists {
+                    return None;
+                }
+                let artboard = raw.runtime_artboard_by_property_name(path);
+                let handle = artboard.as_ref().and_then(|artboard| {
+                    self.artboards.iter().find_map(|(handle, entry)| {
+                        entry.bindable.ptr_eq(artboard).then_some(*handle)
+                    })
+                });
+                CommandValue::Artboard(handle)
             }
             _ => return None,
         })
@@ -1548,12 +1747,13 @@ impl CommandServer {
         let mut events = Vec::new();
         for index in 0..self.subscriptions.len() {
             let (handle, path, data_type, request_id) = {
-                let (handle, path, data_type, request_id, _) = &self.subscriptions[index];
+                let (handle, path, data_type, request_id, _, _) = &self.subscriptions[index];
                 (*handle, path.clone(), *data_type, *request_id)
             };
-            if let Some(value) = self.get_view_model_value(handle, &path, data_type) {
-                if value != self.subscriptions[index].4 {
+            if let Some((value, revision)) = self.subscription_value(handle, &path, data_type) {
+                if value != self.subscriptions[index].4 || revision != self.subscriptions[index].5 {
                     self.subscriptions[index].4 = value.clone();
+                    self.subscriptions[index].5 = revision;
                     events.push(CommandEvent::ViewModelValue {
                         handle,
                         request_id,
@@ -1566,6 +1766,25 @@ impl CommandServer {
         for event in events {
             self.emit(event);
         }
+    }
+
+    fn subscription_value(
+        &self,
+        handle: ViewModelInstanceHandle,
+        path: &str,
+        data_type: CommandDataType,
+    ) -> Option<(CommandValue, u64)> {
+        let value = self.get_view_model_value(handle, path, data_type)?;
+        let revision = if data_type == CommandDataType::Trigger {
+            self.view_models
+                .get(&handle)?
+                .instance
+                .raw()
+                .trigger_value_by_property_name_path(path)?
+        } else {
+            0
+        };
+        Some((value, revision))
     }
 }
 

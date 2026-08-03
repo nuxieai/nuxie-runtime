@@ -4713,6 +4713,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let mut glyphs = glyphs;
+        glyphs.push(glyphs.last().expect("fixture has a right glyph").clone());
         let annotations = materialize_renderer_glyph_run_annotations(text, &mut glyphs).unwrap();
         assert_eq!(
             materialized_renderer_glyph_run_annotations(&glyphs),
@@ -4721,7 +4722,36 @@ mod tests {
         assert_eq!(annotations.joiners, vec![1, 2]);
         assert_eq!(
             glyph_end_avoiding_word_joiner(text, &glyphs, 3, &annotations.joiners),
-            4
+            5
+        );
+
+        let ligature_text = "xfi\u{2060}b";
+        let mut ligature_glyphs = [0, 1, 3, 4]
+            .into_iter()
+            .map(|character_index| TextGlyph {
+                glyph_id: 0,
+                cluster: u32::try_from(char_byte_index(ligature_text, character_index))
+                    .expect("fixture cluster fits u32"),
+                advance: 1.0,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                renderer_breaks_before: 0,
+                renderer_breaks_after: 0,
+                renderer_joiners: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        let ligature_annotations =
+            materialize_renderer_glyph_run_annotations(ligature_text, &mut ligature_glyphs)
+                .unwrap();
+        assert_eq!(ligature_annotations.joiners, vec![3]);
+        assert_eq!(
+            glyph_end_avoiding_word_joiner(
+                ligature_text,
+                &ligature_glyphs,
+                3,
+                &ligature_annotations.joiners,
+            ),
+            1
         );
     }
 

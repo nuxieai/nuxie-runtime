@@ -209,11 +209,18 @@ fn glyph_end_avoiding_word_joiner(
     }
 
     let left_text_index = joiners[first_joiner].saturating_sub(1);
+    let left_cluster = glyphs
+        .iter()
+        .filter_map(|glyph| {
+            u32::try_from(character_index_for_cluster(text, glyph.cluster))
+                .ok()
+                .filter(|index| *index <= left_text_index)
+        })
+        .max();
     let left_glyph_index = glyphs
         .iter()
         .position(|glyph| {
-            u32::try_from(character_index_for_cluster(text, glyph.cluster))
-                .is_ok_and(|index| index >= left_text_index)
+            u32::try_from(character_index_for_cluster(text, glyph.cluster)).ok() == left_cluster
         })
         .unwrap_or(0);
     if left_glyph_index != 0 {
@@ -221,12 +228,16 @@ fn glyph_end_avoiding_word_joiner(
     }
 
     let right_text_index = joiners[last_joiner].saturating_add(1);
-    glyphs
-        .iter()
-        .position(|glyph| {
-            u32::try_from(character_index_for_cluster(text, glyph.cluster))
-                .is_ok_and(|index| index >= right_text_index)
-        })
-        .map(|index| index + 1)
-        .unwrap_or(glyphs.len())
+    let Some(right_glyph_index) = glyphs.iter().position(|glyph| {
+        u32::try_from(character_index_for_cluster(text, glyph.cluster))
+            .is_ok_and(|index| index >= right_text_index)
+    }) else {
+        return glyphs.len();
+    };
+    let right_cluster = glyphs[right_glyph_index].cluster;
+    right_glyph_index
+        + glyphs[right_glyph_index..]
+            .iter()
+            .take_while(|glyph| glyph.cluster == right_cluster)
+            .count()
 }

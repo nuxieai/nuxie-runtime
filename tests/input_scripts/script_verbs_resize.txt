@@ -1,0 +1,2 @@
+# Change the logical artboard size and declare a 2x device-pixel ratio.
+0 resize 320 180 2

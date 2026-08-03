@@ -1,0 +1,4 @@
+# Exercise all typed StateMachineInputInstance mutation shapes.
+0 setInput trig trigger
+0 setInput bool bool true
+0 setInput num number 12

@@ -1,0 +1,3 @@
+# Exercise value and edge-triggered mutations on the bound main view model.
+0 setNumber num3 320
+0 fireTrigger tri

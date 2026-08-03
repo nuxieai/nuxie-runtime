@@ -1934,8 +1934,8 @@ note = "Consolidated Rust port for scripted."
 [[file]]
 upstream = "src/scripted/scripted_interpolator.cpp"
 status = "ported"
-rust_module = "crates/nuxie-runtime/src/scripting.rs"
-note = "Consolidated Rust port for scripted."
+rust_module = "crates/nuxie-runtime/src/scripted_interpolator.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie/src/lib.rs"
+note = "Per-keyframe ScriptedInterpolator tables, VM callback coercion, and ordinary cloned ScriptInput DataBind/converter lifecycle; scripted/stateful converter clone advancement and full DataContext rebinding remain explicit file-correspondence residue. Crate-boundary facade and VM seams are retained intentionally."
 
 [[file]]
 upstream = "src/scripted/scripted_layout.cpp"

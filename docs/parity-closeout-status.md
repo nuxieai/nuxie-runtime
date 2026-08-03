@@ -8,8 +8,8 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 
 | tier | state | number | notes |
 |---|---|---|---|
-| 1 Frame parity | PARTIAL | ordinary exact-segments 673/673; scripted 683/683; e2e-exact: gate not built | Scripted corpus is 330 exact entries / 361 total after #OR-3; #OR-6 missing |
-| 2 Interaction parity | PARTIAL | ordinary side-channel-segments 672/672; scripted 682/682 (V11 carve-out filed); fuzz-clean-nights: 0 | #OR-3 closed with five exact verb entries; #OR-7 open |
+| 1 Frame parity | PARTIAL | ordinary exact-segments 673/673; scripted 685/685; e2e-exact: gate not built | Scripted corpus is 331 exact entries / 362 total after #OR-3; #OR-6 missing |
+| 2 Interaction parity | PARTIAL | ordinary side-channel-segments 672/672; scripted 684/684 (V11 carve-out filed); fuzz-clean-nights: 0 | #OR-3 closed with six exact verb entries; #OR-7 open |
 | 3 SDK parity | RED | A-rows closed 0/8 | register A-table |
 | 4 Platform parity | PARTIAL | pixel-exact 1468/1468; adapters 2/2; live same-runner 1468/1468 local | static byte-exact 837; live d788 M5 byte-exact 1370; Paravirtual rerun pending; #HD-2's hypothesis oracle remains; #HD-3 closed by retiring WebGL2 |
 | 5 Performance & size | RED | ratio 0.897–0.914 (non-blocking, 6 files); size 7.88 MiB OFF / 8.76 MiB ON vs user-approved 9 MiB budget (both variants green at `5901c1fe`) | #OR-9 |
@@ -17,7 +17,7 @@ logs the way `v2-status.md` / `renderer-status.md` did.
 Regression floor (must stay green): runtime lib 521/521, nuxie lib 146/146,
 C++ probe 747/747, ordinary runtime golden gate 325/325 exact / 673/673
 segments with the side channel ON (side-channel-segments 672); the last
-scripted gate is green at 330/330 exact / 683/683 segments after #OR-3. Both
+scripted gate is green at 331/331 exact / 685/685 segments after #OR-3. Both
 recorded gates have zero failures. The workspace push gate is green
 as of 2026-07-22 and now builds/exports `RIVE_CPP_PROBE`, so its log contains
 the complete probe run rather than silently skipping it. Every remaining RB-1
@@ -984,11 +984,12 @@ upstream-sync-map registry).
   UNIV-1343: `docs/evidence/or2-settling-assessment.md` — a stop-when-settled
   embedder loop is implementable on today's surface.
 - [x] #OR-3 script verbs — landed 2026-08-03: both runners share typed
-  `setInput` bool/number/trigger, bound-main-view-model boolean/number/trigger,
-  and resize/DPR grammar and stream records. `golden-compare` forwards both
-  script files. Five new exact entries cover each family and equal-time
-  cross-stream ordering; key/textInput remain reserved for #FT-TEXT. Scripted
-  floor: 330/330 exact, 683/683 exact-segments, 682/682 side-channel-segments.
+  `setInput` bool/number/trigger, slash-path view-model
+  bool/number/string/enum/color plus trigger, and resize/DPR grammar and stream
+  records. `golden-compare` forwards both script files. Six new exact entries
+  cover every family, nested property resolution, and equal-time cross-stream
+  ordering; key/textInput remain reserved for #FT-TEXT. Scripted floor:
+  331/331 exact, 685/685 exact-segments, 684/684 side-channel-segments.
 - [ ] #OR-4 sampling densification (237 t=0-only entries)
 - [ ] #OR-5 input-script coverage (all listener-bearing files)
 - [ ] #OR-6 `make e2e-golden` blocking (≥50 files)

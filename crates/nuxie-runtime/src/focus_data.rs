@@ -4,12 +4,12 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
+#[cfg(test)]
+use crate::input::FocusEvent;
 use crate::input::{
     FocusBounds, FocusEdgeBehavior, FocusEventKind, FocusManager, FocusNode, FocusNodeId,
     FocusPoint, RuntimeFocusable,
 };
-#[cfg(test)]
-use crate::input::FocusEvent;
 use crate::parent_traversal::{ParentTraversal, ParentTraversalFrame};
 use crate::properties::property_key_for_name;
 use crate::{ArtboardInstance, Mat2D};
@@ -369,6 +369,131 @@ impl RuntimeFocusTree {
         domain
             .mounts
             .retain(|_, candidate| !candidate.occurrence_key.is_within(&mount.occurrence_key));
+    }
+
+    /// Rebuild this private domain from the owner's live subtree in another
+    /// retained manager. C++ can rebuild through its stored Artboard pointer;
+    /// the public Rust manager-switch API deliberately carries no Artboard
+    /// borrow, so clone the already-retained occurrence at that rare switch
+    /// boundary instead. This never runs from the per-frame focus query.
+    pub(crate) fn replace_with_owner_occurrence_from(&mut self, source: &Self) -> bool {
+        if self.shares_manager(source) || self.owner_identity != source.owner_identity {
+            return false;
+        }
+        let source_domain = source.domain.borrow();
+        let Some(root_mount) = source_domain.mounts.get(&source.owner_identity).cloned() else {
+            return false;
+        };
+        let keys = source_domain
+            .retained_nodes
+            .keys()
+            .filter(|key| key.is_within(&root_mount.occurrence_key))
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let old_to_key = keys
+            .iter()
+            .filter_map(|key| {
+                source_domain
+                    .retained_nodes
+                    .get(key)
+                    .copied()
+                    .map(|node_id| (node_id, key.clone()))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut roots = old_to_key
+            .keys()
+            .copied()
+            .filter(|node_id| {
+                source_domain
+                    .manager
+                    .parent(*node_id)
+                    .is_none_or(|parent| !old_to_key.contains_key(&parent))
+            })
+            .collect::<Vec<_>>();
+        roots.sort_by_key(|node_id| {
+            source_domain
+                .manager
+                .parent(*node_id)
+                .and_then(|parent| source_domain.manager.children(parent))
+                .unwrap_or(source_domain.manager.roots())
+                .iter()
+                .position(|candidate| candidate == node_id)
+                .unwrap_or(usize::MAX)
+        });
+
+        let mut rebuilt = RuntimeFocusDomain::default();
+        let mut old_to_new = BTreeMap::new();
+        let mut new_to_key = BTreeMap::new();
+        let mut pending = roots
+            .iter()
+            .enumerate()
+            .rev()
+            .map(|(index, node_id)| (*node_id, None, index))
+            .collect::<Vec<_>>();
+        while let Some((old_id, new_parent, index)) = pending.pop() {
+            let Some(mut node) = source_domain.manager.node(old_id).cloned() else {
+                continue;
+            };
+            node.parent = None;
+            node.children.clear();
+            node.has_focus = false;
+            let new_id = rebuilt.manager.create_node(node);
+            rebuilt.manager.insert_child(new_parent, new_id, index);
+            old_to_new.insert(old_id, new_id);
+
+            let Some(key) = old_to_key.get(&old_id).cloned() else {
+                continue;
+            };
+            let parent_key = new_parent.and_then(|parent| new_to_key.get(&parent).cloned());
+            rebuilt.retained_nodes.insert(key.clone(), new_id);
+            rebuilt.retained_parents.insert(key.clone(), parent_key);
+            new_to_key.insert(new_id, key);
+
+            let children = source_domain
+                .manager
+                .children(old_id)
+                .unwrap_or_default()
+                .iter()
+                .copied()
+                .filter(|child| old_to_key.contains_key(child))
+                .collect::<Vec<_>>();
+            pending.extend(
+                children
+                    .iter()
+                    .enumerate()
+                    .rev()
+                    .map(|(index, child)| (*child, Some(new_id), index)),
+            );
+        }
+
+        for (identity, old_id) in &source_domain.focus_nodes {
+            if let Some(new_id) = old_to_new.get(old_id) {
+                rebuilt.focus_nodes.insert(*identity, *new_id);
+            }
+        }
+        for (identity, old_id) in &source_domain.focus_targets {
+            if let Some(new_id) = old_to_new.get(old_id) {
+                rebuilt.focus_targets.insert(*identity, *new_id);
+            }
+        }
+        for (owner, mount) in &source_domain.mounts {
+            if mount.occurrence_key.is_within(&root_mount.occurrence_key) {
+                let mut mount = mount.clone();
+                if mount
+                    .parent_focus
+                    .as_ref()
+                    .is_some_and(|parent| !keys.contains(parent))
+                {
+                    mount.parent_focus = None;
+                    mount.sibling_index = 0;
+                }
+                rebuilt.mounts.insert(*owner, mount);
+            }
+        }
+        drop(source_domain);
+        self.inert = rebuilt.retained_nodes.is_empty();
+        self.domain = Rc::new(RefCell::new(rebuilt));
+        true
     }
 
     fn place_retained_node(

@@ -2786,10 +2786,16 @@ impl StateMachineInstance {
         // retained manager clears this occurrence's selected focus and queues
         // its observable callback before selection changes.
         self.clean_selected_focus_before_manager_switch();
-        self.focus.cleanup_owner_occurrence();
         self.record_focus_manager_phase("clean-retained-tree");
         if !self.external_focus_manager_selected {
+            // The private manager is no longer selected, so retaining its
+            // fallback tree cannot affect the parent domain. On the reverse
+            // switch it is refreshed from the live external subtree when that
+            // occurrence exists, and remains available for embedders that
+            // install an owner without an Artboard mount.
             self.internal_focus = Some(std::mem::take(&mut self.focus));
+        } else {
+            self.focus.cleanup_owner_occurrence();
         }
         self.focus = parent_focus.external_for_owner(owner_identity);
         self.publish_focusable_keyboard_capabilities();
@@ -2806,20 +2812,21 @@ impl StateMachineInstance {
     ///
     /// The retained internal tree is selected again; no manager pointer
     /// crosses the public Rust API.
-    pub fn clear_external_focus_manager(&mut self, artboard: &ArtboardInstance) -> bool {
+    pub fn clear_external_focus_manager(&mut self) -> bool {
         if !self.external_focus_manager_selected {
             return false;
         }
         self.clean_selected_focus_before_manager_switch();
-        self.focus.cleanup_owner_occurrence();
         self.record_focus_manager_phase("clean-retained-tree");
-        self.focus = self
+        let mut internal_focus = self
             .internal_focus
             .take()
             .expect("external focus selection retains its internal fallback");
+        internal_focus.replace_with_owner_occurrence_from(&self.focus);
+        self.focus.cleanup_owner_occurrence();
+        self.focus = internal_focus;
         self.external_focus_manager_selected = false;
         self.owns_focus_domain = true;
-        self.focus.build_focus_tree(artboard);
         self.publish_focusable_keyboard_capabilities();
         self.record_focus_manager_phase("assign-internal");
         self.record_focus_manager_phase("select-retained-tree");
@@ -21213,7 +21220,7 @@ mod scripted_listener_action_tests {
 
     #[test]
     fn fl_c5_focus_semantic_manager_switch_is_identity_noop_and_restores_internal() {
-        let (artboard, mut machine, _) =
+        let (_artboard, mut machine, _) =
             scripted_drawable_input_artboard_and_machine(Box::new(RecordingDrawableInputScript {
                 label: "internal",
                 methods: Vec::new(),
@@ -21250,7 +21257,7 @@ mod scripted_listener_action_tests {
         );
         assert!(machine.focus_manager_phase_trace.is_empty());
 
-        assert!(machine.clear_external_focus_manager(&artboard));
+        assert!(machine.clear_external_focus_manager());
         assert!(!machine.has_external_focus_manager());
         assert!(machine.internal_focus_manager());
         assert_eq!(
@@ -21268,7 +21275,7 @@ mod scripted_listener_action_tests {
         );
         assert!(machine.has_focus_nodes());
         assert!(
-            !machine.clear_external_focus_manager(&artboard),
+            !machine.clear_external_focus_manager(),
             "null-to-null is the same-manager no-op"
         );
     }

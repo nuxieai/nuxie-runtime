@@ -1283,14 +1283,7 @@ struct RuntimeNestedEventRegistration {
     kind: RuntimeNestedEventNotifierKind,
 }
 
-/// Cheap, owner-safe host projection of the selected focus manager.
-///
-/// This projects pinned C++ `StateMachineInstance::FocusState` without
-/// returning a borrowed manager or node pointer. Cross-owner/intrinsic
-/// `Focusable::acceptsKeyboardInput` lookup remains in the RECORDED
-/// `src/input/focus_manager.cpp` seam owned by manifest row B6-0238
-/// (`focus.rs`, DIVERGENT); the current Rust boundary reports registered
-/// keyboard/text capability only for this occurrence.
+/// Cheap, owner-safe host projection of the selected retained focus manager.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct FocusState {
     pub has_focus: bool,
@@ -2790,42 +2783,46 @@ impl StateMachineInstance {
         }
 
         // C++ calls cleanupFocusTree before assigning the new manager. The
-        // manager-owned cleanup algorithm remains RECORDED under
-        // `src/input/focus_manager.cpp`, manifest row B6-0238 (`focus.rs`,
-        // DIVERGENT); at this instance seam we preserve its observable
-        // focused-owner notification before selection changes.
+        // retained manager clears this occurrence's selected focus and queues
+        // its observable callback before selection changes.
         self.clean_selected_focus_before_manager_switch();
-        self.record_focus_manager_phase("clean-tree-recorded-seam");
+        self.focus.cleanup_owner_occurrence();
+        self.record_focus_manager_phase("clean-retained-tree");
         if !self.external_focus_manager_selected {
             self.internal_focus = Some(std::mem::take(&mut self.focus));
         }
         self.focus = parent_focus.external_for_owner(owner_identity);
+        self.publish_focusable_keyboard_capabilities();
         self.external_focus_manager_selected = true;
         self.owns_focus_domain = false;
         self.record_focus_manager_phase("assign-external");
-        // RECORDED seam: manifest row B6-0238 owns the manager/tree rebuild.
-        self.record_focus_manager_phase("rebuild-tree-recorded-seam");
+        // The parent Artboard build already placed this child occurrence's
+        // retained nodes in the shared domain before the nested machine is
+        // pointed at it; no descriptor reconstruction is necessary here.
+        self.record_focus_manager_phase("select-retained-tree");
     }
 
     /// Owner-safe external-to-null form of C++ `setExternalFocusManager`.
     ///
-    /// The retained internal projection is selected again; no manager pointer
+    /// The retained internal tree is selected again; no manager pointer
     /// crosses the public Rust API.
-    pub fn clear_external_focus_manager(&mut self) -> bool {
+    pub fn clear_external_focus_manager(&mut self, artboard: &ArtboardInstance) -> bool {
         if !self.external_focus_manager_selected {
             return false;
         }
         self.clean_selected_focus_before_manager_switch();
-        self.record_focus_manager_phase("clean-tree-recorded-seam");
+        self.focus.cleanup_owner_occurrence();
+        self.record_focus_manager_phase("clean-retained-tree");
         self.focus = self
             .internal_focus
             .take()
             .expect("external focus selection retains its internal fallback");
         self.external_focus_manager_selected = false;
         self.owns_focus_domain = true;
+        self.focus.build_focus_tree(artboard);
+        self.publish_focusable_keyboard_capabilities();
         self.record_focus_manager_phase("assign-internal");
-        // RECORDED seam: manifest row B6-0238 owns the manager/tree rebuild.
-        self.record_focus_manager_phase("rebuild-tree-recorded-seam");
+        self.record_focus_manager_phase("select-retained-tree");
         true
     }
 
@@ -2838,16 +2835,23 @@ impl StateMachineInstance {
 
     fn clean_selected_focus_before_manager_switch(&mut self) {
         // Queue callbacks that this occurrence can translate owner-safely.
-        // Cross-owner subtree cleanup remains inside RECORDED manifest row
-        // B6-0238 rather than approximating focus_manager.cpp tree removal.
+        // Cross-owner nodes stay with the selected retained manager; only the
+        // switching occurrence translates its own focus callback.
         let selected_owner = self.focus.owner_identity();
-        let focused_by_this_projection = self
+        let focused_by_this_tree = self
             .focus
             .focused_listener_chain()
             .first()
             .is_some_and(|(owner, _, _)| *owner == selected_owner);
-        if focused_by_this_projection && self.focus.clear_focus() {
+        if focused_by_this_tree && self.focus.clear_focus() {
             self.capture_focus_callbacks();
+        }
+    }
+
+    fn publish_focusable_keyboard_capabilities(&self) {
+        for group in &self.keyboard_listener_groups {
+            self.focus
+                .set_accepts_keyboard_input(group.focus_data_local_id, true);
         }
     }
 
@@ -2858,7 +2862,7 @@ impl StateMachineInstance {
 
     #[cfg(test)]
     pub(crate) fn sync_focus_for_test(&mut self, artboard: &ArtboardInstance) {
-        self.focus.sync(artboard);
+        self.focus.build_focus_tree(artboard);
     }
 
     fn rebind_file_trigger_cells_after_clone(
@@ -3146,7 +3150,7 @@ impl StateMachineInstance {
         instance.build_initial_focus_tree(artboard);
         instance.record_constructor_phase(RuntimeConstructorPhase::FocusTree);
         // `Artboard::buildFocusTree` installs the parent's manager while it
-        // visits nested artboards. Rust's retained projection is built above,
+        // visits nested artboards. Rust's retained tree is built above,
         // then the nested state-machine occurrences are pointed at that same
         // domain without copying manager state.
         artboard.install_external_focus_domain(&instance.focus);
@@ -3385,6 +3389,7 @@ impl StateMachineInstance {
 
     fn build_initial_focus_tree(&mut self, artboard: &ArtboardInstance) {
         self.focus.synchronize_after_layer_initialization(artboard);
+        self.publish_focusable_keyboard_capabilities();
     }
 
     /// cloneScriptedObject appends its binds after the ordinary StateMachine
@@ -3579,12 +3584,21 @@ impl StateMachineInstance {
     /// prevents duplicate occurrences when facade preparation is idempotent.
     #[doc(hidden)]
     pub fn synchronize_scripted_input_groups(&mut self, artboard: &ArtboardInstance) {
+        for focus_data_local in self
+            .keyboard_listener_groups
+            .iter()
+            .filter_map(|group| group.scripted_global_id.map(|_| group.focus_data_local_id))
+        {
+            self.focus
+                .set_accepts_keyboard_input(focus_data_local, false);
+        }
         self.keyboard_listener_groups
             .retain(|group| group.scripted_global_id.is_none());
         self.gamepad_scripted_drawables.clear();
         self.hit_components
             .retain(|hit| hit.scripted_global_id().is_none());
         self.initialize_scripted_input_groups(artboard);
+        self.publish_focusable_keyboard_capabilities();
         self.sort_hit_components(artboard);
         self.scripted_input_group_generation = artboard.script_attachment_generation();
     }
@@ -5305,7 +5319,7 @@ impl StateMachineInstance {
     ///
     /// Rust uses the target's mounted local identity instead of exposing a
     /// borrowed `FocusData*`. `None`, or a retained FocusData whose node is no
-    /// longer present in this projection, follows the C++ clear-focus branch.
+    /// longer present in this retained tree, follows the C++ clear-focus branch.
     pub fn set_focus(&mut self, target_local_id: Option<usize>) -> bool {
         self.change_focus(|focus| match target_local_id {
             Some(target_local_id) if focus.has_focus_target(target_local_id) => {
@@ -5328,18 +5342,8 @@ impl StateMachineInstance {
 
     /// Poll the selected manager without exposing manager/node ownership.
     pub fn focus_state(&self) -> FocusState {
-        let focused_chain = self.focus.focused_listener_chain();
         let has_focus = self.focus.has_primary_focus();
-        let expects_keyboard_input =
-            focused_chain
-                .iter()
-                .any(|(owner_identity, _, focus_data_local_id)| {
-                    *owner_identity == self.focus.owner_identity()
-                        && self
-                            .keyboard_listener_groups
-                            .iter()
-                            .any(|group| group.focus_data_local_id == *focus_data_local_id)
-                });
+        let expects_keyboard_input = self.focus.primary_accepts_keyboard_input();
         FocusState {
             has_focus,
             expects_keyboard_input,
@@ -5556,7 +5560,7 @@ impl StateMachineInstance {
             return false;
         }
         if !self.focus.is_inert() {
-            self.focus.sync(artboard);
+            self.focus.drop_hidden_focus_target();
         }
         let owner_identity = self.focus.owner_identity();
         for (owner, _, focus_data_local_id) in self.focus.focused_listener_chain() {
@@ -5636,7 +5640,7 @@ impl StateMachineInstance {
             return false;
         }
         if !self.focus.is_inert() {
-            self.focus.sync(artboard);
+            self.focus.drop_hidden_focus_target();
         }
         let owner_identity = self.focus.owner_identity();
         for (owner, _, focus_data_local_id) in self.focus.focused_listener_chain() {
@@ -5707,7 +5711,7 @@ impl StateMachineInstance {
             return false;
         }
         if !self.focus.is_inert() {
-            self.focus.sync(artboard);
+            self.focus.drop_hidden_focus_target();
         }
         let mut handled = false;
         let mut already_dispatched = None;
@@ -6175,7 +6179,7 @@ impl StateMachineInstance {
             return Ok(HitResult::None);
         }
         if !self.focus.is_inert() {
-            self.focus.sync(artboard);
+            self.focus.drop_hidden_focus_target();
         }
         let position = Self::normalized_hit_position(artboard, x, y);
         let mut groups = std::mem::take(&mut self.listener_groups);
@@ -12657,7 +12661,8 @@ impl StateMachineInstance {
     }
 
     pub(crate) fn drop_hidden_focus_target(&mut self, artboard: &ArtboardInstance) {
-        self.focus.sync(artboard);
+        let _ = artboard;
+        self.focus.drop_hidden_focus_target();
     }
 
     /// Probe authored transitions without advancing or reapplying the current
@@ -12689,9 +12694,6 @@ impl StateMachineInstance {
         #[cfg(test)]
         {
             self.transition_probe_count += 1;
-        }
-        if !self.focus.is_inert() {
-            self.focus.sync(artboard);
         }
         self.collect_retained_owned_view_model_dirt();
         self.update_data_binds_false(artboard, None, host)?;
@@ -12825,7 +12827,7 @@ impl StateMachineInstance {
             self.draw_order_change_counter = draw_order_change_counter;
         }
         if !self.focus.is_inert() {
-            self.focus.sync(artboard);
+            self.focus.drop_hidden_focus_target();
         }
     }
 
@@ -21160,7 +21162,7 @@ mod scripted_listener_action_tests {
 
     #[test]
     fn fl_c5_focus_semantic_focus_state_and_owner_safe_focus_accessors() {
-        let (_artboard, mut machine, _) =
+        let (artboard, mut machine, _) =
             scripted_drawable_input_artboard_and_machine(Box::new(RecordingDrawableInputScript {
                 label: "focus state",
                 methods: Vec::new(),
@@ -21204,7 +21206,7 @@ mod scripted_listener_action_tests {
         assert!(machine.set_focus(Some(1)));
         assert!(
             machine.set_focus(Some(usize::MAX)),
-            "a missing owner-safe FocusData/node projection clears current focus"
+            "a missing owner-safe retained FocusData/node clears current focus"
         );
         assert_eq!(machine.focus_state(), FocusState::default());
     }
@@ -21232,9 +21234,9 @@ mod scripted_listener_action_tests {
         assert_eq!(
             machine.focus_manager_phase_trace,
             [
-                "clean-tree-recorded-seam",
+                "clean-retained-tree",
                 "assign-external",
-                "rebuild-tree-recorded-seam",
+                "select-retained-tree",
             ]
         );
 
@@ -21248,15 +21250,15 @@ mod scripted_listener_action_tests {
         );
         assert!(machine.focus_manager_phase_trace.is_empty());
 
-        assert!(machine.clear_external_focus_manager());
+        assert!(machine.clear_external_focus_manager(&artboard));
         assert!(!machine.has_external_focus_manager());
         assert!(machine.internal_focus_manager());
         assert_eq!(
             machine.focus_manager_phase_trace,
             [
-                "clean-tree-recorded-seam",
+                "clean-retained-tree",
                 "assign-internal",
-                "rebuild-tree-recorded-seam",
+                "select-retained-tree",
             ]
         );
         assert_eq!(
@@ -21266,7 +21268,7 @@ mod scripted_listener_action_tests {
         );
         assert!(machine.has_focus_nodes());
         assert!(
-            !machine.clear_external_focus_manager(),
+            !machine.clear_external_focus_manager(&artboard),
             "null-to-null is the same-manager no-op"
         );
     }

@@ -2040,12 +2040,26 @@ fn build_runtime_scroll_layout_metrics(
         scroll_viewport_axis_size(viewport_layout_height, content_origin_y)
     };
     let content_width = if virtualize && main_axis_is_horizontal {
-        virtualized_provider_content_size(&provider_item_sizes, true, gap_x, infinite)
+        virtualized_provider_content_size(
+            &provider_item_sizes,
+            true,
+            gap_x,
+            infinite,
+            layout_style_axis_leading_padding(artboard, content_style_local, true),
+            layout_style_axis_trailing_padding(artboard, content_style_local, true),
+        )
     } else {
         content_bounds.map(|bounds| bounds.width).unwrap_or(0.0)
     };
     let content_height = if virtualize && !main_axis_is_horizontal {
-        virtualized_provider_content_size(&provider_item_sizes, false, gap_y, infinite)
+        virtualized_provider_content_size(
+            &provider_item_sizes,
+            false,
+            gap_y,
+            infinite,
+            layout_style_axis_leading_padding(artboard, content_style_local, false),
+            layout_style_axis_trailing_padding(artboard, content_style_local, false),
+        )
     } else {
         content_bounds.map(|bounds| bounds.height).unwrap_or(0.0)
     };
@@ -2855,6 +2869,11 @@ mod tests {
     use crate::properties::property_key_for_name;
     use crate::{ArtboardInstance, TransformProperty};
 
+    use super::draggable_constraint::runtime_draggable_proxies;
+    use super::scrolling::scroll_virtualizer::{
+        test_virtualizer_placements_for_metrics, test_virtualizer_placements_for_providers,
+        virtualized_provider_content_size,
+    };
     use super::{
         BONE_LENGTH_PROPERTY_KEY, FOLLOW_PATH_DISTANCE_PROPERTY_KEY,
         FOLLOW_PATH_OFFSET_PROPERTY_KEY, FOLLOW_PATH_ORIENT_PROPERTY_KEY,
@@ -2864,13 +2883,8 @@ mod tests {
         RuntimeScrollAxisIntent, RuntimeScrollConstraintState, RuntimeScrollLayoutMetrics,
         RuntimeScrollProperty, RuntimeScrollSpace, TestVirtualizerPlacement, clamped_scroll_offset,
         interpolated_rotation, interpolated_rotation_from_modded_base, point_length,
-        runtime_draggable_proxy_drag, runtime_draggable_proxy_end,
-        runtime_draggable_proxy_start, runtime_scroll_intent_axes, scroll_viewport_axis_size,
-    };
-    use super::draggable_constraint::runtime_draggable_proxies;
-    use super::scrolling::scroll_virtualizer::{
-        test_virtualizer_placements_for_metrics, test_virtualizer_placements_for_providers,
-        virtualized_provider_content_size,
+        runtime_draggable_proxy_drag, runtime_draggable_proxy_end, runtime_draggable_proxy_start,
+        runtime_scroll_intent_axes, scroll_viewport_axis_size,
     };
 
     #[test]
@@ -3390,6 +3404,70 @@ mod tests {
         assert!(cold.active_pointers.is_empty());
         assert!(!cold.has_scrolled);
         assert!(!cold.viewport_is_dragging);
+    }
+
+    #[test]
+    fn finite_drag_without_physics_clamps_stored_overscroll_before_the_next_delta() {
+        let (mut instance, scroll_local, _) = scroll_bar_proxy_fixture();
+        let constraint = instance
+            .component_handle(scroll_local)
+            .expect("ScrollConstraint handle");
+        instance
+            .objects
+            .component_mut(constraint)
+            .and_then(|component| component.concrete.scroll.as_mut())
+            .expect("retained ScrollConstraint")
+            .physics = None;
+        let mut proxy = runtime_draggable_proxies(&instance)
+            .into_iter()
+            .find(|proxy| proxy.kind == RuntimeDraggableProxyKind::Viewport)
+            .expect("viewport proxy");
+
+        runtime_draggable_proxy_start(&mut instance, &mut proxy, (10.0, 10.0), 0.0);
+        assert!(runtime_draggable_proxy_drag(
+            &mut instance,
+            &mut proxy,
+            (10.0, 20.0),
+            0.016,
+        ));
+        assert_eq!(
+            instance
+                .component(scroll_local)
+                .and_then(|component| component.concrete.scroll.as_ref())
+                .map(|scroll| scroll.offset_y),
+            Some(0.0),
+            "positive overscroll clamps at the viewport origin"
+        );
+
+        assert!(runtime_draggable_proxy_drag(
+            &mut instance,
+            &mut proxy,
+            (10.0, -200.0),
+            0.032,
+        ));
+        assert_eq!(
+            instance
+                .component(scroll_local)
+                .and_then(|component| component.concrete.scroll.as_ref())
+                .map(|scroll| scroll.offset_y),
+            Some(-200.0),
+            "negative overscroll clamps at the finite content bound"
+        );
+
+        assert!(runtime_draggable_proxy_drag(
+            &mut instance,
+            &mut proxy,
+            (10.0, -190.0),
+            0.048,
+        ));
+        assert_eq!(
+            instance
+                .component(scroll_local)
+                .and_then(|component| component.concrete.scroll.as_ref())
+                .map(|scroll| scroll.offset_y),
+            Some(-180.0),
+            "the next in-range delta is applied immediately instead of paying down hidden overscroll"
+        );
     }
 
     #[test]
@@ -3944,7 +4022,8 @@ mod tests {
             vec![(15.0, 10.0)],
             vec![(25.0, 10.0), (25.0, 10.0)],
         ];
-        let content_size = virtualized_provider_content_size(&providers, true, 5.0, false);
+        let content_size =
+            virtualized_provider_content_size(&providers, true, 5.0, false, 0.0, 0.0);
         assert_eq!(content_size, 170.0);
 
         let placements = test_virtualizer_placements_for_providers(
@@ -3983,6 +4062,52 @@ mod tests {
             // index 4, before this provider's second item
             // (the pinned virtualizer loop's visible-end behavior).
         );
+    }
+
+    #[test]
+    fn virtualized_content_size_includes_finite_padding_but_not_infinite_cycle_padding() {
+        let providers = vec![vec![(20.0, 10.0), (30.0, 10.0)]];
+        assert_eq!(
+            virtualized_provider_content_size(&providers, true, 5.0, false, 7.0, 11.0),
+            73.0
+        );
+        assert_eq!(
+            virtualized_provider_content_size(&providers, true, 5.0, true, 7.0, 11.0),
+            60.0,
+            "infinite width is the two-item cycle plus its wrap gap, without padding"
+        );
+    }
+
+    #[test]
+    fn upstream_clipped_component_list_fixture_imports_virtualized_scroll_owners() {
+        let file = read_runtime_file(include_bytes!(
+            "../../../fixtures/sync/component_list_clipped_viewport.riv"
+        ))
+        .expect("upstream clipped component-list fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("fixture graph builds");
+        let graph = graphs
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some("Main"))
+            .expect("Main artboard graph");
+        let mut artboard =
+            ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+                .expect("Main artboard instantiates");
+        assert!(artboard.bind_default_view_model_artboard_list_context(&file));
+        while artboard.advance_artboard_data_binds() {}
+        artboard.update_pass();
+
+        let list_local = artboard
+            .slots()
+            .iter()
+            .find(|slot| {
+                slot.type_name == Some("ArtboardComponentList")
+                    && slot.name.as_deref() == Some("List")
+            })
+            .map(|slot| slot.local_id)
+            .expect("named component list");
+        assert!(artboard.component_list_state(list_local).is_some());
+        assert_eq!(artboard.scroll_constraint_occurrences().len(), 1);
     }
 
     #[test]

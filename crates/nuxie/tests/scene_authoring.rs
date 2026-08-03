@@ -13287,6 +13287,139 @@ fn typed_scripted_drawable_exports_raw_script_and_shader_payloads_with_one_envel
 }
 
 #[test]
+fn verified_script_require_edges_tree_shake_runtime_export_dependency_first() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let _unused = tx.create_script_asset(ScriptAssetSpec {
+            name: "unused".into(),
+            is_module: true,
+            bytes: b"unused".to_vec(),
+        })?;
+        let dependency = tx.create_script_asset(ScriptAssetSpec {
+            name: "dependency".into(),
+            is_module: true,
+            bytes: b"dependency".to_vec(),
+        })?;
+        let protocol = tx.create_script_asset(ScriptAssetSpec {
+            name: "protocol".into(),
+            is_module: false,
+            bytes: b"protocol".to_vec(),
+        })?;
+        let forced = tx.create_script_asset(ScriptAssetSpec {
+            name: "forced".into(),
+            is_module: true,
+            bytes: b"forced".to_vec(),
+        })?;
+        tx.set_script_require_edges(protocol, &[dependency])?;
+        tx.set_script_include_in_export(forced, true)?;
+
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Script roots".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::ScriptedDrawable(ScriptedDrawableSpec {
+                name: "Protocol root".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                script: protocol,
+            }),
+        )?;
+        tx.verify_script_require_edges()?;
+        Ok(())
+    })?;
+
+    let records = scene.export_records().into_records();
+    let script_names = records
+        .iter()
+        .filter(|record| record.kind == ExportedObjectKind::ScriptAsset)
+        .map(|record| {
+            record
+                .properties
+                .iter()
+                .find_map(|property| match property {
+                    ExportedProperty::AssetName(name) => Some(name.as_str()),
+                    _ => None,
+                })
+                .expect("script records carry an asset name")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(script_names, ["dependency", "protocol", "forced"]);
+    assert!(records.iter().any(|record| {
+        record.kind == ExportedObjectKind::ScriptedDrawable
+            && record
+                .properties
+                .contains(&ExportedProperty::ScriptedDrawableScriptAssetId(1))
+    }));
+
+    scene.edit(|tx| {
+        tx.create_script_asset(ScriptAssetSpec {
+            name: "after verification".into(),
+            is_module: true,
+            bytes: b"late".to_vec(),
+        })?;
+        Ok(())
+    })?;
+    assert_eq!(
+        scene
+            .export_records()
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::ScriptAsset)
+            .count(),
+        5,
+        "editing the script set invalidates verification and fails safe by keeping every script"
+    );
+    Ok(())
+}
+
+#[test]
+fn verified_script_require_edges_allow_reachable_module_cycles() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let first = tx.create_script_asset(ScriptAssetSpec {
+            name: "first".into(),
+            is_module: true,
+            bytes: b"first".to_vec(),
+        })?;
+        let second = tx.create_script_asset(ScriptAssetSpec {
+            name: "second".into(),
+            is_module: true,
+            bytes: b"second".to_vec(),
+        })?;
+        tx.set_script_require_edges(first, &[second])?;
+        tx.set_script_require_edges(second, &[first])?;
+        tx.set_script_include_in_export(first, true)?;
+        tx.verify_script_require_edges()?;
+        Ok(())
+    })?;
+
+    let exported = scene.export_records();
+    let script_names = exported
+        .records()
+        .iter()
+        .filter(|record| record.kind == ExportedObjectKind::ScriptAsset)
+        .filter_map(|record| {
+            record
+                .properties
+                .iter()
+                .find_map(|property| match property {
+                    ExportedProperty::AssetName(name) => Some(name.as_str()),
+                    _ => None,
+                })
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(script_names, ["second", "first"]);
+    Ok(())
+}
+
+#[test]
 fn empty_script_and_shader_payloads_are_structurally_preserved_as_unsigned_envelopes() -> Result<()>
 {
     let mut scene = Scene::new();

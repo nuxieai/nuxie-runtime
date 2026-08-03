@@ -28,16 +28,25 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
 fi
 
 jobs="$(sysctl -n hw.logicalcpu 2>/dev/null || nproc)"
+
+# librive build trees default under this repo's own target/ rather than the
+# shared pinned checkout's out/. Concurrent worktree batteries racing
+# `make clean`+rebuild in one shared build tree can delete or partially
+# rewrite librive.a between another battery's provenance verify and its
+# link. Per-repo trees make the shared checkout read-only for builds;
+# explicit *_OUT overrides still win.
+repo_target="$(cd "$script_dir/../.." && pwd)/target"
+
 if [[ "$with_scripting" == "1" ]]; then
     runtime_mode="scripted"
-    runtime_out="${RIVE_CPP_PROBE_RUNTIME_OUT:-out/rive-rust-cpp-probe-scripting-$config}"
-    decoders_out="${RIVE_CPP_PROBE_DECODERS_OUT:-out/rive-rust-cpp-probe-scripting-$config}"
+    runtime_out="${RIVE_CPP_PROBE_RUNTIME_OUT:-$repo_target/cpp-probe-librive/scripted-$config}"
+    decoders_out="${RIVE_CPP_PROBE_DECODERS_OUT:-$repo_target/cpp-probe-librive/scripted-$config-decoders}"
     runtime_premake_flags=(--with_rive_text --with_rive_layout --with_rive_scripting)
     runtime_targets=(rive rive_harfbuzz rive_sheenbidi rive_yoga luau_vm)
     export RIVE_CPP_PROBE_RUNNER_NAME="${RIVE_CPP_PROBE_RUNNER_NAME:-rive_cpp_probe_scripted}"
 else
     runtime_mode="audio"
-    runtime_out="${RIVE_CPP_PROBE_RUNTIME_OUT:-out/rive-rust-cpp-probe-audio-$config}"
+    runtime_out="${RIVE_CPP_PROBE_RUNTIME_OUT:-$repo_target/cpp-probe-librive/audio-$config}"
     runtime_premake_flags=(--with_rive_text --with_rive_layout --with_rive_audio=external)
     runtime_targets=(rive miniaudio rive_harfbuzz rive_sheenbidi rive_yoga)
     export RIVE_CPP_PROBE_WITH_AUDIO=1

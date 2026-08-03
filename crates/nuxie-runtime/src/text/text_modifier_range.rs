@@ -38,7 +38,7 @@ impl StaticTextWords for str {
         let mut words = Vec::new();
         let mut start = None;
         for (index, ch) in self.char_indices() {
-            if ch.is_whitespace() {
+            if nuxie_render_api::is_white_space(ch) {
                 if let Some(word_start) = start.take() {
                     words.push((word_start, &self[word_start..index]));
                 }
@@ -213,7 +213,7 @@ impl StaticTextModifierRange {
                 .skip(start)
                 .take(end.saturating_sub(start))
                 .filter_map(|(index, ch)| {
-                    (!ch.is_whitespace()).then_some(StaticRangeUnit {
+                    (!nuxie_render_api::is_white_space(ch)).then_some(StaticRangeUnit {
                         start: index,
                         len: 1,
                     })
@@ -229,7 +229,7 @@ impl StaticTextModifierRange {
         let mut units = Vec::new();
         let mut word_start = None;
         for (index, ch) in text.chars().enumerate() {
-            if ch.is_whitespace() {
+            if nuxie_render_api::is_white_space(ch) {
                 if let Some(index_from) = word_start.take() {
                     add_range_unit(&mut units, index_from, index, start, end);
                 }

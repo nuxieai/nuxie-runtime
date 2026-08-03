@@ -6,4 +6,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+harfrust = "0.12"
 nuxie-audio = { path = "../nuxie-audio" }
+
+[dev-dependencies]
+base64 = "0.22"

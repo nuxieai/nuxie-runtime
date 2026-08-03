@@ -2536,15 +2536,15 @@ note = "MR-3 justification: FL-D6 Event::trigger direct owner; event_report.rs r
 
 [[file]]
 upstream = "src/factory.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
+rust_module = "crates/nuxie-render-api/src/lib.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0207"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "2026-08-02 reconciliation: remains pending. Factory::decodeAudio is now owned by nuxie-render-api and exercised by the audio oracle, but the Factory seam still has no direct equivalents for pinned Factory::makeRenderPath(AABB) and Factory::decodeFont; font decoding and rectangle-path construction are performed by downstream asset/path owners instead. B6-0207 establishes an adapted trait seam, not complete whole-file correspondence. C17 exception: retained modules are `crates/nuxie-runtime/src/lib.rs`; the retained crate root is the public factory boundary and adapted audio, font, and path operations are owned by downstream render/asset modules, so a dedicated runtime factory file would be an empty or behavior-changing shim."
+note = "P3-g faithful candidate against d788e8ec: `Factory::makeRenderPath(AABB)` (`src/factory.cpp:15-20`) is the default `Factory::make_render_path_from_aabb` and is covered by `p3g_factory_aabb_helper_builds_the_pinned_nonzero_rectangle_path`; `Factory::decodeFont` (`src/factory.cpp:22-29`) is the HarfRust-validating, byte-owning `Factory::decode_font` default, covered by `p3g_factory_font_helper_validates_and_owns_the_encoded_font` and the behavior-preserving observer test `p3g_font_asset_decode_routes_through_the_factory_helper`; both loader-driven and portable RuntimeFile font installation call that owner, with the latter using NullFactory because pinned decodeFont is nonvirtual; the overridable Rust default follows the row's B6 AF-3 trait-object adaptation shared with existing `decode_audio`; `Factory::decodeAudio` (`src/factory.cpp:31-40`) remains covered by `factory_decode_audio_owns_and_decodes_the_pinned_wav`. C17 exception: the backend-neutral Factory trait and its default helpers intentionally live at the `nuxie-render-api` crate root alongside their renderer resource types; extracting a forwarding factory file would split this single public seam without creating an owner."
 
 [[file]]
 upstream = "src/file.cpp"
@@ -3806,15 +3806,15 @@ note = "P1-m/F12 faithful candidate awaiting orchestrator verification: transiti
 
 [[file]]
 upstream = "src/renderer.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/lib.rs"
+rust_module = "crates/nuxie-render-api/src/lib.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0311"
 b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
-note = "2026-08-02 reconciliation: remains pending. Rust owns backend-neutral render traits, buffers, paths, alignment at nested-artboard call sites, and HarfRust text shaping, but not the complete renderer.cpp surface: Renderer translate/scale/rotate convenience semantics and Factory-independent computeAlignment are not exposed as direct owners, and Font::shapeText's exact break/joiner annotation (including C++ zero-width-space classification) lacks whole-file oracle correspondence. B6-0311 is only medium-confidence adapted evidence. C17 exception: retained modules are `crates/nuxie-runtime/src/lib.rs`; the retained crate root re-exports renderer contracts whose implementations live across render API, text, and draw boundaries; a runtime renderer target would only add a forwarding shim and would not own the whole upstream surface."
+note = "P3-g faithful candidate against d788e8ec: `computeAlignment` (`src/renderer.cpp:7-70`) is the standalone `compute_alignment` owner used by nested-artboard alignment and is covered across every pinned Fit by `p3g_compute_alignment_matches_every_pinned_fit_case`; Renderer translate/scale/rotate (`src/renderer.cpp:72-88`) are exact trait defaults covered by `p3g_renderer_transform_helpers_emit_the_pinned_matrices`; existing RenderBuffer/resource traits own `src/renderer.cpp:90-140`, with type/flags/size/map/unmap and draw handoff covered by `records_buffers_gradients_images_and_meshes`—exclusive `&mut [u8]` mapping owns the access window and adapter bytes are authoritative, so the B6 adaptation needs no mirrored C++ dirty bit; `isWhiteSpace` and the post-shape break/joiner loop (`src/renderer.cpp:142-229`) are the direct `is_white_space`/`annotate_glyph_runs` helpers covered by `p3g_glyph_run_annotations_match_pinned_break_and_joiner_rules`; every complete HarfRust shaping path calls `materialize_renderer_glyph_run_annotations`, static wrapping consumes the materialized breaks/joiners, and `p3g_renderer_whitespace_contract_drives_runtime_word_units` pins U+200B/U+2060/non-Rive whitespace plus joiner-safe overflow. C17 exception: these backend-neutral renderer contracts intentionally live together at the `nuxie-render-api` crate root; a forwarding renderer file would not own behavior."
 
 [[file]]
 upstream = "src/resetting_component.cpp"

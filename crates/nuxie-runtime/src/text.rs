@@ -321,7 +321,23 @@ pub(crate) fn static_text_layout_debug_report(
 
 #[doc(hidden)]
 pub fn debug_text_word_unit_count(text: &str) -> usize {
-    text.split_word_bound_indices().len()
+    let glyphs = text
+        .char_indices()
+        .map(|(cluster, _)| TextGlyph {
+            glyph_id: 0,
+            cluster: u32::try_from(cluster).unwrap_or(u32::MAX),
+            advance: 1.0,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            renderer_breaks_before: 0,
+            renderer_breaks_after: 0,
+            renderer_joiners: Vec::new(),
+        })
+        .collect::<Vec<_>>();
+    let mut glyphs = glyphs;
+    materialize_renderer_glyph_run_annotations(text, &mut glyphs)
+        .map(|annotations| annotations.breaks.len() / 2)
+        .unwrap_or(0)
 }
 
 include!("text/text_engine.rs");
@@ -3879,18 +3895,13 @@ impl<'a> StaticTextSlice<'a> {
             return Ok(glyphs.len());
         }
 
+        let annotations = materialized_renderer_glyph_run_annotations(glyphs);
         let mut line_end = 0;
         let mut saw_word = false;
-        for (start, word) in text.split_word_bound_indices() {
-            if word.chars().all(char::is_whitespace) {
-                continue;
-            }
-            let word_end = start + word.len();
-            let candidate_end = glyphs
-                .iter()
-                .rposition(|glyph| glyph.cluster < word_end as u32)
-                .map(|index| index + 1)
-                .unwrap_or(line_end);
+        for word in annotations.breaks.chunks_exact(2) {
+            let candidate_end = usize::try_from(word[1])
+                .unwrap_or(usize::MAX)
+                .min(glyphs.len());
             if candidate_end <= line_end {
                 continue;
             }
@@ -3899,11 +3910,12 @@ impl<'a> StaticTextSlice<'a> {
                 return Ok(line_end);
             }
             if width > max_width {
-                return Ok(first_fitting_glyph_end(
+                let glyph_end = first_fitting_glyph_end(glyphs, max_width, scale, letter_spacing);
+                return Ok(glyph_end_avoiding_word_joiner(
+                    text,
                     glyphs,
-                    max_width,
-                    scale,
-                    letter_spacing,
+                    glyph_end,
+                    &annotations.joiners,
                 ));
             }
             line_end = candidate_end;
@@ -4715,6 +4727,69 @@ mod tests {
     use super::*;
     use nuxie_binary::{AuthoringProperty, AuthoringRecord, AuthoringValue};
     use nuxie_graph::GraphFile;
+
+    #[test]
+    fn p3g_renderer_whitespace_contract_drives_runtime_word_units() {
+        assert_eq!(debug_text_word_unit_count("a\u{200b}b"), 2);
+        assert_eq!(debug_text_word_unit_count("a\u{2060}b"), 1);
+        assert_eq!(debug_text_word_unit_count("a\u{00a0}b"), 1);
+
+        let text = "a\u{2060}\u{2060}b";
+        let glyphs = text
+            .char_indices()
+            .map(|(cluster, _)| TextGlyph {
+                glyph_id: 0,
+                cluster: u32::try_from(cluster).expect("fixture cluster fits u32"),
+                advance: 1.0,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                renderer_breaks_before: 0,
+                renderer_breaks_after: 0,
+                renderer_joiners: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        let mut glyphs = glyphs;
+        glyphs.push(glyphs.last().expect("fixture has a right glyph").clone());
+        let annotations = materialize_renderer_glyph_run_annotations(text, &mut glyphs).unwrap();
+        assert_eq!(
+            materialized_renderer_glyph_run_annotations(&glyphs),
+            annotations
+        );
+        assert_eq!(annotations.joiners, vec![1, 2]);
+        assert_eq!(
+            glyph_end_avoiding_word_joiner(text, &glyphs, 3, &annotations.joiners),
+            5
+        );
+
+        let ligature_text = "xfi\u{2060}b";
+        let mut ligature_glyphs = [0, 1, 3, 4]
+            .into_iter()
+            .map(|character_index| TextGlyph {
+                glyph_id: 0,
+                cluster: u32::try_from(char_byte_index(ligature_text, character_index))
+                    .expect("fixture cluster fits u32"),
+                advance: 1.0,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                renderer_breaks_before: 0,
+                renderer_breaks_after: 0,
+                renderer_joiners: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        let ligature_annotations =
+            materialize_renderer_glyph_run_annotations(ligature_text, &mut ligature_glyphs)
+                .unwrap();
+        assert_eq!(ligature_annotations.joiners, vec![3]);
+        assert_eq!(
+            glyph_end_avoiding_word_joiner(
+                ligature_text,
+                &ligature_glyphs,
+                3,
+                &ligature_annotations.joiners,
+            ),
+            1
+        );
+    }
 
     fn authoring_record(type_name: &str, properties: Vec<AuthoringProperty>) -> AuthoringRecord {
         AuthoringRecord {

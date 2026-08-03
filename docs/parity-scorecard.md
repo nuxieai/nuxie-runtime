@@ -3,8 +3,8 @@
 ## C++ → Rust file correspondence
 
 Files: 448
-Status counts: `divergent-by-decision`: 4; `faithful`: 423; `pending`: 21
-Named pending files: 21
+Status counts: `divergent-by-decision`: 4; `faithful`: 425; `pending`: 19
+Named pending files: 19
 
 ### focus-input
 
@@ -24,9 +24,7 @@ Named pending files: 21
 ### misc-core
 
 - `src/core.cpp`
-- `src/factory.cpp`
 - `src/focus_data.cpp`
-- `src/renderer.cpp`
 
 ### scripted
 
@@ -44,8 +42,8 @@ Named pending files: 21
 
 ## Rust → C++ attribution
 
-Ledger coverage: 398 Rust files (368 attributed by manifest inversion; 30 classified additions)
-Addition categories: `codegen`: 16; `flowsession-abi`: 7; `retained-render`: 3; `scene-api`: 3; `test-infra`: 1
+Ledger coverage: 442 Rust files (411 attributed by manifest inversion; 31 classified additions)
+Addition categories: `codegen`: 18; `flowsession-abi`: 7; `retained-render`: 2; `scene-api`: 3; `test-infra`: 1
 
 ## Test correspondence
 

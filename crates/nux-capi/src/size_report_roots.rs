@@ -373,6 +373,7 @@ pub unsafe extern "C" fn __nuxie_size_report_renderer_roots(
                 sampler_bindings: Vec::new(),
                 pipeline_state: nuxie_render_api::GpuCanvasPipelineState::default(),
                 pass_state: nuxie_render_api::GpuCanvasPassState::default(),
+                pipelines: Vec::new(),
                 render_passes: Vec::new(),
             };
             if let Ok(shader) = Factory::make_gpu_canvas_shader(factory, &shader) {

@@ -52,7 +52,7 @@ FEATURE_ROWS = {
     "src/lua/renderer/lua_gpu.cpp": (
         "partial",
         "crates/nuxie-scripting/src/gpu_canvas.rs; crates/nuxie-render-api/src/lib.rs; crates/nuxie-renderer/src/gpu_canvas.rs",
-        "P3E: GPU-prefixed Lua surface is implemented through the approved wgpu adaptation; mixed-file Canvas 2D/Image:view residue remains F7/F8.",
+        "GPUCEIL: the GPU-prefixed Lua candidate includes retained multi-pipeline submissions, explicit empty-pass/orphan handling, and occurrence-lifetime cross-submission external texture identity through the proposed wgpu adaptation; mixed-file Canvas 2D/Image:view residue remains F7/F8.",
     ),
     "src/joystick.cpp": (
         "ported",

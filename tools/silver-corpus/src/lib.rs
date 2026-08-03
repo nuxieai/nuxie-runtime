@@ -10,12 +10,12 @@ pub use action::{
     PointerCoordinate,
 };
 
-pub const EXPECTED_ENTRIES: usize = 238;
-pub const EXPECTED_RUNTIME: usize = 195;
+pub const EXPECTED_ENTRIES: usize = 252;
+pub const EXPECTED_RUNTIME: usize = 208;
 pub const EXPECTED_SCRIPTED: usize = 41;
-pub const MAX_PROVENANCE_UNKNOWN: usize = 2;
+pub const MAX_PROVENANCE_UNKNOWN: usize = 3;
 pub const SRIV_EPSILON: f32 = 0.001;
-pub const UPSTREAM_REF: &str = "d788e8ec6e8b598526607d6a1e8818e8b637b60c";
+pub const UPSTREAM_REF: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sriv {
@@ -1333,7 +1333,7 @@ mod tests {
         assert_eq!(summary.runtime, EXPECTED_RUNTIME);
         assert_eq!(summary.scripted, EXPECTED_SCRIPTED);
         assert_eq!(summary.cpp_baseline_exact, EXPECTED_ENTRIES);
-        assert_eq!(summary.status(Status::ProvenanceUnknown), 2);
+        assert_eq!(summary.status(Status::ProvenanceUnknown), 3);
     }
 
     #[test]

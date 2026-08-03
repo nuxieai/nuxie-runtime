@@ -72,6 +72,27 @@ fn upstream_fl_bc_resolved_silver_assertions() {
 }
 
 #[test]
+fn advanced_pin_s4_divergences_are_replayed_and_recorded() {
+    for (id, expected) in [
+        (
+            "bidirectional_stateful_property",
+            "bidirectional_stateful_property: frame 3, op 180 (transform), field tx: expected 150, got 100",
+        ),
+        (
+            "paused_nested_artboard_opacity",
+            "paused_nested_artboard_opacity: frame 1, op 103 (rewind): expected rewind, got drawPath",
+        ),
+        (
+            "layout_text_match",
+            "layout_text_match: frame 0, op 61 (save): expected save, got frame",
+        ),
+    ] {
+        let error = compare_case(id).expect_err("advanced-pin fixture unexpectedly became exact");
+        assert_eq!(format!("{error:#}"), expected);
+    }
+}
+
+#[test]
 #[ignore = "Post-FL-D runner gap: Execution::run constructs raw nuxie_runtime ArtboardInstance/StateMachineInstance values and never creates a nuxie_scripting ScriptingVm or attaches the fixture's ScriptAsset occurrence, so ScriptedListenerAction::performAction remains inert"]
 fn upstream_fl_bc_multi_listener_scripted_action_assertion() {
     compare_case("multi_listeners").unwrap_or_else(|error| panic!("{error:#}"));

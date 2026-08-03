@@ -3591,13 +3591,11 @@ impl StateMachineInstance {
     /// prevents duplicate occurrences when facade preparation is idempotent.
     #[doc(hidden)]
     pub fn synchronize_scripted_input_groups(&mut self, artboard: &ArtboardInstance) {
-        for focus_data_local in self
-            .keyboard_listener_groups
-            .iter()
-            .filter_map(|group| group.scripted_global_id.map(|_| group.focus_data_local_id))
-        {
-            self.focus
-                .set_accepts_keyboard_input(focus_data_local, false);
+        for group in &self.keyboard_listener_groups {
+            if group.scripted_global_id.is_some() {
+                self.focus
+                    .set_accepts_keyboard_input(group.focus_data_local_id, false);
+            }
         }
         self.keyboard_listener_groups
             .retain(|group| group.scripted_global_id.is_none());

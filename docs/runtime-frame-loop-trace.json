@@ -9074,7 +9074,7 @@
     "dynamic_cpp_functions": 493,
     "dynamic_rust_files": 109,
     "dynamic_rust_functions": 1583,
-    "static_cpp_files": 350
+    "static_cpp_files": 354
   },
   "steady_allocation_counts": {
     "cpp": {

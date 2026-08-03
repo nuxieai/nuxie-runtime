@@ -145,19 +145,19 @@ steady = false
 # Counts are ratchets. Source-set globs expand against the pinned checkout, so
 # a new, removed, or multiply-owned C++ file changes the count and fails.
 [expected_file_status_counts]
-faithful = 349
+faithful = 353
 adapted = 0
 divergent-by-decision = 1
-pending = 4
+pending = 0
 compensation = 0
 
 # The 41 closed runtime-drawing owners are imported below. The remaining rows
 # are the state-bearing frame-loop owners still requiring member-level proof.
 [expected_member_status_counts]
-faithful = 35
+faithful = 36
 adapted = 40
 divergent-by-decision = 0
-pending = 1
+pending = 0
 compensation = 0
 
 [[wave]]
@@ -423,7 +423,7 @@ static_closure = "State, transition, condition, listener, focus, and input subcl
 
 [[source_set]]
 id = "retained-focus-tree"
-wave = "FL-C"
+wave = "S4"
 include = [
   "src/focus_data.cpp",
   "src/input/focus_manager.cpp",
@@ -3391,38 +3391,38 @@ status = "faithful"
 [[file]]
 upstream = "src/focus_data.cpp"
 source_set = "retained-focus-tree"
-wave = "FL-C"
+wave = "S4"
 rust_modules = ["crates/nuxie-runtime/src/focus_data.rs"]
-dynamically_reached = true
+dynamically_reached = false
 status = "faithful"
 
 [[file]]
 upstream = "src/input/focus_manager.cpp"
 source_set = "retained-focus-tree"
-wave = "FL-C"
+wave = "S4"
 rust_modules = ["crates/nuxie-runtime/src/input/focus_manager.rs"]
-dynamically_reached = true
+dynamically_reached = false
 status = "faithful"
 
 [[file]]
 upstream = "src/input/focus_node.cpp"
 source_set = "retained-focus-tree"
-wave = "FL-C"
+wave = "S4"
 rust_modules = ["crates/nuxie-runtime/src/input/focus_node.rs"]
-dynamically_reached = true
+dynamically_reached = false
 status = "faithful"
 
 [[file]]
 upstream = "src/input/focusable.cpp"
 source_set = "retained-focus-tree"
-wave = "FL-C"
+wave = "S4"
 rust_modules = ["crates/nuxie-runtime/src/input/focusable.rs"]
-dynamically_reached = true
+dynamically_reached = false
 status = "faithful"
 
 [[member]]
 id = "focus.retained_tree"
-wave = "FL-C"
+wave = "S4"
 cpp_files = ["src/focus_data.cpp", "src/input/focus_manager.cpp", "src/input/focus_node.cpp", "src/input/focusable.cpp"]
 rust_file = "crates/nuxie-runtime/src/focus_data.rs"
 rust_anchor = "pub(crate) struct RuntimeFocusTree"

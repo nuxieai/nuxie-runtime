@@ -698,6 +698,16 @@ impl From<RuntimeOwnedViewModelInstance> for RuntimeOwnedViewModelHandle {
 }
 
 impl RuntimeOwnedViewModelInstance {
+    /// Whether this retained instance is currently reachable through another
+    /// instance's ViewModel or list property.
+    ///
+    /// This is the Rust equivalent of pinned C++
+    /// `ViewModelInstance::hasParents()` and reads the runtime-owned topology;
+    /// scripting must not reconstruct this relationship graph.
+    pub fn has_parents(&self) -> bool {
+        self.parent_relay.has_parents()
+    }
+
     /// Field-level deep copy used by every whole-subtree copy path: scalar
     /// slots deep-copy their cells (fresh cells, same values) while list
     /// storage and linked child references still point into the SOURCE

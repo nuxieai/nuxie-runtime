@@ -570,7 +570,7 @@ pub struct ScriptVm {
     view_model_frame_context: ScriptViewModelFrameContext,
     view_models: BTreeMap<String, ScriptViewModel>,
     default_context_view_model: Option<ScriptViewModel>,
-    default_context_parent_view_models: Vec<ScriptViewModel>,
+    default_context_parent_view_models: Vec<Option<ScriptViewModel>>,
     host_commands: host_commands::HostCommandQueue,
     script_safepoints: Rc<Cell<usize>>,
     host_cycle_active: Rc<Cell<bool>>,
@@ -629,7 +629,7 @@ pub struct LuaScriptInstance {
     context_alive: Option<Rc<Cell<bool>>>,
     context_missing_requested_data: Rc<Cell<bool>>,
     context_view_model_is_resolved: bool,
-    context_parent_view_models: Vec<ScriptViewModel>,
+    context_parent_view_models: Vec<Option<ScriptViewModel>>,
     generator: Option<Function>,
     user_init_done: bool,
     init_retry_requires_recreation: bool,
@@ -673,7 +673,7 @@ impl LuaScriptInstance {
         context: Option<AnyUserData>,
         context_alive: Option<Rc<Cell<bool>>>,
         context_missing_requested_data: Rc<Cell<bool>>,
-        context_parent_view_models: Vec<ScriptViewModel>,
+        context_parent_view_models: Vec<Option<ScriptViewModel>>,
         generator: Option<Function>,
         resource_limits: resource_limits::ResourceLimitTracker,
         gpu_canvas: Option<ImportedGpuCanvasInstance>,
@@ -1086,7 +1086,7 @@ impl ScriptVm {
         _host: &mut dyn ScriptHost,
         factory: &mut dyn RenderFactory,
         context_view_model_value: Option<ScriptViewModel>,
-        context_parent_view_models: Vec<ScriptViewModel>,
+        context_parent_view_models: Vec<Option<ScriptViewModel>>,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
         self.instantiate_registered_script_with_optional_factory_and_context(
             program,
@@ -1103,7 +1103,7 @@ impl ScriptVm {
         &self,
         program: &ScriptProgram,
         context_view_model_value: Option<ScriptViewModel>,
-        context_parent_view_models: Vec<ScriptViewModel>,
+        context_parent_view_models: Vec<Option<ScriptViewModel>>,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
         self.instantiate_registered_script_with_optional_factory_and_context(
             program,
@@ -1134,7 +1134,7 @@ impl ScriptVm {
         program: &ScriptProgram,
         factory: Option<&mut dyn RenderFactory>,
         context_view_model_value: Option<ScriptViewModel>,
-        context_parent_view_models: Vec<ScriptViewModel>,
+        context_parent_view_models: Vec<Option<ScriptViewModel>>,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
         let bindings = self.renderer_bindings.clone();
         let context_alive = Rc::new(Cell::new(true));
@@ -1476,7 +1476,7 @@ impl ScriptVm {
     pub fn set_default_context_view_model_chain(
         &mut self,
         view_model: Option<ScriptViewModel>,
-        parents: Vec<ScriptViewModel>,
+        parents: Vec<Option<ScriptViewModel>>,
     ) {
         self.default_context_view_model = view_model;
         self.default_context_parent_view_models = parents;
@@ -2024,7 +2024,7 @@ impl ScriptInstance for LuaScriptInstance {
     fn set_context_view_model_chain(
         &mut self,
         view_model: Option<ScriptViewModel>,
-        parents: Vec<ScriptViewModel>,
+        parents: Vec<Option<ScriptViewModel>>,
     ) -> std::result::Result<(), ScriptError> {
         *self.context_view_model.borrow_mut() = view_model;
         self.context_parent_view_models = parents.clone();

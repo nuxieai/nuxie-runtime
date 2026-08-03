@@ -928,9 +928,6 @@ impl RuntimeOwnedDataContext {
                 is_main: index == 0,
             })
             .collect::<Vec<_>>();
-        if instances.is_empty() {
-            return parent.cloned().unwrap_or_default();
-        }
         Self {
             state: Rc::new(RuntimeOwnedDataContextState {
                 instances,
@@ -952,9 +949,6 @@ impl RuntimeOwnedDataContext {
                 is_main: index == 0,
             })
             .collect::<Vec<_>>();
-        if instances.is_empty() {
-            return parent.cloned().unwrap_or_default();
-        }
         Self {
             state: Rc::new(RuntimeOwnedDataContextState {
                 instances,
@@ -1078,6 +1072,43 @@ impl RuntimeOwnedDataContext {
                     result.push(scoped);
                 }
             }
+            if let Some(parent) = data_context.state.parent.as_ref() {
+                append(parent, file, result);
+            }
+        }
+
+        let mut result = Vec::new();
+        append(self, file, &mut result);
+        result
+    }
+
+    /// Preserve every retained DataContext node, including nodes whose main
+    /// ViewModel is null. Lua `DataContext::parent()` follows context identity;
+    /// absence of a model on one node must not collapse that node out of the
+    /// chain (`lua_data_context.cpp`).
+    pub(crate) fn main_context_slots(
+        &self,
+        file: &RuntimeFile,
+    ) -> Vec<Option<RuntimeOwnedViewModelContextHandle>> {
+        fn append(
+            data_context: &RuntimeOwnedDataContext,
+            file: &RuntimeFile,
+            result: &mut Vec<Option<RuntimeOwnedViewModelContextHandle>>,
+        ) {
+            let main = data_context
+                .state
+                .instances
+                .iter()
+                .find(|instance| instance.is_main)
+                .and_then(|main| {
+                    let root = RuntimeOwnedViewModelContextHandle::root(file, main.context.clone());
+                    if main.scope_path.is_empty() {
+                        Some(root)
+                    } else {
+                        root.scoped(main.scope_path.clone())
+                    }
+                });
+            result.push(main);
             if let Some(parent) = data_context.state.parent.as_ref() {
                 append(parent, file, result);
             }
@@ -11062,7 +11093,7 @@ mod tests {
         assert!(fallback.borrow().cell_by_property_path(&[0]).is_none());
 
         let parent = RuntimeOwnedDataContext::from_root_handle(fallback.clone());
-        let child = RuntimeOwnedDataContext::with_local_handles([local], Some(&parent));
+        let child = RuntimeOwnedDataContext::with_local_handles([local.clone()], Some(&parent));
         let (resolved, property_path) = child
             .resolved_property_path(&[0, 1])
             .expect("missing local property falls through to parent");
@@ -11075,6 +11106,16 @@ mod tests {
                 .color_value_by_property_path(&property_path),
             Some(0xff35_0000)
         );
+
+        let modeled_parent = RuntimeOwnedDataContext::from_root_handle(fallback);
+        let empty_parent = RuntimeOwnedDataContext::with_local_handles([], Some(&modeled_parent));
+        let local_context =
+            RuntimeOwnedDataContext::with_local_handles([local], Some(&empty_parent));
+        let slots = local_context.main_context_slots(&file);
+        assert_eq!(slots.len(), 3);
+        assert!(slots[0].is_some());
+        assert!(slots[1].is_none());
+        assert!(slots[2].is_some());
     }
 
     #[test]

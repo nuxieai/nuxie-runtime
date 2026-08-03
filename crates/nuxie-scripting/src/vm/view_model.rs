@@ -35,17 +35,11 @@ struct TrackedViewModel {
     instance: ViewModelInstanceWeak,
     strong_instance: Option<ViewModelInstance>,
     registrations: usize,
-    parents: BTreeMap<ViewModelInstanceKey, ParentRelationship>,
-}
-
-struct ParentRelationship {
-    instance: ViewModelInstanceWeak,
-    explicit: bool,
-    list: bool,
 }
 
 /// Per-VM equivalent of C++ `ScriptingContext`'s owner-counted detached VMI
-/// registry. Relationships are weak; registrations alone retain instances.
+/// registry. The runtime-owned instance topology decides which registered
+/// instances are detached; this registry only owns registration lifetimes.
 #[derive(Clone, Default)]
 pub(crate) struct ScriptViewModelFrameContext {
     tracked: Rc<RefCell<TrackedViewModels>>,
@@ -98,7 +92,6 @@ impl ScriptViewModelFrameContext {
                 instance: Rc::downgrade(instance),
                 strong_instance: None,
                 registrations: 0,
-                parents: BTreeMap::new(),
             })
     }
 
@@ -111,7 +104,6 @@ impl ScriptViewModelFrameContext {
             entry.registrations = entry.registrations.saturating_add(1);
             entry.strong_instance = Some(Rc::clone(&instance));
         }
-        self.sync_list_parents(model);
         ScriptViewModelRegistration {
             tracked: Rc::downgrade(&self.tracked),
             key,
@@ -207,210 +199,25 @@ impl ScriptViewModelFrameContext {
         });
     }
 
-    pub(crate) fn link_parent(&self, child: &ScriptViewModel, parent: &ScriptViewModel) {
-        let child_instance = child.owned_instance();
-        let parent_instance = parent.owned_instance();
-        let parent_key = instance_key(&parent_instance);
-        let mut tracked = self.tracked.borrow_mut();
-        Self::ensure_entry(&mut tracked, &parent_instance);
-        let child_entry = Self::ensure_entry(&mut tracked, &child_instance);
-        child_entry
-            .parents
-            .entry(parent_key)
-            .and_modify(|relationship| {
-                relationship.instance = Rc::downgrade(&parent_instance);
-                relationship.explicit = true;
-            })
-            .or_insert_with(|| ParentRelationship {
-                instance: Rc::downgrade(&parent_instance),
-                explicit: true,
-                list: false,
-            });
-    }
-
-    /// Mirror `ViewModelInstanceViewModel::referenceViewModelInstance` for
-    /// the scripting registry's detached-root projection.
-    ///
-    /// The retained runtime owner performs the real remove/store/add sequence.
-    /// This companion edge update keeps C++'s `hasParents()` classification
-    /// visible to `advanceDetachedViewModels`: the replaced child becomes a
-    /// detached root and the replacement becomes attached immediately.
-    pub(crate) fn replace_explicit_parent(
-        &self,
-        previous: Option<&ScriptViewModel>,
-        replacement: &ScriptViewModel,
-        parent: &ScriptViewModel,
-    ) {
-        let parent_instance = parent.owned_instance();
-        let parent_key = instance_key(&parent_instance);
-        let mut tracked = self.tracked.borrow_mut();
-        Self::ensure_entry(&mut tracked, &parent_instance);
-
-        if let Some(previous) = previous {
-            let previous_instance = previous.owned_instance();
-            let previous_entry = Self::ensure_entry(&mut tracked, &previous_instance);
-            let remove = previous_entry
-                .parents
-                .get_mut(&parent_key)
-                .is_some_and(|relationship| {
-                    relationship.explicit = false;
-                    !relationship.list
-                });
-            if remove {
-                previous_entry.parents.remove(&parent_key);
-            }
-        }
-
-        let replacement_instance = replacement.owned_instance();
-        let replacement_entry = Self::ensure_entry(&mut tracked, &replacement_instance);
-        replacement_entry
-            .parents
-            .entry(parent_key)
-            .and_modify(|relationship| {
-                relationship.instance = Rc::downgrade(&parent_instance);
-                relationship.explicit = true;
-            })
-            .or_insert_with(|| ParentRelationship {
-                instance: Rc::downgrade(&parent_instance),
-                explicit: true,
-                list: false,
-            });
-    }
-
-    pub(crate) fn sync_list_parents(&self, parent: &ScriptViewModel) {
-        let parent_instance = parent.owned_instance();
-        self.sync_list_parent_instance(&parent_instance);
-    }
-
-    fn sync_list_parent_instance(&self, parent_instance: &ViewModelInstance) {
-        let parent_key = instance_key(parent_instance);
-        let list_children = ScriptViewModel::owned_list_children(parent_instance)
-            .into_iter()
-            .map(|instance| (instance_key(&instance), instance))
-            .collect::<BTreeMap<_, _>>();
-
-        let mut tracked = self.tracked.borrow_mut();
-        Self::ensure_entry(&mut tracked, parent_instance);
-        for child in list_children.values() {
-            Self::ensure_entry(&mut tracked, child);
-        }
-        for (child_key, child_entry) in &mut tracked.instances {
-            let Some(child_instance) = list_children.get(child_key) else {
-                let remove = child_entry
-                    .parents
-                    .get_mut(&parent_key)
-                    .is_some_and(|relationship| {
-                        relationship.list = false;
-                        !relationship.explicit
-                    });
-                if remove {
-                    child_entry.parents.remove(&parent_key);
-                }
-                continue;
-            };
-            child_entry
-                .parents
-                .entry(parent_key)
-                .and_modify(|relationship| {
-                    relationship.instance = Rc::downgrade(parent_instance);
-                    relationship.list = true;
-                })
-                .or_insert_with(|| ParentRelationship {
-                    instance: Rc::downgrade(parent_instance),
-                    explicit: false,
-                    list: true,
-                });
-            debug_assert!(Rc::ptr_eq(
-                &child_entry.instance.upgrade().expect("live list child"),
-                child_instance
-            ));
-        }
-    }
-
     pub(crate) fn advance_detached(&self) -> bool {
         let mut changed = self.dispatch_trigger_watches();
         changed |= self.dispatch_blob_watches();
-        // Lists can also change through data binding or host APIs. Refresh all
-        // live parent edges here, not only in Lua list methods, before deciding
-        // which registered instances are detached roots.
-        let live_instances = self
-            .tracked
-            .borrow()
-            .instances
-            .values()
-            .filter_map(|entry| entry.instance.upgrade())
-            .collect::<Vec<_>>();
-        for instance in live_instances {
-            self.sync_list_parent_instance(&instance);
-        }
-
-        let (instances, roots, children) = {
+        let roots = {
             let mut tracked = self.tracked.borrow_mut();
             tracked
                 .instances
-                .retain(|_, entry| entry.registrations > 0 || entry.instance.strong_count() > 0);
-            for entry in tracked.instances.values_mut() {
-                entry
-                    .parents
-                    .retain(|_, parent| parent.instance.strong_count() > 0);
-            }
-
-            let instances = tracked
+                .retain(|_, entry| entry.registrations > 0 && entry.instance.strong_count() > 0);
+            tracked
                 .instances
-                .iter()
-                .filter_map(|(key, entry)| {
-                    entry.instance.upgrade().map(|instance| (*key, instance))
+                .values()
+                .filter_map(|entry| {
+                    let instance = entry.instance.upgrade()?;
+                    let is_detached = !instance.borrow().has_parents();
+                    is_detached.then_some(instance)
                 })
-                .collect::<BTreeMap<_, _>>();
-            let roots = tracked
-                .instances
-                .iter()
-                .filter_map(|(key, entry)| {
-                    (entry.registrations > 0
-                        && entry
-                            .parents
-                            .values()
-                            .all(|parent| parent.instance.strong_count() == 0))
-                    .then_some(*key)
-                })
-                .collect::<Vec<_>>();
-            let mut children = BTreeMap::<ViewModelInstanceKey, Vec<ViewModelInstanceKey>>::new();
-            for (child_key, entry) in &tracked.instances {
-                for (parent_key, parent) in &entry.parents {
-                    if parent.instance.strong_count() > 0 {
-                        children.entry(*parent_key).or_default().push(*child_key);
-                    }
-                }
-            }
-            (instances, roots, children)
+                .collect::<Vec<_>>()
         };
-
-        fn collect_registered(
-            key: ViewModelInstanceKey,
-            instances: &BTreeMap<ViewModelInstanceKey, ViewModelInstance>,
-            children: &BTreeMap<ViewModelInstanceKey, Vec<ViewModelInstanceKey>>,
-            visited: &mut BTreeSet<ViewModelInstanceKey>,
-            ordered: &mut Vec<ViewModelInstance>,
-        ) {
-            if !visited.insert(key) {
-                return;
-            }
-            if let Some(instance) = instances.get(&key) {
-                ordered.push(Rc::clone(instance));
-            }
-            if let Some(child_keys) = children.get(&key) {
-                for child_key in child_keys {
-                    collect_registered(*child_key, instances, children, visited, ordered);
-                }
-            }
-        }
-
-        let mut visited = BTreeSet::new();
-        let mut ordered = Vec::new();
-        for root in roots {
-            collect_registered(root, &instances, &children, &mut visited, &mut ordered);
-        }
-        changed |= ScriptViewModel::advance_owned_instances(&ordered);
+        changed |= ScriptViewModel::advance_owned_instances(&roots);
         // Trigger reset cascades ordinary dirt even though C++ suppresses its
         // delegate callback. Consume that reset dirt so it cannot replay the
         // Lua listener on the next host frame.
@@ -426,17 +233,6 @@ impl ScriptViewModelFrameContext {
             .get(&instance_key(&model.owned_instance()))
             .map(|entry| entry.registrations)
             .unwrap_or_default()
-    }
-
-    #[cfg(test)]
-    fn has_explicit_parent(&self, child: &ScriptViewModel, parent: &ScriptViewModel) -> bool {
-        let parent_key = instance_key(&parent.owned_instance());
-        self.tracked
-            .borrow()
-            .instances
-            .get(&instance_key(&child.owned_instance()))
-            .and_then(|entry| entry.parents.get(&parent_key))
-            .is_some_and(|relationship| relationship.explicit)
     }
 }
 
@@ -474,18 +270,14 @@ pub(super) fn create_scripted_view_model(
     lua: &Lua,
     model: ScriptViewModel,
 ) -> luaur_rt::Result<Table> {
-    create_scripted_view_model_with_parent(lua, model, None)
+    create_scripted_view_model_retained(lua, model)
 }
 
-fn create_scripted_view_model_with_parent(
+fn create_scripted_view_model_retained(
     lua: &Lua,
     model: ScriptViewModel,
-    parent: Option<&ScriptViewModel>,
 ) -> luaur_rt::Result<Table> {
     let frame_context = ScriptViewModelFrameContext::for_lua(lua);
-    if let Some(parent) = parent {
-        frame_context.link_parent(&model, parent);
-    }
     let registration = frame_context.register(&model);
     let table = lua.create_table();
     table.set(
@@ -754,18 +546,11 @@ impl UserData for ScriptedPropertyViewModel {
                     this.name
                 ))
             })?;
-            create_scripted_view_model_with_parent(lua, model, Some(&this.parent)).map(Value::Table)
+            create_scripted_view_model(lua, model).map(Value::Table)
         });
-        fields.add_field_method_set("value", |lua, this, value: Table| {
+        fields.add_field_method_set("value", |_, this, value: Table| {
             let value = model_from_table(&value)?;
-            let previous = this.parent.view_model(&this.name);
-            if this.parent.set_view_model(&this.name, &value) {
-                ScriptViewModelFrameContext::for_lua(lua).replace_explicit_parent(
-                    previous.as_ref(),
-                    &value,
-                    &this.parent,
-                );
-            }
+            this.parent.set_view_model(&this.name, &value);
             Ok(())
         });
     }
@@ -1215,22 +1000,19 @@ impl UserData for ScriptedPropertyList {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("push", |lua, this, item: Table| {
+        methods.add_method("push", |_, this, item: Table| {
             let item = model_from_table(&item)?;
             this.model.push_list_item(&this.name, &item);
-            ScriptViewModelFrameContext::for_lua(lua).sync_list_parents(&this.model);
             Ok(())
         });
-        methods.add_method("insert", |lua, this, (item, index): (Table, usize)| {
+        methods.add_method("insert", |_, this, (item, index): (Table, usize)| {
             let item = model_from_table(&item)?;
             this.model
                 .insert_list_item(&this.name, index.saturating_sub(1), &item);
-            ScriptViewModelFrameContext::for_lua(lua).sync_list_parents(&this.model);
             Ok(())
         });
         methods.add_method("pop", |lua, this, ()| {
             let item = this.model.pop_list_item(&this.name);
-            ScriptViewModelFrameContext::for_lua(lua).sync_list_parents(&this.model);
             match item {
                 Some(item) => create_scripted_view_model(lua, item).map(Value::Table),
                 None => Ok(Value::Nil),
@@ -1238,7 +1020,6 @@ impl UserData for ScriptedPropertyList {
         });
         methods.add_method("shift", |lua, this, ()| {
             let item = this.model.shift_list_item(&this.name);
-            ScriptViewModelFrameContext::for_lua(lua).sync_list_parents(&this.model);
             match item {
                 Some(item) => create_scripted_view_model(lua, item).map(Value::Table),
                 None => Ok(Value::Nil),
@@ -1252,12 +1033,11 @@ impl UserData for ScriptedPropertyList {
             );
             Ok(())
         });
-        methods.add_method("clear", |lua, this, ()| {
+        methods.add_method("clear", |_, this, ()| {
             this.model.clear_list_items(&this.name);
-            ScriptViewModelFrameContext::for_lua(lua).sync_list_parents(&this.model);
             Ok(())
         });
-        methods.add_method("remove", |lua, this, item: Value| {
+        methods.add_method("remove", |_, this, item: Value| {
             let Value::Table(item) = item else {
                 return Ok(());
             };
@@ -1265,20 +1045,18 @@ impl UserData for ScriptedPropertyList {
                 return Ok(());
             };
             this.model.remove_list_item(&this.name, &item, false);
-            ScriptViewModelFrameContext::for_lua(lua).sync_list_parents(&this.model);
             Ok(())
         });
-        methods.add_method("removeAt", |lua, this, index: usize| {
+        methods.add_method("removeAt", |_, this, index: usize| {
             let Some(index) = index.checked_sub(1) else {
                 return Err(luaur_rt::Error::runtime("removeAt index out of range"));
             };
             if !this.model.remove_list_item_at(&this.name, index) {
                 return Err(luaur_rt::Error::runtime("removeAt index out of range"));
             }
-            ScriptViewModelFrameContext::for_lua(lua).sync_list_parents(&this.model);
             Ok(())
         });
-        methods.add_method("removeAllOf", |lua, this, item: Value| {
+        methods.add_method("removeAllOf", |_, this, item: Value| {
             let Value::Table(item) = item else {
                 return Ok(());
             };
@@ -1286,7 +1064,6 @@ impl UserData for ScriptedPropertyList {
                 return Ok(());
             };
             this.model.remove_list_item(&this.name, &item, true);
-            ScriptViewModelFrameContext::for_lua(lua).sync_list_parents(&this.model);
             Ok(())
         });
     }
@@ -1295,7 +1072,7 @@ impl UserData for ScriptedPropertyList {
 pub(super) struct ScriptedContext {
     model: Rc<RefCell<Option<ScriptViewModel>>>,
     context_present: Rc<Cell<bool>>,
-    parents: Vec<ScriptViewModel>,
+    parents: Vec<Option<ScriptViewModel>>,
     missing_requested_data: Rc<Cell<bool>>,
     gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
     alive: Rc<Cell<bool>>,
@@ -1304,7 +1081,7 @@ pub(super) struct ScriptedContext {
 impl ScriptedContext {
     pub(super) fn new(
         model: Rc<RefCell<Option<ScriptViewModel>>>,
-        parents: Vec<ScriptViewModel>,
+        parents: Vec<Option<ScriptViewModel>>,
         missing_requested_data: Rc<Cell<bool>>,
         gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
     ) -> Self {
@@ -1322,7 +1099,7 @@ impl ScriptedContext {
     pub(super) fn new_with_lifetime(
         model: Rc<RefCell<Option<ScriptViewModel>>>,
         context_present: Rc<Cell<bool>>,
-        parents: Vec<ScriptViewModel>,
+        parents: Vec<Option<ScriptViewModel>>,
         missing_requested_data: Rc<Cell<bool>>,
         gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
         alive: Rc<Cell<bool>>,
@@ -1337,7 +1114,7 @@ impl ScriptedContext {
         }
     }
 
-    pub(super) fn set_parents(&mut self, parents: Vec<ScriptViewModel>) {
+    pub(super) fn set_parents(&mut self, parents: Vec<Option<ScriptViewModel>>) {
         self.parents = parents;
     }
 
@@ -1357,11 +1134,7 @@ impl UserData for ScriptedContext {
         methods.add_method("viewModel", |lua, this, ()| {
             this.require_live("viewModel")?;
             Ok(match this.model.borrow().clone() {
-                Some(model) => Value::Table(create_scripted_view_model_with_parent(
-                    lua,
-                    model,
-                    this.parents.first(),
-                )?),
+                Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
                 None => {
                     this.missing_requested_data.set(true);
                     Value::Nil
@@ -1373,8 +1146,9 @@ impl UserData for ScriptedContext {
             Ok(
                 match this
                     .parents
-                    .last()
-                    .cloned()
+                    .iter()
+                    .rev()
+                    .find_map(Clone::clone)
                     .or_else(|| this.model.borrow().clone())
                 {
                     Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
@@ -1452,14 +1226,13 @@ impl UserData for ScriptedContext {
 
 struct ScriptedDataContext {
     model: Option<ScriptViewModel>,
-    parents: Vec<ScriptViewModel>,
+    parents: Vec<Option<ScriptViewModel>>,
 }
 
 impl UserData for ScriptedDataContext {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("viewModel", |lua, this, ()| match this.model.clone() {
-            Some(model) => create_scripted_view_model_with_parent(lua, model, this.parents.first())
-                .map(Value::Table),
+            Some(model) => create_scripted_view_model(lua, model).map(Value::Table),
             None => Ok(Value::Nil),
         });
         methods.add_method("parent", |lua, this, ()| {
@@ -1467,7 +1240,7 @@ impl UserData for ScriptedDataContext {
                 return Ok(Value::Nil);
             };
             lua.create_userdata(ScriptedDataContext {
-                model: Some(parent.clone()),
+                model: parent.clone(),
                 parents: remaining.to_vec(),
             })
             .map(Value::UserData)
@@ -1604,7 +1377,7 @@ mod tests {
     }
 
     #[test]
-    fn attached_empty_data_context_remains_non_nil_and_keeps_its_parent() {
+    fn parent_data_context_without_a_view_model_remains_in_the_chain() {
         let lua = Lua::new();
         let parent = fixture_models()
             .into_values()
@@ -1615,7 +1388,7 @@ mod tests {
             .create_userdata(ScriptedContext::new_with_lifetime(
                 Rc::new(RefCell::new(None)),
                 Rc::new(Cell::new(true)),
-                vec![parent],
+                vec![None, Some(parent)],
                 Rc::clone(&missing_requested_data),
                 None,
                 Rc::new(Cell::new(true)),
@@ -1625,16 +1398,26 @@ mod tests {
             .set("context", context)
             .expect("context global");
 
-        let (has_context, has_local_model, has_parent, has_parent_model): (bool, bool, bool, bool) =
-            lua.load(
+        let (
+            has_context,
+            has_local_model,
+            has_parent,
+            has_parent_model,
+            has_grandparent,
+            has_grandparent_model,
+        ): (bool, bool, bool, bool, bool, bool) = lua
+            .load(
                 r#"
                 local dataContext = context:dataContext()
                 local parent = dataContext:parent()
+                local grandparent = parent:parent()
                 context:markNeedsUpdate()
                 return dataContext ~= nil,
                     dataContext:viewModel() ~= nil,
                     parent ~= nil,
-                    parent:viewModel() ~= nil
+                    parent:viewModel() ~= nil,
+                    grandparent ~= nil,
+                    grandparent:viewModel() ~= nil
                 "#,
             )
             .eval()
@@ -1643,7 +1426,9 @@ mod tests {
         assert!(has_context);
         assert!(!has_local_model);
         assert!(has_parent);
-        assert!(has_parent_model);
+        assert!(!has_parent_model);
+        assert!(has_grandparent);
+        assert!(has_grandparent_model);
         assert!(
             !missing_requested_data.get(),
             "requesting the retained DataContext object itself is not missing data"
@@ -1773,10 +1558,10 @@ mod tests {
 
     #[test]
     fn only_parentless_roots_advance_and_registered_roots_recurse_to_children() {
-        let (parent, _) = model_with_property(ScriptViewModelProperty::Trigger);
+        let (parent, list) = model_with_property(ScriptViewModelProperty::List);
         let (child, trigger) = model_with_property(ScriptViewModelProperty::Trigger);
+        assert!(parent.push_list_item(&list, &child));
         let context = ScriptViewModelFrameContext::default();
-        context.link_parent(&child, &parent);
         let _child_registration = context.register(&child);
 
         assert!(child.fire_trigger(&trigger));
@@ -1794,11 +1579,12 @@ mod tests {
         let previous = parent
             .view_model(&property_name)
             .expect("authored child occurrence");
+        assert!(previous.has_parents());
         let replacement = previous
             .named_instance(None)
             .expect("fresh replacement occurrence");
+        assert!(!replacement.has_parents());
         let lua = Lua::new();
-        let context = ScriptViewModelFrameContext::for_lua(&lua);
         let parent_table =
             create_scripted_view_model(&lua, parent.clone()).expect("scripted parent");
         let replacement_table =
@@ -1822,8 +1608,8 @@ mod tests {
 
         let old_table = lua.globals().get::<Table>("oldChild").expect("old child");
         let old = model_from_table(&old_table).expect("old child model");
-        assert!(!context.has_explicit_parent(&old, &parent));
-        assert!(context.has_explicit_parent(&replacement, &parent));
+        assert!(!old.has_parents());
+        assert!(replacement.has_parents());
 
         let current = parent
             .view_model(&property_name)
@@ -1883,13 +1669,12 @@ mod tests {
     }
 
     #[test]
-    fn frame_end_refreshes_list_parent_edges_changed_outside_lua() {
+    fn runtime_list_parent_edges_change_without_a_scripting_rescan() {
         let (parent, list) = model_with_property(ScriptViewModelProperty::List);
         let (child, trigger) = model_with_property(ScriptViewModelProperty::Trigger);
         assert!(parent.push_list_item(&list, &child));
 
         let context = ScriptViewModelFrameContext::default();
-        context.sync_list_parents(&parent);
         let _child_registration = context.register(&child);
         assert!(child.fire_trigger(&trigger));
         assert!(!context.advance_detached());

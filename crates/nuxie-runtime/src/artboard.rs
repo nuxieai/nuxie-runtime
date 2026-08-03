@@ -4022,14 +4022,18 @@ impl ArtboardInstance {
         &self,
         file: &RuntimeFile,
         fallback_root: Option<&RuntimeOwnedViewModelHandle>,
-    ) -> (Option<ScriptViewModel>, Vec<ScriptViewModel>) {
+    ) -> (Option<ScriptViewModel>, Vec<Option<ScriptViewModel>>) {
         if let Some(data_context) = self.artboard_owned_data_context.as_ref() {
-            let mut contexts = data_context.main_context_chain(file).into_iter();
+            let mut contexts = data_context.main_context_slots(file).into_iter();
             if let Some(main) = contexts.next() {
-                let main = crate::script_view_model_from_owned_context(file, &main);
+                let main = main.and_then(|context| {
+                    crate::script_view_model_from_owned_context(file, &context)
+                });
                 let parents = contexts
-                    .filter_map(|context| {
-                        crate::script_view_model_from_owned_context(file, &context)
+                    .map(|context| {
+                        context.and_then(|context| {
+                            crate::script_view_model_from_owned_context(file, &context)
+                        })
                     })
                     .collect();
                 return (main, parents);

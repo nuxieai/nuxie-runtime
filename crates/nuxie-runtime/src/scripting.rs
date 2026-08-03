@@ -295,7 +295,7 @@ pub enum ScriptListenerInputSnapshotValue {
 /// the table field is the authored callback itself.
 pub struct ScriptListenerActionHydration {
     context_view_model: Option<ScriptViewModel>,
-    context_parent_view_models: Vec<ScriptViewModel>,
+    context_parent_view_models: Vec<Option<ScriptViewModel>>,
     context_resolved: bool,
     inputs: Vec<ScriptListenerInputHydration>,
 }
@@ -315,7 +315,7 @@ impl ScriptListenerActionHydration {
 
     pub fn new_with_context_chain(
         context_view_model: Option<ScriptViewModel>,
-        context_parent_view_models: Vec<ScriptViewModel>,
+        context_parent_view_models: Vec<Option<ScriptViewModel>>,
         inputs: Vec<ScriptListenerInputHydration>,
     ) -> Self {
         Self {
@@ -828,6 +828,11 @@ impl ScriptImage {
 }
 
 impl ScriptViewModel {
+    /// Read the retained runtime's structural parent topology.
+    pub fn has_parents(&self) -> bool {
+        self.context.root_handle().borrow().has_parents()
+    }
+
     pub fn property(&self, name: &str) -> Option<ScriptViewModelProperty> {
         self.properties.get(name).copied()
     }
@@ -2208,7 +2213,7 @@ pub trait ScriptInstance {
     fn set_context_view_model_chain(
         &mut self,
         view_model: Option<ScriptViewModel>,
-        _parents: Vec<ScriptViewModel>,
+        _parents: Vec<Option<ScriptViewModel>>,
     ) -> Result<(), ScriptError> {
         self.set_context_view_model(view_model)
     }

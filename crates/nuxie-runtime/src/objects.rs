@@ -719,8 +719,17 @@ impl InstanceObjectArena {
     }
 
     pub(crate) fn bool_property(&self, local_id: usize, property_key: u16) -> Option<bool> {
-        self.object(local_id)
-            .and_then(|object| object.bool_property(property_key))
+        let object = self.object(local_id)?;
+        if let Some(bitmask) =
+            bitmask_passthrough_by_key_in_hierarchy(object.type_key(), property_key)
+        {
+            // Mirror the generated getter by reading the packed target field.
+            let (_owner, target) =
+                runtime_property_metadata_by_name(object.type_key(), bitmask.target)?;
+            let packed = object.uint_property(target.key.int).unwrap_or(0);
+            return Some((packed & bitmask_field_mask(bitmask.bit, bitmask.width)) != 0);
+        }
+        object.bool_property(property_key)
     }
 
     pub(crate) fn shape_paint_is_visible(&self, local_id: usize) -> Option<bool> {
@@ -923,7 +932,9 @@ impl InstanceObjectArena {
             return false;
         }
 
-        if let (Some(bitmask), FieldValue::Uint(value)) = (property.bitmask_passthrough, &value) {
+        if let Some(bitmask) = property.bitmask_passthrough {
+            // Mirror generated bool/uint passthrough setters by updating the
+            // declared slice of their packed target field.
             let Some((_owner, target)) =
                 runtime_property_metadata_by_name(type_key, bitmask.target)
             else {
@@ -934,7 +945,14 @@ impl InstanceObjectArena {
             };
             let mask = bitmask_field_mask(bitmask.bit, bitmask.width);
             let current = object.uint_property(target.key.int).unwrap_or(0);
-            let shifted = value.checked_shl(bitmask.bit.into()).unwrap_or(0);
+            let passthrough_value = match &value {
+                FieldValue::Bool(value) => u64::from(*value),
+                FieldValue::Uint(value) => *value,
+                _ => return false,
+            };
+            let shifted = passthrough_value
+                .checked_shl(bitmask.bit.into())
+                .unwrap_or(0);
             let next = (current & !mask) | (shifted & mask);
             return object.set_uint_property(target.key.int, next);
         }

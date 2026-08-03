@@ -27,7 +27,7 @@ FEATURE_ROWS = {
     "src/command_queue.cpp": (
         "partial",
         "crates/nuxie/src/command_queue.rs",
-        "P3F partial against the advanced 4ac7b327 test oracle: the full structural queue owner provides typed transport, callbacks, resources, view models, draw coalescing, and lifecycle commands, with 14 focused Rust tests; 4/83 upstream command_queue_test.cpp cases are complete, while fixture-specific, semantic, and S4-45 blob cases remain pending, so whole-file faithful promotion is not claimed.",
+        "P3F/F3F6: faithful equivalents cover 79/83 pinned command_queue_test.cpp cases, including all 13 former F6-gated semantic cases. The four S4-45 blob command/message cases remain WATCH, so this whole-file row stays partial.",
     ),
     "src/constraints/scrolling/elastic_scroll_physics.cpp": (
         "absent",
@@ -116,7 +116,7 @@ FEATURE_ROWS.update(
         "src/command_server.cpp": (
             "partial",
             "crates/nuxie/src/command_server.rs; crates/nuxie-scripting/src/vm/command_server.rs",
-            "P3F partial against the advanced 4ac7b327 test oracle: the full structural server owner provides the server thread, handle maps, command loop, dependency cleanup, callbacks, draw scheduling, and resource/list/view-model structure, with 14 focused Rust tests; 4/83 upstream command_queue_test.cpp cases are complete, while fixture-specific, semantic, and S4-45 blob cases remain pending, so whole-file faithful promotion is not claimed. FL-E1's independently verified scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and the scripting VM seam; render-api contract surface stays with its crate.",
+            "P3F/F3F6: semantic command dispatch, diff delivery, and view mapping bring faithful equivalents to 79/83 pinned command_queue_test.cpp cases. The four S4-45 blob cases remain WATCH, so this whole-file row stays partial. FL-E1's scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and scripting VM seam; render-api contract surface stays with its crate.",
         ),
         "src/constraints/scrolling/clamped_scroll_physics.cpp": (
             "partial",
@@ -281,9 +281,14 @@ FEATURE_ROWS["src/semantic/semantic_provider.cpp"] = (
 
 for _path in {
     "src/lua/lua_buffer_ext.cpp",
-    "src/lua/lua_scripted_context.cpp",
 }:
     FEATURE_ROWS[_path] = ("absent", "", "F7: this Lua binding is absent.")
+
+FEATURE_ROWS["src/lua/lua_scripted_context.cpp"] = (
+    "absent",
+    "",
+    "F7/F3F6 audit: a partial ScriptedContext method surface exists, but pinned canvas/features and full ScriptedObject-backed markNeedsUpdate/lifecycle semantics remain absent. LT-2 commit 7f486955 is not on current origin/main and addresses lua_properties rather than this residue, so the coherent binding remains unpromoted.",
+)
 
 FEATURE_ROWS.update(
     {

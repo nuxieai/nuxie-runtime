@@ -9,7 +9,7 @@ The lane-focused command is:
 cargo test -p nuxie --test command_queue --no-fail-fast
 ```
 
-## Complete upstream case ports (66)
+## Complete upstream case ports (79)
 
 | Upstream `TEST_CASE` | Rust evidence |
 |---|---|
@@ -79,6 +79,19 @@ cargo test -p nuxie --test command_queue --no-fail-fast
 | `file assets listed - all assets returned` | `file_assets_listed_all_assets_returned` — compares the queued catalog count with the imported file's full asset catalog. |
 | `Global View Model Names Listed` | `global_view_model_names_listed` — reports non-empty global model names and suppresses a success callback for an invalid file. |
 | `Set/Bind/Get Global View Model Instance` | `set_bind_get_global_view_model_instance` — sets a global instance, binds the state machine, retrieves a handle with the expected model name, and errors for an invalid global name. |
+| `Semantics advance does not auto-deliver diff` | `semantics_advance_does_not_auto_deliver_diff` — enables and advances the pinned `semantic/simpsons.riv` fixture without draining, then proves neither a diff nor an error is delivered. |
+| `Semantics enable + initial diff on drainSemanticsDiff` | `semantics_enable_and_initial_diff_on_drain` — enables, settles, explicitly drains, replays the returned diff, and proves the initial tree is non-empty and contains the authored tab list. |
+| `Semantics no diff when not enabled` | `semantics_no_diff_when_not_enabled` — settles the fixture without enabling or draining and proves no semantic diff/error delivery. |
+| `Semantics drainSemanticsDiff errors when not enabled` | `semantics_drain_diff_errors_when_not_enabled` — checks the single state-machine error carries request id `0x1234` and that no diff is emitted. |
+| `Semantics drainSemanticsDiff only emits for non-empty diff` | `semantics_drain_diff_only_emits_for_non_empty_diff` — checks one callback and request id for the initial drain, then proves a second unchanged drain emits nothing. |
+| `Semantics fireSemanticAction tap changes selected tab` | `semantics_fire_tap_changes_selected_tab` — finds the selected and first unselected authored tabs, fires `Tap`, settles/drains, and proves the selected bits swap with no error. |
+| `Semantics commands on invalid state machine handle` | `semantics_commands_on_invalid_state_machine_handle` — routes all five semantic commands to a failed named-machine handle and checks the exact ordered request ids `0xE1..=0xE5`, with no diff. |
+| `Semantics drainSemanticsDiff maps bounds into view space` | `semantics_drain_diff_maps_bounds_into_view_space` — drains independent 200×200 and 800×800 views, matches a non-empty tab by id, and preserves the pinned 1% relative scale checks on width and height. |
+| `Semantics requestSemanticFocus errors when not enabled` | `semantics_request_focus_errors_when_not_enabled` — checks exactly one error with request id `0x5151` and no diff. |
+| `Semantics fireSemanticAction errors when not enabled` | `semantics_fire_action_errors_when_not_enabled` — checks exactly one error with request id `0x5252` and no diff. |
+| `Semantics requestSemanticFocus on a valid node routes without error` | `semantics_request_focus_on_valid_node_routes_without_error` — drains a real node id, requests focus, settles/drains again, and proves the enabled route never reports an error whether or not that node accepts focus. |
+| `Semantics clearSemanticFocus removes Focused bit from focused node` | `semantics_clear_focus_removes_focused_bit` — uses pinned `semantic_list_scroll_focus_fixed.riv`, focuses a `Focusable` node through the queue, observes `Focused`, clears through the queue, and observes the bit removed without error. |
+| `Semantics drainSemanticsDiff honors scaleFactor when the view matches the artboard` | `semantics_drain_diff_honors_scale_factor_for_matching_view` — discovers the origin-based authored bounds, uses the matching view with `Fit::Layout`, and preserves the pinned 2% relative checks that scale factor 2 doubles every shared non-empty node's width and height. |
 
 The focused Rust suite has additional supporting assertions for typed monotonic
 handles, ordered `runOnce` callbacks, bounded command/message polling,
@@ -102,24 +115,11 @@ handles and messages.
 3. `View Model Blob Property Set`
 4. `View Model Blob Property Subscription`
 
-## Pending F6 dependency rows (13)
+## Pending F6 dependency rows (0)
 
-Each row is blocked specifically on **F6 semantic-manager/action/focus/diff
-semantics** and remains outside this baseline lane.
+PR #216's F6 semantic runtime and PR #218's mounted-focus correction unblock
+all 13 former dependency rows. The focused semantic queue run is green at
+13/13; the pending floor tightens from 13 to 0 and may not be raised.
 
-1. `Semantics advance does not auto-deliver diff` — depends on F6 diff ownership.
-2. `Semantics enable + initial diff on drainSemanticsDiff` — depends on F6 enable/drain protocol.
-3. `Semantics no diff when not enabled` — depends on F6 enable state.
-4. `Semantics drainSemanticsDiff errors when not enabled` — depends on F6 error contract.
-5. `Semantics drainSemanticsDiff only emits for non-empty diff` — depends on F6 diff generation.
-6. `Semantics fireSemanticAction tap changes selected tab` — depends on F6 action routing.
-7. `Semantics commands on invalid state machine handle` — depends on F6 command surface.
-8. `Semantics drainSemanticsDiff maps bounds into view space` — depends on F6 geometry diff mapping.
-9. `Semantics requestSemanticFocus errors when not enabled` — depends on F6 focus state.
-10. `Semantics fireSemanticAction errors when not enabled` — depends on F6 action state.
-11. `Semantics requestSemanticFocus on a valid node routes without error` — depends on F6 focus routing.
-12. `Semantics clearSemanticFocus removes Focused bit from focused node` — depends on F6 focus mutation.
-13. `Semantics drainSemanticsDiff honors scaleFactor when the view is scaled` — depends on F6 view-space diff mapping.
-
-Ratchet accounting: **66 complete + 0 pending non-F6 + 13 pending F6 +
+Ratchet accounting: **79 complete + 0 pending non-F6 + 0 pending F6 +
 4 S4-45 WATCH = 83 expected upstream cases**.

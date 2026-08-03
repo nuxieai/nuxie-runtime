@@ -6100,6 +6100,7 @@ impl ArtboardInstance {
                 paint.feather.as_ref(),
                 &selected_commands,
                 shape_world,
+                owner.paint_type == RuntimeShapePaintKind::Fill,
             )
         });
         if let Some(feather_state) = feather_state.as_mut() {
@@ -19060,6 +19061,7 @@ fn runtime_shape_paint_command_with_effect_path(
         paint.feather.as_ref(),
         feather_path_commands,
         shape_world,
+        paint.paint_type == ShapePaintKind::Fill,
     );
     if let Some(feather_state) = feather_state.as_mut() {
         prune_empty_path_segments(&mut feather_state.inner_path_commands);
@@ -19518,6 +19520,7 @@ fn runtime_feather_state(
     feather: Option<&FeatherNode>,
     path_commands: &[RuntimePathCommand],
     shape_world: Mat2D,
+    parent_is_fill: bool,
 ) -> Option<RuntimeFeatherState> {
     let mut feather = feather?.clone();
     feather.space_value =
@@ -19528,7 +19531,12 @@ fn runtime_feather_state(
         runtime_feather_double_property(artboard, &feather, "offsetX", feather.offset_x);
     feather.offset_y =
         runtime_feather_double_property(artboard, &feather, "offsetY", feather.offset_y);
-    feather.inner = runtime_feather_bool_property(artboard, &feather, "inner", feather.inner);
+    let authored_inner =
+        runtime_feather_bool_property(artboard, &feather, "inner", feather.inner);
+    feather.inner = crate::shapes::paint::feather::is_inner(
+        authored_inner,
+        parent_is_fill.then_some("Fill"),
+    );
 
     let inner_path_commands = inner_feather_path_commands(&feather, path_commands, shape_world);
     Some(RuntimeFeatherState {

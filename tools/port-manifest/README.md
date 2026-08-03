@@ -6,8 +6,8 @@ upstream runtime's `src/**/*.cpp` tree. Generated object-model sources under
 schema/codegen gate. At the explicit manifest inventory ref `b73bc675`, this
 is exactly 447 files.
 
-The product runtime remains pinned at `d788e8ec` until Phase S approval. That
-older revision has 448 in-scope files because it still contains
+The product runtime remains pinned at `d788e8ec` until Upstream Sync cycle
+approval. That older revision has 448 in-scope files because it still contains
 `src/core/field_types/core_uint64_type.cpp`; checking the candidate-driven
 manifest against d788 is therefore expected to fail on that path. This is the
 removal drift detector, not a tolerated exception or a product-pin advance.
@@ -27,14 +27,14 @@ The check fails for missing, duplicate, or stale upstream rows, invalid
 statuses, drift from the register seeds, and declared Rust modules that no
 longer exist. It prints the exact inventory and status counts on success.
 
-After an approved Phase S classification change, update the classification
-rules in `port_manifest.py`, then regenerate against the approved candidate
+After an approved Upstream Sync cycle classification change, update the
+classification rules in `port_manifest.py`, then regenerate against the approved candidate
 worktree with:
 
 ```sh
 RIVE_RUNTIME_DIR=/path/to/rive-runtime make port-manifest-generate
 ```
 
-Phase S runs the checker against the clean candidate checkout before the
-approval gate. A newly added C++ file therefore fails inventory until its row
+The Upstream Sync cycle runs the checker against the clean candidate checkout
+before the approval gate. A newly added C++ file therefore fails inventory until its row
 is reviewed; regeneration is not a substitute for triage approval.

@@ -88,7 +88,7 @@ GOAL: <one sentence — the slice's exit gate restated>.
 STEPS: <the slice's steps, with C++ source citations where porting>.
 TOUCH: <exact files/dirs>. DON'T TOUCH: corpus.toml, corpus-r.toml,
   docs/parity-closeout-status.md, tools/golden-* (unless slice says),
-  frozen: nuxie-schema, nuxie-binary (unless Phase S says), V1 contract
+  frozen: nuxie-schema, nuxie-binary (unless the Upstream Sync cycle says), V1 contract
   suite, any tolerance or gate threshold.
 GATE: run <command(s)>; paste the numbers. If the gate fails twice for the
   same cause, STOP and report the failure context — do not loosen anything.
@@ -96,8 +96,8 @@ REPORT: a status-file entry draft (metric delta, files touched, decisions
   needed) + the gate output. Your final message is the report.
 ```
 
-**USER-GATE rows** (orchestrator stops and asks; never inferred): Phase S
-approvals (#B-1, per `docs/upstream-sync-map.md`), size budget (#B-3),
+**USER-GATE rows** (orchestrator stops and asks; never inferred): Upstream Sync
+cycle approvals (#B-1, per `docs/upstream-sync-map.md`), size budget (#B-3),
 audio engine confirmation (#FT-AUDIO a), command-server decision (#HD-1),
 browser support decision (#HD-3, resolved WebGPU-only 2026-07-24),
 production-flow corpus access (#FT-PROD), and any
@@ -153,7 +153,7 @@ text spacing), while faithfully ported code has stayed quiet.
 
 ## Phase 0 — Baseline (#B) — do first, mostly parallel lanes
 
-### #B-1 Phase S sync cycle to current upstream — SPINE, S/M, USER-GATE
+### #B-1 Upstream Sync cycle to current upstream — SPINE, S/M, USER-GATE
 The fixed cycle-3 approval cut is `b73bc675`, 3 commits past the pin, including
 TextInput improvements (`1b4df2ad`) that land squarely on #FT-TEXT. Later
 upstream drift is a separate inventory, not an implicit widening of this cut.
@@ -170,8 +170,8 @@ per upstream `src/**/*.cpp` (447 files today) →
 `{status: ported|partial|absent|not-applicable, rust_module, note}`. Seed
 statuses from the register's F-table. `make port-manifest-check` fails on:
 an upstream file with no row, or a row whose `rust_module` path no longer
-exists. Wire into CI and into the Phase S inventory step (a new upstream
-file with no row fails triage).
+exists. Wire into CI and into the Upstream Sync cycle inventory step (a new
+upstream file with no row fails triage).
 **Gate:** `make port-manifest-check` green in CI; 447/447 rows; seeded
 statuses match the register (absent rows carry their F-row id).
 

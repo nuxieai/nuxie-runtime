@@ -1,0 +1,249 @@
+diff --git a/renderer/src/shaders/atomic_draw.glsl b/renderer/src/shaders/atomic_draw.glsl
+index 84f57997..2c7ed66a 100644
+--- a/renderer/src/shaders/atomic_draw.glsl
++++ b/renderer/src/shaders/atomic_draw.glsl
+@@ -793,10 +793,11 @@ ATOMIC_PLS_MAIN(@drawFragmentMain)
+                           FRAGMENT_CONTEXT_UNPACK PLS_CONTEXT_UNPACK);
+     }
+ 
+-    fragColorOut.rgb = add_dither(fragColorOut.rgb,
+-                                  _fragCoord.xy,
+-                                  uniforms.ditherScale,
+-                                  uniforms.ditherBias);
++    fragColorOut.rgb = add_dither_if_alpha_nonzero(fragColorOut.rgb,
++                                                   fragColorOut.a,
++                                                   _fragCoord.xy,
++                                                   uniforms.ditherScale,
++                                                   uniforms.ditherBias);
+ #ifdef @FIXED_FUNCTION_COLOR_OUTPUT
+     _fragColor = fragColorOut;
+ #else
+@@ -883,10 +884,11 @@ ATOMIC_PLS_MAIN(@drawFragmentMain)
+                           FRAGMENT_CONTEXT_UNPACK PLS_CONTEXT_UNPACK);
+     }
+ 
+-    fragColorOut.rgb = add_dither(fragColorOut.rgb,
+-                                  _fragCoord.xy,
+-                                  uniforms.ditherScale,
+-                                  uniforms.ditherBias);
++    fragColorOut.rgb = add_dither_if_alpha_nonzero(fragColorOut.rgb,
++                                                   fragColorOut.a,
++                                                   _fragCoord.xy,
++                                                   uniforms.ditherScale,
++                                                   uniforms.ditherBias);
+ #ifdef @FIXED_FUNCTION_COLOR_OUTPUT
+     _fragColor = fragColorOut;
+ #else
+@@ -1000,10 +1002,11 @@ ATOMIC_PLS_MAIN(@drawFragmentMain)
+     // blending pipeline.
+     fragColorOut = fragColorOut * (1. - imageColor.a) + imageColor;
+ 
+-    fragColorOut.rgb = add_dither(fragColorOut.rgb,
+-                                  _fragCoord.xy,
+-                                  uniforms.ditherScale,
+-                                  uniforms.ditherBias);
++    fragColorOut.rgb = add_dither_if_alpha_nonzero(fragColorOut.rgb,
++                                                   fragColorOut.a,
++                                                   _fragCoord.xy,
++                                                   uniforms.ditherScale,
++                                                   uniforms.ditherBias);
+ #ifdef @FIXED_FUNCTION_COLOR_OUTPUT
+     _fragColor = fragColorOut;
+ #else
+@@ -1083,10 +1086,11 @@ ATOMIC_PLS_MAIN(@drawFragmentMain)
+     EMIT_PLS_AND_FRAG_COLOR
+ #else
+ 
+-    fragColorOut.rgb = add_dither(fragColorOut.rgb,
+-                                  _fragCoord.xy,
+-                                  uniforms.ditherScale,
+-                                  uniforms.ditherBias);
++    fragColorOut.rgb = add_dither_if_alpha_nonzero(fragColorOut.rgb,
++                                                   fragColorOut.a,
++                                                   _fragCoord.xy,
++                                                   uniforms.ditherScale,
++                                                   uniforms.ditherBias);
+ #ifdef @FIXED_FUNCTION_COLOR_OUTPUT
+     _fragColor = fragColorOut;
+ #else
+diff --git a/renderer/src/shaders/common.glsl b/renderer/src/shaders/common.glsl
+index 19c50edb..9c3a7771 100644
+--- a/renderer/src/shaders/common.glsl
++++ b/renderer/src/shaders/common.glsl
+@@ -308,18 +308,48 @@ INLINE half get_dither(float2 fragCoord, half scale, half bias)
+                           : .0;
+ }
+ 
+-INLINE half3 add_dither(half3 color, float2 fragCoord, half scale, half bias)
+-{
+-    return @ENABLE_DITHER
++INLINE half3 add_dither_if_alpha_nonzero(half3 color,
++                                         half alpha,
++                                         float2 fragCoord,
++                                         half scale,
++                                         half bias)
++{
++    // Skip dither at alpha == 0, where src-over is an identity on an already
++    // quantized destination -- there is no rounding to randomize, and the noise
++    // would land in the framebuffer undiluted. It only varies with fragCoord,
++    // so that error accumulates with overdraw rather than averaging out.
++    return (@ENABLE_DITHER && alpha != .0)
+                ? (interleaved_gradient_noise(fragCoord, scale, bias) + color)
+                : color;
+ }
+ 
++INLINE half3 add_dither_if_alpha_nonzero(half3 color,
++                                         half alpha,
++                                         half precomputedDither)
++{
++    // Skip dither at alpha == 0, where src-over is an identity on an already
++    // quantized destination -- there is no rounding to randomize, and the noise
++    // would land in the framebuffer undiluted. It only varies with fragCoord,
++    // so that error accumulates with overdraw rather than averaging out.
++    return (@ENABLE_DITHER && alpha != .0) ? (precomputedDither + color)
++                                           : color;
++}
+ #else
+ 
+ INLINE half get_dither(float2 fragCoord, float scale, float bias) { return 0.; }
+ 
+-INLINE half3 add_dither(half3 color, float2 fragCoord, half scale, half bias)
++INLINE half3 add_dither_if_alpha_nonzero(half3 color,
++                                         half alpha,
++                                         float2 fragCoord,
++                                         half scale,
++                                         half bias)
++{
++    return color;
++}
++
++INLINE half3 add_dither_if_alpha_nonzero(half3 color,
++                                         half alpha,
++                                         half precomputedDither)
+ {
+     return color;
+ }
+diff --git a/renderer/src/shaders/draw_clockwise_atomic_path.frag b/renderer/src/shaders/draw_clockwise_atomic_path.frag
+index 2b14d575..11162957 100644
+--- a/renderer/src/shaders/draw_clockwise_atomic_path.frag
++++ b/renderer/src/shaders/draw_clockwise_atomic_path.frag
+@@ -364,10 +364,8 @@ CLOCKWISE_ATOMIC_PLS_MAIN(@drawFragmentMain)
+     paintColor.rgb *= paintColor.a;
+ 
+ #ifdef @ENABLE_DITHER
+-    if (@ENABLE_DITHER)
+-    {
+-        paintColor.rgb += dither;
+-    }
++    paintColor.rgb =
++        add_dither_if_alpha_nonzero(paintColor.rgb, paintColor.a, dither);
+ #endif
+ 
+     // Since blend is enabled, storing 0 to the clip will ensure it remains
+diff --git a/renderer/src/shaders/draw_clockwise_path.frag b/renderer/src/shaders/draw_clockwise_path.frag
+index f4f5a153..da95003c 100644
+--- a/renderer/src/shaders/draw_clockwise_path.frag
++++ b/renderer/src/shaders/draw_clockwise_path.frag
+@@ -200,10 +200,8 @@ PLS_MAIN(@drawFragmentMain)
+         // equivalent to applying the c0 -> c1 coverage delta.
+         paintColor *= incremental_clockwise_coverage(c0, c1, paintColor.a);
+ #ifdef @ENABLE_DITHER
+-        if (@ENABLE_DITHER)
+-        {
+-            paintColor.rgb += dither;
+-        }
++        paintColor.rgb =
++            add_dither_if_alpha_nonzero(paintColor.rgb, paintColor.a, dither);
+ #endif
+ #ifndef @DRAW_INTERIOR_TRIANGLES
+         // Update the coverage buffer with our final value if we aren't an
+diff --git a/renderer/src/shaders/draw_mesh.frag b/renderer/src/shaders/draw_mesh.frag
+index d543ccaa..15f921ed 100644
+--- a/renderer/src/shaders/draw_mesh.frag
++++ b/renderer/src/shaders/draw_mesh.frag
+@@ -185,10 +185,11 @@ PLS_MAIN(@drawFragmentMain)
+     }
+ #endif
+ 
+-    color.rgb = add_dither(color.rgb,
+-                           _fragCoord.xy,
+-                           uniforms.ditherScale,
+-                           uniforms.ditherBias);
++    color.rgb = add_dither_if_alpha_nonzero(color.rgb,
++                                            color.a,
++                                            _fragCoord.xy,
++                                            uniforms.ditherScale,
++                                            uniforms.ditherBias);
+ 
+ #ifndef @RENDER_MODE_CLOCKWISE_ATOMIC
+     color = dstColorPremul * (1. - color.a) + color;
+@@ -211,10 +212,11 @@ PLS_MAIN(@drawFragmentMain)
+ 
+ #ifdef @FIXED_FUNCTION_COLOR_OUTPUT
+     color = (color * coverage);
+-    color.rgb = add_dither(color.rgb,
+-                           _fragCoord.xy,
+-                           uniforms.ditherScale,
+-                           uniforms.ditherBias);
++    color.rgb = add_dither_if_alpha_nonzero(color.rgb,
++                                            color.a,
++                                            _fragCoord.xy,
++                                            uniforms.ditherScale,
++                                            uniforms.ditherBias);
+     _fragColor = color;
+     EMIT_PLS_AND_FRAG_COLOR
+ #else
+diff --git a/renderer/src/shaders/draw_msaa_object.frag b/renderer/src/shaders/draw_msaa_object.frag
+index 45b25f03..e4e06c37 100644
+--- a/renderer/src/shaders/draw_msaa_object.frag
++++ b/renderer/src/shaders/draw_msaa_object.frag
+@@ -78,7 +78,6 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
+     // Src-over blending is enabled, so just premultiply and let the HW
+     // finish the the the alpha portion of the blend mode.
+     color.rgb *= color.a;
+-    // clang-format off
+ #endif
+ 
+     // Certain platforms give us less control of the format of what we are
+@@ -92,10 +91,12 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
+     }
+ #endif
+ 
+-    color.rgb = add_dither(color.rgb,
+-                           _fragCoord.xy,
+-                           uniforms.ditherScale,
+-                           uniforms.ditherBias);
++    color.rgb = add_dither_if_alpha_nonzero(color.rgb,
++                                            color.a,
++                                            _fragCoord.xy,
++                                            uniforms.ditherScale,
++                                            uniforms.ditherBias);
++
+     EMIT_FRAG_DATA(color);
+ }
+ 
+diff --git a/renderer/src/shaders/draw_raster_order_path.frag b/renderer/src/shaders/draw_raster_order_path.frag
+index ebef5ca3..9cbd8377 100644
+--- a/renderer/src/shaders/draw_raster_order_path.frag
++++ b/renderer/src/shaders/draw_raster_order_path.frag
+@@ -210,12 +210,14 @@ PLS_MAIN(@drawFragmentMain)
+         }
+ #endif
+ 
+-        color += dstColorPremul * (1. - color.a);
+-
+-        color.rgb = add_dither(color.rgb,
+-                               _fragCoord.xy,
+-                               uniforms.ditherScale,
+-                               uniforms.ditherBias);
++        // Save paint alpha before destructively updating it with the dstColor.
++        half paintAlpha = color.a;
++        color += dstColorPremul * (1. - paintAlpha);
++        color.rgb = add_dither_if_alpha_nonzero(color.rgb,
++                                                paintAlpha,
++                                                _fragCoord.xy,
++                                                uniforms.ditherScale,
++                                                uniforms.ditherBias);
+ 
+         PLS_STORE4F(colorBuffer, color);
+         PLS_PRESERVE_UI(clipBuffer);

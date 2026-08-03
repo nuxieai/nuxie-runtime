@@ -1,25 +1,25 @@
 struct CC {
-    bc: f32,
-    kd: f32,
-    bf: f32,
-    cf: f32,
-    m6_: u32,
-    Bg: u32,
-    Ne: u32,
-    Oe: u32,
-    Q7_: vec4<i32>,
-    xg: vec2<f32>,
-    ld: vec2<f32>,
-    a2_: u32,
-    Cg: f32,
-    Z5_: u32,
-    N2_: f32,
+    cc: f32,
     md: f32,
-    Ie: u32,
-    y3_: f32,
+    df: f32,
+    ef: f32,
+    m6_: u32,
+    Dg: u32,
+    Pe: u32,
+    Qe: u32,
+    R7_: vec4<i32>,
+    zg: vec2<f32>,
+    nd: vec2<f32>,
+    a2_: u32,
+    Eg: f32,
+    Z5_: u32,
+    P2_: f32,
+    od: f32,
+    Ke: u32,
     z3_: f32,
-    nd: f32,
-    ug: u32,
+    A3_: f32,
+    pd: f32,
+    wg: u32,
 }
 
 struct gl_PerVertex {
@@ -37,7 +37,7 @@ struct VertexOutput {
 var<private> gl_VertexIndex_1: i32;
 var<private> KC_1: vec4<u32>;
 @group(0) @binding(0)
-var<uniform> m: CC;
+var<uniform> n: CC;
 var<private> R6_: vec4<f32>;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 
@@ -63,7 +63,7 @@ fn main_1() {
     let _e43 = phi_239_;
     let _e45 = (f32(_e43) * 0.000015258789f);
     let _e48 = select(1f, 0f, ((_e31 & 1i) == 0i));
-    let _e50 = m.bc;
+    let _e50 = n.cc;
     phi_240_ = _e48;
     if (_e50 < 0f) {
         phi_240_ = (1f - _e48);

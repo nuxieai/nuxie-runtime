@@ -4184,6 +4184,132 @@ impl ArtboardInstance {
         Some((min_x, min_y, max_x, max_y))
     }
 
+    /// Layout-derived world transform with live ancestor ScrollConstraint
+    /// transforms applied. The draw cache computes the same combination;
+    /// semantic/focus providers need it without creating renderer state.
+    pub(crate) fn runtime_component_world_transform_with_scroll(&self, local_id: usize) -> Mat2D {
+        let mut world = self
+            .runtime_graph()
+            .map(|graph| self.runtime_component_world_transform(local_id, graph))
+            .or_else(|| {
+                self.component(local_id)
+                    .map(|component| component.transform.world_transform)
+            })
+            .unwrap_or(Mat2D::IDENTITY);
+        let mut current = Some(local_id);
+        while let Some(ancestor_local) = current {
+            if let Some(component) = self.component(ancestor_local) {
+                for constraint in &component.constraints {
+                    if let Some(scroll_transform) = self
+                        .objects
+                        .component(*constraint)
+                        .and_then(|component| component.concrete.scroll.as_ref())
+                        .map(|scroll| scroll.scroll_transform)
+                    {
+                        world = world.multiply(scroll_transform);
+                    }
+                }
+            }
+            current = self.component_parent_local(ancestor_local);
+        }
+        world
+    }
+
+    /// Run the `FocusData::scrollIntoView` ancestor walk for one mounted
+    /// focus occurrence. The owner identity disambiguates repeated nested
+    /// artboards whose authored local ids are identical.
+    pub(crate) fn scroll_focus_target_into_view(
+        &mut self,
+        owner_identity: u64,
+        target_local: usize,
+    ) -> bool {
+        self.scroll_focus_target_path(owner_identity, target_local)
+            .is_some_and(|path| path.changed)
+    }
+
+    fn scroll_focus_target_path(
+        &mut self,
+        owner_identity: u64,
+        target_local: usize,
+    ) -> Option<RuntimeFocusScrollPath> {
+        if self.instance_identity() == owner_identity {
+            let bounds = self.layout_world_bounds(target_local).or_else(|| {
+                self.object_world_bounds(target_local)
+                    .map(|bounds| (bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y))
+            })?;
+            let changed = self.scroll_bounds_along_ancestors(target_local, bounds);
+            return Some(RuntimeFocusScrollPath { bounds, changed });
+        }
+
+        let nested_hosts = self.nested_artboards.keys().copied().collect::<Vec<_>>();
+        for host_local in nested_hosts {
+            let host_world = self.runtime_component_world_transform_with_scroll(host_local);
+            let child_path = {
+                let nested = self.nested_artboards.get_mut(&host_local)?;
+                let child_transform = nested.child.mounted_root_transform(host_world);
+                nested
+                    .child
+                    .scroll_focus_target_path(owner_identity, target_local)
+                    .map(|path| (path, child_transform))
+            };
+            if let Some((child_path, child_transform)) = child_path {
+                let bounds = transform_focus_bounds(child_transform, child_path.bounds);
+                let changed =
+                    child_path.changed | self.scroll_bounds_along_ancestors(host_local, bounds);
+                return Some(RuntimeFocusScrollPath { bounds, changed });
+            }
+        }
+
+        let list_locals = self.component_list_locals().collect::<Vec<_>>();
+        let list_roots = self.runtime_component_list_child_root_transforms(Mat2D::IDENTITY);
+        for list_local in list_locals {
+            let item_count = self.component_list_items(list_local).map_or(0, <[_]>::len);
+            for item_index in 0..item_count {
+                let child_transform = list_roots
+                    .get(&list_local)
+                    .and_then(|roots| roots.get(item_index))
+                    .copied()
+                    .unwrap_or(Mat2D::IDENTITY);
+                let child_path = self
+                    .component_list_items_mut(list_local)
+                    .and_then(|items| items.get_mut(item_index))
+                    .and_then(|item| {
+                        item.child
+                            .scroll_focus_target_path(owner_identity, target_local)
+                    });
+                if let Some(child_path) = child_path {
+                    let bounds = transform_focus_bounds(child_transform, child_path.bounds);
+                    let changed =
+                        child_path.changed | self.scroll_bounds_along_ancestors(list_local, bounds);
+                    return Some(RuntimeFocusScrollPath { bounds, changed });
+                }
+            }
+        }
+        None
+    }
+
+    fn scroll_bounds_along_ancestors(
+        &mut self,
+        start_local: usize,
+        bounds: (f32, f32, f32, f32),
+    ) -> bool {
+        let mut constraints = Vec::new();
+        let mut current = Some(start_local);
+        while let Some(local_id) = current {
+            if let Some(component) = self.component(local_id) {
+                constraints.extend(component.constraints.iter().copied().filter(|constraint| {
+                    self.objects
+                        .component(*constraint)
+                        .is_some_and(|component| component.concrete.scroll.is_some())
+                }));
+            }
+            current = self.component_parent_local(local_id);
+        }
+        constraints.into_iter().fold(false, |changed, constraint| {
+            crate::constraints::scroll_constraint_to_show_bounds(self, constraint, bounds) | changed
+        })
+    }
+
     /// Whether authored nested or component-list players still need a future
     /// advance. Hosts use this independently from the selected root player so
     /// a static root cannot prematurely settle a playing child artboard.
@@ -10783,6 +10909,21 @@ impl ArtboardInstance {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct RuntimeFocusScrollPath {
+    bounds: (f32, f32, f32, f32),
+    changed: bool,
+}
+
+fn transform_focus_bounds(transform: Mat2D, bounds: (f32, f32, f32, f32)) -> (f32, f32, f32, f32) {
+    // Pinned FocusData::scrollIntoView maps exactly the AABB minimum and
+    // maximum while crossing an Artboard boundary. SemanticProvider uses the
+    // separate four-corner rootTransformAABB path.
+    let min = transform.transform_point(bounds.0, bounds.1);
+    let max = transform.transform_point(bounds.2, bounds.3);
+    (min.0, min.1, max.0, max.1)
+}
+
 impl ArtboardInstance {
     pub(crate) fn install_external_focus_domain(
         &mut self,
@@ -10794,11 +10935,14 @@ impl ArtboardInstance {
                 self.external_focus_domain = Some(current);
             } else {
                 current.cleanup_focus_tree(self);
-                next.build_focus_tree(self);
+                // `NestedArtboard::syncNestedFocusTree` re-homes under the
+                // recorded placement as the final write after a manager
+                // switch (`src/nested_artboard.cpp:369-376`).
+                next.sync_mounted_focus_tree(self);
                 self.external_focus_domain = Some(next);
             }
         } else {
-            next.build_focus_tree(self);
+            next.sync_mounted_focus_tree(self);
             self.external_focus_domain = Some(next);
         }
         for (_, nested) in &mut self.nested_artboards.entries {

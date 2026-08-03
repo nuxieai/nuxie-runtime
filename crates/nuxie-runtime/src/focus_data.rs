@@ -218,6 +218,33 @@ impl RuntimeFocusTree {
         self.inert
     }
 
+    /// Port of `NestedArtboard::syncNestedFocusTree`
+    /// (`src/nested_artboard.cpp:446-486`): after a manager switch the nested
+    /// tree must be rebuilt under its resolved placement — upstream rebuilds
+    /// under `m_focusScope != nullptr ? m_focusScope : fallbackParent`, never
+    /// at the manager root. In the retained model the parent artboard's
+    /// hierarchical build pass has already recorded this occurrence's mount
+    /// (parent scope, sibling index, root transform), so that mount is the
+    /// placement authority; scope placement stays the final write. A missing
+    /// mount means a first registration outside a build pass, which upstream
+    /// treats as best-effort root placement normalized by the next build pass
+    /// (`registerFocusScope`, `src/nested_artboard.cpp:437-443`).
+    pub(crate) fn sync_mounted_focus_tree(&self, artboard: &ArtboardInstance) {
+        if self.inert {
+            return;
+        }
+        let mount = self
+            .domain
+            .borrow()
+            .mounts
+            .get(&artboard.instance_identity())
+            .cloned();
+        match mount {
+            Some(mount) => self.rebuild_mounted_subtree(artboard, mount),
+            None => self.build_focus_tree(artboard),
+        }
+    }
+
     /// Direct port of `Artboard::buildFocusTree`: walk authored child order and
     /// mutate the retained nodes/scopes in place. Unlike the retired `sync`
     /// projection, this runs only at the pinned construction/rebuild sites.
@@ -570,10 +597,22 @@ impl RuntimeFocusTree {
     }
 
     pub(crate) fn set_focus_target(&mut self, target_local: usize) -> bool {
+        self.set_focus_target_for_owner(self.owner_identity, target_local)
+    }
+
+    /// Select a target in any mounted occurrence sharing this retained
+    /// domain. SemanticManager node ids are domain-wide, so semantic focus
+    /// routing must retain the Artboard occurrence identity as well as the
+    /// owner-local target id.
+    pub(crate) fn set_focus_target_for_owner(
+        &mut self,
+        owner_identity: u64,
+        target_local: usize,
+    ) -> bool {
         let mut domain = self.domain.borrow_mut();
         domain
             .focus_targets
-            .get(&(self.owner_identity, target_local))
+            .get(&(owner_identity, target_local))
             .copied()
             .is_some_and(|node_id| domain.manager.set_focus(node_id))
     }

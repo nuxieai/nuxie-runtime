@@ -159,6 +159,10 @@ impl RuntimeStateMachineDataContext {
         state.sync_rebind_relays(&weak_state);
     }
 
+    pub(crate) fn main_handle(&self) -> Option<RuntimeOwnedViewModelHandle> {
+        self.state.borrow().context.main_handle().cloned()
+    }
+
     pub(crate) fn set_global_named(
         &self,
         file: &RuntimeFile,

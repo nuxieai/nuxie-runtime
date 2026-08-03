@@ -20,14 +20,14 @@ impl RuntimeViewModelImage {
         self.bytes.as_deref().unwrap_or_default()
     }
 
-    pub(crate) fn from_render_image(image: Rc<dyn RenderImage>) -> Self {
+    pub fn from_render_image(image: Rc<dyn RenderImage>) -> Self {
         Self {
             bytes: None,
             render_image: Some(image),
         }
     }
 
-    pub(crate) fn render_image(&self) -> Option<Rc<dyn RenderImage>> {
+    pub fn render_image(&self) -> Option<Rc<dyn RenderImage>> {
         self.render_image.as_ref().map(Rc::clone)
     }
 

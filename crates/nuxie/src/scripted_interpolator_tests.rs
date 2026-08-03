@@ -225,12 +225,15 @@ fn apply_at_half(
 ) {
     let bytes = scripted_interpolator_file(protocol);
     let file = Arc::new(File::import_with_unsigned_scripts(&bytes).expect("fixture imports"));
-    let mut artboard =
-        OwnedArtboardInstance::instantiate_default(file).expect("artboard instantiates");
+    assert!(file.has_script_assets());
+    assert!(!file.scripting_runtime_is_ready());
+    let mut artboard = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+        .expect("artboard instantiates");
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     artboard
         .try_advance_with_factory(&mut factory, 0.0)
         .expect("script factories mount");
+    assert!(file.scripting_runtime_is_ready());
     let mut animation = artboard
         .linear_animation_instance_named("Scripted")
         .expect("animation instantiates");
@@ -270,6 +273,72 @@ fn imported_lua_transform_value_drives_keyframe_apply() {
     );
     assert_eq!(value, 15.0);
     assert!(diagnostics.is_empty());
+}
+
+#[test]
+fn imported_lua_transform_and_transform_value_keep_per_keyframe_state() {
+    let bytes = scripted_interpolator_file(
+        br#"
+            return function(_context)
+                return {
+                    init = function(self)
+                        assert(self.scale == 1)
+                        self.calls = 0
+                        return true
+                    end,
+                    transformValue = function(self, from, to, factor)
+                        self.calls += 1
+                        return from + (to - from) * factor * factor * self.scale
+                            + (self.calls - 1) * 0.125
+                    end,
+                    transform = function(self, factor)
+                        self.calls += 1
+                        return factor * factor * self.scale
+                            + (self.calls - 1) * 0.005
+                    end,
+                }
+            end
+        "#,
+    );
+    let file = Arc::new(File::import_with_unsigned_scripts(&bytes).expect("fixture imports"));
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    assert!(file.has_script_assets());
+    assert!(!file.scripting_runtime_is_ready());
+    assert!(
+        file.prepare_scripting_runtime(&mut factory)
+            .expect("File registers the scripting runtime")
+    );
+    assert!(file.scripting_runtime_is_ready());
+    let mut artboard = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
+        .expect("artboard instantiates");
+    artboard
+        .try_advance_with_factory(&mut factory, 0.0)
+        .expect("script factories mount");
+    let mut animation = artboard
+        .linear_animation_instance_named("Scripted")
+        .expect("animation instantiates");
+    artboard
+        .raw()
+        .advance_linear_animation_instance(&mut animation, 0.5);
+
+    for (x, color) in [(15.0, 0xff40_4040), (15.125, 0xff41_4141)] {
+        artboard
+            .raw_mut()
+            .apply_linear_animation_instance(&animation, 1.0);
+        assert_eq!(
+            artboard
+                .raw()
+                .transform_property(1, nuxie_runtime::TransformProperty::X),
+            Some(x)
+        );
+        assert_eq!(
+            artboard
+                .raw()
+                .color_property(3, property_key("SolidColor", "colorValue")),
+            Some(color)
+        );
+    }
+    assert!(animation.scripted_interpolator_diagnostics().is_empty());
 }
 
 #[test]

@@ -9,10 +9,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub use nuxie_render_api::{
-    GpuCanvasBlendState, GpuCanvasColorTarget, GpuCanvasDepthStencilState, GpuCanvasIndexBuffer,
-    GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelineState, GpuCanvasSamplerBinding,
-    GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload, GpuCanvasUniformBuffer,
-    GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+    GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
+    GpuCanvasDepthStencilAttachment, GpuCanvasDepthStencilState, GpuCanvasDrawCommand,
+    GpuCanvasIndexBuffer, GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelineState,
+    GpuCanvasRenderPass, GpuCanvasSamplerBinding, GpuCanvasStencilFace, GpuCanvasTextureBinding,
+    GpuCanvasTextureUpload, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute,
+    GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 use nuxie_render_api::{
     GpuCanvasError, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderEntry,
@@ -22,7 +24,7 @@ use nuxie_render_api::{
 };
 use wgpu::util::DeviceExt;
 
-use super::{RendererError, WgpuFactory, WgpuImage, WgpuImageTexture, align_to, map_buffer};
+use super::{align_to, map_buffer, RendererError, WgpuFactory, WgpuImage, WgpuImageTexture};
 
 const MAX_GPU_CANVAS_DIMENSION: u32 = 2_048;
 const MAX_UNIFORM_BUFFER_BYTES: usize = 64 * 1024;
@@ -178,7 +180,7 @@ pub struct GpuCanvasRenderPlan {
 
 struct PreparedImportedGpuCanvas {
     vertex_entry_point: String,
-    fragment_entry_point: String,
+    fragment_entry_point: Option<String>,
     resource_requirements: BTreeMap<(u32, u32), ImportedResourceRequirement>,
 }
 
@@ -212,6 +214,7 @@ struct ImportedGpuCanvasPipelineKey {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ImportedTextureBindingKey {
+    resource_id: u64,
     group: u32,
     binding: u32,
     width: u32,
@@ -226,6 +229,42 @@ struct ImportedTextureBindingKey {
     mip_level_count_in_view: u32,
     base_array_layer: u32,
     array_layer_count: u32,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct ImportedAttachmentViewKey {
+    resource_id: u64,
+    view_dimension: String,
+    base_mip_level: u32,
+    mip_level_count: u32,
+    base_array_layer: u32,
+    array_layer_count: u32,
+}
+
+impl ImportedAttachmentViewKey {
+    fn new(texture: &GpuCanvasTextureBinding) -> Self {
+        Self {
+            resource_id: texture.resource_id,
+            view_dimension: texture.view_dimension.clone(),
+            base_mip_level: texture.base_mip_level,
+            mip_level_count: texture.mip_level_count_in_view,
+            base_array_layer: texture.base_array_layer,
+            array_layer_count: texture.array_layer_count,
+        }
+    }
+}
+
+fn same_texture_resource(left: &GpuCanvasTextureBinding, right: &GpuCanvasTextureBinding) -> bool {
+    left.resource_id == right.resource_id
+        && left.width == right.width
+        && left.height == right.height
+        && left.depth_or_array_layers == right.depth_or_array_layers
+        && left.format == right.format
+        && left.texture_type == right.texture_type
+        && left.render_target == right.render_target
+        && left.sample_count == right.sample_count
+        && left.mip_level_count == right.mip_level_count
+        && left.uploads == right.uploads
 }
 
 impl ImportedGpuCanvasPipelineKey {
@@ -271,6 +310,7 @@ impl ImportedGpuCanvasPipelineKey {
                 .texture_bindings
                 .iter()
                 .map(|texture| ImportedTextureBindingKey {
+                    resource_id: texture.resource_id,
                     group: texture.group,
                     binding: texture.binding,
                     width: texture.width,
@@ -534,12 +574,22 @@ fn prepare_imported_gpu_canvas_modules(
         plan.vertex_entry.as_ref(),
         "vertex",
     )?;
-    let fragment_record = resolve_imported_entry(
-        fragment_shader.shader,
-        GpuCanvasShaderStage::Fragment,
-        plan.fragment_entry.as_ref(),
-        "fragment",
-    )?;
+    let fragment_record =
+        if plan.fragment_entry.is_some() || !plan.pipeline_state.color_targets.is_empty() {
+            Some(resolve_imported_entry(
+                fragment_shader.shader,
+                GpuCanvasShaderStage::Fragment,
+                plan.fragment_entry.as_ref(),
+                "fragment",
+            )?)
+        } else {
+            None
+        };
+    if !plan.pipeline_state.color_targets.is_empty() && fragment_record.is_none() {
+        return Err(GpuCanvasError::new(
+            "GPU-canvas color pipeline has no fragment entry",
+        ));
+    }
     validate_imported_interface(
         vertex_shader,
         fragment_shader,
@@ -547,12 +597,15 @@ fn prepare_imported_gpu_canvas_modules(
         vertex_record,
         fragment_record,
     )?;
-    let resource_requirements =
-        merge_imported_resource_requirements(vertex_shader, fragment_shader)?;
+    let resource_requirements = if fragment_record.is_some() {
+        merge_imported_resource_requirements(vertex_shader, fragment_shader)?
+    } else {
+        vertex_shader.resource_requirements.clone()
+    };
     validate_imported_resource_plan(&resource_requirements, plan)?;
     Ok(PreparedImportedGpuCanvas {
         vertex_entry_point: vertex_record.physical_entry_point.clone(),
-        fragment_entry_point: fragment_record.physical_entry_point.clone(),
+        fragment_entry_point: fragment_record.map(|record| record.physical_entry_point.clone()),
         resource_requirements,
     })
 }
@@ -700,7 +753,7 @@ fn validate_imported_interface(
     fragment_shader: ImportedGpuCanvasShaderRef<'_>,
     plan: &GpuCanvasPlan,
     vertex_record: &GpuCanvasShaderEntry,
-    fragment_record: &GpuCanvasShaderEntry,
+    fragment_record: Option<&GpuCanvasShaderEntry>,
 ) -> Result<BTreeMap<(u32, u32), ImportedUniformRequirement>, GpuCanvasError> {
     let invalid = |message: String| {
         GpuCanvasError::new(format!("invalid imported GPU-canvas interface: {message}"))
@@ -716,26 +769,10 @@ fn validate_imported_interface(
             vertex_record.physical_entry_point
         ))
     })?;
-    let fragment_entry = imported_entry_point(
-        &fragment_shader.parsed.module,
-        naga::ShaderStage::Fragment,
-        &fragment_record.physical_entry_point,
-    )
-    .ok_or_else(|| {
-        invalid(format!(
-            "fragment stage has no physical entry point '{}'",
-            fragment_record.physical_entry_point
-        ))
-    })?;
-
     let vertex_inputs =
         imported_function_inputs(&vertex_shader.parsed.module, &vertex_entry.function)?;
     let vertex_outputs =
         imported_function_output(&vertex_shader.parsed.module, &vertex_entry.function)?;
-    let fragment_inputs =
-        imported_function_inputs(&fragment_shader.parsed.module, &fragment_entry.function)?;
-    let fragment_outputs =
-        imported_function_output(&fragment_shader.parsed.module, &fragment_entry.function)?;
 
     if vertex_inputs.builtins.iter().any(|builtin| {
         !matches!(
@@ -762,30 +799,6 @@ fn validate_imported_interface(
             vertex_outputs.builtins
         )));
     }
-    if fragment_inputs.builtins.iter().any(|builtin| {
-        !matches!(
-            builtin,
-            naga::BuiltIn::Position { .. } | naga::BuiltIn::FrontFacing
-        )
-    }) {
-        return Err(invalid(format!(
-            "fragment inputs contain unsupported built-ins {:?}",
-            fragment_inputs.builtins
-        )));
-    }
-    if !fragment_outputs.builtins.is_empty()
-        || fragment_outputs.locations.len() != 1
-        || fragment_outputs
-            .locations
-            .get(&0)
-            .map(|output| output.format)
-            != Some("float32x4")
-    {
-        return Err(invalid(
-            "fragment output must be exactly one vec4<f32> at location 0".into(),
-        ));
-    }
-
     let planned_attributes = plan
         .vertex_layouts
         .iter()
@@ -805,16 +818,59 @@ fn validate_imported_interface(
         )));
     }
 
-    for (&location, fragment_input) in &fragment_inputs.locations {
-        let Some(vertex_output) = vertex_outputs.locations.get(&location) else {
+    if let Some(fragment_record) = fragment_record {
+        let fragment_entry = imported_entry_point(
+            &fragment_shader.parsed.module,
+            naga::ShaderStage::Fragment,
+            &fragment_record.physical_entry_point,
+        )
+        .ok_or_else(|| {
+            invalid(format!(
+                "fragment stage has no physical entry point '{}'",
+                fragment_record.physical_entry_point
+            ))
+        })?;
+        let fragment_inputs =
+            imported_function_inputs(&fragment_shader.parsed.module, &fragment_entry.function)?;
+        let fragment_outputs =
+            imported_function_output(&fragment_shader.parsed.module, &fragment_entry.function)?;
+        if fragment_inputs.builtins.iter().any(|builtin| {
+            !matches!(
+                builtin,
+                naga::BuiltIn::Position { .. } | naga::BuiltIn::FrontFacing
+            )
+        }) {
             return Err(invalid(format!(
-                "fragment input location {location} has no vertex output"
+                "fragment inputs contain unsupported built-ins {:?}",
+                fragment_inputs.builtins
             )));
-        };
-        if vertex_output != fragment_input {
+        }
+        let expected_locations = plan.pipeline_state.color_targets.len();
+        if !fragment_outputs.builtins.is_empty()
+            || fragment_outputs.locations.len() != expected_locations
+            || (0..expected_locations).any(|location| {
+                fragment_outputs
+                    .locations
+                    .get(&(location as u32))
+                    .map(|output| output.format)
+                    != Some("float32x4")
+            })
+        {
             return Err(invalid(format!(
-                "inter-stage location {location} differs: vertex {vertex_output:?}, fragment {fragment_input:?}"
+                "fragment output must provide one vec4<f32> at each color target location 0..{expected_locations}"
             )));
+        }
+        for (&location, fragment_input) in &fragment_inputs.locations {
+            let Some(vertex_output) = vertex_outputs.locations.get(&location) else {
+                return Err(invalid(format!(
+                    "fragment input location {location} has no vertex output"
+                )));
+            };
+            if vertex_output != fragment_input {
+                return Err(invalid(format!(
+                    "inter-stage location {location} differs: vertex {vertex_output:?}, fragment {fragment_input:?}"
+                )));
+            }
         }
     }
 
@@ -823,28 +879,28 @@ fn validate_imported_interface(
     // target-16 map. Do not union the fragment module's resources into it.
     let mut required_uniforms = vertex_shader.uniform_requirements.clone();
     let fragment_stage_mask = 1 << GpuCanvasShaderStage::Fragment as u8;
-    for (&binding, fragment_requirement) in fragment_shader
-        .uniform_requirements
-        .iter()
-        .filter(|(_, requirement)| requirement.stage_mask & fragment_stage_mask != 0)
-    {
-        let Some(vertex_requirement) = required_uniforms.get_mut(&binding) else {
-            return Err(invalid(format!(
-                "fragment resource group {} binding {} is absent from the vertex-authoritative target-16 map",
-                binding.0, binding.1
-            )));
-        };
-        if vertex_requirement.stage_mask & fragment_stage_mask == 0 {
-            return Err(invalid(format!(
-                "fragment resource group {} binding {} is not fragment-visible in the vertex-authoritative target-16 map",
-                binding.0, binding.1
-            )));
+    if fragment_record.is_some() {
+        for (&binding, fragment_requirement) in fragment_shader
+            .uniform_requirements
+            .iter()
+            .filter(|(_, requirement)| requirement.stage_mask & fragment_stage_mask != 0)
+        {
+            let Some(vertex_requirement) = required_uniforms.get_mut(&binding) else {
+                return Err(invalid(format!(
+                    "fragment resource group {} binding {} is absent from the vertex-authoritative target-16 map",
+                    binding.0, binding.1
+                )));
+            };
+            if vertex_requirement.stage_mask & fragment_stage_mask == 0 {
+                return Err(invalid(format!(
+                    "fragment resource group {} binding {} is not fragment-visible in the vertex-authoritative target-16 map",
+                    binding.0, binding.1
+                )));
+            }
+            vertex_requirement.required_size = vertex_requirement
+                .required_size
+                .max(fragment_requirement.required_size);
         }
-        // Target 16 carries no uniform size. Keep its vertex-authored identity
-        // and visibility, but preflight enough bytes for either explicit WGSL.
-        vertex_requirement.required_size = vertex_requirement
-            .required_size
-            .max(fragment_requirement.required_size);
     }
     let planned_uniforms = plan
         .uniform_buffers
@@ -1442,10 +1498,25 @@ impl WgpuFactory {
                 })
                 .collect::<Result<Vec<_>, RendererError>>()
                 .map_err(|error| GpuCanvasError::new(error.to_string()))?;
-            let color_target =
-                plan.pipeline_state.color_targets.first().ok_or_else(|| {
-                    GpuCanvasError::new("GPU-canvas pipeline has no color target")
-                })?;
+            let color_targets = plan
+                .pipeline_state
+                .color_targets
+                .iter()
+                .map(|target| {
+                    Ok(Some(wgpu::ColorTargetState {
+                        format: texture_format(&target.format)
+                            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                        blend: target
+                            .blend
+                            .as_ref()
+                            .map(blend_state)
+                            .transpose()
+                            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                        write_mask: color_writes(&target.write_mask)
+                            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                    }))
+                })
+                .collect::<Result<Vec<_>, GpuCanvasError>>()?;
             let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("nuxie-imported-gpu-canvas-pipeline"),
                 layout: Some(&pipeline_layout),
@@ -1468,22 +1539,13 @@ impl WgpuFactory {
                     count: plan.pipeline_state.sample_count,
                     ..Default::default()
                 },
-                fragment: Some(wgpu::FragmentState {
-                    module: &fragment_shader.module,
-                    entry_point: Some(&prepared.fragment_entry_point),
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: texture_format(&color_target.format)
-                            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
-                        blend: color_target
-                            .blend
-                            .as_ref()
-                            .map(blend_state)
-                            .transpose()
-                            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
-                        write_mask: color_writes(&color_target.write_mask)
-                            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
-                    })],
+                fragment: prepared.fragment_entry_point.as_deref().map(|entry_point| {
+                    wgpu::FragmentState {
+                        module: &fragment_shader.module,
+                        entry_point: Some(entry_point),
+                        compilation_options: wgpu::PipelineCompilationOptions::default(),
+                        targets: &color_targets,
+                    }
                 }),
                 multiview_mask: None,
                 cache: None,
@@ -1727,6 +1789,119 @@ impl WgpuFactory {
             view_formats: &[],
         });
         let view = target.create_view(&wgpu::TextureViewDescriptor::default());
+        let attachment_bindings = plan
+            .render_passes
+            .iter()
+            .flat_map(|pass| {
+                pass.color_attachments
+                    .iter()
+                    .flat_map(|attachment| {
+                        std::iter::once(&attachment.view).chain(attachment.resolve_target.iter())
+                    })
+                    .chain(
+                        pass.depth_stencil_attachment
+                            .iter()
+                            .map(|attachment| &attachment.view),
+                    )
+            })
+            .filter_map(|view| match view {
+                GpuCanvasAttachmentView::Canvas => None,
+                GpuCanvasAttachmentView::Texture(texture) => Some(texture),
+            })
+            .collect::<Vec<_>>();
+        let mut attachment_resource_specs = BTreeMap::<u64, &GpuCanvasTextureBinding>::new();
+        for texture in &attachment_bindings {
+            if let Some(existing) = attachment_resource_specs.get(&texture.resource_id) {
+                if !same_texture_resource(existing, texture) {
+                    return Err(GpuCanvasError::new(format!(
+                        "GPU texture resource {} has inconsistent attachment descriptors",
+                        texture.resource_id
+                    )));
+                }
+            }
+            attachment_resource_specs.insert(texture.resource_id, texture);
+        }
+        let mut attachment_resource_indices = BTreeMap::new();
+        let mut attachment_textures = Vec::new();
+        for (&resource_id, texture) in &attachment_resource_specs {
+            let mut usage = wgpu::TextureUsages::RENDER_ATTACHMENT;
+            if texture.sample_count == 1 {
+                usage |= wgpu::TextureUsages::COPY_DST;
+            }
+            let gpu_texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("nuxie-imported-gpu-canvas-attachment-texture"),
+                size: wgpu::Extent3d {
+                    width: texture.width,
+                    height: texture.height,
+                    depth_or_array_layers: texture.depth_or_array_layers,
+                },
+                mip_level_count: texture.mip_level_count,
+                sample_count: texture.sample_count,
+                dimension: texture_dimension(&texture.texture_type)
+                    .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                format: texture_format(&texture.format)
+                    .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                usage,
+                view_formats: &[],
+            });
+            for upload in &texture.uploads {
+                queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &gpu_texture,
+                        mip_level: upload.mip_level,
+                        origin: wgpu::Origin3d {
+                            x: upload.x,
+                            y: upload.y,
+                            z: if texture.texture_type == "3d" {
+                                upload.z
+                            } else {
+                                upload.array_layer
+                            },
+                        },
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    &upload.bytes,
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(upload.bytes_per_row),
+                        rows_per_image: Some(upload.rows_per_image),
+                    },
+                    wgpu::Extent3d {
+                        width: upload.width,
+                        height: upload.height,
+                        depth_or_array_layers: upload.depth,
+                    },
+                );
+            }
+            attachment_resource_indices.insert(resource_id, attachment_textures.len());
+            attachment_textures.push(gpu_texture);
+        }
+        let mut attachment_view_indices = BTreeMap::new();
+        let mut attachment_views = Vec::new();
+        for texture in attachment_bindings {
+            let key = ImportedAttachmentViewKey::new(texture);
+            if attachment_view_indices.contains_key(&key) {
+                continue;
+            }
+            let texture_index = attachment_resource_indices[&texture.resource_id];
+            let gpu_view =
+                attachment_textures[texture_index].create_view(&wgpu::TextureViewDescriptor {
+                    label: Some("nuxie-imported-gpu-canvas-attachment-view"),
+                    format: None,
+                    dimension: Some(
+                        texture_view_dimension(&texture.view_dimension)
+                            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                    ),
+                    usage: Some(wgpu::TextureUsages::RENDER_ATTACHMENT),
+                    aspect: wgpu::TextureAspect::All,
+                    base_mip_level: texture.base_mip_level,
+                    mip_level_count: Some(texture.mip_level_count_in_view),
+                    base_array_layer: texture.base_array_layer,
+                    array_layer_count: Some(texture.array_layer_count),
+                });
+            attachment_view_indices.insert(key, attachment_views.len());
+            attachment_views.push(gpu_view);
+        }
         let multisample_target = (plan.pipeline_state.sample_count > 1).then(|| {
             device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("nuxie-imported-gpu-canvas-multisample-target"),
@@ -1793,7 +1968,7 @@ impl WgpuFactory {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("nuxie-imported-gpu-canvas-encoder"),
         });
-        {
+        if plan.render_passes.is_empty() {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("nuxie-imported-gpu-canvas-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1815,49 +1990,79 @@ impl WgpuFactory {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&cached.pipeline);
-            for (index, bind_group) in cached.bind_groups.iter().enumerate() {
-                pass.set_bind_group(index as u32, bind_group, &[]);
-            }
-            for (buffer, gpu_buffer) in plan.vertex_buffers.iter().zip(&cached.vertex_buffers) {
-                pass.set_vertex_buffer(buffer.slot, gpu_buffer.slice(..));
-            }
-            if let Some(viewport) = plan.pass_state.viewport {
-                pass.set_viewport(viewport[0], viewport[1], viewport[2], viewport[3], 0.0, 1.0);
-            }
-            if let Some(scissor) = plan.pass_state.scissor_rect {
-                pass.set_scissor_rect(scissor[0], scissor[1], scissor[2], scissor[3]);
-            }
-            pass.set_stencil_reference(plan.pass_state.stencil_reference);
-            pass.set_blend_constant(wgpu::Color {
-                r: plan.pass_state.blend_color[0],
-                g: plan.pass_state.blend_color[1],
-                b: plan.pass_state.blend_color[2],
-                a: plan.pass_state.blend_color[3],
-            });
-            if let Some(draw) = &plan.indexed_draw {
-                let index_buffer = cached.index_buffer.as_ref().ok_or_else(|| {
-                    GpuCanvasError::new("indexed GPU-canvas draw has no wgpu index buffer")
-                })?;
-                let format = index_format(
-                    &plan
-                        .index_buffer
-                        .as_ref()
-                        .ok_or_else(|| GpuCanvasError::new("indexed draw has no index buffer"))?
-                        .format,
-                )
-                .map_err(|error| GpuCanvasError::new(error.to_string()))?;
-                pass.set_index_buffer(index_buffer.slice(..), format);
-                pass.draw_indexed(
-                    draw.first_index..draw.first_index.saturating_add(draw.index_count),
-                    draw.base_vertex,
-                    draw.first_instance..draw.first_instance.saturating_add(draw.instance_count),
-                );
-            } else {
-                pass.draw(
-                    plan.first_vertex..plan.first_vertex.saturating_add(plan.vertex_count),
-                    plan.first_instance..plan.first_instance.saturating_add(plan.instance_count),
-                );
+            let draw = GpuCanvasDrawCommand {
+                vertex_count: plan.vertex_count,
+                instance_count: plan.instance_count,
+                first_vertex: plan.first_vertex,
+                first_instance: plan.first_instance,
+                indexed_draw: plan.indexed_draw.clone(),
+                pass_state: plan.pass_state.clone(),
+            };
+            encode_imported_draws(&mut pass, cached, plan, std::slice::from_ref(&draw))?;
+        } else {
+            for authored_pass in &plan.render_passes {
+                let color_attachments = authored_pass
+                    .color_attachments
+                    .iter()
+                    .map(|attachment| {
+                        Ok(Some(wgpu::RenderPassColorAttachment {
+                            view: resolve_attachment_view(
+                                &attachment.view,
+                                &view,
+                                &attachment_view_indices,
+                                &attachment_views,
+                            )?,
+                            resolve_target: attachment
+                                .resolve_target
+                                .as_ref()
+                                .map(|target| {
+                                    resolve_attachment_view(
+                                        target,
+                                        &view,
+                                        &attachment_view_indices,
+                                        &attachment_views,
+                                    )
+                                })
+                                .transpose()?,
+                            depth_slice: None,
+                            ops: wgpu::Operations {
+                                load: color_load_op(&attachment.load_op, attachment.clear_color)?,
+                                store: store_op(&attachment.store_op)?,
+                            },
+                        }))
+                    })
+                    .collect::<Result<Vec<_>, GpuCanvasError>>()?;
+                let depth_stencil_attachment = authored_pass
+                    .depth_stencil_attachment
+                    .as_ref()
+                    .map(|attachment| {
+                        Ok(wgpu::RenderPassDepthStencilAttachment {
+                            view: resolve_attachment_view(
+                                &attachment.view,
+                                &view,
+                                &attachment_view_indices,
+                                &attachment_views,
+                            )?,
+                            depth_ops: Some(wgpu::Operations {
+                                load: depth_load_op(
+                                    &attachment.depth_load_op,
+                                    attachment.depth_clear_value,
+                                )?,
+                                store: store_op(&attachment.depth_store_op)?,
+                            }),
+                            stencil_ops: None,
+                        })
+                    })
+                    .transpose()?;
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("nuxie-imported-gpu-canvas-authored-pass"),
+                    color_attachments: &color_attachments,
+                    depth_stencil_attachment,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                encode_imported_draws(&mut pass, cached, plan, &authored_pass.draws)?;
             }
         }
         queue.submit(Some(encoder.finish()));
@@ -2198,8 +2403,315 @@ fn validate_gpu_canvas_plan(plan: &GpuCanvasRenderPlan) -> Result<(), RendererEr
     validate_gpu_canvas_plan_ref(plan.into())
 }
 
+fn resolve_attachment_view<'a>(
+    attachment: &GpuCanvasAttachmentView,
+    canvas_view: &'a wgpu::TextureView,
+    indices: &BTreeMap<ImportedAttachmentViewKey, usize>,
+    views: &'a [wgpu::TextureView],
+) -> Result<&'a wgpu::TextureView, GpuCanvasError> {
+    match attachment {
+        GpuCanvasAttachmentView::Canvas => Ok(canvas_view),
+        GpuCanvasAttachmentView::Texture(texture) => {
+            let key = ImportedAttachmentViewKey::new(texture);
+            indices
+                .get(&key)
+                .and_then(|index| views.get(*index))
+                .ok_or_else(|| GpuCanvasError::new("GPU attachment view disappeared"))
+        }
+    }
+}
+
+fn color_load_op(
+    value: &str,
+    clear: [f64; 4],
+) -> Result<wgpu::LoadOp<wgpu::Color>, GpuCanvasError> {
+    match value {
+        "load" => Ok(wgpu::LoadOp::Load),
+        "clear" => Ok(wgpu::LoadOp::Clear(wgpu::Color {
+            r: clear[0],
+            g: clear[1],
+            b: clear[2],
+            a: clear[3],
+        })),
+        value => Err(GpuCanvasError::new(format!(
+            "invalid GPU color load operation '{value}'"
+        ))),
+    }
+}
+
+fn depth_load_op(value: &str, clear: f32) -> Result<wgpu::LoadOp<f32>, GpuCanvasError> {
+    match value {
+        "load" => Ok(wgpu::LoadOp::Load),
+        "clear" => Ok(wgpu::LoadOp::Clear(clear)),
+        value => Err(GpuCanvasError::new(format!(
+            "invalid GPU depth load operation '{value}'"
+        ))),
+    }
+}
+
+fn store_op(value: &str) -> Result<wgpu::StoreOp, GpuCanvasError> {
+    match value {
+        "store" => Ok(wgpu::StoreOp::Store),
+        "discard" => Ok(wgpu::StoreOp::Discard),
+        value => Err(GpuCanvasError::new(format!(
+            "invalid GPU store operation '{value}'"
+        ))),
+    }
+}
+
+fn encode_imported_draws<'a>(
+    pass: &mut wgpu::RenderPass<'a>,
+    cached: &'a ImportedWgpuGpuCanvasPipeline,
+    plan: &'a GpuCanvasPlan,
+    draws: &[GpuCanvasDrawCommand],
+) -> Result<(), GpuCanvasError> {
+    pass.set_pipeline(&cached.pipeline);
+    for (index, bind_group) in cached.bind_groups.iter().enumerate() {
+        pass.set_bind_group(index as u32, bind_group, &[]);
+    }
+    for (buffer, gpu_buffer) in plan.vertex_buffers.iter().zip(&cached.vertex_buffers) {
+        pass.set_vertex_buffer(buffer.slot, gpu_buffer.slice(..));
+    }
+    for draw in draws {
+        if let Some(viewport) = draw.pass_state.viewport {
+            pass.set_viewport(viewport[0], viewport[1], viewport[2], viewport[3], 0.0, 1.0);
+        }
+        if let Some(scissor) = draw.pass_state.scissor_rect {
+            pass.set_scissor_rect(scissor[0], scissor[1], scissor[2], scissor[3]);
+        }
+        pass.set_stencil_reference(draw.pass_state.stencil_reference);
+        pass.set_blend_constant(wgpu::Color {
+            r: draw.pass_state.blend_color[0],
+            g: draw.pass_state.blend_color[1],
+            b: draw.pass_state.blend_color[2],
+            a: draw.pass_state.blend_color[3],
+        });
+        if let Some(indexed) = &draw.indexed_draw {
+            let index_buffer = cached.index_buffer.as_ref().ok_or_else(|| {
+                GpuCanvasError::new("indexed GPU-canvas draw has no wgpu index buffer")
+            })?;
+            let format = index_format(
+                &plan
+                    .index_buffer
+                    .as_ref()
+                    .ok_or_else(|| GpuCanvasError::new("indexed draw has no index buffer"))?
+                    .format,
+            )
+            .map_err(|error| GpuCanvasError::new(error.to_string()))?;
+            pass.set_index_buffer(index_buffer.slice(..), format);
+            pass.draw_indexed(
+                indexed.first_index..indexed.first_index.saturating_add(indexed.index_count),
+                indexed.base_vertex,
+                indexed.first_instance
+                    ..indexed
+                        .first_instance
+                        .saturating_add(indexed.instance_count),
+            );
+        } else {
+            pass.draw(
+                draw.first_vertex..draw.first_vertex.saturating_add(draw.vertex_count),
+                draw.first_instance..draw.first_instance.saturating_add(draw.instance_count),
+            );
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn validate_imported_gpu_canvas_plan(plan: &GpuCanvasPlan) -> Result<(), RendererError> {
-    validate_gpu_canvas_plan_ref(plan.into())
+    validate_gpu_canvas_plan_ref(plan.into())?;
+    let invalid = |message: String| RendererError::InvalidGpuCanvas(message);
+    if plan.pipeline_state.color_targets.len() > 4 {
+        return Err(invalid(
+            "pipelines support at most four color targets".into(),
+        ));
+    }
+    for authored_pass in &plan.render_passes {
+        if authored_pass.color_attachments.is_empty()
+            && authored_pass.depth_stencil_attachment.is_none()
+        {
+            return Err(invalid(
+                "render pass must contain a color or depth attachment".into(),
+            ));
+        }
+        if authored_pass.color_attachments.len() != plan.pipeline_state.color_targets.len() {
+            return Err(invalid(format!(
+                "render pass has {} color attachments for {} pipeline targets",
+                authored_pass.color_attachments.len(),
+                plan.pipeline_state.color_targets.len()
+            )));
+        }
+        let mut pass_extent = None;
+        for (attachment, target) in authored_pass
+            .color_attachments
+            .iter()
+            .zip(&plan.pipeline_state.color_targets)
+        {
+            validate_attachment_view(&attachment.view, &target.format)?;
+            require_attachment_extent(&mut pass_extent, &attachment.view, plan)?;
+            if let Some(resolve_target) = &attachment.resolve_target {
+                validate_attachment_view(resolve_target, &target.format)?;
+                require_attachment_extent(&mut pass_extent, resolve_target, plan)?;
+                if attachment_sample_count(resolve_target) != 1
+                    || attachment_sample_count(&attachment.view) == 1
+                {
+                    return Err(invalid(
+                        "resolve target requires a multisampled source and single-sampled destination"
+                            .into(),
+                    ));
+                }
+            }
+            color_load_op(&attachment.load_op, attachment.clear_color)
+                .map_err(|error| invalid(error.to_string()))?;
+            store_op(&attachment.store_op).map_err(|error| invalid(error.to_string()))?;
+        }
+        match (
+            &authored_pass.depth_stencil_attachment,
+            &plan.pipeline_state.depth_stencil,
+        ) {
+            (Some(attachment), Some(depth)) => {
+                validate_attachment_view(&attachment.view, &depth.format)?;
+                require_attachment_extent(&mut pass_extent, &attachment.view, plan)?;
+                depth_load_op(&attachment.depth_load_op, attachment.depth_clear_value)
+                    .map_err(|error| invalid(error.to_string()))?;
+                store_op(&attachment.depth_store_op).map_err(|error| invalid(error.to_string()))?;
+            }
+            (None, None) => {}
+            _ => {
+                return Err(invalid(
+                    "pipeline and render pass depth attachments do not match".into(),
+                ));
+            }
+        }
+        let pass_sample_count = authored_pass
+            .color_attachments
+            .first()
+            .map(|attachment| attachment_sample_count(&attachment.view))
+            .or_else(|| {
+                authored_pass
+                    .depth_stencil_attachment
+                    .as_ref()
+                    .map(|attachment| attachment_sample_count(&attachment.view))
+            })
+            .unwrap_or(1);
+        if pass_sample_count != plan.pipeline_state.sample_count {
+            return Err(invalid(format!(
+                "render pass sampleCount {pass_sample_count} does not match pipeline sampleCount {}",
+                plan.pipeline_state.sample_count
+            )));
+        }
+        for draw in &authored_pass.draws {
+            validate_draw_command(draw, plan.index_buffer.as_ref())?;
+        }
+    }
+    Ok(())
+}
+
+fn attachment_sample_count(view: &GpuCanvasAttachmentView) -> u32 {
+    match view {
+        GpuCanvasAttachmentView::Canvas => 1,
+        GpuCanvasAttachmentView::Texture(texture) => texture.sample_count,
+    }
+}
+
+fn validate_attachment_view(
+    view: &GpuCanvasAttachmentView,
+    expected_format: &str,
+) -> Result<(), RendererError> {
+    let invalid = |message: String| RendererError::InvalidGpuCanvas(message);
+    match view {
+        GpuCanvasAttachmentView::Canvas if expected_format != "rgba8unorm" => Err(invalid(
+            format!("canvas attachment format rgba8unorm does not match {expected_format}"),
+        )),
+        GpuCanvasAttachmentView::Canvas => Ok(()),
+        GpuCanvasAttachmentView::Texture(texture) => {
+            if texture.resource_id == 0
+                || !texture.render_target
+                || texture.format != expected_format
+            {
+                return Err(invalid(
+                    "external attachment identity, dimensions, usage, or format is invalid".into(),
+                ));
+            }
+            Ok(())
+        }
+    }
+}
+
+fn require_attachment_extent(
+    pass_extent: &mut Option<(u32, u32)>,
+    view: &GpuCanvasAttachmentView,
+    plan: &GpuCanvasPlan,
+) -> Result<(), RendererError> {
+    let extent = match view {
+        GpuCanvasAttachmentView::Canvas => (plan.width, plan.height),
+        GpuCanvasAttachmentView::Texture(texture) => (
+            texture
+                .width
+                .checked_shr(texture.base_mip_level)
+                .unwrap_or(0)
+                .max(1),
+            texture
+                .height
+                .checked_shr(texture.base_mip_level)
+                .unwrap_or(0)
+                .max(1),
+        ),
+    };
+    match *pass_extent {
+        Some(expected) if expected != extent => Err(RendererError::InvalidGpuCanvas(format!(
+            "render-pass attachment extent {}x{} does not match {}x{}",
+            extent.0, extent.1, expected.0, expected.1
+        ))),
+        Some(_) => Ok(()),
+        None => {
+            *pass_extent = Some(extent);
+            Ok(())
+        }
+    }
+}
+
+fn validate_draw_command(
+    draw: &GpuCanvasDrawCommand,
+    index_buffer: Option<&GpuCanvasIndexBuffer>,
+) -> Result<(), RendererError> {
+    let invalid = |message: String| RendererError::InvalidGpuCanvas(message);
+    let (count, instance_count, first) = if let Some(indexed) = &draw.indexed_draw {
+        let buffer =
+            index_buffer.ok_or_else(|| invalid("indexed draw requires an index buffer".into()))?;
+        let index_size = match buffer.format.as_str() {
+            "uint16" => 2_u64,
+            "uint32" => 4_u64,
+            value => return Err(invalid(format!("invalid index format '{value}'"))),
+        };
+        let required = u64::from(indexed.first_index)
+            .checked_add(u64::from(indexed.index_count))
+            .and_then(|count| count.checked_mul(index_size))
+            .ok_or_else(|| invalid("index buffer byte range overflow".into()))?;
+        if required > buffer.bytes.len() as u64 {
+            return Err(invalid("indexed draw exceeds its index buffer".into()));
+        }
+        (
+            indexed.index_count,
+            indexed.instance_count,
+            indexed.first_index,
+        )
+    } else {
+        (draw.vertex_count, draw.instance_count, draw.first_vertex)
+    };
+    if count == 0 || instance_count == 0 {
+        return Err(invalid("draw counts must be positive".into()));
+    }
+    let invocations = u64::from(count)
+        .checked_mul(u64::from(instance_count))
+        .ok_or_else(|| invalid("draw invocation count overflow".into()))?;
+    if invocations > MAX_DRAW_INVOCATIONS
+        || u64::from(first.saturating_add(count)) > MAX_DRAW_INVOCATIONS
+    {
+        return Err(invalid(format!(
+            "draw ranges may cover at most {MAX_DRAW_INVOCATIONS} invocations"
+        )));
+    }
+    Ok(())
 }
 
 fn validate_gpu_canvas_plan_ref(plan: GpuCanvasPlanRef<'_>) -> Result<(), RendererError> {
@@ -2951,6 +3463,68 @@ fn fs_main() -> @location(0) vec4<f32> {
             sampler_bindings: Vec::new(),
             pipeline_state: nuxie_render_api::GpuCanvasPipelineState::default(),
             pass_state: nuxie_render_api::GpuCanvasPassState::default(),
+            render_passes: Vec::new(),
+        }
+    }
+
+    fn attachment_texture(
+        resource_id: u64,
+        format: &str,
+        sample_count: u32,
+    ) -> GpuCanvasTextureBinding {
+        GpuCanvasTextureBinding {
+            resource_id,
+            group: 0,
+            binding: 0,
+            width: 8,
+            height: 8,
+            depth_or_array_layers: 1,
+            format: format.into(),
+            texture_type: "2d".into(),
+            render_target: true,
+            sample_count,
+            mip_level_count: 1,
+            view_dimension: "2d".into(),
+            base_mip_level: 0,
+            mip_level_count_in_view: 1,
+            base_array_layer: 0,
+            array_layer_count: 1,
+            uploads: Vec::new(),
+        }
+    }
+
+    fn draw_command(viewport: Option<[f32; 4]>) -> GpuCanvasDrawCommand {
+        GpuCanvasDrawCommand {
+            vertex_count: 3,
+            instance_count: 1,
+            first_vertex: 0,
+            first_instance: 0,
+            indexed_draw: None,
+            pass_state: GpuCanvasPassState {
+                viewport,
+                ..GpuCanvasPassState::default()
+            },
+        }
+    }
+
+    fn depth_state() -> GpuCanvasDepthStencilState {
+        let face = GpuCanvasStencilFace {
+            compare: "always".into(),
+            fail_op: "keep".into(),
+            depth_fail_op: "keep".into(),
+            pass_op: "keep".into(),
+        };
+        GpuCanvasDepthStencilState {
+            format: "depth32float".into(),
+            depth_compare: "less-equal".into(),
+            depth_write_enabled: true,
+            depth_bias: 0,
+            depth_bias_slope_scale: 0.0,
+            depth_bias_clamp: 0.0,
+            stencil_front: face.clone(),
+            stencil_back: face,
+            stencil_read_mask: u32::MAX,
+            stencil_write_mask: u32::MAX,
         }
     }
 
@@ -2959,6 +3533,223 @@ fn fs_main() -> @location(0) vec4<f32> {
         plan: &GpuCanvasPlan,
     ) -> Result<PreparedImportedGpuCanvas, GpuCanvasError> {
         prepare_test_gpu_canvas_stages(shader, shader, plan)
+    }
+
+    #[test]
+    fn imported_preflight_accepts_four_arbitrary_targets_and_depth_only() {
+        let four_output_source = r#"
+struct FragmentOutput {
+    @location(0) first: vec4<f32>,
+    @location(1) second: vec4<f32>,
+    @location(2) third: vec4<f32>,
+    @location(3) fourth: vec4<f32>,
+}
+
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    return vec4<f32>(f32(i32(index) - 1), f32(i32(index & 1u) * 2 - 1), 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> FragmentOutput {
+    return FragmentOutput(
+        vec4<f32>(1.0, 0.0, 0.0, 1.0),
+        vec4<f32>(0.0, 1.0, 0.0, 1.0),
+        vec4<f32>(0.0, 0.0, 1.0, 1.0),
+        vec4<f32>(1.0, 1.0, 1.0, 1.0),
+    );
+}
+"#;
+        let shader = imported_shader(four_output_source);
+        let mut plan = imported_plan();
+        plan.pipeline_state.color_targets = ["r8unorm", "rg8unorm", "rgba8unorm", "rgba16float"]
+            .into_iter()
+            .map(|format| GpuCanvasColorTarget {
+                format: format.into(),
+                write_mask: "rgba".into(),
+                blend: None,
+            })
+            .collect();
+        plan.render_passes = vec![GpuCanvasRenderPass {
+            color_attachments: plan
+                .pipeline_state
+                .color_targets
+                .iter()
+                .enumerate()
+                .map(|(index, target)| GpuCanvasColorAttachment {
+                    view: GpuCanvasAttachmentView::Texture(attachment_texture(
+                        index as u64 + 1,
+                        &target.format,
+                        1,
+                    )),
+                    resolve_target: None,
+                    load_op: "clear".into(),
+                    store_op: "store".into(),
+                    clear_color: [0.0; 4],
+                })
+                .collect(),
+            depth_stencil_attachment: None,
+            draws: vec![draw_command(None)],
+        }];
+        let prepared = prepare_test_gpu_canvas(&shader, &plan)
+            .expect("four arbitrary color outputs pass exact preflight");
+        assert_eq!(prepared.fragment_entry_point.as_deref(), Some("fs_main"));
+
+        let depth_source = r#"
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    return vec4<f32>(f32(i32(index) - 1), f32(i32(index & 1u) * 2 - 1), 0.0, 1.0);
+}
+"#;
+        let depth_shader = GpuCanvasShader {
+            source: depth_source.into(),
+            entries: vec![GpuCanvasShaderEntry {
+                stage: GpuCanvasShaderStage::Vertex,
+                logical_entry_point: "vs_main".into(),
+                physical_entry_point: "vs_main".into(),
+            }],
+            bindings: Vec::new(),
+        };
+        let mut depth_plan = imported_plan();
+        depth_plan.pipeline_state.color_targets.clear();
+        depth_plan.pipeline_state.depth_stencil = Some(depth_state());
+        depth_plan.render_passes = vec![GpuCanvasRenderPass {
+            color_attachments: Vec::new(),
+            depth_stencil_attachment: Some(GpuCanvasDepthStencilAttachment {
+                view: GpuCanvasAttachmentView::Texture(attachment_texture(5, "depth32float", 1)),
+                depth_load_op: "clear".into(),
+                depth_store_op: "store".into(),
+                depth_clear_value: 0.75,
+            }),
+            draws: vec![draw_command(None)],
+        }];
+        let prepared = prepare_test_gpu_canvas(&depth_shader, &depth_plan)
+            .expect("a vertex-only module materializes a depth-only pipeline");
+        assert!(prepared.fragment_entry_point.is_none());
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn imported_wgpu_executes_external_resolves_and_repeated_draws_and_passes() {
+        let shader = imported_shader(
+            r#"
+struct FragmentOutput {
+    @location(0) first: vec4<f32>,
+    @location(1) second: vec4<f32>,
+}
+
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    return vec4<f32>(f32(i32(index) - 1), f32(i32(index & 1u) * 2 - 1), 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> FragmentOutput {
+    return FragmentOutput(vec4<f32>(1.0, 0.0, 0.0, 1.0), vec4<f32>(0.0, 1.0, 0.0, 1.0));
+}
+"#,
+        );
+        let mut plan = imported_plan();
+        plan.pipeline_state.color_targets = vec![
+            GpuCanvasColorTarget {
+                format: "rgba8unorm".into(),
+                write_mask: "rgba".into(),
+                blend: None,
+            },
+            GpuCanvasColorTarget {
+                format: "rgba16float".into(),
+                write_mask: "rgba".into(),
+                blend: None,
+            },
+        ];
+        plan.pipeline_state.sample_count = 4;
+        let attachments = vec![
+            GpuCanvasColorAttachment {
+                view: GpuCanvasAttachmentView::Texture(attachment_texture(10, "rgba8unorm", 4)),
+                resolve_target: Some(GpuCanvasAttachmentView::Canvas),
+                load_op: "clear".into(),
+                store_op: "discard".into(),
+                clear_color: [0.0, 0.0, 0.0, 1.0],
+            },
+            GpuCanvasColorAttachment {
+                view: GpuCanvasAttachmentView::Texture(attachment_texture(11, "rgba16float", 4)),
+                resolve_target: Some(GpuCanvasAttachmentView::Texture(attachment_texture(
+                    12,
+                    "rgba16float",
+                    1,
+                ))),
+                load_op: "clear".into(),
+                store_op: "discard".into(),
+                clear_color: [0.0, 0.0, 0.0, 1.0],
+            },
+        ];
+        plan.render_passes = vec![
+            GpuCanvasRenderPass {
+                color_attachments: attachments.clone(),
+                depth_stencil_attachment: None,
+                draws: vec![draw_command(None), draw_command(Some([0.0, 0.0, 4.0, 4.0]))],
+            },
+            GpuCanvasRenderPass {
+                color_attachments: attachments,
+                depth_stencil_attachment: None,
+                draws: vec![draw_command(None)],
+            },
+        ];
+
+        let Ok(mut factory) = WgpuFactory::new_with_mode(8, 8, crate::RenderMode::ClockwiseAtomic)
+        else {
+            eprintln!("GPU adapter unavailable; focused wgpu execution skipped");
+            return;
+        };
+        let shader_handle = factory
+            .make_imported_gpu_canvas_shader(&shader)
+            .expect("authored multi-output WGSL materializes");
+        factory
+            .make_imported_gpu_canvas_image(&shader_handle, &shader_handle, &plan)
+            .expect("wgpu accepts two resolves across repeated draws and passes");
+
+        let depth_shader = GpuCanvasShader {
+            source: r#"
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+    return vec4<f32>(f32(i32(index) - 1), f32(i32(index & 1u) * 2 - 1), 0.0, 1.0);
+}
+"#
+            .into(),
+            entries: vec![GpuCanvasShaderEntry {
+                stage: GpuCanvasShaderStage::Vertex,
+                logical_entry_point: "vs_main".into(),
+                physical_entry_point: "vs_main".into(),
+            }],
+            bindings: Vec::new(),
+        };
+        let mut depth_plan = imported_plan();
+        depth_plan.pipeline_state.color_targets.clear();
+        depth_plan.pipeline_state.depth_stencil = Some(depth_state());
+        depth_plan.render_passes = vec![GpuCanvasRenderPass {
+            color_attachments: Vec::new(),
+            depth_stencil_attachment: Some(GpuCanvasDepthStencilAttachment {
+                view: GpuCanvasAttachmentView::Texture(attachment_texture(
+                    20,
+                    "depth32float",
+                    1,
+                )),
+                depth_load_op: "clear".into(),
+                depth_store_op: "store".into(),
+                depth_clear_value: 1.0,
+            }),
+            draws: vec![draw_command(None)],
+        }];
+        let depth_shader_handle = factory
+            .make_imported_gpu_canvas_shader(&depth_shader)
+            .expect("vertex-only WGSL materializes");
+        factory
+            .make_imported_gpu_canvas_image(
+                &depth_shader_handle,
+                &depth_shader_handle,
+                &depth_plan,
+            )
+            .expect("wgpu accepts a zero-color depth-only pipeline");
     }
 
     fn prepare_test_gpu_canvas_stages(
@@ -3234,7 +4025,7 @@ fn fs_main() -> @location(0) vec4<f32> {
         let prepared = prepare_test_gpu_canvas(&shader, &plan)
             .expect("one authored module contains both physical entries");
         assert_eq!(prepared.vertex_entry_point, "vs_main");
-        assert_eq!(prepared.fragment_entry_point, "fs_main");
+        assert_eq!(prepared.fragment_entry_point.as_deref(), Some("fs_main"));
         assert_eq!(
             prepared.resource_requirements[&(0, 0)].visibility(),
             wgpu::ShaderStages::VERTEX_FRAGMENT,
@@ -3379,7 +4170,10 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
         let prepared = prepare_test_gpu_canvas(&shader, &plan)
             .expect("bare modules select the first declaration of each stage");
         assert_eq!(prepared.vertex_entry_point, "physical_vertex_0");
-        assert_eq!(prepared.fragment_entry_point, "physical_fragment_0");
+        assert_eq!(
+            prepared.fragment_entry_point.as_deref(),
+            Some("physical_fragment_0")
+        );
 
         plan.vertex_entry = Some(GpuCanvasShaderEntrySelection {
             logical_entry_point: "chosen_vertex".into(),
@@ -3392,7 +4186,10 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
         let prepared = prepare_test_gpu_canvas(&shader, &plan)
             .expect("the pipeline carries its resolved logical/physical pair");
         assert_eq!(prepared.vertex_entry_point, "physical_vertex_1");
-        assert_eq!(prepared.fragment_entry_point, "physical_fragment_1");
+        assert_eq!(
+            prepared.fragment_entry_point.as_deref(),
+            Some("physical_fragment_1")
+        );
 
         plan.fragment_entry.as_mut().unwrap().physical_entry_point = "physical_fragment_0".into();
         let error = prepare_test_gpu_canvas(&shader, &plan)
@@ -3565,6 +4362,7 @@ fn fs_main() -> @location(0) vec4<f32> {
             first_instance: 0,
         });
         plan.texture_bindings = vec![nuxie_render_api::GpuCanvasTextureBinding {
+            resource_id: 1,
             group: 0,
             binding: 0,
             width: 1,
@@ -3908,6 +4706,7 @@ fn fs_main() -> @location(0) vec4<f32> {
             sampler_bindings: Vec::new(),
             pipeline_state: nuxie_render_api::GpuCanvasPipelineState::default(),
             pass_state: nuxie_render_api::GpuCanvasPassState::default(),
+            render_passes: Vec::new(),
         };
 
         for mode in [crate::RenderMode::ClockwiseAtomic, crate::RenderMode::Msaa] {
@@ -4010,6 +4809,7 @@ fn fs_main() -> @location(0) vec4<f32> {
             sampler_bindings: Vec::new(),
             pipeline_state: nuxie_render_api::GpuCanvasPipelineState::default(),
             pass_state: nuxie_render_api::GpuCanvasPassState::default(),
+            render_passes: Vec::new(),
         };
         for mode in [crate::RenderMode::ClockwiseAtomic, crate::RenderMode::Msaa] {
             let Ok(mut factory) = WgpuFactory::new_with_mode(160, 100, mode) else {

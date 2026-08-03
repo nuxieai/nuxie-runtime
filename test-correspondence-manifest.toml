@@ -14,7 +14,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 81
+max_pending = 79
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"
@@ -926,17 +926,16 @@ note = "P3-c phase-1 ports the underlying tree/diff code. All 10 fixture cases r
 upstream = "tests/unit_tests/runtime/semantic_data_lifecycle_test.cpp"
 test_case_count = 9
 status = "partial"
-evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_data.rs"]
-covered_test_cases = ["mutating a property does not recreate the SemanticNode"]
-note = "Lazy retained node identity, authored propagation, and post-creation setter behavior have focused Rust evidence. Registered-owner destruction/removal and bounds retry through the shared Artboard lifecycle remain pending; fixture-visible removal also needs #LT-1 complete SemanticsDiff serialization."
+evidence = ["F6FID-report.md", "crates/nuxie-runtime/src/semantic_data.rs::tests"]
+covered_test_cases = ["hasSemanticNode flips once semanticNode() is called", "semanticNode() returns the same instance on repeated calls", "semanticNode() snapshots authored properties onto the node", "semanticNode() back-reference points at the owning SemanticData", "setter changes after first semanticNode() propagate to the node", "mutating a property does not recreate the SemanticNode", "destroying a registered SD removes its node from the manager", "destroying a registered SD emits a removed entry on the next diff"]
+note = "F6FID directly ports the eight non-side-channel lifecycle cases in semantic_data::tests, including Rust's owner-safe explicit retained-tree detach in place of a raw manager back-pointer during Drop. `SD property change authored by state machine appears in updatedSemantic` remains pending specifically on #LT-1 serialization of the fired action and complete follow-up SemanticsDiff from data_binding_lists.riv."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_dispatch_test.cpp"
 test_case_count = 16
-status = "partial"
-evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_data.rs", "crates/nuxie-runtime/src/semantic_manager.rs", "crates/nuxie-runtime/src/state_machine/semantic_listener_group.rs"]
-covered_test_cases = ["fireSemanticTap invokes onSemanticTap on all registered listeners", "fireSemanticIncrease only invokes onSemanticIncrease", "fireSemanticDecrease only invokes onSemanticDecrease", "manager.nodeById returns null for an unknown id", "boundary node has no owning SemanticData", "removing an SD from the manager drops its id from the index", "setFocusedState toggles the Focused bit and preserves siblings", "setFocusedState is a no-op before semanticNode() has been created", "requestFocus with an unknown id returns false", "requestFocus on a boundary node returns false"]
-note = "Duplicate-preserving listener dispatch, manager lookup/removal, boundary rejection, focus-bit preservation, and owner-mediated focus lookup have focused evidence. Production node-id action/focus routing remains pending on the shared StateMachineInstance resolver splice; #LT-1 must serialize requested action id/type and resulting focus/action outcome."
+status = "ported-direct"
+evidence = ["F6FID-report.md", "crates/nuxie-runtime/src/semantic_data.rs::tests", "crates/nuxie-runtime/src/semantic_manager.rs::tests", "crates/nuxie-runtime/src/state_machine/state_machine_instance.rs::semantic_callbacks_apply_constraints_preserve_duplicates_and_defer_actions"]
+note = "All 16 direct dispatch cases are ported: duplicate-preserving exact-action callbacks, registered/unregistered/empty removal paths, owner-local back-reference routing, manager lookup/removal, Focused-bit preservation, and all requestFocus rejection branches. Rust uses retained owner identity/local id instead of a raw SemanticData pointer."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_focus_list_test.cpp"
@@ -948,10 +947,9 @@ note = "Visual-order and manager-local id algorithms are ported. Both .riv asser
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_label_inference_test.cpp"
 test_case_count = 36
-status = "partial"
-evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_manager.rs"]
-covered_test_cases = ["button derives label from child text", "button with explicit label ignores children", "multiple text children concatenated in tree order", "button derives label from image when no text", "text takes priority over image in label derivation", "derived label trims and collapses whitespace", "absorbed children are not in the flat output", "standalone group does not absorb child labels", "textField does not derive label from children", "all interactive roles derive labels from children", "content change on absorbed child re-derives parent label", "children sorted by bounds position", "X position breaks ties for same Y", "bounds change that swaps visual order triggers reorder in diff", "bounds change without order change stays on incremental path", "empty bounds nodes preserve insertion order", "added array is emitted in tree pre-order on first frame", "nodes constructed without an id receive one on addChild", "two independent SemanticManagers do not share an id space", "explicit ids are preserved and bump the manager's watermark", "explicit id that collides with a different resident node is reassigned", "mixed content+bounds dirt on one node emits into both arrays", "no-op bounds dirty mark produces no updatedGeometry entry (guarded)", "dirty mark on an unknown id is silently ignored", "content change on an absorbed child escalates to re-derivation", "removed array is emitted in previous tree pre-order"]
-note = "Twenty focused manager cases cover derivation/absorption, pinned roles, UTF-8-preserving whitespace normalization, boundary flattening, visual reorder, manager-local ids, incremental diffs, no-op dirt, removal order, and owner-mediated focus. Remaining case-for-case ports stay pending; fixture-facing assertions require #LT-1 complete SemanticsDiff arrays and ordering."
+status = "ported-direct"
+evidence = ["F6FID-report.md", "crates/nuxie-runtime/src/semantic_manager.rs::tests"]
+note = "All 36 direct manager cases are ported with exact derivation/absorption, nested text and explicit-label precedence, role classification, visual and boundary ordering, manager-local id/collision behavior, every incremental diff array/no-op path, and previous-tree removal order."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_provider_test.cpp"
@@ -963,9 +961,10 @@ note = "Direct SemanticData precedence, Text inference, drawable/descendant/fall
 [[file]]
 upstream = "tests/unit_tests/runtime/semantic_state_machine_test.cpp"
 test_case_count = 15
-status = "pending"
-evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_manager.rs", "crates/nuxie-runtime/src/semantic_data.rs", "crates/nuxie-runtime/src/state_machine/semantic_listener_group.rs"]
-note = "Manager/data/listener owners are ported and existing semantic callback ordering tests pass. All 15 .riv state-machine cases remain pending on production manager installation/tree lifecycle and #LT-1 serialization of full SemanticsDiff, fired action id/type, queued listener outcome, selected/focused state, and no-op results."
+status = "partial"
+evidence = ["F6FID-report.md", "crates/nuxie-runtime/tests/semantic_focus_runtime.rs", "fixtures/semantic/semantic_list_scroll_focus_fixed.riv"]
+covered_test_cases = ["list_scroll_focus.riv: list items expose the Focusable trait", "list_scroll_focus.riv: requestFocus sets Focused only on the target item", "list_scroll_focus.riv: moving focus hands the Focused bit between items", "list_scroll_focus.riv: focusing the bottom slot scrolls the list (all items shift upward)"]
+note = "F6FID ports the four RB-2-dependent list-focus cases through the production retained semantic/focus trees, including owner-qualified repeated-artboard routing, Focused handoff, FocusData scrollIntoView, mounted root transforms, and five geometry updates. The other 11 fixture cases remain pending specifically on #LT-1 serialization of complete SemanticsDiff/action outcomes for the simpsons, tabtest, and data_binding_lists oracle runs."
 
 [[file]]
 upstream = "tests/unit_tests/runtime/serialized_rendering_test.cpp"

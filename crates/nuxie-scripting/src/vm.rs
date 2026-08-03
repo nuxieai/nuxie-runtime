@@ -55,6 +55,7 @@ use luaur_rt::{
     AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Value,
     Vector as LuaVector, VmState,
 };
+use luaur_vm::functions::lua_callbacks::lua_callbacks;
 use luaur_vm::functions::luau_load::luau_load;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
@@ -82,6 +83,404 @@ pub use resource_limits::ScriptResourceLimit;
 const MODULE_CACHE_KEY: &str = "rive_scripting_registered_modules";
 const SCRIPT_VM_MEMORY_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 const SCRIPT_SAFEPOINTS_PER_CYCLE: usize = 100_000;
+
+// Direct port of the compile-time atom table in
+// `src/lua/rive_lua_libs.cpp`. The numeric values are the corresponding
+// `LuaAtoms` discriminants from `rive_lua_libs.hpp`.
+const RIVE_LUA_ATOMS: &[(&[u8], i16)] = &[
+    (b"length", 0),
+    (b"lengthSquared", 1),
+    (b"normalized", 2),
+    (b"distance", 3),
+    (b"distanceSquared", 4),
+    (b"dot", 5),
+    (b"lerp", 6),
+    (b"moveTo", 7),
+    (b"lineTo", 8),
+    (b"quadTo", 9),
+    (b"cubicTo", 10),
+    (b"close", 11),
+    (b"type", 16),
+    (b"reset", 12),
+    (b"add", 13),
+    (b"contours", 14),
+    (b"measure", 15),
+    (b"invert", 18),
+    (b"isIdentity", 19),
+    (b"width", 20),
+    (b"height", 21),
+    (b"clamp", 22),
+    (b"repeat", 23),
+    (b"mirror", 24),
+    (b"bilinear", 25),
+    (b"nearest", 26),
+    (b"style", 27),
+    (b"join", 28),
+    (b"cap", 29),
+    (b"thickness", 30),
+    (b"blendMode", 31),
+    (b"feather", 32),
+    (b"gradient", 33),
+    (b"color", 34),
+    (b"stroke", 35),
+    (b"fill", 36),
+    (b"miter", 37),
+    (b"round", 38),
+    (b"bevel", 39),
+    (b"butt", 40),
+    (b"square", 41),
+    (b"srcOver", 42),
+    (b"screen", 43),
+    (b"overlay", 44),
+    (b"darken", 45),
+    (b"lighten", 46),
+    (b"colorDodge", 47),
+    (b"colorBurn", 48),
+    (b"hardLight", 49),
+    (b"softLight", 50),
+    (b"difference", 51),
+    (b"exclusion", 52),
+    (b"multiply", 53),
+    (b"hue", 54),
+    (b"saturation", 55),
+    (b"luminosity", 56),
+    (b"copy", 57),
+    (b"drawPath", 58),
+    (b"drawImage", 59),
+    (b"drawImageMesh", 60),
+    (b"clipPath", 61),
+    (b"save", 62),
+    (b"restore", 63),
+    (b"transform", 64),
+    (b"value", 65),
+    (b"red", 66),
+    (b"green", 67),
+    (b"blue", 68),
+    (b"alpha", 69),
+    (b"getNumber", 70),
+    (b"getTrigger", 71),
+    (b"getString", 72),
+    (b"getBoolean", 73),
+    (b"getColor", 74),
+    (b"getList", 75),
+    (b"getViewModel", 76),
+    (b"getEnum", 77),
+    (b"getIndex", 78),
+    (b"getImage", 79),
+    (b"getFont", 80),
+    (b"getBlob", 81),
+    (b"values", 82),
+    (b"addListener", 83),
+    (b"removeListener", 84),
+    (b"fire", 85),
+    (b"push", 86),
+    (b"insert", 87),
+    (b"pop", 89),
+    (b"swap", 90),
+    (b"shift", 88),
+    (b"clear", 91),
+    (b"draw", 92),
+    (b"advance", 93),
+    (b"frameOrigin", 94),
+    (b"data", 95),
+    (b"instance", 96),
+    (b"animation", 97),
+    (b"new", 98),
+    (b"bounds", 99),
+    (b"pointerDown", 100),
+    (b"pointerUp", 102),
+    (b"pointerMove", 101),
+    (b"pointerExit", 103),
+    (b"isNumber", 106),
+    (b"isString", 107),
+    (b"isBoolean", 108),
+    (b"isColor", 109),
+    (b"hit", 110),
+    (b"id", 111),
+    (b"position", 112),
+    (b"rotation", 113),
+    (b"scale", 114),
+    (b"worldTransform", 115),
+    (b"scaleX", 116),
+    (b"scaleY", 117),
+    (b"decompose", 118),
+    (b"children", 119),
+    (b"parent", 120),
+    (b"node", 121),
+    (b"paint", 122),
+    (b"asPath", 124),
+    (b"asPaint", 123),
+    (b"addToPath", 104),
+    (b"positionAndTangent", 125),
+    (b"warp", 126),
+    (b"extract", 127),
+    (b"next", 128),
+    (b"isClosed", 129),
+    (b"markNeedsUpdate", 130),
+    (b"viewModel", 131),
+    (b"rootViewModel", 132),
+    (b"dataContext", 136),
+    (b"image", 133),
+    (b"blob", 134),
+    (b"size", 135),
+    (b"name", 105),
+    (b"duration", 153),
+    (b"setTime", 154),
+    (b"setTimeFrames", 155),
+    (b"setTimePercentage", 156),
+    (b"isPointerEvent", 159),
+    (b"isKeyboardEvent", 160),
+    (b"isTextInput", 161),
+    (b"previousPosition", 157),
+    (b"timeStamp", 158),
+    (b"isFocus", 162),
+    (b"isReportedEvent", 163),
+    (b"isViewModelChange", 164),
+    (b"isNone", 165),
+    (b"isGamepadConnected", 166),
+    (b"isGamepadEvent", 167),
+    (b"isGamepadDisconnected", 168),
+    (b"asPointerEvent", 169),
+    (b"asKeyboardEvent", 170),
+    (b"asTextInput", 171),
+    (b"asFocus", 172),
+    (b"asReportedEvent", 173),
+    (b"asViewModelChange", 174),
+    (b"asGamepadConnected", 175),
+    (b"asGamepadEvent", 176),
+    (b"asGamepadDisconnected", 177),
+    (b"gamepadEvent", 178),
+    (b"gamepadConnected", 179),
+    (b"gamepadDisconnected", 180),
+    (b"asNone", 181),
+    (b"key", 182),
+    (b"shift", 88),
+    (b"alt", 183),
+    (b"control", 184),
+    (b"meta", 185),
+    (b"text", 186),
+    (b"phase", 187),
+    (b"delaySeconds", 188),
+    (b"deviceId", 189),
+    (b"buttonMask", 190),
+    (b"remove", 191),
+    (b"removeAt", 192),
+    (b"removeAllOf", 193),
+    (b"axes", 232),
+    (b"gamepadMapping", 233),
+    (b"mapping", 234),
+    (b"isStandardMapping", 235),
+    (b"buttons", 236),
+    (b"buttonPressed", 237),
+    (b"buttonValue", 238),
+    (b"axis", 239),
+    (b"west", 240),
+    (b"south", 241),
+    (b"north", 242),
+    (b"east", 243),
+    (b"leftShoulder", 244),
+    (b"rightShoulder", 245),
+    (b"back", 246),
+    (b"forward", 247),
+    (b"leftStickButton", 248),
+    (b"rightStickButton", 249),
+    (b"dpadUp", 250),
+    (b"dpadDown", 251),
+    (b"dpadLeft", 252),
+    (b"dpadRight", 253),
+    (b"start", 256),
+    (b"leftStick", 254),
+    (b"rightStick", 255),
+    (b"leftTrigger", 257),
+    (b"rightTrigger", 258),
+    (b"leftTriggerPressed", 259),
+    (b"rightTriggerPressed", 260),
+    (b"changeKind", 261),
+    (b"changeIndex", 262),
+    (b"changeValue", 263),
+    (b"hasStandardButtonIntent", 264),
+    (b"hasStandardAxisIntent", 265),
+    (b"intentButton", 266),
+    (b"intentAxis", 267),
+    (b"audio", 137),
+    (b"play", 138),
+    (b"playAtTime", 139),
+    (b"playInTime", 140),
+    (b"playAtFrame", 141),
+    (b"playInFrame", 142),
+    (b"stop", 143),
+    (b"pause", 144),
+    (b"resume", 145),
+    (b"seek", 146),
+    (b"seekFrame", 147),
+    (b"volume", 148),
+    (b"completed", 149),
+    (b"time", 150),
+    (b"timeFrame", 151),
+    (b"sampleRate", 152),
+    (b"write", 194),
+    (b"upload", 195),
+    (b"view", 196),
+    (b"setPipeline", 197),
+    (b"setVertexBuffer", 198),
+    (b"setIndexBuffer", 199),
+    (b"setBindGroup", 200),
+    (b"setViewport", 201),
+    (b"setScissorRect", 202),
+    (b"setStencilReference", 203),
+    (b"drawIndexed", 205),
+    (b"finish", 206),
+    (b"beginRenderPass", 207),
+    (b"beginFrame", 208),
+    (b"endFrame", 209),
+    (b"colorView", 210),
+    (b"depthView", 211),
+    (b"setBlendColor", 204),
+    (b"resize", 212),
+    (b"canvas", 213),
+    (b"gpuCanvas", 214),
+    (b"features", 216),
+    (b"drawCanvas", 215),
+    (b"shader", 217),
+    (b"format", 218),
+    (b"andThen", 219),
+    (b"catch", 220),
+    (b"finally", 221),
+    (b"cancel", 222),
+    (b"onCancel", 223),
+    (b"getStatus", 224),
+    (b"decodeImage", 225),
+    (b"transpose", 226),
+    (b"transformPoint", 227),
+    (b"transformVec4", 228),
+    (b"writeToBuffer", 229),
+    (b"invertAffine", 230),
+    (b"writeVec4", 231),
+];
+
+const RIVE_LUA_ATOM_SLOT_COUNT: usize = 1024;
+
+const fn hash_rive_lua_atom(name: &[u8]) -> u32 {
+    let mut hash = 2_166_136_261_u32;
+    let mut index = 0;
+    while index < name.len() {
+        hash = (hash ^ name[index] as u32).wrapping_mul(16_777_619);
+        index += 1;
+    }
+    hash
+}
+
+const fn rive_lua_atom_names_equal(left: &[u8], right: &[u8]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut index = 0;
+    while index < left.len() {
+        if left[index] != right[index] {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
+const fn longest_rive_lua_atom_name() -> usize {
+    let mut longest = 0;
+    let mut index = 0;
+    while index < RIVE_LUA_ATOMS.len() {
+        let length = RIVE_LUA_ATOMS[index].0.len();
+        if length > longest {
+            longest = length;
+        }
+        index += 1;
+    }
+    longest
+}
+
+const RIVE_LUA_MAX_ATOM_NAME_LENGTH: usize = longest_rive_lua_atom_name();
+
+const fn build_rive_lua_atom_slots() -> [u16; RIVE_LUA_ATOM_SLOT_COUNT] {
+    let mut slots = [0; RIVE_LUA_ATOM_SLOT_COUNT];
+    let mut index = 0;
+    while index < RIVE_LUA_ATOMS.len() {
+        let name = RIVE_LUA_ATOMS[index].0;
+        let mut slot = hash_rive_lua_atom(name) as usize & (RIVE_LUA_ATOM_SLOT_COUNT - 1);
+        while slots[slot] != 0
+            && !rive_lua_atom_names_equal(RIVE_LUA_ATOMS[slots[slot] as usize - 1].0, name)
+        {
+            slot = (slot + 1) & (RIVE_LUA_ATOM_SLOT_COUNT - 1);
+        }
+        if slots[slot] == 0 {
+            slots[slot] = index as u16 + 1;
+        }
+        index += 1;
+    }
+    slots
+}
+
+const RIVE_LUA_ATOM_SLOTS: [u16; RIVE_LUA_ATOM_SLOT_COUNT] = build_rive_lua_atom_slots();
+
+fn find_rive_lua_atom(name: &[u8]) -> i16 {
+    if name.len() > RIVE_LUA_MAX_ATOM_NAME_LENGTH {
+        return -1;
+    }
+    let mut slot = hash_rive_lua_atom(name) as usize & (RIVE_LUA_ATOM_SLOT_COUNT - 1);
+    loop {
+        let biased_index = RIVE_LUA_ATOM_SLOTS[slot];
+        if biased_index == 0 {
+            return -1;
+        }
+        let (candidate, atom) = RIVE_LUA_ATOMS[biased_index as usize - 1];
+        if candidate == name {
+            return atom;
+        }
+        slot = (slot + 1) & (RIVE_LUA_ATOM_SLOT_COUNT - 1);
+    }
+}
+
+unsafe extern "C" fn resolve_rive_lua_atom(
+    _state: *mut luaur_vm::records::lua_state::lua_State,
+    chars: *const core::ffi::c_char,
+    length: usize,
+) -> i16 {
+    if chars.is_null() {
+        return -1;
+    }
+    find_rive_lua_atom(unsafe { std::slice::from_raw_parts(chars.cast::<u8>(), length) })
+}
+
+/// Library version a script or module belongs to. `(0, 0)` is the host file.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ScopeKey {
+    pub library_id: u64,
+    pub library_version_id: u64,
+}
+
+impl ScopeKey {
+    pub const ROOT: Self = Self::new(0, 0);
+
+    const UNPINNED: Self = Self::new(u64::MAX, u64::MAX);
+
+    pub const fn new(library_id: u64, library_version_id: u64) -> Self {
+        Self {
+            library_id,
+            library_version_id,
+        }
+    }
+
+    pub const fn is_root(self) -> bool {
+        self.library_id == 0 && self.library_version_id == 0
+    }
+}
+
+#[derive(Debug, Default)]
+struct ScriptScopes {
+    /// One table per caller scope: import label -> pinned library version.
+    pins: BTreeMap<ScopeKey, BTreeMap<String, ScopeKey>>,
+    /// Readable chunkname -> scope. This also covers editor-style callers
+    /// without a retained module descriptor.
+    chunk_scopes: BTreeMap<String, ScopeKey>,
+}
 
 /// Default ceiling for one trusted imported File's Luau VM.
 pub const DEFAULT_SCRIPT_VM_MEMORY_BYTES: usize = 64 * 1024 * 1024;
@@ -796,6 +1195,11 @@ impl ScriptVm {
     /// Boot a VM with the Luau standard libraries open.
     pub fn new() -> Self {
         let lua = Lua::new();
+        // Install Rive's atom resolver before any Rive globals or imported
+        // bytecode can intern their method/property strings.
+        unsafe {
+            (*lua_callbacks(lua.current_thread().state())).useratom = Some(resolve_rive_lua_atom);
+        }
         let view_model_frame_context = ScriptViewModelFrameContext::default();
         lua.set_app_data(view_model_frame_context.clone());
         let blob_assets = lua_blob::ScriptedBlobAssets::install(&lua);
@@ -2313,6 +2717,9 @@ fn script_value_from_lua(value: Value) -> Result<ScriptValue> {
 mod context_init_tests {
     use super::*;
     use luaur_rt::UserData;
+    use luaur_vm::functions::lua_pushlstring::lua_pushlstring;
+    use luaur_vm::functions::lua_tostringatom::lua_tostringatom;
+    use luaur_vm::macros::lua_pop::lua_pop;
     use nuxie_render_api::{NullFactory, PersistentFactory};
     use nuxie_runtime::NoopScriptHost;
 
@@ -2320,6 +2727,39 @@ mod context_init_tests {
     struct TruthyUserData;
 
     impl UserData for TruthyUserData {}
+
+    #[test]
+    fn compile_time_atom_table_resolves_every_upstream_name_and_exact_id() {
+        assert!(RIVE_LUA_ATOMS.len() < RIVE_LUA_ATOM_SLOT_COUNT);
+        for &(name, atom) in RIVE_LUA_ATOMS {
+            assert_eq!(
+                find_rive_lua_atom(name),
+                atom,
+                "{}",
+                String::from_utf8_lossy(name)
+            );
+        }
+        assert_eq!(find_rive_lua_atom(b"unknownRiveAtom"), -1);
+        assert_eq!(find_rive_lua_atom(b"length\0suffix"), -1);
+        assert_eq!(
+            find_rive_lua_atom(&vec![b'x'; RIVE_LUA_MAX_ATOM_NAME_LENGTH + 1]),
+            -1
+        );
+    }
+
+    #[test]
+    fn script_vm_installs_the_compile_time_atom_resolver() {
+        let vm = ScriptVm::new();
+        let state = vm.lua.current_thread().state();
+        let name = b"invertAffine";
+        let mut atom = -1;
+        unsafe {
+            lua_pushlstring(state, name.as_ptr().cast(), name.len());
+            assert!(!lua_tostringatom(state, -1, &mut atom).is_null());
+            lua_pop(state, 1);
+        }
+        assert_eq!(atom, 230);
+    }
 
     #[test]
     fn converter_advance_uses_native_lua_truthiness_for_every_value_kind() {

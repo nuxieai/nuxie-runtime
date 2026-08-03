@@ -17,27 +17,27 @@ fn reference_runtime_dir() -> PathBuf {
 
 #[test]
 fn generated_schema_exposes_current_runtime_definition_set() {
-    assert_eq!(DEFINITIONS.len(), 342);
+    assert_eq!(DEFINITIONS.len(), 348);
 
     let runtime_property_count = DEFINITIONS
         .iter()
         .flat_map(|definition| definition.properties)
         .count();
-    assert_eq!(runtime_property_count, 596);
+    assert_eq!(runtime_property_count, 608);
 
     let animatable_property_count = DEFINITIONS
         .iter()
         .flat_map(|definition| definition.properties)
         .filter(|property| property.animates)
         .count();
-    assert_eq!(animatable_property_count, 218);
+    assert_eq!(animatable_property_count, 224);
 
     let grouped_property_count = DEFINITIONS
         .iter()
         .flat_map(|definition| definition.properties)
         .filter(|property| property.group.is_some())
         .count();
-    assert_eq!(grouped_property_count, 71);
+    assert_eq!(grouped_property_count, 73);
 
     let non_coop_property_count = DEFINITIONS
         .iter()
@@ -51,7 +51,7 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .flat_map(|definition| definition.properties)
         .filter(|property| property.description.is_some())
         .count();
-    assert_eq!(described_property_count, 446);
+    assert_eq!(described_property_count, 457);
 }
 
 #[test]
@@ -273,7 +273,7 @@ fn generated_schema_metadata_matches_cpp_defs_json() {
             );
             assert_eq!(
                 property.parentable,
-                json_u64(property_json, "parentable"),
+                json_i64(property_json, "parentable"),
                 "{label} parentable"
             );
             assert_eq!(
@@ -675,8 +675,8 @@ fn uint_storage_width_preserves_alias_semantics() {
         .expect("FileAsset.assetId exists");
     assert_eq!(asset_id.uint_storage(), Some(UintStorage::Uint32));
 
-    let compact_layout_field = definition_by_name("LayoutComponentStyle")
-        .expect("LayoutComponentStyle exists")
+    let compact_layout_field = definition_by_name("LayoutSizingStyle")
+        .expect("LayoutSizingStyle exists")
         .property_by_key(596)
         .expect("LayoutComponentStyle.displayValue exists");
     assert_eq!(compact_layout_field.declared_type, "uint8");
@@ -895,6 +895,10 @@ fn json_u64(json: &Value, key: &str) -> Option<u64> {
     json.get(key).and_then(Value::as_u64)
 }
 
+fn json_i64(json: &Value, key: &str) -> Option<i64> {
+    json.get(key).and_then(Value::as_i64)
+}
+
 fn json_key_fits_u16(json: &Value) -> bool {
     json_key_int(json).is_some()
 }
@@ -960,10 +964,10 @@ fn json_field_kind(json: &Value) -> FieldKind {
         Some("callback") => FieldKind::Callback,
         Some("Color") => FieldKind::Color,
         Some("double") => FieldKind::Double,
+        Some("int") | Some("int16") => FieldKind::Int,
         Some("String") => FieldKind::String,
-        Some("uint") | Some("uint8") | Some("uint64") | Some("Id") | Some("List<Id>") => {
-            FieldKind::Uint
-        }
+        Some("uint") | Some("uint8") | Some("uint16") | Some("uint64") | Some("Id")
+        | Some("List<Id>") => FieldKind::Uint,
         other => panic!("unsupported JSON runtime field kind {other:?}"),
     }
 }

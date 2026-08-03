@@ -9412,6 +9412,17 @@ fn compare_cpp_property_value_result(
                 return Err(format!("{label} mismatch: C++ {expected}, Rust {actual:?}"));
             }
         }
+        CppProbeFieldKind::Int => {
+            let expected = cpp_property
+                .value
+                .as_i64()
+                .and_then(|value| i32::try_from(value).ok())
+                .ok_or_else(|| format!("{label} C++ value is not int"))?;
+            let actual = rust_object.int_property(name);
+            if actual != Some(expected) {
+                return Err(format!("{label} mismatch: C++ {expected}, Rust {actual:?}"));
+            }
+        }
         CppProbeFieldKind::String => {
             let expected = cpp_property
                 .value
@@ -15722,6 +15733,7 @@ struct CppProbePropertyValue {
 #[serde(rename_all = "camelCase")]
 enum CppProbeFieldKind {
     Uint,
+    Int,
     String,
     Double,
     Color,
@@ -15732,6 +15744,7 @@ impl CppProbeFieldKind {
     fn from_field_kind(kind: FieldKind) -> Option<Self> {
         match kind {
             FieldKind::Uint => Some(Self::Uint),
+            FieldKind::Int => Some(Self::Int),
             FieldKind::String => Some(Self::String),
             FieldKind::Double => Some(Self::Double),
             FieldKind::Color => Some(Self::Color),

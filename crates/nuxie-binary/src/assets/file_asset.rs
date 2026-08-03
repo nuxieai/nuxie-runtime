@@ -129,8 +129,7 @@ pub(crate) fn normalize_file_asset_ids(
         // ManifestAsset opts out.
         let is_backboard_file_asset =
             definition_by_type_key(object.type_key).is_some_and(|definition| {
-                definition.is_a("FileAsset")
-                    && definition.name != "ManifestAsset"
+                definition.is_a("FileAsset") && definition.name != "ManifestAsset"
             });
         if !is_backboard_file_asset {
             continue;

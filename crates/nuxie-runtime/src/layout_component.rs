@@ -84,6 +84,11 @@ pub(crate) fn bool_property_changed(
     if !matches!(type_name, Some("LayoutComponent" | "NestedArtboardLayout")) {
         return None;
     }
-    (property_key_for_name("LayoutComponent", "clip") == Some(property_key))
-        .then(|| mark_layout_node_dirty(instance, local_id))
+    (property_key_for_name("LayoutComponent", "clip") == Some(property_key)).then(|| {
+        // Ported from caa91f21 `LayoutComponent::clipChanged`: enabling clip
+        // must also build the retained background path even when layout
+        // geometry itself did not change.
+        mark_layout_node_dirty(instance, local_id)
+            | instance.add_dirt(local_id, crate::components::ComponentDirt::PATH, false)
+    })
 }

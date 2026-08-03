@@ -1604,6 +1604,7 @@ impl RuntimeComponentComparandKind {
     fn from_property_key(property_key: u16) -> Option<Self> {
         match core_registry_field_kind_by_property_key(property_key)? {
             CoreRegistryFieldKind::Double => Some(Self::NumberDouble),
+            CoreRegistryFieldKind::Int => None,
             CoreRegistryFieldKind::Bool => Some(Self::Boolean),
             CoreRegistryFieldKind::StringOrBytes => Some(Self::String),
             CoreRegistryFieldKind::Color => Some(Self::Color),

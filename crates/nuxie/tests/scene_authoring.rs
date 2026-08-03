@@ -17,12 +17,12 @@ use nuxie::{
     RecordingFactory, RectangleCornerRadii, RectangleSpec, RenderBuffer, RenderBufferFlags,
     RenderBufferType, RenderImage, RenderPaint, RenderPath, RenderShader, ResolveError, Scene,
     SceneClippingFillRule, SceneEvent, SceneEventStringProperty, SceneFeatherSpace,
-    SceneLayoutAlign, SceneLayoutAlignment, SceneLayoutAnimationStyle,
-    SceneLayoutCubicInterpolator, SceneLayoutCubicInterpolatorField, SceneLayoutDirection,
-    SceneLayoutDisplay, SceneLayoutElasticEasing, SceneLayoutElasticInterpolator,
-    SceneLayoutElasticInterpolatorField, SceneLayoutFlexDirection, SceneLayoutInterpolation,
-    SceneLayoutInterpolator, SceneLayoutJustify, SceneLayoutOverflow, SceneLayoutPosition,
-    SceneLayoutScale, SceneLayoutScriptedInterpolator, SceneLayoutScriptedInterpolatorField,
+    SceneLayoutAlignment, SceneLayoutAnimationStyle, SceneLayoutCubicInterpolator,
+    SceneLayoutCubicInterpolatorField, SceneLayoutDirection, SceneLayoutDisplay,
+    SceneLayoutElasticEasing, SceneLayoutElasticInterpolator, SceneLayoutElasticInterpolatorField,
+    SceneLayoutFlexDirection, SceneLayoutInterpolation, SceneLayoutInterpolator,
+    SceneLayoutJustify, SceneLayoutOverflow, SceneLayoutPosition, SceneLayoutScale,
+    SceneLayoutScriptedInterpolator, SceneLayoutScriptedInterpolatorField, SceneLayoutType,
     SceneLayoutUnit, SceneLayoutWrap, SceneStrokeCap, SceneStrokeJoin, SceneTextAlign,
     SceneTextOverflow, SceneTextSizing, SceneTextWrap, SceneTx, ScriptAssetSpec,
     ScriptedDrawableSpec, ShaderAssetSpec, ShapeSpec, SolidColorSpec, StaleCursor, StrokeSpec,
@@ -266,9 +266,6 @@ fn ordinary_layout_component_authors_the_complete_typed_cpp_style_domain() -> Re
                     position_right: 20.0,
                     position_top: 21.0,
                     position_bottom: 22.0,
-                    flex: 23.0,
-                    flex_grow: 24.0,
-                    flex_shrink: 25.0,
                     flex_basis: 26.0,
                     aspect_ratio: 27.0,
                     animation_style: SceneLayoutAnimationStyle::Custom,
@@ -287,10 +284,6 @@ fn ordinary_layout_component_authors_the_complete_typed_cpp_style_domain() -> Re
                     position_type: SceneLayoutPosition::Absolute,
                     flex_direction: SceneLayoutFlexDirection::ColumnReverse,
                     direction: SceneLayoutDirection::LeftToRight,
-                    align_content: SceneLayoutAlign::Center,
-                    align_items: SceneLayoutAlign::Stretch,
-                    align_self: SceneLayoutAlign::FlexEnd,
-                    justify_content: SceneLayoutJustify::SpaceEvenly,
                     flex_wrap: SceneLayoutWrap::WrapReverse,
                     overflow: SceneLayoutOverflow::Scroll,
                     intrinsically_sized: true,
@@ -327,6 +320,9 @@ fn ordinary_layout_component_authors_the_complete_typed_cpp_style_domain() -> Re
                     layout_width_scale: SceneLayoutScale::Fill,
                     layout_height_scale: SceneLayoutScale::Hug,
                     flex_basis_units: SceneLayoutUnit::Point,
+                    justify_self: SceneLayoutJustify::End,
+                    justify_items: SceneLayoutJustify::End,
+                    layout_type: SceneLayoutType::Grid,
                     present: Default::default(),
                 },
             }),
@@ -368,8 +364,8 @@ fn ordinary_layout_component_authors_the_complete_typed_cpp_style_domain() -> Re
     let style = &exported.records()[3];
     assert_eq!(
         style.properties.len(),
-        77,
-        "Name, parent, and all 75 LayoutComponentStyleBase properties must be authored"
+        73,
+        "Name, parent, and all 71 runtime LayoutComponentStyle properties must be authored"
     );
     Ok(())
 }
@@ -13291,6 +13287,139 @@ fn typed_scripted_drawable_exports_raw_script_and_shader_payloads_with_one_envel
 }
 
 #[test]
+fn verified_script_require_edges_tree_shake_runtime_export_dependency_first() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let _unused = tx.create_script_asset(ScriptAssetSpec {
+            name: "unused".into(),
+            is_module: true,
+            bytes: b"unused".to_vec(),
+        })?;
+        let dependency = tx.create_script_asset(ScriptAssetSpec {
+            name: "dependency".into(),
+            is_module: true,
+            bytes: b"dependency".to_vec(),
+        })?;
+        let protocol = tx.create_script_asset(ScriptAssetSpec {
+            name: "protocol".into(),
+            is_module: false,
+            bytes: b"protocol".to_vec(),
+        })?;
+        let forced = tx.create_script_asset(ScriptAssetSpec {
+            name: "forced".into(),
+            is_module: true,
+            bytes: b"forced".to_vec(),
+        })?;
+        tx.set_script_require_edges(protocol, &[dependency])?;
+        tx.set_script_include_in_export(forced, true)?;
+
+        let artboard = tx.create_artboard(ArtboardSpec {
+            name: "Script roots".into(),
+            width: 100.0,
+            height: 100.0,
+        })?;
+        tx.create(
+            Parent::Artboard(artboard),
+            NodeSpec::ScriptedDrawable(ScriptedDrawableSpec {
+                name: "Protocol root".into(),
+                x: 0.0,
+                y: 0.0,
+                opacity: 1.0,
+                rotation: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                script: protocol,
+            }),
+        )?;
+        tx.verify_script_require_edges()?;
+        Ok(())
+    })?;
+
+    let records = scene.export_records().into_records();
+    let script_names = records
+        .iter()
+        .filter(|record| record.kind == ExportedObjectKind::ScriptAsset)
+        .map(|record| {
+            record
+                .properties
+                .iter()
+                .find_map(|property| match property {
+                    ExportedProperty::AssetName(name) => Some(name.as_str()),
+                    _ => None,
+                })
+                .expect("script records carry an asset name")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(script_names, ["dependency", "protocol", "forced"]);
+    assert!(records.iter().any(|record| {
+        record.kind == ExportedObjectKind::ScriptedDrawable
+            && record
+                .properties
+                .contains(&ExportedProperty::ScriptedDrawableScriptAssetId(1))
+    }));
+
+    scene.edit(|tx| {
+        tx.create_script_asset(ScriptAssetSpec {
+            name: "after verification".into(),
+            is_module: true,
+            bytes: b"late".to_vec(),
+        })?;
+        Ok(())
+    })?;
+    assert_eq!(
+        scene
+            .export_records()
+            .records()
+            .iter()
+            .filter(|record| record.kind == ExportedObjectKind::ScriptAsset)
+            .count(),
+        5,
+        "editing the script set invalidates verification and fails safe by keeping every script"
+    );
+    Ok(())
+}
+
+#[test]
+fn verified_script_require_edges_allow_reachable_module_cycles() -> Result<()> {
+    let mut scene = Scene::new();
+    scene.edit(|tx| {
+        let first = tx.create_script_asset(ScriptAssetSpec {
+            name: "first".into(),
+            is_module: true,
+            bytes: b"first".to_vec(),
+        })?;
+        let second = tx.create_script_asset(ScriptAssetSpec {
+            name: "second".into(),
+            is_module: true,
+            bytes: b"second".to_vec(),
+        })?;
+        tx.set_script_require_edges(first, &[second])?;
+        tx.set_script_require_edges(second, &[first])?;
+        tx.set_script_include_in_export(first, true)?;
+        tx.verify_script_require_edges()?;
+        Ok(())
+    })?;
+
+    let exported = scene.export_records();
+    let script_names = exported
+        .records()
+        .iter()
+        .filter(|record| record.kind == ExportedObjectKind::ScriptAsset)
+        .filter_map(|record| {
+            record
+                .properties
+                .iter()
+                .find_map(|property| match property {
+                    ExportedProperty::AssetName(name) => Some(name.as_str()),
+                    _ => None,
+                })
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(script_names, ["second", "first"]);
+    Ok(())
+}
+
+#[test]
 fn empty_script_and_shader_payloads_are_structurally_preserved_as_unsigned_envelopes() -> Result<()>
 {
     let mut scene = Scene::new();
@@ -15481,9 +15610,9 @@ fn layout_display_bind_swaps_a_flex_slot_and_relayouts_live() -> Result<()> {
             view_models.set_artboard_default(root_artboard, defaults)?;
             (defaults, count)
         };
-        let slot_style = tx.layout_component_style(slot).ok_or_else(|| {
-            tx.abort("fallback slot must own a typed layout style")
-        })?;
+        let slot_style = tx
+            .layout_component_style(slot)
+            .ok_or_else(|| tx.abort("fallback slot must own a typed layout style"))?;
         tx.view_models().bind_number(
             slot_style,
             props::LAYOUT_DISPLAY,

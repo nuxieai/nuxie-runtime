@@ -291,6 +291,16 @@ impl RuntimeLinearAnimation {
                             value,
                         );
                     }
+                    RuntimeKeyedPropertyTarget::Int => {
+                        let Some(value) = keyed_property.int_value_at(seconds) else {
+                            continue;
+                        };
+                        changed |= instance.set_int_property(
+                            keyed_object.target_local_id,
+                            keyed_property.property_key,
+                            value,
+                        );
+                    }
                     RuntimeKeyedPropertyTarget::String => {
                         let Some(value) = keyed_property.string_value_at(seconds, key_frame_values)
                         else {

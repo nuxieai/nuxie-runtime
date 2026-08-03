@@ -115,6 +115,10 @@ fn encode_authoring_records(records: &[AuthoringRecord]) -> Vec<u8> {
                 }
                 AuthoringValue::Color(value) => bytes.extend_from_slice(&value.to_le_bytes()),
                 AuthoringValue::Double(value) => bytes.extend_from_slice(&value.to_le_bytes()),
+                AuthoringValue::Int(value) => {
+                    let encoded = ((*value as u32) << 1) ^ ((*value >> 31) as u32);
+                    push_var_uint(&mut bytes, u64::from(encoded));
+                }
                 AuthoringValue::String(value) => {
                     push_var_uint(&mut bytes, value.len() as u64);
                     bytes.extend_from_slice(value.as_bytes());

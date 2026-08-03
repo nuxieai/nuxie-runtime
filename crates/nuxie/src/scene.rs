@@ -151,6 +151,12 @@ pub struct ImageAssetId(u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ScriptAssetId(u64);
 
+/// Require-edge contract understood by the authored runtime exporter.
+///
+/// This mirrors upstream `Backboard::scriptEdgesVerifiedVersion`: zero or an
+/// unknown version fails safe by retaining every script.
+pub const SCRIPT_REQUIRE_EDGE_CONTRACT_VERSION: u32 = 1;
+
 /// Stable identity of a compiled Rive shader table owned by the authored scene.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ShaderAssetId(u64);
@@ -1180,6 +1186,7 @@ struct Definitions {
     font_assets: Vec<FontAssetDefinition>,
     image_assets: Vec<ImageAssetDefinition>,
     script_assets: Vec<ScriptAssetDefinition>,
+    script_edges_verified_version: u32,
     shader_assets: Vec<ShaderAssetDefinition>,
     data_converters: Vec<DataConverterDefinition>,
     view_models: Vec<ViewModelDefinition>,
@@ -1693,6 +1700,8 @@ struct ImageAssetDefinition {
 struct ScriptAssetDefinition {
     id: ScriptAssetId,
     spec: ScriptAssetSpec,
+    dependency_ids: Vec<ScriptAssetId>,
+    include_in_export: bool,
     project_converter: Option<ProjectDataConverterScriptDefinition>,
 }
 
@@ -8014,6 +8023,8 @@ impl Scene {
             &self.definitions.shader_assets,
             &artboards,
             &self.definitions.view_models,
+            &self.definitions.data_converters,
+            self.definitions.script_edges_verified_version,
         )
         .ordered
         .iter()
@@ -8649,6 +8660,8 @@ impl Scene {
             &self.definitions.shader_assets,
             all_artboards.as_slice(),
             &self.definitions.view_models,
+            &self.definitions.data_converters,
+            self.definitions.script_edges_verified_version,
         )
         .lower(0, &origins)
         {
@@ -9012,12 +9025,14 @@ impl SceneTx<'_> {
     ///
     /// `spec.bytes` is the compiler payload, not Rive's signed-content framing.
     /// Scene lowering adds one unsigned version-zero envelope. Script assets are
-    /// emitted into every materialized file so by-name module dependencies remain
-    /// available even when they are not referenced by a retained node. Rive's
-    /// module namespace is file-global and order-sensitive. Scene preserves
-    /// empty payloads, empty names, and duplicate names without validating Luau;
-    /// the compiler boundary must provide valid bytecode and unambiguous runtime
-    /// names when scripts use by-name lookup.
+    /// retained in every materialized file until the compiler supplies and
+    /// verifies a complete require-edge graph. Once verified, runtime export
+    /// retains scripts referenced by runtime objects, their transitive requires,
+    /// and scripts explicitly included by the host. Rive's module namespace is
+    /// file-global and order-sensitive. Scene preserves empty payloads, empty
+    /// names, and duplicate names without validating Luau; the compiler boundary
+    /// must provide valid bytecode and unambiguous runtime names when scripts use
+    /// by-name lookup.
     pub fn create_script_asset(
         &mut self,
         spec: ScriptAssetSpec,
@@ -9030,14 +9045,140 @@ impl SceneTx<'_> {
         self.definitions.script_assets.push(ScriptAssetDefinition {
             id,
             spec,
+            dependency_ids: Vec::new(),
+            include_in_export: false,
             project_converter: None,
         });
+        // A newly added script has not participated in the last complete edge
+        // audit. Match upstream's fail-safe behavior and keep all scripts.
+        self.definitions.script_edges_verified_version = 0;
         self.definition_index.script_assets.insert(id, script_index);
         self.spec_origins.script_assets.insert(id, operation_index);
         for artboard in &self.definitions.artboards {
             self.touched_artboards.insert(artboard.id, operation_index);
         }
         Ok(id)
+    }
+
+    /// Replace one script's direct `require` edges using stable authored ids.
+    ///
+    /// Any edit invalidates the file-wide verification stamp. Call
+    /// [`Self::verify_script_require_edges`] after all scripts have been
+    /// analyzed to enable tree-shaking.
+    pub fn set_script_require_edges(
+        &mut self,
+        script: ScriptAssetId,
+        dependencies: &[ScriptAssetId],
+    ) -> std::result::Result<(), EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let script_index = self
+            .definition_index
+            .script_assets
+            .get(&script)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::ScriptAsset(script)],
+                    EditReason::UnknownScriptAsset,
+                )
+            })?;
+        let mut seen = BTreeSet::new();
+        for dependency in dependencies {
+            if !self.definition_index.script_assets.contains_key(dependency) {
+                return Err(EditAbort::new(
+                    operation_index,
+                    vec![
+                        EditId::ScriptAsset(script),
+                        EditId::ScriptAsset(*dependency),
+                    ],
+                    EditReason::UnknownScriptAsset,
+                ));
+            }
+            if !seen.insert(*dependency) {
+                continue;
+            }
+        }
+        let definition = self
+            .definitions
+            .script_assets
+            .get_mut(script_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::ScriptAsset(script)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        definition.dependency_ids = dependencies
+            .iter()
+            .copied()
+            .filter(|dependency| seen.remove(dependency))
+            .collect();
+        self.definitions.script_edges_verified_version = 0;
+        for artboard in &self.definitions.artboards {
+            self.touched_artboards.insert(artboard.id, operation_index);
+        }
+        Ok(())
+    }
+
+    /// Force a script into runtime export even when no runtime object refers to
+    /// it. This is the semantic counterpart of upstream FileAsset
+    /// `includeInExport`.
+    pub fn set_script_include_in_export(
+        &mut self,
+        script: ScriptAssetId,
+        include: bool,
+    ) -> std::result::Result<(), EditAbort> {
+        let operation_index = self.begin_operation()?;
+        let script_index = self
+            .definition_index
+            .script_assets
+            .get(&script)
+            .copied()
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::ScriptAsset(script)],
+                    EditReason::UnknownScriptAsset,
+                )
+            })?;
+        let definition = self
+            .definitions
+            .script_assets
+            .get_mut(script_index)
+            .ok_or_else(|| {
+                EditAbort::new(
+                    operation_index,
+                    vec![EditId::ScriptAsset(script)],
+                    EditReason::InternalInvariant,
+                )
+            })?;
+        definition.include_in_export = include;
+        for artboard in &self.definitions.artboards {
+            self.touched_artboards.insert(artboard.id, operation_index);
+        }
+        Ok(())
+    }
+
+    /// Verify the complete direct-require graph and enable runtime-export
+    /// tree-shaking for this authored file.
+    pub fn verify_script_require_edges(&mut self) -> std::result::Result<(), EditAbort> {
+        let operation_index = self.begin_operation()?;
+        validate_script_require_edges(&self.definitions.script_assets).map_err(
+            |(script, dependency, reason)| {
+                let mut ids = vec![EditId::ScriptAsset(script)];
+                if dependency != script {
+                    ids.push(EditId::ScriptAsset(dependency));
+                }
+                EditAbort::new(operation_index, ids, reason)
+            },
+        )?;
+        self.definitions.script_edges_verified_version = SCRIPT_REQUIRE_EDGE_CONTRACT_VERSION;
+        for artboard in &self.definitions.artboards {
+            self.touched_artboards.insert(artboard.id, operation_index);
+        }
+        Ok(())
     }
 
     /// Add raw compiled RSTB shader bytes and return their stable semantic identity.
@@ -9798,6 +9939,7 @@ impl DataConverterTx<'_> {
             })
             && let Some(script_index) = self.definition_index.script_assets.get(&script).copied()
         {
+            self.definitions.script_edges_verified_version = 0;
             self.definitions.script_assets.remove(script_index);
             self.definition_index.script_assets.clear();
             for (index, definition) in self.definitions.script_assets.iter().enumerate() {
@@ -16551,6 +16693,8 @@ impl MaterializedArtboard {
             &definitions.shader_assets,
             closure.as_slice(),
             &definitions.view_models,
+            &definitions.data_converters,
+            definitions.script_edges_verified_version,
         )
         .lower(fallback_operation_index, origins)?;
         let image_intrinsic_dimensions_by_file_asset_index = referenced_assets
@@ -17018,6 +17162,59 @@ enum CanonicalFileAsset<'a> {
 /// order. Each asset record is immediately followed by its contents record.
 struct CanonicalFileAssets<'a> {
     ordered: Vec<CanonicalFileAsset<'a>>,
+}
+
+fn validate_script_require_edges(
+    scripts: &[ScriptAssetDefinition],
+) -> std::result::Result<(), (ScriptAssetId, ScriptAssetId, EditReason)> {
+    let ids = scripts
+        .iter()
+        .map(|script| script.id)
+        .collect::<BTreeSet<_>>();
+    for script in scripts {
+        for dependency in &script.dependency_ids {
+            if !ids.contains(dependency) {
+                return Err((script.id, *dependency, EditReason::UnknownScriptAsset));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn collect_reachable_scripts<'a>(
+    scripts: &'a [ScriptAssetDefinition],
+    roots: &BTreeSet<ScriptAssetId>,
+) -> Vec<&'a ScriptAssetDefinition> {
+    let by_id = scripts
+        .iter()
+        .map(|script| (script.id, script))
+        .collect::<BTreeMap<_, _>>();
+    let mut visited = BTreeSet::new();
+    let mut ordered = Vec::new();
+    for script in scripts {
+        if roots.contains(&script.id) {
+            collect_reachable_script_from(script.id, &by_id, &mut visited, &mut ordered);
+        }
+    }
+    ordered
+}
+
+fn collect_reachable_script_from<'a>(
+    script: ScriptAssetId,
+    by_id: &BTreeMap<ScriptAssetId, &'a ScriptAssetDefinition>,
+    visited: &mut BTreeSet<ScriptAssetId>,
+    ordered: &mut Vec<&'a ScriptAssetDefinition>,
+) {
+    if !visited.insert(script) {
+        return;
+    }
+    let Some(definition) = by_id.get(&script).copied() else {
+        return;
+    };
+    for dependency in &definition.dependency_ids {
+        collect_reachable_script_from(*dependency, by_id, visited, ordered);
+    }
+    ordered.push(definition);
 }
 
 struct LoweredFileAssets {
@@ -19051,6 +19248,8 @@ impl<'a> CanonicalFileAssets<'a> {
         shader_assets: &'a [ShaderAssetDefinition],
         artboards: &[&ArtboardDefinition],
         view_models: &[ViewModelDefinition],
+        data_converters: &[DataConverterDefinition],
+        script_edges_verified_version: u32,
     ) -> Self {
         let fonts = font_assets
             .iter()
@@ -19110,7 +19309,37 @@ impl<'a> CanonicalFileAssets<'a> {
                 }
             }
         }
-        ordered.extend(script_assets.iter().map(CanonicalFileAsset::Script));
+        let retained_scripts =
+            if script_edges_verified_version == SCRIPT_REQUIRE_EDGE_CONTRACT_VERSION {
+                let mut roots = script_assets
+                    .iter()
+                    .filter(|script| script.include_in_export)
+                    .map(|script| script.id)
+                    .collect::<BTreeSet<_>>();
+                for artboard in artboards {
+                    for record in &artboard.records {
+                        if let Some((_, NodeSpec::ScriptedDrawable(spec))) = record.visual() {
+                            roots.insert(spec.script);
+                        }
+                        if let Some((_, NodeSpec::LayoutComponent(spec))) = record.visual()
+                            && let Some(SceneLayoutInterpolator::Scripted(interpolator)) =
+                                &spec.style.interpolator
+                            && let Some(script) = interpolator.script
+                        {
+                            roots.insert(script);
+                        }
+                    }
+                }
+                for converter in data_converters {
+                    if let DataConverterSpec::Scripted { script, .. } = converter.spec {
+                        roots.insert(script);
+                    }
+                }
+                collect_reachable_scripts(script_assets, &roots)
+            } else {
+                script_assets.iter().collect()
+            };
+        ordered.extend(retained_scripts.into_iter().map(CanonicalFileAsset::Script));
         ordered.extend(shader_assets.iter().map(CanonicalFileAsset::Shader));
         Self { ordered }
     }
@@ -25687,6 +25916,10 @@ mod tests {
                     }
                     AuthoringValue::Color(value) => bytes.extend_from_slice(&value.to_le_bytes()),
                     AuthoringValue::Double(value) => bytes.extend_from_slice(&value.to_le_bytes()),
+                    AuthoringValue::Int(value) => {
+                        let encoded = ((value as u32) << 1) ^ ((value >> 31) as u32);
+                        push_var_uint(&mut bytes, u64::from(encoded));
+                    }
                     AuthoringValue::String(value) => {
                         push_var_uint(&mut bytes, value.len() as u64);
                         bytes.extend_from_slice(value.as_bytes());
@@ -25725,6 +25958,7 @@ mod tests {
                             }
                             FieldValue::Color(value) => AuthoringValue::Color(*value),
                             FieldValue::Double(value) => AuthoringValue::Double(*value),
+                            FieldValue::Int(value) => AuthoringValue::Int(*value),
                             FieldValue::String(value) => AuthoringValue::String(
                                 value
                                     .as_str()

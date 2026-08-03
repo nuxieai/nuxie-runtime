@@ -305,11 +305,7 @@ impl FileScriptRuntime {
             for asset in pending {
                 let payload = required_script_payload(asset, "module registration")?;
                 let effect_checkpoint = vm.checkpoint_host_effects();
-                if let Err(error) = vm.register_module_with_factory(
-                    &asset.name,
-                    payload,
-                    factory,
-                ) {
+                if let Err(error) = vm.register_module_with_factory(&asset.name, payload, factory) {
                     vm.rollback_host_effects(effect_checkpoint);
                     failures.push((asset, error));
                 }

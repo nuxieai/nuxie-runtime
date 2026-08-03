@@ -31,7 +31,9 @@ mod core;
 
 use core::{
     binary_reader::BinaryReader,
-    field_types::{read_field_value, read_known_uint_field, read_string_or_bytes_value},
+    field_types::{
+        read_field_value, read_known_int_field, read_known_uint_field, read_string_or_bytes_value,
+    },
 };
 
 pub const SUPPORTED_MAJOR_VERSION: u64 = 7;
@@ -471,6 +473,7 @@ pub enum AuthoringValue {
     Bytes(Vec<u8>),
     Color(u32),
     Double(f32),
+    Int(i32),
     String(String),
     Uint(u64),
 }
@@ -7422,6 +7425,17 @@ impl RuntimeObject {
         }
     }
 
+    pub fn int_property(&self, name: &str) -> Option<i32> {
+        if let Some(property) = self.property(name) {
+            return property.value.as_int();
+        }
+
+        match self.stored_field_initializer(name)? {
+            StoredFieldInitializer::Int(value) => Some(value),
+            _ => None,
+        }
+    }
+
     pub fn bool_property(&self, name: &str) -> Option<bool> {
         if let Some(property) = self.property(name) {
             return property.value.as_bool();
@@ -7537,6 +7551,7 @@ pub enum FieldValue {
     Callback,
     Color(u32),
     Double(f32),
+    Int(i32),
     String(StringValue),
     Uint(u64),
 }
@@ -7603,6 +7618,13 @@ impl FieldValue {
     pub fn as_uint(&self) -> Option<u64> {
         match self {
             Self::Uint(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    pub fn as_int(&self) -> Option<i32> {
+        match self {
+            Self::Int(value) => Some(*value),
             _ => None,
         }
     }
@@ -7934,6 +7956,7 @@ impl AuthoringValue {
                 | (Self::Bytes(_), FieldKind::Bytes)
                 | (Self::Color(_), FieldKind::Color)
                 | (Self::Double(_), FieldKind::Double)
+                | (Self::Int(_), FieldKind::Int)
                 | (Self::String(_), FieldKind::String)
                 | (Self::Uint(_), FieldKind::Uint)
         )
@@ -7945,6 +7968,7 @@ impl AuthoringValue {
             Self::Bytes(_) => "bytes",
             Self::Color(_) => "color",
             Self::Double(_) => "double",
+            Self::Int(_) => "int",
             Self::String(_) => "string",
             Self::Uint(_) => "uint",
         }
@@ -7956,6 +7980,7 @@ impl AuthoringValue {
             Self::Bytes(value) => FieldValue::Bytes(BytesValue::new(value)),
             Self::Color(value) => FieldValue::Color(value),
             Self::Double(value) => FieldValue::Double(value),
+            Self::Int(value) => FieldValue::Int(value),
             Self::String(value) => {
                 let raw = value.as_bytes().to_vec();
                 FieldValue::String(StringValue {
@@ -7978,6 +8003,7 @@ fn header_field_kind_for_property(
 
     let header_kind = match (property.runtime_type, core_kind) {
         (FieldKind::Uint, CoreRegistryFieldKind::Uint) => Some(HeaderFieldKind::Uint),
+        (FieldKind::Int, CoreRegistryFieldKind::Int) => Some(HeaderFieldKind::Uint),
         (FieldKind::String, CoreRegistryFieldKind::StringOrBytes) => {
             Some(HeaderFieldKind::StringOrBytes)
         }
@@ -9001,7 +9027,7 @@ fn cpp_data_bind_target_supports_push(
     )
 }
 
-fn cpp_data_bind_polling_property_keys() -> [u64; 16] {
+fn cpp_data_bind_polling_property_keys() -> [u64; 18] {
     [
         cpp_property_key("Solo", "activeComponentId"),
         cpp_property_key("Node", "computedLocalX"),
@@ -9019,7 +9045,27 @@ fn cpp_data_bind_polling_property_keys() -> [u64; 16] {
         cpp_property_key("ScrollConstraint", "velocityX"),
         cpp_property_key("ScrollConstraint", "velocityY"),
         cpp_property_key("ScrollConstraint", "scrollActive"),
+        cpp_property_key("ScrollConstraint", "computedContentWidth"),
+        cpp_property_key("ScrollConstraint", "computedContentHeight"),
     ]
+}
+
+#[cfg(test)]
+mod computed_scroll_polling_tests {
+    use super::{cpp_data_bind_polling_property_keys, cpp_property_key};
+
+    #[test]
+    fn computed_scroll_extents_are_polled_data_bind_targets() {
+        let polling = cpp_data_bind_polling_property_keys();
+        assert!(polling.contains(&cpp_property_key(
+            "ScrollConstraint",
+            "computedContentWidth"
+        )));
+        assert!(polling.contains(&cpp_property_key(
+            "ScrollConstraint",
+            "computedContentHeight"
+        )));
+    }
 }
 
 fn cpp_property_key(definition_name: &str, property_name: &str) -> u64 {
@@ -11692,6 +11738,9 @@ fn skip_core_registry_value(
             // so consume the full raw varuint64 just like File::readRuntimeObject.
             reader.read_var_uint()?;
         }
+        CoreRegistryFieldKind::Int => {
+            reader.read_var_uint()?;
+        }
         CoreRegistryFieldKind::StringOrBytes => {
             reader.read_string()?;
         }
@@ -11722,6 +11771,9 @@ fn read_core_registry_fallback_value(
         CoreRegistryFieldKind::Uint => {
             FieldValue::Uint(read_known_uint_field(reader, property, "uint field")?)
         }
+        CoreRegistryFieldKind::Int => {
+            FieldValue::Int(read_known_int_field(reader, property, "int field")?)
+        }
         CoreRegistryFieldKind::StringOrBytes => read_string_or_bytes_value(reader, property)?,
         CoreRegistryFieldKind::Double => FieldValue::Double(reader.read_f32()?),
         CoreRegistryFieldKind::Color => FieldValue::Color(reader.read_u32()?),
@@ -11744,6 +11796,9 @@ fn read_header_fallback_value(
     property: &Property,
 ) -> Result<FieldValue> {
     Ok(match field {
+        HeaderFieldKind::Uint if property.runtime_type == FieldKind::Int => {
+            FieldValue::Int(read_known_int_field(reader, property, "header int field")?)
+        }
         HeaderFieldKind::Uint => FieldValue::Uint(read_known_uint_field(
             reader,
             property,
@@ -11836,6 +11891,7 @@ fn read_cpp_embedded_var_uint64(bytes: &[u8]) -> (u64, usize) {
 fn core_registry_field_name(kind: CoreRegistryFieldKind) -> &'static str {
     match kind {
         CoreRegistryFieldKind::Uint => "uint",
+        CoreRegistryFieldKind::Int => "int",
         CoreRegistryFieldKind::StringOrBytes => "stringOrBytes",
         CoreRegistryFieldKind::Double => "double",
         CoreRegistryFieldKind::Color => "color",
@@ -12650,7 +12706,6 @@ mod uint_wire_tests {
             u64::from(u8::MAX)
         );
     }
-
 }
 
 #[cfg(test)]

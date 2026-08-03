@@ -92,6 +92,30 @@ impl RuntimeImageList {
         self.owner(local_id)?.borrow().mesh
     }
 
+    /// Direct port of `Image::computedWidth/Height`: intrinsic image
+    /// dimensions multiplied by the effective render scale. Modern files
+    /// compose the authored scale with the retained layout-fit scale; legacy
+    /// files expose the fit through the public scale itself.
+    pub(crate) fn computed_size(
+        &self,
+        local_id: usize,
+        public_scale_x: f32,
+        public_scale_y: f32,
+    ) -> Option<(f32, f32)> {
+        let owner = self.owner(local_id)?.borrow();
+        let width = owner.image_width.unwrap_or(0.0);
+        let height = owner.image_height.unwrap_or(0.0);
+        let (render_scale_x, render_scale_y) = if owner.layout_scale_separate {
+            (
+                public_scale_x * owner.layout_scale_x,
+                public_scale_y * owner.layout_scale_y,
+            )
+        } else {
+            (public_scale_x, public_scale_y)
+        };
+        Some((width * render_scale_x, height * render_scale_y))
+    }
+
     fn register_mesh_children(&self, graph: &ArtboardGraph) -> Result<()> {
         for component in &graph.components {
             let parent = graph

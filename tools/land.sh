@@ -5,6 +5,10 @@
 set -euo pipefail
 branch="$1"; body="$2"; shift 2
 [[ -f "$body" ]] || { echo "land.sh: body file $body missing" >&2; exit 1; }
+# Invalidate any cargo artifacts whose sources changed without a fresh mtime
+# (regenerated codegen racing a concurrent build) so every step below builds
+# from the sources being landed, not a poisoned cache.
+make rust-sources-fresh
 make cpp-probe
 cargo test -p nuxie-runtime
 cargo test -p nuxie --features scripting

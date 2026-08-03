@@ -42,7 +42,7 @@ FEATURE_ROWS = {
     "src/semantic/semantic_manager.cpp": (
         "partial",
         "crates/nuxie-runtime/src/semantic_manager.rs",
-        "F6FID/LT1SC: full semantic records are emitted; nested focus is exact, but data-binding and Simpsons full diffs remain red (LT1SC-report.md).",
+        "SEMRES: nested focus and Simpsons are exact; data_binding_lists matches Selected propagation, removals, and all post-action diffs, but four initial mounted Text bounds and snapshot-adapted generic bounds dirt keep the row partial (SEMRES-report.md).",
     ),
     "src/lua/lua_promise.cpp": (
         "ported",
@@ -266,17 +266,17 @@ for _path, _module in {
 FEATURE_ROWS["src/semantic/semantic_data.cpp"] = (
     "partial",
     "crates/nuxie-runtime/src/semantic_data.rs",
-    "F6FID/LT1SC: fired actions and full diffs are emitted, but data_binding_lists still differs on Selected state and removals (LT1SC-report.md).",
+    "SEMRES: data_binding_lists now matches Selected propagation, removals, hierarchy patches, and all post-action diffs; four initial mounted Text bounds keep the full differential red, and generic bounds dirt remains snapshot-adapted rather than owner-pushed (SEMRES-report.md).",
 )
 FEATURE_ROWS["src/semantic/semantic_inference_registry.cpp"] = (
-    "absent",
-    "",
-    "F6/LT1SC: Simpsons labels, ids, and hierarchy match, but the required full Text-inference diff remains red on bounds/state updates (LT1SC-report.md).",
+    "ported",
+    "crates/nuxie-runtime/src/semantic_inference_registry.rs",
+    "SEMRES: the Simpsons semantic-only differential is exact across initial and action frames, covering inferred labels, ids, hierarchy, state updates, and bounds (SEMRES-report.md).",
 )
 FEATURE_ROWS["src/semantic/semantic_provider.cpp"] = (
     "partial",
     "crates/nuxie-runtime/src/semantic_provider.rs",
-    "F6FID/LT1SC: nested focus provider bounds are exact; Simpsons provider/root bounds remain red, so the family stays partial (LT1SC-report.md).",
+    "SEMRES: nested focus and Simpsons provider/root/pre-layout bounds are exact; four initial mounted Text bounds and the remaining owner-pushed generic bounds-dirt port keep the provider family partial (SEMRES-report.md).",
 )
 
 for _path in {

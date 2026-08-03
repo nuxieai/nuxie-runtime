@@ -6762,6 +6762,46 @@ impl ArtboardInstance {
             .collect()
     }
 
+    /// Retained root transforms for semantic snapshots of mounted list rows.
+    ///
+    /// Pinned C++ `SemanticProvider::semanticBounds` observes each row through
+    /// its existing `ArtboardHost`; list removal patches are produced before a
+    /// later layout pass replaces those transforms. Keep semantic refresh on
+    /// the retained host/item transforms instead of running a fresh Taffy
+    /// projection while the tree is being diffed.
+    pub(crate) fn runtime_component_list_retained_child_root_transforms(
+        &self,
+        root_transform: Mat2D,
+    ) -> BTreeMap<usize, Vec<Mat2D>> {
+        self.component_list_locals()
+            .map(|list_local| {
+                let host_transform_local = if crate::constraints::scrolling::scroll_virtualizer::component_list_virtualization(
+                    self, list_local,
+                )
+                .is_some()
+                {
+                    self.component_parent_local(list_local)
+                        .unwrap_or(list_local)
+                } else {
+                    list_local
+                };
+                let host_root = root_transform.multiply(
+                    self.runtime_component_world_transform_with_scroll(host_transform_local),
+                );
+                let item_transforms = self
+                    .component_list_state(list_local)
+                    .into_iter()
+                    .flat_map(|list| list.item_transforms.iter().zip(&list.items))
+                    .map(|(item_transform, item)| {
+                        item.child
+                            .mounted_root_transform(host_root.multiply(*item_transform))
+                    })
+                    .collect();
+                (list_local, item_transforms)
+            })
+            .collect()
+    }
+
     #[doc(hidden)]
     pub fn debug_taffy_layout_bounds_report(
         &self,
@@ -16584,6 +16624,49 @@ fn runtime_text_replay_order(
 }
 
 impl ArtboardInstance {
+    /// Build the live solved box observed by C++ `Node::localBounds`.
+    ///
+    /// D3 Taffy adapter: Rust's horizontal fill result excludes the layout
+    /// component's own padding, while Rive's Yoga-backed
+    /// `LayoutComponent::layoutWidth` includes it. Reinsert that horizontal
+    /// padding to reconstruct the box passed to the otherwise literal
+    /// `SemanticProvider::semanticBounds` port.
+    pub(crate) fn semantic_layout_world_bounds(
+        &self,
+        local_id: usize,
+    ) -> Option<(f32, f32, f32, f32)> {
+        const LAYOUT_SCALE_TYPE_FILL: u64 = 1;
+
+        if self.component(local_id)?.type_name != "LayoutComponent" {
+            return None;
+        }
+        let layout = self.layout_bounds(local_id)?;
+        let style_local = self.runtime_layout_component_style_local(local_id)?;
+        let mut min_x = 0.0;
+        let mut max_x = layout.width;
+        if self.runtime_layout_axis_scale(style_local, true) == LAYOUT_SCALE_TYPE_FILL {
+            let padding_left = self.runtime_layout_style_length(
+                style_local,
+                RuntimeLayoutStyleProperty::PaddingLeft,
+                RuntimeLayoutStyleProperty::PaddingLeftUnitsValue,
+                layout.width,
+            )?;
+            let padding_right = self.runtime_layout_style_length(
+                style_local,
+                RuntimeLayoutStyleProperty::PaddingRight,
+                RuntimeLayoutStyleProperty::PaddingRightUnitsValue,
+                layout.width,
+            )?;
+            min_x -= padding_left;
+            max_x += padding_left + padding_right;
+        }
+        let bounds = runtime_transformed_rect_bounds(
+            (min_x, 0.0, max_x, layout.height),
+            self.component(local_id)?.transform.world_transform,
+        );
+        Some((bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y))
+    }
+
     /// Direct update-phase counterpart of C++ `Text::buildRenderStyles`.
     /// Drawing only consumes this retained result.
     pub(crate) fn update_runtime_text_render_styles(

@@ -519,6 +519,10 @@ impl SemanticManager {
         self.mark_dirty(SemanticDirt::BOUNDS);
     }
 
+    pub(crate) fn structure_is_dirty(&self) -> bool {
+        self.dirt.contains(SemanticDirt::STRUCTURE)
+    }
+
     fn ensure_node_id(&mut self, node: &SemanticNodeHandle) {
         if node.borrow().id() == 0 {
             while self.nodes_by_id.contains_key(&self.next_local_id) {

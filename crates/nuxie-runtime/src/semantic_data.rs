@@ -98,7 +98,6 @@ impl RuntimeSemanticData {
         &mut self,
         artboard: &mut ArtboardInstance,
         manager: &mut SemanticManager,
-        root_transform: Mat2D,
     ) {
         let role = semantic_uint_property(artboard, self.local_id, "role");
         let label = semantic_string_property(artboard, self.local_id, "label");
@@ -125,7 +124,6 @@ impl RuntimeSemanticData {
         self.set_trait_flags(trait_flags, Some(manager));
         self.set_state_flags(state_flags, Some(manager), artboard);
         self.apply_inferred_semantics_if_needed(artboard, Some(manager));
-        self.update_world_bounds_with_root_transform(artboard, Some(manager), root_transform);
     }
 
     pub fn has_semantic_node(&self) -> bool {
@@ -216,11 +214,16 @@ impl RuntimeSemanticData {
         parent: Option<&SemanticNodeHandle>,
         artboard: &mut ArtboardInstance,
         root_transform: Mat2D,
+        boundary_collapsed: bool,
     ) {
         let Some(node) = self.semantic_node.clone() else {
             return;
         };
-        let exclude = self.should_exclude_from_tree(artboard);
+        // `Artboard::collapseSemanticBoundary` collapses every SemanticData
+        // below a mounted artboard boundary. Rust synchronizes that tree
+        // recursively, so carry the equivalent inherited state into the
+        // membership decision.
+        let exclude = boundary_collapsed || self.should_exclude_from_tree(artboard);
         let attached = node.borrow().manager_identity() == Some(manager.identity());
         let current_parent_id = node.borrow().parent_id();
         let desired_parent_id = parent.map(|parent| parent.borrow().id());
@@ -548,12 +551,10 @@ impl SemanticBounds {
     }
 
     pub fn is_empty_or_nan(self) -> bool {
-        self.min_x.is_nan()
-            || self.min_y.is_nan()
-            || self.max_x.is_nan()
-            || self.max_y.is_nan()
-            || self.min_x > self.max_x
-            || self.min_y > self.max_y
+        // Pinned `AABB::isEmptyOrNaN` uses inverse positive-area checks,
+        // which also classify point/line fallbacks as empty and trigger the
+        // one-shot SemanticData bounds retry.
+        !(self.max_x - self.min_x > 0.0 && self.max_y - self.min_y > 0.0)
     }
 
     pub fn expand(&mut self, other: Self) {
@@ -994,6 +995,15 @@ mod tests {
     }
 
     #[test]
+    fn empty_bounds_match_pinned_positive_area_rule() {
+        assert!(!SemanticBounds::new(1.0, 2.0, 3.0, 4.0).is_empty_or_nan());
+        assert!(SemanticBounds::new(1.0, 2.0, 1.0, 4.0).is_empty_or_nan());
+        assert!(SemanticBounds::new(1.0, 2.0, 3.0, 2.0).is_empty_or_nan());
+        assert!(SemanticBounds::new(f32::NAN, 2.0, 3.0, 4.0).is_empty_or_nan());
+        assert!(SemanticBounds::for_expansion().is_empty_or_nan());
+    }
+
+    #[test]
     fn listeners_preserve_duplicates_remove_first_and_dispatch_exact_action() {
         let mut data = RuntimeSemanticData::new(1, Some(0));
         let listener = Rc::new(CountingListener::default());
@@ -1120,12 +1130,12 @@ mod tests {
         let parent_local = data.parent_local_id.expect("SemanticData parent");
         let mut manager = SemanticManager::new();
         data.prepare_for_tree(&mut artboard);
-        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY);
+        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY, false);
         let id = data.semantic_id();
         manager.drain_diff().expect("initial semantic diff");
 
         assert!(artboard.collapse_component(parent_local, true));
-        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY);
+        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY, false);
         assert_eq!(
             manager
                 .drain_diff()
@@ -1135,7 +1145,7 @@ mod tests {
         );
 
         assert!(artboard.collapse_component(parent_local, false));
-        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY);
+        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY, false);
         assert_eq!(
             manager
                 .drain_diff()
@@ -1149,11 +1159,42 @@ mod tests {
     }
 
     #[test]
+    fn mounted_boundary_collapse_removes_and_restores_retained_semantic_node() {
+        let (mut artboard, mut data) = fixture_data();
+        let mut manager = SemanticManager::new();
+        data.prepare_for_tree(&mut artboard);
+        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY, false);
+        let id = data.semantic_id();
+        manager.drain_diff().expect("initial semantic diff");
+
+        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY, true);
+        assert_eq!(
+            manager
+                .drain_diff()
+                .expect("boundary collapse semantic diff")
+                .removed,
+            [id]
+        );
+
+        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY, false);
+        assert_eq!(
+            manager
+                .drain_diff()
+                .expect("boundary uncollapse semantic diff")
+                .added
+                .iter()
+                .map(|node| node.id)
+                .collect::<Vec<_>>(),
+            [id]
+        );
+    }
+
+    #[test]
     fn repeated_focused_state_is_an_incremental_no_op() {
         let (mut artboard, mut data) = fixture_data();
         let mut manager = SemanticManager::new();
         data.prepare_for_tree(&mut artboard);
-        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY);
+        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY, false);
         manager.drain_diff().expect("initial semantic diff");
 
         data.set_focused_state(false, Some(&mut manager));

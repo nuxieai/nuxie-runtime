@@ -79,6 +79,7 @@ fn run() -> Result<(), String> {
                         &corpus_dir,
                         RunnerKind::Cpp,
                         options.verify_scripted_diagnostics,
+                        false,
                     ) {
                         Ok(cpp_stream) => println!(
                             "[unsupported-feature] {}: c++ stream ok ({} bytes)",
@@ -178,6 +179,7 @@ fn run() -> Result<(), String> {
                     &corpus_dir,
                     RunnerKind::Cpp,
                     options.verify_scripted_diagnostics,
+                    options.side_channel,
                 ) {
                     Ok(cpp_stream) => {
                         println!(
@@ -199,6 +201,7 @@ fn run() -> Result<(), String> {
                                         &corpus_dir,
                                         RunnerKind::Rust,
                                         options.verify_scripted_diagnostics,
+                                        options.side_channel,
                                     ) {
                                         Ok(rust_stream) if status == Status::Diverges => println!(
                                             "[diverges] {}: rust stream ok ({} bytes)",
@@ -259,11 +262,17 @@ fn run() -> Result<(), String> {
     }
 
     let exact = counts.get(&Status::Exact).copied().unwrap_or(0);
+    let side_channel_segments = if options.side_channel {
+        exact_segments
+    } else {
+        0
+    };
     println!(
-        "golden-compare summary: entries={} exact={} exact-segments={} diverges={} unsupported-feature={} not-yet={}",
+        "golden-compare summary: entries={} exact={} exact-segments={} side-channel-segments={} diverges={} unsupported-feature={} not-yet={}",
         corpus.len(),
         exact,
         exact_segments,
+        side_channel_segments,
         counts.get(&Status::Diverges).copied().unwrap_or(0),
         counts
             .get(&Status::UnsupportedFeature)
@@ -309,6 +318,7 @@ struct Options {
     verify_divergent_rust: bool,
     probe_not_yet_rust: bool,
     verify_scripted_diagnostics: bool,
+    side_channel: bool,
 }
 
 impl Options {
@@ -325,6 +335,7 @@ impl Options {
         let mut verify_divergent_rust = false;
         let mut probe_not_yet_rust = false;
         let mut verify_scripted_diagnostics = false;
+        let mut side_channel = false;
         let mut rive_runtime_dir = env::var_os("RIVE_RUNTIME_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
@@ -351,9 +362,10 @@ impl Options {
                 "--verify-divergent-rust" => verify_divergent_rust = true,
                 "--probe-not-yet-rust" => probe_not_yet_rust = true,
                 "--verify-scripted-diagnostics" => verify_scripted_diagnostics = true,
+                "--side-channel" => side_channel = true,
                 "--help" | "-h" => {
                     println!(
-                        "usage: golden-compare [--corpus corpus.toml] [--milestone name] [--status exact|diverges|unsupported-feature|not-yet] [--id corpus-id]... [--verify-unsupported-cpp] [--verify-divergent-rust] [--probe-not-yet-rust] [--verify-scripted-diagnostics] --cpp-runner <path> [--rust-runner <path>]"
+                        "usage: golden-compare [--corpus corpus.toml] [--milestone name] [--status exact|diverges|unsupported-feature|not-yet] [--id corpus-id]... [--verify-unsupported-cpp] [--verify-divergent-rust] [--probe-not-yet-rust] [--verify-scripted-diagnostics] [--side-channel] --cpp-runner <path> [--rust-runner <path>]"
                     );
                     std::process::exit(0);
                 }
@@ -374,6 +386,7 @@ impl Options {
             verify_divergent_rust,
             probe_not_yet_rust,
             verify_scripted_diagnostics,
+            side_channel,
         })
     }
 }
@@ -1023,6 +1036,7 @@ mod tests {
             Path::new("corpus"),
             RunnerKind::Rust,
             true,
+            false,
         );
         assert!(
             scripted_rust
@@ -1036,6 +1050,7 @@ mod tests {
             Path::new("fixture.riv"),
             Path::new("corpus"),
             RunnerKind::Rust,
+            false,
             false,
         );
         assert!(
@@ -1051,6 +1066,7 @@ mod tests {
             Path::new("corpus"),
             RunnerKind::Cpp,
             true,
+            false,
         );
         assert!(
             scripted_cpp
@@ -1323,6 +1339,62 @@ features = ["scripted-runner-only", "scripted-status:exact"]
         assert!(entries[2].executes_scripts_in_rust());
     }
 
+    #[test]
+    fn side_channel_flag_forwards_to_both_runner_kinds() {
+        let entry = CorpusEntry::new();
+        for kind in [RunnerKind::Cpp, RunnerKind::Rust] {
+            let on = stream_command(
+                Path::new("runner"),
+                &entry,
+                Path::new("fixture.riv"),
+                Path::new("corpus"),
+                kind,
+                false,
+                true,
+            );
+            assert!(on.get_args().any(|argument| argument == "--side-channel"));
+
+            let off = stream_command(
+                Path::new("runner"),
+                &entry,
+                Path::new("fixture.riv"),
+                Path::new("corpus"),
+                kind,
+                false,
+                false,
+            );
+            assert!(off.get_args().all(|argument| argument != "--side-channel"));
+        }
+    }
+
+    #[test]
+    fn side_channel_lines_compare_like_ordinary_stream_lines() {
+        // settled and hit values are text: any flip is a structural diff.
+        assert!(!streams_equivalent(
+            "advance seconds=0.5 settled=true statesChanged=0\n",
+            "advance seconds=0.5 settled=false statesChanged=0\n"
+        ));
+        assert!(!streams_equivalent(
+            "hit result=hit\n",
+            "hit result=hitOpaque\n"
+        ));
+        // statesChanged is an integer: a count flip exceeds the epsilon.
+        assert!(!streams_equivalent(
+            "advance seconds=0.5 settled=true statesChanged=1\n",
+            "advance seconds=0.5 settled=true statesChanged=2\n"
+        ));
+        // event delays are floats under the ordinary numeric epsilon.
+        assert!(streams_equivalent(
+            "event type=128 name=\"tick\" delay=0.0833333433 props=[]\n",
+            "event type=128 name=\"tick\" delay=0.0833334 props=[]\n"
+        ));
+        // a missing side-channel line (stub baseline) is an extra-line diff.
+        assert!(!streams_equivalent(
+            "advance seconds=0 settled=false\nsample seconds=0\n",
+            "sample seconds=0\n"
+        ));
+    }
+
     fn f32_hex(values: &[f32]) -> String {
         let mut hex = String::new();
         for value in values {
@@ -1341,8 +1413,17 @@ fn run_stream(
     corpus_dir: &Path,
     runner_kind: RunnerKind,
     scripted_lane: bool,
+    side_channel: bool,
 ) -> Result<String, String> {
-    let mut command = stream_command(runner, entry, file, corpus_dir, runner_kind, scripted_lane);
+    let mut command = stream_command(
+        runner,
+        entry,
+        file,
+        corpus_dir,
+        runner_kind,
+        scripted_lane,
+        side_channel,
+    );
     let output = command
         .output()
         .map_err(|error| format!("failed to run {}: {error}", runner.display()))?;
@@ -1381,7 +1462,15 @@ fn run_malformed_rejection(
     expected_rust_error: &str,
     scripted_lane: bool,
 ) -> Result<(), String> {
-    let mut command = stream_command(runner, entry, file, corpus_dir, runner_kind, scripted_lane);
+    let mut command = stream_command(
+        runner,
+        entry,
+        file,
+        corpus_dir,
+        runner_kind,
+        scripted_lane,
+        false,
+    );
     let output = command
         .output()
         .map_err(|error| format!("failed to run {}: {error}", runner.display()))?;
@@ -1480,6 +1569,7 @@ fn run_unsupported_diagnostic(
         corpus_dir,
         RunnerKind::Rust,
         scripted_lane,
+        false,
     );
     let output = command
         .output()
@@ -1518,6 +1608,7 @@ fn stream_command(
     corpus_dir: &Path,
     runner_kind: RunnerKind,
     scripted_lane: bool,
+    side_channel: bool,
 ) -> Command {
     let mut command = Command::new(runner);
     command.arg("--file").arg(file);
@@ -1539,6 +1630,11 @@ fn stream_command(
         command
             .arg("--input-script")
             .arg(resolve_script_path(input_script, corpus_dir));
+    }
+    if side_channel {
+        // The event/state side channel is part of the diffed stream; it must
+        // be on for BOTH runners or every segment fails (stub baseline).
+        command.arg("--side-channel");
     }
     command
 }

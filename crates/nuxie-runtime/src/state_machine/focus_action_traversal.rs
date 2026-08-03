@@ -21,9 +21,20 @@ impl RuntimeFocusActionTraversal {
     /// other authored value to next.
     pub(crate) fn perform(
         &self,
-        _artboard: &crate::ArtboardInstance,
+        artboard: &crate::ArtboardInstance,
         focus: &mut RuntimeFocusTree,
     ) -> bool {
+        // Pinned `FocusManager::{focusNext,...}` evaluate eligibility live at
+        // every traversal query: `focusNodeEligibleForFocus` calls
+        // `Focusable::isEligibleForFocusTraversal`, which re-walks collapse,
+        // hidden flags, and renderOpacity across artboard boundaries on each
+        // call (`src/input/focus_manager.cpp:20-46`;
+        // `src/focus_data.cpp:511-560`). The retained Rust tree bakes those
+        // inputs into its nodes and mounts, so the query boundary must
+        // resynchronize them from live component state first — otherwise a
+        // mount recorded before the first update pass (renderOpacity still
+        // zero) would pin its subtree ineligible forever.
+        focus.refresh_visibility_change(artboard);
         focus.traverse(
             self.action_owner
                 .uint(super::listener_action_owner::FOCUS_TRAVERSAL_KIND_KEY),

@@ -15,6 +15,7 @@ cargo test -p nuxie --features scripting
 make runtime-frame-loop-port-check
 make rust-attribution-check
 make scripted-golden-compare
+make silver-corpus-test
 for extra in "$@"; do make "$extra"; done
 git push -u origin "$branch"
 gh pr create --base main --head "$branch" --title "$(head -1 "$body")" --body "$(tail -n +2 "$body")"

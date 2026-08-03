@@ -5490,6 +5490,14 @@ impl StateMachineInstance {
         let Some(tree) = self.semantic_tree.as_mut() else {
             return Err(SemanticDrainError::NotEnabled);
         };
+        // Semantic focus requests route through `FocusManager::setFocus`,
+        // whose eligibility gate re-walks live collapse/hidden/renderOpacity
+        // state on every call (`src/input/focus_manager.cpp:118-141`;
+        // `src/focus_data.cpp:511-560`). `request_semantic_focus` carries no
+        // Artboard borrow, so the retained eligibility bake is resynchronized
+        // here — the drain that constructs the semantic routes is its
+        // artboard-bearing precondition.
+        self.focus.refresh_visibility_change(artboard);
         tree.synchronize(artboard, &self.semantic_listener_groups);
         tree.manager.drain_diff()
     }

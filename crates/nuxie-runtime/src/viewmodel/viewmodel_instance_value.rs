@@ -12,6 +12,7 @@ enum RuntimeOwnedViewModelValueKind {
     List,
     Asset,
     FontAsset,
+    BlobAsset,
     Artboard,
     Trigger,
     ViewModel,
@@ -54,6 +55,9 @@ fn runtime_owned_view_model_value_kind(type_name: &str) -> Option<RuntimeOwnedVi
         | "ViewModelInstanceAssetImage" => RuntimeOwnedViewModelValueKind::Asset,
         "ViewModelPropertyAssetFont" | "ViewModelInstanceAssetFont" => {
             RuntimeOwnedViewModelValueKind::FontAsset
+        }
+        "ViewModelPropertyAssetBlob" | "ViewModelInstanceAssetBlob" => {
+            RuntimeOwnedViewModelValueKind::BlobAsset
         }
         "ViewModelPropertyArtboard" | "ViewModelInstanceArtboard" => {
             RuntimeOwnedViewModelValueKind::Artboard

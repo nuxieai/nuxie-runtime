@@ -2,29 +2,40 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use luaur_rt::{Lua, Result, UserData, UserDataFields, Value};
+use nuxie_runtime::RuntimeBlobAsset;
 
 #[derive(Debug)]
 struct ScriptedBlobData {
     name: String,
-    short_name: String,
-    bytes: Rc<[u8]>,
+    asset: Arc<RuntimeBlobAsset>,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct ScriptedBlob(Rc<ScriptedBlobData>);
+pub(super) struct ScriptedBlob(Arc<RuntimeBlobAsset>);
 
 impl UserData for ScriptedBlob {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("size", |_, this| Ok(this.0.bytes.len() as f64));
-        fields.add_field_method_get("name", |_, this| Ok(this.0.short_name.clone()));
+        fields.add_field_method_get("size", |_, this| Ok(this.0.bytes().len() as f64));
+        fields.add_field_method_get("name", |_, this| Ok(this.0.name().to_owned()));
         fields.add_field_method_get("data", |lua, this| {
-            if this.0.bytes.is_empty() {
+            if this.0.bytes().is_empty() {
                 return Ok(Value::Nil);
             }
-            lua.create_buffer(this.0.bytes.as_ref()).map(Value::Buffer)
+            lua.create_buffer(this.0.bytes()).map(Value::Buffer)
         });
+    }
+}
+
+impl ScriptedBlob {
+    pub(super) fn from_asset(asset: Arc<RuntimeBlobAsset>) -> Self {
+        Self(asset)
+    }
+
+    pub(super) fn asset(&self) -> Arc<RuntimeBlobAsset> {
+        Arc::clone(&self.0)
     }
 }
 
@@ -49,8 +60,7 @@ impl ScriptedBlobAssets {
     pub(super) fn register(&self, name: &str, short_name: &str, bytes: &[u8]) -> Result<()> {
         self.assets.borrow_mut().push(Rc::new(ScriptedBlobData {
             name: name.to_owned(),
-            short_name: short_name.to_owned(),
-            bytes: Rc::from(bytes),
+            asset: Arc::new(RuntimeBlobAsset::new(short_name, Arc::from(bytes))),
         }));
         Ok(())
     }
@@ -63,16 +73,16 @@ impl ScriptedBlobAssets {
         let mut best_rank = 0;
         let mut asset = None;
         for candidate in assets.assets.borrow().iter() {
-            let rank = reference.rank(&candidate.name, &candidate.short_name);
-            if rank > best_rank && !candidate.bytes.is_empty() {
+            let rank = reference.rank(&candidate.name, candidate.asset.name());
+            if rank > best_rank && !candidate.asset.bytes().is_empty() {
                 best_rank = rank;
-                asset = Some(Rc::clone(candidate));
+                asset = Some(Arc::clone(&candidate.asset));
             }
         }
         match asset {
             // Pinned Context:blob deliberately rejects zero-byte BlobAssets.
             Some(asset) => lua
-                .create_userdata(ScriptedBlob(asset))
+                .create_userdata(ScriptedBlob::from_asset(asset))
                 .map(Value::UserData),
             _ => Ok(Value::Nil),
         }

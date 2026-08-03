@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
 
 use luaur_rt::{
     AnyUserData, Buffer, Function, Lua, MultiValue, Table, UserData, UserDataFields,
@@ -9,9 +10,11 @@ use luaur_rt::{
 };
 use luaur_vm::functions::lua_getmetatable::lua_getmetatable;
 use nuxie_runtime::view_model_cell::RuntimeCellDirtSink;
-use nuxie_runtime::{RuntimeOwnedViewModelInstance, ScriptViewModel, ScriptViewModelProperty};
+use nuxie_runtime::{
+    RuntimeBlobAsset, RuntimeOwnedViewModelInstance, ScriptViewModel, ScriptViewModelProperty,
+};
 
-use super::lua_blob::ScriptedBlobAssets;
+use super::lua_blob::{ScriptedBlob, ScriptedBlobAssets};
 use super::lua_font::{ScriptedFont, create_asset_font};
 use super::lua_image::{ScriptedImage, create_asset_image};
 
@@ -47,6 +50,7 @@ struct ParentRelationship {
 pub(crate) struct ScriptViewModelFrameContext {
     tracked: Rc<RefCell<TrackedViewModels>>,
     trigger_watches: Rc<RefCell<Vec<Weak<ScriptedTriggerWatch>>>>,
+    blob_watches: Rc<RefCell<Vec<Weak<ScriptedBlobWatch>>>>,
 }
 
 impl std::fmt::Debug for ScriptViewModelFrameContext {
@@ -55,6 +59,7 @@ impl std::fmt::Debug for ScriptViewModelFrameContext {
             .debug_struct("ScriptViewModelFrameContext")
             .field("tracked_instances", &self.tracked.borrow().instances.len())
             .field("trigger_watches", &self.trigger_watches.borrow().len())
+            .field("blob_watches", &self.blob_watches.borrow().len())
             .finish()
     }
 }
@@ -126,9 +131,48 @@ impl ScriptViewModelFrameContext {
         watches.push(Rc::downgrade(watch));
     }
 
+    fn register_blob_watch(&self, watch: &Rc<ScriptedBlobWatch>) {
+        let mut watches = self.blob_watches.borrow_mut();
+        watches.retain(|candidate| candidate.strong_count() != 0);
+        if watches
+            .iter()
+            .filter_map(Weak::upgrade)
+            .any(|candidate| Rc::ptr_eq(&candidate, watch))
+        {
+            return;
+        }
+        watches.push(Rc::downgrade(watch));
+    }
+
     fn dispatch_trigger_watches(&self) -> bool {
         let watches = {
             let mut retained = self.trigger_watches.borrow_mut();
+            let watches = retained
+                .iter()
+                .filter_map(Weak::upgrade)
+                .collect::<Vec<_>>();
+            retained.retain(|watch| watch.strong_count() != 0);
+            watches
+        };
+        let mut changed = false;
+        for watch in watches {
+            if watch.sink.take_dirt().is_empty() {
+                continue;
+            }
+            changed = true;
+            let listeners = watch.listeners.borrow().clone();
+            for listener in listeners.into_iter().rev() {
+                let _ = listener
+                    .callback
+                    .call::<()>(listener.userdata.unwrap_or(Value::Nil));
+            }
+        }
+        changed
+    }
+
+    fn dispatch_blob_watches(&self) -> bool {
+        let watches = {
+            let mut retained = self.blob_watches.borrow_mut();
             let watches = retained
                 .iter()
                 .filter_map(Weak::upgrade)
@@ -285,6 +329,7 @@ impl ScriptViewModelFrameContext {
 
     pub(crate) fn advance_detached(&self) -> bool {
         let mut changed = self.dispatch_trigger_watches();
+        changed |= self.dispatch_blob_watches();
         // Lists can also change through data binding or host APIs. Refresh all
         // live parent edges here, not only in Lua list methods, before deciding
         // which registered instances are detached roots.
@@ -552,6 +597,18 @@ fn create_scripted_view_model_with_parent(
             }
         })?,
     )?;
+    let get_blob_model = model.clone();
+    table.set(
+        "getBlob",
+        lua.create_function(move |lua, (_self, name): (Table, String)| {
+            match get_blob_model.property(&name) {
+                Some(ScriptViewModelProperty::Blob) => lua
+                    .create_userdata(ScriptedPropertyBlob::new(get_blob_model.clone(), name))
+                    .map(Value::UserData),
+                _ => Ok(Value::Nil),
+            }
+        })?,
+    )?;
     let get_font_model = model.clone();
     table.set(
         "getFont",
@@ -625,6 +682,9 @@ fn create_scripted_view_model_with_parent(
             }
             ScriptViewModelProperty::Image => {
                 lua.create_userdata(ScriptedPropertyImage::new(model.clone(), name.clone()))?
+            }
+            ScriptViewModelProperty::Blob => {
+                lua.create_userdata(ScriptedPropertyBlob::new(model.clone(), name.clone()))?
             }
             ScriptViewModelProperty::Font => {
                 lua.create_userdata(ScriptedPropertyFont::new(model.clone(), name.clone()))?
@@ -826,6 +886,122 @@ struct ScriptedPropertyImage {
     name: String,
     cached_value: Rc<RefCell<Option<AnyUserData>>>,
     _change_sink: RuntimeCellDirtSink,
+}
+
+struct ScriptedBlobWatch {
+    sink: RuntimeCellDirtSink,
+    listeners: RefCell<Vec<ScriptedListener>>,
+}
+
+#[derive(Clone)]
+struct ScriptedPropertyBlob {
+    model: ScriptViewModel,
+    name: String,
+    watch: Rc<ScriptedBlobWatch>,
+}
+
+impl ScriptedPropertyBlob {
+    fn new(model: ScriptViewModel, name: String) -> Self {
+        let sink = model.property_dirt_sink(&name).unwrap_or_default();
+        Self {
+            model,
+            name,
+            watch: Rc::new(ScriptedBlobWatch {
+                sink,
+                listeners: RefCell::new(Vec::new()),
+            }),
+        }
+    }
+
+    fn notify_listeners(&self) {
+        let listeners = self.watch.listeners.borrow().clone();
+        for listener in listeners.into_iter().rev() {
+            let _ = listener
+                .callback
+                .call::<()>(listener.userdata.unwrap_or(Value::Nil));
+        }
+        let _ = self.watch.sink.take_dirt();
+    }
+}
+
+impl UserData for ScriptedPropertyBlob {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("value", |lua, this| {
+            Ok(match this.model.blob_asset(&this.name) {
+                Some(asset) => {
+                    Value::UserData(lua.create_userdata(ScriptedBlob::from_asset(asset))?)
+                }
+                None => Value::Nil,
+            })
+        });
+        fields.add_field_method_set("value", |_, this, value: Value| {
+            let asset = match value {
+                Value::Nil => None,
+                Value::String(value) => Some(Arc::new(RuntimeBlobAsset::new(
+                    "",
+                    Arc::<[u8]>::from(value.as_bytes()),
+                ))),
+                Value::Buffer(value) => Some(Arc::new(RuntimeBlobAsset::new(
+                    "",
+                    Arc::<[u8]>::from(value.to_vec()),
+                ))),
+                Value::UserData(value) => {
+                    let blob = value.borrow::<ScriptedBlob>()?;
+                    Some(blob.asset())
+                }
+                _ => {
+                    return Err(luaur_rt::Error::runtime(
+                        "expected Blob, string, buffer, or nil",
+                    ));
+                }
+            };
+            if this.model.set_blob_asset(&this.name, asset) {
+                this.notify_listeners();
+            }
+            Ok(())
+        });
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method_mut("addListener", |lua, this, args: MultiValue| {
+            let args = args.into_vec();
+            let (userdata, callback) = match args.as_slice() {
+                [Value::Function(callback)] => (
+                    Some(Value::UserData(lua.create_userdata(this.clone())?)),
+                    callback.clone(),
+                ),
+                [userdata, Value::Function(callback)] => (Some(userdata.clone()), callback.clone()),
+                _ => {
+                    return Err(luaur_rt::Error::runtime(
+                        "addListener expects a callback or userdata and callback",
+                    ));
+                }
+            };
+            this.watch
+                .listeners
+                .borrow_mut()
+                .push(ScriptedListener { callback, userdata });
+            ScriptViewModelFrameContext::for_lua(lua).register_blob_watch(&this.watch);
+            Ok(())
+        });
+        methods.add_method_mut("removeListener", |_, this, args: MultiValue| {
+            let args = args.into_vec();
+            let callback = match args.as_slice() {
+                [Value::Function(callback)] | [_, Value::Function(callback)] => callback,
+                _ => {
+                    return Err(luaur_rt::Error::runtime(
+                        "removeListener expects a callback or userdata and callback",
+                    ));
+                }
+            };
+            let identity = callback.to_pointer();
+            this.watch
+                .listeners
+                .borrow_mut()
+                .retain(|listener| listener.callback.to_pointer() != identity);
+            Ok(())
+        });
+    }
 }
 
 impl ScriptedPropertyImage {
@@ -2104,6 +2280,113 @@ mod tests {
             .eval::<bool>()
             .unwrap()
         );
+    }
+
+    #[test]
+    fn scripted_blob_property_reads_and_writes_bytes() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/sync/data_bind_blob_test.riv");
+        let bytes = std::fs::read(path).expect("vendored blob fixture");
+        let file = nuxie_binary::read_runtime_file(&bytes).expect("blob fixture parses");
+        let model = nuxie_runtime::script_view_models(&file)
+            .into_values()
+            .find_map(|definition| {
+                definition
+                    .properties()
+                    .values()
+                    .any(|kind| *kind == ScriptViewModelProperty::Blob)
+                    .then(|| definition.named_instance(None))
+                    .flatten()
+            })
+            .expect("fixture exposes blob property");
+        let property_name = model
+            .properties()
+            .iter()
+            .find_map(|(name, kind)| (*kind == ScriptViewModelProperty::Blob).then(|| name.clone()))
+            .expect("blob property name");
+        let lua = Lua::new();
+        let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
+        lua.globals().set("model", table).unwrap();
+        lua.globals()
+            .set("propertyName", property_name.clone())
+            .unwrap();
+
+        let values: Table = lua
+            .load(
+                "local property = model:getBlob(propertyName)\n\
+                 assert(property ~= nil)\n\
+                 property.value = 'abcd'\n\
+                 local size = property.value.size\n\
+                 local first = buffer.readu8(property.value.data, 0)\n\
+                 property.value = ''\n\
+                 local empty = property.value\n\
+                 return { size, first, empty ~= nil, empty.size, empty.data == nil }",
+            )
+            .eval()
+            .expect("blob property script");
+
+        assert_eq!(values.get::<usize>(1).unwrap(), 4);
+        assert_eq!(values.get::<u8>(2).unwrap(), b'a');
+        assert!(values.get::<bool>(3).unwrap());
+        assert_eq!(values.get::<usize>(4).unwrap(), 0);
+        assert!(values.get::<bool>(5).unwrap());
+        assert_eq!(model.blob(&property_name).as_deref(), Some(&b""[..]));
+    }
+
+    #[test]
+    fn scripted_blob_property_fires_listeners_only_when_identity_changes() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/sync/data_bind_blob_test.riv");
+        let bytes = std::fs::read(path).expect("vendored blob fixture");
+        let file = nuxie_binary::read_runtime_file(&bytes).expect("blob fixture parses");
+        let model = nuxie_runtime::script_view_models(&file)
+            .into_values()
+            .find_map(|definition| {
+                definition
+                    .properties()
+                    .values()
+                    .any(|kind| *kind == ScriptViewModelProperty::Blob)
+                    .then(|| definition.named_instance(None))
+                    .flatten()
+            })
+            .expect("fixture exposes blob property");
+        let property_name = model
+            .properties()
+            .iter()
+            .find_map(|(name, kind)| (*kind == ScriptViewModelProperty::Blob).then(|| name.clone()))
+            .expect("blob property name");
+        let lua = Lua::new();
+        let assets = ScriptedBlobAssets::install(&lua);
+        assets
+            .register("payload.bin", "payload.bin", b"abcd")
+            .expect("blob registration");
+        let source = ScriptedBlobAssets::lookup(&lua, "payload.bin").expect("blob lookup");
+        let table = create_scripted_view_model(&lua, model).expect("scripted model");
+        lua.globals().set("model", table).unwrap();
+        lua.globals().set("propertyName", property_name).unwrap();
+        lua.globals().set("source", source).unwrap();
+
+        let values: Table = lua
+            .load(
+                "local property = model:getBlob(propertyName)\n\
+                 local count = 0\n\
+                 local function changed(_) count += 1 end\n\
+                 local function throwing(_) error('ignored listener failure') end\n\
+                 property:addListener(changed)\n\
+                 property:addListener(throwing)\n\
+                 property.value = source\n\
+                 local same = property.value\n\
+                 property.value = same\n\
+                 property:removeListener(changed)\n\
+                 property:removeListener(throwing)\n\
+                 property.value = 'efgh'\n\
+                 return { count, same.name }",
+            )
+            .eval()
+            .expect("blob listener script");
+
+        assert_eq!(values.get::<i64>(1).unwrap(), 1);
+        assert_eq!(values.get::<String>(2).unwrap(), "payload.bin");
     }
 
     #[test]

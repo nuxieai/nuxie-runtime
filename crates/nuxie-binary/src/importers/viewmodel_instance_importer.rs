@@ -14,7 +14,10 @@ pub(super) fn imports_successfully(
     }
     if matches!(
         definition.name,
-        "ViewModelInstanceAsset" | "ViewModelInstanceAssetImage" | "ViewModelInstanceAssetFont"
+        "ViewModelInstanceAsset"
+            | "ViewModelInstanceAssetImage"
+            | "ViewModelInstanceAssetFont"
+            | "ViewModelInstanceAssetBlob"
     ) {
         return Some(
             context.latest(ImportStackKey::Backboard)

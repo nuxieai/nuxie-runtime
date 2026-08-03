@@ -1,0 +1,2 @@
+# Exercise a slash-separated nested view-model property path.
+0 setVmNumber child2/xPos 123

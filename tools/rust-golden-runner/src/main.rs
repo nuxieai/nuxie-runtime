@@ -173,7 +173,8 @@ fn validate_trace_options(options: &Options) -> Result<()> {
         && (!frame_only
             || options.samples.len() != 1
             || options.benchmark_repeat != 1
-            || options.input_script.is_some())
+            || options.input_script.is_some()
+            || options.view_model_script.is_some())
     {
         bail!(
             "steady-only coverage requires frame-only coverage, one sample, \
@@ -189,18 +190,30 @@ trait RunnerBackend {
     fn source(&mut self, file: &str, artboard: &str, scene: &str);
     fn frame_size(&mut self, width: u32, height: u32);
     fn add_input_event(&mut self, kind: &str, seconds: f32, x: f32, y: f32, pointer_id: i32);
+    fn add_set_input_boolean(&mut self, seconds: f32, name: &str, value: bool);
+    fn add_set_input_number(&mut self, seconds: f32, name: &str, value: f32);
+    fn add_set_input_trigger(&mut self, seconds: f32, name: &str);
+    fn add_view_model_boolean(&mut self, seconds: f32, property: &str, value: bool);
+    fn add_view_model_number(&mut self, seconds: f32, property: &str, value: f32);
+    fn add_view_model_string(&mut self, seconds: f32, property: &str, value: &str);
+    fn add_view_model_enum(&mut self, seconds: f32, property: &str, value: u32);
+    fn add_view_model_color(&mut self, seconds: f32, property: &str, value: u32);
+    fn add_view_model_trigger(&mut self, seconds: f32, property: &str);
+    fn add_resize(
+        &mut self,
+        seconds: f32,
+        width: f32,
+        height: f32,
+        dpr: f32,
+        pixel_width: u32,
+        pixel_height: u32,
+    );
     fn add_sample(&mut self, seconds: f32);
     fn add_advance(&mut self, seconds: f32, settled: bool);
     fn add_advance_with_states(&mut self, seconds: f32, settled: bool, states_changed: usize);
     fn add_side_channel_event(&mut self, event: &SideChannelEvent);
     fn add_semantics_diff(&mut self, diff: &SideChannelSemanticsDiff);
-    fn add_semantic_action(
-        &mut self,
-        seconds: f32,
-        node_id: u32,
-        action: &str,
-        dispatched: bool,
-    );
+    fn add_semantic_action(&mut self, seconds: f32, node_id: u32, action: &str, dispatched: bool);
     fn add_semantic_focus(&mut self, seconds: f32, node_id: u32, focused: bool);
     fn add_hit_result(&mut self, result: &str);
     fn add_frame(&mut self);
@@ -228,6 +241,54 @@ impl RunnerBackend for RecordingFactory {
         RecordingFactory::add_input_event(self, kind, seconds, x, y, pointer_id);
     }
 
+    fn add_set_input_boolean(&mut self, seconds: f32, name: &str, value: bool) {
+        RecordingFactory::add_set_input_boolean(self, seconds, name, value);
+    }
+
+    fn add_set_input_number(&mut self, seconds: f32, name: &str, value: f32) {
+        RecordingFactory::add_set_input_number(self, seconds, name, value);
+    }
+
+    fn add_set_input_trigger(&mut self, seconds: f32, name: &str) {
+        RecordingFactory::add_set_input_trigger(self, seconds, name);
+    }
+
+    fn add_view_model_boolean(&mut self, seconds: f32, property: &str, value: bool) {
+        RecordingFactory::add_view_model_boolean(self, seconds, property, value);
+    }
+
+    fn add_view_model_number(&mut self, seconds: f32, property: &str, value: f32) {
+        RecordingFactory::add_view_model_number(self, seconds, property, value);
+    }
+
+    fn add_view_model_string(&mut self, seconds: f32, property: &str, value: &str) {
+        RecordingFactory::add_view_model_string(self, seconds, property, value);
+    }
+
+    fn add_view_model_enum(&mut self, seconds: f32, property: &str, value: u32) {
+        RecordingFactory::add_view_model_enum(self, seconds, property, value);
+    }
+
+    fn add_view_model_color(&mut self, seconds: f32, property: &str, value: u32) {
+        RecordingFactory::add_view_model_color(self, seconds, property, value);
+    }
+
+    fn add_view_model_trigger(&mut self, seconds: f32, property: &str) {
+        RecordingFactory::add_view_model_trigger(self, seconds, property);
+    }
+
+    fn add_resize(
+        &mut self,
+        seconds: f32,
+        width: f32,
+        height: f32,
+        dpr: f32,
+        pixel_width: u32,
+        pixel_height: u32,
+    ) {
+        RecordingFactory::add_resize(self, seconds, width, height, dpr, pixel_width, pixel_height);
+    }
+
     fn add_sample(&mut self, seconds: f32) {
         RecordingFactory::add_sample(self, seconds);
     }
@@ -248,13 +309,7 @@ impl RunnerBackend for RecordingFactory {
         RecordingFactory::add_semantics_diff(self, diff);
     }
 
-    fn add_semantic_action(
-        &mut self,
-        seconds: f32,
-        node_id: u32,
-        action: &str,
-        dispatched: bool,
-    ) {
+    fn add_semantic_action(&mut self, seconds: f32, node_id: u32, action: &str, dispatched: bool) {
         RecordingFactory::add_semantic_action(self, seconds, node_id, action, dispatched);
     }
 
@@ -289,6 +344,35 @@ impl RunnerBackend for NullFactory {
     fn frame_size(&mut self, _width: u32, _height: u32) {}
 
     fn add_input_event(&mut self, _kind: &str, _seconds: f32, _x: f32, _y: f32, _pointer_id: i32) {}
+
+    fn add_set_input_boolean(&mut self, _seconds: f32, _name: &str, _value: bool) {}
+
+    fn add_set_input_number(&mut self, _seconds: f32, _name: &str, _value: f32) {}
+
+    fn add_set_input_trigger(&mut self, _seconds: f32, _name: &str) {}
+
+    fn add_view_model_boolean(&mut self, _seconds: f32, _property: &str, _value: bool) {}
+
+    fn add_view_model_number(&mut self, _seconds: f32, _property: &str, _value: f32) {}
+
+    fn add_view_model_string(&mut self, _seconds: f32, _property: &str, _value: &str) {}
+
+    fn add_view_model_enum(&mut self, _seconds: f32, _property: &str, _value: u32) {}
+
+    fn add_view_model_color(&mut self, _seconds: f32, _property: &str, _value: u32) {}
+
+    fn add_view_model_trigger(&mut self, _seconds: f32, _property: &str) {}
+
+    fn add_resize(
+        &mut self,
+        _seconds: f32,
+        _width: f32,
+        _height: f32,
+        _dpr: f32,
+        _pixel_width: u32,
+        _pixel_height: u32,
+    ) {
+    }
 
     fn add_sample(&mut self, _seconds: f32) {}
 
@@ -345,6 +429,61 @@ where
             .add_input_event(kind, seconds, x, y, pointer_id);
     }
 
+    fn add_set_input_boolean(&mut self, seconds: f32, name: &str, value: bool) {
+        self.borrow_mut()
+            .add_set_input_boolean(seconds, name, value);
+    }
+
+    fn add_set_input_number(&mut self, seconds: f32, name: &str, value: f32) {
+        self.borrow_mut().add_set_input_number(seconds, name, value);
+    }
+
+    fn add_set_input_trigger(&mut self, seconds: f32, name: &str) {
+        self.borrow_mut().add_set_input_trigger(seconds, name);
+    }
+
+    fn add_view_model_boolean(&mut self, seconds: f32, property: &str, value: bool) {
+        self.borrow_mut()
+            .add_view_model_boolean(seconds, property, value);
+    }
+
+    fn add_view_model_number(&mut self, seconds: f32, property: &str, value: f32) {
+        self.borrow_mut()
+            .add_view_model_number(seconds, property, value);
+    }
+
+    fn add_view_model_string(&mut self, seconds: f32, property: &str, value: &str) {
+        self.borrow_mut()
+            .add_view_model_string(seconds, property, value);
+    }
+
+    fn add_view_model_enum(&mut self, seconds: f32, property: &str, value: u32) {
+        self.borrow_mut()
+            .add_view_model_enum(seconds, property, value);
+    }
+
+    fn add_view_model_color(&mut self, seconds: f32, property: &str, value: u32) {
+        self.borrow_mut()
+            .add_view_model_color(seconds, property, value);
+    }
+
+    fn add_view_model_trigger(&mut self, seconds: f32, property: &str) {
+        self.borrow_mut().add_view_model_trigger(seconds, property);
+    }
+
+    fn add_resize(
+        &mut self,
+        seconds: f32,
+        width: f32,
+        height: f32,
+        dpr: f32,
+        pixel_width: u32,
+        pixel_height: u32,
+    ) {
+        self.borrow_mut()
+            .add_resize(seconds, width, height, dpr, pixel_width, pixel_height);
+    }
+
     fn add_sample(&mut self, seconds: f32) {
         self.borrow_mut().add_sample(seconds);
     }
@@ -366,13 +505,7 @@ where
         self.borrow_mut().add_semantics_diff(diff);
     }
 
-    fn add_semantic_action(
-        &mut self,
-        seconds: f32,
-        node_id: u32,
-        action: &str,
-        dispatched: bool,
-    ) {
+    fn add_semantic_action(&mut self, seconds: f32, node_id: u32, action: &str, dispatched: bool) {
         self.borrow_mut()
             .add_semantic_action(seconds, node_id, action, dispatched);
     }
@@ -448,6 +581,14 @@ fn run() -> Result<String> {
         .map(load_input_script)
         .transpose()?
         .unwrap_or_default();
+    let has_pointer_events = input_events.iter().any(InputEvent::is_pointer);
+    let view_model_events = options
+        .view_model_script
+        .as_deref()
+        .map(load_view_model_script)
+        .transpose()?
+        .unwrap_or_default();
+    let script_events = merge_script_events(input_events, view_model_events);
     let bytes = std::fs::read(&options.file)
         .with_context(|| format!("failed to read {}", options.file.display()))?;
     let runtime = read_runtime_for_options(&bytes, options.execute_scripts)
@@ -455,12 +596,7 @@ fn run() -> Result<String> {
     let graph = GraphFile::from_runtime_file(&runtime).context("failed to build graph")?;
     let (artboard_index, artboard) = select_artboard(&graph, options.artboard.as_deref())?;
     if !options.layout_bounds && !options.semantic_side_channel_only {
-        ensure_static_draw_supported(
-            &runtime,
-            &graph,
-            artboard,
-            input_events.iter().any(InputEvent::is_pointer),
-        )?;
+        ensure_static_draw_supported(&runtime, &graph, artboard, has_pointer_events)?;
     }
     // Construction evidence compares the live occurrence arena, not the
     // immutable RuntimeFile/GraphFile definition import above.
@@ -760,7 +896,7 @@ fn run() -> Result<String> {
             script_artboard_render_state
                 .as_ref()
                 .map(|state| state as &dyn RootScriptFrameTail),
-            &input_events,
+            &script_events,
         );
     }
 
@@ -837,15 +973,15 @@ fn run() -> Result<String> {
     let mut input_elapsed = Duration::ZERO;
     let mut prepare_elapsed = Duration::ZERO;
     let mut draw_elapsed = Duration::ZERO;
-    let mut next_input = 0;
+    let mut next_script = 0;
     #[cfg(feature = "scripting")]
     let mut bound_script_artboards = BTreeMap::new();
     for _ in 0..options.benchmark_repeat {
         for sample in &options.samples {
-            while next_input < input_events.len()
-                && input_events[next_input].seconds <= *sample + TIME_EPSILON
+            while next_script < script_events.len()
+                && script_events[next_script].seconds <= *sample + TIME_EPSILON
             {
-                let event = &input_events[next_input];
+                let event = &script_events[next_script];
                 let keep_going = timed_result(options.benchmark, &mut advance_elapsed, || {
                     advance_scene_to(
                         &mut instance,
@@ -881,37 +1017,55 @@ fn run() -> Result<String> {
                         registered_script_file.as_ref(),
                     )?;
                 }
-                timed(options.benchmark, &mut input_elapsed, || {
-                    if matches!(
-                        event.kind,
-                        InputKind::SemanticAction | InputKind::SemanticFocus
-                    ) {
-                        apply_semantic_input(
-                            &mut *factory,
-                            state_machine.as_mut(),
-                            event,
-                            options.side_channel,
-                        );
-                        return;
+                timed_result(options.benchmark, &mut input_elapsed, || {
+                    match &event.kind {
+                        ScriptEventKind::Input(event)
+                            if matches!(
+                                event.kind,
+                                InputKind::SemanticAction | InputKind::SemanticFocus
+                            ) =>
+                        {
+                            apply_semantic_input(
+                                &mut *factory,
+                                state_machine.as_mut(),
+                                event,
+                                options.side_channel,
+                            );
+                        }
+                        ScriptEventKind::Input(event) if event.kind == InputKind::SetInput => {
+                            apply_set_input(state_machine.as_mut(), event)?;
+                            emit_input_mutation(&mut *factory, event)?;
+                        }
+                        ScriptEventKind::Input(event) if event.kind == InputKind::Resize => {
+                            instance.set_artboard_dimensions(event.width, event.height);
+                            emit_input_mutation(&mut *factory, event)?;
+                        }
+                        ScriptEventKind::Input(event) => {
+                            let hit_result = apply_input_event(
+                                event,
+                                &mut instance,
+                                state_machine.as_mut(),
+                                owned_view_model_context.as_mut(),
+                            );
+                            factory.add_input_event(
+                                event.kind.name(),
+                                event.seconds,
+                                event.x,
+                                event.y,
+                                event.pointer_id,
+                            );
+                            if options.side_channel {
+                                factory.add_hit_result(hit_result_name(hit_result));
+                            }
+                        }
+                        ScriptEventKind::ViewModel(event) => {
+                            apply_view_model_event(owned_view_model_context.as_mut(), event)?;
+                            emit_view_model_mutation(&mut *factory, event);
+                        }
                     }
-                    let hit_result = apply_input_event(
-                        event,
-                        &mut instance,
-                        state_machine.as_mut(),
-                        owned_view_model_context.as_mut(),
-                    );
-                    factory.add_input_event(
-                        event.kind.name(),
-                        event.seconds,
-                        event.x,
-                        event.y,
-                        event.pointer_id,
-                    );
-                    if options.side_channel {
-                        factory.add_hit_result(hit_result_name(hit_result));
-                    }
-                });
-                next_input += 1;
+                    Ok(())
+                })?;
+                next_script += 1;
             }
             let keep_going = timed_result(options.benchmark, &mut advance_elapsed, || {
                 advance_scene_to(
@@ -1395,7 +1549,7 @@ fn write_layout_bounds_report(
     state_machine: &mut Option<StateMachineInstance>,
     owned_view_model_context: &mut Option<RuntimeOwnedViewModelContext>,
     #[cfg(feature = "scripting")] script_frame_tail: Option<&dyn RootScriptFrameTail>,
-    input_events: &[InputEvent],
+    script_events: &[ScriptEvent],
 ) -> Result<String> {
     let mut out = String::new();
     out.push('{');
@@ -1408,12 +1562,12 @@ fn write_layout_bounds_report(
     out.push_str(",\"samples\":[");
 
     let mut current_seconds = 0.0;
-    let mut next_input = 0;
+    let mut next_script = 0;
     for (sample_index, sample) in options.samples.iter().enumerate() {
-        while next_input < input_events.len()
-            && input_events[next_input].seconds <= *sample + TIME_EPSILON
+        while next_script < script_events.len()
+            && script_events[next_script].seconds <= *sample + TIME_EPSILON
         {
-            let event = &input_events[next_input];
+            let event = &script_events[next_script];
             advance_scene_to(
                 instance,
                 runtime,
@@ -1424,13 +1578,26 @@ fn write_layout_bounds_report(
                 event.seconds,
                 &mut current_seconds,
             )?;
-            apply_input_event(
-                event,
-                instance,
-                state_machine.as_mut(),
-                owned_view_model_context.as_mut(),
-            );
-            next_input += 1;
+            match &event.kind {
+                ScriptEventKind::Input(event) if event.kind == InputKind::SetInput => {
+                    apply_set_input(state_machine.as_mut(), event)?;
+                }
+                ScriptEventKind::Input(event) if event.kind == InputKind::Resize => {
+                    instance.set_artboard_dimensions(event.width, event.height);
+                }
+                ScriptEventKind::Input(event) => {
+                    apply_input_event(
+                        event,
+                        instance,
+                        state_machine.as_mut(),
+                        owned_view_model_context.as_mut(),
+                    );
+                }
+                ScriptEventKind::ViewModel(event) => {
+                    apply_view_model_event(owned_view_model_context.as_mut(), event)?;
+                }
+            }
+            next_script += 1;
         }
 
         advance_scene_to(
@@ -1603,6 +1770,8 @@ enum InputKind {
     PointerExit,
     SemanticAction,
     SemanticFocus,
+    SetInput,
+    Resize,
 }
 
 impl InputKind {
@@ -1614,6 +1783,8 @@ impl InputKind {
             "pointerExit" => Ok(Self::PointerExit),
             "semanticAction" => Ok(Self::SemanticAction),
             "semanticFocus" => Ok(Self::SemanticFocus),
+            "setInput" => Ok(Self::SetInput),
+            "resize" => Ok(Self::Resize),
             _ => bail!("unknown input event on line {line_number}: {value}"),
         }
     }
@@ -1626,8 +1797,27 @@ impl InputKind {
             Self::PointerExit => "pointerExit",
             Self::SemanticAction => "semanticAction",
             Self::SemanticFocus => "semanticFocus",
+            Self::SetInput => "setInput",
+            Self::Resize => "resize",
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScriptValueKind {
+    Boolean,
+    Number,
+    Trigger,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ViewModelKind {
+    SetBoolean,
+    SetNumber,
+    SetString,
+    SetEnum,
+    SetColor,
+    FireTrigger,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1673,7 +1863,38 @@ struct InputEvent {
     pointer_id: i32,
     semantic_node_id: u32,
     semantic_action: SemanticInputAction,
+    name: String,
+    value_kind: ScriptValueKind,
+    bool_value: bool,
+    number_value: f32,
+    width: f32,
+    height: f32,
+    dpr: f32,
     order: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ViewModelEvent {
+    seconds: f32,
+    kind: ViewModelKind,
+    property: String,
+    bool_value: bool,
+    number_value: f32,
+    string_value: String,
+    uint_value: u32,
+    order: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum ScriptEventKind {
+    Input(InputEvent),
+    ViewModel(ViewModelEvent),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ScriptEvent {
+    seconds: f32,
+    kind: ScriptEventKind,
 }
 
 impl InputEvent {
@@ -1715,85 +1936,254 @@ fn parse_input_script(contents: &str) -> Result<Vec<InputEvent>> {
         }
         let kind = InputKind::parse(tokens[1], line_number)?;
         let context = format!("input script line {line_number}");
-        let (x, y, pointer_id, semantic_node_id, semantic_action) = match kind {
+        if matches!(kind, InputKind::SetInput | InputKind::Resize) && !seconds.is_finite() {
+            bail!("{context} seconds must be finite");
+        }
+        let mut event = InputEvent {
+            seconds,
+            kind,
+            x: 0.0,
+            y: 0.0,
+            pointer_id: 0,
+            semantic_node_id: 0,
+            semantic_action: SemanticInputAction::Tap,
+            name: String::new(),
+            value_kind: ScriptValueKind::Boolean,
+            bool_value: false,
+            number_value: 0.0,
+            width: 0.0,
+            height: 0.0,
+            dpr: 1.0,
+            order: events.len(),
+        };
+        match kind {
             InputKind::SemanticAction => {
                 if tokens.len() != 4 {
                     bail!(
                         "{context} must be: <seconds> semanticAction <nodeId> <tap|increase|decrease>"
                     );
                 }
-                (
-                    0.0,
-                    0.0,
-                    0,
-                    tokens[2]
-                        .parse::<u32>()
-                        .with_context(|| format!("invalid unsigned integer for {context} nodeId"))?,
-                    SemanticInputAction::parse(tokens[3], line_number)?,
-                )
+                event.semantic_node_id = tokens[2]
+                    .parse::<u32>()
+                    .with_context(|| format!("invalid unsigned integer for {context} nodeId"))?;
+                event.semantic_action = SemanticInputAction::parse(tokens[3], line_number)?;
             }
             InputKind::SemanticFocus => {
                 if tokens.len() != 3 {
                     bail!("{context} must be: <seconds> semanticFocus <nodeId>");
                 }
-                (
-                    0.0,
-                    0.0,
-                    0,
-                    tokens[2]
-                        .parse::<u32>()
-                        .with_context(|| format!("invalid unsigned integer for {context} nodeId"))?,
-                    SemanticInputAction::Tap,
-                )
+                event.semantic_node_id = tokens[2]
+                    .parse::<u32>()
+                    .with_context(|| format!("invalid unsigned integer for {context} nodeId"))?;
             }
-            _ => {
-                if tokens.len() != 4 && tokens.len() != 5 {
+            InputKind::SetInput => {
+                if tokens.len() < 4 {
                     bail!(
-                        "{context} must be: <seconds> <pointer-event> <x> <y> [pointerId]"
+                        "{context} must be: <seconds> setInput <name> <bool|number|trigger> [value]"
                     );
                 }
-                let pointer_id = if let Some(pointer_id) = tokens.get(4) {
+                event.name = tokens[2].to_owned();
+                match tokens[3] {
+                    "bool" => {
+                        if tokens.len() != 5 {
+                            bail!("{context} bool input requires one value");
+                        }
+                        event.value_kind = ScriptValueKind::Boolean;
+                        event.bool_value =
+                            parse_script_bool(tokens[4], &format!("{context} value"))?;
+                    }
+                    "number" => {
+                        if tokens.len() != 5 {
+                            bail!("{context} number input requires one value");
+                        }
+                        event.value_kind = ScriptValueKind::Number;
+                        event.number_value =
+                            parse_finite_script_float(tokens[4], &format!("{context} value"))?;
+                    }
+                    "trigger" => {
+                        if tokens.len() != 4 {
+                            bail!("{context} trigger input takes no value");
+                        }
+                        event.value_kind = ScriptValueKind::Trigger;
+                    }
+                    other => bail!("unknown setInput type on line {line_number}: {other}"),
+                }
+            }
+            InputKind::Resize => {
+                if tokens.len() != 5 {
+                    bail!("{context} must be: <seconds> resize <width> <height> <dpr>");
+                }
+                event.width = parse_finite_script_float(tokens[2], &format!("{context} width"))?;
+                event.height = parse_finite_script_float(tokens[3], &format!("{context} height"))?;
+                event.dpr = parse_finite_script_float(tokens[4], &format!("{context} dpr"))?;
+                if event.width <= 0.0 || event.height <= 0.0 || event.dpr <= 0.0 {
+                    bail!("{context} resize width, height, and dpr must be greater than 0");
+                }
+            }
+            InputKind::PointerDown
+            | InputKind::PointerMove
+            | InputKind::PointerUp
+            | InputKind::PointerExit => {
+                if tokens.len() != 4 && tokens.len() != 5 {
+                    bail!("{context} must be: <seconds> <pointer-event> <x> <y> [pointerId]");
+                }
+                event.pointer_id = if let Some(pointer_id) = tokens.get(4) {
                     pointer_id.parse::<i32>().with_context(|| {
                         format!("invalid integer for {context} pointerId: {pointer_id}")
                     })?
                 } else {
                     0
                 };
-                (
-                    parse_script_float(tokens[2], &format!("{context} x"))?,
-                    parse_script_float(tokens[3], &format!("{context} y"))?,
-                    pointer_id,
-                    0,
-                    SemanticInputAction::Tap,
-                )
+                event.x = parse_script_float(tokens[2], &format!("{context} x"))?;
+                event.y = parse_script_float(tokens[3], &format!("{context} y"))?;
             }
-        };
-        events.push(InputEvent {
-            seconds,
-            kind,
-            x,
-            y,
-            pointer_id,
-            semantic_node_id,
-            semantic_action,
-            order: events.len(),
-        });
+        }
+        events.push(event);
     }
 
-    events.sort_by(|left, right| {
-        if (left.seconds - right.seconds).abs() <= TIME_EPSILON {
-            left.order.cmp(&right.order)
-        } else {
-            left.seconds.total_cmp(&right.seconds)
-        }
-    });
+    events.sort_by(|left, right| left.seconds.total_cmp(&right.seconds));
     Ok(events)
+}
+
+fn load_view_model_script(path: &Path) -> Result<Vec<ViewModelEvent>> {
+    let contents = std::fs::read_to_string(path)
+        .with_context(|| format!("unable to read view-model script: {}", path.display()))?;
+    parse_view_model_script(&contents)
+}
+
+fn parse_view_model_script(contents: &str) -> Result<Vec<ViewModelEvent>> {
+    let mut events = Vec::new();
+    for (line_index, line) in contents.lines().enumerate() {
+        let line_number = line_index + 1;
+        let line = line.split_once('#').map_or(line, |(value, _)| value).trim();
+        if line.is_empty() {
+            continue;
+        }
+        let tokens = line.split_whitespace().collect::<Vec<_>>();
+        if tokens.len() < 2 {
+            bail!("view-model script line {line_number} must start with: <seconds> <event>");
+        }
+        let context = format!("view-model script line {line_number}");
+        let seconds = parse_finite_script_float(tokens[0], &format!("{context} seconds"))?;
+        if seconds < 0.0 {
+            bail!("{context} has a negative time");
+        }
+        let kind = match tokens[1] {
+            "setVmBool" => ViewModelKind::SetBoolean,
+            "setVmNumber" => ViewModelKind::SetNumber,
+            "setVmString" => ViewModelKind::SetString,
+            "setVmEnum" => ViewModelKind::SetEnum,
+            "setVmColor" => ViewModelKind::SetColor,
+            "fireVmTrigger" => ViewModelKind::FireTrigger,
+            other => bail!("unknown view-model event on line {line_number}: {other}"),
+        };
+        if kind == ViewModelKind::FireTrigger {
+            if tokens.len() != 3 {
+                bail!("{context} must be: <seconds> fireVmTrigger <path>");
+            }
+        } else if tokens.len() != 4 {
+            bail!("{context} must be: <seconds> <view-model-setter> <path> <value>");
+        }
+        if tokens[2].starts_with('/') || tokens[2].ends_with('/') || tokens[2].contains("//") {
+            bail!("{context} has an invalid property path");
+        }
+        let mut event = ViewModelEvent {
+            seconds,
+            kind,
+            property: tokens[2].to_owned(),
+            bool_value: false,
+            number_value: 0.0,
+            string_value: String::new(),
+            uint_value: 0,
+            order: events.len(),
+        };
+        match kind {
+            ViewModelKind::SetBoolean => {
+                event.bool_value = parse_script_bool(tokens[3], &format!("{context} value"))?;
+            }
+            ViewModelKind::SetNumber => {
+                event.number_value =
+                    parse_finite_script_float(tokens[3], &format!("{context} value"))?;
+            }
+            ViewModelKind::SetString => event.string_value = tokens[3].to_owned(),
+            ViewModelKind::SetEnum => {
+                event.uint_value = tokens[3].parse::<u32>().with_context(|| {
+                    format!(
+                        "invalid unsigned integer for {context} value: {}",
+                        tokens[3]
+                    )
+                })?;
+            }
+            ViewModelKind::SetColor => {
+                event.uint_value = parse_script_color(tokens[3], &format!("{context} value"))?;
+            }
+            ViewModelKind::FireTrigger => {}
+        }
+        events.push(event);
+    }
+    events.sort_by(|left, right| left.seconds.total_cmp(&right.seconds));
+    Ok(events)
+}
+
+fn merge_script_events(
+    input_events: Vec<InputEvent>,
+    view_model_events: Vec<ViewModelEvent>,
+) -> Vec<ScriptEvent> {
+    let mut input_events = input_events.into_iter().peekable();
+    let mut view_model_events = view_model_events.into_iter().peekable();
+    let mut events = Vec::new();
+    while input_events.peek().is_some() || view_model_events.peek().is_some() {
+        let use_input = match (input_events.peek(), view_model_events.peek()) {
+            (Some(input), Some(view_model)) => input.seconds <= view_model.seconds,
+            (Some(_), None) => true,
+            (None, Some(_)) => false,
+            (None, None) => break,
+        };
+        if use_input {
+            let event = input_events.next().expect("peeked input event");
+            events.push(ScriptEvent {
+                seconds: event.seconds,
+                kind: ScriptEventKind::Input(event),
+            });
+        } else {
+            let event = view_model_events.next().expect("peeked view-model event");
+            events.push(ScriptEvent {
+                seconds: event.seconds,
+                kind: ScriptEventKind::ViewModel(event),
+            });
+        }
+    }
+    events
 }
 
 fn parse_script_float(value: &str, context: &str) -> Result<f32> {
     value
         .parse::<f32>()
         .with_context(|| format!("invalid float for {context}: {value}"))
+}
+
+fn parse_finite_script_float(value: &str, context: &str) -> Result<f32> {
+    let value = parse_script_float(value, context)?;
+    if !value.is_finite() {
+        bail!("{context} must be finite");
+    }
+    Ok(value)
+}
+
+fn parse_script_color(value: &str, context: &str) -> Result<u32> {
+    let digits = value
+        .strip_prefix("0x")
+        .filter(|digits| digits.len() == 8)
+        .with_context(|| format!("{context} must be 0x followed by eight hex digits"))?;
+    u32::from_str_radix(digits, 16).with_context(|| format!("invalid color for {context}: {value}"))
+}
+
+fn parse_script_bool(value: &str, context: &str) -> Result<bool> {
+    match value {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => bail!("invalid boolean for {context}: {value}"),
+    }
 }
 
 fn hit_result_name(result: RuntimeHitResult) -> &'static str {
@@ -1825,9 +2215,11 @@ fn side_channel_event(event: &nuxie_runtime::StateMachineReportedEvent) -> SideC
                     RuntimeEventPropertyValue::Bool(value) => {
                         SideChannelEventPropertyValue::Bool(*value)
                     }
-                    RuntimeEventPropertyValue::String(bytes) => SideChannelEventPropertyValue::String(
-                        String::from_utf8_lossy(bytes).into_owned(),
-                    ),
+                    RuntimeEventPropertyValue::String(bytes) => {
+                        SideChannelEventPropertyValue::String(
+                            String::from_utf8_lossy(bytes).into_owned(),
+                        )
+                    }
                     RuntimeEventPropertyValue::Color(value) => {
                         SideChannelEventPropertyValue::Color(*value)
                     }
@@ -1981,6 +2373,205 @@ fn apply_semantic_input(
     }
 }
 
+fn resize_pixel_dimension(logical: f32, dpr: f32) -> Result<u32> {
+    let pixels = (f64::from(logical) * f64::from(dpr)).ceil();
+    if !pixels.is_finite() || pixels < 1.0 || pixels > f64::from(u32::MAX) {
+        bail!("resize physical extent is outside the u32 range");
+    }
+    Ok(pixels as u32)
+}
+
+fn apply_set_input(
+    state_machine: Option<&mut StateMachineInstance>,
+    event: &InputEvent,
+) -> Result<()> {
+    let state_machine = state_machine.context("setInput requires a state-machine scene")?;
+    match event.value_kind {
+        ScriptValueKind::Boolean => {
+            let index = state_machine
+                .get_bool(&event.name)
+                .map(|input| input.index())
+                .with_context(|| {
+                    format!("state-machine input '{}' was not found as bool", event.name)
+                })?;
+            state_machine.set_bool(index, event.bool_value);
+        }
+        ScriptValueKind::Number => {
+            let index = state_machine
+                .get_number(&event.name)
+                .map(|input| input.index())
+                .with_context(|| {
+                    format!(
+                        "state-machine input '{}' was not found as number",
+                        event.name
+                    )
+                })?;
+            state_machine.set_number(index, event.number_value);
+        }
+        ScriptValueKind::Trigger => {
+            let index = state_machine
+                .get_trigger(&event.name)
+                .map(|input| input.index())
+                .with_context(|| {
+                    format!(
+                        "state-machine input '{}' was not found as trigger",
+                        event.name
+                    )
+                })?;
+            state_machine.fire_trigger(index);
+        }
+    }
+    Ok(())
+}
+
+fn apply_view_model_event(
+    owned_view_model_context: Option<&mut RuntimeOwnedViewModelContext>,
+    event: &ViewModelEvent,
+) -> Result<()> {
+    let context =
+        owned_view_model_context.context("view-model script requires a bound main view model")?;
+    let mut main = context
+        .main_mut()
+        .context("view-model script requires a bound main view model")?;
+    match event.kind {
+        ViewModelKind::SetBoolean => {
+            if main
+                .boolean_value_by_property_name_path(&event.property)
+                .is_none()
+            {
+                bail!(
+                    "view-model property '{}' was not found as bool",
+                    event.property
+                );
+            }
+            main.set_boolean_by_property_name_path(&event.property, event.bool_value);
+        }
+        ViewModelKind::SetNumber => {
+            if main
+                .number_value_by_property_name_path(&event.property)
+                .is_none()
+            {
+                bail!(
+                    "view-model property '{}' was not found as number",
+                    event.property
+                );
+            }
+            main.set_number_by_property_name_path(&event.property, event.number_value);
+        }
+        ViewModelKind::SetString => {
+            if main
+                .string_value_by_property_name_path(&event.property)
+                .is_none()
+            {
+                bail!(
+                    "view-model property '{}' was not found as string",
+                    event.property
+                );
+            }
+            main.set_string_by_property_name_path(&event.property, event.string_value.as_bytes());
+        }
+        ViewModelKind::SetEnum => {
+            if main
+                .enum_value_by_property_name_path(&event.property)
+                .is_none()
+            {
+                bail!(
+                    "view-model property '{}' was not found as enum",
+                    event.property
+                );
+            }
+            main.set_enum_by_property_name_path(&event.property, u64::from(event.uint_value));
+            if main.enum_value_by_property_name_path(&event.property)
+                != Some(u64::from(event.uint_value))
+            {
+                bail!(
+                    "view-model property '{}' rejected enum index {}",
+                    event.property,
+                    event.uint_value
+                );
+            }
+        }
+        ViewModelKind::SetColor => {
+            if main
+                .color_value_by_property_name_path(&event.property)
+                .is_none()
+            {
+                bail!(
+                    "view-model property '{}' was not found as color",
+                    event.property
+                );
+            }
+            main.set_color_by_property_name_path(&event.property, event.uint_value);
+        }
+        ViewModelKind::FireTrigger => {
+            let value = main
+                .trigger_value_by_property_name_path(&event.property)
+                .with_context(|| {
+                    format!(
+                        "view-model property '{}' was not found as trigger",
+                        event.property
+                    )
+                })?;
+            let value = value
+                .checked_add(1)
+                .context("view-model trigger counter overflow")?;
+            if !main.set_trigger_by_property_name_path(&event.property, value) {
+                bail!("failed to fire view-model trigger '{}'", event.property);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn emit_input_mutation(factory: &mut dyn RunnerBackend, event: &InputEvent) -> Result<()> {
+    match event.kind {
+        InputKind::SetInput => match event.value_kind {
+            ScriptValueKind::Boolean => {
+                factory.add_set_input_boolean(event.seconds, &event.name, event.bool_value);
+            }
+            ScriptValueKind::Number => {
+                factory.add_set_input_number(event.seconds, &event.name, event.number_value);
+            }
+            ScriptValueKind::Trigger => {
+                factory.add_set_input_trigger(event.seconds, &event.name);
+            }
+        },
+        InputKind::Resize => factory.add_resize(
+            event.seconds,
+            event.width,
+            event.height,
+            event.dpr,
+            resize_pixel_dimension(event.width, event.dpr)?,
+            resize_pixel_dimension(event.height, event.dpr)?,
+        ),
+        _ => {}
+    }
+    Ok(())
+}
+
+fn emit_view_model_mutation(factory: &mut dyn RunnerBackend, event: &ViewModelEvent) {
+    match event.kind {
+        ViewModelKind::SetBoolean => {
+            factory.add_view_model_boolean(event.seconds, &event.property, event.bool_value);
+        }
+        ViewModelKind::SetNumber => {
+            factory.add_view_model_number(event.seconds, &event.property, event.number_value);
+        }
+        ViewModelKind::SetString => {
+            factory.add_view_model_string(event.seconds, &event.property, &event.string_value);
+        }
+        ViewModelKind::SetEnum => {
+            factory.add_view_model_enum(event.seconds, &event.property, event.uint_value);
+        }
+        ViewModelKind::SetColor => {
+            factory.add_view_model_color(event.seconds, &event.property, event.uint_value);
+        }
+        ViewModelKind::FireTrigger => {
+            factory.add_view_model_trigger(event.seconds, &event.property);
+        }
+    }
+}
+
 /// Applies one scripted pointer input and returns the tri-state
 /// `HitResult` C++ `Scene::pointerDown/Move/Up/Exit` return
 /// (`scene.hpp:55-60`; base `Scene` returns `none`, `scene.cpp:18-24`).
@@ -2024,7 +2615,10 @@ fn apply_input_event(
             event.pointer_id,
             context.as_deref_mut(),
         ),
-        InputKind::SemanticAction | InputKind::SemanticFocus => RuntimeHitResult::None,
+        InputKind::SemanticAction
+        | InputKind::SemanticFocus
+        | InputKind::SetInput
+        | InputKind::Resize => RuntimeHitResult::None,
     }
 }
 
@@ -2071,6 +2665,78 @@ mod tests {
     }
 
     #[test]
+    fn mutation_input_script_verbs_preserve_types_values_and_dimensions() {
+        let events = parse_input_script(
+            "0 setInput enabled bool true\n0 setInput amount number 12.5\n\
+             0 setInput launch trigger\n0 resize 320 180 2\n",
+        )
+        .expect("mutation input verbs parse");
+
+        assert_eq!(events[0].kind, InputKind::SetInput);
+        assert_eq!(events[0].name, "enabled");
+        assert_eq!(events[0].value_kind, ScriptValueKind::Boolean);
+        assert!(events[0].bool_value);
+        assert_eq!(events[1].value_kind, ScriptValueKind::Number);
+        assert_eq!(events[1].number_value, 12.5);
+        assert_eq!(events[2].value_kind, ScriptValueKind::Trigger);
+        assert_eq!(events[3].kind, InputKind::Resize);
+        assert_eq!(
+            (events[3].width, events[3].height, events[3].dpr),
+            (320.0, 180.0, 2.0)
+        );
+
+        assert!(parse_input_script("0 setInput enabled bool 1\n").is_err());
+        assert!(parse_input_script("0 setInput amount number nan\n").is_err());
+        assert!(parse_input_script("0 setInput launch trigger now\n").is_err());
+        assert!(parse_input_script("0 resize 320 0 2\n").is_err());
+    }
+
+    #[test]
+    fn view_model_script_parser_and_merge_preserve_cross_stream_order() {
+        let input = parse_input_script("0 setInput enabled bool true\n1 resize 10 20 2\n")
+            .expect("input script parses");
+        let view_model = parse_view_model_script(
+            "0 setVmBool visible false\n0 setVmNumber progress 0.5\n\
+             0 setVmString child/label ready\n0 setVmEnum status 2\n\
+             0 setVmColor tint 0xff123456\n0 fireVmTrigger go\n",
+        )
+        .expect("view-model script parses");
+
+        assert_eq!(view_model[0].kind, ViewModelKind::SetBoolean);
+        assert!(!view_model[0].bool_value);
+        assert_eq!(view_model[1].kind, ViewModelKind::SetNumber);
+        assert_eq!(view_model[1].number_value, 0.5);
+        assert_eq!(view_model[2].kind, ViewModelKind::SetString);
+        assert_eq!(view_model[2].property, "child/label");
+        assert_eq!(view_model[2].string_value, "ready");
+        assert_eq!(view_model[3].kind, ViewModelKind::SetEnum);
+        assert_eq!(view_model[3].uint_value, 2);
+        assert_eq!(view_model[4].kind, ViewModelKind::SetColor);
+        assert_eq!(view_model[4].uint_value, 0xff12_3456);
+        assert_eq!(view_model[5].kind, ViewModelKind::FireTrigger);
+
+        let merged = merge_script_events(input, view_model);
+        assert!(matches!(merged[0].kind, ScriptEventKind::Input(_)));
+        assert!(matches!(merged[1].kind, ScriptEventKind::ViewModel(_)));
+        assert!(matches!(merged[2].kind, ScriptEventKind::ViewModel(_)));
+        assert!(matches!(merged[3].kind, ScriptEventKind::ViewModel(_)));
+        assert!(matches!(merged[6].kind, ScriptEventKind::ViewModel(_)));
+        assert!(matches!(merged[7].kind, ScriptEventKind::Input(_)));
+
+        assert!(parse_view_model_script("0 setVmBool visible yes\n").is_err());
+        assert!(parse_view_model_script("0 setVmNumber progress inf\n").is_err());
+        assert!(parse_view_model_script("0 setVmColor tint ff123456\n").is_err());
+        assert!(parse_view_model_script("0 setVmString child//label x\n").is_err());
+        assert!(parse_view_model_script("0 fireVmTrigger go now\n").is_err());
+
+        let ordered =
+            parse_view_model_script("0.0000005 setVmBool later true\n0 setVmBool earlier true\n")
+                .expect("nearby distinct timestamps parse");
+        assert_eq!(ordered[0].property, "earlier");
+        assert_eq!(ordered[1].property, "later");
+    }
+
+    #[test]
     fn semantic_input_script_verbs_preserve_ids_actions_and_order() {
         let events = parse_input_script(
             "0.2 semanticFocus 16\n0.1 semanticAction 4 tap\n0.1 semanticAction 7 decrease\n",
@@ -2080,7 +2746,12 @@ mod tests {
         assert_eq!(
             events
                 .iter()
-                .map(|event| (event.seconds, event.kind, event.semantic_node_id, event.semantic_action))
+                .map(|event| (
+                    event.seconds,
+                    event.kind,
+                    event.semantic_node_id,
+                    event.semantic_action
+                ))
                 .collect::<Vec<_>>(),
             vec![
                 (0.1, InputKind::SemanticAction, 4, SemanticInputAction::Tap),
@@ -2123,17 +2794,11 @@ mod tests {
         assert!(base(&["--side-channel", "--layout-bounds"]).is_err());
         assert!(base(&["--semantic-default-view-model"]).is_err());
         assert!(base(&["--semantic-side-channel-only"]).is_err());
-        let semantic_defaults = base(&[
-            "--side-channel",
-            "--semantic-default-view-model",
-        ])
-        .expect("semantic fixture defaults parse with the side channel");
+        let semantic_defaults = base(&["--side-channel", "--semantic-default-view-model"])
+            .expect("semantic fixture defaults parse with the side channel");
         assert!(semantic_defaults.semantic_default_view_model);
-        let semantic_projection = base(&[
-            "--side-channel",
-            "--semantic-side-channel-only",
-        ])
-        .expect("semantic projection parses with the side channel");
+        let semantic_projection = base(&["--side-channel", "--semantic-side-channel-only"])
+            .expect("semantic projection parses with the side channel");
         assert!(semantic_projection.semantic_side_channel_only);
     }
 
@@ -2439,6 +3104,7 @@ struct Options {
     artboard: Option<String>,
     state_machine: Option<String>,
     input_script: Option<PathBuf>,
+    view_model_script: Option<PathBuf>,
     samples: Vec<f32>,
     layout_bounds: bool,
     benchmark: bool,
@@ -2455,6 +3121,7 @@ impl Options {
         let mut artboard = None;
         let mut state_machine = None;
         let mut input_script = None;
+        let mut view_model_script = None;
         let mut samples = vec![0.0];
         let mut layout_bounds = false;
         let mut benchmark = false;
@@ -2479,6 +3146,7 @@ impl Options {
                 "--artboard" => artboard = Some(value(arg)?),
                 "--state-machine" => state_machine = Some(value(arg)?),
                 "--input-script" => input_script = Some(PathBuf::from(value(arg)?)),
+                "--view-model-script" => view_model_script = Some(PathBuf::from(value(arg)?)),
                 "--samples" => samples = parse_samples(&value(arg)?)?,
                 "--layout-bounds" => layout_bounds = true,
                 "--benchmark" => benchmark = true,
@@ -2491,7 +3159,7 @@ impl Options {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--layout-bounds] [--execute-scripts] [--side-channel] [--semantic-default-view-model] [--semantic-side-channel-only] [--benchmark] [--benchmark-repeat N]"
+                        "usage: rust-golden-runner --file <path> [--artboard <name>] [--samples <t0,t1,...>] [--input-script <path>] [--view-model-script <path>] [--layout-bounds] [--execute-scripts] [--side-channel] [--semantic-default-view-model] [--semantic-side-channel-only] [--benchmark] [--benchmark-repeat N]"
                     );
                     std::process::exit(0);
                 }
@@ -2522,8 +3190,8 @@ impl Options {
             if !benchmark {
                 bail!("--benchmark-repeat requires --benchmark");
             }
-            if input_script.is_some() {
-                bail!("--benchmark-repeat cannot be combined with --input-script");
+            if input_script.is_some() || view_model_script.is_some() {
+                bail!("--benchmark-repeat cannot be combined with scripts");
             }
             if samples.len() != 1 {
                 bail!("--benchmark-repeat requires exactly one sample");
@@ -2535,6 +3203,7 @@ impl Options {
             artboard,
             state_machine,
             input_script,
+            view_model_script,
             samples,
             layout_bounds,
             benchmark,

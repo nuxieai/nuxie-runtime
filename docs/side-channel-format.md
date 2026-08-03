@@ -190,6 +190,79 @@ action; any listener/state/data effect is observable in the next advance and
 semantic diff. `missing` includes no selected manager, an unknown id, and a
 boundary node. `focused`/`rejected` is the exact requestFocus return.
 
+### Scripted state, view-model, and resize verbs
+
+Input scripts also accept direct state-machine input mutation and host-resize
+verbs:
+
+    <seconds> setInput <name> bool <true|false>
+    <seconds> setInput <name> number <float>
+    <seconds> setInput <name> trigger
+    <seconds> resize <width> <height> <dpr>
+
+`name` is one whitespace-delimited state-machine input name. The selected
+scene must be a state machine, and the name must resolve to the declared input
+type; a missing scene, missing name, or type mismatch is a script error.
+`trigger` calls the runtime's trigger/fire surface once. Boolean and number
+writes use the runtime's ordinary input setters, including their normal
+needs-advance and listener behavior.
+
+Both runners additionally accept `--view-model-script <path>`. Its
+timestamped grammar is:
+
+    <seconds> setVmBool <path> <true|false>
+    <seconds> setVmNumber <path> <float>
+    <seconds> setVmString <path> <utf8-token>
+    <seconds> setVmEnum <path> <u32-index>
+    <seconds> setVmColor <path> <0xAARRGGBB>
+    <seconds> fireVmTrigger <path>
+
+`path` is one whitespace-delimited slash-separated property path rooted at
+the main view-model instance bound to the selected artboard. Empty path
+segments are invalid. The terminal property must exist and have the declared
+type; otherwise the runner reports a script error. String values follow the
+existing whitespace-token grammar and therefore cannot contain spaces. Enum
+values are zero-based unsigned indices. Colors are exactly eight hexadecimal
+digits prefixed by `0x`. `fireVmTrigger` increments the view-model trigger
+through the runtime's public trigger surface rather than assigning an authored
+counter value.
+
+All new script floats must be finite. Resize width, height, and DPR must also
+be greater than zero. A resize sets the selected root artboard's logical
+width and height. DPR does not alter logical runtime coordinates; it derives
+the host pixel extent as `ceil(width * dpr)` by `ceil(height * dpr)`.
+
+Input-script and view-model-script commands are merged into one timestamp
+order. Commands are applied after the pre-advance to their timestamp. File
+order is stable within each script; when commands from both files have the
+same timestamp, all input-script commands at that timestamp run before all
+view-model-script commands. As with pointer input, commands later than the
+last requested sample are not applied.
+
+The commands emit these ordinary golden-stream records whether or not
+`--side-channel` is enabled:
+
+    setInput seconds=<float> name=<quoted> type=bool value=<true|false>
+    setInput seconds=<float> name=<quoted> type=number value=<float>
+    setInput seconds=<float> name=<quoted> type=trigger
+    viewModel seconds=<float> path=<quoted> type=bool value=<true|false>
+    viewModel seconds=<float> path=<quoted> type=number value=<float>
+    viewModel seconds=<float> path=<quoted> type=string value=<quoted>
+    viewModel seconds=<float> path=<quoted> type=enum value=<u32-index>
+    viewModel seconds=<float> path=<quoted> type=color value=<0xAARRGGBB>
+    viewModel seconds=<float> path=<quoted> type=trigger
+    resize seconds=<float> logical=(<float>,<float>) dpr=<float> pixels=(<u32>,<u32>)
+
+These records identify the successfully resolved mutation. Script errors do
+not emit an outcome line. With `--side-channel`, the following advance and
+event/semantic records expose the mutation's runtime effects under the same
+rules as pointer and semantic input.
+
+Corpus entries select view-model scripts with
+`view_model_script = "<path>"`; `golden-compare` resolves the path relative
+to the corpus and forwards `--view-model-script` to both runners. The
+existing `input_script` field carries `setInput` and `resize` commands.
+
 ## Stream position
 
 Within one sample-loop iteration, with the side channel ON:
@@ -197,8 +270,9 @@ Within one sample-loop iteration, with the side channel ON:
     advance seconds=E settled=S statesChanged=N     # pre-advance to input time
     event ...                                       # 0..k reported events
     semantics ...                                   # seven complete-diff lines
-    input kind=... seconds=E position=(x,y) pointerId=p   # existing line
-    hit result=R
+    input kind=... seconds=E position=(x,y) pointerId=p   # pointer command
+    hit result=R                                          # pointer command
+    setInput ... | viewModel ... | resize ...             # mutation command
     ...                                             # further inputs due
     advance seconds=T settled=S statesChanged=N     # advance to the sample
     event ...

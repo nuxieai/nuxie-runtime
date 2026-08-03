@@ -3,17 +3,12 @@
 ## C++ → Rust file correspondence
 
 Files: 456
-Status counts: `divergent-by-decision`: 4; `faithful`: 438; `pending`: 14
-Named pending files: 14
+Status counts: `divergent-by-decision`: 4; `faithful`: 443; `pending`: 9
+Named pending files: 9
 
 ### lua-scripting
 
-- `src/lua/lua_data_value.cpp`
-- `src/lua/lua_properties.cpp`
-- `src/lua/lua_state.cpp`
 - `src/lua/renderer/lua_gpu.cpp`
-- `src/lua/renderer/lua_gradient.cpp`
-- `src/lua/rive_lua_libs.cpp`
 
 ### scripted
 
@@ -38,7 +33,7 @@ Addition categories: `codegen`: 17; `flowsession-abi`: 7; `retained-render`: 1; 
 
 Files: 157
 Test cases: 1404
-Status counts: `n-a`: 2; `partial`: 32; `pending`: 80; `ported-differential`: 5; `ported-direct`: 38
+Status counts: `n-a`: 2; `partial`: 32; `pending`: 79; `ported-differential`: 5; `ported-direct`: 39
 
 ## Silver corpus
 

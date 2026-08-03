@@ -3874,6 +3874,18 @@ impl RuntimeFile {
         Some(cpp_data_enum_resolved_value_bytes(value))
     }
 
+    pub fn view_model_property_enum_value_key_for_index_object(
+        &self,
+        property: &RuntimeObject,
+        value_index: usize,
+    ) -> Option<&[u8]> {
+        let enum_data = self.cpp_view_model_property_enum_data(property)?;
+        enum_data
+            .values
+            .get(value_index)?
+            .string_property_bytes("key")
+    }
+
     pub fn view_model_property_enum_value_index_for_key_bytes(
         &self,
         property_id: usize,

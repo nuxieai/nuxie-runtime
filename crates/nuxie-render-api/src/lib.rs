@@ -890,6 +890,23 @@ pub trait RenderGpuCanvasShader: Any {
     fn as_any(&self) -> &dyn Any;
 }
 
+/// Backend shader occurrences paired with one [`GpuCanvasPipelinePlan`].
+/// Pipeline index ordering is shared with [`GpuCanvasPlan::pipelines`].
+#[derive(Clone)]
+pub struct GpuCanvasPipelineShaders {
+    pub vertex: Arc<dyn RenderGpuCanvasShader>,
+    pub fragment: Option<Arc<dyn RenderGpuCanvasShader>>,
+}
+
+impl std::fmt::Debug for GpuCanvasPipelineShaders {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GpuCanvasPipelineShaders")
+            .field("has_fragment", &self.fragment.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
 pub trait RenderImage: Any {
     fn as_any(&self) -> &dyn Any;
     fn width(&self) -> u32;
@@ -1058,12 +1075,42 @@ pub struct GpuCanvasTextureUpload {
     pub rows_per_image: u32,
 }
 
+/// Cloneable occurrence token that ties a backend texture sidecar to the Lua
+/// `GPUTexture` that owns it.
+#[derive(Clone, Default)]
+pub struct GpuCanvasResourceLifetime(Arc<()>);
+
+impl GpuCanvasResourceLifetime {
+    pub fn new() -> Self {
+        Self(Arc::new(()))
+    }
+
+    pub fn downgrade(&self) -> std::sync::Weak<()> {
+        Arc::downgrade(&self.0)
+    }
+}
+
+impl std::fmt::Debug for GpuCanvasResourceLifetime {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("GpuCanvasResourceLifetime(..)")
+    }
+}
+
+impl PartialEq for GpuCanvasResourceLifetime {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for GpuCanvasResourceLifetime {}
+
 /// One sampled texture view bound by an authored GPU-canvas pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GpuCanvasTextureBinding {
     /// Stable identity of the authored `GPUTexture` occurrence. Attachment
     /// and sampled views with the same id must resolve to one backend texture.
     pub resource_id: u64,
+    pub lifetime: GpuCanvasResourceLifetime,
     pub group: u32,
     pub binding: u32,
     pub width: u32,
@@ -1233,6 +1280,9 @@ pub struct GpuCanvasDepthStencilAttachment {
 /// at the draw site so repeated draws can change it independently.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GpuCanvasDrawCommand {
+    /// Index into [`GpuCanvasPlan::pipelines`] for the complete pipeline and
+    /// resource snapshot effective at this draw.
+    pub pipeline_index: u32,
     pub vertex_count: u32,
     pub instance_count: u32,
     pub first_vertex: u32,
@@ -1241,14 +1291,31 @@ pub struct GpuCanvasDrawCommand {
     pub pass_state: GpuCanvasPassState,
 }
 
-/// One authored render pass. Pipeline and resource state remains on
-/// [`GpuCanvasPlan`] because the adapted wgpu handoff currently materializes
-/// one pipeline/resource set for the complete canvas submission.
+/// One authored render pass. Each draw selects its retained pipeline/resource
+/// snapshot through [`GpuCanvasDrawCommand::pipeline_index`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct GpuCanvasRenderPass {
     pub color_attachments: Vec<GpuCanvasColorAttachment>,
     pub depth_stencil_attachment: Option<GpuCanvasDepthStencilAttachment>,
     pub draws: Vec<GpuCanvasDrawCommand>,
+}
+
+/// One immutable pipeline and resource snapshot used by a canvas submission.
+///
+/// Several passes and draws may select the same entry. This mirrors the
+/// retained pipeline/resource objects in `lua_gpu.cpp` without exposing
+/// backend objects through the render-plan seam.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GpuCanvasPipelinePlan {
+    pub vertex_entry: Option<GpuCanvasShaderEntrySelection>,
+    pub fragment_entry: Option<GpuCanvasShaderEntrySelection>,
+    pub uniform_buffers: Vec<GpuCanvasUniformBuffer>,
+    pub vertex_layouts: Vec<GpuCanvasVertexLayout>,
+    pub vertex_buffers: Vec<GpuCanvasVertexBuffer>,
+    pub index_buffer: Option<GpuCanvasIndexBuffer>,
+    pub texture_bindings: Vec<GpuCanvasTextureBinding>,
+    pub sampler_bindings: Vec<GpuCanvasSamplerBinding>,
+    pub pipeline_state: GpuCanvasPipelineState,
 }
 
 /// Backend-neutral result of executing one imported script's `drawCanvas`.
@@ -1272,6 +1339,9 @@ pub struct GpuCanvasPlan {
     pub sampler_bindings: Vec<GpuCanvasSamplerBinding>,
     pub pipeline_state: GpuCanvasPipelineState,
     pub pass_state: GpuCanvasPassState,
+    /// Pipeline/resource snapshots referenced by explicit render-pass draws.
+    /// Empty denotes the legacy single-pipeline fields above.
+    pub pipelines: Vec<GpuCanvasPipelinePlan>,
     /// Explicit authored pass stream. An empty vector denotes the legacy
     /// single-pass fields above for backwards-compatible callers.
     pub render_passes: Vec<GpuCanvasRenderPass>,
@@ -1586,6 +1656,19 @@ pub trait Factory {
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
         Err(GpuCanvasError::unsupported())
     }
+
+    /// Execute a pipeline-indexed imported GPU-canvas submission.
+    fn make_gpu_canvas_image_with_pipelines(
+        &mut self,
+        pipelines: &[GpuCanvasPipelineShaders],
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        let [pipeline] = pipelines else {
+            return Err(GpuCanvasError::unsupported());
+        };
+        let fragment = pipeline.fragment.as_ref().unwrap_or(&pipeline.vertex);
+        self.make_gpu_canvas_image(&pipeline.vertex, fragment, plan)
+    }
 }
 
 impl<F: Factory + 'static> Factory for PersistentFactory<F> {
@@ -1661,6 +1744,15 @@ impl<F: Factory + 'static> Factory for PersistentFactory<F> {
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
         self.borrow_mut()
             .make_gpu_canvas_image(vertex_shader, fragment_shader, plan)
+    }
+
+    fn make_gpu_canvas_image_with_pipelines(
+        &mut self,
+        pipelines: &[GpuCanvasPipelineShaders],
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        self.borrow_mut()
+            .make_gpu_canvas_image_with_pipelines(pipelines, plan)
     }
 }
 

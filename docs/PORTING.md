@@ -1436,3 +1436,8 @@ lifecycle for typed `ScriptError` too: surface the error as an additive host
 signal, but do not automatically rearm, queue, or retry the owner. A later
 authored wake may reactivate the exact slot through the ordinary C++-shaped
 path.
+
+
+## Named adaptation ceilings
+
+- **lua-gpu-wgpu-adapter** (D18): Lua GPU objects execute on wgpu via immutable submission snapshots; explicit `finish()` required at script return; at most 16 retained external texture identities. Never drop GPU-prefixed names or substitute CPU rendering.

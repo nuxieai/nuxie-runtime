@@ -1888,7 +1888,7 @@ b6_row_id = "B6-0448"
 b6_verdict = "ADAPTED"
 b6_cluster = "binary-core"
 audit_record = "docs/b6-audit/results/binary-core.md"
-note = "P1-a direct owner split at d788e8ec: pinned full-width varuint64 deserialize is at src/core/field_types/core_uint64_type.cpp:6-9; the moved decode is at crates/nuxie-binary/src/core/field_types/core_uint64_type.rs:4-6 and the UintStorage dispatch is at crates/nuxie-binary/src/core/field_types/mod.rs:39-50. Row added 2026-07-31 to repair the B-2 inventory omission at the pin; the file was removed after the pin at candidate b73bc675."
+note = "Pinned d788 compatibility owner retained until the S4 pin advance. S4-3 removes every runtime schema dispatch to this decoder; remove this row and compatibility file together when the correspondence pin advances past b73bc675."
 
 [[file]]
 upstream = "src/core/field_types/core_uint_type.cpp"
@@ -3262,13 +3262,13 @@ note = "P1-i faithful candidate: all 47 pinned upstream Promise scenarios pass e
 upstream = "src/lua/lua_properties.cpp"
 status = "pending"
 verification = "pending-verification"
-rust_module = "crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs"
+rust_module = "crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/lua_font.rs; crates/nuxie-scripting/src/vm/view_model.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0269"
 b6_verdict = "DIVERGENT"
 b6_cluster = "lua-scripting"
 audit_record = "docs/b6-audit/results/lua-scripting.md"
-note = "2026-08-02 reconciliation: remains pending. Image property behavior landed, but the umbrella lua_properties.cpp row still lacks retained push-owned ScriptViewModel parent/property links: Rust mirrors parent edges and rescans/re-writes live instances before detached advance. The other 14 non-image scripting_properties_test.cpp cases remain unclaimed, so image/blob/mesh/layout/audio wrapper completion is not whole-file evidence for this 1,884-line owner. MR-2/C08 exception: the retained ScriptViewModel property wrappers and parent-edge lifecycle are the same implementation seam used by B6-0288 across vm.rs and vm/view_model.rs, so a per-row move would misattribute shared state."
+note = "2026-08-02 reconciliation: remains pending. Image/font Property.value wrappers now retain stable Lua identity until the backing retained cell reports valueChanged; the pinned schema has no ViewModelPropertyAssetBlob/ViewModelInstanceAssetBlob, so the upstream Blob branch is unavailable without a pin advance. The umbrella lua_properties.cpp row still lacks retained push-owned ScriptViewModel parent/property links: Rust mirrors parent edges and rescans/re-writes live instances before detached advance. The other non-image scripting_properties_test.cpp cases remain unclaimed, so image/font/mesh/layout/audio wrapper completion is not whole-file evidence for this 1,884-line owner. MR-2/C08 exception: the retained ScriptViewModel property wrappers and parent-edge lifecycle are the same implementation seam used by B6-0288 across runtime scripting.rs, vm.rs, and vm/view_model.rs, so a per-row move would misattribute shared state."
 
 [[file]]
 upstream = "src/lua/lua_rive_base.cpp"

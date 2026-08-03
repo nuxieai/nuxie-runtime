@@ -80,7 +80,7 @@ fn drag_view(
     let local = artboard.component_at(constraint).local_id;
     let multiplier = constraint_double(artboard, local, "ScrollConstraint", "dragMultiplier", 1.0);
     let scaled = (delta.0 * multiplier, delta.1 * multiplier);
-    let Some((offset_x, offset_y)) = artboard
+    let Some((mut offset_x, mut offset_y, has_physics)) = artboard
         .objects
         .component_mut(constraint)
         .and_then(|component| component.concrete.scroll.as_mut())
@@ -88,11 +88,38 @@ fn drag_view(
             if let Some(physics) = scroll.physics.as_mut() {
                 physics.accumulate(scaled, timestamp);
             }
-            (scroll.offset_x + scaled.0, scroll.offset_y + scaled.1)
+            (
+                scroll.offset_x + scaled.0,
+                scroll.offset_y + scaled.1,
+                scroll.physics.is_some(),
+            )
         })
     else {
         return;
     };
+    if !has_physics {
+        let metrics = artboard
+            .objects
+            .component(constraint)
+            .and_then(|component| component.concrete.scroll.as_ref())
+            .map(|scroll| {
+                runtime_scroll_layout_metrics(artboard, constraint, scroll, false).unwrap_or_else(
+                    || {
+                        build_runtime_scroll_layout_metrics(
+                            artboard, constraint, scroll, None, false,
+                        )
+                    },
+                )
+            });
+        if let Some(metrics) = metrics
+            && !metrics.infinite
+        {
+            // Without physics no later owner pulls the stored offset back
+            // into range. Clamp now so overscroll cannot eat the next drag.
+            offset_x = offset_x.clamp(metrics.max_offset(RuntimeScrollAxis::X), 0.0);
+            offset_y = offset_y.clamp(metrics.max_offset(RuntimeScrollAxis::Y), 0.0);
+        }
+    }
     set_scroll_offset(artboard, constraint, RuntimeScrollAxis::X, offset_x);
     set_scroll_offset(artboard, constraint, RuntimeScrollAxis::Y, offset_y);
 }

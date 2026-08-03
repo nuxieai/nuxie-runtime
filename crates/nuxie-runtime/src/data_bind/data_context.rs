@@ -181,6 +181,23 @@ impl RuntimeStateMachineDataContext {
         true
     }
 
+    pub(crate) fn unset_global_named(&self, file: &RuntimeFile, name: &str) -> bool {
+        let weak_state = Rc::downgrade(&self.state);
+        let mut state = self.state.borrow_mut();
+        if !state.context.unset_global_named(file, name) {
+            return false;
+        }
+        if let Some(slot) = file
+            .view_models()
+            .iter()
+            .position(|view_model| view_model.object.string_property("name") == Some(name))
+        {
+            state.unusual_slot_handles.remove(&slot);
+        }
+        state.sync_rebind_relays(&weak_state);
+        true
+    }
+
     pub(crate) fn complete_for_artboard(&self, file: &RuntimeFile, artboard_index: usize) -> bool {
         let weak_state = Rc::downgrade(&self.state);
         let mut state = self.state.borrow_mut();

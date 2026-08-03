@@ -173,7 +173,7 @@ pub use animation::{
 pub use artboard::RuntimeNestedRemapAnimationReport;
 pub use artboard::{
     ArtboardInstance, ExternalFontAssetError, RuntimeArtboardOccurrenceSegment, RuntimeComponents,
-    artboard_draw_frame_id,
+    RuntimeFrameComponentsAdvance, artboard_draw_frame_id,
 };
 pub use audio_asset::RuntimeAudioAssetOwners;
 pub use components::{
@@ -253,7 +253,7 @@ pub use scripting::{
     NoopScriptHost, ScriptAnimation, ScriptAnimationTime, ScriptArtboard,
     ScriptArtboardDataContext, ScriptArtboardParentContext, ScriptArtboardResolver,
     ScriptCoreString, ScriptDataConverterMethod, ScriptDataConverterOptionalCall, ScriptError,
-    ScriptHost, ScriptImage, ScriptInstance, ScriptInterpolatorMethod,
+    ScriptFont, ScriptHost, ScriptImage, ScriptInstance, ScriptInterpolatorMethod,
     ScriptListenerActionDefinition, ScriptListenerActionHydration, ScriptListenerActionMethod,
     ScriptListenerInputDefinition, ScriptListenerInputHydration, ScriptListenerInputKind,
     ScriptListenerInputSnapshot, ScriptListenerInputSnapshotValue, ScriptMethod, ScriptModule,
@@ -270,7 +270,7 @@ pub use shapes::list_path::{RuntimeListPathDebugReport, RuntimeListPathDebugVert
 pub use state_machine::RuntimeFileStateMachineActionCatalog;
 pub use state_machine::{
     FocusState, GAMEPAD_BATCH_MAX_AXES, GAMEPAD_BATCH_MAX_BUTTONS, GAMEPAD_BATCH_WIRE_VERSION,
-    RuntimeLayerState, RuntimeNestedStateMachineReport,
+    RuntimeHitResult, RuntimeLayerState, RuntimeNestedStateMachineReport,
     RuntimeScriptedListenerDataConverterBindStep, RuntimeStateMachine,
     RuntimeStateMachineDataConverterBindStep, RuntimeStateMachineInput, RuntimeStateMachineLayer,
     ScriptGamepadInputChange, ScriptGamepadMappingKind, ScriptGamepadSnapshot,

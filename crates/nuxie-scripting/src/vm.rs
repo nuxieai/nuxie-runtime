@@ -17,9 +17,10 @@ mod command_server;
 mod host_commands;
 mod listener_invocation;
 mod logging_scripting_context;
-mod lua_blob;
+pub(crate) mod lua_blob;
 mod lua_color;
 mod lua_data_value;
+mod lua_font;
 mod lua_image;
 mod lua_image_decode;
 mod lua_mat4;
@@ -54,6 +55,7 @@ use luaur_rt::{
     AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Value,
     Vector as LuaVector, VmState,
 };
+use luaur_vm::functions::lua_callbacks::lua_callbacks;
 use luaur_vm::functions::luau_load::luau_load;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
@@ -67,7 +69,8 @@ use view_model::{ScriptViewModelFrameContext, ScriptedContext, create_scripted_v
 
 use crate::envelope::SignedContent;
 use crate::gpu_canvas::{
-    ImportedGpuCanvasInstance, ImportedGpuCanvasShaderAssets, RegisteredGpuCanvasShaderAsset,
+    ImportedGpuCanvasInstance, ImportedGpuCanvasShaderAssetEntry, ImportedGpuCanvasShaderAssets,
+    RegisteredGpuCanvasShaderAsset,
 };
 
 pub use host_commands::{HostCommand, HostCycleCheckpoint, HostEffectCheckpoint, HostValue};
@@ -80,6 +83,371 @@ pub use resource_limits::ScriptResourceLimit;
 const MODULE_CACHE_KEY: &str = "rive_scripting_registered_modules";
 const SCRIPT_VM_MEMORY_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 const SCRIPT_SAFEPOINTS_PER_CYCLE: usize = 100_000;
+
+// Direct port of the compile-time atom table in
+// `src/lua/rive_lua_libs.cpp`. The numeric values are the corresponding
+// `LuaAtoms` discriminants from `rive_lua_libs.hpp`.
+const RIVE_LUA_ATOMS: &[(&[u8], i16)] = &[
+    (b"length", 0),
+    (b"lengthSquared", 1),
+    (b"normalized", 2),
+    (b"distance", 3),
+    (b"distanceSquared", 4),
+    (b"dot", 5),
+    (b"lerp", 6),
+    (b"moveTo", 7),
+    (b"lineTo", 8),
+    (b"quadTo", 9),
+    (b"cubicTo", 10),
+    (b"close", 11),
+    (b"type", 16),
+    (b"reset", 12),
+    (b"add", 13),
+    (b"contours", 14),
+    (b"measure", 15),
+    (b"invert", 18),
+    (b"isIdentity", 19),
+    (b"width", 20),
+    (b"height", 21),
+    (b"clamp", 22),
+    (b"repeat", 23),
+    (b"mirror", 24),
+    (b"bilinear", 25),
+    (b"nearest", 26),
+    (b"style", 27),
+    (b"join", 28),
+    (b"cap", 29),
+    (b"thickness", 30),
+    (b"blendMode", 31),
+    (b"feather", 32),
+    (b"gradient", 33),
+    (b"color", 34),
+    (b"stroke", 35),
+    (b"fill", 36),
+    (b"miter", 37),
+    (b"round", 38),
+    (b"bevel", 39),
+    (b"butt", 40),
+    (b"square", 41),
+    (b"srcOver", 42),
+    (b"screen", 43),
+    (b"overlay", 44),
+    (b"darken", 45),
+    (b"lighten", 46),
+    (b"colorDodge", 47),
+    (b"colorBurn", 48),
+    (b"hardLight", 49),
+    (b"softLight", 50),
+    (b"difference", 51),
+    (b"exclusion", 52),
+    (b"multiply", 53),
+    (b"hue", 54),
+    (b"saturation", 55),
+    (b"luminosity", 56),
+    (b"copy", 57),
+    (b"drawPath", 58),
+    (b"drawImage", 59),
+    (b"drawImageMesh", 60),
+    (b"clipPath", 61),
+    (b"save", 62),
+    (b"restore", 63),
+    (b"transform", 64),
+    (b"value", 65),
+    (b"red", 66),
+    (b"green", 67),
+    (b"blue", 68),
+    (b"alpha", 69),
+    (b"getNumber", 70),
+    (b"getTrigger", 71),
+    (b"getString", 72),
+    (b"getBoolean", 73),
+    (b"getColor", 74),
+    (b"getList", 75),
+    (b"getViewModel", 76),
+    (b"getEnum", 77),
+    (b"getIndex", 78),
+    (b"getImage", 79),
+    (b"getFont", 80),
+    (b"getBlob", 81),
+    (b"values", 82),
+    (b"addListener", 83),
+    (b"removeListener", 84),
+    (b"fire", 85),
+    (b"push", 86),
+    (b"insert", 87),
+    (b"pop", 89),
+    (b"swap", 90),
+    (b"shift", 88),
+    (b"clear", 91),
+    (b"draw", 92),
+    (b"advance", 93),
+    (b"frameOrigin", 94),
+    (b"data", 95),
+    (b"instance", 96),
+    (b"animation", 97),
+    (b"new", 98),
+    (b"bounds", 99),
+    (b"pointerDown", 100),
+    (b"pointerUp", 102),
+    (b"pointerMove", 101),
+    (b"pointerExit", 103),
+    (b"isNumber", 106),
+    (b"isString", 107),
+    (b"isBoolean", 108),
+    (b"isColor", 109),
+    (b"hit", 110),
+    (b"id", 111),
+    (b"position", 112),
+    (b"rotation", 113),
+    (b"scale", 114),
+    (b"worldTransform", 115),
+    (b"scaleX", 116),
+    (b"scaleY", 117),
+    (b"decompose", 118),
+    (b"children", 119),
+    (b"parent", 120),
+    (b"node", 121),
+    (b"paint", 122),
+    (b"asPath", 124),
+    (b"asPaint", 123),
+    (b"addToPath", 104),
+    (b"positionAndTangent", 125),
+    (b"warp", 126),
+    (b"extract", 127),
+    (b"next", 128),
+    (b"isClosed", 129),
+    (b"markNeedsUpdate", 130),
+    (b"viewModel", 131),
+    (b"rootViewModel", 132),
+    (b"dataContext", 136),
+    (b"image", 133),
+    (b"blob", 134),
+    (b"size", 135),
+    (b"name", 105),
+    (b"duration", 153),
+    (b"setTime", 154),
+    (b"setTimeFrames", 155),
+    (b"setTimePercentage", 156),
+    (b"isPointerEvent", 159),
+    (b"isKeyboardEvent", 160),
+    (b"isTextInput", 161),
+    (b"previousPosition", 157),
+    (b"timeStamp", 158),
+    (b"isFocus", 162),
+    (b"isReportedEvent", 163),
+    (b"isViewModelChange", 164),
+    (b"isNone", 165),
+    (b"isGamepadConnected", 166),
+    (b"isGamepadEvent", 167),
+    (b"isGamepadDisconnected", 168),
+    (b"asPointerEvent", 169),
+    (b"asKeyboardEvent", 170),
+    (b"asTextInput", 171),
+    (b"asFocus", 172),
+    (b"asReportedEvent", 173),
+    (b"asViewModelChange", 174),
+    (b"asGamepadConnected", 175),
+    (b"asGamepadEvent", 176),
+    (b"asGamepadDisconnected", 177),
+    (b"gamepadEvent", 178),
+    (b"gamepadConnected", 179),
+    (b"gamepadDisconnected", 180),
+    (b"asNone", 181),
+    (b"key", 182),
+    (b"shift", 88),
+    (b"alt", 183),
+    (b"control", 184),
+    (b"meta", 185),
+    (b"text", 186),
+    (b"phase", 187),
+    (b"delaySeconds", 188),
+    (b"deviceId", 189),
+    (b"buttonMask", 190),
+    (b"remove", 191),
+    (b"removeAt", 192),
+    (b"removeAllOf", 193),
+    (b"axes", 232),
+    (b"gamepadMapping", 233),
+    (b"mapping", 234),
+    (b"isStandardMapping", 235),
+    (b"buttons", 236),
+    (b"buttonPressed", 237),
+    (b"buttonValue", 238),
+    (b"axis", 239),
+    (b"west", 240),
+    (b"south", 241),
+    (b"north", 242),
+    (b"east", 243),
+    (b"leftShoulder", 244),
+    (b"rightShoulder", 245),
+    (b"back", 246),
+    (b"forward", 247),
+    (b"leftStickButton", 248),
+    (b"rightStickButton", 249),
+    (b"dpadUp", 250),
+    (b"dpadDown", 251),
+    (b"dpadLeft", 252),
+    (b"dpadRight", 253),
+    (b"start", 256),
+    (b"leftStick", 254),
+    (b"rightStick", 255),
+    (b"leftTrigger", 257),
+    (b"rightTrigger", 258),
+    (b"leftTriggerPressed", 259),
+    (b"rightTriggerPressed", 260),
+    (b"changeKind", 261),
+    (b"changeIndex", 262),
+    (b"changeValue", 263),
+    (b"hasStandardButtonIntent", 264),
+    (b"hasStandardAxisIntent", 265),
+    (b"intentButton", 266),
+    (b"intentAxis", 267),
+    (b"audio", 137),
+    (b"play", 138),
+    (b"playAtTime", 139),
+    (b"playInTime", 140),
+    (b"playAtFrame", 141),
+    (b"playInFrame", 142),
+    (b"stop", 143),
+    (b"pause", 144),
+    (b"resume", 145),
+    (b"seek", 146),
+    (b"seekFrame", 147),
+    (b"volume", 148),
+    (b"completed", 149),
+    (b"time", 150),
+    (b"timeFrame", 151),
+    (b"sampleRate", 152),
+    (b"write", 194),
+    (b"upload", 195),
+    (b"view", 196),
+    (b"setPipeline", 197),
+    (b"setVertexBuffer", 198),
+    (b"setIndexBuffer", 199),
+    (b"setBindGroup", 200),
+    (b"setViewport", 201),
+    (b"setScissorRect", 202),
+    (b"setStencilReference", 203),
+    (b"drawIndexed", 205),
+    (b"finish", 206),
+    (b"beginRenderPass", 207),
+    (b"beginFrame", 208),
+    (b"endFrame", 209),
+    (b"colorView", 210),
+    (b"depthView", 211),
+    (b"setBlendColor", 204),
+    (b"resize", 212),
+    (b"canvas", 213),
+    (b"gpuCanvas", 214),
+    (b"features", 216),
+    (b"drawCanvas", 215),
+    (b"shader", 217),
+    (b"format", 218),
+    (b"andThen", 219),
+    (b"catch", 220),
+    (b"finally", 221),
+    (b"cancel", 222),
+    (b"onCancel", 223),
+    (b"getStatus", 224),
+    (b"decodeImage", 225),
+    (b"transpose", 226),
+    (b"transformPoint", 227),
+    (b"transformVec4", 228),
+    (b"writeToBuffer", 229),
+    (b"invertAffine", 230),
+    (b"writeVec4", 231),
+];
+
+const RIVE_LUA_ATOM_SLOT_COUNT: usize = 1024;
+
+const fn hash_rive_lua_atom(name: &[u8]) -> u32 {
+    let mut hash = 2_166_136_261_u32;
+    let mut index = 0;
+    while index < name.len() {
+        hash = (hash ^ name[index] as u32).wrapping_mul(16_777_619);
+        index += 1;
+    }
+    hash
+}
+
+const fn rive_lua_atom_names_equal(left: &[u8], right: &[u8]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    let mut index = 0;
+    while index < left.len() {
+        if left[index] != right[index] {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
+const fn longest_rive_lua_atom_name() -> usize {
+    let mut longest = 0;
+    let mut index = 0;
+    while index < RIVE_LUA_ATOMS.len() {
+        let length = RIVE_LUA_ATOMS[index].0.len();
+        if length > longest {
+            longest = length;
+        }
+        index += 1;
+    }
+    longest
+}
+
+const RIVE_LUA_MAX_ATOM_NAME_LENGTH: usize = longest_rive_lua_atom_name();
+
+const fn build_rive_lua_atom_slots() -> [u16; RIVE_LUA_ATOM_SLOT_COUNT] {
+    let mut slots = [0; RIVE_LUA_ATOM_SLOT_COUNT];
+    let mut index = 0;
+    while index < RIVE_LUA_ATOMS.len() {
+        let name = RIVE_LUA_ATOMS[index].0;
+        let mut slot = hash_rive_lua_atom(name) as usize & (RIVE_LUA_ATOM_SLOT_COUNT - 1);
+        while slots[slot] != 0
+            && !rive_lua_atom_names_equal(RIVE_LUA_ATOMS[slots[slot] as usize - 1].0, name)
+        {
+            slot = (slot + 1) & (RIVE_LUA_ATOM_SLOT_COUNT - 1);
+        }
+        if slots[slot] == 0 {
+            slots[slot] = index as u16 + 1;
+        }
+        index += 1;
+    }
+    slots
+}
+
+const RIVE_LUA_ATOM_SLOTS: [u16; RIVE_LUA_ATOM_SLOT_COUNT] = build_rive_lua_atom_slots();
+
+fn find_rive_lua_atom(name: &[u8]) -> i16 {
+    if name.len() > RIVE_LUA_MAX_ATOM_NAME_LENGTH {
+        return -1;
+    }
+    let mut slot = hash_rive_lua_atom(name) as usize & (RIVE_LUA_ATOM_SLOT_COUNT - 1);
+    loop {
+        let biased_index = RIVE_LUA_ATOM_SLOTS[slot];
+        if biased_index == 0 {
+            return -1;
+        }
+        let (candidate, atom) = RIVE_LUA_ATOMS[biased_index as usize - 1];
+        if candidate == name {
+            return atom;
+        }
+        slot = (slot + 1) & (RIVE_LUA_ATOM_SLOT_COUNT - 1);
+    }
+}
+
+unsafe extern "C" fn resolve_rive_lua_atom(
+    _state: *mut luaur_vm::records::lua_state::lua_State,
+    chars: *const core::ffi::c_char,
+    length: usize,
+) -> i16 {
+    if chars.is_null() {
+        return -1;
+    }
+    find_rive_lua_atom(unsafe { std::slice::from_raw_parts(chars.cast::<u8>(), length) })
+}
 
 /// Library version a script or module belongs to. `(0, 0)` is the host file.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -200,7 +568,6 @@ pub struct ScriptVm {
     rive_globals_installed: Cell<bool>,
     renderer_bindings: RendererBindings,
     view_model_frame_context: ScriptViewModelFrameContext,
-    scopes: Rc<RefCell<ScriptScopes>>,
     view_models: BTreeMap<String, ScriptViewModel>,
     default_context_view_model: Option<ScriptViewModel>,
     default_context_parent_view_models: Vec<ScriptViewModel>,
@@ -635,29 +1002,6 @@ fn caller_chunk_source(lua: &Lua) -> Option<String> {
     None
 }
 
-fn resolve_require_key(scopes: &ScriptScopes, caller_chunkname: &str, request: &str) -> String {
-    let caller = scopes
-        .chunk_scopes
-        .get(normalize_chunk_source(caller_chunkname))
-        .copied()
-        .unwrap_or(ScopeKey::ROOT);
-
-    let (path, target) = if let Some(rest) = request.strip_prefix("lib:") {
-        let (label, path) = rest.split_once('/').unwrap_or((rest, ""));
-        let target = scopes
-            .pins
-            .get(&caller)
-            .and_then(|pins| pins.get(label))
-            .copied()
-            .unwrap_or(ScopeKey::UNPINNED);
-        (path, target)
-    } else {
-        (request, caller)
-    };
-
-    ScriptVm::scoped_module_key(path, target)
-}
-
 impl ScriptVm {
     fn script_error(&self, error: Error) -> ScriptError {
         tracked_script_error(error, &self.resource_limits)
@@ -697,31 +1041,15 @@ impl ScriptVm {
         payload: &[u8],
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<ScriptProgram, ScriptError> {
-        self.register_protocol_script_with_factory_scoped(name, ScopeKey::ROOT, payload, factory)
-    }
-
-    /// Scope-aware protocol registration. The readable scoped chunkname stays
-    /// attached to the returned generator and every closure it creates. Unlike
-    /// modules, protocol scripts never consult the name-and-scope module cache:
-    /// a protocol ScriptAsset is identified by its serialized FileAsset record.
-    pub fn register_protocol_script_with_factory_scoped(
-        &self,
-        name: &str,
-        scope: ScopeKey,
-        payload: &[u8],
-        factory: &mut dyn RenderFactory,
-    ) -> std::result::Result<ScriptProgram, ScriptError> {
         self.install_render_factory(factory)?;
         self.install_rive_globals()
             .map_err(|error| self.script_error(error))?;
-        let chunkname = Self::readable_chunkname(name, scope);
-        self.set_chunkname_scope(&chunkname, scope);
         let chunk = self
-            .load_script_asset_payload(&chunkname, payload)
+            .load_script_asset_payload(name, payload)
             .map_err(|error| self.script_error(error))?;
         self.reset_execution_budget();
         let generator = self
-            .execute_loaded_module(&chunkname, chunk)
+            .execute_loaded_module(name, chunk)
             .map_err(|error| self.script_error(error))?;
         Ok(ScriptProgram { generator })
     }
@@ -867,6 +1195,11 @@ impl ScriptVm {
     /// Boot a VM with the Luau standard libraries open.
     pub fn new() -> Self {
         let lua = Lua::new();
+        // Install Rive's atom resolver before any Rive globals or imported
+        // bytecode can intern their method/property strings.
+        unsafe {
+            (*lua_callbacks(lua.current_thread().state())).useratom = Some(resolve_rive_lua_atom);
+        }
         let view_model_frame_context = ScriptViewModelFrameContext::default();
         lua.set_app_data(view_model_frame_context.clone());
         let blob_assets = lua_blob::ScriptedBlobAssets::install(&lua);
@@ -895,7 +1228,6 @@ impl ScriptVm {
             rive_globals_installed: Cell::new(false),
             renderer_bindings: RendererBindings::new(view_model_frame_context.clone()),
             view_model_frame_context,
-            scopes: Rc::new(RefCell::new(ScriptScopes::default())),
             view_models: BTreeMap::new(),
             default_context_view_model: None,
             default_context_parent_view_models: Vec::new(),
@@ -905,7 +1237,7 @@ impl ScriptVm {
             resource_limits,
             blob_assets,
             audio_assets,
-            gpu_canvas_shaders: Rc::new(RefCell::new(BTreeMap::new())),
+            gpu_canvas_shaders: Rc::new(RefCell::new(Vec::new())),
             logging: LoggingScriptingContext::default(),
         }
     }
@@ -993,17 +1325,57 @@ impl ScriptVm {
         name: &str,
         payload: &[u8],
     ) -> std::result::Result<(), ScriptError> {
-        self.register_gpu_canvas_shader_asset_aliases(&[name], payload)
+        if self
+            .gpu_canvas_shaders
+            .borrow()
+            .iter()
+            .any(|entry| entry.name == name)
+        {
+            return Err(ScriptError::new(format!(
+                "ShaderAsset name '{name}' is duplicated"
+            )));
+        }
+        self.register_gpu_canvas_shader_asset_with_short_name(name, name, payload)
     }
 
-    /// Retain one imported BlobAsset for exact-name `Context:blob` lookup.
+    /// Retain one imported ShaderAsset under its prelinked full name while
+    /// preserving the authored short name used by caller-scoped lookup.
+    pub fn register_gpu_canvas_shader_asset_with_short_name(
+        &self,
+        name: &str,
+        short_name: &str,
+        payload: &[u8],
+    ) -> std::result::Result<(), ScriptError> {
+        let owner = Rc::new(RefCell::new(RegisteredGpuCanvasShaderAsset::new(
+            name, payload,
+        )));
+        self.gpu_canvas_shaders
+            .borrow_mut()
+            .push(ImportedGpuCanvasShaderAssetEntry {
+                name: name.to_owned(),
+                short_name: short_name.to_owned(),
+                owner,
+            });
+        Ok(())
+    }
+
+    /// Retain one imported BlobAsset for scoped `Context:blob` lookup.
     pub fn register_blob_asset(
         &self,
         name: &str,
         payload: &[u8],
     ) -> std::result::Result<(), ScriptError> {
+        self.register_blob_asset_with_short_name(name, name, payload)
+    }
+
+    pub fn register_blob_asset_with_short_name(
+        &self,
+        name: &str,
+        short_name: &str,
+        payload: &[u8],
+    ) -> std::result::Result<(), ScriptError> {
         self.blob_assets
-            .register(name, payload)
+            .register(name, short_name, payload)
             .map_err(|error| ScriptError::new(error.to_string()))
     }
 
@@ -1039,6 +1411,15 @@ impl ScriptVm {
         lua_image::set_image_asset_owners(&self.lua, owners);
     }
 
+    /// Attach the file-owned decoded FontAsset catalog. Scripted Font values
+    /// retain the resolved owner so assignment survives registry replacement.
+    pub fn set_font_asset_owners(
+        &self,
+        owners: std::sync::Arc<nuxie_runtime::RuntimeFontAssetOwners>,
+    ) {
+        lua_font::set_font_asset_owners(&self.lua, owners);
+    }
+
     /// Retain one imported ShaderAsset owner under all of its file lookup
     /// aliases. Every alias is preflighted before the registry is changed.
     pub fn register_gpu_canvas_shader_asset_aliases(
@@ -1054,7 +1435,8 @@ impl ScriptVm {
         let shaders = self.gpu_canvas_shaders.borrow();
         let mut requested_aliases = BTreeSet::new();
         for alias in aliases {
-            if !requested_aliases.insert(*alias) || shaders.contains_key(*alias) {
+            if !requested_aliases.insert(*alias) || shaders.iter().any(|entry| entry.name == *alias)
+            {
                 return Err(ScriptError::new(format!(
                     "ShaderAsset name '{alias}' is duplicated"
                 )));
@@ -1067,7 +1449,11 @@ impl ScriptVm {
         )));
         let mut shaders = self.gpu_canvas_shaders.borrow_mut();
         for alias in aliases {
-            shaders.insert((*alias).to_owned(), Rc::clone(&owner));
+            shaders.push(ImportedGpuCanvasShaderAssetEntry {
+                name: (*alias).to_owned(),
+                short_name: (*alias).to_owned(),
+                owner: Rc::clone(&owner),
+            });
         }
         Ok(())
     }
@@ -1157,6 +1543,7 @@ impl ScriptVm {
     /// Compile and evaluate Luau *source*, returning the chunk's results.
     pub fn eval<R: FromLuaMulti>(&self, source: &str) -> Result<R> {
         self.ensure_initialized()?;
+        self.reserve_parent_stack_headroom()?;
         self.reset_execution_budget();
         let result = self.lua.load(source).eval();
         self.track_resource_result(result)
@@ -1165,6 +1552,7 @@ impl ScriptVm {
     /// Compile Luau *source* into a callable function without running it.
     pub fn load(&self, name: &str, source: &str) -> Result<Function> {
         self.ensure_initialized()?;
+        self.reserve_parent_stack_headroom()?;
         let result = self.lua.load(source).set_name(name).into_function();
         self.track_resource_result(result)
     }
@@ -1266,70 +1654,12 @@ impl ScriptVm {
         Ok(cache)
     }
 
-    /// Require-cache key for a module in `scope`; root keeps its bare name.
-    pub fn scoped_module_key(name: &str, scope: ScopeKey) -> String {
-        if scope.is_root() {
-            name.to_owned()
-        } else {
-            format!(
-                "{name}\u{1f}{}:{}",
-                scope.library_id, scope.library_version_id
-            )
-        }
-    }
-
-    /// Human-readable chunkname baked into bytecode and source functions.
-    /// Scoped names deliberately contain no colon because trace tooling treats
-    /// a colon as the separator before a line number.
-    pub fn readable_chunkname(name: &str, scope: ScopeKey) -> String {
-        if scope.is_root() {
-            name.to_owned()
-        } else {
-            format!("{}-{}/{name}", scope.library_id, scope.library_version_id)
-        }
-    }
-
-    /// Pin one `lib:` label for a caller scope to a concrete library version.
-    pub fn add_import(&self, caller: ScopeKey, library_name: &str, target: ScopeKey) {
-        self.scopes
-            .borrow_mut()
-            .pins
-            .entry(caller)
-            .or_default()
-            .insert(library_name.to_owned(), target);
-    }
-
-    /// Seed scope for a chunk without retained module metadata.
-    pub fn set_chunkname_scope(&self, chunkname: &str, scope: ScopeKey) {
-        self.scopes
-            .borrow_mut()
-            .chunk_scopes
-            .insert(normalize_chunk_source(chunkname).to_owned(), scope);
-    }
-
-    /// Resolve a request relative to a named caller chunk. Public for tooling
-    /// and conformance probes; `require` itself derives this chunk from the
-    /// active Luau stack.
-    pub fn resolve_require(&self, caller_chunkname: &str, request: &str) -> String {
-        resolve_require_key(
-            &self.scopes.borrow(),
-            normalize_chunk_source(caller_chunkname),
-            request,
-        )
-    }
-
-    /// Install Rive's custom `require`, resolving bare names in the caller's
-    /// scope and `lib:` names through that caller scope's serialized pins.
+    /// Install Rive's custom `require`. Library dependencies are prelinked by
+    /// the exporter, so runtime lookup uses the requested module name verbatim.
     fn install_require_global(&self, cache: Table) -> Result<()> {
         let lookup = cache.clone();
-        let scopes = Rc::clone(&self.scopes);
-        let require = self.lua.create_function(move |lua, name: String| {
-            // The defining chunk remains on the Luau stack when a returned
-            // closure lazily calls require. Reading that frame is therefore
-            // scope-correct even long after module registration finished.
-            let caller = caller_chunk_source(lua).unwrap_or_default();
-            let cache_key = resolve_require_key(&scopes.borrow(), &caller, &name);
-            match lookup.get::<Value>(cache_key.as_str())? {
+        let require = self.lua.create_function(move |_, name: String| {
+            match lookup.get::<Value>(name.as_str())? {
                 Value::Nil => Err(Error::runtime(format!(
                     "require could not find a script named {name}"
                 ))),
@@ -1341,36 +1671,37 @@ impl ScriptVm {
     }
 
     fn module_cache(&self) -> Result<Table> {
+        self.reserve_parent_stack_headroom()?;
         self.ensure_module_cache()
+    }
+
+    /// Re-open checked headroom on luaur's parent C frame before pushing a
+    /// registry/table handle. A failed large bytecode chunk can leave that
+    /// frame exactly at `ci->top` even though `pcall` restored its logical
+    /// stack top. `exec_raw` calls `lua_checkstack` before its first push, so a
+    /// no-op protected call safely restores the invariant for the next host
+    /// operation.
+    fn reserve_parent_stack_headroom(&self) -> Result<()> {
+        // `exec_raw` reserves `nargs + 2` slots on the *parent* before it
+        // pushes its trampoline. Dummy nil arguments are consumed by the
+        // protected call and give subsequent raw table conversion enough room
+        // for table, key, result, and the reference-value duplicate.
+        let padding = MultiValue::from_vec(vec![Value::Nil; 8]);
+        let result = unsafe { self.lua.exec_raw::<(), _>(padding, |_| {}) };
+        self.track_resource_result(result)
     }
 
     /// The module previously registered under `name`, if any.
     pub fn registered_module(&self, name: &str) -> Result<Value> {
-        self.registered_module_scoped(name, ScopeKey::ROOT)
-    }
-
-    /// The module previously registered under `name` in `scope`, if any.
-    pub fn registered_module_scoped(&self, name: &str, scope: ScopeKey) -> Result<Value> {
-        self.module_cache()?
-            .get(Self::scoped_module_key(name, scope))
+        self.module_cache()?.raw_get(name)
     }
 
     /// Execute a `ScriptAsset` payload (envelope + Luau bytecode) and cache
     /// its result under `name` so scripts can `require` it — the twin of
     /// C++ `ScriptingVM::registerModule`. Idempotent per name.
     pub fn register_module(&self, name: &str, payload: &[u8]) -> Result<Value> {
-        self.register_module_scoped(name, ScopeKey::ROOT, payload)
-    }
-
-    /// Scope-aware twin of [`Self::register_module`].
-    pub fn register_module_scoped(
-        &self,
-        name: &str,
-        scope: ScopeKey,
-        payload: &[u8],
-    ) -> Result<Value> {
         self.install_rive_globals()?;
-        self.register_module_after_init(name, scope, payload)
+        self.register_module_after_init(name, payload)
     }
 
     /// Register a module while exposing the draw call's renderer factory to
@@ -1381,61 +1712,40 @@ impl ScriptVm {
         payload: &[u8],
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<Value, ScriptError> {
-        self.register_module_with_factory_scoped(name, ScopeKey::ROOT, payload, factory)
-    }
-
-    /// Scope-aware module registration with a renderer factory in context.
-    pub fn register_module_with_factory_scoped(
-        &self,
-        name: &str,
-        scope: ScopeKey,
-        payload: &[u8],
-        factory: &mut dyn RenderFactory,
-    ) -> std::result::Result<Value, ScriptError> {
         self.install_render_factory(factory)?;
-        self.register_module_scoped(name, scope, payload)
+        self.register_module(name, payload)
             .map_err(|error| self.script_error(error))
     }
 
-    fn register_module_after_init(
-        &self,
-        name: &str,
-        scope: ScopeKey,
-        payload: &[u8],
-    ) -> Result<Value> {
-        let cache_key = Self::scoped_module_key(name, scope);
+    fn register_module_after_init(&self, name: &str, payload: &[u8]) -> Result<Value> {
         if let value @ (Value::Table(_) | Value::Function(_)) =
-            self.module_cache()?.get::<Value>(cache_key.as_str())?
+            self.module_cache()?.raw_get::<Value>(name)?
         {
             return Ok(value);
         }
-        let chunkname = Self::readable_chunkname(name, scope);
-        self.set_chunkname_scope(&chunkname, scope);
-        let function = self.load_script_asset_payload(&chunkname, payload)?;
-        self.register_loaded_module(name, scope, function)
+        let chunk = self.load_script_asset_payload(name, payload)?;
+        self.reset_execution_budget();
+        let result = self.execute_loaded_module(name, chunk)?;
+        self.cache_registered_module(name, result)
     }
 
-    fn register_loaded_module(
-        &self,
-        name: &str,
-        scope: ScopeKey,
-        function: Function,
-    ) -> Result<Value> {
+    fn register_loaded_module(&self, name: &str, function: Function) -> Result<Value> {
         let cache = self.module_cache()?;
-        let cache_key = Self::scoped_module_key(name, scope);
-        if let value @ (Value::Table(_) | Value::Function(_)) =
-            cache.get::<Value>(cache_key.as_str())?
-        {
+        if let value @ (Value::Table(_) | Value::Function(_)) = cache.raw_get::<Value>(name)? {
             return Ok(value);
         }
-        let display = Self::readable_chunkname(name, scope);
         self.reset_execution_budget();
-        let result: Value = self.execute_loaded_module(&display, function)?;
+        let result: Value = self.execute_loaded_module(name, function)?;
+        self.cache_registered_module(name, result)
+    }
+
+    fn cache_registered_module(&self, name: &str, result: Value) -> Result<Value> {
+        let cache = self.module_cache()?;
         match &result {
             Value::Table(_) | Value::Function(_) => {}
             other => {
                 return self.track_resource_result(Err(Error::runtime(format!(
-                    "module '{display}' must return a table or function, got {other:?}"
+                    "module '{name}' must return a table or function, got {other:?}"
                 ))));
             }
         }
@@ -1443,30 +1753,22 @@ impl ScriptVm {
         // insertion is therefore the exact operation we want, and it avoids
         // luaur-rt's protected Table::set trampoline needing a fourth stack
         // slot after a large candidate module graph has filled the base frame.
-        cache.raw_set(cache_key, result.clone())?;
+        cache.raw_set(name, result.clone())?;
         Ok(result)
     }
 
     /// Compile and register a source module. Runtime `.riv` execution uses the
-    /// bytecode methods; this source entry point supports editor/tooling flows
-    /// and conformance tests with the identical scope machinery.
-    pub fn register_source_module_scoped(
-        &self,
-        name: &str,
-        scope: ScopeKey,
-        source: &str,
-    ) -> Result<Value> {
+    /// bytecode methods; this entry point supports editor/tooling flows and
+    /// conformance tests with the same flat prelinked module namespace.
+    pub fn register_source_module(&self, name: &str, source: &str) -> Result<Value> {
         self.install_rive_globals()?;
-        let cache_key = Self::scoped_module_key(name, scope);
         if let value @ (Value::Table(_) | Value::Function(_)) =
-            self.module_cache()?.get::<Value>(cache_key.as_str())?
+            self.module_cache()?.raw_get::<Value>(name)?
         {
             return Ok(value);
         }
-        let chunkname = Self::readable_chunkname(name, scope);
-        self.set_chunkname_scope(&chunkname, scope);
-        let function = self.lua.load(source).set_name(&chunkname).into_function()?;
-        self.register_loaded_module(name, scope, function)
+        let function = self.load(name, source)?;
+        self.register_loaded_module(name, function)
     }
 
     /// Register a batch of modules, retrying until a pass makes no progress
@@ -1477,29 +1779,13 @@ impl ScriptVm {
         &self,
         modules: impl IntoIterator<Item = (&'a str, &'a [u8])>,
     ) -> Vec<(&'a str, Error)> {
-        self.perform_scoped_registration(
-            modules
-                .into_iter()
-                .map(|(name, payload)| (name, ScopeKey::ROOT, payload)),
-        )
-        .into_iter()
-        .map(|(name, _, error)| (name, error))
-        .collect()
-    }
-
-    /// Scope-aware registration retry loop. A missing dependency may become
-    /// available in a later pass, including under a different library pin.
-    pub fn perform_scoped_registration<'a>(
-        &self,
-        modules: impl IntoIterator<Item = (&'a str, ScopeKey, &'a [u8])>,
-    ) -> Vec<(&'a str, ScopeKey, Error)> {
-        let mut pending: Vec<(&str, ScopeKey, &[u8])> = modules.into_iter().collect();
+        let mut pending: Vec<(&str, &[u8])> = modules.into_iter().collect();
         loop {
             let mut failures = Vec::new();
             let before = pending.len();
-            for (name, scope, payload) in pending {
-                if let Err(error) = self.register_module_scoped(name, scope, payload) {
-                    failures.push((name, scope, payload, error));
+            for (name, payload) in pending {
+                if let Err(error) = self.register_module(name, payload) {
+                    failures.push((name, payload, error));
                 }
             }
             if failures.is_empty() {
@@ -1509,12 +1795,12 @@ impl ScriptVm {
                 // No progress this pass: report what is left.
                 return failures
                     .into_iter()
-                    .map(|(name, scope, _, error)| (name, scope, error))
+                    .map(|(name, _, error)| (name, error))
                     .collect();
             }
             pending = failures
                 .into_iter()
-                .map(|(name, scope, payload, _)| (name, scope, payload))
+                .map(|(name, payload, _)| (name, payload))
                 .collect();
         }
     }
@@ -2431,6 +2717,9 @@ fn script_value_from_lua(value: Value) -> Result<ScriptValue> {
 mod context_init_tests {
     use super::*;
     use luaur_rt::UserData;
+    use luaur_vm::functions::lua_pushlstring::lua_pushlstring;
+    use luaur_vm::functions::lua_tostringatom::lua_tostringatom;
+    use luaur_vm::macros::lua_pop::lua_pop;
     use nuxie_render_api::{NullFactory, PersistentFactory};
     use nuxie_runtime::NoopScriptHost;
 
@@ -2438,6 +2727,39 @@ mod context_init_tests {
     struct TruthyUserData;
 
     impl UserData for TruthyUserData {}
+
+    #[test]
+    fn compile_time_atom_table_resolves_every_upstream_name_and_exact_id() {
+        assert!(RIVE_LUA_ATOMS.len() < RIVE_LUA_ATOM_SLOT_COUNT);
+        for &(name, atom) in RIVE_LUA_ATOMS {
+            assert_eq!(
+                find_rive_lua_atom(name),
+                atom,
+                "{}",
+                String::from_utf8_lossy(name)
+            );
+        }
+        assert_eq!(find_rive_lua_atom(b"unknownRiveAtom"), -1);
+        assert_eq!(find_rive_lua_atom(b"length\0suffix"), -1);
+        assert_eq!(
+            find_rive_lua_atom(&vec![b'x'; RIVE_LUA_MAX_ATOM_NAME_LENGTH + 1]),
+            -1
+        );
+    }
+
+    #[test]
+    fn script_vm_installs_the_compile_time_atom_resolver() {
+        let vm = ScriptVm::new();
+        let state = vm.lua.current_thread().state();
+        let name = b"invertAffine";
+        let mut atom = -1;
+        unsafe {
+            lua_pushlstring(state, name.as_ptr().cast(), name.len());
+            assert!(!lua_tostringatom(state, -1, &mut atom).is_null());
+            lua_pop(state, 1);
+        }
+        assert_eq!(atom, 230);
+    }
 
     #[test]
     fn converter_advance_uses_native_lua_truthiness_for_every_value_kind() {
@@ -3385,9 +3707,8 @@ mod context_init_tests {
     fn registered_utility_modules_keep_their_writable_globals_isolated() {
         let vm = ScriptVm::new();
         let first = vm
-            .register_source_module_scoped(
+            .register_source_module(
                 "first",
-                ScopeKey::ROOT,
                 r#"
                 CollisionValue = "first"
                 return { read = function() return CollisionValue end }
@@ -3395,9 +3716,8 @@ mod context_init_tests {
             )
             .expect("register first module");
         let second = vm
-            .register_source_module_scoped(
+            .register_source_module(
                 "second",
-                ScopeKey::ROOT,
                 r#"
                 CollisionValue = "second"
                 return { read = function() return CollisionValue end }
@@ -3590,7 +3910,12 @@ mod gpu_canvas_tests {
         vm.register_gpu_canvas_shader_asset("broken", &payload)
             .expect("the C++ file importer ignores neutral decode failure");
 
-        assert!(vm.gpu_canvas_shaders.borrow().contains_key("broken"));
+        assert!(
+            vm.gpu_canvas_shaders
+                .borrow()
+                .iter()
+                .any(|entry| entry.name == "broken")
+        );
     }
 
     #[test]
@@ -3600,7 +3925,12 @@ mod gpu_canvas_tests {
             .expect("aliases register");
 
         let shaders = vm.gpu_canvas_shaders.borrow();
-        assert!(Rc::ptr_eq(&shaders["scene"], &shaders["effects/scene"]));
+        let scene = shaders.iter().find(|entry| entry.name == "scene").unwrap();
+        let nested = shaders
+            .iter()
+            .find(|entry| entry.name == "effects/scene")
+            .unwrap();
+        assert!(Rc::ptr_eq(&scene.owner, &nested.owner,));
         drop(shaders);
 
         vm.register_gpu_canvas_shader_asset_aliases(&["unused/new-alias", "scene"], &[4, 5, 6, 7])
@@ -3608,7 +3938,8 @@ mod gpu_canvas_tests {
         assert!(
             !vm.gpu_canvas_shaders
                 .borrow()
-                .contains_key("unused/new-alias")
+                .iter()
+                .any(|entry| entry.name == "unused/new-alias")
         );
     }
 }

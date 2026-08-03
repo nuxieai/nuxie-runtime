@@ -1,11 +1,11 @@
 //! Retained editable buffer ported from `src/text/raw_text_input.cpp`.
 
+use super::cursor::{Cursor, CursorPosition};
+use super::text_selection_path::TextSelectionPath;
 use super::{
     RuntimeTextLayoutConstraint, StaticShapedTextLayout, StaticShapedTextLine, StaticTextSlice,
     char_byte_index, paragraph_base_is_rtl,
 };
-use super::cursor::{Cursor, CursorPosition};
-use super::text_selection_path::TextSelectionPath;
 use crate::{ArtboardInstance, Mat2D, RuntimePathCommand};
 use nuxie_binary::RuntimeFile;
 use nuxie_graph::ArtboardGraph;

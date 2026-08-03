@@ -2769,7 +2769,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                         },
                     );
                 }
-                pub fn advance_frame_components_with_state_machine() {
+                pub fn advance_frame_components_with_state_machine_report() {
                     StateMachineInstance::dispatch_nested_event_sources_with(
                         |artboard, nested_event_dispatch| {
                             artboard.advance_frame_components_collect_events_with_mode(
@@ -2861,8 +2861,8 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "state_machine_hit_result_tristate_required",
-                "enum HitResult { None, Hit, HitOpaque }\n",
-                "type HitResult = bool;\n",
+                "enum RuntimeHitResult { #[default] None, Hit, HitOpaque }\n",
+                "type RuntimeHitResult = bool;\n",
             ),
             (
                 "state_machine_hit_three_pass_order_required",

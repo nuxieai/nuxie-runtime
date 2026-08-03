@@ -1340,7 +1340,7 @@ max_occurrences = 6
 [[ratchet]]
 id = "state_machine_hit_result_tristate_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "enum\\s+HitResult\\s*\\{\\s*None\\s*,\\s*Hit\\s*,\\s*HitOpaque\\s*,?\\s*\\}"
+pattern = "enum\\s+RuntimeHitResult\\s*\\{\\s*(?:#\\[default\\]\\s*)?None\\s*,\\s*Hit\\s*,\\s*HitOpaque\\s*,?\\s*\\}"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1462,7 +1462,7 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_event_exact_100_batches_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "const\\s+MAX_EVENT_ITERATIONS:\\s*usize\\s*=\\s*100\\s*;[\\s\\S]{0,1800}for\\s+_\\s+in\\s+0\\.\\.MAX_EVENT_ITERATIONS"
+pattern = "const\\s+MAX_EVENT_ITERATIONS:\\s*usize\\s*=\\s*100\\s*;[\\s\\S]{0,1800}for\\s+(?:_|iteration)\\s+in\\s+0\\.\\.MAX_EVENT_ITERATIONS"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1615,7 +1615,7 @@ max_occurrences = 0
 [[ratchet]]
 id = "state_machine_artboard_single_nested_delegation_required"
 globs = ["crates/nuxie-runtime/src/artboard.rs"]
-pattern = "\\A(?=[\\s\\S]*pub\\s+fn\\s+advance_nested_artboards_with_state_machine\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_nested_event_sources_with\\([\\s\\S]{0,1400}Some\\(nested_event_dispatch\\))(?=[\\s\\S]*pub\\s+fn\\s+advance_frame_components_with_state_machine\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_nested_event_sources_with\\([\\s\\S]{0,1400}Some\\(nested_event_dispatch\\))(?=[\\s\\S]*fn\\s+advance_nested_artboard_entry\\b[\\s\\S]{0,4200}advance_nested_animation_owner_with\\([\\s\\S]{0,1800}advance_after_animation_owners\\()"
+pattern = "\\A(?=[\\s\\S]*pub\\s+fn\\s+advance_nested_artboards_with_state_machine\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_nested_event_sources_with\\([\\s\\S]{0,1400}Some\\(nested_event_dispatch\\))(?=[\\s\\S]*pub\\s+fn\\s+advance_frame_components_with_state_machine_report\\b[\\s\\S]{0,1000}StateMachineInstance::dispatch_nested_event_sources_with\\([\\s\\S]{0,1400}Some\\(nested_event_dispatch\\))(?=[\\s\\S]*fn\\s+advance_nested_artboard_entry\\b[\\s\\S]{0,4200}advance_nested_animation_owner_with\\([\\s\\S]{0,1800}advance_after_animation_owners\\()"
 min_occurrences = 1
 max_occurrences = 1
 
@@ -1860,11 +1860,14 @@ guarded_name = "RuntimeNestedAnimationInstance"
 site_hash = "02453b30663d26006245bd11e28ee13e7815d3cf68133ec9b47c4446f17e97b0"
 
 [[owner_boundary_allow]]
+# [OR-2] 2026-08-02: the one dispatch site moved into the _report variant so
+# the advanceAndApply keep-going composition can observe the components'
+# changed bool alongside the notify trigger; same single boundary.
 file = "crates/nuxie-runtime/src/artboard.rs"
 kind = "dispatch"
-anchor = "ArtboardInstance::advance_frame_components_with_state_machine"
+anchor = "ArtboardInstance::advance_frame_components_with_state_machine_report"
 guarded_name = "dispatch_nested_event_sources_with"
-site_hash = "bc3f3697d7139cf955cabcc157597b24ec8a590c95d9332fd463277a60307586"
+site_hash = "62d47ec6773da5b18e0b0eda23801548caa7e84145b93f40850b8949377f1528"
 
 [[owner_boundary_allow]]
 file = "crates/nuxie-runtime/src/artboard.rs"

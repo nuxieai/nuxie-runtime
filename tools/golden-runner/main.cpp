@@ -4,6 +4,15 @@
 
 #include "rive/animation/state_machine_instance.hpp"
 #include "rive/artboard.hpp"
+#include "rive/custom_property_boolean.hpp"
+#include "rive/custom_property_color.hpp"
+#include "rive/custom_property_enum.hpp"
+#include "rive/custom_property_number.hpp"
+#include "rive/custom_property_string.hpp"
+#include "rive/custom_property_trigger.hpp"
+#include "rive/event.hpp"
+#include "rive/event_report.hpp"
+#include "rive/open_url_event.hpp"
 #include "rive/assets/audio_asset.hpp"
 #include "rive/assets/file_asset_contents.hpp"
 #include "rive/assets/font_asset.hpp"
@@ -163,6 +172,7 @@ struct Options
     std::string viewModelScript;
     std::vector<float> samples = {0.0f};
     size_t benchmarkRepeat = 1;
+    bool sideChannel = false;
 };
 
 void validateTraceOptions(const Options& options)
@@ -228,8 +238,8 @@ std::string usage()
            "       rive_golden_runner --file <path> [--artboard <name>]\n"
            "           [--state-machine <name> | --animation <name>]\n"
            "           [--samples <t0,t1,...>]\n"
-           "           [--input-script <path>] [--benchmark]\n"
-           "           [--benchmark-repeat N]\n"
+           "           [--input-script <path>] [--side-channel]\n"
+           "           [--benchmark] [--benchmark-repeat N]\n"
            "\n"
            "input script lines:\n"
            "  <seconds> pointerDown <x> <y> [pointerId]\n"
@@ -515,6 +525,10 @@ Options parseOptions(int argc, char** argv)
         {
             options.viewModelScript = requireValue(arg);
         }
+        else if (arg == "--side-channel")
+        {
+            options.sideChannel = true;
+        }
         else if (!arg.empty() && arg[0] == '-')
         {
             throw CliError("unknown option: " + arg);
@@ -532,6 +546,10 @@ Options parseOptions(int argc, char** argv)
     if (!options.stateMachine.empty() && !options.animation.empty())
     {
         throw CliError("--state-machine and --animation are mutually exclusive");
+    }
+    if (options.sideChannel && options.benchmark)
+    {
+        throw CliError("--side-channel cannot be combined with --benchmark");
     }
 
     for (size_t index = 0; index < options.samples.size(); index++)
@@ -788,12 +806,14 @@ public:
 
         if (!stateMachineName.empty())
         {
-            m_scene = m_artboard->stateMachineNamed(stateMachineName);
-            if (m_scene == nullptr)
+            auto stateMachine = m_artboard->stateMachineNamed(stateMachineName);
+            if (stateMachine == nullptr)
             {
                 throw std::runtime_error("state machine '" + stateMachineName +
                                          "' was not found");
             }
+            m_stateMachine = stateMachine.get();
+            m_scene = std::move(stateMachine);
         }
         else if (!animationName.empty())
         {
@@ -806,7 +826,9 @@ public:
         }
         else
         {
-            m_scene = m_artboard->defaultStateMachine();
+            auto stateMachine = m_artboard->defaultStateMachine();
+            m_stateMachine = stateMachine.get();
+            m_scene = std::move(stateMachine);
         }
 
         if (m_scene == nullptr)
@@ -821,16 +843,22 @@ public:
     }
 
     rive::Scene* scene() const { return m_scene.get(); }
+    // Non-null only when the selected scene is a state machine; the no-RTTI
+    // reference build cannot recover this via dynamic_cast at emit time.
+    rive::StateMachineInstance* stateMachine() const { return m_stateMachine; }
     const std::string& artboardName() const { return m_artboard->name(); }
 
 private:
     rive::rcp<rive::File> m_file;
     std::unique_ptr<rive::ArtboardInstance> m_artboard;
     std::unique_ptr<rive::Scene> m_scene;
+    rive::StateMachineInstance* m_stateMachine = nullptr;
     rive::rcp<rive::ViewModelInstance> m_viewModelInstance;
 };
 
-void advanceTo(rive::Scene* scene, float targetSeconds, float& currentSeconds)
+// Returns Scene::advanceAndApply's raw keep-going/needs-frame bool
+// (state_machine_instance.cpp:2601-2665; static_scene.cpp:22-28).
+bool advanceTo(rive::Scene* scene, float targetSeconds, float& currentSeconds)
 {
     if (targetSeconds + kTimeEpsilon < currentSeconds)
     {
@@ -842,27 +870,153 @@ void advanceTo(rive::Scene* scene, float targetSeconds, float& currentSeconds)
     {
         elapsed = 0.0f;
     }
-    scene->advanceAndApply(elapsed);
+    const bool keepGoing = scene->advanceAndApply(elapsed);
     currentSeconds = targetSeconds;
+    return keepGoing;
 }
 
-void applyInput(rive::Scene* scene, const InputEvent& event)
+rive::HitResult applyInput(rive::Scene* scene, const InputEvent& event)
 {
     const rive::Vec2D position(event.x, event.y);
     switch (event.kind)
     {
         case InputKind::pointerDown:
-            scene->pointerDown(position, event.pointerId);
-            break;
+            return scene->pointerDown(position, event.pointerId);
         case InputKind::pointerMove:
-            scene->pointerMove(position, event.seconds, event.pointerId);
-            break;
+            return scene->pointerMove(position, event.seconds, event.pointerId);
         case InputKind::pointerUp:
-            scene->pointerUp(position, event.pointerId);
-            break;
+            return scene->pointerUp(position, event.pointerId);
         case InputKind::pointerExit:
-            scene->pointerExit(position, event.pointerId);
-            break;
+            return scene->pointerExit(position, event.pointerId);
+    }
+    return rive::HitResult::none;
+}
+
+std::string hitResultName(rive::HitResult result)
+{
+    switch (result)
+    {
+        case rive::HitResult::none:
+            return "none";
+        case rive::HitResult::hit:
+            return "hit";
+        case rive::HitResult::hitOpaque:
+            return "hitOpaque";
+    }
+    return "none";
+}
+
+// docs/side-channel-format.md target mapping (OpenUrlEvent targetValue).
+std::string openUrlTargetName(uint32_t value)
+{
+    switch (value)
+    {
+        case 0:
+            return "_blank";
+        case 1:
+            return "_parent";
+        case 2:
+            return "_self";
+        case 3:
+            return "_top";
+    }
+    return "";
+}
+
+rive_rust::golden::SideChannelEvent describeReportedEvent(
+    const rive::EventReport& report)
+{
+    rive_rust::golden::SideChannelEvent out;
+    rive::Event* event = report.event();
+    if (event == nullptr)
+    {
+        return out;
+    }
+    out.coreType = static_cast<uint32_t>(event->coreType());
+    out.name = event->name();
+    out.delay = report.secondsDelay();
+    if (event->is<rive::OpenUrlEvent>())
+    {
+        auto openUrl = event->as<rive::OpenUrlEvent>();
+        out.hasUrl = true;
+        out.url = openUrl->url();
+        out.target = openUrlTargetName(openUrl->targetValue());
+    }
+    for (rive::Component* child : event->children())
+    {
+        rive_rust::golden::SideChannelEventProperty property;
+        property.name = child->name();
+        if (child->is<rive::CustomPropertyNumber>())
+        {
+            property.kind =
+                rive_rust::golden::SideChannelEventProperty::Kind::number;
+            property.numberValue =
+                child->as<rive::CustomPropertyNumber>()->propertyValue();
+        }
+        else if (child->is<rive::CustomPropertyBoolean>())
+        {
+            property.kind =
+                rive_rust::golden::SideChannelEventProperty::Kind::boolean;
+            property.boolValue =
+                child->as<rive::CustomPropertyBoolean>()->propertyValue();
+        }
+        else if (child->is<rive::CustomPropertyString>())
+        {
+            property.kind =
+                rive_rust::golden::SideChannelEventProperty::Kind::string;
+            property.stringValue =
+                child->as<rive::CustomPropertyString>()->propertyValue();
+        }
+        else if (child->is<rive::CustomPropertyColor>())
+        {
+            property.kind =
+                rive_rust::golden::SideChannelEventProperty::Kind::color;
+            property.colorValue = static_cast<uint32_t>(
+                child->as<rive::CustomPropertyColor>()->propertyValue());
+        }
+        else if (child->is<rive::CustomPropertyEnum>())
+        {
+            property.kind =
+                rive_rust::golden::SideChannelEventProperty::Kind::uintValue;
+            property.uintValue =
+                child->as<rive::CustomPropertyEnum>()->propertyValue();
+        }
+        else if (child->is<rive::CustomPropertyTrigger>())
+        {
+            property.kind =
+                rive_rust::golden::SideChannelEventProperty::Kind::uintValue;
+            property.uintValue =
+                child->as<rive::CustomPropertyTrigger>()->propertyValue();
+        }
+        else
+        {
+            continue;
+        }
+        out.properties.push_back(std::move(property));
+    }
+    return out;
+}
+
+// Emits the advance line (settled = !advanceAndApply return) plus one event
+// line per event the state machine reported during that advance.
+void recordAdvanceSideChannel(rive_rust::golden::RecordingFactory& factory,
+                              rive::StateMachineInstance* stateMachine,
+                              float targetSeconds,
+                              bool keepGoing)
+{
+    if (stateMachine == nullptr)
+    {
+        factory.addAdvance(targetSeconds, !keepGoing);
+        return;
+    }
+    factory.addAdvanceWithStates(targetSeconds,
+                                 !keepGoing,
+                                 stateMachine->stateChangedCount());
+    const size_t reportedCount = stateMachine->reportedEventCount();
+    for (size_t index = 0; index < reportedCount; index++)
+    {
+        factory.addSideChannelEvent(
+            describeReportedEvent(stateMachine->reportedEventAt(index)));
     }
 }
 
@@ -1015,6 +1169,7 @@ int runFile(const Options& options)
                      options.animation,
                      factory);
     rive::Scene* scene = loader.scene();
+    rive::StateMachineInstance* sceneStateMachine = loader.stateMachine();
     auto renderer = options.benchmark ? nullFactory.makeRenderer()
                                       : recordingFactory.makeRenderer();
 
@@ -1030,7 +1185,15 @@ int runFile(const Options& options)
     float currentSeconds = 0.0f;
     if (std::getenv("RIVE_GOLDEN_COVERAGE_STEADY_ONLY") != nullptr)
     {
-        advanceTo(scene, options.samples.front(), currentSeconds);
+        const bool keepGoing =
+            advanceTo(scene, options.samples.front(), currentSeconds);
+        if (options.sideChannel)
+        {
+            recordAdvanceSideChannel(recordingFactory,
+                                     sceneStateMachine,
+                                     options.samples.front(),
+                                     keepGoing);
+        }
         scene->draw(renderer.get());
     }
     resetCoverageProfileForFrameLoopIfRequested();
@@ -1060,10 +1223,18 @@ int runFile(const Options& options)
             {
                 const auto& event = inputEvents[nextInput];
                 timedStage(advanceElapsed, [&] {
-                    advanceTo(scene, event.seconds, currentSeconds);
+                    const bool keepGoing =
+                        advanceTo(scene, event.seconds, currentSeconds);
+                    if (options.sideChannel && !options.benchmark)
+                    {
+                        recordAdvanceSideChannel(recordingFactory,
+                                                 sceneStateMachine,
+                                                 event.seconds,
+                                                 keepGoing);
+                    }
                 });
                 timedStage(inputElapsed, [&] {
-                    applyInput(scene, event);
+                    const rive::HitResult hitResult = applyInput(scene, event);
                     if (!options.benchmark)
                     {
                         recordingFactory.addInputEvent(
@@ -1072,13 +1243,26 @@ int runFile(const Options& options)
                             event.x,
                             event.y,
                             event.pointerId);
+                        if (options.sideChannel)
+                        {
+                            recordingFactory.addHitResult(
+                                hitResultName(hitResult));
+                        }
                     }
                 });
                 nextInput++;
             }
 
             timedStage(advanceElapsed, [&] {
-                advanceTo(scene, sampleSeconds, currentSeconds);
+                const bool keepGoing =
+                    advanceTo(scene, sampleSeconds, currentSeconds);
+                if (options.sideChannel && !options.benchmark)
+                {
+                    recordAdvanceSideChannel(recordingFactory,
+                                             sceneStateMachine,
+                                             sampleSeconds,
+                                             keepGoing);
+                }
             });
             if (!options.benchmark)
             {

@@ -3,16 +3,17 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 rive_runtime="${RIVE_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}"
-shader_dir="$rive_runtime/renderer/src/shaders"
+source_shader_dir="$rive_runtime/renderer/src/shaders"
 output_dir="${RENDERER_SHADER_OUTPUT_DIR:-$root/crates/nuxie-renderer/src/generated}"
-upstream_out="${RENDERER_SHADER_UPSTREAM_OUT:-$shader_dir/out/generated}"
-venv="$root/target/renderer-shader-venv"
+requested_upstream_out="${RENDERER_SHADER_UPSTREAM_OUT:-}"
+shader_overlay="$root/tools/rive-runtime-patches/395defdb-alpha-zero-dither.patch"
 export PATH="$HOME/.cargo/bin:$PATH"
 # Upstream's WGSL header minifier assigns short identifiers while iterating
 # Python sets. Fix the hash seed so its compiler-input headers are byte-stable.
 export PYTHONHASHSEED=0
 
 expected_runtime_revision="d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+expected_overlay_digest="9a6e72367d2e30f0c7572c28f3babf8600a80f3a7ecef80f376efac72a409b89"
 expected_naga_version="30.0.0"
 expected_glslang_version="Glslang Version: 11:16.2.0"
 expected_spirv_tools_version="SPIRV-Tools v2026.1 unknown hash, 2026-01-22T19:45:19+00:00"
@@ -28,6 +29,11 @@ done
 runtime_revision="$(git -C "$rive_runtime" rev-parse HEAD)"
 if [[ "$runtime_revision" != "$expected_runtime_revision" ]]; then
     echo "wrong rive-runtime revision: expected $expected_runtime_revision, got $runtime_revision" >&2
+    exit 1
+fi
+overlay_digest="$(shasum -a 256 "$shader_overlay" | awk '{print $1}')"
+if [[ "$overlay_digest" != "$expected_overlay_digest" ]]; then
+    echo "wrong shader overlay digest: expected $expected_overlay_digest, got $overlay_digest" >&2
     exit 1
 fi
 if ! git -C "$rive_runtime" diff --quiet HEAD -- renderer/src/shaders; then
@@ -55,6 +61,17 @@ if [[ -n "$untracked_local_sources" ]]; then
     printf '%s\n' "$untracked_local_sources" >&2
     exit 1
 fi
+
+# The runtime revision is a cycle pin and must not move for an independently
+# authorized shader port. Apply the exact shader-only diff from 395defdb to an
+# isolated copy of the pinned inputs instead.
+shader_work="$(mktemp -d "${TMPDIR:-/tmp}/nuxie-renderer-shader-inputs.XXXXXX")"
+trap 'rm -rf "$shader_work"' EXIT
+mkdir -p "$shader_work/renderer/src"
+cp -R "$source_shader_dir" "$shader_work/renderer/src/shaders"
+git -C "$shader_work" apply "$shader_overlay"
+shader_dir="$shader_work/renderer/src/shaders"
+upstream_out="${requested_upstream_out:-$shader_dir/out/generated}"
 
 naga_version="$(naga --version)"
 glslang_version="$(glslangValidator --version | head -n 1)"
@@ -94,6 +111,7 @@ generate_clockwise_atomic_shader() {
     local stem="$output_dir/${output%.wgsl}"
     local unoptimized="$stem.unoptimized.spv"
     local optimized="$stem.spv"
+    local naga_stderr="$stem.naga.stderr"
     local source_path
     if [[ -f "$root/$source" ]]; then
         source_path="$root/$source"
@@ -124,17 +142,19 @@ generate_clockwise_atomic_shader() {
         "$source_path"
     spirv-opt --preserve-bindings --preserve-interface -O \
         "$unoptimized" -o "$optimized"
-    TERM=dumb naga --keep-coordinate-space "$optimized" "$output_dir/$output" \
-        2> >(grep -v "Unknown decoration RelaxedPrecision" >&2 || true)
+    if ! TERM=dumb naga --keep-coordinate-space "$optimized" "$output_dir/$output" \
+        2>"$naga_stderr"; then
+        cat "$naga_stderr" >&2
+        return 1
+    fi
+    grep -v "Unknown decoration RelaxedPrecision" "$naga_stderr" >&2 || true
     normalize_wgsl "$output_dir/$output"
-    rm -f "$unoptimized" "$optimized"
+    rm -f "$unoptimized" "$optimized" "$naga_stderr"
 }
 
-if [[ ! -x "$venv/bin/python3" ]]; then
-    python3 -m venv "$venv"
-    "$venv/bin/pip" install "ply==$expected_ply_version"
-fi
-ply_version="$("$venv/bin/python3" -c 'import importlib.metadata; print(importlib.metadata.version("ply"))')"
+ply_source="$rive_runtime/renderer/dependencies/dabeaz_ply_3.11"
+export PYTHONPATH="$ply_source${PYTHONPATH:+:$PYTHONPATH}"
+ply_version="$(python3 -c 'import ply; print(ply.__version__)')"
 if [[ "$ply_version" != "$expected_ply_version" ]]; then
     echo "wrong ply version: expected $expected_ply_version, got $ply_version" >&2
     exit 1
@@ -143,10 +163,10 @@ fi
 mkdir -p "$output_dir"
 rm -f "$output_dir"/*.wgsl
 
-PATH="$venv/bin:$HOME/.cargo/bin:$PATH" make -C "$shader_dir" OUT="$upstream_out" wgsl
+PATH="$HOME/.cargo/bin:$PATH" make -C "$shader_dir" OUT="$upstream_out" wgsl
 while IFS= read -r header; do
     source="${header%.hpp}.wgsl"
-    PATH="$venv/bin:$HOME/.cargo/bin:$PATH" make -C "$shader_dir" OUT="$upstream_out" "$source"
+    PATH="$HOME/.cargo/bin:$PATH" make -C "$shader_dir" OUT="$upstream_out" "$source"
     output="$output_dir/$(basename "$source")"
     cp "$source" "$output"
     normalize_wgsl "$output"

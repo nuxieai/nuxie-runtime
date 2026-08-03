@@ -11,8 +11,9 @@ from pathlib import Path
 
 TOOL = Path(__file__).with_name("parity_scorecard.py")
 REPO_ROOT = TOOL.parents[2]
-RUNTIME_ENTRIES = 317
-RUNTIME_SEGMENTS = 647
+RUNTIME_ENTRIES = 324
+RUNTIME_SEGMENTS = 670
+RUNTIME_SIDE_CHANNEL_SEGMENTS = 669
 RENDERER_ENTRIES = 1468
 GATE_COMMANDS = {
     "golden-compare": ["make", "golden-compare"],
@@ -25,10 +26,15 @@ GATE_COMMANDS = {
 }
 
 
-def golden_summary(entries=RUNTIME_ENTRIES, segments=RUNTIME_SEGMENTS):
+def golden_summary(
+    entries=RUNTIME_ENTRIES,
+    segments=RUNTIME_SEGMENTS,
+    side_channel_segments=RUNTIME_SIDE_CHANNEL_SEGMENTS,
+):
     return (
         f"golden-compare summary: entries={entries} exact={entries} "
-        f"exact-segments={segments} diverges=0 unsupported-feature=0 not-yet=0\n"
+        f"exact-segments={segments} side-channel-segments={side_channel_segments} "
+        f"diverges=0 unsupported-feature=0 not-yet=0\n"
     )
 
 
@@ -322,9 +328,9 @@ class ParityScorecardCliTests(unittest.TestCase):
         completed = self.run_check(repo)
 
         self.assertEqual(completed.returncode, 1)
-        self.assertIn("runtime corpus entry ratchet regressed: 316 < 317", completed.stderr)
+        self.assertIn("runtime corpus entry ratchet regressed: 316 < 324", completed.stderr)
         self.assertIn(
-            "runtime exact-segments ratchet regressed: 646 < 647", completed.stderr
+            "runtime exact-segments ratchet regressed: 646 < 670", completed.stderr
         )
         self.assertIn("exact-segments unavailable/red", completed.stdout)
 
@@ -470,9 +476,9 @@ class ParityScorecardCliTests(unittest.TestCase):
         definition = definition.replace("required_adapters = 2", "required_adapters = 1")
         definition = definition.replace("blocking_min_entries = 20", "blocking_min_entries = 1")
         definition = definition.replace("max_ratio = 1.0", "max_ratio = 1.5")
-        definition = definition.replace("runtime_entries = 317", "runtime_entries = 1")
+        definition = definition.replace("runtime_entries = 324", "runtime_entries = 1")
         definition = definition.replace(
-            "runtime_exact_segments = 647", "runtime_exact_segments = 1"
+            "runtime_exact_segments = 670", "runtime_exact_segments = 1"
         )
         definition = definition.replace("renderer_entries = 1468", "renderer_entries = 1")
         (repo / "parity-scorecard.toml").write_text(definition)
@@ -483,8 +489,8 @@ class ParityScorecardCliTests(unittest.TestCase):
         self.assertIn("platform.required_adapters must be at least 2", completed.stderr)
         self.assertIn("performance.blocking_min_entries must be at least 20", completed.stderr)
         self.assertIn("performance.max_ratio must be at most 1.0", completed.stderr)
-        self.assertIn("floor.runtime_entries must be at least 317", completed.stderr)
-        self.assertIn("floor.runtime_exact_segments must be at least 647", completed.stderr)
+        self.assertIn("floor.runtime_entries must be at least 324", completed.stderr)
+        self.assertIn("floor.runtime_exact_segments must be at least 670", completed.stderr)
         self.assertIn("floor.renderer_entries must be at least 1468", completed.stderr)
 
     def test_green_floor_evidence_prints_all_five_tiers_and_writes_json(self):
@@ -517,7 +523,7 @@ class ParityScorecardCliTests(unittest.TestCase):
         ):
             self.assertIn(tier_name, completed.stdout)
         self.assertIn("tiers-green: 0/5", completed.stdout)
-        self.assertIn("exact-segments 647/647", completed.stdout)
+        self.assertIn("exact-segments 670/670", completed.stdout)
         self.assertIn("pixel-exact 1468/1468", completed.stdout)
         self.assertIn("cargo-test-workspace GREEN", completed.stdout)
         self.assertIn("capi-smoke GREEN", completed.stdout)
@@ -525,9 +531,11 @@ class ParityScorecardCliTests(unittest.TestCase):
             "r4-timing-gate per-commit scorecard evidence not built",
             completed.stdout,
         )
+        self.assertIn(
+            "side-channel-segments 669/669 (V11 carve-out filed)", completed.stdout
+        )
         for ticket in (
             "#OR-6",
-            "#OR-1/#OR-2",
             "#OR-3",
             "#OR-4",
             "#OR-5",
@@ -588,8 +596,8 @@ class ParityScorecardCliTests(unittest.TestCase):
                 f"""
                 schema_version = 1
                 [floor]
-                runtime_entries = 317
-                runtime_exact_segments = 647
+                runtime_entries = 324
+                runtime_exact_segments = 670
                 renderer_entries = 1468
                 [sdk]
                 rows = {json.dumps(list(sdk_rows))}
@@ -639,18 +647,22 @@ class ParityScorecardCliTests(unittest.TestCase):
 
     @staticmethod
     def write_runtime_manifest(path, entries=RUNTIME_ENTRIES, segments=RUNTIME_SEGMENTS):
-        assert entries > 0 and segments >= entries
+        assert entries > 1 and segments >= entries
         first_samples = segments - entries + 1
         rows = []
         for index in range(entries):
             sample_count = first_samples if index == 0 else 1
             samples = ", ".join(str(float(sample)) for sample in range(sample_count))
+            features = (
+                'features = ["side-channel-diverges:V11"]\n' if index == 1 else ""
+            )
             rows.append(
                 "[[file]]\n"
                 f'id = "runtime-{index}"\n'
                 f'path = "runtime-{index}.riv"\n'
                 f"samples = [{samples}]\n"
                 'status = "exact"\n'
+                f"{features}"
             )
         path.write_text("\n".join(rows))
 

@@ -109,8 +109,7 @@ use nuxie_scripting::vm::{
 };
 #[cfg(feature = "scripting")]
 pub use nuxie_scripting::vm::{
-    LuaScriptInstance, ScopeKey, ScriptExecutionLimits, ScriptVm, ScriptingLogLevel,
-    ScriptingLogSink,
+    LuaScriptInstance, ScriptExecutionLimits, ScriptVm, ScriptingLogLevel, ScriptingLogSink,
 };
 
 #[cfg(feature = "scripting")]
@@ -140,19 +139,10 @@ struct FileScriptAsset {
     type_name: &'static str,
     bare_name: String,
     name: String,
-    scope: ScopeKey,
     is_module: bool,
     serialized_implemented_methods: u32,
     payload: Option<Vec<u8>>,
     is_project_data_converter: bool,
-}
-
-#[cfg(feature = "scripting")]
-#[derive(Debug, Clone)]
-struct FileScriptLibraryImport {
-    caller: ScopeKey,
-    name: String,
-    target: ScopeKey,
 }
 
 #[cfg(feature = "scripting")]
@@ -167,7 +157,6 @@ struct ReadyFileScripts {
 #[cfg(feature = "scripting")]
 struct FileScriptRuntime {
     assets: Arc<[FileScriptAsset]>,
-    imports: Arc<[FileScriptLibraryImport]>,
     authorization: ScriptExecutionAuthorization,
     execution_limits: Option<ScriptExecutionLimits>,
     log_sink: Option<ScriptingLogSink>,
@@ -180,7 +169,6 @@ impl std::fmt::Debug for FileScriptRuntime {
         formatter
             .debug_struct("FileScriptRuntime")
             .field("assets", &self.assets)
-            .field("imports", &self.imports)
             .field("authorization", &self.authorization)
             .field("execution_limits", &self.execution_limits)
             .field("has_log_sink", &self.log_sink.is_some())
@@ -217,13 +205,6 @@ impl FileScriptRuntime {
                     } else {
                         format!("{folder}/{name}")
                     },
-                    scope: ScopeKey::new(
-                        entry.asset.uint_property("scopeLibraryId").unwrap_or(0),
-                        entry
-                            .asset
-                            .uint_property("scopeLibraryVersionId")
-                            .unwrap_or(0),
-                    ),
                     is_module: entry.asset.bool_property("isModule").unwrap_or(false),
                     serialized_implemented_methods: entry
                         .asset
@@ -239,42 +220,17 @@ impl FileScriptRuntime {
             })
             .collect::<Vec<_>>()
             .into();
-        let imports = entries
-            .into_iter()
-            .filter(|entry| entry.asset.type_name == "LibraryAsset")
-            .map(|entry| FileScriptLibraryImport {
-                caller: ScopeKey::new(
-                    entry.asset.uint_property("scopeLibraryId").unwrap_or(0),
-                    entry
-                        .asset
-                        .uint_property("scopeLibraryVersionId")
-                        .unwrap_or(0),
-                ),
-                name: entry
-                    .asset
-                    .string_property("name")
-                    .unwrap_or_default()
-                    .to_owned(),
-                target: ScopeKey::new(
-                    entry.asset.uint_property("libraryId").unwrap_or(0),
-                    entry.asset.uint_property("libraryVersionId").unwrap_or(0),
-                ),
-            })
-            .collect::<Vec<_>>()
-            .into();
-        Self::new(assets, imports, authorization, execution_limits, None)
+        Self::new(assets, authorization, execution_limits, None)
     }
 
     fn new(
         assets: Arc<[FileScriptAsset]>,
-        imports: Arc<[FileScriptLibraryImport]>,
         authorization: ScriptExecutionAuthorization,
         execution_limits: Option<ScriptExecutionLimits>,
         log_sink: Option<ScriptingLogSink>,
     ) -> Self {
         Self {
             assets,
-            imports,
             authorization,
             execution_limits,
             log_sink,
@@ -315,34 +271,21 @@ impl FileScriptRuntime {
             .iter()
             .filter(|asset| asset.type_name == "BlobAsset")
         {
-            vm.register_blob_asset(
+            vm.register_blob_asset_with_short_name(
+                &asset.name,
                 &asset.bare_name,
                 asset.payload.as_deref().unwrap_or_default(),
             )
             .map_err(|error| asset_phase_error(asset, "blob registration", error))?;
         }
-        // LibraryAsset records are serialized import edges. Seed every pin
-        // before executing any module so both eager and lazy requires observe
-        // the exact per-caller dependency graph from the file.
-        for import in self.imports.iter() {
-            vm.add_import(import.caller, &import.name, import.target);
-        }
         let assets = self.assets.as_ref();
-        let mut registered_shader_aliases = BTreeSet::new();
         for asset in assets
             .iter()
             .filter(|asset| asset.type_name == "ShaderAsset")
         {
-            let aliases = [&asset.bare_name, &asset.name]
-                .into_iter()
-                .filter(|alias| registered_shader_aliases.insert((*alias).clone()))
-                .map(String::as_str)
-                .collect::<Vec<_>>();
-            if aliases.is_empty() {
-                continue;
-            }
-            vm.register_gpu_canvas_shader_asset_aliases(
-                &aliases,
+            vm.register_gpu_canvas_shader_asset_with_short_name(
+                &asset.name,
+                &asset.bare_name,
                 asset.payload.as_deref().unwrap_or_default(),
             )
             .map_err(|error| asset_phase_error(asset, "shader registration", error))?;
@@ -362,12 +305,7 @@ impl FileScriptRuntime {
             for asset in pending {
                 let payload = required_script_payload(asset, "module registration")?;
                 let effect_checkpoint = vm.checkpoint_host_effects();
-                if let Err(error) = vm.register_module_with_factory_scoped(
-                    &asset.name,
-                    asset.scope,
-                    payload,
-                    factory,
-                ) {
+                if let Err(error) = vm.register_module_with_factory(&asset.name, payload, factory) {
                     vm.rollback_host_effects(effect_checkpoint);
                     failures.push((asset, error));
                 }
@@ -376,6 +314,16 @@ impl FileScriptRuntime {
                 break;
             }
             if failures.len() == before {
+                if failures.iter().all(|(_, error)| {
+                    error
+                        .to_string()
+                        .contains("require could not find a script named")
+                }) {
+                    // C++ reports unresolved modules after its dependency
+                    // ordering pass but keeps the File and every successfully
+                    // registered module usable.
+                    break;
+                }
                 let (asset, error) = failures.remove(0);
                 return Err(asset_phase_error(asset, "module registration", error));
             }
@@ -387,15 +335,22 @@ impl FileScriptRuntime {
             asset.type_name == "ScriptAsset" && !asset.is_module && !asset.is_project_data_converter
         }) {
             let payload = required_script_payload(asset, "protocol registration")?;
-            let program = vm
-                .register_protocol_script_with_factory_scoped(
-                    &asset.name,
-                    asset.scope,
-                    payload,
-                    factory,
-                )
-                .map_err(|error| asset_phase_error(asset, "protocol registration", error))?;
-            programs.insert(asset.ordinal, program);
+            match vm.register_protocol_script_with_factory(&asset.name, payload, factory) {
+                Ok(program) => {
+                    programs.insert(asset.ordinal, program);
+                }
+                Err(error)
+                    if error
+                        .to_string()
+                        .contains("require could not find a script named") =>
+                {
+                    // Match performRegistration: an unrelated unresolved
+                    // protocol is absent, not a reason to reject the File.
+                }
+                Err(error) => {
+                    return Err(asset_phase_error(asset, "protocol registration", error));
+                }
+            }
         }
 
         Ok(ReadyFileScripts {
@@ -420,6 +375,9 @@ impl FileScriptRuntime {
         candidate
             .vm
             .set_image_asset_owners(file_asset_owners.image_assets());
+        candidate
+            .vm
+            .set_font_asset_owners(file_asset_owners.font_assets());
         candidate
             .vm
             .set_audio_asset_owners(file_asset_owners.audio_assets());
@@ -3434,7 +3392,6 @@ pub enum FileAssetKind {
     Blob,
     Script,
     Shader,
-    Library,
 }
 
 /// Borrowed handle to one entry in a [`File`]'s dense asset catalog.
@@ -3473,7 +3430,6 @@ impl<'a> FileAsset<'a> {
             "BlobAsset" => FileAssetKind::Blob,
             "ScriptAsset" => FileAssetKind::Script,
             "ShaderAsset" => FileAssetKind::Shader,
-            "LibraryAsset" => FileAssetKind::Library,
             other => unreachable!("RuntimeFile published unsupported FileAsset kind {other}"),
         }
     }
@@ -3982,7 +3938,6 @@ impl Clone for File {
             let scripts = self.scripts.borrow();
             Rc::new(RefCell::new(FileScriptRuntime::new(
                 Arc::clone(&scripts.assets),
-                Arc::clone(&scripts.imports),
                 scripts.authorization,
                 scripts.execution_limits,
                 scripts.log_sink.clone(),
@@ -7151,6 +7106,35 @@ mod owned_instance_tests {
         assert!(completed.load(Ordering::Acquire));
     }
 
+    #[cfg(feature = "scripting")]
+    #[test]
+    fn scripted_artboard_clone_keeps_host_file_and_bound_view_model_alive() {
+        let file = Arc::new(facade_view_model_file());
+        let weak_file = Arc::downgrade(&file);
+        let scripted = FileScriptArtboard::new(Arc::clone(&file), 0, None)
+            .expect("host-backed scripted artboard");
+        let bound = nuxie_runtime::ScriptArtboard::data(&scripted)
+            .expect("host artboard has a bound view model");
+
+        let cloned = nuxie_runtime::ScriptArtboard::instance(&scripted, Some(bound.clone()))
+            .expect("scripted artboard clone");
+        let cloned_bound = cloned.data().expect("clone keeps the supplied model");
+        assert!(Rc::ptr_eq(
+            &bound.owned_instance(),
+            &cloned_bound.owned_instance(),
+        ));
+
+        drop(scripted);
+        drop(file);
+        assert!(
+            weak_file.upgrade().is_some(),
+            "the cloned userdata pins its cross-lifetime host file"
+        );
+        assert!(cloned.data().is_some());
+        drop(cloned);
+        assert!(weak_file.upgrade().is_none());
+    }
+
     #[test]
     fn borrowed_and_owned_artboards_expose_authored_default_view_model_and_extended_setters() {
         let file = facade_view_model_file();
@@ -7723,7 +7707,7 @@ mod owned_instance_tests {
 
     #[cfg(feature = "scripting")]
     #[test]
-    fn file_script_runtime_extracts_scopes_and_nested_library_edges() {
+    fn file_script_runtime_extracts_prelinked_module_names() {
         let property = |key, value| AuthoringProperty { key, value };
         let runtime = RuntimeFile::from_authoring_records(vec![
             AuthoringRecord {
@@ -7731,23 +7715,14 @@ mod owned_instance_tests {
                 properties: vec![],
             },
             AuthoringRecord {
-                type_key: 558,
-                properties: vec![
-                    property(203, AuthoringValue::String("InnerLib".to_owned())),
-                    property(798, AuthoringValue::Uint(21)),
-                    property(799, AuthoringValue::Uint(4)),
-                    property(1037, AuthoringValue::Uint(20)),
-                    property(1038, AuthoringValue::Uint(6)),
-                ],
-            },
-            AuthoringRecord {
                 type_key: 529,
                 properties: vec![
                     property(203, AuthoringValue::String("mesh".to_owned())),
-                    property(926, AuthoringValue::String("config".to_owned())),
+                    property(
+                        926,
+                        AuthoringValue::String("InnerLib#21@4/config".to_owned()),
+                    ),
                     property(914, AuthoringValue::Bool(true)),
-                    property(1037, AuthoringValue::Uint(21)),
-                    property(1038, AuthoringValue::Uint(4)),
                 ],
             },
         ])
@@ -7763,29 +7738,14 @@ mod owned_instance_tests {
             .iter()
             .find(|asset| asset.type_name == "ScriptAsset")
             .expect("script asset extracted");
-        assert_eq!(mesh.name, "config/mesh");
-        assert_eq!(mesh.scope, ScopeKey::new(21, 4));
-
-        assert_eq!(scripts.imports.len(), 1);
-        let import = &scripts.imports[0];
-        assert_eq!(import.name, "InnerLib");
-        assert_eq!(import.caller, ScopeKey::new(20, 6));
-        assert_eq!(import.target, ScopeKey::new(21, 4));
+        assert_eq!(mesh.name, "InnerLib#21@4/config/mesh");
     }
 
     #[cfg(feature = "scripting")]
     #[test]
     fn file_script_runtime_resolves_exported_library_scope_probe() {
-        let Some(rive_runtime_dir) = std::env::var_os("RIVE_RUNTIME_DIR") else {
-            // The candidate-only fixture is exercised by the upstream-sync
-            // gates; hermetic scope behavior is covered by nuxie-scripting.
-            return;
-        };
-        let fixture = std::path::PathBuf::from(rive_runtime_dir)
-            .join("tests/unit_tests/assets/scope_probe.riv");
-        if !fixture.exists() {
-            return;
-        }
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/sync/scope_probe.riv");
         let bytes = std::fs::read(&fixture)
             .unwrap_or_else(|error| panic!("failed to read {}: {error}", fixture.display()));
         let runtime = read_runtime_file_for_facade(&bytes).expect("scope probe imports");
@@ -7798,7 +7758,7 @@ mod owned_instance_tests {
 
         let ready = scripts
             .build_candidate(&runtime, &mut factory)
-            .expect("scoped modules register through serialized library pins");
+            .expect("prelinked scoped modules register from the exact candidate fixture");
         let (lib, has_decode, cached, bare_leaked): (i64, i64, i64, bool) = ready
             .vm
             .eval(

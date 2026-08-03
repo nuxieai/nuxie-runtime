@@ -264,6 +264,10 @@ pub(crate) struct RuntimeDataBindGraphSourceNode {
     pub(crate) defer_source_to_target_until_next_update: bool,
     pub(crate) source_to_target_dirty_after_immediate: bool,
     pub(crate) source_to_target_dirty_after_target_to_source: bool,
+    /// Last concrete target value observed by this occurrence. C++ keeps the
+    /// same snapshot in `DataBindContextTargetValue` so target-to-source dirt
+    /// can ignore notifications whose value did not actually change.
+    target_value: Option<RuntimeDataBindGraphValue>,
     /// Every source owns exactly one C++-shaped direction engine. Keep this
     /// field before converter occurrence state: Rust drops fields in
     /// declaration order, matching `DataBind::~DataBind` clearing the outer
@@ -6238,6 +6242,7 @@ impl RuntimeDataBindGraph {
             defer_source_to_target_until_next_update: false,
             source_to_target_dirty_after_immediate: false,
             source_to_target_dirty_after_target_to_source: false,
+            target_value: None,
             converter,
             converter_state,
             converter_data_binds: RuntimeDataConverterDataBindState::default(),
@@ -10257,6 +10262,11 @@ impl RuntimeDataBindGraph {
             if !target_to_source_dirty {
                 continue;
             }
+            let target_changed = source.sync_target_value(target_value.clone());
+            if !target_changed && !include_deferred_main_to_target {
+                source.target_to_source_dirty = false;
+                continue;
+            }
             let converted = match source.target_to_source_converted_value_with_script_errors(
                 &target_value,
                 &mut formula_random_source,
@@ -10550,6 +10560,12 @@ impl RuntimeDataBindGraph {
                 skipped_dirty_binding = true;
                 continue;
             }
+            // Source-to-target just wrote this value. Refresh the target-side
+            // snapshot so a later genuine edit back to the pre-write value is
+            // still detected (`ContextValue::refreshTargetValue`).
+            if source.applies_target_to_source() {
+                source.target_value = Some(value.clone());
+            }
             updates.push((target.target, value));
             source.source_to_target_dirty_after_immediate = false;
             source.source_to_target_dirty_after_target_to_source = false;
@@ -10793,6 +10809,12 @@ impl RuntimeDataBindGraph {
 }
 
 impl RuntimeDataBindGraphSourceNode {
+    fn sync_target_value(&mut self, value: RuntimeDataBindGraphValue) -> bool {
+        let changed = self.target_value.as_ref() != Some(&value);
+        self.target_value = Some(value);
+        changed
+    }
+
     fn retain_departed_operation_sources(&mut self) {
         let mut operation_cells = Vec::new();
         if let Some(converter) = self.converter.as_ref() {
@@ -12700,6 +12722,36 @@ mod tests {
                 | DATA_BIND_FLAG_TWO_WAY
                 | DATA_BIND_FLAG_SOURCE_TO_TARGET_RUNS_FIRST
         ));
+    }
+
+    #[test]
+    fn bidirectional_source_apply_refreshes_the_target_change_baseline() {
+        let mut graph = graph_with_number_binding(DATA_BIND_FLAG_TWO_WAY);
+        assert!(graph.sources[0].sync_target_value(RuntimeDataBindGraphValue::Number(3.0)));
+
+        graph.sources[0].value = RuntimeDataBindGraphValue::Number(8.0);
+        graph.sources[0].source_to_target_dirty_after_target_to_source = true;
+        let updates = graph.take_default_view_model_binding_updates(
+            true,
+            RuntimeDataBindGraphApplyPhase::UpdateDataBindsFalse,
+            None,
+        );
+        assert!(matches!(
+            updates.as_slice(),
+            [(
+                RuntimeDataBindGraphTarget::Number { global_id: 7 },
+                RuntimeDataBindGraphValue::Number(8.0),
+            )]
+        ));
+
+        assert!(
+            graph.sources[0].sync_target_value(RuntimeDataBindGraphValue::Number(3.0)),
+            "returning to the value from before our own write is a genuine target change"
+        );
+        assert!(
+            !graph.sources[0].sync_target_value(RuntimeDataBindGraphValue::Number(3.0)),
+            "an unchanged target is still filtered by the refreshed cache"
+        );
     }
 
     #[test]

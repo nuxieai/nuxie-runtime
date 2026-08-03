@@ -3315,12 +3315,6 @@ impl RuntimeOwnedViewModelInstance {
         )
     }
 
-    pub(crate) fn script_list_children(&self) -> Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
-        let mut children = Vec::new();
-        collect_runtime_owned_list_children(&self.lists, &mut children);
-        children
-    }
-
     pub(crate) fn push_list_item_by_property_name(
         &mut self,
         property_name: &str,

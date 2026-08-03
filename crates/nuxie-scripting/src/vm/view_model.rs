@@ -1143,21 +1143,18 @@ impl UserData for ScriptedContext {
         });
         methods.add_method("rootViewModel", |lua, this, ()| {
             this.require_live("rootViewModel")?;
-            Ok(
-                match this
-                    .parents
-                    .iter()
-                    .rev()
-                    .find_map(Clone::clone)
-                    .or_else(|| this.model.borrow().clone())
-                {
-                    Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
-                    None => {
-                        this.missing_requested_data.set(true);
-                        Value::Nil
-                    }
-                },
-            )
+            let root = this
+                .parents
+                .last()
+                .cloned()
+                .unwrap_or_else(|| this.model.borrow().clone());
+            Ok(match root {
+                Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
+                None => {
+                    this.missing_requested_data.set(true);
+                    Value::Nil
+                }
+            })
         });
         methods.add_method("dataContext", |lua, this, ()| {
             this.require_live("dataContext")?;
@@ -2008,6 +2005,40 @@ mod tests {
             .expect("runtime view-model state retains the factory image");
         assert_eq!((retained.width(), retained.height()), (3, 5));
         assert!(!missing_requested_data.get());
+    }
+
+    #[test]
+    fn root_view_model_preserves_a_terminal_context_without_a_model() {
+        let lua = Lua::new();
+        let local = fixture_models()
+            .into_values()
+            .next()
+            .expect("fixture local view model");
+        let nearer_parent = local
+            .named_instance(None)
+            .expect("fixture nearer parent view model");
+        let missing_requested_data = Rc::new(Cell::new(false));
+        let context = lua
+            .create_userdata(ScriptedContext::new_with_lifetime(
+                Rc::new(RefCell::new(Some(local))),
+                Rc::new(Cell::new(true)),
+                vec![Some(nearer_parent), None],
+                Rc::clone(&missing_requested_data),
+                None,
+                Rc::new(Cell::new(true)),
+            ))
+            .expect("scripted context");
+        lua.globals()
+            .set("context", context)
+            .expect("context global");
+
+        let root_is_nil: bool = lua
+            .load("return context:rootViewModel() == nil")
+            .eval()
+            .expect("root view model lookup");
+
+        assert!(root_is_nil);
+        assert!(missing_requested_data.get());
     }
 
     #[test]

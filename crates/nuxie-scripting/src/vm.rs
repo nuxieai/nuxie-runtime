@@ -1139,7 +1139,12 @@ impl ScriptVm {
         let bindings = self.renderer_bindings.clone();
         let context_alive = Rc::new(Cell::new(true));
         let instantiate = || {
-            let context_present = Rc::new(Cell::new(context_view_model_value.is_some()));
+            // A retained parent slot proves that the DataContext exists even
+            // when its own main ViewModel is null. Pinned C++ pushes the
+            // DataContext userdata independently from mainViewModelInstance.
+            let context_present = Rc::new(Cell::new(
+                context_view_model_value.is_some() || !context_parent_view_models.is_empty(),
+            ));
             let context_view_model = Rc::new(RefCell::new(context_view_model_value));
             let context_missing_requested_data = Rc::new(Cell::new(false));
             let (gpu_canvas, gpu_canvas_context) = ImportedGpuCanvasInstance::new(
@@ -1928,7 +1933,10 @@ impl RuntimeScriptingVm for ScriptVm {
             .execute_loaded_module(name, chunk)
             .map_err(|error| self.script_error(error))?;
         let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
-        let context_present = Rc::new(Cell::new(self.default_context_view_model.is_some()));
+        let context_present = Rc::new(Cell::new(
+            self.default_context_view_model.is_some()
+                || !self.default_context_parent_view_models.is_empty(),
+        ));
         let context_missing_requested_data = Rc::new(Cell::new(false));
         let context_alive = Rc::new(Cell::new(true));
         let context_parent_view_models = self.default_context_parent_view_models.clone();
@@ -3187,6 +3195,36 @@ mod context_init_tests {
             );
             assert_eq!(instance.script_lifetime_valid(), expected, "{label}");
         }
+    }
+
+    #[test]
+    fn generator_preserves_a_nil_main_context_with_a_parent_slot() {
+        let vm = ScriptVm::new();
+        let generator: Function = vm
+            .lua
+            .load(
+                r#"
+                return function(context)
+                    generatorSawDataContext = context:dataContext() ~= nil
+                    return {}
+                end
+                "#,
+            )
+            .eval()
+            .expect("script generator");
+        let program = ScriptProgram { generator };
+
+        let instance = vm
+            .instantiate_registered_script_with_context(&program, None, vec![None])
+            .expect("nil-main DataContext remains present during generation");
+
+        assert!(
+            vm.lua
+                .globals()
+                .get::<bool>("generatorSawDataContext")
+                .expect("generator observation")
+        );
+        drop(instance);
     }
 
     #[test]

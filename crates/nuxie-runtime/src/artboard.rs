@@ -4887,12 +4887,14 @@ impl ArtboardInstance {
         {
             return false;
         }
+        // Generated C++ setters invoke their concrete `*Changed()` callback
+        // before notifying Core observers.
+        self.apply_string_property_changed(local_id, property_key);
         self.notify_artboard_data_bind_target_property_changed(local_id, property_key);
         self.mark_stateful_nested_view_model_contexts_dirty_for_local(local_id);
         self.mark_changed_unless_view_model_instance(local_id);
         self.mark_text_changed_for_local(local_id);
         self.mark_prepared_changed_for_property(local_id, property_key);
-        self.apply_string_property_changed(local_id, property_key);
         self.refresh_retained_focusables_for_property(local_id, property_key);
         true
     }

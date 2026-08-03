@@ -1256,16 +1256,6 @@ impl ScriptViewModel {
         changed
     }
 
-    /// Snapshot the shared instances currently parented through this
-    /// instance's list properties. The scripting registry refreshes these
-    /// edges at frame end so host/data-binding list mutations cannot leave a
-    /// retained wrapper incorrectly classified as attached or detached.
-    pub fn owned_list_children(
-        instance: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
-    ) -> Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>> {
-        instance.borrow().script_list_children()
-    }
-
     pub fn view_model(&self, name: &str) -> Option<Self> {
         let property_index = self
             .file

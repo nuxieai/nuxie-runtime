@@ -101,6 +101,13 @@ fn generate(options: Options) -> Result<()> {
         if let Some(input_script) = previous.and_then(|entry| entry.input_script.as_ref()) {
             output.push_str(&format!("input_script = {}\n", quoted(input_script)));
         }
+        if let Some(view_model_script) = previous.and_then(|entry| entry.view_model_script.as_ref())
+        {
+            output.push_str(&format!(
+                "view_model_script = {}\n",
+                quoted(view_model_script)
+            ));
+        }
         if previous.is_some_and(|entry| entry.rust_execute_scripts) {
             output.push_str("rust_execute_scripts = true\n");
         }
@@ -209,6 +216,7 @@ struct ExistingEntry {
     artboard: Option<String>,
     state_machine: Option<String>,
     input_script: Option<String>,
+    view_model_script: Option<String>,
     rust_execute_scripts: bool,
     semantic_default_view_model: bool,
     semantic_side_channel_only: bool,
@@ -248,13 +256,10 @@ fn parse_existing(path: &Path) -> Result<BTreeMap<String, ExistingEntry>> {
             "artboard" => entry.artboard = Some(parse_string(value)?),
             "state_machine" => entry.state_machine = Some(parse_string(value)?),
             "input_script" => entry.input_script = Some(parse_string(value)?),
+            "view_model_script" => entry.view_model_script = Some(parse_string(value)?),
             "rust_execute_scripts" => entry.rust_execute_scripts = parse_bool(value)?,
-            "semantic_default_view_model" => {
-                entry.semantic_default_view_model = parse_bool(value)?
-            }
-            "semantic_side_channel_only" => {
-                entry.semantic_side_channel_only = parse_bool(value)?
-            }
+            "semantic_default_view_model" => entry.semantic_default_view_model = parse_bool(value)?,
+            "semantic_side_channel_only" => entry.semantic_side_channel_only = parse_bool(value)?,
             "samples" => entry.samples = parse_array(value).unwrap_or_default(),
             "status" => entry.status = parse_string(value)?,
             "verification" => entry.verification = Some(parse_string(value)?),
@@ -390,6 +395,8 @@ mod tests {
 [[file]]
 id = "verified"
 path = "tests/unit_tests/assets/verified.riv"
+input_script = "tests/input_scripts/verified.txt"
+view_model_script = "tests/view_model_scripts/verified.txt"
 samples = [0.0]
 status = "exact"
 verification = "rejects-malformed"
@@ -423,6 +430,14 @@ features = []
         assert_eq!(verified.status, "exact");
         assert_eq!(verified.verification.as_deref(), Some("rejects-malformed"));
         assert!(verified.rust_execute_scripts);
+        assert_eq!(
+            verified.input_script.as_deref(),
+            Some("tests/input_scripts/verified.txt")
+        );
+        assert_eq!(
+            verified.view_model_script.as_deref(),
+            Some("tests/view_model_scripts/verified.txt")
+        );
         assert!(
             verified
                 .features

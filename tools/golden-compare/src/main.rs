@@ -425,6 +425,7 @@ struct CorpusEntry {
     artboard: Option<String>,
     state_machine: Option<String>,
     input_script: Option<String>,
+    view_model_script: Option<String>,
     rust_execute_scripts: bool,
     semantic_default_view_model: bool,
     semantic_side_channel_only: bool,
@@ -443,6 +444,7 @@ impl CorpusEntry {
             artboard: None,
             state_machine: None,
             input_script: None,
+            view_model_script: None,
             rust_execute_scripts: false,
             semantic_default_view_model: false,
             semantic_side_channel_only: false,
@@ -704,6 +706,9 @@ fn parse_corpus(path: &Path) -> Result<Vec<CorpusEntry>, String> {
             "artboard" => entry.artboard = Some(parse_string(value, line_number)?),
             "state_machine" => entry.state_machine = Some(parse_string(value, line_number)?),
             "input_script" => entry.input_script = Some(parse_string(value, line_number)?),
+            "view_model_script" => {
+                entry.view_model_script = Some(parse_string(value, line_number)?)
+            }
             "rust_execute_scripts" => entry.rust_execute_scripts = parse_bool(value, line_number)?,
             "semantic_default_view_model" => {
                 entry.semantic_default_view_model = parse_bool(value, line_number)?
@@ -1163,6 +1168,37 @@ mod tests {
                 .get_args()
                 .all(|argument| argument != "--execute-scripts")
         );
+    }
+
+    #[test]
+    fn stream_command_forwards_both_script_files() {
+        let mut entry = CorpusEntry::new();
+        entry.input_script = Some("tests/input_scripts/input.txt".to_owned());
+        entry.view_model_script = Some("tests/view_model_scripts/view-model.txt".to_owned());
+
+        let command = stream_command(
+            Path::new("runner"),
+            &entry,
+            Path::new("fixture.riv"),
+            Path::new("/workspace"),
+            RunnerKind::Cpp,
+            true,
+            false,
+        );
+        let arguments = command
+            .get_args()
+            .map(|argument| argument.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert!(arguments.windows(2).any(|pair| {
+            pair == ["--input-script", "/workspace/tests/input_scripts/input.txt"]
+        }));
+        assert!(arguments.windows(2).any(|pair| {
+            pair == [
+                "--view-model-script",
+                "/workspace/tests/view_model_scripts/view-model.txt",
+            ]
+        }));
     }
 
     #[test]
@@ -1720,6 +1756,11 @@ fn stream_command(
         command
             .arg("--input-script")
             .arg(resolve_script_path(input_script, corpus_dir));
+    }
+    if let Some(view_model_script) = &entry.view_model_script {
+        command
+            .arg("--view-model-script")
+            .arg(resolve_script_path(view_model_script, corpus_dir));
     }
     if side_channel {
         // The event/state side channel is part of the diffed stream; it must

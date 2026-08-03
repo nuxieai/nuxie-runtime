@@ -995,6 +995,69 @@ fn invalid_bitmask_passthrough_metadata_is_rejected_like_cpp_generator() {
 }
 
 #[test]
+fn editor_only_script_export_stamps_do_not_enter_the_runtime_schema() {
+    let defs_dir = write_codegen_defs_fixture_files(
+        "editor_only_script_export_stamps",
+        &[
+            (
+                "backboard.json",
+                r#"
+                {
+                  "name": "Backboard",
+                  "key": { "int": 23, "string": "backboard" },
+                  "properties": {
+                    "scriptEdgesVerifiedVersion": {
+                      "type": "uint",
+                      "initialValue": "0",
+                      "key": { "int": 1042, "string": "scriptedgesverifiedversion" },
+                      "runtime": false,
+                      "journal": false
+                    }
+                  }
+                }
+                "#,
+            ),
+            (
+                "script_asset.json",
+                r#"
+                {
+                  "name": "ScriptAsset",
+                  "key": { "int": 529, "string": "scriptasset" },
+                  "properties": {
+                    "scriptProtocolValue": {
+                      "type": "uint",
+                      "initialValue": "0",
+                      "key": { "int": 1035, "string": "scriptprotocolvalue" },
+                      "runtime": false,
+                      "journal": false
+                    }
+                  }
+                }
+                "#,
+            ),
+        ],
+    );
+    let out_path = defs_dir.join("schema.rs");
+    let output = run_codegen(&defs_dir, &out_path);
+    assert!(
+        output.status.success(),
+        "nuxie-codegen failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let generated = std::fs::read_to_string(&out_path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", out_path.display()));
+    let _ = std::fs::remove_dir_all(&defs_dir);
+
+    assert!(generated.contains("name: \"Backboard\""));
+    assert!(generated.contains("name: \"ScriptAsset\""));
+    assert!(!generated.contains("scriptEdgesVerifiedVersion"));
+    assert!(!generated.contains("scriptProtocolValue"));
+    assert!(!generated.contains("property_key: 1042"));
+    assert!(!generated.contains("property_key: 1035"));
+}
+
+#[test]
 fn duplicate_and_reserved_keys_are_rejected_like_cpp_generator() {
     let cases = [
         (

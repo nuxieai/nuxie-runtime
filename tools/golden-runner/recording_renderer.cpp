@@ -4,6 +4,7 @@
 
 #include "rive/math/raw_path.hpp"
 #include "rive/refcnt.hpp"
+#include "rive/semantic/semantic_snapshot.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -80,6 +81,62 @@ std::string quotedString(const std::string& value)
         }
     }
     out << '"';
+    return out.str();
+}
+
+void writeIdList(std::ostringstream& out, const std::vector<uint32_t>& ids)
+{
+    for (size_t index = 0; index < ids.size(); index++)
+    {
+        if (index != 0)
+        {
+            out << ',';
+        }
+        out << ids[index];
+    }
+}
+
+void writeSemanticsBounds(std::ostringstream& out,
+                          float minX,
+                          float minY,
+                          float maxX,
+                          float maxY)
+{
+    out << floatToString(minX) << ',' << floatToString(minY) << ','
+        << floatToString(maxX) << ',' << floatToString(maxY);
+}
+
+void writeSemanticsNode(std::ostringstream& out,
+                        const rive::SemanticsDiffNode& node)
+{
+    out << "{id=" << node.id << ",role=" << node.role
+        << ",label=" << quotedString(node.label)
+        << ",value=" << quotedString(node.value)
+        << ",hint=" << quotedString(node.hint)
+        << ",stateFlags=" << node.stateFlags
+        << ",traitFlags=" << node.traitFlags
+        << ",headingLevel=" << node.headingLevel << ",bounds=(";
+    writeSemanticsBounds(
+        out, node.minX, node.minY, node.maxX, node.maxY);
+    out << "),parentId=" << node.parentId
+        << ",siblingIndex=" << node.siblingIndex << '}';
+}
+
+std::string semanticsNodesLine(
+    const char* kind,
+    const std::vector<rive::SemanticsDiffNode>& nodes)
+{
+    std::ostringstream out;
+    out << "semantics " << kind << " nodes=[";
+    for (size_t index = 0; index < nodes.size(); index++)
+    {
+        if (index != 0)
+        {
+            out << ',';
+        }
+        writeSemanticsNode(out, nodes[index]);
+    }
+    out << ']';
     return out.str();
 }
 
@@ -962,6 +1019,82 @@ void RecordingFactory::addSideChannelEvent(const SideChannelEvent& event)
         out << '}';
     }
     out << ']';
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addSemanticsDiff(const rive::SemanticsDiff& diff)
+{
+    std::ostringstream header;
+    header << "semantics frame=" << diff.frameNumber
+           << " treeVersion=" << diff.treeVersion << " rootId=" << diff.rootId;
+    m_stream.line(header.str());
+
+    std::ostringstream removed;
+    removed << "semantics removed ids=[";
+    writeIdList(removed, diff.removed);
+    removed << ']';
+    m_stream.line(removed.str());
+
+    m_stream.line(semanticsNodesLine("added", diff.added));
+    m_stream.line(semanticsNodesLine("moved", diff.moved));
+
+    std::ostringstream children;
+    children << "semantics childrenUpdated entries=[";
+    for (size_t index = 0; index < diff.childrenUpdated.size(); index++)
+    {
+        if (index != 0)
+        {
+            children << ',';
+        }
+        const auto& update = diff.childrenUpdated[index];
+        children << "{parentId=" << update.parentId << ",childIds=[";
+        writeIdList(children, update.childIds);
+        children << "]}";
+    }
+    children << ']';
+    m_stream.line(children.str());
+
+    m_stream.line(
+        semanticsNodesLine("updatedSemantic", diff.updatedSemantic));
+
+    std::ostringstream geometry;
+    geometry << "semantics updatedGeometry bounds=[";
+    for (size_t index = 0; index < diff.updatedGeometry.size(); index++)
+    {
+        if (index != 0)
+        {
+            geometry << ',';
+        }
+        const auto& update = diff.updatedGeometry[index];
+        geometry << "{id=" << update.id << ",bounds=(";
+        writeSemanticsBounds(
+            geometry, update.minX, update.minY, update.maxX, update.maxY);
+        geometry << ")}";
+    }
+    geometry << ']';
+    m_stream.line(geometry.str());
+}
+
+void RecordingFactory::addSemanticAction(float seconds,
+                                         uint32_t nodeId,
+                                         const std::string& action,
+                                         bool dispatched)
+{
+    std::ostringstream out;
+    out << "semanticAction seconds=" << floatToString(seconds)
+        << " nodeId=" << nodeId << " action=" << action
+        << " outcome=" << (dispatched ? "dispatched" : "missing");
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addSemanticFocus(float seconds,
+                                        uint32_t nodeId,
+                                        bool focused)
+{
+    std::ostringstream out;
+    out << "semanticFocus seconds=" << floatToString(seconds)
+        << " nodeId=" << nodeId
+        << " outcome=" << (focused ? "focused" : "rejected");
     m_stream.line(out.str());
 }
 

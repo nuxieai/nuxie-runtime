@@ -3,6 +3,7 @@
 #include "recording_renderer.hpp"
 
 #include "rive/animation/state_machine_instance.hpp"
+#include "rive/animation/semantic_listener_group.hpp"
 #include "rive/artboard.hpp"
 #include "rive/custom_property_boolean.hpp"
 #include "rive/custom_property_color.hpp"
@@ -29,6 +30,8 @@
 #include "rive/refcnt.hpp"
 #include "rive/runtime_header.hpp"
 #include "rive/scene.hpp"
+#include "rive/semantic/semantic_manager.hpp"
+#include "rive/semantic/semantic_node.hpp"
 #include "rive/static_scene.hpp"
 
 #include <algorithm>
@@ -42,6 +45,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -147,6 +151,8 @@ enum class InputKind
     pointerMove,
     pointerUp,
     pointerExit,
+    semanticAction,
+    semanticFocus,
 };
 
 struct InputEvent
@@ -156,6 +162,8 @@ struct InputEvent
     float x = 0.0f;
     float y = 0.0f;
     int pointerId = 0;
+    uint32_t semanticNodeId = 0;
+    rive::SemanticActionType semanticAction = rive::SemanticActionType::tap;
     size_t order = 0;
 };
 
@@ -245,7 +253,9 @@ std::string usage()
            "  <seconds> pointerDown <x> <y> [pointerId]\n"
            "  <seconds> pointerMove <x> <y> [pointerId]\n"
            "  <seconds> pointerUp <x> <y> [pointerId]\n"
-           "  <seconds> pointerExit <x> <y> [pointerId]\n";
+           "  <seconds> pointerExit <x> <y> [pointerId]\n"
+           "  <seconds> semanticAction <nodeId> <tap|increase|decrease>\n"
+           "  <seconds> semanticFocus <nodeId>\n";
 }
 
 std::string trim(const std::string& value)
@@ -289,6 +299,20 @@ int parseInt(const std::string& value, const std::string& context)
         throw CliError("invalid integer for " + context + ": " + value);
     }
     return static_cast<int>(parsed);
+}
+
+uint32_t parseUint32(const std::string& value, const std::string& context)
+{
+    errno = 0;
+    char* end = nullptr;
+    const unsigned long parsed = std::strtoul(value.c_str(), &end, 10);
+    if (end == value.c_str() || *end != '\0' || errno == ERANGE ||
+        parsed > std::numeric_limits<uint32_t>::max())
+    {
+        throw CliError("invalid unsigned integer for " + context + ": " +
+                       value);
+    }
+    return static_cast<uint32_t>(parsed);
 }
 
 size_t parsePositiveSize(const std::string& value, const std::string& context)
@@ -354,6 +378,14 @@ InputKind parseInputKind(const std::string& value, size_t lineNumber)
     {
         return InputKind::pointerExit;
     }
+    if (value == "semanticAction")
+    {
+        return InputKind::semanticAction;
+    }
+    if (value == "semanticFocus")
+    {
+        return InputKind::semanticFocus;
+    }
     throw CliError("unknown input event on line " + std::to_string(lineNumber) +
                    ": " + value);
 }
@@ -370,8 +402,45 @@ std::string inputKindName(InputKind kind)
             return "pointerUp";
         case InputKind::pointerExit:
             return "pointerExit";
+        case InputKind::semanticAction:
+            return "semanticAction";
+        case InputKind::semanticFocus:
+            return "semanticFocus";
     }
     return "unknown";
+}
+
+rive::SemanticActionType parseSemanticAction(const std::string& value,
+                                             size_t lineNumber)
+{
+    if (value == "tap")
+    {
+        return rive::SemanticActionType::tap;
+    }
+    if (value == "increase")
+    {
+        return rive::SemanticActionType::increase;
+    }
+    if (value == "decrease")
+    {
+        return rive::SemanticActionType::decrease;
+    }
+    throw CliError("unknown semantic action on line " +
+                   std::to_string(lineNumber) + ": " + value);
+}
+
+std::string semanticActionName(rive::SemanticActionType action)
+{
+    switch (action)
+    {
+        case rive::SemanticActionType::tap:
+            return "tap";
+        case rive::SemanticActionType::increase:
+            return "increase";
+        case rive::SemanticActionType::decrease:
+            return "decrease";
+    }
+    return "tap";
 }
 
 std::vector<InputEvent> loadInputScript(const std::string& path)
@@ -407,10 +476,10 @@ std::vector<InputEvent> loadInputScript(const std::string& path)
             tokens.push_back(token);
         }
 
-        if (tokens.size() != 4 && tokens.size() != 5)
+        if (tokens.size() < 2)
         {
             throw CliError("input script line " + std::to_string(lineNumber) +
-                           " must be: <seconds> <event> <x> <y> [pointerId]");
+                           " must start with: <seconds> <event>");
         }
 
         InputEvent event;
@@ -424,18 +493,43 @@ std::vector<InputEvent> loadInputScript(const std::string& path)
                            " has a negative time");
         }
         event.kind = parseInputKind(tokens[1], lineNumber);
-        event.x =
-            parseFloat(tokens[2],
-                       "input script line " + std::to_string(lineNumber) + " x");
-        event.y =
-            parseFloat(tokens[3],
-                       "input script line " + std::to_string(lineNumber) + " y");
-        event.pointerId =
-            tokens.size() == 5
-                ? parseInt(tokens[4],
-                           "input script line " + std::to_string(lineNumber) +
-                               " pointerId")
-                : 0;
+        const std::string lineContext =
+            "input script line " + std::to_string(lineNumber);
+        if (event.kind == InputKind::semanticAction)
+        {
+            if (tokens.size() != 4)
+            {
+                throw CliError(lineContext +
+                               " must be: <seconds> semanticAction <nodeId> "
+                               "<tap|increase|decrease>");
+            }
+            event.semanticNodeId = parseUint32(tokens[2], lineContext + " nodeId");
+            event.semanticAction = parseSemanticAction(tokens[3], lineNumber);
+        }
+        else if (event.kind == InputKind::semanticFocus)
+        {
+            if (tokens.size() != 3)
+            {
+                throw CliError(lineContext +
+                               " must be: <seconds> semanticFocus <nodeId>");
+            }
+            event.semanticNodeId = parseUint32(tokens[2], lineContext + " nodeId");
+        }
+        else
+        {
+            if (tokens.size() != 4 && tokens.size() != 5)
+            {
+                throw CliError(lineContext +
+                               " must be: <seconds> <pointer-event> <x> <y> "
+                               "[pointerId]");
+            }
+            event.x = parseFloat(tokens[2], lineContext + " x");
+            event.y = parseFloat(tokens[3], lineContext + " y");
+            event.pointerId =
+                tokens.size() == 5
+                    ? parseInt(tokens[4], lineContext + " pointerId")
+                    : 0;
+        }
         event.order = events.size();
         events.push_back(event);
     }
@@ -888,6 +982,9 @@ rive::HitResult applyInput(rive::Scene* scene, const InputEvent& event)
             return scene->pointerUp(position, event.pointerId);
         case InputKind::pointerExit:
             return scene->pointerExit(position, event.pointerId);
+        case InputKind::semanticAction:
+        case InputKind::semanticFocus:
+            return rive::HitResult::none;
     }
     return rive::HitResult::none;
 }
@@ -1017,6 +1114,49 @@ void recordAdvanceSideChannel(rive_rust::golden::RecordingFactory& factory,
     {
         factory.addSideChannelEvent(
             describeReportedEvent(stateMachine->reportedEventAt(index)));
+    }
+    auto* semanticManager = stateMachine->semanticManager();
+    if (semanticManager != nullptr)
+    {
+        factory.addSemanticsDiff(semanticManager->drainDiff());
+    }
+}
+
+void applySemanticInput(
+    rive_rust::golden::RecordingFactory& factory,
+    rive::StateMachineInstance* stateMachine,
+    const InputEvent& event,
+    bool recordSideChannel)
+{
+    auto* semanticManager =
+        stateMachine == nullptr ? nullptr : stateMachine->semanticManager();
+    if (event.kind == InputKind::semanticAction)
+    {
+        auto* node = semanticManager == nullptr
+                         ? nullptr
+                         : semanticManager->nodeById(event.semanticNodeId);
+        const bool dispatched =
+            node != nullptr && node->semanticData() != nullptr;
+        if (dispatched)
+        {
+            stateMachine->fireSemanticAction(event.semanticNodeId,
+                                             event.semanticAction);
+        }
+        if (recordSideChannel)
+        {
+            factory.addSemanticAction(event.seconds,
+                                      event.semanticNodeId,
+                                      semanticActionName(event.semanticAction),
+                                      dispatched);
+        }
+        return;
+    }
+
+    const bool focused = semanticManager != nullptr &&
+                         semanticManager->requestFocus(event.semanticNodeId);
+    if (recordSideChannel)
+    {
+        factory.addSemanticFocus(event.seconds, event.semanticNodeId, focused);
     }
 }
 
@@ -1170,6 +1310,10 @@ int runFile(const Options& options)
                      factory);
     rive::Scene* scene = loader.scene();
     rive::StateMachineInstance* sceneStateMachine = loader.stateMachine();
+    if (options.sideChannel && sceneStateMachine != nullptr)
+    {
+        sceneStateMachine->enableSemantics();
+    }
     auto renderer = options.benchmark ? nullFactory.makeRenderer()
                                       : recordingFactory.makeRenderer();
 
@@ -1234,6 +1378,15 @@ int runFile(const Options& options)
                     }
                 });
                 timedStage(inputElapsed, [&] {
+                    if (event.kind == InputKind::semanticAction ||
+                        event.kind == InputKind::semanticFocus)
+                    {
+                        applySemanticInput(recordingFactory,
+                                           sceneStateMachine,
+                                           event,
+                                           options.sideChannel);
+                        return;
+                    }
                     const rive::HitResult hitResult = applyInput(scene, event);
                     if (!options.benchmark)
                     {

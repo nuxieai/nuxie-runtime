@@ -1,0 +1,2 @@
+# Select the second tab through the semantic action embedder surface.
+1 semanticAction 4 tap

@@ -1,0 +1,3 @@
+# Focus the bottom visible list item to exercise requestFocus and provider
+# geometry updates after scroll-to-visible.
+1 semanticFocus 16

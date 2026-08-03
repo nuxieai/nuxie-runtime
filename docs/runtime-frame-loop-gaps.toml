@@ -1462,7 +1462,7 @@ max_occurrences = 1
 [[ratchet]]
 id = "state_machine_event_exact_100_batches_required"
 globs = ["crates/nuxie-runtime/src/state_machine/state_machine_instance.rs"]
-pattern = "const\\s+MAX_EVENT_ITERATIONS:\\s*usize\\s*=\\s*100\\s*;[\\s\\S]{0,1800}for\\s+_\\s+in\\s+0\\.\\.MAX_EVENT_ITERATIONS"
+pattern = "const\\s+MAX_EVENT_ITERATIONS:\\s*usize\\s*=\\s*100\\s*;[\\s\\S]{0,1800}for\\s+(?:_|iteration)\\s+in\\s+0\\.\\.MAX_EVENT_ITERATIONS"
 min_occurrences = 1
 max_occurrences = 1
 

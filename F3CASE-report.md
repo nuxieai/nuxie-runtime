@@ -24,6 +24,7 @@ Complete for the requested F3 case-promotion scope.
 3. `0e3f3b03` — `[F3CASE] Complete non-F6 command queue case ports`
 4. `ebe72deb` — `[F3CASE] Tighten command queue oracle assertions`
 5. `3bd9e5ec` — `[F3CASE] Preserve external image handle identity`
+6. `fa898109` — `[F3CASE] Tighten final ledger evidence`
 
 ## Evidence
 

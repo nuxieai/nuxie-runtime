@@ -152,6 +152,9 @@ pub(super) fn install_data_value_global(lua: &Lua) -> Result<()> {
             local getmetatable = getmetatable
             return function(value)
                 local metatable = getmetatable(value)
+                if metatable.__riveDataValuePatched then
+                    return value
+                end
                 local index = metatable.__index
                 local newindex = metatable.__newindex
                 metatable.__index = function(self, key)
@@ -167,6 +170,7 @@ pub(super) fn install_data_value_global(lua: &Lua) -> Result<()> {
                         return newindex(self, key, newValue)
                     end
                 end
+                metatable.__riveDataValuePatched = true
                 return value
             end
             "#,

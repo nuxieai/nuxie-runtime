@@ -15610,9 +15610,9 @@ fn layout_display_bind_swaps_a_flex_slot_and_relayouts_live() -> Result<()> {
             view_models.set_artboard_default(root_artboard, defaults)?;
             (defaults, count)
         };
-        let slot_style = tx.layout_component_style(slot).ok_or_else(|| {
-            tx.abort("fallback slot must own a typed layout style")
-        })?;
+        let slot_style = tx
+            .layout_component_style(slot)
+            .ok_or_else(|| tx.abort("fallback slot must own a typed layout style"))?;
         tx.view_models().bind_number(
             slot_style,
             props::LAYOUT_DISPLAY,

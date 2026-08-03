@@ -1,5 +1,7 @@
 use crate::{
-    artboard::ArtboardInstance, components::ComponentDirt, layout_node_provider,
+    artboard::ArtboardInstance,
+    components::ComponentDirt,
+    layout_node_provider,
     properties::property_key_for_name,
     view_model::{RuntimeCoreObjectListener, RuntimeOwnedViewModelHandle},
 };

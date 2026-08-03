@@ -1,6 +1,7 @@
 use std::cell::{RefCell, RefMut};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::{error::Error, fmt};
 
 use nuxie_binary::{RuntimeFile, RuntimeObject};
@@ -791,6 +792,29 @@ pub struct ScriptImage {
     asset_global_id: u32,
 }
 
+/// A retained font selected from a view-model property.
+///
+/// File-backed values preserve their asset identity until the scripting VM
+/// resolves them through its file-owned font registry. Live values retain the
+/// exact byte owner installed by the host or another scripted property.
+#[derive(Debug, Clone)]
+pub struct ScriptFont {
+    asset_global_id: Option<u32>,
+    live_font_bytes: Option<Arc<[u8]>>,
+}
+
+impl ScriptFont {
+    #[doc(hidden)]
+    pub fn asset_global_id(&self) -> Option<u32> {
+        self.asset_global_id
+    }
+
+    #[doc(hidden)]
+    pub fn live_font_bytes_arc(&self) -> Option<&Arc<[u8]>> {
+        self.live_font_bytes.as_ref()
+    }
+}
+
 impl ScriptImage {
     pub fn file_asset_index(self) -> u64 {
         self.file_asset_index
@@ -824,6 +848,30 @@ impl ScriptViewModel {
             .cell_by_property_path(&path)?;
         let sink = RuntimeCellDirtSink::new();
         cell.add_dependent(&sink);
+        Some(sink)
+    }
+
+    /// Retain a property observer whose callback runs synchronously before
+    /// the change is published to ordinary dirty queues.
+    ///
+    /// Script asset wrappers use this as the Rust counterpart of
+    /// `ScriptedProperty::valueChanged()`: cached Lua registry references are
+    /// released at the mutation boundary, even when several writes coalesce
+    /// before the next scripted read.
+    #[doc(hidden)]
+    pub fn property_change_sink(
+        &self,
+        name: &str,
+        callback: impl Fn() + 'static,
+    ) -> Option<RuntimeCellDirtSink> {
+        let sink = self.property_dirt_sink(name)?;
+        sink.set_before_notify(Some(Rc::new(move |_| {
+            callback();
+            // The callback is the complete notification path for this
+            // observer. Staying clean makes every later valueChanged edge
+            // release the then-current cached wrapper immediately.
+            false
+        })));
         Some(sink)
     }
 
@@ -949,6 +997,41 @@ impl ScriptViewModel {
             file_asset_index,
             asset_global_id: asset.id,
         })
+    }
+
+    pub fn font(&self, name: &str) -> Option<ScriptFont> {
+        if self.property(name) != Some(ScriptViewModelProperty::Font) {
+            return None;
+        }
+        let path = self.scoped_property_path(name)?;
+        let value = self
+            .context
+            .root_handle()
+            .borrow()
+            .font_asset_value_by_property_path(&path)?;
+        let asset_global_id = usize::try_from(value.file_asset_index())
+            .ok()
+            .and_then(|index| self.file.file_asset(index))
+            .filter(|asset| asset.type_name == "FontAsset")
+            .map(|asset| asset.id);
+        (asset_global_id.is_some() || value.live_font_bytes_arc().is_some()).then(|| ScriptFont {
+            asset_global_id,
+            live_font_bytes: value.live_font_bytes_arc().cloned(),
+        })
+    }
+
+    #[doc(hidden)]
+    pub fn set_font_bytes(&self, name: &str, font_bytes: Option<Arc<[u8]>>) -> bool {
+        if self.property(name) != Some(ScriptViewModelProperty::Font) {
+            return false;
+        }
+        let Some(path) = self.scoped_property_path(name) else {
+            return false;
+        };
+        self.context
+            .root_handle()
+            .borrow_mut()
+            .set_live_font_bytes_by_property_path(&path, font_bytes)
     }
 
     pub fn render_image(&self, name: &str) -> Option<Rc<dyn nuxie_render_api::RenderImage>> {
@@ -1313,6 +1396,7 @@ pub enum ScriptViewModelProperty {
     Boolean,
     Trigger,
     Image,
+    Font,
     List,
     ViewModel,
     SymbolListIndex,
@@ -1420,6 +1504,7 @@ pub(crate) fn build_script_view_model_scoped(
                 "ViewModelPropertyBoolean" => ScriptViewModelProperty::Boolean,
                 "ViewModelPropertyTrigger" => ScriptViewModelProperty::Trigger,
                 "ViewModelPropertyAssetImage" => ScriptViewModelProperty::Image,
+                "ViewModelPropertyAssetFont" => ScriptViewModelProperty::Font,
                 "ViewModelPropertyList" => ScriptViewModelProperty::List,
                 "ViewModelPropertyViewModel" => ScriptViewModelProperty::ViewModel,
                 "ViewModelPropertySymbolListIndex" => ScriptViewModelProperty::SymbolListIndex,

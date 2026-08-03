@@ -176,13 +176,13 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
         }
     }
 
-    assert_eq!(runtime_definition_count, 342);
-    assert_eq!(runtime_property_count, 596);
+    assert_eq!(runtime_definition_count, 341);
+    assert_eq!(runtime_property_count, 592);
     assert_eq!(
         declared_types,
         [
             "bool", "Bytes", "callback", "Color", "double", "Id", "List<Id>", "String", "uint",
-            "uint8", "uint64",
+            "uint8",
         ]
         .into_iter()
         .map(str::to_owned)
@@ -192,7 +192,7 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
     assert_eq!(
         runtime_types,
         [
-            "bool", "Bytes", "callback", "Color", "double", "String", "uint", "uint8", "uint64"
+            "bool", "Bytes", "callback", "Color", "double", "String", "uint", "uint8"
         ]
         .into_iter()
         .map(str::to_owned)
@@ -214,7 +214,6 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
         (("uint", None), 121),
         (("uint", Some("uint")), 4),
         (("uint8", None), 40),
-        (("uint64", None), 4),
     ]
     .into_iter()
     .map(|((declared, runtime), count)| ((declared.to_owned(), runtime.map(str::to_owned)), count))
@@ -306,7 +305,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
     );
 
     let properties = runtime_json_properties(&runtime_dir.join("dev/defs"));
-    assert_eq!(properties.len(), 596);
+    assert_eq!(properties.len(), 592);
 
     let encoded = properties
         .iter()
@@ -790,7 +789,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("description").is_some())
             .count(),
-        446,
+        442,
         "dev/defs description coverage changed; audit generated description metadata"
     );
     assert_eq!(
@@ -798,7 +797,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("journal").is_some())
             .count(),
-        5,
+        3,
         "dev/defs journal annotation count changed; audit generated journal metadata"
     );
     assert_eq!(
@@ -832,7 +831,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("initialValue").is_some())
             .count(),
-        552,
+        548,
         "dev/defs initialValue coverage changed; audit generated stored-field initializers"
     );
 

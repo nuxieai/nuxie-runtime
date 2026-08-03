@@ -35,13 +35,11 @@ pub enum CoreRegistryFieldKind {
 /// The in-memory width requested by a uint-like schema field.
 ///
 /// All three widths use the same varuint wire family. `Uint8` is only a
-/// storage optimization in generated runtimes, while `Uint64` opts known
-/// fields into the full varuint64 value range.
+/// storage optimization in generated runtimes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UintStorage {
     Uint8,
     Uint32,
-    Uint64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,7 +53,6 @@ impl UintStorage {
         match self {
             Self::Uint8 => u8::MAX as u64,
             Self::Uint32 => u32::MAX as u64,
-            Self::Uint64 => u64::MAX,
         }
     }
 }
@@ -146,7 +143,6 @@ impl Property {
 
         Some(match self.declared_type {
             "uint8" => UintStorage::Uint8,
-            "uint64" => UintStorage::Uint64,
             _ => UintStorage::Uint32,
         })
     }
@@ -401,7 +397,6 @@ fn parse_uint_initializer(value: &'static str, storage: UintStorage) -> u64 {
                 UintStorage::Uint32 => u64::from(u32::try_from(parsed).unwrap_or_else(|_| {
                     panic!("uint initializer {value:?} does not fit {storage:?}")
                 })),
-                UintStorage::Uint64 => parsed,
             }
         }
     }

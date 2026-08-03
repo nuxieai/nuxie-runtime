@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use luaur_rt::{Error, Table};
 use nuxie_runtime::{NoopScriptHost, ScriptInstance, ScriptMethod};
-use nuxie_scripting::vm::{ScopeKey, ScriptVm, ScriptingLogLevel};
+use nuxie_scripting::vm::{ScriptVm, ScriptingLogLevel};
 
 #[test]
 fn host_sink_receives_one_complete_info_line_per_nonempty_print_call() {
@@ -109,7 +109,7 @@ fn bytecode_load_and_invalid_module_results_are_error_lines() {
     };
 
     let module_error = vm
-        .register_source_module_scoped("invalid-result", ScopeKey::ROOT, "return 42")
+        .register_source_module("invalid-result", "return 42")
         .expect_err("module result must be a table or function");
     let Error::RuntimeError(raw_module_message) = module_error else {
         panic!("expected runtime error, got {module_error:?}");

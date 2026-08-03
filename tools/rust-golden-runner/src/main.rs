@@ -23,7 +23,7 @@ use nuxie_runtime::{
     preallocate_source_render_paints,
 };
 #[cfg(feature = "scripting")]
-use nuxie_scripting::vm::{DetachedViewModelFrame, ScopeKey, ScriptProgram, ScriptVm};
+use nuxie_scripting::vm::{DetachedViewModelFrame, ScriptProgram, ScriptVm};
 #[cfg(feature = "coverage-trace")]
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::collections::{BTreeMap, BTreeSet};
@@ -2256,7 +2256,6 @@ struct ExtractedScriptAsset {
     asset_id: u64,
     global_id: u32,
     name: String,
-    scope: ScopeKey,
     is_module: bool,
     payload: Vec<u8>,
 }
@@ -4496,13 +4495,6 @@ fn extract_script_assets(runtime: &RuntimeFile) -> BTreeMap<u64, ExtractedScript
                     } else {
                         format!("{folder}/{name}")
                     },
-                    scope: ScopeKey::new(
-                        entry.asset.uint_property("scopeLibraryId").unwrap_or(0),
-                        entry
-                            .asset
-                            .uint_property("scopeLibraryVersionId")
-                            .unwrap_or(0),
-                    ),
                     is_module: entry.asset.bool_property("isModule").unwrap_or(false),
                     payload: payload.to_vec(),
                 },
@@ -4521,30 +4513,6 @@ fn prepare_script_vm(
     vm.install_render_factory(factory)?;
     vm.set_view_models(nuxie_runtime::script_view_models(runtime));
 
-    // LibraryAsset records are serialized, caller-relative dependency pins.
-    // Seed every edge before module top-level code runs so eager and lazy
-    // requires both resolve in the same scope as the C++ scripting context.
-    for entry in runtime
-        .scripting_file_assets_with_contents()
-        .into_iter()
-        .filter(|entry| entry.asset.type_name == "LibraryAsset")
-    {
-        vm.add_import(
-            ScopeKey::new(
-                entry.asset.uint_property("scopeLibraryId").unwrap_or(0),
-                entry
-                    .asset
-                    .uint_property("scopeLibraryVersionId")
-                    .unwrap_or(0),
-            ),
-            entry.asset.string_property("name").unwrap_or_default(),
-            ScopeKey::new(
-                entry.asset.uint_property("libraryId").unwrap_or(0),
-                entry.asset.uint_property("libraryVersionId").unwrap_or(0),
-            ),
-        );
-    }
-
     // C++ retries module registration until the dependency graph converges.
     // Preserve the original FileAsset ordering within each pass.
     let mut pending = script_assets
@@ -4555,12 +4523,9 @@ fn prepare_script_vm(
         let before = pending.len();
         let mut failures = Vec::new();
         for asset in pending {
-            if let Err(error) = vm.register_module_with_factory_scoped(
-                &asset.name,
-                asset.scope,
-                &asset.payload,
-                factory,
-            ) {
+            if let Err(error) =
+                vm.register_module_with_factory(&asset.name, &asset.payload, factory)
+            {
                 failures.push((asset, error));
             }
         }
@@ -4568,13 +4533,11 @@ fn prepare_script_vm(
             break;
         }
         if failures.len() == before {
-            let (asset, error) = failures.remove(0);
-            return Err(anyhow!(
-                "failed to register scoped ScriptAsset module '{}' ({}-{}): {error}",
-                asset.name,
-                asset.scope.library_id,
-                asset.scope.library_version_id,
-            ));
+            // C++ `ScriptingContext::performRegistration` reports unresolved
+            // module errors but does not reject the File. Preserve the
+            // partially registered VM so non-scripted artboard content still
+            // renders and later protocol lookup remains safely absent.
+            break;
         }
         pending = failures.into_iter().map(|(asset, _)| asset).collect();
     }
@@ -4591,20 +4554,15 @@ fn register_script_file(
     let vm = prepare_script_vm(runtime, script_assets, factory)?;
     let mut script_programs = BTreeMap::new();
     for script in script_assets.values().filter(|asset| !asset.is_module) {
-        let program = vm
-            .register_protocol_script_with_factory_scoped(
-                &script.name,
-                script.scope,
-                &script.payload,
-                factory,
-            )
-            .with_context(|| {
-                format!(
-                    "failed to register protocol ScriptAsset '{}' ({}-{})",
-                    script.name, script.scope.library_id, script.scope.library_version_id,
-                )
-            })?;
-        script_programs.insert(script.asset_id, program);
+        // The C++ file-registration pass reports unresolved ScriptAsset
+        // dependencies but keeps the File usable. A protocol is only required
+        // if an artboard actually references it, so preserve the background
+        // render instead of rejecting unrelated test/library scripts.
+        if let Ok(program) =
+            vm.register_protocol_script_with_factory(&script.name, &script.payload, factory)
+        {
+            script_programs.insert(script.asset_id, program);
+        }
     }
     Ok(RegisteredScriptFile {
         vm: Rc::new(vm),

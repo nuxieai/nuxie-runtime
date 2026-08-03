@@ -253,7 +253,7 @@ pub use scripting::{
     NoopScriptHost, ScriptAnimation, ScriptAnimationTime, ScriptArtboard,
     ScriptArtboardDataContext, ScriptArtboardParentContext, ScriptArtboardResolver,
     ScriptCoreString, ScriptDataConverterMethod, ScriptDataConverterOptionalCall, ScriptError,
-    ScriptHost, ScriptImage, ScriptInstance, ScriptInterpolatorMethod,
+    ScriptFont, ScriptHost, ScriptImage, ScriptInstance, ScriptInterpolatorMethod,
     ScriptListenerActionDefinition, ScriptListenerActionHydration, ScriptListenerActionMethod,
     ScriptListenerInputDefinition, ScriptListenerInputHydration, ScriptListenerInputKind,
     ScriptListenerInputSnapshot, ScriptListenerInputSnapshotValue, ScriptMethod, ScriptModule,

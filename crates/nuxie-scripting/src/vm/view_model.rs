@@ -43,8 +43,8 @@ struct TrackedViewModel {
 #[derive(Clone, Default)]
 pub(crate) struct ScriptViewModelFrameContext {
     tracked: Rc<RefCell<TrackedViewModels>>,
-    trigger_watches: Rc<RefCell<Vec<Weak<ScriptedTriggerWatch>>>>,
-    blob_watches: Rc<RefCell<Vec<Weak<ScriptedBlobWatch>>>>,
+    trigger_watches: Rc<RefCell<Vec<Rc<ScriptedTriggerWatch>>>>,
+    blob_watches: Rc<RefCell<Vec<Rc<ScriptedBlobWatch>>>>,
     property_watches: Rc<RefCell<Vec<Rc<ScriptedPropertyWatch>>>>,
 }
 
@@ -114,28 +114,18 @@ impl ScriptViewModelFrameContext {
 
     fn register_trigger_watch(&self, watch: &Rc<ScriptedTriggerWatch>) {
         let mut watches = self.trigger_watches.borrow_mut();
-        watches.retain(|candidate| candidate.strong_count() != 0);
-        if watches
-            .iter()
-            .filter_map(Weak::upgrade)
-            .any(|candidate| Rc::ptr_eq(&candidate, watch))
-        {
+        if watches.iter().any(|candidate| Rc::ptr_eq(candidate, watch)) {
             return;
         }
-        watches.push(Rc::downgrade(watch));
+        watches.push(Rc::clone(watch));
     }
 
     fn register_blob_watch(&self, watch: &Rc<ScriptedBlobWatch>) {
         let mut watches = self.blob_watches.borrow_mut();
-        watches.retain(|candidate| candidate.strong_count() != 0);
-        if watches
-            .iter()
-            .filter_map(Weak::upgrade)
-            .any(|candidate| Rc::ptr_eq(&candidate, watch))
-        {
+        if watches.iter().any(|candidate| Rc::ptr_eq(candidate, watch)) {
             return;
         }
-        watches.push(Rc::downgrade(watch));
+        watches.push(Rc::clone(watch));
     }
 
     fn register_property_watch(&self, watch: &Rc<ScriptedPropertyWatch>) {
@@ -163,15 +153,7 @@ impl ScriptViewModelFrameContext {
     }
 
     fn dispatch_trigger_watches(&self) -> bool {
-        let watches = {
-            let mut retained = self.trigger_watches.borrow_mut();
-            let watches = retained
-                .iter()
-                .filter_map(Weak::upgrade)
-                .collect::<Vec<_>>();
-            retained.retain(|watch| watch.strong_count() != 0);
-            watches
-        };
+        let watches = self.trigger_watches.borrow().clone();
         let mut changed = false;
         for watch in watches {
             if watch.sink.take_dirt().is_empty() {
@@ -185,19 +167,14 @@ impl ScriptViewModelFrameContext {
                     .call::<()>(listener.userdata.unwrap_or(Value::Nil));
             }
         }
+        self.trigger_watches
+            .borrow_mut()
+            .retain(|watch| !watch.listeners.borrow().is_empty());
         changed
     }
 
     fn dispatch_blob_watches(&self) -> bool {
-        let watches = {
-            let mut retained = self.blob_watches.borrow_mut();
-            let watches = retained
-                .iter()
-                .filter_map(Weak::upgrade)
-                .collect::<Vec<_>>();
-            retained.retain(|watch| watch.strong_count() != 0);
-            watches
-        };
+        let watches = self.blob_watches.borrow().clone();
         let mut changed = false;
         for watch in watches {
             if watch.sink.take_dirt().is_empty() {
@@ -211,17 +188,17 @@ impl ScriptViewModelFrameContext {
                     .call::<()>(listener.userdata.unwrap_or(Value::Nil));
             }
         }
+        self.blob_watches
+            .borrow_mut()
+            .retain(|watch| !watch.listeners.borrow().is_empty());
         changed
     }
 
     fn clear_trigger_watch_dirt(&self) {
         let mut retained = self.trigger_watches.borrow_mut();
         retained.retain(|watch| {
-            let Some(watch) = watch.upgrade() else {
-                return false;
-            };
             let _ = watch.sink.take_dirt();
-            true
+            !watch.listeners.borrow().is_empty()
         });
     }
 

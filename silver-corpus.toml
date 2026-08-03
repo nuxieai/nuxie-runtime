@@ -3,11 +3,11 @@
 
 [corpus]
 version = 1
-upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
-expected_entries = 238
-expected_runtime = 195
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+expected_entries = 252
+expected_runtime = 208
 expected_scripted = 41
-max_provenance_unknown = 2
+max_provenance_unknown = 3
 min_cpp_rust_exact = 76
 cpp_rust_exact_ids = ["advance_blend_mode-inputs", "advance_blend_mode-vms", "animated_clipping-layout", "artboard_list_map_rules", "artboard_width_test", "bidirectional_precedence-source_first", "collapse_data_binds-test_3", "component_based_conditions", "component_based_conditions-Artboard2", "component_list_follow_path", "component_list_follow_path_distance", "component_stateful", "computed_root_transform-nested_artboard", "custom_property_enum", "custom_property_trigger_bind", "data_bind_font_test", "data_bind_solo-values-to-solos", "data_converter_to_number", "databind_artboard", "databind_solo_to_enum", "event_trigger_event", "fill_trim_path", "focus_test", "focus_traversal", "focusable_element", "follow_path_animate_shape", "follow_path_animate_solo", "follow_path_animate_target", "follow_path_constraint", "format_number_with_commas", "global_viewmodels_test-auto_instance", "group_effect-main-missing-targets", "hittest_ab1", "hittest_ab1_grand_parent", "hittest_ab1_parent", "hittest_ab_text_parent", "hittest_collapsed_layouts", "hittest_nested", "image_fit_alignment_3", "image_fit_alignment_updated_test", "list_items", "list_to_length_test", "list_to_path", "listener_view_model", "lock_icon_demo", "multitouch", "multitouch_enter", "n_slice_triangle", "nested_artboard_origin_override_test", "nested_events", "nested_hug", "nested_needs_advance", "pause_nested_artboard", "recursive_data_bind", "relative_data_bind_path", "relative_data_binding", "saturation", "sorted_listeners", "spotify_kids_app_icon", "stacked_path_effects", "state_transition_fire_trigger", "target_event", "text_follow_path_shape_length", "text_listener_simpler", "text_stroke_test", "transition_actions", "transition_duration_bind_list", "transition_duration_bind_nested", "transition_index_condition", "trigger_based_listeners", "trigger_fires_single_change", "vertical_align_ellipsis", "viewmodel_based_condition", "viewmodel_image_reset", "viewmodel_list_trigger", "zero_width_space_line_break"]
 
@@ -30,7 +30,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Advance two consecutive blend modes and apply inputs"
-producer_line = 1642
+producer_line = 1649
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -52,7 +52,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Advance two consecutive blend modes and apply view model"
-producer_line = 1674
+producer_line = 1681
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -74,7 +74,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "ai assistant data binding"
-producer_line = 340
+producer_line = 347
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 82 (makeLinearGradient): expected makeLinearGradient, got feather."
 
 [[case]]
@@ -188,6 +188,28 @@ producer_line = 603
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 303 (rewind): expected rewind, got drawPath."
 
 [[case]]
+id = "artboard_opacity_and_transform_test"
+expected = "tests/unit_tests/silvers/artboard_opacity_and_transform_test.sriv"
+source = "artboard_opacity_and_transform_test.riv"
+dependencies = []
+artboard = "default"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "cpp-test-defined"
+sample_times = [0.1, 0.1]
+actions = []
+verification = "sriv-v1-epsilon"
+status = "unsupported-feature"
+producer_class = "runtime-literal"
+provenance_file = "tests/unit_tests/runtime/artboard_transform_test.cpp"
+provenance_test = "Artboard transform and opacity"
+producer_line = 203
+note = "Unsupported feature: missing runtime surface pointer-expression-encoding; the pinned C++ action stream requires that unported runtime surface."
+
+[[case]]
 id = "artboard_width_test"
 expected = "tests/unit_tests/silvers/artboard_width_test.sriv"
 source = "artboard_width_test.riv"
@@ -228,7 +250,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "bank card data binding"
-producer_line = 298
+producer_line = 305
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint."
 
 [[case]]
@@ -250,7 +272,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Data bound artboards with multiple targets bound to same property bidirectionally"
-producer_line = 551
+producer_line = 552
 note = "Unsupported feature: missing runtime surface external-bindable-artboard-registration; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -298,6 +320,28 @@ producer_line = 2005
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 24 (transform), field tx: expected 252.5, got 100."
 
 [[case]]
+id = "bidirectional_stateful_property"
+expected = "tests/unit_tests/silvers/bidirectional_stateful_property.sriv"
+source = "bidirectional_stateful_property.riv"
+dependencies = []
+artboard = "default"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "cpp-test-defined"
+sample_times = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2]
+actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 175.0, y = 175.0, pointer_id = 0 }, { kind = "pointer-up", x = 175.0, y = 175.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 450.0, y = 450.0, pointer_id = 0 }, { kind = "pointer-up", x = 450.0, y = 450.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 175.0, y = 175.0, pointer_id = 0 }, { kind = "pointer-up", x = 175.0, y = 175.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 450.0, y = 450.0, pointer_id = 0 }, { kind = "pointer-up", x = 450.0, y = 450.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 450.0, y = 50.0, pointer_id = 0 }, { kind = "pointer-up", x = 450.0, y = 50.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.2 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.2 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.2 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.2 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.2 }, { kind = "draw" }]
+verification = "sriv-v1-epsilon"
+status = "diverges"
+producer_class = "runtime-literal"
+provenance_file = "tests/unit_tests/runtime/data_binding_viewmodels_test.cpp"
+provenance_test = "Bidirectional stateful property binding"
+producer_line = 134
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 3, op 180 (transform), field tx: expected 150, got 100."
+
+[[case]]
 id = "bindable_artboard_nesty"
 expected = "tests/unit_tests/silvers/bindable_artboard_nesty.sriv"
 source = "bindable_artboard_nesty.riv"
@@ -316,7 +360,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Data bound artboard with view model instance resets its properties"
-producer_line = 476
+producer_line = 477
 note = "Unsupported feature: missing runtime surface external-bindable-artboard-with-bound-view-model-injection; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -338,7 +382,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "car widgets data binding"
-producer_line = 615
+producer_line = 622
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 222 (blendMode): expected blendMode, got makeRenderPaint."
 
 [[case]]
@@ -404,7 +448,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Collapsable data binds get added when object is uncollapsed"
-producer_line = 1568
+producer_line = 1575
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 14 (save): expected save, got color."
 
 [[case]]
@@ -426,7 +470,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Collapsed data binds from layouts with display hidden"
-producer_line = 709
+producer_line = 716
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 10, op 760 (rewind): expected rewind, got drawPath."
 
 [[case]]
@@ -448,7 +492,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Collapsed data binds from property groups in solos"
-producer_line = 743
+producer_line = 750
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 15, op 315 (addRawPath): expected 151 fields, got 256."
 
 [[case]]
@@ -470,7 +514,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Collapsed data bound layout styles still update"
-producer_line = 795
+producer_line = 802
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -800,7 +844,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_computed_values_test.cpp"
 provenance_test = "Computed root values"
-producer_line = 38
+producer_line = 39
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 54 (addRawPath), field point: expected (256.2, -0.0 (0x80000000)), got (245, -0.0 (0x80000000))."
 
 [[case]]
@@ -866,8 +910,30 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Test Scripted Artboard Input data bound to internal and external artboards"
-producer_line = 388
+producer_line = 389
 note = "Unsupported feature: missing runtime surface external-bindable-artboard-registration; the pinned C++ action stream requires that unported runtime surface."
+
+[[case]]
+id = "data_bind_blob_test"
+expected = "tests/unit_tests/silvers/data_bind_blob_test.sriv"
+source = "data_bind_blob_test.riv"
+dependencies = []
+artboard = "default"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "cpp-test-defined"
+sample_times = [0.1, 0.1, 0.5, 0.5]
+actions = []
+verification = "sriv-v1-epsilon"
+status = "unsupported-feature"
+producer_class = "runtime-literal"
+provenance_file = "tests/unit_tests/runtime/data_binding_blobs_test.cpp"
+provenance_test = "Data bind blobs internally and externally"
+producer_line = 149
+note = "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
 id = "data_bind_font_test"
@@ -976,7 +1042,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Test default data binding artboard from different source"
-producer_line = 325
+producer_line = 326
 note = "Unsupported feature: missing runtime surface external-bindable-artboard-registration; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -998,7 +1064,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Test data binding artboards from same and different sources"
-producer_line = 137
+producer_line = 138
 note = "Unsupported feature: missing runtime surface external-bindable-artboard-registration; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -1020,7 +1086,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Test recursive data binding artboards is skipped"
-producer_line = 201
+producer_line = 202
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 118 (makeRenderPaint): expected makeRenderPaint, got frame."
 
 [[case]]
@@ -1086,7 +1152,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "data viz demo data binding"
-producer_line = 265
+producer_line = 272
 note = "Unsupported feature: missing runtime surface runtime-frame-loop-nontermination-after-nested-view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -1130,7 +1196,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Data bind external artboard with no initial source artboard"
-producer_line = 427
+producer_line = 428
 note = "Unsupported feature: missing runtime surface external-bindable-artboard-and-view-model-graph-registration; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -1152,7 +1218,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "Data bound solos with enums work in both directions"
-producer_line = 358
+producer_line = 450
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1196,7 +1262,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "health tracker data binding"
-producer_line = 555
+producer_line = 562
 note = "Unsupported feature: missing runtime surface runtime-frame-loop-nontermination; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -1240,7 +1306,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Pointer drag event"
-producer_line = 1458
+producer_line = 1465
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 23, op 602 (save): expected save, got color."
 
 [[case]]
@@ -1284,7 +1350,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "echo show demo data binding"
-producer_line = 373
+producer_line = 380
 note = "Unsupported feature: missing runtime surface renderer-paint-allocation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -1306,7 +1372,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Event triggers another event"
-producer_line = 675
+producer_line = 682
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1372,7 +1438,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "FocusManager skips collapsed nodes and fully transparent nodes"
-producer_line = 1671
+producer_line = 1755
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 3, op 192 (color), field paint_id: expected 6, got 11."
 
 [[case]]
@@ -1394,7 +1460,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus based transitions work"
-producer_line = 2233
+producer_line = 2317
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1416,7 +1482,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus traversal listener actions"
-producer_line = 1997
+producer_line = 2081
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1438,7 +1504,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus traversal clears focus when it reaches edge of root scope"
-producer_line = 2048
+producer_line = 2132
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1570,7 +1636,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Reset randomization on every change"
-producer_line = 949
+producer_line = 956
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 44 (transform), field tx: expected 10, got 521.8384."
 
 [[case]]
@@ -1592,7 +1658,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Reset randomization only once"
-producer_line = 898
+producer_line = 905
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 44 (transform), field tx: expected 10, got 510.0007."
 
 [[case]]
@@ -1614,7 +1680,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Reset randomization on value change"
-producer_line = 846
+producer_line = 853
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 44 (transform), field tx: expected 10, got 521.8384."
 
 [[case]]
@@ -1768,7 +1834,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "hide silver"
-producer_line = 74
+producer_line = 81
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 50 (color), field paint_id: expected 14, got 10."
 
 [[case]]
@@ -1988,7 +2054,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "hunter x demo data binding"
-producer_line = 521
+producer_line = 528
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 488 (blendMode): expected blendMode, got makeRenderPaint."
 
 [[case]]
@@ -2012,6 +2078,28 @@ provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 provenance_test = "Dynamic image binding with listener action"
 producer_line = 233
 note = "Unsupported feature: missing runtime surface live-decoded-image-view-model-payload-injection; the pinned C++ action stream requires that unported runtime surface."
+
+[[case]]
+id = "image_computed_transform_bind"
+expected = "tests/unit_tests/silvers/image_computed_transform_bind.sriv"
+source = "image_computed_transform_bind.riv"
+dependencies = []
+artboard = "default"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "cpp-test-defined"
+sample_times = [0, 0.016, 0.032]
+actions = []
+verification = "sriv-v1-epsilon"
+status = "unsupported-feature"
+producer_class = "runtime-literal"
+provenance_file = "tests/unit_tests/runtime/data_binding_computed_values_test.cpp"
+provenance_test = "Image computed width/height track layout resize"
+producer_line = 93
+note = "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
 id = "image_fit_alignment"
@@ -2120,7 +2208,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Image read from propertyValue"
-producer_line = 844
+producer_line = 851
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -2142,7 +2230,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "interactive and non interactive scrolling"
-producer_line = 1061
+producer_line = 1068
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 42 (transform), field xy: expected -0.0 (0x80000000), got 0."
 
 [[case]]
@@ -2164,7 +2252,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Interpolator returns advance status as true until it settles"
-producer_line = 1101
+producer_line = 1108
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 63 (addRawPath): expected 954 fields, got 975."
 
 [[case]]
@@ -2230,7 +2318,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "juice silver"
-producer_line = 49
+producer_line = 56
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 40 (blendMode): expected blendMode, got makeRenderPaint."
 
 [[case]]
@@ -2252,7 +2340,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focused elements receive keyboard inputs"
-producer_line = 1751
+producer_line = 1835
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 85 (color): expected color, got save."
 
 [[case]]
@@ -2274,7 +2362,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Keyboard inputs with different key combinations"
-producer_line = 1867
+producer_line = 1951
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 214 (color): expected color, got save."
 
 [[case]]
@@ -2408,6 +2496,138 @@ provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout fixed/fill scale type round trip preserves units"
 producer_line = 686
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 57 (addRawPath), field point: expected (300, 0), got (150, 0)."
+
+[[case]]
+id = "layout_grid_stack_grid_with_layout_participants"
+expected = "tests/unit_tests/silvers/layout_grid_stack_grid_with_layout_participants.sriv"
+source = "layout_grid_stack.riv"
+dependencies = []
+artboard = "GridWithLayoutParticipants"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "none"
+sample_times = [0, 0.016]
+actions = []
+verification = "sriv-v1-epsilon"
+status = "unsupported-feature"
+producer_class = "grid-stack-dynamic"
+provenance_file = "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp"
+provenance_test = "grid with layout participants silver"
+producer_line = 72
+note = "Unsupported feature: missing runtime surface retained-text-render-style-registration-for-layout-participant-text; the pinned C++ gridStackSilver action stream requires that unported runtime surface."
+
+[[case]]
+id = "layout_grid_stack_grid_with_layouts"
+expected = "tests/unit_tests/silvers/layout_grid_stack_grid_with_layouts.sriv"
+source = "layout_grid_stack.riv"
+dependencies = []
+artboard = "GridWithLayouts"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "none"
+sample_times = [0, 0.016]
+actions = [{ kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
+verification = "sriv-v1-epsilon"
+status = "diverges"
+producer_class = "grid-stack-dynamic"
+provenance_file = "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp"
+provenance_test = "grid with layouts silver"
+producer_line = 44
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned gridStackSilver helper actions; first difference: frame 1, op 228 (rewind): expected rewind, got drawPath."
+
+[[case]]
+id = "layout_grid_stack_grid_with_layouts_size_changing"
+expected = "tests/unit_tests/silvers/layout_grid_stack_grid_with_layouts_size_changing.sriv"
+source = "layout_grid_stack.riv"
+dependencies = []
+artboard = "GridWithLayoutsSizeChanging"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "none"
+sample_times = [0, 0.016]
+actions = [{ kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
+verification = "sriv-v1-epsilon"
+status = "diverges"
+producer_class = "grid-stack-dynamic"
+provenance_file = "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp"
+provenance_test = "grid with layouts size changing silver"
+producer_line = 54
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned gridStackSilver helper actions; first difference: frame 1, op 227 (transform), field ty: expected 336.03223, got 310."
+
+[[case]]
+id = "layout_grid_stack_grid_with_layouts_size_span_changing"
+expected = "tests/unit_tests/silvers/layout_grid_stack_grid_with_layouts_size_span_changing.sriv"
+source = "layout_grid_stack.riv"
+dependencies = []
+artboard = "GridWithLayoutsSizeSpanChanging"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "none"
+sample_times = [0, 0.016]
+actions = [{ kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
+verification = "sriv-v1-epsilon"
+status = "diverges"
+producer_class = "grid-stack-dynamic"
+provenance_file = "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp"
+provenance_test = "grid with layouts size span changing silver"
+producer_line = 66
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned gridStackSilver helper actions; first difference: frame 32, op 1592 (rewind): expected rewind, got drawPath."
+
+[[case]]
+id = "layout_grid_stack_grid_with_layouts_span"
+expected = "tests/unit_tests/silvers/layout_grid_stack_grid_with_layouts_span.sriv"
+source = "layout_grid_stack.riv"
+dependencies = []
+artboard = "GridWithLayoutsSpan"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "none"
+sample_times = [0, 0.016]
+actions = [{ kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
+verification = "sriv-v1-epsilon"
+status = "diverges"
+producer_class = "grid-stack-dynamic"
+provenance_file = "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp"
+provenance_test = "grid with layouts span silver"
+producer_line = 60
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned gridStackSilver helper actions; first difference: frame 34, op 1116 (rewind): expected rewind, got drawPath."
+
+[[case]]
+id = "layout_grid_stack_stack_with_layouts"
+expected = "tests/unit_tests/silvers/layout_grid_stack_stack_with_layouts.sriv"
+source = "layout_grid_stack.riv"
+dependencies = []
+artboard = "StackWithLayouts"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "none"
+sample_times = [0, 0.016]
+actions = [{ kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
+verification = "sriv-v1-epsilon"
+status = "diverges"
+producer_class = "grid-stack-dynamic"
+provenance_file = "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp"
+provenance_test = "stack with layouts silver"
+producer_line = 49
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned gridStackSilver helper actions; first difference: frame 1, op 228 (rewind): expected rewind, got drawPath."
 
 [[case]]
 id = "layout_hug_artboard"
@@ -2630,6 +2850,28 @@ producer_line = 652
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 130 (transform), field xy: expected -0.0 (0x80000000), got 0."
 
 [[case]]
+id = "layout_text_match"
+expected = "tests/unit_tests/silvers/layout_text_match.sriv"
+source = "layout_text_match.riv"
+dependencies = []
+artboard = "default"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "cpp-test-defined"
+sample_times = [0, 0.016]
+actions = [{ kind = "bind-default-view-model" }, { kind = "bind-default-view-model" }, { kind = "draw" }, { kind = "frame" }, { kind = "draw" }, { kind = "frame" }, { kind = "draw" }, { kind = "frame" }, { kind = "draw" }, { kind = "frame" }, { kind = "draw" }]
+verification = "sriv-v1-epsilon"
+status = "diverges"
+producer_class = "runtime-literal"
+provenance_file = "tests/unit_tests/runtime/text_test.cpp"
+provenance_test = "Text box matches layout-controlled size"
+producer_line = 819
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 61 (save): expected save, got frame."
+
+[[case]]
 id = "list_focus_order"
 expected = "tests/unit_tests/silvers/list_focus_order.sriv"
 source = "list_focus_order.riv"
@@ -2648,7 +2890,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus is correctly built and updated for lists"
-producer_line = 2199
+producer_line = 2283
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 78 (addRawPath), field point: expected (-0.0 (0x80000000), 137.20052), got (-0.0 (0x80000000), 137.20053)."
 
 [[case]]
@@ -2670,7 +2912,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Expose list index to scripts and ensure the type is correct"
-producer_line = 797
+producer_line = 804
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -2802,7 +3044,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "lock icon listener silver"
-producer_line = 128
+producer_line = 135
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2978,7 +3220,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "n-slice silver"
-producer_line = 89
+producer_line = 96
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2998,9 +3240,9 @@ actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "s
 verification = "sriv-v1-epsilon"
 status = "exact"
 producer_class = "runtime-literal"
-provenance_file = "tests/unit_tests/runtime/nested_artboard_origin_test.cpp"
+provenance_file = "tests/unit_tests/runtime/component_origin_test.cpp"
 provenance_test = "Animated origin and click events"
-producer_line = 86
+producer_line = 139
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3158,6 +3400,28 @@ producer_line = 259
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
+id = "paused_nested_artboard_opacity"
+expected = "tests/unit_tests/silvers/paused_nested_artboard_opacity.sriv"
+source = "paused_nested_artboard_opacity.riv"
+dependencies = []
+artboard = "default"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "cpp-test-defined"
+sample_times = [0.1, 0.1, 0.05]
+actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.05 }, { kind = "draw" }]
+verification = "sriv-v1-epsilon"
+status = "diverges"
+producer_class = "runtime-literal"
+provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
+provenance_test = "Paused state machine changes opacity and relayouts when parent's opacity or layout changes"
+producer_line = 996
+note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 1, op 103 (rewind): expected rewind, got drawPath."
+
+[[case]]
 id = "pointer_exit"
 expected = "tests/unit_tests/silvers/pointer_exit.sriv"
 source = "pointer_exit.riv"
@@ -3220,7 +3484,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Recursive data binding artboards are skipped"
-producer_line = 1515
+producer_line = 1522
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3352,7 +3616,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Scripts can remove items from lists"
-producer_line = 774
+producer_line = 781
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -3374,7 +3638,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Replace a view model property value from a script"
-producer_line = 741
+producer_line = 748
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -3396,7 +3660,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "View models keep reference to their dependents and parents"
-producer_line = 1228
+producer_line = 1235
 note = "Unsupported feature: missing runtime surface runtime-owned-shared-view-model-graph-reparenting; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -3418,7 +3682,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Replace view model instance in nested list"
-producer_line = 1399
+producer_line = 1406
 note = "Unsupported feature: missing runtime surface runtime-owned-nested-list-view-model-reference-replacement; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -3440,7 +3704,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Replace view model instance in list"
-producer_line = 1311
+producer_line = 1318
 note = "Unsupported feature: missing runtime surface runtime-owned-list-view-model-reference-replacement; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -3484,7 +3748,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Reset detached view model instances at end of frame"
-producer_line = 893
+producer_line = 900
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -3528,7 +3792,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "rewards demo data binding"
-producer_line = 419
+producer_line = 426
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint."
 
 [[case]]
@@ -3550,7 +3814,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Target to source with different data types on source and target"
-producer_line = 985
+producer_line = 992
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -4122,7 +4386,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Scripted image properties"
-producer_line = 818
+producer_line = 825
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4324,6 +4588,28 @@ producer_line = 165
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 69 (transform), field xy: expected -0.0 (0x80000000), got 0."
 
 [[case]]
+id = "solo_index_test"
+expected = "tests/unit_tests/silvers/solo_index_test.sriv"
+source = "solo_index_test.riv"
+dependencies = []
+artboard = "default"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "cpp-test-defined"
+sample_times = [0.1, 0.1, 0.1, 0.1]
+actions = []
+verification = "sriv-v1-epsilon"
+status = "unsupported-feature"
+producer_class = "runtime-literal"
+provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
+provenance_test = "Data bind by index skipping non hierarchical children"
+producer_line = 540
+note = "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
+
+[[case]]
 id = "sorted_listeners"
 expected = "tests/unit_tests/silvers/sorted_listeners.sriv"
 source = "sorted_listeners.riv"
@@ -4364,7 +4650,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "spotify kids app icon data binding"
-producer_line = 487
+producer_line = 494
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -4386,7 +4672,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "spotify kids demo data binding"
-producer_line = 453
+producer_line = 460
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 200 (blendMode): expected blendMode, got makeRenderPaint."
 
 [[case]]
@@ -4456,6 +4742,28 @@ producer_line = 637
 note = "Unsupported feature: missing runtime surface live-bindable-artboard-value-and-bound-view-model-swap; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
+id = "stateful_component_image_test"
+expected = "tests/unit_tests/silvers/stateful_component_image_test.sriv"
+source = "stateful_component_image_test.riv"
+dependencies = []
+artboard = "default"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "cpp-test-defined"
+sample_times = [0.1, 0.1, 0.1]
+actions = []
+verification = "sriv-v1-epsilon"
+status = "unsupported-feature"
+producer_class = "runtime-literal"
+provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
+provenance_test = "Stateful component image bind"
+producer_line = 616
+note = "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
+
+[[case]]
 id = "stateful_keyed_trigger"
 expected = "tests/unit_tests/silvers/stateful_keyed_trigger.sriv"
 source = "stateful_keyed_trigger.riv"
@@ -4480,24 +4788,24 @@ note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE acti
 [[case]]
 id = "stateful_list_props"
 expected = "tests/unit_tests/silvers/stateful_list_props.sriv"
-source = "stateful_list_props.riv"
+source = "provenance-unknown"
 dependencies = []
-artboard = "Main"
-animation = "none"
-state_machine = "default"
-lane = "runtime"
-deterministic = "cpp-test-defined"
-random = "cpp-test-defined"
-view_model = "cpp-test-defined"
-sample_times = [0, 0.016, 0.016, 0.016, 0.016]
-actions = []
+artboard = "provenance-unknown"
+animation = "provenance-unknown"
+state_machine = "provenance-unknown"
+lane = "unknown"
+deterministic = "provenance-unknown"
+random = "provenance-unknown"
+view_model = "provenance-unknown"
+sample_times = []
+actions = "provenance-unknown"
 verification = "sriv-v1-epsilon"
-status = "unsupported-feature"
-producer_class = "runtime-literal"
-provenance_file = "tests/unit_tests/runtime/component_test.cpp"
-provenance_test = "Stateful Component list with input/output bridge binds"
-producer_line = 478
-note = "Unsupported feature: missing runtime surface stateful-component-list-bridge-observation-for-dynamic-items; the pinned C++ action stream requires that unported runtime surface."
+status = "provenance-unknown"
+producer_class = "provenance-unknown"
+provenance_file = ""
+provenance_test = ""
+producer_line = 0
+note = "The only producer is deliberately disabled upstream inside a block comment; tests/unit_tests/runtime/component_test.cpp:282-480 says per-list-item stateful VM instances are not created and the test may be revisited."
 
 [[case]]
 id = "stateful_list_props_lifecycle"
@@ -4606,7 +4914,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "superbowl data binding"
-producer_line = 218
+producer_line = 225
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 2825 (color), field paint_id: expected 220, got 208."
 
 [[case]]
@@ -4628,7 +4936,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_event_test.cpp"
 provenance_test = "event targetting an event object triggers correctly"
-producer_line = 376
+producer_line = 377
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -4716,7 +5024,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "validate text run listener works"
-producer_line = 156
+producer_line = 163
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -4738,7 +5046,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "validate text with modifiers and dashes render correctly"
-producer_line = 183
+producer_line = 190
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -4826,7 +5134,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Test State machine transition conditions based on artboards"
-producer_line = 1713
+producer_line = 1720
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 16 (frameSize), field width: expected 983, got 984."
 
 [[case]]
@@ -5002,7 +5310,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Vertical align on text with ellipsis"
-producer_line = 633
+producer_line = 640
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5024,7 +5332,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Access view model properties and enum properties"
-producer_line = 696
+producer_line = 703
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -5090,7 +5398,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Creates view models from specified named instances"
-producer_line = 716
+producer_line = 723
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -5178,7 +5486,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Virtualized list with blended animations as initial state correctly render their mixed values"
-producer_line = 1611
+producer_line = 1618
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 33 (color): expected color, got save."
 
 [[case]]

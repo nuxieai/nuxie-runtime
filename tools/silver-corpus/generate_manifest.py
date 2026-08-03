@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Generate silver-corpus.toml from the pinned upstream C++ producers.
 
-Literal matches() calls are discovered mechanically. The six layout-scroll
-names assembled through helper arguments are deliberately listed below, and
-the two producerless files are deliberately classified as provenance-unknown.
+Active literal matches() calls are discovered mechanically. The layout-scroll
+and grid-stack names assembled through helper arguments are deliberately
+listed below, and producerless files are deliberately classified as
+provenance-unknown.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+UPSTREAM_REF = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -96,7 +97,56 @@ DYNAMIC_LAYOUT_SCROLL = (
     ),
 )
 
-PROVENANCE_UNKNOWN = ("interpolator", "multitouch_debug")
+DYNAMIC_GRID_STACK = (
+    (
+        "layout_grid_stack_grid_with_layouts",
+        "GridWithLayouts",
+        "grid with layouts silver",
+        44,
+    ),
+    (
+        "layout_grid_stack_stack_with_layouts",
+        "StackWithLayouts",
+        "stack with layouts silver",
+        49,
+    ),
+    (
+        "layout_grid_stack_grid_with_layouts_size_changing",
+        "GridWithLayoutsSizeChanging",
+        "grid with layouts size changing silver",
+        54,
+    ),
+    (
+        "layout_grid_stack_grid_with_layouts_span",
+        "GridWithLayoutsSpan",
+        "grid with layouts span silver",
+        60,
+    ),
+    (
+        "layout_grid_stack_grid_with_layouts_size_span_changing",
+        "GridWithLayoutsSizeSpanChanging",
+        "grid with layouts size span changing silver",
+        66,
+    ),
+    (
+        "layout_grid_stack_grid_with_layout_participants",
+        "GridWithLayoutParticipants",
+        "grid with layout participants silver",
+        72,
+    ),
+)
+
+PROVENANCE_UNKNOWN = {
+    "interpolator": "No producer/reference exists in the pinned upstream runtime tests.",
+    "multitouch_debug": (
+        "No producer/reference exists in the pinned upstream runtime tests."
+    ),
+    "stateful_list_props": (
+        "The only producer is deliberately disabled upstream inside a block comment; "
+        "tests/unit_tests/runtime/component_test.cpp:282-480 says per-list-item "
+        "stateful VM instances are not created and the test may be revisited."
+    ),
+}
 FORCED_BLOCKERS = {
     "db_health_tracker": "runtime-frame-loop-nontermination",
     "echo_show_demo": "renderer-paint-allocation",
@@ -126,6 +176,9 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     "transition_self_comparator_test": "runtime-owned-composite-list-and-view-model-comparator-mutation",
     "rebind_with_nested_viewmodel": "runtime-owned-nested-view-model-reference-replacement-by-handle",
     "layout_hug_artboard": "top-level-computed-layout-width-height-exposure",
+    "layout_grid_stack_grid_with_layout_participants": (
+        "retained-text-render-style-registration-for-layout-participant-text"
+    ),
     "layout_scroll_snap_carousel": "scroll-constraint-physics-running-state-exposure",
 }
 EXACT = (
@@ -1767,6 +1820,7 @@ DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
 animated_clipping-nodes|frame 10, op 328 (drawPath): expected drawPath, got makeRenderPath
+bidirectional_stateful_property|frame 3, op 180 (transform), field tx: expected 150, got 100
 gamepad_test|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
 component_list_hit_order|frame 1, op 106 (color): expected color, got save
 component_list_grouped|frame 13, op 746 (color): expected color, got save
@@ -1795,6 +1849,12 @@ layout_scroll_snap_padding_list|frame 0, op 24 (makeRenderPaint): expected makeR
 layout_scroll_snap_padding_virtualized|frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize
 list_focus_order|frame 0, op 78 (addRawPath), field point: expected (-0.0 (0x80000000), 137.20052), got (-0.0 (0x80000000), 137.20053)
 layout_scroll_visibility|frame 0, op 130 (transform), field xy: expected -0.0 (0x80000000), got 0
+layout_text_match|frame 0, op 61 (save): expected save, got frame
+layout_grid_stack_grid_with_layouts|frame 1, op 228 (rewind): expected rewind, got drawPath
+layout_grid_stack_grid_with_layouts_size_changing|frame 1, op 227 (transform), field ty: expected 336.03223, got 310
+layout_grid_stack_grid_with_layouts_size_span_changing|frame 32, op 1592 (rewind): expected rewind, got drawPath
+layout_grid_stack_grid_with_layouts_span|frame 34, op 1116 (rewind): expected rewind, got drawPath
+layout_grid_stack_stack_with_layouts|frame 1, op 228 (rewind): expected rewind, got drawPath
 multitouch_enter-MainList|frame 1, op 179 (color): expected color, got save
 relative_data_bind_path-fire-trigger|frame 1, op 48 (color): expected color, got save
 relative_data_bind_path-listener|frame 1, op 72 (makeRenderPath): expected makeRenderPath, got drawPath
@@ -1849,6 +1909,7 @@ nested_artboard_quantize_and_speed|frame 0, op 75 (transform), field xx: expecte
 nested_events|frame 1, op 166 (makeRenderPath): expected makeRenderPath, got rewind
 number_to_list_nested_children|frame 0, op 141 (color): expected color, got save
 path_effect_with_feathers|frame 0, op 21 (feather), field paint_id: expected 8, got 5
+paused_nested_artboard_opacity|frame 1, op 103 (rewind): expected rewind, got drawPath
 pointer_exit|frame 31, op 1173 (save): expected save, got color
 reset_phase_multi_main|frame 0, op 25 (color): expected color, got makeRenderPaint
 rewards_demo|frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint
@@ -1933,8 +1994,47 @@ def pointer_coordinate(value: str) -> float | str:
 
 
 def strip_cpp_comments(source: str) -> str:
-    source = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
-    return re.sub(r"//[^\n]*", "", source)
+    """Blank C++ comments without changing offsets or quoted literals."""
+    result = list(source)
+    mode = "code"
+    index = 0
+    while index < len(source):
+        char = source[index]
+        following = source[index + 1] if index + 1 < len(source) else ""
+        if mode == "code":
+            if char == '"':
+                mode = "string"
+            elif char == "'":
+                mode = "character"
+            elif char == "/" and following == "/":
+                result[index] = result[index + 1] = " "
+                mode = "line-comment"
+                index += 1
+            elif char == "/" and following == "*":
+                result[index] = result[index + 1] = " "
+                mode = "block-comment"
+                index += 1
+        elif mode in ("string", "character"):
+            if char == "\\":
+                index += 1
+            elif (mode == "string" and char == '"') or (
+                mode == "character" and char == "'"
+            ):
+                mode = "code"
+        elif mode == "line-comment":
+            if char == "\n":
+                mode = "code"
+            else:
+                result[index] = " "
+        elif mode == "block-comment":
+            if char == "*" and following == "/":
+                result[index] = result[index + 1] = " "
+                mode = "code"
+                index += 1
+            elif char != "\n":
+                result[index] = " "
+        index += 1
+    return "".join(result)
 
 
 def matching_brace(source: str, opening: int) -> int:
@@ -2146,7 +2246,7 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
     producers: list[Producer] = []
     for path in files:
         relative = path.relative_to(runtime_dir).as_posix()
-        source = path.read_text(encoding="utf-8", errors="replace")
+        source = strip_cpp_comments(path.read_text(encoding="utf-8", errors="replace"))
         for test_name, test_line, chunk in test_chunks(source):
             for match in LITERAL_MATCH.finditer(chunk):
                 silver_id = match.group(1)
@@ -2354,7 +2454,7 @@ def dynamic_producers() -> list[Producer]:
         ]
         return tuple(actions)
 
-    return [
+    layout_scroll = [
         Producer(
             id=silver_id,
             source=source,
@@ -2382,6 +2482,72 @@ def dynamic_producers() -> list[Producer]:
         for silver_id, source, artboard, test_name, line in DYNAMIC_LAYOUT_SCROLL
     ]
 
+    grid_actions = (
+        action("advance", target="state-machine", seconds=0.0),
+        action("draw"),
+        *(
+            item
+            for _ in range(120)
+            for item in (
+                action("frame"),
+                action("advance", target="state-machine", seconds=0.016),
+                action("draw"),
+            )
+        ),
+    )
+    grid_stack = []
+    for silver_id, artboard, test_name, line in DYNAMIC_GRID_STACK:
+        blocker = CLASSIFIED_RUNTIME_BLOCKERS.get(silver_id)
+        if blocker is not None:
+            status = "unsupported-feature"
+            actions = ()
+            note = (
+                f"Unsupported feature: missing runtime surface {blocker}; the pinned "
+                "C++ gridStackSilver action stream requires that unported runtime surface."
+            )
+        elif silver_id in EXACT:
+            status = "exact"
+            actions = grid_actions
+            note = (
+                "Rust renderer stream is operation-exact with the pinned C++ silver "
+                "baseline after replaying the gridStackSilver helper actions."
+            )
+        else:
+            difference = DIVERGENCES.get(silver_id)
+            if difference is None:
+                raise ValueError(f"{silver_id} has no Rust result classification")
+            status = "diverges"
+            actions = grid_actions
+            note = (
+                "Genuine Rust-vs-C++ divergence after replaying the pinned "
+                f"gridStackSilver helper actions; first difference: {difference}."
+            )
+        grid_stack.append(
+            Producer(
+                id=silver_id,
+                source="layout_grid_stack.riv",
+                dependencies=(),
+                artboard=artboard,
+                animation="none",
+                state_machine="default",
+                lane="runtime",
+                deterministic="cpp-test-defined",
+                random="cpp-test-defined",
+                view_model="none",
+                sample_times=(0.0, 0.016),
+                actions=actions,
+                status=status,
+                producer_class="grid-stack-dynamic",
+                provenance_file=(
+                    "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp"
+                ),
+                provenance_test=test_name,
+                producer_line=line,
+                note=note,
+            )
+        )
+    return layout_scroll + grid_stack
+
 
 def unknown_producers() -> list[Producer]:
     return [
@@ -2403,7 +2569,7 @@ def unknown_producers() -> list[Producer]:
             provenance_file="",
             provenance_test="",
             producer_line=0,
-            note="No producer/reference exists in the pinned upstream runtime tests.",
+            note=PROVENANCE_UNKNOWN[silver_id],
         )
         for silver_id in PROVENANCE_UNKNOWN
     ]
@@ -2482,7 +2648,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (238, 195, 41, 2):
+    if (len(producers), runtime, scripted, unknown) != (252, 208, 41, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -2495,10 +2661,10 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 238",
-        "expected_runtime = 195",
+        "expected_entries = 252",
+        "expected_runtime = 208",
         "expected_scripted = 41",
-        "max_provenance_unknown = 2",
+        "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",
         "cpp_rust_exact_ids = ["
         + ", ".join(quoted(silver_id) for silver_id in sorted(EXACT))

@@ -6,6 +6,33 @@ import generate_manifest
 
 
 class SilverManifestGeneratorTests(unittest.TestCase):
+    def test_cpp_comment_stripping_ignores_dead_matches_and_preserves_lines(self):
+        source = '''
+TEST_CASE("live", "[silver]")
+{
+    auto file = ReadRiveFile("assets/live.riv", &silver); // matches in strings stay
+    CHECK(silver.matches("live"));
+}
+// TEST_CASE("moved", "[silver]")
+// {
+//     CHECK(silver.matches("stale-line"));
+// }
+/* TEST_CASE("also moved", "[silver]")
+{
+    CHECK(silver.matches("stale-block"));
+} */
+'''
+        stripped = generate_manifest.strip_cpp_comments(source)
+        chunks = generate_manifest.test_chunks(stripped)
+
+        self.assertEqual(len(chunks), 1)
+        self.assertEqual(chunks[0][0], "live")
+        self.assertEqual(chunks[0][1], 2)
+        self.assertEqual(
+            generate_manifest.LITERAL_MATCH.findall(chunks[0][2]), ["live"]
+        )
+        self.assertEqual(stripped.count("\n"), source.count("\n"))
+
     def test_gamepad_actions_replay_the_complete_pinned_sequence(self):
         actions = generate_manifest.p2e_gamepad_actions("gamepad_test")
         self.assertIsNotNone(actions)
@@ -40,23 +67,27 @@ TEST_CASE("renders selected board", "[silver]")
         self.assertEqual(generate_manifest.STATE_MACHINE_NAME.findall(chunk), ["Machine"])
         self.assertEqual(generate_manifest.SAMPLE_TIME.findall(chunk), ["0.125"])
 
-    def test_dynamic_layout_entries_are_hand_authored(self):
+    def test_dynamic_helper_entries_are_hand_authored(self):
         producers = generate_manifest.dynamic_producers()
-        self.assertEqual(len(producers), 6)
-        self.assertEqual(
-            {producer.id for producer in producers},
-            {
-                "layout_scroll_snap_padding_layouts",
-                "layout_scroll_snap_padding_list",
-                "layout_scroll_snap_padding_virtualized",
-                "layout_scroll_drag_multiplier_layouts",
-                "layout_scroll_drag_multiplier_list",
-                "layout_scroll_drag_multiplier_virtualized",
-            },
-        )
+        self.assertEqual(len(producers), 12)
         self.assertTrue(
-            all(producer.producer_class == "layout-scroll-dynamic" for producer in producers)
+            {
+                "layout_grid_stack_grid_with_layout_participants",
+                "layout_grid_stack_grid_with_layouts",
+                "layout_grid_stack_grid_with_layouts_size_changing",
+                "layout_grid_stack_grid_with_layouts_size_span_changing",
+                "layout_grid_stack_grid_with_layouts_span",
+                "layout_grid_stack_stack_with_layouts",
+            }.issubset({producer.id for producer in producers})
         )
+        grid = next(
+            producer
+            for producer in producers
+            if producer.id == "layout_grid_stack_grid_with_layouts"
+        )
+        self.assertEqual(grid.artboard, "GridWithLayouts")
+        self.assertEqual(len(grid.actions), 362)
+        self.assertEqual(sum(action["kind"] == "frame" for action in grid.actions), 120)
 
         snap = next(
             producer
@@ -83,9 +114,15 @@ TEST_CASE("renders selected board", "[silver]")
             },
         )
         self.assertEqual(drag.actions[-1], snap.actions[-1])
-        self.assertTrue(all(producer.status == "diverges" for producer in producers))
+        scroll = [
+            producer
+            for producer in producers
+            if producer.producer_class == "layout-scroll-dynamic"
+        ]
+        self.assertEqual(len(scroll), 6)
+        self.assertTrue(all(producer.status == "diverges" for producer in scroll))
         self.assertTrue(
-            all("first difference:" in producer.note for producer in producers)
+            all("first difference:" in producer.note for producer in scroll)
         )
 
     def test_expands_constant_cpp_frame_loops_into_ordered_actions(self):

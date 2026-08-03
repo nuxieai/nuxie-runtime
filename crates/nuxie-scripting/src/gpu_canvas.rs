@@ -16,8 +16,9 @@ use luaur_rt::{
     UserDataMethods, Value, VmState,
 };
 use nuxie_render_api::{
-    Factory as RenderFactory, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderEntry,
-    GpuCanvasShaderEntrySelection, GpuCanvasShaderStage, RenderGpuCanvasShader, RenderImage,
+    Factory as RenderFactory, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShader,
+    GpuCanvasShaderEntry, GpuCanvasShaderEntrySelection, GpuCanvasShaderStage,
+    RenderGpuCanvasShader, RenderImage,
 };
 pub use nuxie_render_api::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
@@ -1038,25 +1039,29 @@ impl ImportedGpuCanvasInstance {
             self.state.borrow_mut().completed.take().ok_or_else(|| {
                 Error::runtime("gpu-canvas drawCanvas did not finish a render pass")
             })?;
-        let vertex_shader = completed
-            .vertex_shader
-            .as_ref()
-            .and_then(|shader| shader.module.as_ref())
-            .ok_or_else(|| {
-                Error::runtime("GPU-canvas vertex shader has no backend module occurrence")
-            })?;
-        let fragment_shader = completed
-            .fragment_shader
-            .as_ref()
-            .or(completed.vertex_shader.as_ref())
-            .expect("completed GPU-canvas pipeline has a vertex shader")
-            .module
-            .as_ref()
-            .ok_or_else(|| {
-                Error::runtime("GPU-canvas fragment shader has no backend module occurrence")
-            })?;
+        let pipelines = completed
+            .pipelines
+            .iter()
+            .map(|pipeline| {
+                let vertex = pipeline.vertex_shader.module.clone().ok_or_else(|| {
+                    Error::runtime("GPU-canvas vertex shader has no backend module occurrence")
+                })?;
+                let fragment = pipeline
+                    .fragment_shader
+                    .as_ref()
+                    .map(|shader| {
+                        shader.module.clone().ok_or_else(|| {
+                            Error::runtime(
+                                "GPU-canvas fragment shader has no backend module occurrence",
+                            )
+                        })
+                    })
+                    .transpose()?;
+                Ok(GpuCanvasPipelineShaders { vertex, fragment })
+            })
+            .collect::<Result<Vec<_>>>()?;
         let image = factory
-            .make_gpu_canvas_image(vertex_shader, fragment_shader, &completed.plan)
+            .make_gpu_canvas_image_with_pipelines(&pipelines, &completed.plan)
             .map_err(|error| Error::runtime(format!("GPU-canvas render failed: {error}")))?;
         self.state.borrow_mut().image = Some(image);
         Ok(())

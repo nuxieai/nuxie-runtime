@@ -49,7 +49,8 @@ use nuxie_image_codec::{
     decoded_rgba_len, preflight_encoded_image, MAX_DECODED_IMAGE_BYTES, MAX_IMAGE_DIMENSION,
 };
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
+    BlendMode, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPipelineShaders,
+    GpuCanvasPlan, GpuCanvasShader,
     ImageDecodeError, ImageSampler, Mat2D, PathVerb, RawPath, RenderBuffer, RenderBufferFlags,
     RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle,
     RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
@@ -1340,6 +1341,14 @@ impl Factory for WgpuFactory {
         plan: &GpuCanvasPlan,
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
         self.make_imported_gpu_canvas_image(vertex_shader, fragment_shader, plan)
+    }
+
+    fn make_gpu_canvas_image_with_pipelines(
+        &mut self,
+        pipelines: &[GpuCanvasPipelineShaders],
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        self.make_imported_gpu_canvas_image_with_pipelines(pipelines, plan)
     }
 }
 

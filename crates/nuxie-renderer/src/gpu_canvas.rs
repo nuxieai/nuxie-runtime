@@ -17,14 +17,14 @@ pub use nuxie_render_api::{
     GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 use nuxie_render_api::{
-    GpuCanvasError, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderEntry,
+    GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderEntry,
     GpuCanvasShaderEntrySelection, GpuCanvasShaderResourceKind, GpuCanvasShaderStage,
     GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension, RenderGpuCanvasShader,
     RenderImage,
 };
 use wgpu::util::DeviceExt;
 
-use super::{align_to, map_buffer, RendererError, WgpuFactory, WgpuImage, WgpuImageTexture};
+use super::{RendererError, WgpuFactory, WgpuImage, WgpuImageTexture, align_to, map_buffer};
 
 const MAX_GPU_CANVAS_DIMENSION: u32 = 2_048;
 const MAX_UNIFORM_BUFFER_BYTES: usize = 64 * 1024;
@@ -267,6 +267,266 @@ fn same_texture_resource(left: &GpuCanvasTextureBinding, right: &GpuCanvasTextur
         && left.uploads == right.uploads
 }
 
+fn same_texture_descriptor(
+    left: &GpuCanvasTextureBinding,
+    right: &GpuCanvasTextureBinding,
+) -> bool {
+    left.resource_id == right.resource_id
+        && left.width == right.width
+        && left.height == right.height
+        && left.depth_or_array_layers == right.depth_or_array_layers
+        && left.format == right.format
+        && left.texture_type == right.texture_type
+        && left.render_target == right.render_target
+        && left.sample_count == right.sample_count
+        && left.mip_level_count == right.mip_level_count
+}
+
+fn create_imported_texture(
+    device: &wgpu::Device,
+    texture: &GpuCanvasTextureBinding,
+) -> Result<wgpu::Texture, GpuCanvasError> {
+    let mut usage = wgpu::TextureUsages::TEXTURE_BINDING;
+    if texture.sample_count == 1 {
+        usage |= wgpu::TextureUsages::COPY_DST;
+    }
+    if texture.render_target {
+        usage |= wgpu::TextureUsages::RENDER_ATTACHMENT;
+    }
+    Ok(device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("nuxie-imported-gpu-canvas-texture"),
+        size: wgpu::Extent3d {
+            width: texture.width,
+            height: texture.height,
+            depth_or_array_layers: texture.depth_or_array_layers,
+        },
+        mip_level_count: texture.mip_level_count,
+        sample_count: texture.sample_count,
+        dimension: texture_dimension(&texture.texture_type)
+            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+        format: texture_format(&texture.format)
+            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+        usage,
+        view_formats: &[],
+    }))
+}
+
+fn create_imported_texture_view(
+    texture: &wgpu::Texture,
+    binding: &GpuCanvasTextureBinding,
+    usage: Option<wgpu::TextureUsages>,
+) -> Result<wgpu::TextureView, GpuCanvasError> {
+    Ok(texture.create_view(&wgpu::TextureViewDescriptor {
+        label: Some("nuxie-imported-gpu-canvas-texture-view"),
+        format: None,
+        dimension: Some(
+            texture_view_dimension(&binding.view_dimension)
+                .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+        ),
+        usage,
+        aspect: wgpu::TextureAspect::All,
+        base_mip_level: binding.base_mip_level,
+        mip_level_count: Some(binding.mip_level_count_in_view),
+        base_array_layer: binding.base_array_layer,
+        array_layer_count: Some(binding.array_layer_count),
+    }))
+}
+
+fn create_imported_sampler(
+    device: &wgpu::Device,
+    sampler: &GpuCanvasSamplerBinding,
+) -> Result<wgpu::Sampler, GpuCanvasError> {
+    Ok(device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("nuxie-imported-gpu-canvas-sampler"),
+        address_mode_u: sampler_address_mode(&sampler.address_mode_u)?,
+        address_mode_v: sampler_address_mode(&sampler.address_mode_v)?,
+        address_mode_w: sampler_address_mode(&sampler.address_mode_w)?,
+        mag_filter: sampler_filter_mode(&sampler.mag_filter)?,
+        min_filter: sampler_filter_mode(&sampler.min_filter)?,
+        mipmap_filter: sampler_mipmap_filter_mode(&sampler.mipmap_filter)?,
+        lod_min_clamp: sampler.lod_min_clamp,
+        lod_max_clamp: sampler.lod_max_clamp,
+        compare: sampler
+            .compare
+            .as_deref()
+            .map(compare_function)
+            .transpose()
+            .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+        anisotropy_clamp: sampler.max_anisotropy,
+        border_color: None,
+    }))
+}
+
+fn materialize_pipeline_plan(
+    submission: &GpuCanvasPlan,
+    pipeline: &GpuCanvasPipelinePlan,
+) -> GpuCanvasPlan {
+    GpuCanvasPlan {
+        vertex_entry: pipeline.vertex_entry.clone(),
+        fragment_entry: pipeline.fragment_entry.clone(),
+        width: submission.width,
+        height: submission.height,
+        clear_color: submission.clear_color,
+        vertex_count: submission.vertex_count,
+        instance_count: submission.instance_count,
+        first_vertex: submission.first_vertex,
+        first_instance: submission.first_instance,
+        uniform_buffers: pipeline.uniform_buffers.clone(),
+        vertex_layouts: pipeline.vertex_layouts.clone(),
+        vertex_buffers: pipeline.vertex_buffers.clone(),
+        index_buffer: pipeline.index_buffer.clone(),
+        indexed_draw: None,
+        texture_bindings: pipeline.texture_bindings.clone(),
+        sampler_bindings: pipeline.sampler_bindings.clone(),
+        pipeline_state: pipeline.pipeline_state.clone(),
+        pass_state: GpuCanvasPassState::default(),
+        pipelines: Vec::new(),
+        render_passes: Vec::new(),
+    }
+}
+
+fn write_imported_texture_uploads(
+    queue: &wgpu::Queue,
+    texture: &GpuCanvasTextureBinding,
+    gpu_texture: &wgpu::Texture,
+    first_upload: usize,
+) -> Result<(), GpuCanvasError> {
+    for upload in texture.uploads.iter().skip(first_upload) {
+        let origin_z = if texture.texture_type == "3d" {
+            upload.z
+        } else {
+            upload.array_layer
+        };
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: gpu_texture,
+                mip_level: upload.mip_level,
+                origin: wgpu::Origin3d {
+                    x: upload.x,
+                    y: upload.y,
+                    z: origin_z,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            &upload.bytes,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(upload.bytes_per_row),
+                rows_per_image: Some(upload.rows_per_image),
+            },
+            wgpu::Extent3d {
+                width: upload.width,
+                height: upload.height,
+                depth_or_array_layers: upload.depth,
+            },
+        );
+    }
+    Ok(())
+}
+
+fn collect_retained_texture_specs(
+    plan: &GpuCanvasPlan,
+) -> Result<BTreeMap<u64, GpuCanvasTextureBinding>, GpuCanvasError> {
+    let attachment_bindings = plan.render_passes.iter().flat_map(|pass| {
+        pass.color_attachments
+            .iter()
+            .flat_map(|attachment| {
+                std::iter::once(&attachment.view).chain(attachment.resolve_target.iter())
+            })
+            .chain(
+                pass.depth_stencil_attachment
+                    .iter()
+                    .map(|attachment| &attachment.view),
+            )
+    });
+    let bindings = plan
+        .pipelines
+        .iter()
+        .flat_map(|pipeline| pipeline.texture_bindings.iter())
+        .chain(attachment_bindings.filter_map(|view| match view {
+            GpuCanvasAttachmentView::Canvas => None,
+            GpuCanvasAttachmentView::Texture(texture) => Some(texture),
+        }));
+    let mut retained = BTreeMap::<u64, GpuCanvasTextureBinding>::new();
+    for binding in bindings {
+        match retained.get_mut(&binding.resource_id) {
+            None => {
+                retained.insert(binding.resource_id, binding.clone());
+            }
+            Some(existing) => {
+                if !same_texture_descriptor(existing, binding) {
+                    return Err(GpuCanvasError::new(format!(
+                        "GPU texture resource {} has inconsistent descriptors",
+                        binding.resource_id
+                    )));
+                }
+                if binding.uploads.starts_with(&existing.uploads) {
+                    if binding.uploads.len() > existing.uploads.len() {
+                        existing.uploads = binding.uploads.clone();
+                    }
+                } else if !existing.uploads.starts_with(&binding.uploads) {
+                    return Err(GpuCanvasError::new(format!(
+                        "GPU texture resource {} has divergent upload histories",
+                        binding.resource_id
+                    )));
+                }
+            }
+        }
+    }
+    Ok(retained)
+}
+
+fn retain_imported_textures(
+    cache: &mut ImportedWgpuGpuCanvasCache,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    specs: &BTreeMap<u64, GpuCanvasTextureBinding>,
+) -> Result<BTreeMap<u64, wgpu::Texture>, GpuCanvasError> {
+    for binding in specs.values() {
+        if let Some(retained) = cache
+            .textures
+            .iter_mut()
+            .find(|retained| retained.binding.resource_id == binding.resource_id)
+        {
+            if !same_texture_descriptor(&retained.binding, binding)
+                || !binding.uploads.starts_with(&retained.binding.uploads)
+            {
+                return Err(GpuCanvasError::new(format!(
+                    "GPU texture resource {} changed after backend allocation",
+                    binding.resource_id
+                )));
+            }
+            write_imported_texture_uploads(
+                queue,
+                binding,
+                &retained.texture,
+                retained.applied_uploads,
+            )?;
+            retained.binding = binding.clone();
+            retained.applied_uploads = binding.uploads.len();
+            continue;
+        }
+        if cache.textures.len() >= MAX_IMPORTED_GPU_CANVAS_CACHE_ENTRIES {
+            return Err(GpuCanvasError::new(format!(
+                "GPU-canvas factory retains at most {MAX_IMPORTED_GPU_CANVAS_CACHE_ENTRIES} external texture resources"
+            )));
+        }
+        let texture = create_imported_texture(device, binding)?;
+        write_imported_texture_uploads(queue, binding, &texture, 0)?;
+        cache.textures.push(ImportedWgpuGpuCanvasTexture {
+            binding: binding.clone(),
+            texture,
+            applied_uploads: binding.uploads.len(),
+        });
+    }
+    Ok(cache
+        .textures
+        .iter()
+        .filter(|retained| specs.contains_key(&retained.binding.resource_id))
+        .map(|retained| (retained.binding.resource_id, retained.texture.clone()))
+        .collect())
+}
+
 impl ImportedGpuCanvasPipelineKey {
     fn new(
         vertex_shader: &WgpuGpuCanvasShader,
@@ -402,6 +662,7 @@ impl std::fmt::Debug for ImportedGpuCanvasPipelineKey {
 
 pub(super) struct ImportedWgpuGpuCanvasCache {
     pipelines: Vec<ImportedWgpuGpuCanvasPipeline>,
+    textures: Vec<ImportedWgpuGpuCanvasTexture>,
     buffer_bytes: usize,
     pipeline_builds: u64,
 }
@@ -410,10 +671,17 @@ impl Default for ImportedWgpuGpuCanvasCache {
     fn default() -> Self {
         Self {
             pipelines: Vec::new(),
+            textures: Vec::new(),
             buffer_bytes: 0,
             pipeline_builds: 0,
         }
     }
+}
+
+struct ImportedWgpuGpuCanvasTexture {
+    binding: GpuCanvasTextureBinding,
+    texture: wgpu::Texture,
+    applied_uploads: usize,
 }
 
 impl ImportedWgpuGpuCanvasCache {
@@ -1353,6 +1621,523 @@ fn imported_shader_for_context<'a>(
 }
 
 impl WgpuFactory {
+    fn build_imported_gpu_canvas_pipeline(
+        &self,
+        vertex_shader: &WgpuGpuCanvasShader,
+        fragment_shader: &WgpuGpuCanvasShader,
+        plan: &GpuCanvasPlan,
+        key: ImportedGpuCanvasPipelineKey,
+        retained_textures: &BTreeMap<u64, wgpu::Texture>,
+    ) -> Result<ImportedWgpuGpuCanvasPipeline, GpuCanvasError> {
+        let device = &self.context.device;
+        let prepared = prepare_imported_gpu_canvas(vertex_shader, fragment_shader, plan)?;
+        validate_imported_wgpu_limits(plan, &prepared.resource_requirements, &device.limits())?;
+        let vertex_attributes = plan
+            .vertex_layouts
+            .iter()
+            .map(|layout| {
+                layout
+                    .attributes
+                    .iter()
+                    .map(|attribute| {
+                        Ok(wgpu::VertexAttribute {
+                            format: vertex_format(&attribute.format)?,
+                            offset: attribute.offset,
+                            shader_location: attribute.shader_location,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, RendererError>>()
+            })
+            .collect::<Result<Vec<_>, RendererError>>()
+            .map_err(|error| GpuCanvasError::new(error.to_string()))?;
+        let mut bind_group_layouts = Vec::new();
+        if let Some(max_group) = prepared
+            .resource_requirements
+            .keys()
+            .map(|(group, _)| *group)
+            .max()
+        {
+            for group in 0..=max_group {
+                let entries = prepared
+                    .resource_requirements
+                    .iter()
+                    .filter(|((resource_group, _), _)| *resource_group == group)
+                    .map(|(&(resource_group, binding), &requirement)| {
+                        let uniform_size = plan
+                            .uniform_buffers
+                            .iter()
+                            .find(|buffer| {
+                                buffer.group == resource_group && buffer.binding == binding
+                            })
+                            .map(|buffer| buffer.bytes.len());
+                        Ok(wgpu::BindGroupLayoutEntry {
+                            binding,
+                            visibility: requirement.visibility(),
+                            ty: imported_binding_type(requirement, uniform_size)?,
+                            count: None,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, GpuCanvasError>>()?;
+                bind_group_layouts.push(device.create_bind_group_layout(
+                    &wgpu::BindGroupLayoutDescriptor {
+                        label: Some("nuxie-imported-gpu-canvas-bind-group-layout"),
+                        entries: &entries,
+                    },
+                ));
+            }
+        }
+        let layout_refs = bind_group_layouts.iter().map(Some).collect::<Vec<_>>();
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("nuxie-imported-gpu-canvas-pipeline-layout"),
+            bind_group_layouts: &layout_refs,
+            immediate_size: 0,
+        });
+        let vertex_layouts = plan
+            .vertex_layouts
+            .iter()
+            .zip(&vertex_attributes)
+            .map(|(layout, attributes)| {
+                Ok(Some(wgpu::VertexBufferLayout {
+                    array_stride: layout.stride,
+                    step_mode: vertex_step_mode(&layout.step_mode)?,
+                    attributes,
+                }))
+            })
+            .collect::<Result<Vec<_>, RendererError>>()
+            .map_err(|error| GpuCanvasError::new(error.to_string()))?;
+        let color_targets = plan
+            .pipeline_state
+            .color_targets
+            .iter()
+            .map(|target| {
+                Ok(Some(wgpu::ColorTargetState {
+                    format: texture_format(&target.format)
+                        .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                    blend: target
+                        .blend
+                        .as_ref()
+                        .map(blend_state)
+                        .transpose()
+                        .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                    write_mask: color_writes(&target.write_mask)
+                        .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+                }))
+            })
+            .collect::<Result<Vec<_>, GpuCanvasError>>()?;
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nuxie-imported-gpu-canvas-pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &vertex_shader.module,
+                entry_point: Some(&prepared.vertex_entry_point),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &vertex_layouts,
+            },
+            primitive: primitive_state(&plan.pipeline_state)
+                .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+            depth_stencil: plan
+                .pipeline_state
+                .depth_stencil
+                .as_ref()
+                .map(depth_stencil_state)
+                .transpose()
+                .map_err(|error| GpuCanvasError::new(error.to_string()))?,
+            multisample: wgpu::MultisampleState {
+                count: plan.pipeline_state.sample_count,
+                ..Default::default()
+            },
+            fragment: prepared.fragment_entry_point.as_deref().map(|entry_point| {
+                wgpu::FragmentState {
+                    module: &fragment_shader.module,
+                    entry_point: Some(entry_point),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    targets: &color_targets,
+                }
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let uniform_buffers = plan
+            .uniform_buffers
+            .iter()
+            .map(|buffer| {
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("nuxie-imported-gpu-canvas-uniform"),
+                    contents: &buffer.bytes,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                })
+            })
+            .collect::<Vec<_>>();
+        let textures = plan
+            .texture_bindings
+            .iter()
+            .map(|texture| {
+                retained_textures
+                    .get(&texture.resource_id)
+                    .cloned()
+                    .ok_or_else(|| GpuCanvasError::new("GPU texture resource disappeared"))
+            })
+            .collect::<Result<Vec<_>, GpuCanvasError>>()?;
+        let texture_views = plan
+            .texture_bindings
+            .iter()
+            .zip(&textures)
+            .map(|(texture, gpu_texture)| create_imported_texture_view(gpu_texture, texture, None))
+            .collect::<Result<Vec<_>, GpuCanvasError>>()?;
+        let samplers = plan
+            .sampler_bindings
+            .iter()
+            .map(|sampler| create_imported_sampler(device, sampler))
+            .collect::<Result<Vec<_>, GpuCanvasError>>()?;
+        let bind_groups = bind_group_layouts
+            .iter()
+            .enumerate()
+            .map(|(group, layout)| {
+                let entries = prepared
+                    .resource_requirements
+                    .iter()
+                    .filter(|((resource_group, _), _)| *resource_group == group as u32)
+                    .map(|(&(resource_group, binding), requirement)| {
+                        let resource = match requirement {
+                            ImportedResourceRequirement::Uniform(_) => {
+                                let index = plan
+                                    .uniform_buffers
+                                    .iter()
+                                    .position(|buffer| {
+                                        buffer.group == resource_group && buffer.binding == binding
+                                    })
+                                    .ok_or_else(|| {
+                                        GpuCanvasError::new("uniform resource disappeared")
+                                    })?;
+                                uniform_buffers[index].as_entire_binding()
+                            }
+                            ImportedResourceRequirement::Texture { .. } => {
+                                let index = plan
+                                    .texture_bindings
+                                    .iter()
+                                    .position(|texture| {
+                                        texture.group == resource_group
+                                            && texture.binding == binding
+                                    })
+                                    .ok_or_else(|| {
+                                        GpuCanvasError::new("texture resource disappeared")
+                                    })?;
+                                wgpu::BindingResource::TextureView(&texture_views[index])
+                            }
+                            ImportedResourceRequirement::Sampler { .. } => {
+                                let index = plan
+                                    .sampler_bindings
+                                    .iter()
+                                    .position(|sampler| {
+                                        sampler.group == resource_group
+                                            && sampler.binding == binding
+                                    })
+                                    .ok_or_else(|| {
+                                        GpuCanvasError::new("sampler resource disappeared")
+                                    })?;
+                                wgpu::BindingResource::Sampler(&samplers[index])
+                            }
+                        };
+                        Ok(wgpu::BindGroupEntry { binding, resource })
+                    })
+                    .collect::<Result<Vec<_>, GpuCanvasError>>()?;
+                Ok(device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("nuxie-imported-gpu-canvas-bind-group"),
+                    layout,
+                    entries: &entries,
+                }))
+            })
+            .collect::<Result<Vec<_>, GpuCanvasError>>()?;
+        let vertex_buffers = plan
+            .vertex_buffers
+            .iter()
+            .map(|buffer| {
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("nuxie-imported-gpu-canvas-vertex-buffer"),
+                    contents: &buffer.bytes,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                })
+            })
+            .collect::<Vec<_>>();
+        let index_buffer = plan.index_buffer.as_ref().map(|buffer| {
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("nuxie-imported-gpu-canvas-index-buffer"),
+                contents: &buffer.bytes,
+                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+            })
+        });
+        Ok(ImportedWgpuGpuCanvasPipeline {
+            key,
+            resource_requirements: prepared.resource_requirements,
+            bind_groups,
+            uniform_buffers,
+            textures,
+            _texture_views: texture_views,
+            _samplers: samplers,
+            vertex_buffers,
+            index_buffer,
+            pipeline,
+        })
+    }
+
+    pub(super) fn make_imported_gpu_canvas_image_with_pipelines(
+        &mut self,
+        pipelines: &[GpuCanvasPipelineShaders],
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        if pipelines.len() != plan.pipelines.len() {
+            return Err(GpuCanvasError::new(
+                "GPU-canvas shader and pipeline snapshot counts differ",
+            ));
+        }
+        if pipelines.len() > MAX_IMPORTED_GPU_CANVAS_CACHE_ENTRIES {
+            return Err(GpuCanvasError::new(format!(
+                "GPU-canvas submission supports at most {MAX_IMPORTED_GPU_CANVAS_CACHE_ENTRIES} pipeline snapshots"
+            )));
+        }
+        if plan.width == 0
+            || plan.height == 0
+            || plan.width > MAX_GPU_CANVAS_DIMENSION
+            || plan.height > MAX_GPU_CANVAS_DIMENSION
+        {
+            return Err(GpuCanvasError::new(
+                "GPU-canvas submission dimensions are invalid",
+            ));
+        }
+        let target_lease = self.gpu_canvas_targets.acquire(plan.width, plan.height)?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let validation_scope = self
+            .context
+            .device
+            .push_error_scope(wgpu::ErrorFilter::Validation);
+        let retained_texture_specs = collect_retained_texture_specs(plan)?;
+        let retained_textures = retain_imported_textures(
+            &mut self.imported_gpu_canvas,
+            &self.context.device,
+            &self.context.queue,
+            &retained_texture_specs,
+        )?;
+        let materialized_plans = plan
+            .pipelines
+            .iter()
+            .map(|pipeline| materialize_pipeline_plan(plan, pipeline))
+            .collect::<Vec<_>>();
+        let mut keys = Vec::with_capacity(pipelines.len());
+        for (shaders, pipeline_plan) in pipelines.iter().zip(&materialized_plans) {
+            let vertex = imported_shader_for_context(&self.context, &shaders.vertex, "vertex")?;
+            let fragment_handle = shaders.fragment.as_ref().unwrap_or(&shaders.vertex);
+            let fragment = imported_shader_for_context(&self.context, fragment_handle, "fragment")?;
+            let key = ImportedGpuCanvasPipelineKey::new(vertex, fragment, pipeline_plan);
+            if !self
+                .imported_gpu_canvas
+                .pipelines
+                .iter()
+                .any(|cached| cached.key == key)
+            {
+                let built = self.build_imported_gpu_canvas_pipeline(
+                    vertex,
+                    fragment,
+                    pipeline_plan,
+                    key.clone(),
+                    &retained_textures,
+                )?;
+                self.imported_gpu_canvas.insert(built);
+                self.imported_gpu_canvas.pipeline_builds =
+                    self.imported_gpu_canvas.pipeline_builds.saturating_add(1);
+            }
+            keys.push(key);
+        }
+        for (key, pipeline) in keys.iter().zip(&plan.pipelines) {
+            let cached = self
+                .imported_gpu_canvas
+                .pipelines
+                .iter()
+                .find(|cached| cached.key == *key)
+                .ok_or_else(|| {
+                    GpuCanvasError::new("GPU-canvas pipeline cache entry disappeared")
+                })?;
+            for (buffer, gpu_buffer) in pipeline.uniform_buffers.iter().zip(&cached.uniform_buffers)
+            {
+                self.context
+                    .queue
+                    .write_buffer(gpu_buffer, 0, &buffer.bytes);
+            }
+            for (buffer, gpu_buffer) in pipeline.vertex_buffers.iter().zip(&cached.vertex_buffers) {
+                self.context
+                    .queue
+                    .write_buffer(gpu_buffer, 0, &buffer.bytes);
+            }
+            if let (Some(buffer), Some(gpu_buffer)) = (&pipeline.index_buffer, &cached.index_buffer)
+            {
+                self.context
+                    .queue
+                    .write_buffer(gpu_buffer, 0, &buffer.bytes);
+            }
+        }
+        let target = self
+            .context
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("nuxie-imported-gpu-canvas-target"),
+                size: wgpu::Extent3d {
+                    width: plan.width,
+                    height: plan.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+        let view = target.create_view(&wgpu::TextureViewDescriptor::default());
+        let attachment_bindings = plan
+            .render_passes
+            .iter()
+            .flat_map(|pass| {
+                pass.color_attachments
+                    .iter()
+                    .flat_map(|attachment| {
+                        std::iter::once(&attachment.view).chain(attachment.resolve_target.iter())
+                    })
+                    .chain(
+                        pass.depth_stencil_attachment
+                            .iter()
+                            .map(|attachment| &attachment.view),
+                    )
+            })
+            .filter_map(|view| match view {
+                GpuCanvasAttachmentView::Canvas => None,
+                GpuCanvasAttachmentView::Texture(texture) => Some(texture),
+            });
+        let mut attachment_view_indices = BTreeMap::new();
+        let mut attachment_views = Vec::new();
+        for binding in attachment_bindings {
+            let key = ImportedAttachmentViewKey::new(binding);
+            if attachment_view_indices.contains_key(&key) {
+                continue;
+            }
+            let texture = retained_textures.get(&binding.resource_id).ok_or_else(|| {
+                GpuCanvasError::new("retained GPU attachment texture disappeared")
+            })?;
+            let attachment_view = create_imported_texture_view(
+                texture,
+                binding,
+                Some(wgpu::TextureUsages::RENDER_ATTACHMENT),
+            )?;
+            attachment_view_indices.insert(key, attachment_views.len());
+            attachment_views.push(attachment_view);
+        }
+        let mut encoder =
+            self.context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("nuxie-imported-gpu-canvas-indexed-encoder"),
+                });
+        for authored_pass in &plan.render_passes {
+            let color_attachments = authored_pass
+                .color_attachments
+                .iter()
+                .map(|attachment| {
+                    Ok(Some(wgpu::RenderPassColorAttachment {
+                        view: resolve_attachment_view(
+                            &attachment.view,
+                            &view,
+                            &attachment_view_indices,
+                            &attachment_views,
+                        )?,
+                        resolve_target: attachment
+                            .resolve_target
+                            .as_ref()
+                            .map(|target| {
+                                resolve_attachment_view(
+                                    target,
+                                    &view,
+                                    &attachment_view_indices,
+                                    &attachment_views,
+                                )
+                            })
+                            .transpose()?,
+                        depth_slice: None,
+                        ops: wgpu::Operations {
+                            load: color_load_op(&attachment.load_op, attachment.clear_color)?,
+                            store: store_op(&attachment.store_op)?,
+                        },
+                    }))
+                })
+                .collect::<Result<Vec<_>, GpuCanvasError>>()?;
+            let depth_stencil_attachment = authored_pass
+                .depth_stencil_attachment
+                .as_ref()
+                .map(|attachment| {
+                    Ok(wgpu::RenderPassDepthStencilAttachment {
+                        view: resolve_attachment_view(
+                            &attachment.view,
+                            &view,
+                            &attachment_view_indices,
+                            &attachment_views,
+                        )?,
+                        depth_ops: Some(wgpu::Operations {
+                            load: depth_load_op(
+                                &attachment.depth_load_op,
+                                attachment.depth_clear_value,
+                            )?,
+                            store: store_op(&attachment.depth_store_op)?,
+                        }),
+                        stencil_ops: None,
+                    })
+                })
+                .transpose()?;
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("nuxie-imported-gpu-canvas-indexed-pass"),
+                color_attachments: &color_attachments,
+                depth_stencil_attachment,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            for draw in &authored_pass.draws {
+                let pipeline_index = usize::try_from(draw.pipeline_index)
+                    .map_err(|_| GpuCanvasError::new("GPU pipeline index overflow"))?;
+                let key = keys.get(pipeline_index).ok_or_else(|| {
+                    GpuCanvasError::new("draw references an absent GPU pipeline snapshot")
+                })?;
+                let cached = self
+                    .imported_gpu_canvas
+                    .pipelines
+                    .iter()
+                    .find(|cached| cached.key == *key)
+                    .ok_or_else(|| GpuCanvasError::new("GPU pipeline cache entry disappeared"))?;
+                encode_imported_draws(
+                    &mut pass,
+                    cached,
+                    &materialized_plans[pipeline_index],
+                    std::slice::from_ref(draw),
+                )?;
+            }
+        }
+        self.context.queue.submit(Some(encoder.finish()));
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(error) = pollster::block_on(validation_scope.pop()) {
+            return Err(GpuCanvasError::new(format!(
+                "wgpu rejected imported GPU-canvas submission: {error}"
+            )));
+        }
+        let image = Box::new(WgpuImage {
+            width: plan.width,
+            height: plan.height,
+            texture: Some(Arc::new(WgpuImageTexture {
+                texture: target,
+                view,
+            })),
+            owner: Arc::downgrade(&self.context),
+        });
+        Ok(retain_gpu_canvas_target(image, target_lease))
+    }
+
     pub(super) fn make_imported_gpu_canvas_shader(
         &mut self,
         shader: &GpuCanvasShader,
@@ -3508,6 +4293,149 @@ fn fs_main() -> @location(0) vec4<f32> {
                 ..GpuCanvasPassState::default()
             },
         }
+    }
+
+    fn pipeline_plan(plan: &GpuCanvasPlan) -> GpuCanvasPipelinePlan {
+        GpuCanvasPipelinePlan {
+            vertex_entry: plan.vertex_entry.clone(),
+            fragment_entry: plan.fragment_entry.clone(),
+            uniform_buffers: plan.uniform_buffers.clone(),
+            vertex_layouts: plan.vertex_layouts.clone(),
+            vertex_buffers: plan.vertex_buffers.clone(),
+            index_buffer: plan.index_buffer.clone(),
+            texture_bindings: plan.texture_bindings.clone(),
+            sampler_bindings: plan.sampler_bindings.clone(),
+            pipeline_state: plan.pipeline_state.clone(),
+        }
+    }
+
+    fn canvas_attachment(load_op: &str) -> GpuCanvasColorAttachment {
+        GpuCanvasColorAttachment {
+            view: GpuCanvasAttachmentView::Canvas,
+            resolve_target: None,
+            load_op: load_op.into(),
+            store_op: "store".into(),
+            clear_color: [0.0, 0.0, 0.0, 1.0],
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn imported_wgpu_executes_pipeline_indexed_submission() {
+        let Ok(mut factory) = WgpuFactory::new(16, 16) else {
+            eprintln!(
+                "GPU adapter unavailable; pipeline-indexed plan remains structurally covered"
+            );
+            return;
+        };
+        let shader = imported_shader(IMPORTED_WGSL);
+        let shader = factory
+            .make_imported_gpu_canvas_shader(&shader)
+            .expect("shader occurrence materializes");
+        let mut plan = imported_plan();
+        plan.width = 8;
+        plan.height = 8;
+        let first = pipeline_plan(&plan);
+        let mut second = first.clone();
+        second.pipeline_state.cull_mode = "back".into();
+        plan.pipelines = vec![first, second];
+        plan.render_passes = vec![
+            GpuCanvasRenderPass {
+                color_attachments: vec![canvas_attachment("clear")],
+                depth_stencil_attachment: None,
+                draws: vec![draw_command(None)],
+            },
+            GpuCanvasRenderPass {
+                color_attachments: vec![canvas_attachment("load")],
+                depth_stencil_attachment: None,
+                draws: vec![GpuCanvasDrawCommand {
+                    pipeline_index: 1,
+                    ..draw_command(None)
+                }],
+            },
+        ];
+        let pipelines = vec![
+            GpuCanvasPipelineShaders {
+                vertex: shader.clone(),
+                fragment: Some(shader.clone()),
+            },
+            GpuCanvasPipelineShaders {
+                vertex: shader.clone(),
+                fragment: Some(shader),
+            },
+        ];
+
+        factory
+            .make_imported_gpu_canvas_image_with_pipelines(&pipelines, &plan)
+            .expect("wgpu executes both indexed pipelines in one submission");
+        assert_eq!(factory.imported_gpu_canvas.pipeline_builds, 2);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn imported_wgpu_retains_external_attachment_for_empty_passes_across_submissions() {
+        let Ok(mut factory) = WgpuFactory::new(16, 16) else {
+            eprintln!(
+                "GPU adapter unavailable; retained-resource registry remains structurally covered"
+            );
+            return;
+        };
+        let mut plan = imported_plan();
+        plan.pipelines.clear();
+        plan.render_passes = vec![GpuCanvasRenderPass {
+            color_attachments: vec![GpuCanvasColorAttachment {
+                view: GpuCanvasAttachmentView::Texture(attachment_texture(101, "rgba8unorm", 1)),
+                resolve_target: None,
+                load_op: "clear".into(),
+                store_op: "store".into(),
+                clear_color: [0.25, 0.5, 0.75, 1.0],
+            }],
+            depth_stencil_attachment: None,
+            draws: Vec::new(),
+        }];
+
+        factory
+            .make_imported_gpu_canvas_image_with_pipelines(&[], &plan)
+            .expect("wgpu executes an explicit empty pass into an external attachment");
+        let first = factory.imported_gpu_canvas.textures[0].texture.clone();
+
+        plan.render_passes[0].color_attachments[0].load_op = "load".into();
+        factory
+            .make_imported_gpu_canvas_image_with_pipelines(&[], &plan)
+            .expect("a later submission loads the retained external attachment");
+
+        assert_eq!(factory.imported_gpu_canvas.textures.len(), 1);
+        assert_eq!(factory.imported_gpu_canvas.textures[0].texture, first);
+    }
+
+    #[test]
+    fn pipeline_indexed_plan_unifies_sampled_and_attachment_texture_identity() {
+        let mut plan = imported_plan();
+        let sampled = attachment_texture(101, "rgba8unorm", 1);
+        plan.pipelines = vec![GpuCanvasPipelinePlan {
+            texture_bindings: vec![sampled.clone()],
+            ..pipeline_plan(&plan)
+        }];
+        let mut attachment = sampled;
+        attachment.group = 0;
+        attachment.binding = 0;
+        attachment.view_dimension = "2d-array".into();
+        plan.render_passes = vec![GpuCanvasRenderPass {
+            color_attachments: vec![GpuCanvasColorAttachment {
+                view: GpuCanvasAttachmentView::Texture(attachment),
+                resolve_target: None,
+                load_op: "load".into(),
+                store_op: "store".into(),
+                clear_color: [0.0; 4],
+            }],
+            depth_stencil_attachment: None,
+            draws: Vec::new(),
+        }];
+
+        let specs = collect_retained_texture_specs(&plan)
+            .expect("sampled and attachment views share one physical resource descriptor");
+        assert_eq!(specs.len(), 1);
+        assert!(specs.contains_key(&101));
     }
 
     fn depth_state() -> GpuCanvasDepthStencilState {

@@ -890,6 +890,23 @@ pub trait RenderGpuCanvasShader: Any {
     fn as_any(&self) -> &dyn Any;
 }
 
+/// Backend shader occurrences paired with one [`GpuCanvasPipelinePlan`].
+/// Pipeline index ordering is shared with [`GpuCanvasPlan::pipelines`].
+#[derive(Clone)]
+pub struct GpuCanvasPipelineShaders {
+    pub vertex: Arc<dyn RenderGpuCanvasShader>,
+    pub fragment: Option<Arc<dyn RenderGpuCanvasShader>>,
+}
+
+impl std::fmt::Debug for GpuCanvasPipelineShaders {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GpuCanvasPipelineShaders")
+            .field("has_fragment", &self.fragment.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
 pub trait RenderImage: Any {
     fn as_any(&self) -> &dyn Any;
     fn width(&self) -> u32;
@@ -1609,6 +1626,19 @@ pub trait Factory {
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
         Err(GpuCanvasError::unsupported())
     }
+
+    /// Execute a pipeline-indexed imported GPU-canvas submission.
+    fn make_gpu_canvas_image_with_pipelines(
+        &mut self,
+        pipelines: &[GpuCanvasPipelineShaders],
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        let [pipeline] = pipelines else {
+            return Err(GpuCanvasError::unsupported());
+        };
+        let fragment = pipeline.fragment.as_ref().unwrap_or(&pipeline.vertex);
+        self.make_gpu_canvas_image(&pipeline.vertex, fragment, plan)
+    }
 }
 
 impl<F: Factory + 'static> Factory for PersistentFactory<F> {
@@ -1684,6 +1714,15 @@ impl<F: Factory + 'static> Factory for PersistentFactory<F> {
     ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
         self.borrow_mut()
             .make_gpu_canvas_image(vertex_shader, fragment_shader, plan)
+    }
+
+    fn make_gpu_canvas_image_with_pipelines(
+        &mut self,
+        pipelines: &[GpuCanvasPipelineShaders],
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        self.borrow_mut()
+            .make_gpu_canvas_image_with_pipelines(pipelines, plan)
     }
 }
 

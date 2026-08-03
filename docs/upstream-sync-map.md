@@ -269,7 +269,8 @@ worker may act on that category.
   - `tools/generate-renderer-shaders.sh`
   - `tools/golden-runner/runtime-provenance.sh`
   - `tools/renderer-dawn-live-reference-bootstrap.sh`
-  - `tools/runtime-frame-loop-port/build-trace-runners.sh`
+  - `tools/runtime-frame-loop-port/build-trace-runners.sh
+- `port-manifest.toml` `upstream_ref` (missed in the S4 close; found stale at the S3 cut)`
   - `tools/runtime-frame-loop-port/capture_trace.py`
   - `docs/runtime-drawing-gaps.toml` `upstream_ref`
   - `docs/runtime-drawing-ownership.toml` `upstream_ref`

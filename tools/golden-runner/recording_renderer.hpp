@@ -9,6 +9,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace rive_rust::golden
 {
@@ -76,6 +77,39 @@ public:
     void modulateOpacity(float opacity) override;
 };
 
+// One typed custom property attached to a reported event, pre-extraction;
+// formatting happens inside RecordingFactory so the stream float/string
+// rules stay in one place (docs/side-channel-format.md).
+struct SideChannelEventProperty
+{
+    enum class Kind
+    {
+        number,
+        boolean,
+        string,
+        color,
+        uintValue,
+    };
+    Kind kind = Kind::number;
+    std::string name;
+    float numberValue = 0.0f;
+    bool boolValue = false;
+    std::string stringValue;
+    uint32_t colorValue = 0;
+    uint64_t uintValue = 0;
+};
+
+struct SideChannelEvent
+{
+    uint32_t coreType = 0;
+    std::string name;
+    float delay = 0.0f;
+    bool hasUrl = false;
+    std::string url;
+    std::string target;
+    std::vector<SideChannelEventProperty> properties;
+};
+
 class RecordingFactory : public rive::Factory
 {
 public:
@@ -116,6 +150,10 @@ public:
                        float x,
                        float y,
                        int pointerId);
+    void addAdvance(float seconds, bool settled);
+    void addAdvanceWithStates(float seconds, bool settled, size_t statesChanged);
+    void addSideChannelEvent(const SideChannelEvent& event);
+    void addHitResult(const std::string& result);
     void addFrame();
     void frameSize(uint32_t width, uint32_t height);
     void clearColor(rive::ColorInt color);

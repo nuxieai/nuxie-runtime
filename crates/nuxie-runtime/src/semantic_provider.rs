@@ -3,8 +3,8 @@
 // include/rive/semantic/semantic_provider.hpp:1-36.
 
 use crate::ArtboardInstance;
+use crate::semantic_data::{SemanticBounds, SemanticNodeHandle};
 use crate::semantic_inference_registry::{resolve_inferred_semantics, supports_inferred_semantics};
-use crate::semantic_node::{SemanticBounds, SemanticNodeHandle};
 use nuxie_schema::definition_by_name;
 
 fn component_is_a(artboard: &ArtboardInstance, component_local_id: usize, base_type: &str) -> bool {

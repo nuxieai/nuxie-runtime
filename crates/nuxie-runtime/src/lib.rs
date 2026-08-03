@@ -143,9 +143,7 @@ mod scripting;
 mod semantic_data;
 mod semantic_inference_registry;
 mod semantic_manager;
-mod semantic_node;
 mod semantic_provider;
-mod semantic_snapshot;
 mod shapes;
 mod state_machine;
 mod static_scene;
@@ -273,16 +271,16 @@ pub use scripting::{
     script_node_for_artboard, script_view_model_from_owned, script_view_model_from_owned_context,
     script_view_model_from_owned_snapshot, script_view_models,
 };
-pub use semantic_data::{RuntimeSemanticData, SemanticActionType, SemanticListener};
-pub use semantic_manager::{SemanticDrainError, SemanticManager};
-pub use semantic_node::{
-    SemanticBounds, SemanticDirt, SemanticNode, SemanticNodeHandle, SemanticRole, SemanticState,
-    SemanticTrait, has_semantic_state, has_semantic_trait, is_interactive_role,
+pub use semantic_data::{
+    RuntimeSemanticData, SemanticActionType, SemanticBounds, SemanticDirt, SemanticListener,
+    SemanticNode, SemanticNodeHandle, SemanticRole, SemanticState, SemanticTrait,
+    has_semantic_state, has_semantic_trait, is_interactive_role,
+};
+pub use semantic_manager::{
+    SemanticDrainError, SemanticManager, SemanticsBoundsUpdate, SemanticsChildrenUpdate,
+    SemanticsDiff, SemanticsDiffNode,
 };
 pub use semantic_provider::{ResolvedSemanticData, SemanticProvider};
-pub use semantic_snapshot::{
-    SemanticsBoundsUpdate, SemanticsChildrenUpdate, SemanticsDiff, SemanticsDiffNode,
-};
 pub use shapes::list_path::{RuntimeListPathDebugReport, RuntimeListPathDebugVertex};
 #[doc(hidden)]
 pub use state_machine::RuntimeFileStateMachineActionCatalog;

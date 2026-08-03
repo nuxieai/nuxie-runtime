@@ -924,7 +924,7 @@ note = "P3-c phase-1 ports the underlying tree/diff code. All 10 fixture cases r
 upstream = "tests/unit_tests/runtime/semantic_data_lifecycle_test.cpp"
 test_case_count = 9
 status = "partial"
-evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_data.rs", "crates/nuxie-runtime/src/semantic_node.rs"]
+evidence = ["P3C-report.md", "crates/nuxie-runtime/src/semantic_data.rs"]
 covered_test_cases = ["mutating a property does not recreate the SemanticNode"]
 note = "Lazy retained node identity, authored propagation, and post-creation setter behavior have focused Rust evidence. Registered-owner destruction/removal and bounds retry through the shared Artboard lifecycle remain pending; fixture-visible removal also needs #LT-1 complete SemanticsDiff serialization."
 

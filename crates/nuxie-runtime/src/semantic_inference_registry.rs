@@ -2,7 +2,7 @@
 // src/semantic/semantic_inference_registry.cpp:1-97.
 
 use crate::ArtboardInstance;
-use crate::semantic_node::SemanticRole;
+use crate::semantic_data::SemanticRole;
 
 use super::semantic_provider::ResolvedSemanticData;
 

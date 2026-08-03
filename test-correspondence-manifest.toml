@@ -14,7 +14,7 @@ status_values = ["ported-differential", "ported-direct", "partial", "pending", "
 # monotonic guards below are pinned. Concurrent lanes moving rows never edit
 # this block -- lower max_pending occasionally to lock in progress.
 [ratchet]
-max_pending = 85
+max_pending = 81
 
 [[file]]
 upstream = "tests/unit_tests/runtime/aabb_test.cpp"

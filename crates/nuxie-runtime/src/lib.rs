@@ -257,6 +257,7 @@ pub use scripted_data_converter::{
     RuntimeScriptedDataConverterDataBindSnapshot, RuntimeScriptedDataConverterOccurrenceSnapshot,
 };
 pub use scripted_interpolator::{
+    RuntimeScriptedInterpolatorBindingDefinition, RuntimeScriptedInterpolatorBindingOccurrence,
     RuntimeScriptedInterpolatorDiagnostic, RuntimeScriptedInterpolatorFactory,
 };
 pub use scripting::{
@@ -268,10 +269,10 @@ pub use scripting::{
     ScriptListenerInputDefinition, ScriptListenerInputHydration, ScriptListenerInputKind,
     ScriptListenerInputSnapshot, ScriptListenerInputSnapshotValue, ScriptMethod, ScriptModule,
     ScriptModuleFailure, ScriptNode, ScriptOptionalMethodResult, ScriptOptionalNumberResult,
-    ScriptPaint, ScriptValue, ScriptViewModel, ScriptViewModelInputResolver,
-    ScriptViewModelProperty, ScriptedDrawableInputResult, ScriptedDrawablePointerHit,
-    ScriptedDrawablePointerResult, ScriptedStateMachineObjectKind, ScriptingVm,
-    bound_script_artboard_input, bound_script_input_value, bound_script_trigger_input,
+    ScriptPaint, ScriptValue, ScriptViewModel, ScriptViewModelChangeRegistration,
+    ScriptViewModelInputResolver, ScriptViewModelProperty, ScriptedDrawableInputResult,
+    ScriptedDrawablePointerHit, ScriptedDrawablePointerResult, ScriptedStateMachineObjectKind,
+    ScriptingVm, bound_script_artboard_input, bound_script_input_value, bound_script_trigger_input,
     script_node_for_artboard, script_view_model_from_owned, script_view_model_from_owned_context,
     script_view_model_from_owned_snapshot, script_view_models,
 };

@@ -1488,7 +1488,7 @@ b6_row_id = "B6-0121"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "P3F partial against the advanced 4ac7b327 test oracle: the full structural queue owner provides typed transport, callbacks, resources, view models, draw coalescing, and lifecycle commands, with 14 focused Rust tests; 4/83 upstream command_queue_test.cpp cases are complete, while fixture-specific, semantic, and S4-45 blob cases remain pending, so whole-file faithful promotion is not claimed."
+note = "P3F/F3F6 against pinned 4ac7b327: typed transport plus semantic enable/drain/action/focus commands now have faithful equivalents for 79/83 command_queue_test.cpp cases, including all 13 former F6-gated cases. The row remains pending because the four S4-45 blob command/message cases remain WATCH; whole-file faithful promotion is not claimed until that command-protocol decision lands."
 
 [[file]]
 upstream = "src/command_server.cpp"
@@ -1500,7 +1500,7 @@ b6_row_id = "B6-0122"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "P3F partial against the advanced 4ac7b327 test oracle: the full structural server owner provides the server thread, handle maps, command loop, dependency cleanup, callbacks, draw scheduling, and resource/list/view-model structure, with 14 focused Rust tests; 4/83 upstream command_queue_test.cpp cases are complete, while fixture-specific, semantic, and S4-45 blob cases remain pending, so whole-file faithful promotion is not claimed. FL-E1's independently verified scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and the scripting VM seam; render-api contract surface stays with its crate."
+note = "P3F/F3F6 against pinned 4ac7b327: the server owner implements semantic enable/drain/action/focus dispatch, non-empty diff delivery, and view-space mapping, bringing faithful command_queue_test.cpp equivalents to 79/83. The row remains pending because the four S4-45 blob command/message cases remain WATCH. FL-E1's independently verified scripting render-context fragment remains part of this multi-module ownership. MR exception (crate boundary): the server spans the facade transport owner and the scripting VM seam; render-api contract surface stays with its crate."
 
 [[file]]
 upstream = "src/component.cpp"
@@ -3264,15 +3264,15 @@ note = "2026-08-03 P3-b: ScriptedContext retains Vec<Option<ScriptViewModel>> co
 
 [[file]]
 upstream = "src/lua/lua_data_value.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
 rust_module = "crates/nuxie-scripting/src/vm/lua_data_value.rs"
-legacy_port_status = "partial"
+legacy_port_status = "ported"
 b6_row_id = "B6-0265"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "lua-scripting"
-audit_record = "P1G-report.md"
-note = "2026-08-02 P1G/F7 reconciliation: remains pending. DataValue constructors, value/channel accessors, and type queries exist, but exact pinned semantics still missing are: non-color channel reads error rather than nil; luaL_check* setter coercion/wrapping; signed/spill color-channel writes without Rust u32 range checks and masks; non-color channel setters ignore every RHS without conversion; and unknown assignments are silently ignored rather than rejected. Recent wrapper landings do not change this src/lua/lua_data_value.cpp:21-503 gap. MR-2/C08 moved the complete behavior-neutral DataValue userdata and global-constructor owner to its canonical module."
+audit_record = "LUABIND-report.md"
+note = "2026-08-03 LT-2 faithful candidate: lua_data_value.rs now ports pinned luaL_checknumber/string/boolean/unsigned coercion, signed/spill channel writes, silent non-color/unknown writes, and named invalid-channel reads. crates/nuxie-scripting/tests/vm_boot.rs::scripted_data_values_match_lua_check_coercion_and_index_semantics directly exercises every previously cited gap against src/lua/lua_data_value.cpp:21-503."
 
 [[file]]
 upstream = "src/lua/lua_image_decode.cpp"
@@ -3312,15 +3312,15 @@ note = "P1-i faithful candidate: all 47 pinned upstream Promise scenarios pass e
 
 [[file]]
 upstream = "src/lua/lua_properties.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
-rust_module = "crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/lua_font.rs; crates/nuxie-scripting/src/vm/view_model.rs"
+rust_module = "crates/nuxie-binary/src/lib.rs; crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/lua_font.rs; crates/nuxie-scripting/src/vm/view_model.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0269"
 b6_verdict = "DIVERGENT"
 b6_cluster = "lua-scripting"
-audit_record = "docs/b6-audit/results/lua-scripting.md"
-note = "2026-08-03 P3-b reconciliation: remains pending. Image/font Property.value wrappers retain stable Lua identity until the backing retained cell reports valueChanged, and ScriptViewModel parent/property links now mutate runtime-owned parent edges directly without a scripting mirror or rescan. The pinned schema still has no ViewModelPropertyAssetBlob/ViewModelInstanceAssetBlob, so the upstream Blob branch is unavailable without a pin advance; the other non-image scripting_properties_test.cpp cases remain unclaimed, so the parent-edge closure is not whole-file evidence for this 1,884-line owner. MR-2/C08 exception: retained property wrappers span runtime scripting.rs, vm.rs, and vm/view_model.rs, so a per-row move would misattribute shared state."
+audit_record = "LUABIND-report.md"
+note = "2026-08-03 LT-2 faithful candidate: the binary/runtime facades expose authored enum keys and value mutation, and view_model.rs ports the pinned property userdata surface for scalar, enum/values, list, nested view-model, image, font, blob, and trigger values. Direct and named access share one cached wrapper per property. Generic addListener/removeListener callbacks are reverse ordered, survive wrapper GC while subscribed, preserve optional userdata, and run only after runtime/userdata borrows are released: synchronously after Lua mutators and before host facade setters return. Direct tests property_listeners_survive_userdata_gc_while_subscribed, scripted_string_boolean_and_enum_properties_match_upstream_luau_access, scripted_color_property_supports_direct_and_named_access, plus the existing list/image/blob/font/view-model tests cite the supported branches. MR-2/C08 exception remains justified: enum metadata/runtime cells belong in nuxie-binary/nuxie-runtime while Luau userdata projection belongs in nuxie-scripting."
 
 [[file]]
 upstream = "src/lua/lua_rive_base.cpp"
@@ -3344,19 +3344,19 @@ b6_row_id = "B6-0271"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "2026-08-02 reconciliation: remains pending. There is no Rust owner for the full ScriptedContext binding: ScriptedContext construction and pushViewModel, pushRootViewModel, pushDataContext plus the Context namecall surface for artboard, animation, state-machine, event, asset, layout, audio, image/decode, timing and random access in pinned src/lua/lua_scripted_context.cpp:125-595 remain absent as one coherent binding."
+note = "2026-08-03 F3F6/LT-2 audit: remains pending. Current origin/main does contain a partial ScriptedContext at crates/nuxie-scripting/src/vm/view_model.rs:1072-1221 (viewModel/rootViewModel/dataContext, markNeedsUpdate, image/blob/decodeImage/audio, gpuCanvas, shader), but pinned src/lua/lua_scripted_context.cpp:129-569 also requires full ScriptedObject-backed lifecycle and canvas/features branches; markNeedsUpdate is still a base-owner no-op. Local LT-2 commit 7f486955 is not an ancestor of origin/main and changes lua_properties/runtime bindings, not this remaining Context surface, so it does not unblock faithful promotion."
 
 [[file]]
 upstream = "src/lua/lua_state.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
 rust_module = "crates/nuxie-scripting/src/vm/view_model.rs"
-legacy_port_status = "partial"
+legacy_port_status = "ported"
 b6_row_id = "B6-0272"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "lua-scripting"
-audit_record = "P1G-report.md"
-note = "2026-08-02 P1G/F7 reconciliation: remains pending. Data.<ViewModel>.new and fresh/named-instance fallback exist, but pinned lua_state.cpp semantics are still missing: one boolean or table argument returns nil rather than a conversion error, and every call with more than one argument creates a fresh instance instead of interpreting argument one as a template name."
+audit_record = "LUABIND-report.md"
+note = "2026-08-03 LT-2 faithful candidate: Data.<ViewModel>.new dispatches exactly one nil/string-or-number/other argument like pinned lua_state.cpp, returns nil for boolean/table, and treats zero or multiple arguments as a fresh instance. crates/nuxie-scripting/src/vm/view_model.rs::data_constructor_matches_pinned_argument_count_and_type_dispatch is direct evidence."
 
 [[file]]
 upstream = "src/lua/math/lua_color.cpp"
@@ -3456,15 +3456,15 @@ note = "GPUCEIL implementation candidate at pinned 4ac7b327: authored fixtures p
 
 [[file]]
 upstream = "src/lua/renderer/lua_gradient.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
 rust_module = "crates/nuxie-scripting/src/vm/renderer.rs"
-legacy_port_status = "partial"
+legacy_port_status = "ported"
 b6_row_id = "B6-0281"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "lua-scripting"
-audit_record = "P1G-report.md"
-note = "2026-08-02 P1G/F7 reconciliation: remains pending. Gradient.linear/radial, stop decoding, factory allocation and shader userdata exist. Exact remaining lua_gradient.cpp semantics: stop iteration terminates silently at the first non-table (Rust errors), and stop colors use luaL_checkunsigned wrapping/conversion (Rust u32 decoding range-checks)."
+audit_record = "LUABIND-report.md"
+note = "2026-08-03 LT-2 faithful candidate: Gradient stop iteration now terminates at the first non-table and positions/colors use the pinned Lua check/coercion path, including luaL_checkunsigned wrapping. crates/nuxie-scripting/tests/renderer_bindings.rs::gradient_stops_end_at_the_first_non_table_and_wrap_unsigned_colors closes both cited gaps; scripted_draw_can_allocate_and_apply_gradients covers allocation and shader use."
 
 [[file]]
 upstream = "src/lua/renderer/lua_image.cpp"
@@ -3540,15 +3540,15 @@ note = "P1-d direct owner split at d788e8ec: RendererBindings and the existing a
 
 [[file]]
 upstream = "src/lua/rive_lua_libs.cpp"
-status = "pending"
+status = "faithful"
 verification = "pending-verification"
 rust_module = "crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs"
 legacy_port_status = "ported"
 b6_row_id = "B6-0288"
 b6_verdict = "DIVERGENT"
 b6_cluster = "lua-scripting"
-audit_record = "docs/b6-audit/results/lua-scripting.md"
-note = "2026-08-03 P3-b reconciliation: remains pending. The retained ScriptViewModelInstance registry now queries runtime-owned has_parents() directly, so detached advancement no longer depends on a copied parent graph, live-instance rescan, or mirrored rewrite. Pending lua_data_value, lua_state, gradient, and other umbrella registration/userdata semantics still prevent claiming rive_lua_libs.cpp as a whole-file equivalent. MR-2/C08 exception: the registration and retained view-model lifecycle share state across vm.rs and vm/view_model.rs, so no behavior-neutral per-row owner can be extracted."
+audit_record = "LUABIND-report.md"
+note = "2026-08-03 LT-2 faithful candidate for the corpus-gated umbrella: install_rive_globals registers the pinned standard/Rive binding equivalents before sandboxing, is idempotent, and now includes the completed DataValue, property/state, and Gradient semantics. crates/nuxie-scripting/tests/vm_boot.rs::rive_globals_are_installed_before_sandboxing and installing_rive_globals_is_idempotent_after_sandboxing cover ordering/lifecycle; view_model.rs::unported_context_binding_reports_the_script_and_binding_names proves an out-of-corpus Context:animation access fails with both the script and binding names. MR-2/C08 exception remains justified across vm.rs and view_model.rs."
 
 [[file]]
 upstream = "src/math/aabb.cpp"
@@ -3958,7 +3958,7 @@ b6_row_id = "B6-0323"
 b6_verdict = "TRACKED-GAP"
 b6_cluster = "scripted"
 audit_record = "docs/b6-audit/SECOND_PASS.md"
-note = "2026-08-02 C1/F7 reconciliation: remains pending after 60dbc545. The landed seam covers ScriptAsset resolution/registration, DataContext projection, input-before-init hydration, per-animation/per-keyframe stateful tables, shared apply, transform/transformValue coercion/fallback, clone-cold caches and bounded diagnostics; corpus.toml::scripted_interpolator is an exact C++/Rust differential and focused Rust suites are green. Whole-file closure is still blocked by generic cloned ScriptInput DataBind/converter ownership and ordered teardown from ScriptedObject::cloneProperties, which P2-d explicitly did not port. Pinned upstream has no direct ScriptedInterpolator unit-test row, so no test-correspondence count changes. Runtime, VM adapter, public façade, and golden-runner shim intentionally remain split across crate/tool boundaries. C17 exception: retained modules are `crates/nuxie-runtime/src/scripted_interpolator.rs`; `crates/nuxie-scripting/src/vm.rs`; `crates/nuxie/src/lib.rs`; `tools/rust-golden-runner/src/main.rs`; these are the final live owners after same-boundary aggregate fragments were regrouped; consolidating further would cross a crate or tool boundary or move public integration API."
+note = "INTEV evidence at pinned 4ac7b327: ordinary cloned ScriptInput DataBind/converter ownership now has a direct lifecycle regression. Each lazy keyframe receives fresh target/converter state, converted values hydrate before init, later source changes refresh the retained RangeMapper occurrence, and field/drop order unbinds the occurrence before its Lua target; focused nuxie scripted_interpolator tests and the shared clone/drop tests are green. The row remains pending after closeout review found two unported cloneProperties surfaces: cloned ScriptedDataConverter tables are not instantiated/attached and stateful converter occurrences are not advanced; binding also retains one root handle rather than the complete parent-scoped/rebindable Artboard DataContext. The RangeMapper evidence is valid but cannot promote the full converter/DataContext surface. Pinned upstream has no direct ScriptedInterpolator unit-test row, so no test-correspondence count changes. Runtime, VM adapter, public facade, and golden-runner shim intentionally remain split across crate/tool boundaries. C17 exception: retained modules are `crates/nuxie-runtime/src/scripted_interpolator.rs`; `crates/nuxie-scripting/src/vm.rs`; `crates/nuxie/src/lib.rs`; `tools/rust-golden-runner/src/main.rs`; consolidating further would cross a crate or tool boundary or move public integration API."
 
 [[file]]
 upstream = "src/scripted/scripted_layout.cpp"

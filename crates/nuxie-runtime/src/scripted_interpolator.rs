@@ -2,10 +2,126 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
-use crate::{
-    ArtboardInstance, NoopScriptHost, ScriptError, ScriptInstance, ScriptInterpolatorMethod,
-    ScriptOptionalNumberResult,
+use crate::state_machine::{
+    RuntimeScriptedListenerActionBindingDefinition, RuntimeScriptedListenerActionBindingOccurrence,
+    RuntimeScriptedListenerBoundValue, runtime_scripted_object_binding_definition,
 };
+use crate::{
+    ArtboardInstance, NoopScriptHost, RuntimeOwnedViewModelHandle, ScriptError, ScriptInstance,
+    ScriptInterpolatorMethod, ScriptListenerInputSnapshotValue, ScriptOptionalNumberResult,
+};
+use nuxie_binary::RuntimeFile;
+
+/// Immutable recipe for the ScriptInput properties, DataBinds, and converters
+/// cloned with one imported `ScriptedInterpolator`.
+///
+/// Pinned C++ shares `ScriptedObject::cloneProperties` with listener actions
+/// and transition conditions. This wrapper deliberately reuses the same Rust
+/// lifecycle implementation so every keyframe occurrence receives fresh
+/// target properties, retained source edges, and converter state.
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub struct RuntimeScriptedInterpolatorBindingDefinition {
+    inner: RuntimeScriptedListenerActionBindingDefinition,
+}
+
+impl RuntimeScriptedInterpolatorBindingDefinition {
+    pub fn from_imported(
+        file: &RuntimeFile,
+        graph_global_id: u32,
+        interpolator_local_id: usize,
+        interpolator_global_id: u32,
+    ) -> Option<Self> {
+        let interpolator = file.object(interpolator_global_id as usize)?;
+        if interpolator.type_name != "ScriptedInterpolator" {
+            return None;
+        }
+        let start = graph_global_id as usize;
+        let end = ((start + 1)..file.object_count())
+            .find(|global_id| {
+                file.object(*global_id)
+                    .is_some_and(|object| object.type_name == "Artboard")
+            })
+            .unwrap_or_else(|| file.object_count());
+        let inputs = (start..end)
+            .filter_map(|global_id| file.object(global_id))
+            .filter(|input| {
+                input.type_name.starts_with("ScriptInput")
+                    && input.uint_property("parentId") == Some(interpolator_local_id as u64)
+            })
+            .collect::<Vec<_>>();
+        runtime_scripted_object_binding_definition(file, interpolator, &inputs)
+            .map(|inner| Self { inner })
+    }
+
+    pub fn instantiate(&self) -> RuntimeScriptedInterpolatorBindingOccurrence {
+        RuntimeScriptedInterpolatorBindingOccurrence {
+            inner: self.inner.instantiate(),
+        }
+    }
+}
+
+/// Clone-owned ScriptInput/DataBind/converter state for one lazy keyframe
+/// script table.
+///
+/// This value must be dropped before the table it targets. Its `Drop` path
+/// unregisters every retained source and converter operand before releasing
+/// clone-owned state, matching `LinearAnimationInstance`'s explicit C++
+/// teardown order.
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct RuntimeScriptedInterpolatorBindingOccurrence {
+    inner: RuntimeScriptedListenerActionBindingOccurrence,
+}
+
+impl RuntimeScriptedInterpolatorBindingOccurrence {
+    /// Clone authored properties, bind their occurrence-local DataBinds, and
+    /// synchronously project source values through cloned converters. C++
+    /// performs the same synchronous update when `cloneProperties` adds a bind
+    /// to an Artboard whose DataContext is already live.
+    pub fn hydrate_inputs(
+        &mut self,
+        file: &RuntimeFile,
+        root: Option<&RuntimeOwnedViewModelHandle>,
+        script: &mut dyn ScriptInstance,
+    ) -> Result<(), ScriptError> {
+        for input in self.inner.input_snapshots() {
+            if let Some(ScriptListenerInputSnapshotValue::Value(value)) = input.value {
+                script.set_input_core(&input.name, value)?;
+            }
+        }
+        let Some(root) = root else {
+            return Ok(());
+        };
+        {
+            let root = root.borrow();
+            self.inner.bind_sources(file, &root, false);
+        }
+        self.refresh_inputs(file, root, script)
+    }
+
+    /// Apply source changes observed after the clone was hydrated. The source
+    /// edges and converter state remain occurrence-local for the lifetime of
+    /// the keyframe table.
+    pub fn refresh_inputs(
+        &mut self,
+        file: &RuntimeFile,
+        root: &RuntimeOwnedViewModelHandle,
+        script: &mut dyn ScriptInstance,
+    ) -> Result<(), ScriptError> {
+        self.inner.collect_source_dirt();
+        let updates = {
+            let root = root.borrow();
+            self.inner.resolve_runtime_table_updates(file, &root)?
+        };
+        for update in updates {
+            if let RuntimeScriptedListenerBoundValue::Value(value) = update.value {
+                script.set_input_core(&update.input_name, value)?;
+            }
+        }
+        Ok(())
+    }
+}
 
 /// Creates the stateful Lua table used by one scripted-interpolator keyframe.
 ///

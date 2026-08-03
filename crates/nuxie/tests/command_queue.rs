@@ -2,12 +2,13 @@
 //!
 //! These tests port the non-rendering command-loop invariants from
 //! `tests/unit_tests/runtime/command_queue_test.cpp` at `4ac7b327`. The
-//! case-by-case correspondence, including the F6 exclusions, is recorded in
-//! `docs/p3f-command-queue-test-ledger.md`.
+//! case-by-case correspondence, including the remaining S4-45 WATCH residue,
+//! is recorded in `docs/p3f-command-queue-test-ledger.md`.
 
 use std::{
     any::Any,
     cell::RefCell,
+    collections::BTreeMap,
     sync::{
         Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
@@ -16,11 +17,14 @@ use std::{
 };
 
 use nuxie::{
-    AudioSource, RawTextFont, RecordingFactory, RenderImage,
+    AudioSource, RawTextFont, RecordingFactory, RenderImage, SemanticActionType, SemanticRole,
+    SemanticState, SemanticTrait, SemanticsDiff, SemanticsDiffNode,
     command_queue::{
-        CommandDataType, CommandEvent, CommandQueue, CommandValue, Fit, Listener, PointerEvent,
+        ArtboardHandle, CommandDataType, CommandEvent, CommandQueue, CommandValue, Fit, Listener,
+        PointerEvent, StateMachineHandle,
     },
     command_server::CommandServer,
+    has_semantic_state, has_semantic_trait,
 };
 
 #[derive(Debug)]
@@ -58,9 +62,127 @@ const HOSTED_FONT_FIXTURE: &[u8] =
     include_bytes!("../../../fixtures/command_queue/hosted_font_file.riv");
 const GLOBAL_VARIABLES_FIXTURE: &[u8] =
     include_bytes!("../../../fixtures/command_queue/global_variables_test.riv");
+const SEMANTIC_SIMPSONS_FIXTURE: &[u8] = include_bytes!("../../../fixtures/semantic/simpsons.riv");
+const SEMANTIC_FOCUS_FIXTURE: &[u8] =
+    include_bytes!("../../../fixtures/semantic/semantic_list_scroll_focus_fixed.riv");
 
 fn server(queue: &CommandQueue) -> CommandServer {
     CommandServer::new(queue.clone(), Box::new(RecordingFactory::new()))
+}
+
+fn semantic_fixture(
+    listener: Option<&Listener>,
+) -> (
+    CommandQueue,
+    CommandServer,
+    ArtboardHandle,
+    StateMachineHandle,
+) {
+    semantic_fixture_with(SEMANTIC_SIMPSONS_FIXTURE, listener)
+}
+
+fn semantic_fixture_with(
+    fixture: &[u8],
+    listener: Option<&Listener>,
+) -> (
+    CommandQueue,
+    CommandServer,
+    ArtboardHandle,
+    StateMachineHandle,
+) {
+    let queue = CommandQueue::new();
+    let file = queue.load_file(fixture.to_vec(), None, 0);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let view_model =
+        queue.instantiate_view_model_for_artboard(file, artboard, Some(String::new()), None, 0);
+    let state_machine = queue.instantiate_default_state_machine(artboard, listener, 0);
+    queue.bind_view_model(state_machine, view_model, 0);
+    let server = server(&queue);
+    (queue, server, artboard, state_machine)
+}
+
+fn warm_semantics(queue: &CommandQueue, state_machine: StateMachineHandle) {
+    for _ in 0..10 {
+        queue.advance_state_machine(state_machine, 0.1, 0);
+    }
+}
+
+fn drain_semantics(queue: &CommandQueue, state_machine: StateMachineHandle, request_id: u64) {
+    queue.drain_semantics_diff(
+        state_machine,
+        Fit::Contain,
+        nuxie::command_queue::Alignment::CENTER,
+        1.0,
+        nuxie::Vec2D::new(500.0, 500.0),
+        request_id,
+    );
+}
+
+#[derive(Debug, Default)]
+struct SemanticTestModel {
+    nodes: BTreeMap<u32, SemanticsDiffNode>,
+}
+
+impl SemanticTestModel {
+    fn apply(&mut self, diff: &SemanticsDiff) {
+        for id in &diff.removed {
+            self.nodes.remove(id);
+        }
+        for node in diff.added.iter().chain(&diff.moved) {
+            self.nodes.insert(node.id, node.clone());
+        }
+        for node in &diff.updated_semantic {
+            if let Some(existing) = self.nodes.get_mut(&node.id) {
+                let bounds = existing.bounds();
+                *existing = node.clone();
+                existing.set_bounds(bounds);
+            } else {
+                self.nodes.insert(node.id, node.clone());
+            }
+        }
+        for update in &diff.updated_geometry {
+            if let Some(existing) = self.nodes.get_mut(&update.id) {
+                existing.set_bounds(update.bounds());
+            }
+        }
+    }
+}
+
+fn apply_semantic_events(model: &mut SemanticTestModel, captured: &[CommandEvent]) {
+    for event in captured {
+        if let CommandEvent::SemanticsDiffReceived { diff, .. } = event {
+            model.apply(diff);
+        }
+    }
+}
+
+fn semantic_nodes_for_view(
+    fit: Fit,
+    scale_factor: f32,
+    view_bounds: nuxie::Vec2D,
+) -> SemanticTestModel {
+    let (listener, log) = event_log();
+    let (queue, mut server, _, state_machine) = semantic_fixture(Some(&listener));
+    queue.enable_semantics(state_machine, 0);
+    warm_semantics(&queue, state_machine);
+    queue.drain_semantics_diff(
+        state_machine,
+        fit,
+        nuxie::command_queue::Alignment::CENTER,
+        scale_factor,
+        view_bounds,
+        0,
+    );
+    assert!(server.process_commands());
+    queue.process_messages();
+    let mut model = SemanticTestModel::default();
+    apply_semantic_events(&mut model, &events(&log));
+    assert!(
+        !events(&log)
+            .iter()
+            .any(|event| matches!(event, CommandEvent::StateMachineError { .. }))
+    );
+    model
 }
 
 fn event_log() -> (Listener, Arc<Mutex<Vec<CommandEvent>>>) {
@@ -105,6 +227,446 @@ fn pod_stream_rcp() {
             .as_deref(),
         Some(&MAGIC_NUMBER)
     );
+}
+
+#[test]
+fn semantics_advance_does_not_auto_deliver_diff() {
+    let (listener, log) = event_log();
+    let (queue, mut server, _, state_machine) = semantic_fixture(Some(&listener));
+    queue.enable_semantics(state_machine, 0);
+    warm_semantics(&queue, state_machine);
+
+    assert!(server.process_commands());
+    queue.process_messages();
+
+    assert!(!events(&log).iter().any(|event| matches!(
+        event,
+        CommandEvent::SemanticsDiffReceived { .. } | CommandEvent::StateMachineError { .. }
+    )));
+}
+
+#[test]
+fn semantics_enable_and_initial_diff_on_drain() {
+    let (listener, log) = event_log();
+    let (queue, mut server, _, state_machine) = semantic_fixture(Some(&listener));
+    queue.enable_semantics(state_machine, 0);
+    warm_semantics(&queue, state_machine);
+    drain_semantics(&queue, state_machine, 0);
+
+    assert!(server.process_commands());
+    queue.process_messages();
+
+    let mut model = SemanticTestModel::default();
+    let mut diff_count = 0;
+    for event in events(&log) {
+        if let CommandEvent::SemanticsDiffReceived { diff, .. } = event {
+            diff_count += 1;
+            model.apply(&diff);
+        }
+    }
+    assert!(diff_count >= 1);
+    assert!(!model.nodes.is_empty());
+    assert!(
+        model
+            .nodes
+            .values()
+            .any(|node| node.role == SemanticRole::TabList as u32)
+    );
+    assert!(
+        !events(&log)
+            .iter()
+            .any(|event| matches!(event, CommandEvent::StateMachineError { .. }))
+    );
+}
+
+#[test]
+fn semantics_no_diff_when_not_enabled() {
+    let (listener, log) = event_log();
+    let (queue, mut server, _, state_machine) = semantic_fixture(Some(&listener));
+    warm_semantics(&queue, state_machine);
+
+    assert!(server.process_commands());
+    queue.process_messages();
+
+    assert!(!events(&log).iter().any(|event| matches!(
+        event,
+        CommandEvent::SemanticsDiffReceived { .. } | CommandEvent::StateMachineError { .. }
+    )));
+}
+
+#[test]
+fn semantics_drain_diff_errors_when_not_enabled() {
+    let (listener, log) = event_log();
+    let (queue, mut server, _, state_machine) = semantic_fixture(Some(&listener));
+    let request_id = 0x1234;
+    drain_semantics(&queue, state_machine, request_id);
+
+    assert!(server.process_commands());
+    queue.process_messages();
+
+    let captured = events(&log);
+    assert!(
+        !captured
+            .iter()
+            .any(|event| matches!(event, CommandEvent::SemanticsDiffReceived { .. }))
+    );
+    assert_eq!(
+        captured
+            .iter()
+            .filter(|event| matches!(event, CommandEvent::StateMachineError { .. }))
+            .count(),
+        1
+    );
+    assert!(captured.iter().any(|event| matches!(
+        event,
+        CommandEvent::StateMachineError { request_id: actual, .. } if *actual == request_id
+    )));
+}
+
+#[test]
+fn semantics_drain_diff_only_emits_for_non_empty_diff() {
+    let (listener, log) = event_log();
+    let (queue, mut server, _, state_machine) = semantic_fixture(Some(&listener));
+    queue.enable_semantics(state_machine, 0);
+    warm_semantics(&queue, state_machine);
+    let request_id = 0xABCD;
+    drain_semantics(&queue, state_machine, request_id);
+
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert_eq!(
+        events(&log)
+            .iter()
+            .filter(|event| matches!(event, CommandEvent::SemanticsDiffReceived { .. }))
+            .count(),
+        1
+    );
+    assert!(events(&log).iter().any(|event| matches!(
+        event,
+        CommandEvent::SemanticsDiffReceived { request_id: actual, .. } if *actual == request_id
+    )));
+
+    drain_semantics(&queue, state_machine, 0xBCDE);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert_eq!(
+        captured
+            .iter()
+            .filter(|event| matches!(event, CommandEvent::SemanticsDiffReceived { .. }))
+            .count(),
+        1
+    );
+    assert!(
+        !captured
+            .iter()
+            .any(|event| matches!(event, CommandEvent::StateMachineError { .. }))
+    );
+}
+
+#[test]
+fn semantics_fire_tap_changes_selected_tab() {
+    let (listener, log) = event_log();
+    let (queue, mut server, _, state_machine) = semantic_fixture(Some(&listener));
+    queue.enable_semantics(state_machine, 0);
+    warm_semantics(&queue, state_machine);
+    drain_semantics(&queue, state_machine, 0);
+    assert!(server.process_commands());
+    queue.process_messages();
+
+    let mut model = SemanticTestModel::default();
+    let initial_events = events(&log);
+    apply_semantic_events(&mut model, &initial_events);
+    let selected_tab_id = model
+        .nodes
+        .values()
+        .find(|node| {
+            node.role == SemanticRole::Tab as u32
+                && has_semantic_state(node.state_flags, SemanticState::SELECTED)
+        })
+        .map(|node| node.id)
+        .expect("selected tab");
+    let other_tab_id = model
+        .nodes
+        .values()
+        .find(|node| {
+            node.role == SemanticRole::Tab as u32
+                && !has_semantic_state(node.state_flags, SemanticState::SELECTED)
+        })
+        .map(|node| node.id)
+        .expect("other tab");
+
+    queue.fire_semantic_action(state_machine, other_tab_id, SemanticActionType::Tap, 0);
+    warm_semantics(&queue, state_machine);
+    drain_semantics(&queue, state_machine, 0);
+    assert!(server.process_commands());
+    queue.process_messages();
+
+    let captured = events(&log);
+    apply_semantic_events(&mut model, &captured[initial_events.len()..]);
+    assert!(has_semantic_state(
+        model.nodes[&other_tab_id].state_flags,
+        SemanticState::SELECTED
+    ));
+    assert!(!has_semantic_state(
+        model.nodes[&selected_tab_id].state_flags,
+        SemanticState::SELECTED
+    ));
+    assert!(
+        !captured
+            .iter()
+            .any(|event| matches!(event, CommandEvent::StateMachineError { .. }))
+    );
+}
+
+#[test]
+fn semantics_commands_on_invalid_state_machine_handle() {
+    let (listener, log) = event_log();
+    let (queue, mut server, artboard, _) = semantic_fixture(None);
+    let bogus = queue.instantiate_state_machine_named(
+        artboard,
+        "this state machine does not exist",
+        Some(&listener),
+        0,
+    );
+
+    queue.enable_semantics(bogus, 0xE1);
+    queue.drain_semantics_diff(
+        bogus,
+        Fit::Contain,
+        nuxie::command_queue::Alignment::CENTER,
+        1.0,
+        nuxie::Vec2D::new(500.0, 500.0),
+        0xE2,
+    );
+    queue.fire_semantic_action(bogus, 42, SemanticActionType::Tap, 0xE3);
+    queue.request_semantic_focus(bogus, 42, 0xE4);
+    queue.clear_semantic_focus(bogus, 0xE5);
+
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    let error_request_ids = captured
+        .iter()
+        .filter_map(|event| match event {
+            CommandEvent::StateMachineError { request_id, .. } => Some(*request_id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(error_request_ids, [0xE1, 0xE2, 0xE3, 0xE4, 0xE5]);
+    assert!(
+        !captured
+            .iter()
+            .any(|event| matches!(event, CommandEvent::SemanticsDiffReceived { .. }))
+    );
+}
+
+#[test]
+fn semantics_drain_diff_maps_bounds_into_view_space() {
+    let small_view = nuxie::Vec2D::new(200.0, 200.0);
+    let large_view = nuxie::Vec2D::new(800.0, 800.0);
+    let small = semantic_nodes_for_view(Fit::Contain, 1.0, small_view);
+    let large = semantic_nodes_for_view(Fit::Contain, 1.0, large_view);
+
+    let (small_tab, large_tab) = small
+        .nodes
+        .values()
+        .filter(|node| {
+            node.role == SemanticRole::Tab as u32
+                && node.max_x > node.min_x
+                && node.max_y > node.min_y
+        })
+        .find_map(|small_tab| {
+            large
+                .nodes
+                .get(&small_tab.id)
+                .map(|large_tab| (small_tab, large_tab))
+        })
+        .expect("shared tab with non-empty bounds");
+    let small_width = small_tab.max_x - small_tab.min_x;
+    let small_height = small_tab.max_y - small_tab.min_y;
+    let large_width = large_tab.max_x - large_tab.min_x;
+    let large_height = large_tab.max_y - large_tab.min_y;
+    let expected_scale = large_view.x / small_view.x;
+
+    assert!(large_width > small_width);
+    assert!(large_height > small_height);
+    assert!(((large_width / small_width) / expected_scale - 1.0).abs() <= 0.01);
+    assert!(((large_height / small_height) / expected_scale - 1.0).abs() <= 0.01);
+}
+
+#[test]
+fn semantics_request_focus_errors_when_not_enabled() {
+    let (listener, log) = event_log();
+    let (queue, mut server, _, state_machine) = semantic_fixture(Some(&listener));
+    queue.request_semantic_focus(state_machine, 1, 0x5151);
+
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert_eq!(
+        captured
+            .iter()
+            .filter(|event| matches!(
+                event,
+                CommandEvent::StateMachineError {
+                    request_id: 0x5151,
+                    ..
+                }
+            ))
+            .count(),
+        1
+    );
+    assert!(
+        !captured
+            .iter()
+            .any(|event| matches!(event, CommandEvent::SemanticsDiffReceived { .. }))
+    );
+}
+
+#[test]
+fn semantics_fire_action_errors_when_not_enabled() {
+    let (listener, log) = event_log();
+    let (queue, mut server, _, state_machine) = semantic_fixture(Some(&listener));
+    queue.fire_semantic_action(state_machine, 1, SemanticActionType::Tap, 0x5252);
+
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert_eq!(
+        captured
+            .iter()
+            .filter(|event| matches!(
+                event,
+                CommandEvent::StateMachineError {
+                    request_id: 0x5252,
+                    ..
+                }
+            ))
+            .count(),
+        1
+    );
+    assert!(
+        !captured
+            .iter()
+            .any(|event| matches!(event, CommandEvent::SemanticsDiffReceived { .. }))
+    );
+}
+
+#[test]
+fn semantics_request_focus_on_valid_node_routes_without_error() {
+    let (listener, log) = event_log();
+    let (queue, mut server, _, state_machine) = semantic_fixture(Some(&listener));
+    queue.enable_semantics(state_machine, 0);
+    warm_semantics(&queue, state_machine);
+    drain_semantics(&queue, state_machine, 0);
+    assert!(server.process_commands());
+    queue.process_messages();
+
+    let mut model = SemanticTestModel::default();
+    apply_semantic_events(&mut model, &events(&log));
+    let target_id = model.nodes.keys().next().copied().expect("semantic node");
+    queue.request_semantic_focus(state_machine, target_id, 0);
+    warm_semantics(&queue, state_machine);
+    drain_semantics(&queue, state_machine, 0);
+    assert!(server.process_commands());
+    queue.process_messages();
+
+    assert!(
+        !events(&log)
+            .iter()
+            .any(|event| matches!(event, CommandEvent::StateMachineError { .. }))
+    );
+}
+
+#[test]
+fn semantics_clear_focus_removes_focused_bit() {
+    let (listener, log) = event_log();
+    let (queue, mut server, _, state_machine) =
+        semantic_fixture_with(SEMANTIC_FOCUS_FIXTURE, Some(&listener));
+    queue.enable_semantics(state_machine, 0);
+    warm_semantics(&queue, state_machine);
+    drain_semantics(&queue, state_machine, 0);
+    assert!(server.process_commands());
+    queue.process_messages();
+
+    let mut model = SemanticTestModel::default();
+    let initial = events(&log);
+    apply_semantic_events(&mut model, &initial);
+    let focusable_id = model
+        .nodes
+        .values()
+        .find(|node| has_semantic_trait(node.trait_flags, SemanticTrait::FOCUSABLE))
+        .map(|node| node.id)
+        .expect("focusable semantic node");
+
+    queue.request_semantic_focus(state_machine, focusable_id, 0);
+    warm_semantics(&queue, state_machine);
+    drain_semantics(&queue, state_machine, 0);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let focused = events(&log);
+    apply_semantic_events(&mut model, &focused[initial.len()..]);
+    assert!(has_semantic_state(
+        model.nodes[&focusable_id].state_flags,
+        SemanticState::FOCUSED
+    ));
+
+    queue.clear_semantic_focus(state_machine, 0);
+    warm_semantics(&queue, state_machine);
+    drain_semantics(&queue, state_machine, 0);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let cleared = events(&log);
+    apply_semantic_events(&mut model, &cleared[focused.len()..]);
+    assert!(!has_semantic_state(
+        model.nodes[&focusable_id].state_flags,
+        SemanticState::FOCUSED
+    ));
+    assert!(
+        !cleared
+            .iter()
+            .any(|event| matches!(event, CommandEvent::StateMachineError { .. }))
+    );
+}
+
+#[test]
+fn semantics_drain_diff_honors_scale_factor_for_matching_view() {
+    let (queue, mut server, artboard, _) = semantic_fixture(None);
+    let captured_bounds = Arc::new(Mutex::new(None));
+    let sink = Arc::clone(&captured_bounds);
+    queue.run_once(move |server| {
+        *sink.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = server
+            .artboard(artboard)
+            .map(|artboard| artboard.artboard_bounds());
+    });
+    assert!(server.process_commands());
+    let (x, y, width, height) = captured_bounds
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .expect("artboard bounds");
+    assert_eq!((x, y), (0.0, 0.0));
+    assert!(width > 0.0 && height > 0.0);
+    let view_bounds = nuxie::Vec2D::new(width, height);
+
+    let at_scale_1 = semantic_nodes_for_view(Fit::Layout, 1.0, view_bounds);
+    let at_scale_2 = semantic_nodes_for_view(Fit::Layout, 2.0, view_bounds);
+    let mut compared_any = false;
+    for node in at_scale_1
+        .nodes
+        .values()
+        .filter(|node| node.max_x > node.min_x && node.max_y > node.min_y)
+    {
+        let Some(scaled) = at_scale_2.nodes.get(&node.id) else {
+            continue;
+        };
+        let width_ratio = (scaled.max_x - scaled.min_x) / (node.max_x - node.min_x);
+        let height_ratio = (scaled.max_y - scaled.min_y) / (node.max_y - node.min_y);
+        assert!((width_ratio / 2.0 - 1.0).abs() <= 0.02);
+        assert!((height_ratio / 2.0 - 1.0).abs() <= 0.02);
+        compared_any = true;
+    }
+    assert!(compared_any);
 }
 
 #[test]

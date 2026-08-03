@@ -2,7 +2,7 @@
 // binding, whose upstream row is outside owner-split cluster C4.
 use std::rc::Rc;
 
-use luaur_rt::{Lua, Result, Table, UserData, Vector as LuaVector};
+use luaur_rt::{Lua, Result, Table, UserData, Value, Vector as LuaVector};
 use nuxie_render_api::{ColorInt, RenderShader};
 
 pub(super) use super::lua_path::call_path_effect_update;
@@ -66,10 +66,19 @@ impl UserData for ScriptedGradient {}
 fn gradient_stops(stops: Table) -> Result<(Vec<ColorInt>, Vec<f32>)> {
     let mut colors = Vec::with_capacity(stops.raw_len());
     let mut positions = Vec::with_capacity(stops.raw_len());
-    for stop in stops.sequence_values::<Table>() {
-        let stop = stop?;
+    let mut index = 1_i64;
+    loop {
+        let Value::Table(stop) = stops.raw_get::<Value>(index)? else {
+            break;
+        };
         positions.push(stop.get("position")?);
-        colors.push(stop.get("color")?);
+        let color = stop.get::<Value>("color")?;
+        colors.push(super::lua_color::required_unsigned(
+            &stop.lua(),
+            Some(&color),
+            "gradient stop color",
+        )?);
+        index += 1;
     }
     Ok((colors, positions))
 }

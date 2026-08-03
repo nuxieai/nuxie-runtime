@@ -957,8 +957,7 @@ impl LuaScriptInstance {
             return Ok(ScriptDataConverterOptionalCall::UnsupportedInput);
         };
         let lua = table.lua();
-        let input = lua
-            .create_userdata(lua_data_value::ScriptedDataValue::new(value))
+        let input = lua_data_value::create_data_value(&lua, value)
             .map_err(|error| self.script_error(error))?;
         let output: AnyUserData = function
             .call((table, input))
@@ -1526,6 +1525,7 @@ impl ScriptVm {
         lua_promise::install_promise_globals(&self.lua)?;
         lua_image_decode::install(&self.lua);
         lua_audio::install_audio_global(&self.lua)?;
+        view_model::install_property_binding_support(&self.lua)?;
 
         let late = self
             .lua

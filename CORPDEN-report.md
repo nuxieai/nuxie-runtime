@@ -9,7 +9,7 @@ rsync -a /Users/levi/dev/nuxie-runtime/fixtures/ fixtures/
 make fixtures
 ```
 
-V2 densification changed all 226 animated rows that had only `t=0` to retain `t=0`, an authored midpoint, and an authored cycle boundary. The densifier prefers a looping animation on the selected artboard; when a file has no authored loop it uses the finite animation boundary, and it falls back to nested/library artboard animations when the selected artboard has no local timeline. No tolerance was widened and no added sample was removed.
+V2 densification changed all 226 animated rows that had only `t=0` to retain `t=0`, an authored midpoint, and an authored cycle boundary. The densifier prefers a looping animation on the selected artboard; when a file has no authored loop it uses the finite animation boundary. When the selected artboard has no local timeline, it follows only authored `NestedArtboard` references (including transitive library artboards) instead of selecting an unrelated animation elsewhere in the file. No tolerance was widened and no added sample was removed.
 
 The dense scripted comparison exposed 30 previously hidden post-zero failures: 27 rows now carry `status = "diverges"`, and three rows whose Rust stream cannot complete carry `status = "not-yet"`. The four scripting rows with pre-existing `scripted-status:exact` overrides had those overrides removed so their V25/V30/V32/V38 divergent status is actually enforced.
 
@@ -333,3 +333,4 @@ This appendix records each changed row's retained samples and current corpus out
 - `rustfmt --edition 2024 --check tools/golden-compare/src/bin/densify-corpus.rs`: PASS.
 - `git diff --check`: PASS.
 - Densifier dry run: PASS — `densified=0`.
+- Nested-library boundary control: PASS — `library_export_animation_test` resolves through its authored nested-artboard reference to midpoint 0.5/boundary 1.0.

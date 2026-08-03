@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, bail};
-use nuxie_binary::{RuntimeFile, RuntimeObject, read_runtime_file};
+use nuxie_binary::{RuntimeFile, RuntimeLinearAnimation, RuntimeObject, read_runtime_file};
+use std::collections::{BTreeSet, VecDeque};
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -173,13 +174,12 @@ fn proposed_samples(
         .with_context(|| format!("selected artboard was not found for {}", entry.id))?;
 
     let mut animations = runtime.artboard_linear_animations(artboard_index);
-    // A default artboard can be animated solely by a nested simple animation
-    // whose timeline belongs to a library artboard. In that case the selected
-    // artboard has no local LinearAnimation even though the scene advances.
+    // A selected artboard can be animated solely by a nested simple animation
+    // whose timeline belongs to a library artboard. Follow only authored
+    // NestedArtboard references from the selected scene; unrelated artboards
+    // in the same file must not choose its sample boundary.
     if animations.is_empty() {
-        animations = (0..runtime.artboards().len())
-            .flat_map(|index| runtime.artboard_linear_animations(index))
-            .collect();
+        animations = nested_artboard_linear_animations(&runtime, artboard_index);
     }
 
     let mut looping = Vec::new();
@@ -202,6 +202,34 @@ fn proposed_samples(
         return Ok(None);
     };
     Ok(Some((boundary / 2.0, boundary)))
+}
+
+fn nested_artboard_linear_animations(
+    runtime: &RuntimeFile,
+    root_artboard_index: usize,
+) -> Vec<RuntimeLinearAnimation<'_>> {
+    let mut animations = Vec::new();
+    let mut visited = BTreeSet::from([root_artboard_index]);
+    let mut pending = VecDeque::from([root_artboard_index]);
+
+    while let Some(artboard_index) = pending.pop_front() {
+        let Some(slots) = runtime.artboard_local_object_slots(artboard_index) else {
+            continue;
+        };
+        for nested_index in slots.into_iter().flatten().filter_map(|object| {
+            (object.type_name == "NestedArtboard")
+                .then(|| object.uint_property("artboardId"))
+                .flatten()
+                .and_then(|index| usize::try_from(index).ok())
+        }) {
+            if !visited.insert(nested_index) {
+                continue;
+            }
+            animations.extend(runtime.artboard_linear_animations(nested_index));
+            pending.push_back(nested_index);
+        }
+    }
+    animations
 }
 
 fn animation_boundary_seconds(animation: &RuntimeObject) -> Option<f32> {

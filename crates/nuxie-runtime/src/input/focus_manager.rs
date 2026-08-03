@@ -45,6 +45,7 @@ impl FocusManager {
         if !self.nodes.contains_key(&child)
             || parent.is_some_and(|parent| !self.nodes.contains_key(&parent))
             || parent == Some(child)
+            || parent.is_some_and(|parent| self.ancestor_chain(parent).contains(&child))
         {
             return false;
         }

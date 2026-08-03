@@ -2856,6 +2856,7 @@ impl StateMachineInstance {
     }
 
     fn publish_focusable_keyboard_capabilities(&self) {
+        self.focus.clear_keyboard_input_capabilities();
         for group in &self.keyboard_listener_groups {
             self.focus
                 .set_accepts_keyboard_input(group.focus_data_local_id, true);
@@ -21175,6 +21176,7 @@ mod scripted_listener_action_tests {
                 calls: Rc::new(RefCell::new(Vec::new())),
             }));
         machine.keyboard_listener_groups.clear();
+        machine.publish_focusable_keyboard_capabilities();
 
         assert_eq!(
             machine.focus_state(),
@@ -21191,6 +21193,7 @@ mod scripted_listener_action_tests {
             RuntimeKeyboardListenerGroup::scripted(1, 2, 90_901, true, false)
                 .expect("keyboard-consuming focus group"),
         );
+        machine.publish_focusable_keyboard_capabilities();
         assert_eq!(
             machine.focus_state(),
             FocusState {

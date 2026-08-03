@@ -10811,12 +10811,12 @@ impl ArtboardInstance {
                 self.external_focus_domain = Some(current);
             } else {
                 current.cleanup_focus_tree(self);
-                self.external_focus_domain = Some(next.clone());
                 next.build_focus_tree(self);
+                self.external_focus_domain = Some(next);
             }
         } else {
-            self.external_focus_domain = Some(next.clone());
             next.build_focus_tree(self);
+            self.external_focus_domain = Some(next);
         }
         for (_, nested) in &mut self.nested_artboards.entries {
             nested.install_external_focus_domain(parent_focus);

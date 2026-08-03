@@ -62,6 +62,22 @@ struct RuntimeFocusDomain {
     mounts: BTreeMap<u64, RuntimeFocusMount>,
 }
 
+impl RuntimeFocusDomain {
+    fn create_node(&mut self, node: FocusNode) -> FocusNodeId {
+        let focusable = node.focusable();
+        let node_id = self.manager.create_node(node);
+        if let Some(focusable) = focusable {
+            self.focus_nodes.insert(
+                (focusable.owner_identity, focusable.focus_data_local),
+                node_id,
+            );
+            self.focus_targets
+                .insert((focusable.owner_identity, focusable.target_local), node_id);
+        }
+        node_id
+    }
+}
+
 #[derive(Debug, Clone)]
 struct RuntimeFocusMount {
     occurrence_key: RuntimeFocusOccurrenceKey,
@@ -437,7 +453,7 @@ impl RuntimeFocusTree {
             node.parent = None;
             node.children.clear();
             node.has_focus = false;
-            let new_id = rebuilt.manager.create_node(node);
+            let new_id = rebuilt.create_node(node);
             rebuilt.manager.insert_child(new_parent, new_id, index);
             old_to_new.insert(old_id, new_id);
 
@@ -513,7 +529,7 @@ impl RuntimeFocusTree {
                 node_id
             }
             None => {
-                let node_id = self.domain.borrow_mut().manager.create_node(node);
+                let node_id = self.domain.borrow_mut().create_node(node);
                 self.domain
                     .borrow_mut()
                     .retained_nodes
@@ -604,16 +620,12 @@ impl RuntimeFocusTree {
         let node_id = match retained_node {
             Some(node_id) => node_id,
             None => {
-                let node_id = self
-                    .domain
-                    .borrow_mut()
-                    .manager
-                    .create_node(authored_focus_node(
-                        artboard,
-                        focus_data_local,
-                        true,
-                        Mat2D::IDENTITY,
-                    ));
+                let node_id = self.domain.borrow_mut().create_node(authored_focus_node(
+                    artboard,
+                    focus_data_local,
+                    true,
+                    Mat2D::IDENTITY,
+                ));
                 self.domain
                     .borrow_mut()
                     .retained_nodes
@@ -739,7 +751,25 @@ impl RuntimeFocusTree {
             return;
         };
         focusable.accepts_keyboard_input = accepts_keyboard_input;
-        replace_focusable(&mut domain, node_id, Some(focusable));
+        domain.manager.set_node_focusable(node_id, Some(focusable));
+    }
+
+    pub(crate) fn clear_keyboard_input_capabilities(&self) {
+        let mut domain = self.domain.borrow_mut();
+        let node_ids = domain
+            .focus_nodes
+            .iter()
+            .filter_map(|((owner, _), node_id)| (*owner == self.owner_identity).then_some(*node_id))
+            .collect::<Vec<_>>();
+        for node_id in node_ids {
+            let Some(mut focusable) = domain.manager.focusable(node_id) else {
+                continue;
+            };
+            if focusable.accepts_keyboard_input {
+                focusable.accepts_keyboard_input = false;
+                domain.manager.set_node_focusable(node_id, Some(focusable));
+            }
+        }
     }
 
     pub(crate) fn primary_accepts_keyboard_input(&self) -> bool {
@@ -1875,7 +1905,7 @@ mod tests {
             let mut domain = root.domain.borrow_mut();
             let mut node = FocusNode::new();
             node.set_focusable(RuntimeFocusable::new(22, 7, 8));
-            let target = domain.manager.create_node(node);
+            let target = domain.create_node(node);
             domain.manager.add_child(None, target);
             target
         };
@@ -1905,7 +1935,7 @@ mod tests {
             let mut domain = tree.domain.borrow_mut();
             let mut node = FocusNode::new();
             node.set_focusable(RuntimeFocusable::new(11, 7, 8));
-            let target = domain.manager.create_node(node);
+            let target = domain.create_node(node);
             domain.manager.add_child(None, target);
             target
         };
@@ -1928,7 +1958,7 @@ mod tests {
             let mut domain = tree.domain.borrow_mut();
             let mut node = FocusNode::new();
             node.set_focusable(RuntimeFocusable::new(11, 7, 8));
-            let target = domain.manager.create_node(node);
+            let target = domain.create_node(node);
             domain.manager.add_child(None, target);
         }
         assert!(tree.set_focus_target(7));

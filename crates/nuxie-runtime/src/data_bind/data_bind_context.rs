@@ -442,6 +442,8 @@ pub(super) struct RuntimeArtboardPropertyBindingInstance {
     default_value_is_resolved: bool,
     snapshots_source_value: bool,
     pending_value: Option<RuntimeDataBindGraphValue>,
+    runtime_image: Option<RuntimeViewModelImage>,
+    font_value: Option<RuntimeFontAssetValue>,
 }
 
 /// Artboard specialization of the canonical direct-file DataBind owner.
@@ -730,7 +732,8 @@ pub(crate) enum RuntimeNestedChildContextUpdate {
 #[derive(Debug, Clone)]
 enum RuntimeStatefulViewModelValueUpdate {
     Value(RuntimeDataBindGraphValue),
-    FontAsset(u64),
+    ImageAsset(RuntimeViewModelImage),
+    FontAsset(RuntimeFontAssetValue),
     ViewModelInstance(usize),
 }
 
@@ -3350,11 +3353,20 @@ pub(super) fn build_artboard_property_bindings<'a>(
                         }
                         _ => unreachable!("property kind was filtered above"),
                     });
-            if !artboard_property_binding_accepts_default(
-                converter.as_ref(),
-                &default_value,
-                property_kind,
-            ) {
+            let accepts_exposed_asset = converter.is_none()
+                && property_kind == FieldKind::Uint
+                && matches!(default_value, RuntimeDataBindGraphValue::Asset(_))
+                && matches!(
+                    target.type_name,
+                    "ViewModelInstanceAssetImage" | "ViewModelInstanceAssetFont"
+                );
+            if !accepts_exposed_asset
+                && !artboard_property_binding_accepts_default(
+                    converter.as_ref(),
+                    &default_value,
+                    property_kind,
+                )
+            {
                 return None;
             }
             let snapshots_source_value = converter.is_none()
@@ -3381,6 +3393,8 @@ pub(super) fn build_artboard_property_bindings<'a>(
                 default_value,
                 default_value_is_resolved: resolved_default_value.is_some(),
                 snapshots_source_value,
+                runtime_image: None,
+                font_value: None,
             })
         })
         .collect()
@@ -4917,10 +4931,12 @@ impl ArtboardInstance {
                 .component(host_local_id)
                 .map(|component| component.transform.world_transform)
                 .unwrap_or(Mat2D::IDENTITY);
-            let child_root_transform = root_transform.multiply(host_world);
             let Some(nested) = self.nested_artboards.get_mut(&host_local_id) else {
                 continue;
             };
+            let child_root_transform = nested
+                .child
+                .mounted_root_transform(root_transform.multiply(host_world));
             let child_has_direct_context_sources =
                 nested.child.has_artboard_context_source_bindings();
             let child_has_nested_context_sources = !nested.child.nested_artboard_locals.is_empty();
@@ -5208,21 +5224,28 @@ impl ArtboardInstance {
                     }
                 }
             }
+            let property_binding_index = self
+                .artboard_data_bind_target_queues
+                .property_index_for_data_bind(data_bind_index);
             let font_changed = font_value.as_ref().is_some_and(|font_value| {
-                let Some(index) = self
+                let image_binding_changed = self
                     .artboard_data_bind_target_queues
                     .image_asset_index_for_data_bind(data_bind_index)
-                else {
-                    return false;
-                };
-                self.artboard_image_asset_bindings
-                    .get(index)
+                    .and_then(|index| self.artboard_image_asset_bindings.get(index))
                     .filter(|binding| binding.target.is_font())
                     .is_some_and(|binding| {
                         binding.font_value.as_ref().is_none_or(|current| {
                             !runtime_font_asset_values_equal(current, font_value)
                         })
-                    })
+                    });
+                let property_binding_changed = property_binding_index
+                    .and_then(|index| self.artboard_property_bindings.get(index))
+                    .is_some_and(|binding| {
+                        binding.font_value.as_ref().is_none_or(|current| {
+                            !runtime_font_asset_values_equal(current, font_value)
+                        })
+                    });
+                image_binding_changed || property_binding_changed
             });
             let image_binding_index = self
                 .artboard_data_bind_target_queues
@@ -5236,7 +5259,16 @@ impl ArtboardInstance {
                         (None, None) => false,
                         _ => true,
                     }
-                });
+                })
+                || property_binding_index
+                    .and_then(|index| self.artboard_property_bindings.get(index))
+                    .is_some_and(|binding| {
+                        match (binding.runtime_image.as_ref(), runtime_image.as_ref()) {
+                            (Some(current), Some(next)) => !current.ptr_eq(next),
+                            (None, None) => false,
+                            _ => true,
+                        }
+                    });
             if value_changed || font_changed || image_changed || list_adapter_changed {
                 if let Some(font_value) = font_value {
                     if let Some(index) = self
@@ -5245,6 +5277,11 @@ impl ArtboardInstance {
                         && let Some(binding) = self.artboard_image_asset_bindings.get_mut(index)
                         && binding.target.is_font()
                     {
+                        binding.font_value = Some(font_value.clone());
+                    }
+                    if let Some(index) = property_binding_index
+                        && let Some(binding) = self.artboard_property_bindings.get_mut(index)
+                    {
                         binding.font_value = Some(font_value);
                     }
                 }
@@ -5252,6 +5289,12 @@ impl ArtboardInstance {
                     && let Some(index) = image_binding_index
                     && let Some(binding) = self.artboard_image_asset_bindings.get_mut(index)
                     && !binding.target.is_font()
+                {
+                    binding.runtime_image = runtime_image.clone();
+                }
+                if image_changed
+                    && let Some(index) = property_binding_index
+                    && let Some(binding) = self.artboard_property_bindings.get_mut(index)
                 {
                     binding.runtime_image = runtime_image;
                 }
@@ -5992,9 +6035,11 @@ impl ArtboardInstance {
         let mut changed = false;
 
         for index in 0..self.artboard_property_bindings.len() {
-            let update = {
+            let target_type = self
+                .runtime_object_type_name(self.artboard_property_bindings[index].target_local_id);
+            let (update, font_update, runtime_image) = {
                 let binding = &self.artboard_property_bindings[index];
-                runtime_owned_view_model_binding_value_for_data_context(
+                let update = runtime_owned_view_model_binding_value_for_data_context(
                     file,
                     data_context,
                     &binding.path,
@@ -6007,18 +6052,69 @@ impl ArtboardInstance {
                         &[if scoped { &[0usize][..] } else { &[] }],
                         binding,
                     )
-                })
+                });
+                let font_update = (target_type == Some("ViewModelInstanceAssetFont"))
+                    .then(|| {
+                        runtime_owned_view_model_font_value_for_data_context(
+                            file,
+                            data_context,
+                            &binding.path,
+                            binding.path_is_name_based,
+                            allow_full_context_bindings,
+                        )
+                    })
+                    .flatten();
+                let runtime_image = (target_type == Some("ViewModelInstanceAssetImage"))
+                    .then(|| {
+                        runtime_owned_view_model_image_for_data_context(
+                            file,
+                            data_context,
+                            &binding.path,
+                            binding.path_is_name_based,
+                            allow_full_context_bindings,
+                        )
+                    })
+                    .flatten();
+                (update, font_update, runtime_image)
             };
             if let Some(value) = update {
+                let font_changed = font_update.as_ref().is_some_and(|font_update| {
+                    self.artboard_property_bindings[index]
+                        .font_value
+                        .as_ref()
+                        .is_none_or(|current| {
+                            !runtime_font_asset_values_equal(current, font_update)
+                        })
+                });
+                if let Some(font_update) = font_update {
+                    self.artboard_property_bindings[index].font_value = Some(font_update);
+                }
+                let image_changed = match (
+                    self.artboard_property_bindings[index]
+                        .runtime_image
+                        .as_ref(),
+                    runtime_image.as_ref(),
+                ) {
+                    (Some(current), Some(next)) => !current.ptr_eq(next),
+                    (None, None) => false,
+                    _ => true,
+                };
+                self.artboard_property_bindings[index].runtime_image = runtime_image;
                 let path = self.artboard_property_bindings[index].path.as_slice();
-                if self.artboard_data_bind_values.get(path) == Some(&value) {
+                let value_changed = self.artboard_data_bind_values.get(path) != Some(&value);
+                if !value_changed && !font_changed && !image_changed {
                     continue;
                 }
                 if self.artboard_property_bindings[index].snapshots_source_value {
                     self.artboard_property_bindings[index].pending_value = Some(value.clone());
                 }
                 let path = self.artboard_property_bindings[index].path.clone();
-                changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+                if value_changed {
+                    changed |= self.set_artboard_data_bind_value_for_path(&path, value);
+                } else {
+                    self.enqueue_artboard_property_binding_target(index);
+                    changed = true;
+                }
             }
         }
         if allow_full_context_bindings {
@@ -7566,8 +7662,14 @@ impl ArtboardInstance {
     fn apply_artboard_property_binding_indices(&mut self, indices: Vec<usize>) -> bool {
         let mut changed = false;
         for index in indices {
-            let Some((data_bind_index, target_local_id, property_key, value)) =
-                self.converted_artboard_property_binding_value(index)
+            let Some((
+                data_bind_index,
+                target_local_id,
+                property_key,
+                value,
+                font_value,
+                runtime_image,
+            )) = self.converted_artboard_property_binding_value(index)
             else {
                 continue;
             };
@@ -7579,6 +7681,14 @@ impl ArtboardInstance {
             }
             changed |=
                 self.apply_artboard_property_binding_value(target_local_id, property_key, &value);
+            if matches!(
+                value,
+                RuntimeDataBindGraphValue::Asset(RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX)
+            ) && (font_value.is_some() || runtime_image.is_some())
+            {
+                self.stateful_nested_view_model_contexts_dirty = true;
+                changed = true;
+            }
             if let Some(state) = self
                 .artboard_authored_data_bind_states
                 .get_mut(data_bind_index)
@@ -7649,11 +7759,12 @@ impl ArtboardInstance {
             RuntimeArtboardAssetBindingTarget::Font(target_local_id) => {
                 // C++ TextStyle::setAsset swaps the retained FontAsset pointer
                 // without rewriting the serialized fontAssetId property.
-                self.set_text_style_font_override(
-                    target_local_id,
-                    font_value
-                        .unwrap_or_else(|| RuntimeFontAssetValue::from_file_asset_index(*value)),
-                )
+                let font_value = font_value
+                    .unwrap_or_else(|| RuntimeFontAssetValue::from_file_asset_index(*value));
+                let has_font = self.runtime_file().is_some_and(|runtime| {
+                    crate::context_value_asset_font::resolves_to_font(runtime, self, &font_value)
+                });
+                has_font && self.set_text_style_font_override(target_local_id, font_value)
             }
         }
     }
@@ -7661,7 +7772,14 @@ impl ArtboardInstance {
     fn converted_artboard_property_binding_value(
         &mut self,
         index: usize,
-    ) -> Option<(usize, usize, u16, RuntimeDataBindGraphValue)> {
+    ) -> Option<(
+        usize,
+        usize,
+        u16,
+        RuntimeDataBindGraphValue,
+        Option<RuntimeFontAssetValue>,
+        Option<RuntimeViewModelImage>,
+    )> {
         let binding = self.artboard_property_bindings.get_mut(index)?;
         let value = binding.pending_value.take().or_else(|| {
             self.artboard_data_bind_values
@@ -7696,6 +7814,8 @@ impl ArtboardInstance {
             binding.target_local_id,
             binding.property_key,
             converted,
+            binding.font_value.clone(),
+            binding.runtime_image.clone(),
         ))
     }
 
@@ -8257,6 +8377,9 @@ impl ArtboardInstance {
             (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::Enum(value))) => {
                 self.set_uint_property(target_local_id, property_key, value)
             }
+            (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::Asset(value))) => {
+                self.set_uint_property(target_local_id, property_key, value)
+            }
             (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::ViewModel(value))) => self
                 .view_model_instance_index_for_target_pointer(target_local_id, value)
                 .is_some_and(|value| self.set_uint_property(target_local_id, property_key, value)),
@@ -8781,13 +8904,38 @@ impl ArtboardInstance {
                         .uint_property(slot.local_id, value_key)
                         .map(RuntimeDataBindGraphValue::SymbolListIndex)
                         .map(RuntimeStatefulViewModelValueUpdate::Value),
-                    "ViewModelInstanceAssetImage" => self
-                        .uint_property(slot.local_id, value_key)
-                        .map(RuntimeDataBindGraphValue::Asset)
-                        .map(RuntimeStatefulViewModelValueUpdate::Value),
-                    "ViewModelInstanceAssetFont" => self
-                        .uint_property(slot.local_id, value_key)
-                        .map(RuntimeStatefulViewModelValueUpdate::FontAsset),
+                    "ViewModelInstanceAssetImage" => {
+                        self.uint_property(slot.local_id, value_key).map(|value| {
+                            if value == RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
+                                && let Some(image) = self
+                                    .artboard_property_bindings
+                                    .iter()
+                                    .find(|binding| binding.target_local_id == slot.local_id)
+                                    .and_then(|binding| binding.runtime_image.clone())
+                            {
+                                RuntimeStatefulViewModelValueUpdate::ImageAsset(image)
+                            } else {
+                                RuntimeStatefulViewModelValueUpdate::Value(
+                                    RuntimeDataBindGraphValue::Asset(value),
+                                )
+                            }
+                        })
+                    }
+                    "ViewModelInstanceAssetFont" => {
+                        self.uint_property(slot.local_id, value_key).map(|value| {
+                            let value = if value == RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
+                            {
+                                self.artboard_property_bindings
+                                    .iter()
+                                    .find(|binding| binding.target_local_id == slot.local_id)
+                                    .and_then(|binding| binding.font_value.clone())
+                                    .unwrap_or_default()
+                            } else {
+                                RuntimeFontAssetValue::from_file_asset_index(value)
+                            };
+                            RuntimeStatefulViewModelValueUpdate::FontAsset(value)
+                        })
+                    }
                     "ViewModelInstanceArtboard" => self
                         .uint_property(slot.local_id, value_key)
                         .map(RuntimeDataBindGraphValue::Artboard)
@@ -8853,7 +9001,11 @@ impl ArtboardInstance {
                 // back into the authored object arena, the arena can contain
                 // the previous value. Never let that stale mirror overwrite a
                 // live child write during an unrelated host-side sync.
-                if context
+                if !matches!(
+                    &update.value,
+                    RuntimeStatefulViewModelValueUpdate::ImageAsset(_)
+                        | RuntimeStatefulViewModelValueUpdate::FontAsset(_)
+                ) && context
                     .cell_by_property_path(&update.property_path)
                     .is_some_and(|cell| cell.has_changed())
                 {
@@ -8882,9 +9034,13 @@ impl ArtboardInstance {
                     RuntimeStatefulViewModelValueUpdate::Value(
                         RuntimeDataBindGraphValue::Asset(value),
                     ) => context.sync_asset_by_property_path(&update.property_path, value),
-                    RuntimeStatefulViewModelValueUpdate::FontAsset(value) => {
-                        context.sync_font_asset_index_by_property_path(&update.property_path, value)
-                    }
+                    RuntimeStatefulViewModelValueUpdate::ImageAsset(value) => context
+                        .set_runtime_image_by_property_path(&update.property_path, Some(value)),
+                    RuntimeStatefulViewModelValueUpdate::FontAsset(value) => context
+                        .apply_font_asset_data_bind_value_by_property_path(
+                            &update.property_path,
+                            &value,
+                        ),
                     RuntimeStatefulViewModelValueUpdate::Value(
                         RuntimeDataBindGraphValue::Artboard(value),
                     ) => context.sync_artboard_by_property_path(&update.property_path, value),
@@ -10636,6 +10792,53 @@ mod tests {
         assert_eq!(artboard.resolved_image_asset_global(Some(1), Some(1)), None);
     }
 
+    #[test]
+    fn live_image_identity_reaches_a_stateful_nested_exposed_property() {
+        let file = read_runtime_file(include_bytes!(
+            "../../../../fixtures/sync/stateful_component_image_test.riv"
+        ))
+        .expect("stateful image fixture imports");
+        let graphs = nuxie_graph::GraphFile::from_runtime_file(&file).expect("fixture graphs");
+        let parent_graph = graphs.artboards.first().expect("parent artboard");
+        let mut artboard =
+            ArtboardInstance::from_graph_with_artboards(&file, parent_graph, &graphs.artboards)
+                .expect("parent artboard builds");
+        let context = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(&file, 1, 0)
+                .expect("MainVM instance builds"),
+        );
+        assert!(artboard.bind_owned_view_model_artboard_handle(&file, &context));
+        while artboard.advance_artboard_data_binds() {}
+
+        let image: Rc<dyn nuxie_render_api::RenderImage> = Rc::new(BoundTestImage(19, 23));
+        assert!(context.borrow_mut().set_runtime_image_by_property_path(
+            &[1],
+            Some(RuntimeViewModelImage::from_render_image(Rc::clone(&image))),
+        ));
+        while artboard.advance_artboard_data_binds() {}
+
+        assert!(
+            artboard
+                .artboard_property_bindings
+                .iter()
+                .any(|binding| binding.runtime_image.is_some()),
+            "the exposed-property binding retains the source image"
+        );
+
+        let nested = artboard
+            .nested_artboards
+            .values()
+            .find(|nested| nested.stateful_view_model_context.is_some())
+            .expect("fixture mounts a stateful child context");
+        let nested_image = nested
+            .stateful_view_model_context
+            .as_ref()
+            .and_then(|context| context.borrow().runtime_image_by_property_path(&[0]))
+            .and_then(|image| image.render_image())
+            .expect("stateful child retained the live image");
+        assert!(Rc::ptr_eq(&nested_image, &image));
+    }
+
     fn cross_model_global_slot_binding_fixture() -> RuntimeFile {
         RuntimeFile::from_authoring_records(vec![
             record("Backboard", Vec::new()),
@@ -11196,12 +11399,11 @@ mod tests {
             .expect("serialized view model instance builds");
 
         assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
-        assert!(artboard.advance_artboard_data_binds());
-        let serialized = artboard
-            .text_style_font_override(2)
-            .expect("serialized font override was applied");
-        assert_eq!(serialized.file_asset_index(), 0);
-        assert_eq!(serialized.live_font_bytes(), None);
+        let _ = artboard.advance_artboard_data_binds();
+        assert!(
+            artboard.text_style_font_override(2).is_none(),
+            "a file FontAsset with no loaded Font keeps the TextStyle's authored font"
+        );
 
         let live: Arc<[u8]> = vec![1, 2, 3, 4].into();
         assert!(context.set_live_font_bytes_by_property_name("font", Some(Arc::clone(&live))));
@@ -11218,15 +11420,18 @@ mod tests {
 
         assert!(context.set_font_asset_index_by_property_name("font", 0));
         assert!(artboard.bind_owned_view_model_artboard_context(&file, &context));
-        assert!(artboard.advance_artboard_data_binds());
+        assert!(!artboard.advance_artboard_data_binds());
         let file_backed = artboard
             .text_style_font_override(2)
-            .expect("file-backed font override was reapplied");
-        assert_eq!(file_backed.file_asset_index(), 0);
+            .expect("the prior live override remains installed");
+        assert_eq!(
+            file_backed.file_asset_index(),
+            RuntimeFontAssetValue::MISSING_FILE_ASSET_INDEX
+        );
         assert_eq!(
             file_backed.live_font_bytes(),
             Some(live.as_ref()),
-            "assigning a file index preserves the private live font, while resolution lets the file asset win"
+            "an unresolved file FontAsset preserves the TextStyle's previously authored/effective font"
         );
     }
 
@@ -11243,7 +11448,7 @@ mod tests {
         );
 
         assert!(artboard.bind_owned_view_model_artboard_contexts(&file, &context));
-        assert!(artboard.advance_artboard_data_binds());
+        assert!(!artboard.advance_artboard_data_binds());
 
         let live: Arc<[u8]> = vec![5, 6, 7, 8].into();
         assert!(
@@ -11585,6 +11790,8 @@ mod tests {
             default_value_is_resolved: true,
             snapshots_source_value: false,
             pending_value: None,
+            runtime_image: None,
+            font_value: None,
         }
     }
 

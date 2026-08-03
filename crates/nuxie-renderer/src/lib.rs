@@ -16519,6 +16519,28 @@ mod tests {
     }
 
     #[test]
+    fn fully_transparent_overdraw_does_not_dither_the_destination() {
+        let transparent = WgpuPaint {
+            color: 0x0000_0000,
+            ..WgpuPaint::default()
+        };
+        let fill = rect_path([0.0, 0.0, 32.0, 32.0], FillRule::NonZero);
+
+        for mode in [RenderMode::Msaa, RenderMode::ClockwiseAtomic] {
+            let Ok(factory) = WgpuFactory::new_with_mode(32, 32, mode) else {
+                continue;
+            };
+            let mut frame = factory.begin_frame(0xff40_6080);
+            for _ in 0..256 {
+                frame.draw_path(&fill, &transparent);
+            }
+            let pixels = frame.finish().unwrap();
+            let center = &pixels[(16 * 32 + 16) * 4..][..4];
+            assert_eq!(center, [64, 96, 128, 255], "{mode:?}");
+        }
+    }
+
+    #[test]
     fn upstream_tessellation_pass_writes_across_texture_rows() {
         let factory = WgpuFactory::new(64, 64).unwrap();
         let mut uniforms = gpu::FlushUniforms::zeroed();

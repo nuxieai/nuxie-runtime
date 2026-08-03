@@ -347,6 +347,8 @@ pub enum ObjectKind {
     FocusActionClear,
     TransitionFocusCondition,
     ComponentOrigin,
+    ViewModelPropertyAssetBlob,
+    ViewModelInstanceAssetBlob,
     LayoutSizingStyle,
     LayoutNodeStyle,
     GridTrack,
@@ -700,12 +702,14 @@ impl ObjectKind {
             Self::FocusActionClear => &DEFINITIONS[339],
             Self::TransitionFocusCondition => &DEFINITIONS[340],
             Self::ComponentOrigin => &DEFINITIONS[341],
-            Self::LayoutSizingStyle => &DEFINITIONS[342],
-            Self::LayoutNodeStyle => &DEFINITIONS[343],
-            Self::GridTrack => &DEFINITIONS[344],
-            Self::LayoutParticipant => &DEFINITIONS[345],
-            Self::KeyFrameInt => &DEFINITIONS[346],
-            Self::GridItemPlacement => &DEFINITIONS[347],
+            Self::ViewModelPropertyAssetBlob => &DEFINITIONS[342],
+            Self::ViewModelInstanceAssetBlob => &DEFINITIONS[343],
+            Self::LayoutSizingStyle => &DEFINITIONS[344],
+            Self::LayoutNodeStyle => &DEFINITIONS[345],
+            Self::GridTrack => &DEFINITIONS[346],
+            Self::LayoutParticipant => &DEFINITIONS[347],
+            Self::KeyFrameInt => &DEFINITIONS[348],
+            Self::GridItemPlacement => &DEFINITIONS[349],
         }
     }
 
@@ -1062,6 +1066,8 @@ pub fn object_kind_by_type_key(key: u16) -> Option<ObjectKind> {
         1037 => Some(ObjectKind::FocusActionClear),
         1038 => Some(ObjectKind::TransitionFocusCondition),
         1039 => Some(ObjectKind::ComponentOrigin),
+        1043 => Some(ObjectKind::ViewModelPropertyAssetBlob),
+        1044 => Some(ObjectKind::ViewModelInstanceAssetBlob),
         1056 => Some(ObjectKind::LayoutSizingStyle),
         1057 => Some(ObjectKind::LayoutNodeStyle),
         1058 => Some(ObjectKind::GridTrack),
@@ -1420,12 +1426,14 @@ pub fn definition_by_name(name: &str) -> Option<&'static Definition> {
         "FocusActionClear" => Some(&DEFINITIONS[339]),
         "TransitionFocusCondition" => Some(&DEFINITIONS[340]),
         "ComponentOrigin" => Some(&DEFINITIONS[341]),
-        "LayoutSizingStyle" => Some(&DEFINITIONS[342]),
-        "LayoutNodeStyle" => Some(&DEFINITIONS[343]),
-        "GridTrack" => Some(&DEFINITIONS[344]),
-        "LayoutParticipant" => Some(&DEFINITIONS[345]),
-        "KeyFrameInt" => Some(&DEFINITIONS[346]),
-        "GridItemPlacement" => Some(&DEFINITIONS[347]),
+        "ViewModelPropertyAssetBlob" => Some(&DEFINITIONS[342]),
+        "ViewModelInstanceAssetBlob" => Some(&DEFINITIONS[343]),
+        "LayoutSizingStyle" => Some(&DEFINITIONS[344]),
+        "LayoutNodeStyle" => Some(&DEFINITIONS[345]),
+        "GridTrack" => Some(&DEFINITIONS[346]),
+        "LayoutParticipant" => Some(&DEFINITIONS[347]),
+        "KeyFrameInt" => Some(&DEFINITIONS[348]),
+        "GridItemPlacement" => Some(&DEFINITIONS[349]),
         _ => None,
     }
 }
@@ -25491,9 +25499,25 @@ static DEF_341_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_342_ANCESTORS: &[&str] = &["Component"];
+static DEF_342_ANCESTORS: &[&str] = &[
+    "ViewModelPropertyAsset",
+    "ViewModelProperty",
+    "ViewModelComponent",
+];
 
-static DEF_342_PROPERTIES: &[Property] = &[
+static DEF_342_PROPERTIES: &[Property] = &[];
+
+static DEF_343_ANCESTORS: &[&str] = &[
+    "ViewModelInstanceAsset",
+    "ViewModelInstanceValue",
+    "Component",
+];
+
+static DEF_343_PROPERTIES: &[Property] = &[];
+
+static DEF_344_ANCESTORS: &[&str] = &["Component"];
+
+static DEF_344_PROPERTIES: &[Property] = &[
     Property {
         name: "maxWidth",
         key: Key {
@@ -25988,9 +26012,9 @@ static DEF_342_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_343_ANCESTORS: &[&str] = &["LayoutSizingStyle", "Component"];
+static DEF_345_ANCESTORS: &[&str] = &["LayoutSizingStyle", "Component"];
 
-static DEF_343_PROPERTIES: &[Property] = &[
+static DEF_345_PROPERTIES: &[Property] = &[
     Property {
         name: "fractionalWidth",
         key: Key {
@@ -26137,9 +26161,9 @@ static DEF_343_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_344_ANCESTORS: &[&str] = &["Component"];
+static DEF_346_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_344_PROPERTIES: &[Property] = &[
+static DEF_346_PROPERTIES: &[Property] = &[
     Property {
         name: "collection",
         key: Key {
@@ -26321,13 +26345,13 @@ static DEF_344_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_345_ANCESTORS: &[&str] = &["LayoutNodeStyle", "LayoutSizingStyle", "Component"];
+static DEF_347_ANCESTORS: &[&str] = &["LayoutNodeStyle", "LayoutSizingStyle", "Component"];
 
-static DEF_345_PROPERTIES: &[Property] = &[];
+static DEF_347_PROPERTIES: &[Property] = &[];
 
-static DEF_346_ANCESTORS: &[&str] = &["InterpolatingKeyFrame", "KeyFrame"];
+static DEF_348_ANCESTORS: &[&str] = &["InterpolatingKeyFrame", "KeyFrame"];
 
-static DEF_346_PROPERTIES: &[Property] = &[Property {
+static DEF_348_PROPERTIES: &[Property] = &[Property {
     name: "value",
     key: Key {
         int: 1068,
@@ -26363,9 +26387,9 @@ static DEF_346_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_347_ANCESTORS: &[&str] = &["Component"];
+static DEF_349_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_347_PROPERTIES: &[Property] = &[
+static DEF_349_PROPERTIES: &[Property] = &[
     Property {
         name: "gridColumn",
         key: Key {
@@ -27541,10 +27565,10 @@ pub fn property_by_key_in_hierarchy(
         (420, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (420, 498) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[0])),
         (420, 499) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[1])),
-        (420, 500) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[0])),
-        (420, 501) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[1])),
-        (420, 502) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[2])),
-        (420, 503) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[3])),
+        (420, 500) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[0])),
+        (420, 501) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[1])),
+        (420, 502) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[2])),
+        (420, 503) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[3])),
         (420, 504) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[2])),
         (420, 505) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[3])),
         (420, 506) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[4])),
@@ -27567,15 +27591,15 @@ pub fn property_by_key_in_hierarchy(
         (420, 590) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[21])),
         (420, 591) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[22])),
         (420, 592) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[23])),
-        (420, 596) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[4])),
+        (420, 596) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[4])),
         (420, 597) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[24])),
         (420, 598) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[25])),
         (420, 599) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[26])),
         (420, 604) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[27])),
         (420, 605) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[28])),
         (420, 606) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[29])),
-        (420, 607) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[5])),
-        (420, 608) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[6])),
+        (420, 607) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[5])),
+        (420, 608) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[6])),
         (420, 609) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[30])),
         (420, 610) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[31])),
         (420, 611) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[32])),
@@ -27594,21 +27618,21 @@ pub fn property_by_key_in_hierarchy(
         (420, 624) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[45])),
         (420, 625) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[46])),
         (420, 626) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[47])),
-        (420, 627) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[7])),
-        (420, 628) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[8])),
-        (420, 629) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[9])),
-        (420, 630) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[10])),
+        (420, 627) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[7])),
+        (420, 628) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[8])),
+        (420, 629) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[9])),
+        (420, 630) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[10])),
         (420, 632) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[48])),
         (420, 639) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[49])),
         (420, 640) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[50])),
         (420, 641) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[51])),
         (420, 642) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[52])),
         (420, 643) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[53])),
-        (420, 655) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[11])),
-        (420, 656) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[12])),
+        (420, 655) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[11])),
+        (420, 656) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[12])),
         (420, 705) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[54])),
         (420, 1045) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[55])),
-        (420, 1046) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[13])),
+        (420, 1046) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[13])),
         (420, 1059) => Some(("LayoutComponentStyle", &DEF_151_PROPERTIES[56])),
         (422, 203) => Some(("Asset", &DEF_95_PROPERTIES[0])),
         (422, 204) => Some(("FileAsset", &DEF_98_PROPERTIES[0])),
@@ -28460,79 +28484,86 @@ pub fn property_by_key_in_hierarchy(
         (1039, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (1039, 1040) => Some(("ComponentOrigin", &DEF_341_PROPERTIES[0])),
         (1039, 1041) => Some(("ComponentOrigin", &DEF_341_PROPERTIES[1])),
+        (1043, 557) => Some(("ViewModelComponent", &DEF_156_PROPERTIES[0])),
+        (1043, 875) => Some(("ViewModelProperty", &DEF_157_PROPERTIES[0])),
+        (1043, 957) => Some(("ViewModelProperty", &DEF_157_PROPERTIES[1])),
+        (1044, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
+        (1044, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
+        (1044, 554) => Some(("ViewModelInstanceValue", &DEF_155_PROPERTIES[0])),
+        (1044, 824) => Some(("ViewModelInstanceAsset", &DEF_273_PROPERTIES[0])),
         (1056, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1056, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1056, 500) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[0])),
-        (1056, 501) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[1])),
-        (1056, 502) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[2])),
-        (1056, 503) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[3])),
-        (1056, 596) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[4])),
-        (1056, 607) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[5])),
-        (1056, 608) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[6])),
-        (1056, 627) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[7])),
-        (1056, 628) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[8])),
-        (1056, 629) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[9])),
-        (1056, 630) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[10])),
-        (1056, 655) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[11])),
-        (1056, 656) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[12])),
-        (1056, 1046) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[13])),
+        (1056, 500) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[0])),
+        (1056, 501) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[1])),
+        (1056, 502) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[2])),
+        (1056, 503) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[3])),
+        (1056, 596) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[4])),
+        (1056, 607) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[5])),
+        (1056, 608) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[6])),
+        (1056, 627) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[7])),
+        (1056, 628) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[8])),
+        (1056, 629) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[9])),
+        (1056, 630) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[10])),
+        (1056, 655) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[11])),
+        (1056, 656) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[12])),
+        (1056, 1046) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[13])),
         (1057, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1057, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1057, 500) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[0])),
-        (1057, 501) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[1])),
-        (1057, 502) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[2])),
-        (1057, 503) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[3])),
-        (1057, 596) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[4])),
-        (1057, 607) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[5])),
-        (1057, 608) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[6])),
-        (1057, 627) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[7])),
-        (1057, 628) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[8])),
-        (1057, 629) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[9])),
-        (1057, 630) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[10])),
-        (1057, 655) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[11])),
-        (1057, 656) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[12])),
-        (1057, 1046) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[13])),
-        (1057, 1057) => Some(("LayoutNodeStyle", &DEF_343_PROPERTIES[0])),
-        (1057, 1058) => Some(("LayoutNodeStyle", &DEF_343_PROPERTIES[1])),
-        (1057, 1066) => Some(("LayoutNodeStyle", &DEF_343_PROPERTIES[2])),
-        (1057, 1067) => Some(("LayoutNodeStyle", &DEF_343_PROPERTIES[3])),
+        (1057, 500) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[0])),
+        (1057, 501) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[1])),
+        (1057, 502) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[2])),
+        (1057, 503) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[3])),
+        (1057, 596) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[4])),
+        (1057, 607) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[5])),
+        (1057, 608) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[6])),
+        (1057, 627) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[7])),
+        (1057, 628) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[8])),
+        (1057, 629) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[9])),
+        (1057, 630) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[10])),
+        (1057, 655) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[11])),
+        (1057, 656) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[12])),
+        (1057, 1046) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[13])),
+        (1057, 1057) => Some(("LayoutNodeStyle", &DEF_345_PROPERTIES[0])),
+        (1057, 1058) => Some(("LayoutNodeStyle", &DEF_345_PROPERTIES[1])),
+        (1057, 1066) => Some(("LayoutNodeStyle", &DEF_345_PROPERTIES[2])),
+        (1057, 1067) => Some(("LayoutNodeStyle", &DEF_345_PROPERTIES[3])),
         (1058, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1058, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1058, 1061) => Some(("GridTrack", &DEF_344_PROPERTIES[0])),
-        (1058, 1062) => Some(("GridTrack", &DEF_344_PROPERTIES[1])),
-        (1058, 1063) => Some(("GridTrack", &DEF_344_PROPERTIES[2])),
-        (1058, 1064) => Some(("GridTrack", &DEF_344_PROPERTIES[3])),
-        (1058, 1065) => Some(("GridTrack", &DEF_344_PROPERTIES[4])),
+        (1058, 1061) => Some(("GridTrack", &DEF_346_PROPERTIES[0])),
+        (1058, 1062) => Some(("GridTrack", &DEF_346_PROPERTIES[1])),
+        (1058, 1063) => Some(("GridTrack", &DEF_346_PROPERTIES[2])),
+        (1058, 1064) => Some(("GridTrack", &DEF_346_PROPERTIES[3])),
+        (1058, 1065) => Some(("GridTrack", &DEF_346_PROPERTIES[4])),
         (1066, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1066, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1066, 500) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[0])),
-        (1066, 501) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[1])),
-        (1066, 502) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[2])),
-        (1066, 503) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[3])),
-        (1066, 596) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[4])),
-        (1066, 607) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[5])),
-        (1066, 608) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[6])),
-        (1066, 627) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[7])),
-        (1066, 628) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[8])),
-        (1066, 629) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[9])),
-        (1066, 630) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[10])),
-        (1066, 655) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[11])),
-        (1066, 656) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[12])),
-        (1066, 1046) => Some(("LayoutSizingStyle", &DEF_342_PROPERTIES[13])),
-        (1066, 1057) => Some(("LayoutNodeStyle", &DEF_343_PROPERTIES[0])),
-        (1066, 1058) => Some(("LayoutNodeStyle", &DEF_343_PROPERTIES[1])),
-        (1066, 1066) => Some(("LayoutNodeStyle", &DEF_343_PROPERTIES[2])),
-        (1066, 1067) => Some(("LayoutNodeStyle", &DEF_343_PROPERTIES[3])),
+        (1066, 500) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[0])),
+        (1066, 501) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[1])),
+        (1066, 502) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[2])),
+        (1066, 503) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[3])),
+        (1066, 596) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[4])),
+        (1066, 607) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[5])),
+        (1066, 608) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[6])),
+        (1066, 627) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[7])),
+        (1066, 628) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[8])),
+        (1066, 629) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[9])),
+        (1066, 630) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[10])),
+        (1066, 655) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[11])),
+        (1066, 656) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[12])),
+        (1066, 1046) => Some(("LayoutSizingStyle", &DEF_344_PROPERTIES[13])),
+        (1066, 1057) => Some(("LayoutNodeStyle", &DEF_345_PROPERTIES[0])),
+        (1066, 1058) => Some(("LayoutNodeStyle", &DEF_345_PROPERTIES[1])),
+        (1066, 1066) => Some(("LayoutNodeStyle", &DEF_345_PROPERTIES[2])),
+        (1066, 1067) => Some(("LayoutNodeStyle", &DEF_345_PROPERTIES[3])),
         (1067, 67) => Some(("KeyFrame", &DEF_28_PROPERTIES[0])),
         (1067, 68) => Some(("InterpolatingKeyFrame", &DEF_144_PROPERTIES[0])),
         (1067, 69) => Some(("InterpolatingKeyFrame", &DEF_144_PROPERTIES[1])),
-        (1067, 1068) => Some(("KeyFrameInt", &DEF_346_PROPERTIES[0])),
+        (1067, 1068) => Some(("KeyFrameInt", &DEF_348_PROPERTIES[0])),
         (1068, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1068, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1068, 1047) => Some(("GridItemPlacement", &DEF_347_PROPERTIES[0])),
-        (1068, 1048) => Some(("GridItemPlacement", &DEF_347_PROPERTIES[1])),
-        (1068, 1049) => Some(("GridItemPlacement", &DEF_347_PROPERTIES[2])),
-        (1068, 1050) => Some(("GridItemPlacement", &DEF_347_PROPERTIES[3])),
+        (1068, 1047) => Some(("GridItemPlacement", &DEF_349_PROPERTIES[0])),
+        (1068, 1048) => Some(("GridItemPlacement", &DEF_349_PROPERTIES[1])),
+        (1068, 1049) => Some(("GridItemPlacement", &DEF_349_PROPERTIES[2])),
+        (1068, 1050) => Some(("GridItemPlacement", &DEF_349_PROPERTIES[3])),
         _ => None,
     }
 }
@@ -35176,6 +35207,44 @@ pub static DEFINITIONS: &[Definition] = &[
         ancestors: DEF_341_ANCESTORS,
     },
     Definition {
+        name: "ViewModelPropertyAssetBlob",
+        rust_variant: "ViewModelPropertyAssetBlob",
+        file: "viewmodel/viewmodel_property_asset_blob.json",
+        type_key: Key {
+            int: 1043,
+            name: "viewmodelpropertyassetblob",
+        },
+        runtime_parent: Some("ViewModelPropertyAsset"),
+        raw_parent_file: Some("viewmodel/viewmodel_property_asset.json"),
+        mixins: &[],
+        generic: None,
+        generic_pass_through: None,
+        exports_with_context: false,
+        abstract_: false,
+        cloneable: true,
+        properties: DEF_342_PROPERTIES,
+        ancestors: DEF_342_ANCESTORS,
+    },
+    Definition {
+        name: "ViewModelInstanceAssetBlob",
+        rust_variant: "ViewModelInstanceAssetBlob",
+        file: "viewmodel/viewmodel_instance_asset_blob.json",
+        type_key: Key {
+            int: 1044,
+            name: "viewmodelinstanceassetblob",
+        },
+        runtime_parent: Some("ViewModelInstanceAsset"),
+        raw_parent_file: Some("viewmodel/viewmodel_instance_asset.json"),
+        mixins: &[],
+        generic: None,
+        generic_pass_through: None,
+        exports_with_context: false,
+        abstract_: false,
+        cloneable: true,
+        properties: DEF_343_PROPERTIES,
+        ancestors: DEF_343_ANCESTORS,
+    },
+    Definition {
         name: "LayoutSizingStyle",
         rust_variant: "LayoutSizingStyle",
         file: "layout/layout_sizing_style.json",
@@ -35191,8 +35260,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_342_PROPERTIES,
-        ancestors: DEF_342_ANCESTORS,
+        properties: DEF_344_PROPERTIES,
+        ancestors: DEF_344_ANCESTORS,
     },
     Definition {
         name: "LayoutNodeStyle",
@@ -35210,8 +35279,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_343_PROPERTIES,
-        ancestors: DEF_343_ANCESTORS,
+        properties: DEF_345_PROPERTIES,
+        ancestors: DEF_345_ANCESTORS,
     },
     Definition {
         name: "GridTrack",
@@ -35229,8 +35298,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_344_PROPERTIES,
-        ancestors: DEF_344_ANCESTORS,
+        properties: DEF_346_PROPERTIES,
+        ancestors: DEF_346_ANCESTORS,
     },
     Definition {
         name: "LayoutParticipant",
@@ -35248,8 +35317,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_345_PROPERTIES,
-        ancestors: DEF_345_ANCESTORS,
+        properties: DEF_347_PROPERTIES,
+        ancestors: DEF_347_ANCESTORS,
     },
     Definition {
         name: "KeyFrameInt",
@@ -35267,8 +35336,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_346_PROPERTIES,
-        ancestors: DEF_346_ANCESTORS,
+        properties: DEF_348_PROPERTIES,
+        ancestors: DEF_348_ANCESTORS,
     },
     Definition {
         name: "GridItemPlacement",
@@ -35286,7 +35355,7 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_347_PROPERTIES,
-        ancestors: DEF_347_ANCESTORS,
+        properties: DEF_349_PROPERTIES,
+        ancestors: DEF_349_ANCESTORS,
     },
 ];

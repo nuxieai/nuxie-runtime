@@ -151,6 +151,16 @@ impl RuntimeOwnedViewModelContext {
         true
     }
 
+    /// Empty one named global slot while preserving every other occupant.
+    /// A valid already-empty slot still succeeds.
+    pub fn unset_global_named(&mut self, file: &RuntimeFile, name: &str) -> bool {
+        let Some(slot) = runtime_global_view_model_index_named(file, name) else {
+            return false;
+        };
+        self.global_slots.remove(&slot);
+        true
+    }
+
     pub fn set_global_slot(
         &mut self,
         file: &RuntimeFile,

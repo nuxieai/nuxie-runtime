@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 rive_runtime="${RIVE_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}"
-expected_ref="d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+expected_ref="4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 actual_ref="$(git -C "$rive_runtime" rev-parse HEAD)"
 if [[ "$actual_ref" != "$expected_ref" ]]; then
     echo "frame-loop trace build requires pinned C++ $expected_ref; got $actual_ref" >&2

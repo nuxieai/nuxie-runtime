@@ -326,8 +326,15 @@ impl RegisteredGpuCanvasShaderAsset {
 }
 
 pub(crate) type ImportedGpuCanvasShaderAssetOwner = Rc<RefCell<RegisteredGpuCanvasShaderAsset>>;
-pub(crate) type ImportedGpuCanvasShaderAssets =
-    Rc<RefCell<BTreeMap<String, ImportedGpuCanvasShaderAssetOwner>>>;
+
+#[derive(Debug, Clone)]
+pub(crate) struct ImportedGpuCanvasShaderAssetEntry {
+    pub(crate) name: String,
+    pub(crate) short_name: String,
+    pub(crate) owner: ImportedGpuCanvasShaderAssetOwner,
+}
+
+pub(crate) type ImportedGpuCanvasShaderAssets = Rc<RefCell<Vec<ImportedGpuCanvasShaderAssetEntry>>>;
 
 #[derive(Debug, Clone)]
 enum GpuCanvasShaderCatalog {
@@ -338,6 +345,7 @@ enum GpuCanvasShaderCatalog {
 impl GpuCanvasShaderCatalog {
     fn shader(
         &self,
+        lua: &luaur_rt::Lua,
         name: &str,
         renderer_bindings: Option<&RendererBindings>,
     ) -> Option<GpuShader> {
@@ -354,8 +362,18 @@ impl GpuCanvasShaderCatalog {
                 })
             }
             Self::Imported(shaders) => {
-                let owner = Rc::clone(shaders.borrow().get(name)?);
-                let shader = owner.borrow_mut().resolve(name).ok()?.clone();
+                let reference = crate::vm::lua_blob::ScopedAssetReference::new(lua, name);
+                let mut best_rank = 0;
+                let mut selected = None;
+                for entry in shaders.borrow().iter() {
+                    let rank = reference.rank(&entry.name, &entry.short_name);
+                    if rank > best_rank {
+                        best_rank = rank;
+                        selected = Some((entry.name.clone(), Rc::clone(&entry.owner)));
+                    }
+                }
+                let (registered_name, owner) = selected?;
+                let shader = owner.borrow_mut().resolve(&registered_name).ok()?.clone();
                 if shader.entries.is_empty() {
                     return None;
                 }
@@ -389,7 +407,10 @@ impl GpuCanvasContextBindings {
     }
 
     pub(crate) fn shader_userdata(&self, lua: &luaur_rt::Lua, name: String) -> Result<MultiValue> {
-        let Some(shader) = self.shaders.shader(&name, self.renderer_bindings.as_ref()) else {
+        let Some(shader) = self
+            .shaders
+            .shader(lua, &name, self.renderer_bindings.as_ref())
+        else {
             return Ok(MultiValue::new());
         };
         lua.create_userdata(shader)

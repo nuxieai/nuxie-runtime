@@ -7,6 +7,9 @@ pub(super) fn local_clockwise_path(
     text_input_local: usize,
     fallback_height: f32,
 ) -> Vec<RuntimePathCommand> {
+    if !instance.text_input_is_focused(text_input_local) {
+        return Vec::new();
+    }
     let Some((top, bottom)) = instance.text_input_cursor_geometry(text_input_local) else {
         return caret_rect(0.0, 0.0, fallback_height);
     };

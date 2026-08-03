@@ -1170,6 +1170,36 @@ def validate_fl_e8_policy(
         if wave.get("depends_on") != ["FL-E"]:
             errors.append("FL-E8 must depend exactly on FL-E")
 
+    wave_sequence = {
+        str(wave.get("id", "")): int(wave.get("sequence", 0))
+        for wave in waves
+        if isinstance(wave.get("sequence"), int)
+    }
+    post_fl_e8_faithful = sum(
+        1
+        for row in file_rows
+        if wave_sequence.get(str(row.get("wave", "")), 0) > 6
+        and row.get("status") == "faithful"
+    )
+    post_fl_e8_replacements = sum(
+        1
+        for old_path, new_path in {
+            ("src/nested_artboard_origin.cpp", "src/component_origin.cpp"),
+        }
+        if not any(row.get("upstream") == old_path for row in file_rows)
+        and any(
+            row.get("upstream") == new_path
+            and wave_sequence.get(str(row.get("wave", "")), 0) > 6
+            for row in file_rows
+        )
+    )
+
+    def phase_faithful_count(baseline: int) -> int:
+        # FL-E8's frozen phase total remains the baseline. Later waves are
+        # additive rather than permission to replace that historical ratchet
+        # with the current manifest's self-declared expected total.
+        return baseline + post_fl_e8_faithful - post_fl_e8_replacements
+
     rows = {
         str(row.get("upstream", "")): row
         for row in file_rows
@@ -1189,7 +1219,11 @@ def validate_fl_e8_policy(
         )
         if wrong:
             errors.append(f"FL-E8 WP0 rows must all be pending: {wrong!r}")
-        required_counts = {"faithful": 334, "divergent-by-decision": 1, "pending": 7}
+        required_counts = {
+            "faithful": phase_faithful_count(334),
+            "divergent-by-decision": 1,
+            "pending": 7,
+        }
         if candidate_paths:
             errors.append("FL-E8 WP0 must not have a candidate allowlist")
     elif phase == "fl-e8-wp1-candidate":
@@ -1208,7 +1242,11 @@ def validate_fl_e8_policy(
                 "FL-E8 WP1 statuses are incoherent: "
                 f"faithful={wrong_faithful!r}, pending={wrong_pending!r}"
             )
-        required_counts = {"faithful": 339, "divergent-by-decision": 1, "pending": 2}
+        required_counts = {
+            "faithful": phase_faithful_count(339),
+            "divergent-by-decision": 1,
+            "pending": 2,
+        }
         if candidate_paths != FL_E8_WP1_FILES:
             errors.append("FL-E8 WP1 candidate allowlist must be exactly the five promoted rows")
     else:
@@ -1227,7 +1265,11 @@ def validate_fl_e8_policy(
                 "FL-E8 wave statuses are incoherent: "
                 f"faithful={wrong_faithful!r}, pending={wrong_pending!r}"
             )
-        required_counts = {"faithful": 341, "divergent-by-decision": 1, "pending": 0}
+        required_counts = {
+            "faithful": phase_faithful_count(341),
+            "divergent-by-decision": 1,
+            "pending": 0,
+        }
         if candidate_paths != FL_E8_WAVE_FILES:
             errors.append(
                 "FL-E8 wave candidate allowlist must be exactly the seven promoted rows"

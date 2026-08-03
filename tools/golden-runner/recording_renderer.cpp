@@ -902,6 +902,74 @@ void RecordingFactory::addInputEvent(const std::string& kind,
     m_stream.line(out.str());
 }
 
+void RecordingFactory::addAdvance(float seconds, bool settled)
+{
+    std::ostringstream out;
+    out << "advance seconds=" << floatToString(seconds)
+        << " settled=" << (settled ? "true" : "false");
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addAdvanceWithStates(float seconds,
+                                            bool settled,
+                                            size_t statesChanged)
+{
+    std::ostringstream out;
+    out << "advance seconds=" << floatToString(seconds)
+        << " settled=" << (settled ? "true" : "false")
+        << " statesChanged=" << statesChanged;
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addSideChannelEvent(const SideChannelEvent& event)
+{
+    std::ostringstream out;
+    out << "event type=" << event.coreType
+        << " name=" << quotedString(event.name)
+        << " delay=" << floatToString(event.delay);
+    if (event.hasUrl)
+    {
+        out << " url=" << quotedString(event.url)
+            << " target=" << event.target;
+    }
+    out << " props=[";
+    for (size_t index = 0; index < event.properties.size(); index++)
+    {
+        const SideChannelEventProperty& property = event.properties[index];
+        if (index != 0)
+        {
+            out << ',';
+        }
+        out << "{name=" << quotedString(property.name) << ",value=";
+        switch (property.kind)
+        {
+            case SideChannelEventProperty::Kind::number:
+                out << floatToString(property.numberValue);
+                break;
+            case SideChannelEventProperty::Kind::boolean:
+                out << (property.boolValue ? "true" : "false");
+                break;
+            case SideChannelEventProperty::Kind::string:
+                out << quotedString(property.stringValue);
+                break;
+            case SideChannelEventProperty::Kind::color:
+                out << colorToString(property.colorValue);
+                break;
+            case SideChannelEventProperty::Kind::uintValue:
+                out << property.uintValue;
+                break;
+        }
+        out << '}';
+    }
+    out << ']';
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addHitResult(const std::string& result)
+{
+    m_stream.line("hit result=" + result);
+}
+
 void RecordingFactory::addFrame() { m_stream.line("frame"); }
 
 void RecordingFactory::frameSize(uint32_t width, uint32_t height)

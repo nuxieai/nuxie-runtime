@@ -72,6 +72,43 @@ fn edge_activation_distance(position: f32, edge_start: f32) -> f32 {
 }
 
 impl ArtboardInstance {
+    pub(crate) fn sync_text_input_focus(&mut self, focused_local_id: Option<usize>) -> bool {
+        let locals = self
+            .components()
+            .iter()
+            .filter(|component| component.concrete.text_input.is_some())
+            .map(|component| component.local_id)
+            .collect::<Vec<_>>();
+        let mut changed = false;
+        for local_id in locals {
+            let is_focused = focused_local_id == Some(local_id);
+            let state_changed = self
+                .component_mut(local_id)
+                .and_then(|component| component.concrete.text_input.as_mut())
+                .is_some_and(|state| {
+                    if state.is_focused == is_focused {
+                        return false;
+                    }
+                    state.is_focused = is_focused;
+                    if !is_focused {
+                        state.raw.borrow_mut().clear_selection();
+                    }
+                    true
+                });
+            if state_changed {
+                self.add_dirt(local_id, ComponentDirt::PAINT, false);
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    pub(crate) fn text_input_is_focused(&self, local_id: usize) -> bool {
+        self.component(local_id)
+            .and_then(|component| component.concrete.text_input.as_ref())
+            .is_some_and(|state| state.is_focused)
+    }
+
     pub(crate) fn initialize_text_inputs(&self) {
         let locals = self
             .components()
@@ -741,6 +778,11 @@ impl ArtboardInstance {
             .borrow()
             .cursor();
         Some((cursor.start.codepoint_index, cursor.end.codepoint_index))
+    }
+
+    #[cfg(any(test, feature = "tools"))]
+    pub fn debug_text_input_is_focused(&self, local_id: usize) -> bool {
+        self.text_input_is_focused(local_id)
     }
 
     #[cfg(any(test, feature = "tools"))]

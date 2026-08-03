@@ -16,6 +16,7 @@ pub enum ViewModelRuntimeDataType {
     SymbolListIndex,
     AssetImage,
     AssetFont,
+    AssetBlob,
     Artboard,
 }
 

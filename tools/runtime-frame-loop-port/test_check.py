@@ -889,6 +889,40 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "FL-E8 fl-e8-implementation requires pending=7, got 6", errors
         )
 
+    def test_fl_e8_frozen_total_is_additive_after_a_later_wave(self) -> None:
+        errors: list[str] = []
+        validate_fl_e8_policy(
+            phase="fl-e8-wave-candidate",
+            waves=[
+                {"id": "FL-E8", "sequence": 6, "depends_on": ["FL-E"]},
+                {"id": "S4", "sequence": 7, "depends_on": ["FL-E8"]},
+            ],
+            file_rows=[
+                *[
+                    {"upstream": path, "wave": "FL-E8", "status": "faithful"}
+                    for path in sorted(FL_E8_FILES)
+                ],
+                {"upstream": "src/s4_owner.cpp", "wave": "S4", "status": "faithful"},
+            ],
+            expected_counts={
+                "faithful": 343,
+                "divergent-by-decision": 1,
+                "pending": 0,
+            },
+            decisions=[{"id": "D3", "rule": "FLR-20", "ceiling": "layout-engine"}],
+            porting_rules=(
+                "- **FLR-20 Declare support ceilings.** The only approved "
+                "**layout-engine** ceiling is D3; a new ceiling requires an "
+                "explicit user-approved D-row.\n- **FLR-21 Next.** fixture\n"
+            ),
+            parity_register="12. retained history\n",
+            candidate_paths=set(FL_E8_FILES),
+            errors=errors,
+        )
+        self.assertIn(
+            "FL-E8 fl-e8-wave-candidate requires faithful=342, got 343", errors
+        )
+
     def test_fl_e8_wave_requires_all_seven_promotions(self) -> None:
         promoted = {
             "src/shapes/list_path.cpp",
@@ -2769,7 +2803,7 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
                         },
                     );
                 }
-                pub fn advance_frame_components_with_state_machine() {
+                pub fn advance_frame_components_with_state_machine_report() {
                     StateMachineInstance::dispatch_nested_event_sources_with(
                         |artboard, nested_event_dispatch| {
                             artboard.advance_frame_components_collect_events_with_mode(
@@ -2861,8 +2895,8 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             ),
             (
                 "state_machine_hit_result_tristate_required",
-                "enum HitResult { None, Hit, HitOpaque }\n",
-                "type HitResult = bool;\n",
+                "enum RuntimeHitResult { #[default] None, Hit, HitOpaque }\n",
+                "type RuntimeHitResult = bool;\n",
             ),
             (
                 "state_machine_hit_three_pass_order_required",

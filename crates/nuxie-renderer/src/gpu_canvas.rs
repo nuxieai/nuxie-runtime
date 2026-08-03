@@ -11,10 +11,10 @@ use std::sync::{Arc, Mutex};
 pub use nuxie_render_api::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
     GpuCanvasDepthStencilAttachment, GpuCanvasDepthStencilState, GpuCanvasDrawCommand,
-    GpuCanvasIndexBuffer, GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelineState,
-    GpuCanvasRenderPass, GpuCanvasSamplerBinding, GpuCanvasStencilFace, GpuCanvasTextureBinding,
-    GpuCanvasTextureUpload, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute,
-    GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+    GpuCanvasIndexBuffer, GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelinePlan,
+    GpuCanvasPipelineState, GpuCanvasRenderPass, GpuCanvasSamplerBinding, GpuCanvasStencilFace,
+    GpuCanvasTextureBinding, GpuCanvasTextureUpload, GpuCanvasUniformBuffer,
+    GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 use nuxie_render_api::{
     GpuCanvasError, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderEntry,
@@ -1991,6 +1991,7 @@ impl WgpuFactory {
                 multiview_mask: None,
             });
             let draw = GpuCanvasDrawCommand {
+                pipeline_index: 0,
                 vertex_count: plan.vertex_count,
                 instance_count: plan.instance_count,
                 first_vertex: plan.first_vertex,
@@ -3463,6 +3464,7 @@ fn fs_main() -> @location(0) vec4<f32> {
             sampler_bindings: Vec::new(),
             pipeline_state: nuxie_render_api::GpuCanvasPipelineState::default(),
             pass_state: nuxie_render_api::GpuCanvasPassState::default(),
+            pipelines: Vec::new(),
             render_passes: Vec::new(),
         }
     }
@@ -3495,6 +3497,7 @@ fn fs_main() -> @location(0) vec4<f32> {
 
     fn draw_command(viewport: Option<[f32; 4]>) -> GpuCanvasDrawCommand {
         GpuCanvasDrawCommand {
+            pipeline_index: 0,
             vertex_count: 3,
             instance_count: 1,
             first_vertex: 0,
@@ -3729,11 +3732,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
         depth_plan.render_passes = vec![GpuCanvasRenderPass {
             color_attachments: Vec::new(),
             depth_stencil_attachment: Some(GpuCanvasDepthStencilAttachment {
-                view: GpuCanvasAttachmentView::Texture(attachment_texture(
-                    20,
-                    "depth32float",
-                    1,
-                )),
+                view: GpuCanvasAttachmentView::Texture(attachment_texture(20, "depth32float", 1)),
                 depth_load_op: "clear".into(),
                 depth_store_op: "store".into(),
                 depth_clear_value: 1.0,
@@ -3744,11 +3743,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
             .make_imported_gpu_canvas_shader(&depth_shader)
             .expect("vertex-only WGSL materializes");
         factory
-            .make_imported_gpu_canvas_image(
-                &depth_shader_handle,
-                &depth_shader_handle,
-                &depth_plan,
-            )
+            .make_imported_gpu_canvas_image(&depth_shader_handle, &depth_shader_handle, &depth_plan)
             .expect("wgpu accepts a zero-color depth-only pipeline");
     }
 
@@ -4706,6 +4701,7 @@ fn fs_main() -> @location(0) vec4<f32> {
             sampler_bindings: Vec::new(),
             pipeline_state: nuxie_render_api::GpuCanvasPipelineState::default(),
             pass_state: nuxie_render_api::GpuCanvasPassState::default(),
+            pipelines: Vec::new(),
             render_passes: Vec::new(),
         };
 
@@ -4809,6 +4805,7 @@ fn fs_main() -> @location(0) vec4<f32> {
             sampler_bindings: Vec::new(),
             pipeline_state: nuxie_render_api::GpuCanvasPipelineState::default(),
             pass_state: nuxie_render_api::GpuCanvasPassState::default(),
+            pipelines: Vec::new(),
             render_passes: Vec::new(),
         };
         for mode in [crate::RenderMode::ClockwiseAtomic, crate::RenderMode::Msaa] {

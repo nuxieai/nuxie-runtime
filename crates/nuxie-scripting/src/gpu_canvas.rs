@@ -22,10 +22,10 @@ use nuxie_render_api::{
 pub use nuxie_render_api::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
     GpuCanvasDepthStencilAttachment, GpuCanvasDepthStencilState, GpuCanvasDrawCommand,
-    GpuCanvasIndexBuffer, GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelineState,
-    GpuCanvasRenderPass, GpuCanvasSamplerBinding, GpuCanvasStencilFace, GpuCanvasTextureBinding,
-    GpuCanvasTextureUpload, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute,
-    GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+    GpuCanvasIndexBuffer, GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelinePlan,
+    GpuCanvasPipelineState, GpuCanvasRenderPass, GpuCanvasSamplerBinding, GpuCanvasStencilFace,
+    GpuCanvasTextureBinding, GpuCanvasTextureUpload, GpuCanvasUniformBuffer,
+    GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 
 use crate::shader_asset::ShaderAsset;
@@ -618,9 +618,17 @@ impl UserData for GpuBindGroup {}
 
 #[derive(Debug)]
 struct CompletedGpuCanvasPass {
+    vertex_shader: Option<GpuShader>,
+    fragment_shader: Option<GpuShader>,
+    pipelines: Vec<CompletedGpuCanvasPipeline>,
+    plan: GpuCanvasDrawPlan,
+}
+
+#[derive(Debug)]
+struct CompletedGpuCanvasPipeline {
     vertex_shader: GpuShader,
     fragment_shader: Option<GpuShader>,
-    plan: GpuCanvasDrawPlan,
+    plan: GpuCanvasPipelinePlan,
 }
 
 #[derive(Default)]
@@ -1030,13 +1038,18 @@ impl ImportedGpuCanvasInstance {
             self.state.borrow_mut().completed.take().ok_or_else(|| {
                 Error::runtime("gpu-canvas drawCanvas did not finish a render pass")
             })?;
-        let vertex_shader = completed.vertex_shader.module.as_ref().ok_or_else(|| {
-            Error::runtime("GPU-canvas vertex shader has no backend module occurrence")
-        })?;
+        let vertex_shader = completed
+            .vertex_shader
+            .as_ref()
+            .and_then(|shader| shader.module.as_ref())
+            .ok_or_else(|| {
+                Error::runtime("GPU-canvas vertex shader has no backend module occurrence")
+            })?;
         let fragment_shader = completed
             .fragment_shader
             .as_ref()
-            .unwrap_or(&completed.vertex_shader)
+            .or(completed.vertex_shader.as_ref())
+            .expect("completed GPU-canvas pipeline has a vertex shader")
             .module
             .as_ref()
             .ok_or_else(|| {
@@ -1366,6 +1379,55 @@ impl UserData for GpuRenderPass {
         );
         methods.add_method_mut("finish", |_, this, ()| {
             this.ensure_open()?;
+            if this.draws.is_empty() {
+                let mut state = this.state.borrow_mut();
+                if state.width == 0 || state.height == 0 {
+                    return Err(Error::runtime(
+                        "GPU canvas must be resized before its first render pass",
+                    ));
+                }
+                let render_pass = GpuCanvasRenderPass {
+                    color_attachments: this.color_attachments.clone(),
+                    depth_stencil_attachment: this.depth_stencil_attachment.clone(),
+                    draws: Vec::new(),
+                };
+                if let Some(completed) = state.completed.as_mut() {
+                    completed.plan.render_passes.push(render_pass);
+                } else {
+                    state.completed = Some(CompletedGpuCanvasPass {
+                        vertex_shader: None,
+                        fragment_shader: None,
+                        pipelines: Vec::new(),
+                        plan: GpuCanvasDrawPlan {
+                            vertex_entry: None,
+                            fragment_entry: None,
+                            width: state.width,
+                            height: state.height,
+                            clear_color: this
+                                .color_attachments
+                                .first()
+                                .map_or([0.0; 4], |attachment| attachment.clear_color),
+                            vertex_count: 0,
+                            instance_count: 0,
+                            first_vertex: 0,
+                            first_instance: 0,
+                            uniform_buffers: Vec::new(),
+                            vertex_layouts: Vec::new(),
+                            vertex_buffers: Vec::new(),
+                            index_buffer: None,
+                            indexed_draw: None,
+                            texture_bindings: Vec::new(),
+                            sampler_bindings: Vec::new(),
+                            pipeline_state: GpuCanvasPipelineState::default(),
+                            pass_state: GpuCanvasPassState::default(),
+                            pipelines: Vec::new(),
+                            render_passes: vec![render_pass],
+                        },
+                    });
+                }
+                this.finished = true;
+                return Ok(());
+            }
             let pipeline = this.pipeline.as_ref().ok_or_else(|| {
                 Error::runtime("GPU render pass must set a pipeline before finish")
             })?;
@@ -1473,7 +1535,7 @@ impl UserData for GpuRenderPass {
                     slot: *slot,
                     bytes: buffer.bytes.borrow().clone(),
                 })
-                .collect();
+                .collect::<Vec<_>>();
             let draws = this
                 .draws
                 .iter()
@@ -1484,6 +1546,7 @@ impl UserData for GpuRenderPass {
                         first_vertex,
                         first_instance,
                     } => GpuCanvasDrawCommand {
+                        pipeline_index: 0,
                         vertex_count,
                         instance_count,
                         first_vertex,
@@ -1498,6 +1561,7 @@ impl UserData for GpuRenderPass {
                         base_vertex,
                         first_instance,
                     } => GpuCanvasDrawCommand {
+                        pipeline_index: 0,
                         vertex_count: 0,
                         instance_count,
                         first_vertex: 0,
@@ -1533,6 +1597,17 @@ impl UserData for GpuRenderPass {
                 .color_attachments
                 .first()
                 .map_or([0.0; 4], |attachment| attachment.clear_color);
+            let pipeline_plan = GpuCanvasPipelinePlan {
+                vertex_entry: Some(pipeline.vertex_entry.clone()),
+                fragment_entry: pipeline.fragment_entry.clone(),
+                uniform_buffers: uniform_buffers.clone(),
+                vertex_layouts: pipeline.vertex_layouts.clone(),
+                vertex_buffers: vertex_buffers.clone(),
+                index_buffer: index_buffer.clone(),
+                texture_bindings: texture_bindings.clone(),
+                sampler_bindings: sampler_bindings.clone(),
+                pipeline_state: pipeline.state.clone(),
+            };
             let plan = GpuCanvasDrawPlan {
                 vertex_entry: Some(pipeline.vertex_entry.clone()),
                 fragment_entry: pipeline.fragment_entry.clone(),
@@ -1552,18 +1627,67 @@ impl UserData for GpuRenderPass {
                 sampler_bindings,
                 pipeline_state: pipeline.state.clone(),
                 pass_state: first_draw.pass_state.clone(),
+                pipelines: vec![pipeline_plan.clone()],
                 render_passes: vec![render_pass],
             };
             if let Some(completed) = state.completed.as_mut() {
-                ensure_repeated_pass_compatible(completed, pipeline, &plan)?;
-                completed
-                    .plan
-                    .render_passes
-                    .extend(plan.render_passes.into_iter());
+                if completed.pipelines.is_empty() {
+                    completed.vertex_shader = Some(pipeline.vertex_shader.clone());
+                    completed.fragment_shader = pipeline.fragment_shader.clone();
+                    completed.plan.vertex_entry = plan.vertex_entry.clone();
+                    completed.plan.fragment_entry = plan.fragment_entry.clone();
+                    completed.plan.clear_color = plan.clear_color;
+                    completed.plan.vertex_count = plan.vertex_count;
+                    completed.plan.instance_count = plan.instance_count;
+                    completed.plan.first_vertex = plan.first_vertex;
+                    completed.plan.first_instance = plan.first_instance;
+                    completed.plan.uniform_buffers = plan.uniform_buffers.clone();
+                    completed.plan.vertex_layouts = plan.vertex_layouts.clone();
+                    completed.plan.vertex_buffers = plan.vertex_buffers.clone();
+                    completed.plan.index_buffer = plan.index_buffer.clone();
+                    completed.plan.indexed_draw = plan.indexed_draw.clone();
+                    completed.plan.texture_bindings = plan.texture_bindings.clone();
+                    completed.plan.sampler_bindings = plan.sampler_bindings.clone();
+                    completed.plan.pipeline_state = plan.pipeline_state.clone();
+                    completed.plan.pass_state = plan.pass_state.clone();
+                }
+                let pipeline_index = completed
+                    .pipelines
+                    .iter()
+                    .position(|candidate| {
+                        same_shader(&candidate.vertex_shader, &pipeline.vertex_shader)
+                            && same_optional_shader(
+                                candidate.fragment_shader.as_ref(),
+                                pipeline.fragment_shader.as_ref(),
+                            )
+                            && candidate.plan == pipeline_plan
+                    })
+                    .unwrap_or_else(|| {
+                        let index = completed.pipelines.len();
+                        completed.pipelines.push(CompletedGpuCanvasPipeline {
+                            vertex_shader: pipeline.vertex_shader.clone(),
+                            fragment_shader: pipeline.fragment_shader.clone(),
+                            plan: pipeline_plan.clone(),
+                        });
+                        completed.plan.pipelines.push(pipeline_plan);
+                        index
+                    });
+                let pipeline_index = u32::try_from(pipeline_index)
+                    .map_err(|_| Error::runtime("GPU pipeline index overflow"))?;
+                let mut render_passes = plan.render_passes;
+                for draw in &mut render_passes[0].draws {
+                    draw.pipeline_index = pipeline_index;
+                }
+                completed.plan.render_passes.extend(render_passes);
             } else {
                 state.completed = Some(CompletedGpuCanvasPass {
-                    vertex_shader: pipeline.vertex_shader.clone(),
+                    vertex_shader: Some(pipeline.vertex_shader.clone()),
                     fragment_shader: pipeline.fragment_shader.clone(),
+                    pipelines: vec![CompletedGpuCanvasPipeline {
+                        vertex_shader: pipeline.vertex_shader.clone(),
+                        fragment_shader: pipeline.fragment_shader.clone(),
+                        plan: pipeline_plan,
+                    }],
                     plan,
                 });
             }
@@ -1655,34 +1779,12 @@ fn same_shader(left: &GpuShader, right: &GpuShader) -> bool {
         }
 }
 
-fn ensure_repeated_pass_compatible(
-    completed: &CompletedGpuCanvasPass,
-    pipeline: &GpuPipeline,
-    plan: &GpuCanvasPlan,
-) -> Result<()> {
-    let same_fragment = match (&completed.fragment_shader, &pipeline.fragment_shader) {
+fn same_optional_shader(left: Option<&GpuShader>, right: Option<&GpuShader>) -> bool {
+    match (left, right) {
         (Some(left), Some(right)) => same_shader(left, right),
         (None, None) => true,
         _ => false,
-    };
-    let existing = &completed.plan;
-    if !same_shader(&completed.vertex_shader, &pipeline.vertex_shader)
-        || !same_fragment
-        || existing.vertex_entry != plan.vertex_entry
-        || existing.fragment_entry != plan.fragment_entry
-        || existing.uniform_buffers != plan.uniform_buffers
-        || existing.vertex_layouts != plan.vertex_layouts
-        || existing.vertex_buffers != plan.vertex_buffers
-        || existing.index_buffer != plan.index_buffer
-        || existing.texture_bindings != plan.texture_bindings
-        || existing.sampler_bindings != plan.sampler_bindings
-        || existing.pipeline_state != plan.pipeline_state
-    {
-        return Err(Error::runtime(
-            "repeated GPU render passes must retain one pipeline and resource set",
-        ));
     }
-    Ok(())
 }
 
 /// Retained pure-Rust Luau program used for deterministic temporal sampling.

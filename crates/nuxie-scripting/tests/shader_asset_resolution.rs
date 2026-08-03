@@ -332,6 +332,7 @@ fn empty_plan() -> GpuCanvasPlan {
         sampler_bindings: Vec::new(),
         pipeline_state: nuxie_render_api::GpuCanvasPipelineState::default(),
         pass_state: nuxie_render_api::GpuCanvasPassState::default(),
+        pipelines: Vec::new(),
         render_passes: Vec::new(),
     }
 }

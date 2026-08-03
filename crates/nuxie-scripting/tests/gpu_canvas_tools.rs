@@ -68,6 +68,85 @@ const LUA_GPU_FULL_SURFACE: &str = include_str!("fixtures/lua-gpu-full-surface.l
 // Authored oracle: crates/nuxie-scripting/tests/fixtures/lua-gpu-semantic-combinations.luau
 const LUA_GPU_SEMANTIC_COMBINATIONS: &str =
     include_str!("fixtures/lua-gpu-semantic-combinations.luau");
+const LUA_GPU_CEILINGS: &str = include_str!("fixtures/lua-gpu-ceilings.luau");
+
+#[test]
+fn authored_lua_gpu_ceiling_fixture_retains_per_pass_pipeline_and_resources() {
+    let mut program =
+        GpuCanvasProgram::compile(LUA_GPU_CEILINGS).expect("GPU ceiling fixture compiles");
+
+    let plan = program
+        .draw()
+        .expect("one submission may use distinct pipelines and resources");
+    assert_eq!(plan.pipelines.len(), 2);
+    assert_eq!(plan.render_passes.len(), 2);
+    assert_eq!(plan.render_passes[0].draws[0].pipeline_index, 0);
+    assert_eq!(plan.render_passes[1].draws[0].pipeline_index, 1);
+    assert_eq!(plan.pipelines[0].pipeline_state.cull_mode, "none");
+    assert_eq!(plan.pipelines[1].pipeline_state.cull_mode, "back");
+    assert_eq!(
+        f32::from_le_bytes(
+            plan.pipelines[0].uniform_buffers[0].bytes[0..4]
+                .try_into()
+                .unwrap()
+        ),
+        1.0
+    );
+    assert_eq!(
+        f32::from_le_bytes(
+            plan.pipelines[1].uniform_buffers[0].bytes[0..4]
+                .try_into()
+                .unwrap()
+        ),
+        2.0
+    );
+}
+
+#[test]
+fn authored_lua_gpu_ceiling_fixture_retains_explicit_empty_finish() {
+    let mut program =
+        GpuCanvasProgram::compile(LUA_GPU_CEILINGS).expect("GPU ceiling fixture compiles");
+    program.advance(0.0).expect("select empty finished pass");
+
+    let plan = program
+        .draw()
+        .expect("finish closes and retains a pass without draws or a pipeline");
+    assert!(plan.pipelines.is_empty());
+    assert_eq!(plan.render_passes.len(), 1);
+    assert!(plan.render_passes[0].draws.is_empty());
+    assert_eq!(plan.render_passes[0].color_attachments[0].store_op, "store");
+}
+
+#[test]
+fn authored_lua_gpu_ceiling_fixture_keeps_external_identity_across_submissions() {
+    let mut program =
+        GpuCanvasProgram::compile(LUA_GPU_CEILINGS).expect("GPU ceiling fixture compiles");
+    program
+        .advance(0.0)
+        .expect("skip multi-pipeline submission");
+    program
+        .advance(0.0)
+        .expect("select external attachment seed");
+
+    let seed = program
+        .draw()
+        .expect("external attachment seed is retained");
+    let seeded_resource = match &seed.render_passes[0].color_attachments[0].view {
+        GpuCanvasAttachmentView::Texture(texture) => texture.resource_id,
+        GpuCanvasAttachmentView::Canvas => panic!("seed must target the external texture"),
+    };
+
+    program
+        .advance(0.0)
+        .expect("select external texture sample");
+    let sample = program.draw().expect("external texture sample is retained");
+    assert_eq!(sample.pipelines.len(), 1);
+    assert_eq!(sample.pipelines[0].texture_bindings.len(), 1);
+    assert_eq!(
+        sample.pipelines[0].texture_bindings[0].resource_id,
+        seeded_resource
+    );
+}
 
 #[test]
 fn authored_lua_gpu_semantic_combinations_retain_exact_pass_structure() {

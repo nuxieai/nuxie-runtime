@@ -1233,6 +1233,9 @@ pub struct GpuCanvasDepthStencilAttachment {
 /// at the draw site so repeated draws can change it independently.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GpuCanvasDrawCommand {
+    /// Index into [`GpuCanvasPlan::pipelines`] for the complete pipeline and
+    /// resource snapshot effective at this draw.
+    pub pipeline_index: u32,
     pub vertex_count: u32,
     pub instance_count: u32,
     pub first_vertex: u32,
@@ -1241,14 +1244,31 @@ pub struct GpuCanvasDrawCommand {
     pub pass_state: GpuCanvasPassState,
 }
 
-/// One authored render pass. Pipeline and resource state remains on
-/// [`GpuCanvasPlan`] because the adapted wgpu handoff currently materializes
-/// one pipeline/resource set for the complete canvas submission.
+/// One authored render pass. Each draw selects its retained pipeline/resource
+/// snapshot through [`GpuCanvasDrawCommand::pipeline_index`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct GpuCanvasRenderPass {
     pub color_attachments: Vec<GpuCanvasColorAttachment>,
     pub depth_stencil_attachment: Option<GpuCanvasDepthStencilAttachment>,
     pub draws: Vec<GpuCanvasDrawCommand>,
+}
+
+/// One immutable pipeline and resource snapshot used by a canvas submission.
+///
+/// Several passes and draws may select the same entry. This mirrors the
+/// retained pipeline/resource objects in `lua_gpu.cpp` without exposing
+/// backend objects through the render-plan seam.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GpuCanvasPipelinePlan {
+    pub vertex_entry: Option<GpuCanvasShaderEntrySelection>,
+    pub fragment_entry: Option<GpuCanvasShaderEntrySelection>,
+    pub uniform_buffers: Vec<GpuCanvasUniformBuffer>,
+    pub vertex_layouts: Vec<GpuCanvasVertexLayout>,
+    pub vertex_buffers: Vec<GpuCanvasVertexBuffer>,
+    pub index_buffer: Option<GpuCanvasIndexBuffer>,
+    pub texture_bindings: Vec<GpuCanvasTextureBinding>,
+    pub sampler_bindings: Vec<GpuCanvasSamplerBinding>,
+    pub pipeline_state: GpuCanvasPipelineState,
 }
 
 /// Backend-neutral result of executing one imported script's `drawCanvas`.
@@ -1272,6 +1292,9 @@ pub struct GpuCanvasPlan {
     pub sampler_bindings: Vec<GpuCanvasSamplerBinding>,
     pub pipeline_state: GpuCanvasPipelineState,
     pub pass_state: GpuCanvasPassState,
+    /// Pipeline/resource snapshots referenced by explicit render-pass draws.
+    /// Empty denotes the legacy single-pipeline fields above.
+    pub pipelines: Vec<GpuCanvasPipelinePlan>,
     /// Explicit authored pass stream. An empty vector denotes the legacy
     /// single-pass fields above for backwards-compatible callers.
     pub render_passes: Vec<GpuCanvasRenderPass>,

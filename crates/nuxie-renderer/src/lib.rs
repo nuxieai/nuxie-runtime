@@ -609,9 +609,9 @@ pub struct WgpuFrameMetrics {
 pub use gpu_canvas::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
     GpuCanvasDepthStencilAttachment, GpuCanvasDepthStencilState, GpuCanvasDrawCommand,
-    GpuCanvasIndexBuffer, GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelineState,
-    GpuCanvasRenderPass, GpuCanvasRenderPlan, GpuCanvasSamplerBinding, GpuCanvasStencilFace,
-    GpuCanvasTextureBinding, GpuCanvasTextureUpload, GpuCanvasUniformBuffer,
+    GpuCanvasIndexBuffer, GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelinePlan,
+    GpuCanvasPipelineState, GpuCanvasRenderPass, GpuCanvasRenderPlan, GpuCanvasSamplerBinding,
+    GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload, GpuCanvasUniformBuffer,
     GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 #[cfg(any(target_os = "ios", target_os = "macos"))]

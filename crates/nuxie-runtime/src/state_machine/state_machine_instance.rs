@@ -1,5 +1,6 @@
 // Runtime instance orchestration for the C++ state machine path.
 // Mirrors /Users/levi/dev/oss/rive-runtime/src/animation/state_machine_instance.cpp.
+use crate::semantic_runtime_tree::RuntimeSemanticTree;
 use super::focused_input_dispatch::RuntimeInputDispatchOutcome;
 use super::listener_types::RuntimeListenerViewModelPath;
 use super::*;
@@ -1303,191 +1304,21 @@ enum RuntimeSemanticManagerSelection {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct RuntimeSemanticOccurrenceKey {
-    owner_identity: u64,
-    data_local_id: usize,
+pub(crate) struct RuntimeSemanticOccurrenceKey {
+    pub(crate) owner_identity: u64,
+    pub(crate) data_local_id: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
-struct RuntimeSemanticRoute {
-    owner_identity: u64,
-    target_local_id: usize,
-    data_local_id: usize,
+pub(crate) struct RuntimeSemanticRoute {
+    pub(crate) owner_identity: u64,
+    pub(crate) target_local_id: usize,
+    pub(crate) data_local_id: usize,
 }
 
-/// One retained semantic domain shared by every mounted artboard occurrence
-/// beneath a state-machine instance. The interface stays on
-/// `StateMachineInstance`; occurrence keys and recursive Artboard traversal
-/// remain implementation details at this seam.
-#[derive(Debug, Default)]
-struct RuntimeSemanticTree {
-    manager: SemanticManager,
-    data: BTreeMap<RuntimeSemanticOccurrenceKey, RuntimeSemanticData>,
-    routes: BTreeMap<u32, RuntimeSemanticRoute>,
-    registered_listener_groups: BTreeSet<(RuntimeSemanticOccurrenceKey, usize)>,
-    pending_focus_scroll: Option<RuntimeSemanticRoute>,
-}
 
-impl RuntimeSemanticTree {
-    fn synchronize(
-        &mut self,
-        artboard: &mut ArtboardInstance,
-        listener_groups: &[semantic_listener_group::RuntimeSemanticListenerGroup],
-    ) {
-        let root_owner_identity = artboard.instance_identity();
-        let mut live = BTreeSet::new();
-        self.visit_artboard(artboard, None, Mat2D::IDENTITY, &mut live);
 
-        let stale = self
-            .data
-            .keys()
-            .filter(|key| !live.contains(*key))
-            .copied()
-            .collect::<Vec<_>>();
-        for key in stale {
-            if let Some(mut data) = self.data.remove(&key) {
-                data.detach(&mut self.manager);
-            }
-        }
-        self.registered_listener_groups
-            .retain(|(key, _)| live.contains(key));
-        for (group_index, group) in listener_groups.iter().enumerate() {
-            let key = RuntimeSemanticOccurrenceKey {
-                owner_identity: root_owner_identity,
-                data_local_id: group.semantic_data_local_id,
-            };
-            if self.data.contains_key(&key)
-                && self.registered_listener_groups.insert((key, group_index))
-            {
-                group.register(
-                    self.data
-                        .get_mut(&key)
-                        .expect("registered semantic data remains retained"),
-                );
-            }
-        }
-        self.rebuild_routes();
-    }
-
-    fn visit_artboard(
-        &mut self,
-        artboard: &mut ArtboardInstance,
-        inherited_parent: Option<SemanticNodeHandle>,
-        root_transform: Mat2D,
-        live: &mut BTreeSet<RuntimeSemanticOccurrenceKey>,
-    ) {
-        let owner_identity = artboard.instance_identity();
-        let semantic_locals = artboard
-            .components()
-            .iter()
-            .filter(|component| component.type_name == "SemanticData")
-            .map(|component| component.local_id)
-            .collect::<Vec<_>>();
-
-        for local_id in &semantic_locals {
-            let key = RuntimeSemanticOccurrenceKey {
-                owner_identity,
-                data_local_id: *local_id,
-            };
-            live.insert(key);
-            if !self.data.contains_key(&key) {
-                let mut data = RuntimeSemanticData::from_artboard(artboard, *local_id);
-                data.prepare_for_tree(artboard);
-                self.data.insert(key, data);
-            }
-        }
-
-        let nodes_by_target = semantic_locals
-            .iter()
-            .filter_map(|local_id| {
-                let key = RuntimeSemanticOccurrenceKey {
-                    owner_identity,
-                    data_local_id: *local_id,
-                };
-                let data = self.data.get(&key)?;
-                Some((data.parent_local_id?, data.node_handle()?))
-            })
-            .collect::<BTreeMap<_, _>>();
-
-        for local_id in &semantic_locals {
-            let key = RuntimeSemanticOccurrenceKey {
-                owner_identity,
-                data_local_id: *local_id,
-            };
-            let target_local = self.data.get(&key).and_then(|data| data.parent_local_id);
-            let parent = target_local
-                .and_then(|target| artboard.component_parent_local(target))
-                .and_then(|parent| closest_semantic_node(artboard, parent, &nodes_by_target))
-                .or_else(|| inherited_parent.clone());
-            let data = self.data.get_mut(&key).expect("semantic data was retained");
-            data.synchronize_from_artboard(artboard, &mut self.manager, root_transform);
-            data.reconcile_tree_membership(
-                &mut self.manager,
-                parent.as_ref(),
-                artboard,
-                root_transform,
-            );
-        }
-
-        let nested_hosts = artboard
-            .nested_artboards
-            .keys()
-            .copied()
-            .collect::<Vec<_>>();
-        for host_local in nested_hosts {
-            let parent = closest_semantic_node(artboard, host_local, &nodes_by_target)
-                .or_else(|| inherited_parent.clone());
-            let host_world = artboard.runtime_component_world_transform_with_scroll(host_local);
-            if let Some(nested) = artboard.nested_artboards.get_mut(&host_local) {
-                let child_root = nested
-                    .child
-                    .mounted_root_transform(root_transform.multiply(host_world));
-                self.visit_artboard(&mut nested.child, parent, child_root, live);
-            }
-        }
-
-        let list_locals = artboard.component_list_locals().collect::<Vec<_>>();
-        let list_root_transforms =
-            artboard.runtime_component_list_child_root_transforms(root_transform);
-        for list_local in list_locals {
-            let parent = closest_semantic_node(artboard, list_local, &nodes_by_target)
-                .or_else(|| inherited_parent.clone());
-            let Some(items) = artboard.component_list_items_mut(list_local) else {
-                continue;
-            };
-            for (item_index, item) in items.iter_mut().enumerate() {
-                let child_root = list_root_transforms
-                    .get(&list_local)
-                    .and_then(|roots| roots.get(item_index))
-                    .copied()
-                    .unwrap_or(root_transform);
-                self.visit_artboard(&mut item.child, parent.clone(), child_root, live);
-            }
-        }
-    }
-
-    fn rebuild_routes(&mut self) {
-        self.routes.clear();
-        for (key, data) in &self.data {
-            let Some(target_local_id) = data.parent_local_id else {
-                continue;
-            };
-            let id = data.semantic_id();
-            if id != 0 {
-                self.routes.insert(
-                    id,
-                    RuntimeSemanticRoute {
-                        owner_identity: key.owner_identity,
-                        target_local_id,
-                        data_local_id: key.data_local_id,
-                    },
-                );
-            }
-        }
-    }
-}
-
-fn closest_semantic_node(
+pub(crate) fn closest_semantic_node(
     artboard: &ArtboardInstance,
     mut local_id: usize,
     nodes_by_target: &BTreeMap<usize, SemanticNodeHandle>,
@@ -5624,7 +5455,8 @@ impl StateMachineInstance {
     /// Owner-safe availability projection of C++ `semanticManager()`.
     ///
     /// The selected manager pointer and its internals remain at the RECORDED
-    /// absent-manifest-row B6-0329 boundary.
+    /// absent-manifest-row B6-0329 boundary against upstream
+    /// `src/semantic/semantic_manager.cpp`.
     pub fn semantic_manager(&self) -> bool {
         self.semantic_manager_selection() != RuntimeSemanticManagerSelection::None
     }

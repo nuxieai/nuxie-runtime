@@ -4006,7 +4006,7 @@ b6_row_id = "B6-0327"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "P3-c phase-1 preparation against d788e8ec: semantic_data.rs consolidates RuntimeSemanticData with the header-owned retained SemanticNode identity and ports lazy identity, authored fields, focus flags, hidden/collapsed remove-and-readd, content/bounds dirt, inference, bounds, and duplicate-preserving listener dispatch. Focused semantic tests pass, but RF-33 keeps this row pending until the shared Artboard/StateMachineInstance lifecycle splice is landed and the #LT-1 semantic side-channel serializes full SemanticsDiff plus action/focus results for fixture differentials."
+note = "F6FID against 4ac7b327 integrates RuntimeSemanticData into the retained StateMachineInstance semantic tree, owner-qualifies repeated mounted occurrences, refreshes authored/focus/provider state, and passes eight direct semantic_data_lifecycle cases plus four focus fixture cases. The row remains pending—not promoted—because the data_binding_lists action/update case still requires #LT-1 to serialize the fired action and complete follow-up SemanticsDiff."
 
 [[file]]
 upstream = "src/semantic/semantic_inference_registry.cpp"
@@ -4018,7 +4018,7 @@ b6_row_id = "B6-0328"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "P3-c phase-1 preparation against d788e8ec: the pinned WITH_RIVE_TEXT rule set is ported as Text/TextValueRun authored-order concatenation with the same empty-label false result. RF-33 keeps the row pending until fixture-backed Text inference runs through the shared semantic-tree lifecycle and #LT-1 diff side-channel."
+note = "The pinned WITH_RIVE_TEXT rule is implemented as authored-order Text/TextValueRun concatenation with the same empty-label false result. F6FID leaves this row pending because no upstream fixture case yet exercises that registry through the retained tree; promotion requires a green #LT-1 full-diff Text-inference oracle case."
 
 [[file]]
 upstream = "src/semantic/semantic_manager.cpp"
@@ -4030,7 +4030,7 @@ b6_row_id = "B6-0329"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "P3-c phase-1 preparation against d788e8ec: semantic_manager.rs consolidates SemanticManager with its header-owned snapshot payloads and owns manager-local IDs, collision handling, label derivation/absorption, boundary flattening, stable visual order, full/incremental diffs, dirty-boundary reconciliation, drain, lookup, and owner-mediated focus. Twenty label-focused tests plus three manager contract tests pass. RF-33 keeps the row pending until StateMachineInstance installs the production manager/resolver, Artboard owns build/cleanup/boundaries, and #LT-1 serializes every SemanticsDiff field for C++/Rust fixture comparison."
+note = "F6FID installs the retained manager/tree on StateMachineInstance and all 36 semantic_label_inference plus all 16 semantic_dispatch direct cases pass; the four RB-2-dependent focus fixture cases also pass. The row remains pending—not promoted—until #LT-1 serializes every SemanticsDiff field and action outcome for the remaining fixture cases and external nested-boundary manager selection is verified upstream."
 
 [[file]]
 upstream = "src/semantic/semantic_provider.cpp"
@@ -4042,7 +4042,7 @@ b6_row_id = "B6-0330"
 b6_verdict = "N/A"
 b6_cluster = "unavailable"
 audit_record = "docs/b6-audit/results/unavailable.md"
-note = "P3-c phase-1 preparation against d788e8ec: SemanticProvider now resolves direct SemanticData before Text inference and projects drawable, descendant-container, and translation-fallback bounds through the live geometry owner. RF-33 keeps the row pending until fixture-backed nested root-transform evidence is observable through the #LT-1 full SemanticsDiff side-channel."
+note = "F6FID maps all four bounds corners through each mounted occurrence root transform and composes live ancestor scroll transforms; the upstream bottom-focus case emits five green geometry updates after scrolling. The row remains pending—not promoted—because semantic_provider_test.cpp's six exact cases still lack #LT-1 fixture/full-bounds differential evidence."
 
 [[file]]
 upstream = "src/shapes/clipping_shape.cpp"

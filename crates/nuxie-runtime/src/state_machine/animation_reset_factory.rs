@@ -180,6 +180,7 @@ impl AnimationResetFactory {
                         }
                         RuntimeKeyedPropertyTarget::Bool
                         | RuntimeKeyedPropertyTarget::Uint
+                        | RuntimeKeyedPropertyTarget::Int
                         | RuntimeKeyedPropertyTarget::String
                         | RuntimeKeyedPropertyTarget::Callback { .. } => {}
                     }

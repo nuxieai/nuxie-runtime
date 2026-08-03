@@ -25916,6 +25916,10 @@ mod tests {
                     }
                     AuthoringValue::Color(value) => bytes.extend_from_slice(&value.to_le_bytes()),
                     AuthoringValue::Double(value) => bytes.extend_from_slice(&value.to_le_bytes()),
+                    AuthoringValue::Int(value) => {
+                        let encoded = ((value as u32) << 1) ^ ((value >> 31) as u32);
+                        push_var_uint(&mut bytes, u64::from(encoded));
+                    }
                     AuthoringValue::String(value) => {
                         push_var_uint(&mut bytes, value.len() as u64);
                         bytes.extend_from_slice(value.as_bytes());
@@ -25954,6 +25958,7 @@ mod tests {
                             }
                             FieldValue::Color(value) => AuthoringValue::Color(*value),
                             FieldValue::Double(value) => AuthoringValue::Double(*value),
+                            FieldValue::Int(value) => AuthoringValue::Int(*value),
                             FieldValue::String(value) => AuthoringValue::String(
                                 value
                                     .as_str()

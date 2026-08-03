@@ -24,6 +24,7 @@ pub enum RuntimeKeyedPropertyTarget {
     },
     Bool,
     Uint,
+    Int,
     String,
     Callback {
         event_local_index: Option<usize>,
@@ -266,6 +267,29 @@ impl RuntimeKeyedProperty {
             }
         } else {
             self.key_frames.last()?.as_uint()?.value
+        };
+
+        Some(value)
+    }
+
+    fn int_value_at(&self, seconds: f32) -> Option<i32> {
+        if self.key_frames.is_empty() {
+            return None;
+        }
+
+        let idx = self.closest_frame_index(seconds);
+        let value = if idx == 0 {
+            self.key_frames[0].as_int()?.value
+        } else if idx < self.key_frames.len() {
+            let from = self.key_frames[idx - 1].as_int()?;
+            let to = self.key_frames[idx].as_int()?;
+            if seconds == to.seconds {
+                to.value
+            } else {
+                from.value
+            }
+        } else {
+            self.key_frames.last()?.as_int()?.value
         };
 
         Some(value)

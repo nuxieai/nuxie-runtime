@@ -33,15 +33,23 @@ fi
 jobs="$(sysctl -n hw.logicalcpu 2>/dev/null || nproc)"
 "$provenance" source "$rive_runtime"
 
+# librive build trees default under this repo's own target/ rather than the
+# shared pinned checkout's out/. The pinned checkout is shared by every
+# worktree; concurrent batteries racing `make clean`+rebuild in one shared
+# build tree can delete or partially rewrite librive.a between another
+# battery's provenance verify and its link. Per-repo trees make the shared
+# checkout read-only for builds; explicit *_OUT overrides still win.
+repo_target="$(cd "$script_dir/../.." && pwd)/target"
+
 if [[ "${RIVE_GOLDEN_WITH_SCRIPTING:-0}" == "1" ]]; then
     runtime_mode="scripted"
-    runtime_out="${RIVE_GOLDEN_SCRIPTING_OUT:-out/rive-rust-golden-scripting-$config}"
-    decoders_out="${RIVE_GOLDEN_DECODERS_OUT:-out/rive-rust-golden-scripting-$config}"
+    runtime_out="${RIVE_GOLDEN_SCRIPTING_OUT:-$repo_target/golden-runner-librive/scripted-$config}"
+    decoders_out="${RIVE_GOLDEN_DECODERS_OUT:-$repo_target/golden-runner-librive/scripted-$config-decoders}"
     runtime_premake_flags=(--with_rive_text --with_rive_layout --with_rive_scripting --with_rive_audio=external)
     runtime_targets=(rive rive_harfbuzz rive_sheenbidi rive_yoga luau_vm miniaudio)
 else
     runtime_mode="ordinary"
-    runtime_out="${RIVE_GOLDEN_RUNTIME_OUT:-out/rive-rust-golden-$config}"
+    runtime_out="${RIVE_GOLDEN_RUNTIME_OUT:-$repo_target/golden-runner-librive/ordinary-$config}"
     runtime_premake_flags=(--with_rive_text --with_rive_layout)
     runtime_targets=(rive rive_harfbuzz rive_sheenbidi rive_yoga)
 fi

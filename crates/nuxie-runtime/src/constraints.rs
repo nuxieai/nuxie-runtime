@@ -93,10 +93,19 @@ enum RuntimeScrollProperty {
     Offset(RuntimeScrollAxis),
     Percent(RuntimeScrollAxis),
     Index,
+    ContentExtent(RuntimeScrollAxis),
 }
 
 fn runtime_scroll_property(property_key: u16) -> Option<RuntimeScrollProperty> {
-    let [offset_x, offset_y, percent_x, percent_y, index] = *runtime_scroll_property_keys();
+    let [
+        offset_x,
+        offset_y,
+        percent_x,
+        percent_y,
+        index,
+        content_width,
+        content_height,
+    ] = *runtime_scroll_property_keys();
     if offset_x == Some(property_key) {
         Some(RuntimeScrollProperty::Offset(RuntimeScrollAxis::X))
     } else if offset_y == Some(property_key) {
@@ -107,13 +116,17 @@ fn runtime_scroll_property(property_key: u16) -> Option<RuntimeScrollProperty> {
         Some(RuntimeScrollProperty::Percent(RuntimeScrollAxis::Y))
     } else if index == Some(property_key) {
         Some(RuntimeScrollProperty::Index)
+    } else if content_width == Some(property_key) {
+        Some(RuntimeScrollProperty::ContentExtent(RuntimeScrollAxis::X))
+    } else if content_height == Some(property_key) {
+        Some(RuntimeScrollProperty::ContentExtent(RuntimeScrollAxis::Y))
     } else {
         None
     }
 }
 
-fn runtime_scroll_property_keys() -> &'static [Option<u16>; 5] {
-    static KEYS: OnceLock<[Option<u16>; 5]> = OnceLock::new();
+fn runtime_scroll_property_keys() -> &'static [Option<u16>; 7] {
+    static KEYS: OnceLock<[Option<u16>; 7]> = OnceLock::new();
     KEYS.get_or_init(|| {
         [
             property_key_for_name("ScrollConstraint", "scrollOffsetX"),
@@ -121,6 +134,8 @@ fn runtime_scroll_property_keys() -> &'static [Option<u16>; 5] {
             property_key_for_name("ScrollConstraint", "scrollPercentX"),
             property_key_for_name("ScrollConstraint", "scrollPercentY"),
             property_key_for_name("ScrollConstraint", "scrollIndex"),
+            property_key_for_name("ScrollConstraint", "computedContentWidth"),
+            property_key_for_name("ScrollConstraint", "computedContentHeight"),
         ]
     })
 }
@@ -141,7 +156,7 @@ fn runtime_scroll_intent_axes(
             }
             axes
         }
-        RuntimeScrollProperty::Offset(_) => Vec::new(),
+        RuntimeScrollProperty::Offset(_) | RuntimeScrollProperty::ContentExtent(_) => Vec::new(),
     }
 }
 
@@ -1470,6 +1485,11 @@ pub(crate) fn runtime_scroll_double_property(
                     .unwrap_or(0.0),
             )
         }
+        RuntimeScrollProperty::ContentExtent(axis) => Some(
+            runtime_scroll_layout_metrics(artboard, constraint_handle, constraint, false)
+                .map(|metrics| metrics.content_size(axis))
+                .unwrap_or(0.0),
+        ),
     }
 }
 
@@ -1482,6 +1502,14 @@ pub(crate) fn set_runtime_scroll_double_property(
     let property = runtime_scroll_property(property_key)?;
     if matches!(property, RuntimeScrollProperty::Offset(_)) {
         return None;
+    }
+    if matches!(property, RuntimeScrollProperty::ContentExtent(_)) {
+        // S4-47 passthrough setters intentionally retain no value. The
+        // generated wrapper still publishes a changed notification when its
+        // live getter differs from the attempted write.
+        return Some(
+            runtime_scroll_double_property(artboard, local_id, property_key) != Some(value),
+        );
     }
     let (constraint_handle, constraint) = runtime_scroll_constraint(artboard, local_id)?;
     if runtime_scroll_double_property(artboard, local_id, property_key) == Some(value) {
@@ -1576,7 +1604,9 @@ pub(crate) fn set_runtime_scroll_double_property(
                 )?;
             }
         }
-        RuntimeScrollProperty::Offset(_) => unreachable!("offsets use generated storage"),
+        RuntimeScrollProperty::Offset(_) | RuntimeScrollProperty::ContentExtent(_) => {
+            unreachable!("offsets and content extents do not create scroll intents")
+        }
     }
     Some(true)
 }
@@ -3596,6 +3626,35 @@ mod tests {
         assert_eq!(
             instance.double_property(constraint_local, percent_y_key),
             Some(0.5)
+        );
+    }
+
+    #[test]
+    fn computed_scroll_content_extents_are_live_read_only_layout_values() {
+        let (mut instance, constraint_local) = scroll_intent_fixture();
+        let width_key = property_key_for_name("ScrollConstraint", "computedContentWidth").unwrap();
+        let height_key =
+            property_key_for_name("ScrollConstraint", "computedContentHeight").unwrap();
+
+        instance.update_pass();
+        let width = instance
+            .double_property(constraint_local, width_key)
+            .expect("computed content width");
+        let height = instance
+            .double_property(constraint_local, height_key)
+            .expect("computed content height");
+        assert!(width > 0.0);
+        assert!(height > 0.0);
+
+        assert!(instance.set_double_property(constraint_local, width_key, width + 1.0));
+        assert!(instance.set_double_property(constraint_local, height_key, height + 1.0));
+        assert_eq!(
+            instance.double_property(constraint_local, width_key),
+            Some(width)
+        );
+        assert_eq!(
+            instance.double_property(constraint_local, height_key),
+            Some(height)
         );
     }
 

@@ -90548,6 +90548,145 @@ fn upstream_layout_fixture(
     (runtime, graph, graph_index, instance)
 }
 
+#[test]
+fn s4_layout_foundation_fixtures_import_and_settle() {
+    for fixture in [
+        "animated_cubic_participant.riv",
+        "animated_participant.riv",
+        "constrained_participant.riv",
+        "display_none_participant.riv",
+        "fixed_participant.riv",
+        "grid_2x2.riv",
+        "grid_auto_rows.riv",
+        "grid_participant.riv",
+        "grid_track_types.riv",
+        "group_participant.riv",
+        "hug_participant.riv",
+        "list_in_group_joins_layout.riv",
+        "nested_group_participant.riv",
+        "solo_participant.riv",
+        "stack.riv",
+        "stack_participant.riv",
+        "styled_flex.riv",
+        "layout_grid_stack.riv",
+    ] {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/sync")
+            .join(fixture);
+        let bytes = std::fs::read(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        let runtime = read_runtime_file(&bytes)
+            .unwrap_or_else(|error| panic!("failed to import {fixture}: {error:#}"));
+        let graphs = GraphFile::from_runtime_file(&runtime)
+            .unwrap_or_else(|error| panic!("failed to graph {fixture}: {error:#}"));
+        for graph in &graphs.artboards {
+            let mut instance =
+                ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
+                    .unwrap_or_else(|error| panic!("failed to instantiate {fixture}: {error:#}"));
+            instance.update_pass();
+            let report = instance
+                .debug_taffy_layout_bounds_report(&runtime, graph)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{fixture} artboard {:?} did not settle its layout tree",
+                        graph.name
+                    )
+                });
+            let bounds_for = |type_name: &str| {
+                report
+                    .iter()
+                    .filter(|entry| entry.type_name == type_name)
+                    .map(|entry| (entry.x, entry.y, entry.width, entry.height))
+                    .collect::<Vec<_>>()
+            };
+            match fixture {
+                "grid_2x2.riv" => {
+                    let mut cells = bounds_for("LayoutComponent");
+                    cells.sort_by(|a, b| a.1.total_cmp(&b.1).then_with(|| a.0.total_cmp(&b.0)));
+                    assert!(cells.contains(&(0.0, 0.0, 100.0, 50.0)));
+                    assert!(cells.contains(&(100.0, 0.0, 100.0, 50.0)));
+                    assert!(cells.contains(&(0.0, 50.0, 200.0, 50.0)));
+                }
+                "grid_auto_rows.riv" => {
+                    let cells = bounds_for("LayoutComponent");
+                    for expected in [
+                        (0.0, 0.0, 100.0, 50.0),
+                        (100.0, 0.0, 100.0, 50.0),
+                        (0.0, 50.0, 100.0, 40.0),
+                        (100.0, 50.0, 100.0, 40.0),
+                        (0.0, 90.0, 100.0, 40.0),
+                    ] {
+                        assert!(
+                            cells.contains(&expected),
+                            "missing {expected:?} in {cells:?}"
+                        );
+                    }
+                }
+                "grid_track_types.riv" => {
+                    let mut widths = bounds_for("LayoutComponent")
+                        .into_iter()
+                        .filter(|(_, _, width, _)| *width > 0.0)
+                        .map(|(_, _, width, _)| width)
+                        .collect::<Vec<_>>();
+                    widths.sort_by(f32::total_cmp);
+                    assert!(widths.windows(3).any(|values| values == [50.0, 60.0, 90.0]));
+                }
+                "stack.riv" => {
+                    let cells = bounds_for("LayoutComponent");
+                    assert!(cells.contains(&(0.0, 0.0, 200.0, 200.0)));
+                    assert!(cells.contains(&(160.0, 160.0, 40.0, 40.0)));
+                }
+                "stack_participant.riv" | "solo_participant.riv" => {
+                    let shapes = bounds_for("Shape");
+                    assert!(
+                        shapes
+                            .iter()
+                            .any(|(_, _, width, height)| *width == 200.0 && *height == 200.0),
+                        "{fixture}: {shapes:?}"
+                    );
+                }
+                "hug_participant.riv" => {
+                    let shapes = bounds_for("Shape");
+                    assert!(
+                        shapes
+                            .iter()
+                            .any(|(_, _, width, height)| *width == 10.0 && *height == 10.0),
+                        "{shapes:?}"
+                    );
+                }
+                "fixed_participant.riv" => {
+                    assert!(
+                        bounds_for("Shape")
+                            .iter()
+                            .any(|(_, _, width, height)| *width == 60.0 && *height == 40.0)
+                    );
+                }
+                "constrained_participant.riv" => {
+                    assert!(
+                        bounds_for("Shape")
+                            .iter()
+                            .any(|(_, _, width, height)| *width == 50.0 && *height == 30.0)
+                    );
+                }
+                "grid_participant.riv" => {
+                    let shapes = bounds_for("Shape");
+                    assert!(shapes.contains(&(0.0, 0.0, 100.0, 200.0)));
+                    assert!(shapes.contains(&(100.0, 0.0, 100.0, 50.0)));
+                }
+                "display_none_participant.riv" => {
+                    let shapes = report
+                        .iter()
+                        .filter(|entry| entry.type_name == "Shape")
+                        .collect::<Vec<_>>();
+                    assert!(shapes.iter().any(|entry| entry.collapsed));
+                    assert!(shapes.iter().any(|entry| !entry.collapsed));
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 fn upstream_layout_local(graph: &nuxie_graph::ArtboardGraph, name: &str) -> usize {
     graph
         .components

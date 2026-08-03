@@ -11,17 +11,17 @@ fn apply_nested_artboard_origin_override(
     let origin_local = (0..parent_objects.child_len(host))
         .filter_map(|index| parent_objects.child_at(host, index))
         .filter_map(|child| parent_objects.component(child))
-        .find(|component| component.type_name == "NestedArtboardOrigin")
+        .find(|component| component.type_name == "ComponentOrigin")
         .map(|component| component.local_id);
     let Some(origin_local) = origin_local else {
         return false;
     };
-    let Some(origin_x) = property_key_for_name("NestedArtboardOrigin", "originX")
+    let Some(origin_x) = property_key_for_name("ComponentOrigin", "originX")
         .and_then(|key| parent_objects.double_property(origin_local, key))
     else {
         return false;
     };
-    let Some(origin_y) = property_key_for_name("NestedArtboardOrigin", "originY")
+    let Some(origin_y) = property_key_for_name("ComponentOrigin", "originY")
         .and_then(|key| parent_objects.double_property(origin_local, key))
     else {
         return false;

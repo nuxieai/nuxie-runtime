@@ -138,6 +138,12 @@ return function(context)
         topology = "triangle-list",
         sampleCount = 1,
     }
+    local depthTexture = GPUTexture.new {
+        width = 16,
+        height = 16,
+        format = "depth32float",
+        renderTarget = true,
+    }
 
     -- Exercise the auto-layout method independently of the explicit layout.
     local autoPipeline = GPUPipeline.new {
@@ -159,6 +165,12 @@ return function(context)
                     storeOp = "store",
                     clearColor = { 0.125, 0.25, 0.5, 1.0 },
                 } },
+                depthStencil = {
+                    view = depthTexture:view(),
+                    depthLoadOp = "clear",
+                    depthStoreOp = "store",
+                    depthClearValue = 1,
+                },
             }
             pass:setPipeline(pipeline)
             pass:setVertexBuffer(0, vertexBuffer)

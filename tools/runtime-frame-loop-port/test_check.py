@@ -728,6 +728,36 @@ class RuntimeFrameLoopPortCheckTest(unittest.TestCase):
             "before file correspondence is orchestrator-verified", result.stderr
         )
 
+    def test_verified_fragment_allows_whole_file_to_remain_pending(self) -> None:
+        (self.repo / "crates/runtime/src/transport.rs").write_text(
+            "struct RuntimeTransport;\n"
+        )
+        self.manifest.write_text(
+            self.manifest.read_text()
+            .replace("max_multi_module_rows = 0", "max_multi_module_rows = 1")
+            .replace(
+                'rust_module = "crates/runtime/src/animation.rs"',
+                'rust_module = "crates/runtime/src/animation.rs; '
+                'crates/runtime/src/transport.rs"\n'
+                'note = "MR exception: verified frame-loop fragment plus '
+                'out-of-loop transport."',
+            )
+        )
+        self.ledger.write_text(
+            self.ledger.read_text()
+            .replace("faithful = 0", "faithful = 1", 1)
+            .replace("pending = 1", "pending = 0", 1)
+            .replace(
+                'dynamically_reached = true\nstatus = "pending"',
+                'dynamically_reached = true\nstatus = "faithful"\n'
+                'correspondence_scope = "verified-fragment"',
+            )
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_fl_e_wave_acceptance_candidate_allows_pending_verification(self) -> None:
         self.write_files(file_status="adapted")
         self.ledger.write_text(

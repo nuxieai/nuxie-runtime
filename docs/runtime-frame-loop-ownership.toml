@@ -469,17 +469,6 @@ rust_modules = [
 static_closure = "DataBind, ViewModel, event, nested-artboard, and script-input owners participate in Artboard/StateMachine settlement through retained polymorphic collections."
 
 [[source_set]]
-id = "command-transport-baseline"
-wave = "P3F"
-include = ["src/command_queue.cpp", "src/command_server.cpp"]
-exclude = ["semantic command cases delegated to F6"]
-rust_modules = [
-  "crates/nuxie/src/command_queue.rs",
-  "crates/nuxie/src/command_server.rs",
-]
-static_closure = "CommandQueue owns synchronized typed command/message payloads and weak listener registration; CommandServer alone owns runtime File, Artboard, StateMachine, ViewModel, image, audio, and font occurrences. Each poll snapshots the entry command count, executes callbacks on the server thread, coalesces draws by DrawKey, then checks subscriptions. FlowSession remains a separate product layer above this transport seam."
-
-[[source_set]]
 id = "scripting-render-context"
 wave = "FL-E"
 include = ["src/command_server.cpp"]
@@ -1441,23 +1430,15 @@ dynamically_reached = false
 status = "faithful"
 
 [[file]]
-upstream = "src/command_queue.cpp"
-source_set = "command-transport-baseline"
-wave = "P3F"
-rust_modules = ["crates/nuxie/src/command_queue.rs"]
-dynamically_reached = true
-status = "partial"
-
-[[file]]
 upstream = "src/command_server.cpp"
-source_set = "command-transport-baseline"
-wave = "P3F"
+source_set = "scripting-render-context"
+wave = "FL-E"
 rust_modules = [
-  "crates/nuxie/src/command_server.rs",
   "crates/nuxie-scripting/src/vm/command_server.rs",
 ]
-dynamically_reached = true
-status = "partial"
+dynamically_reached = false
+status = "faithful"
+correspondence_scope = "verified-fragment"
 
 [[file]]
 upstream = "src/constraints/constrainable_list.cpp"
@@ -3949,40 +3930,6 @@ advance = ["cpp:src/animation/state_machine_instance.cpp:2320-2342", "rust:crate
 draw = ["cpp:src/event.cpp:8-11", "rust:crates/nuxie-runtime/src/state_machine/event_report.rs:95-173"]
 clone = ["cpp:src/animation/state_machine_instance.cpp:2583-2604", "rust:crates/nuxie-runtime/src/state_machine/event_report.rs:25-46"]
 drop = ["cpp:src/animation/state_machine_instance.cpp:2169-2198", "rust:crates/nuxie-runtime/src/state_machine/state_machine_instance.rs:1380-1600"]
-
-[[member]]
-id = "command_queue.transport"
-wave = "P3F"
-cpp_files = ["src/command_queue.cpp", "src/command_server.cpp"]
-rust_file = "crates/nuxie/src/command_queue.rs"
-rust_anchor = "pub struct CommandQueue"
-status = "partial"
-[member.lifecycle]
-construct = ["cpp:src/command_queue.cpp:34-54", "rust:crates/nuxie/src/command_queue.rs:672-709"]
-retain = ["cpp:include/rive/command_queue.hpp:952-1133", "rust:crates/nuxie/src/command_queue.rs:641-680"]
-dirty = ["cpp:src/command_queue.cpp:34-1216", "rust:crates/nuxie/src/command_queue.rs:700-1329"]
-update = ["cpp:src/command_queue.cpp:1430-2316", "rust:crates/nuxie/src/command_queue.rs:1324-1423"]
-advance = ["cpp:src/command_queue.cpp:710-724", "rust:crates/nuxie/src/command_queue.rs:839-846"]
-draw = ["cpp:src/command_queue.cpp:954-1008", "rust:crates/nuxie/src/command_queue.rs:1301-1320"]
-clone = ["cpp:include/rive/command_queue.hpp:375-378", "rust:crates/nuxie/src/command_queue.rs:666-671"]
-drop = ["cpp:src/command_queue.cpp:2318-2321", "rust:crates/nuxie/src/command_queue.rs:641-680"]
-
-[[member]]
-id = "command_server.runtime"
-wave = "P3F"
-cpp_files = ["src/command_server.cpp"]
-rust_file = "crates/nuxie/src/command_server.rs"
-rust_anchor = "pub struct CommandServer"
-status = "partial"
-[member.lifecycle]
-construct = ["cpp:src/command_server.cpp:263-281", "rust:crates/nuxie/src/command_server.rs:63-80"]
-retain = ["cpp:include/rive/command_server.hpp:172-251", "rust:crates/nuxie/src/command_server.rs:44-61"]
-dirty = ["cpp:src/command_server.cpp:506-597", "rust:crates/nuxie/src/command_server.rs:1301-1331"]
-update = ["cpp:src/command_server.cpp:703-3270", "rust:crates/nuxie/src/command_server.rs:190-1100"]
-advance = ["cpp:src/command_server.cpp:1997-2140", "rust:crates/nuxie/src/command_server.rs:401-464"]
-draw = ["cpp:src/command_server.cpp:2410-2452", "rust:crates/nuxie/src/command_server.rs:1065-1092"]
-clone = ["cpp:include/rive/command_server.hpp:172-251", "rust:crates/nuxie/src/command_server.rs:44-61"]
-drop = ["cpp:src/command_server.cpp:283-293", "rust:crates/nuxie/src/command_server.rs:44-61"]
 
 [[member]]
 id = "scripting.render_context"

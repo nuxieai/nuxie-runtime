@@ -5,6 +5,12 @@
 set -euo pipefail
 branch="$1"; body="$2"; shift 2
 [[ -f "$body" ]] || { echo "land.sh: body file $body missing" >&2; exit 1; }
+# merge-guard: never run the battery on a stale or dirty tree
+if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo "land.sh: dirty tree — commit or stash before landing" >&2; exit 1
+fi
+git fetch origin main
+git merge origin/main --no-edit || { echo "land.sh: merge with origin/main failed" >&2; exit 1; }
 # Invalidate any cargo artifacts whose sources changed without a fresh mtime
 # (regenerated codegen racing a concurrent build) so every step below builds
 # from the sources being landed, not a poisoned cache.

@@ -40,9 +40,9 @@ FEATURE_ROWS = {
         "F5: keyboard listener runtime is absent.",
     ),
     "src/semantic/semantic_manager.cpp": (
-        "absent",
-        "",
-        "F6: semantics runtime is absent.",
+        "partial",
+        "crates/nuxie-runtime/src/semantic_manager.rs",
+        "F6FID: the retained manager/tree is installed and direct upstream cases pass; #LT-1 fixture differential evidence remains pending.",
     ),
     "src/lua/lua_promise.cpp": (
         "ported",
@@ -263,12 +263,21 @@ for _path, _module in {
         "FL-E6: direct TextInput owner family and W65 behavior are ported.",
     )
 
-for _path in {
-    "src/semantic/semantic_data.cpp",
-    "src/semantic/semantic_inference_registry.cpp",
-    "src/semantic/semantic_provider.cpp",
-}:
-    FEATURE_ROWS[_path] = ("absent", "", "F6: semantics runtime is absent.")
+FEATURE_ROWS["src/semantic/semantic_data.cpp"] = (
+    "partial",
+    "crates/nuxie-runtime/src/semantic_data.rs",
+    "F6FID: retained semantics are integrated and focused upstream cases pass; #LT-1 fixture differential evidence remains pending.",
+)
+FEATURE_ROWS["src/semantic/semantic_inference_registry.cpp"] = (
+    "absent",
+    "",
+    "F6FID: no green retained-tree upstream fixture evidence exists yet; promotion requires the #LT-1 full-diff Text-inference oracle case.",
+)
+FEATURE_ROWS["src/semantic/semantic_provider.cpp"] = (
+    "partial",
+    "crates/nuxie-runtime/src/semantic_provider.rs",
+    "F6FID: mounted root/scroll bounds pass the four focus cases; #LT-1 provider differentials remain pending.",
+)
 
 for _path in {
     "src/lua/lua_buffer_ext.cpp",

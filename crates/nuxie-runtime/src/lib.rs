@@ -145,6 +145,7 @@ mod scripted_object;
 mod scripting;
 mod semantic_data;
 mod semantic_inference_registry;
+mod semantic_runtime_tree;
 mod semantic_manager;
 mod semantic_provider;
 mod shapes;

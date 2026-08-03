@@ -14,12 +14,14 @@ type ChildrenByParent = BTreeMap<i32, Vec<u32>>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SemanticDrainError {
+    NotEnabled,
     BoundaryResolutionRequired,
 }
 
 impl std::fmt::Display for SemanticDrainError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::NotEnabled => formatter.write_str("semantics are not enabled"),
             Self::BoundaryResolutionRequired => {
                 formatter.write_str("semantic boundary bounds must be reconciled before draining")
             }
@@ -1343,10 +1345,13 @@ mod tests {
         data.borrow_mut().set_semantic_data_local_id(Some(42));
         let boundary = SemanticNodeHandle::new(2);
         boundary.borrow_mut().set_boundary_node(true);
+        let no_owner = SemanticNodeHandle::new(3);
         manager.add_child(None, data);
         manager.add_child(None, boundary);
+        manager.add_child(None, no_owner);
         assert!(manager.request_focus(1, |local| local == 42));
         assert!(!manager.request_focus(2, |_| true));
+        assert!(!manager.request_focus(3, |_| true));
         assert!(!manager.request_focus(99, |_| true));
     }
 
@@ -1395,5 +1400,176 @@ mod tests {
         assert_eq!(diff.updated_semantic.len(), 1);
         assert_eq!(diff.updated_semantic[0].id, 1);
         assert_eq!(diff.updated_semantic[0].label, "after");
+    }
+
+    #[test]
+    fn nested_group_text_contributes_but_empty_interactive_nodes_stay_empty() {
+        let mut manager = SemanticManager::new();
+        let button = node(1, SemanticRole::Button, "", SemanticBounds::default());
+        let group = node(2, SemanticRole::Group, "", SemanticBounds::default());
+        let text = node(3, SemanticRole::Text, "Nested", SemanticBounds::default());
+        let empty_link = node(4, SemanticRole::Link, "", SemanticBounds::default());
+        manager.add_child(None, button.clone());
+        manager.add_child(Some(&button), group.clone());
+        manager.add_child(Some(&group), text);
+        manager.add_child(None, empty_link);
+        let diff = drain(&mut manager);
+        assert_eq!(diff.added[0].label, "Nested");
+        assert_eq!(diff.added[1].role, SemanticRole::Link as u32);
+        assert!(diff.added[1].label.is_empty());
+    }
+
+    #[test]
+    fn pinned_interactive_role_classification_is_exact() {
+        for role in [
+            SemanticRole::Button,
+            SemanticRole::Link,
+            SemanticRole::Checkbox,
+            SemanticRole::SwitchControl,
+            SemanticRole::Slider,
+            SemanticRole::ListItem,
+            SemanticRole::Tab,
+            SemanticRole::RadioButton,
+        ] {
+            assert!(is_interactive_role(role as u32), "{role:?}");
+        }
+        for role in [
+            SemanticRole::None,
+            SemanticRole::Group,
+            SemanticRole::Text,
+            SemanticRole::Image,
+            SemanticRole::TextField,
+        ] {
+            assert!(!is_interactive_role(role as u32), "{role:?}");
+        }
+    }
+
+    #[test]
+    fn boundary_children_reorder_when_their_bounds_cross() {
+        let mut manager = SemanticManager::new();
+        let list = node(1, SemanticRole::List, "menu", SemanticBounds::default());
+        let first_boundary = node(
+            100,
+            SemanticRole::None,
+            "",
+            SemanticBounds::new(0.0, 0.0, 1.0, 1.0),
+        );
+        first_boundary.borrow_mut().set_boundary_node(true);
+        let second_boundary = node(
+            101,
+            SemanticRole::None,
+            "",
+            SemanticBounds::new(0.0, 10.0, 1.0, 11.0),
+        );
+        second_boundary.borrow_mut().set_boundary_node(true);
+        let first = node(
+            2,
+            SemanticRole::ListItem,
+            "first",
+            SemanticBounds::new(0.0, 0.0, 1.0, 1.0),
+        );
+        let second = node(
+            3,
+            SemanticRole::ListItem,
+            "second",
+            SemanticBounds::new(0.0, 10.0, 1.0, 11.0),
+        );
+        manager.add_child(None, list.clone());
+        manager.add_child(Some(&list), first_boundary.clone());
+        manager.add_child(Some(&first_boundary), first.clone());
+        manager.add_child(Some(&list), second_boundary.clone());
+        manager.add_child(Some(&second_boundary), second.clone());
+        drain(&mut manager);
+        first_boundary
+            .borrow_mut()
+            .set_bounds(SemanticBounds::new(0.0, 10.0, 1.0, 11.0));
+        second_boundary
+            .borrow_mut()
+            .set_bounds(SemanticBounds::new(0.0, 0.0, 1.0, 1.0));
+        first
+            .borrow_mut()
+            .set_bounds(SemanticBounds::new(0.0, 10.0, 1.0, 11.0));
+        second
+            .borrow_mut()
+            .set_bounds(SemanticBounds::new(0.0, 0.0, 1.0, 1.0));
+        manager.mark_node_dirty(100, SemanticDirt::BOUNDS);
+        manager.mark_node_dirty(101, SemanticDirt::BOUNDS);
+        manager.mark_node_dirty(2, SemanticDirt::BOUNDS);
+        manager.mark_node_dirty(3, SemanticDirt::BOUNDS);
+        let diff = drain(&mut manager);
+        assert_eq!(
+            diff.moved.iter().map(|node| node.id).collect::<Vec<_>>(),
+            [3, 2]
+        );
+        assert_eq!(
+            diff.children_updated
+                .iter()
+                .find(|update| update.parent_id == 1)
+                .expect("list order update")
+                .child_ids,
+            [3, 2]
+        );
+    }
+
+    #[test]
+    fn combined_incremental_arrays_are_tree_ordered() {
+        let mut manager = SemanticManager::new();
+        let root = node(1, SemanticRole::Group, "root", SemanticBounds::default());
+        let first = node(2, SemanticRole::Text, "first", SemanticBounds::default());
+        let second = node(3, SemanticRole::Text, "second", SemanticBounds::default());
+        manager.add_child(None, root.clone());
+        manager.add_child(Some(&root), first.clone());
+        manager.add_child(Some(&root), second.clone());
+        drain(&mut manager);
+        for child in [&second, &first] {
+            child.borrow_mut().set_label("changed");
+            child
+                .borrow_mut()
+                .set_bounds(SemanticBounds::new(1.0, 2.0, 3.0, 4.0));
+            manager.mark_node_dirty(
+                child.borrow().id(),
+                SemanticDirt::CONTENT | SemanticDirt::BOUNDS,
+            );
+        }
+        let diff = drain(&mut manager);
+        assert_eq!(
+            diff.updated_semantic
+                .iter()
+                .map(|node| node.id)
+                .collect::<Vec<_>>(),
+            [2, 3]
+        );
+        assert_eq!(
+            diff.updated_geometry
+                .iter()
+                .map(|node| node.id)
+                .collect::<Vec<_>>(),
+            [2, 3]
+        );
+    }
+
+    #[test]
+    fn pure_and_no_op_dirty_paths_emit_only_the_pinned_arrays() {
+        let mut manager = SemanticManager::new();
+        let root = node(1, SemanticRole::Group, "before", SemanticBounds::default());
+        manager.add_child(None, root.clone());
+        drain(&mut manager);
+        assert!(drain(&mut manager).is_empty());
+
+        root.borrow_mut().set_label("after");
+        manager.mark_node_dirty(1, SemanticDirt::CONTENT);
+        let content = drain(&mut manager);
+        assert_eq!(content.updated_semantic.len(), 1);
+        assert!(content.updated_geometry.is_empty());
+
+        root.borrow_mut()
+            .set_bounds(SemanticBounds::new(1.0, 2.0, 3.0, 4.0));
+        manager.mark_node_dirty(1, SemanticDirt::BOUNDS);
+        let geometry = drain(&mut manager);
+        assert!(geometry.updated_semantic.is_empty());
+        assert_eq!(geometry.updated_geometry.len(), 1);
+
+        manager.mark_node_dirty(1, SemanticDirt::CONTENT);
+        assert!(drain(&mut manager).updated_semantic.is_empty());
     }
 }

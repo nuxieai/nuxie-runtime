@@ -1957,27 +1957,27 @@ note = "Consolidated Rust port for scripted."
 
 [[file]]
 upstream = "src/semantic/semantic_data.cpp"
-status = "absent"
-rust_module = ""
-note = "F6: semantics runtime is absent."
+status = "partial"
+rust_module = "crates/nuxie-runtime/src/semantic_data.rs"
+note = "F6FID: retained semantics are integrated and focused upstream cases pass; #LT-1 fixture differential evidence remains pending."
 
 [[file]]
 upstream = "src/semantic/semantic_inference_registry.cpp"
 status = "absent"
 rust_module = ""
-note = "F6: semantics runtime is absent."
+note = "F6FID: no green retained-tree upstream fixture evidence exists yet; promotion requires the #LT-1 full-diff Text-inference oracle case."
 
 [[file]]
 upstream = "src/semantic/semantic_manager.cpp"
-status = "absent"
-rust_module = ""
-note = "F6: semantics runtime is absent."
+status = "partial"
+rust_module = "crates/nuxie-runtime/src/semantic_manager.rs"
+note = "F6FID: the retained manager/tree is installed and direct upstream cases pass; #LT-1 fixture differential evidence remains pending."
 
 [[file]]
 upstream = "src/semantic/semantic_provider.cpp"
-status = "absent"
-rust_module = ""
-note = "F6: semantics runtime is absent."
+status = "partial"
+rust_module = "crates/nuxie-runtime/src/semantic_provider.rs"
+note = "F6FID: mounted root/scroll bounds pass the four focus cases; #LT-1 provider differentials remain pending."
 
 [[file]]
 upstream = "src/shapes/clipping_shape.cpp"

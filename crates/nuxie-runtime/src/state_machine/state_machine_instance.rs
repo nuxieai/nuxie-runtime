@@ -1,5 +1,6 @@
 // Runtime instance orchestration for the C++ state machine path.
 // Mirrors /Users/levi/dev/oss/rive-runtime/src/animation/state_machine_instance.cpp.
+use crate::semantic_runtime_tree::RuntimeSemanticTree;
 use super::focused_input_dispatch::RuntimeInputDispatchOutcome;
 use super::listener_types::RuntimeListenerViewModelPath;
 use super::*;
@@ -7,7 +8,7 @@ use crate::artboard_component_list_order::runtime_component_list_order;
 use crate::artboard_data_bind::RuntimeOwnedDataContext;
 #[cfg(any(test, feature = "tools"))]
 use crate::components::TransformProperty;
-use crate::components::{ComponentHandle, RuntimeShapeState};
+use crate::components::{ComponentHandle, Mat2D, RuntimeShapeState};
 use crate::constraints::draggable_constraint::{RuntimeDraggableProxy, runtime_draggable_proxies};
 use crate::constraints::{
     runtime_draggable_proxy_drag, runtime_draggable_proxy_end, runtime_draggable_proxy_start,
@@ -23,6 +24,8 @@ use crate::listener_group::{ListenerGroup, ListenerGroupKind, select_listener_ac
 use crate::properties::property_key_for_name;
 use crate::script_asset::RuntimeScriptImplementedMethods;
 use crate::scripting::RuntimeScriptInstanceHandle;
+use crate::semantic_data::{RuntimeSemanticData, SemanticActionType, SemanticNodeHandle};
+use crate::semantic_manager::{SemanticDrainError, SemanticManager, SemanticsDiff};
 use crate::view_model::{
     RuntimeBlobAssetValue, RuntimeFontAssetValue, RuntimeOwnedViewModelAdvanceContext,
 };
@@ -1290,17 +1293,42 @@ pub struct FocusState {
     pub expects_keyboard_input: bool,
 }
 
-/// Identity-only projection of the selected semantic-manager boundary.
-///
-/// The manager/tree/node implementation remains the RECORDED
-/// `src/semantic/semantic_manager.cpp` dependency, owned by absent manifest
-/// row B6-0329. This enum exists only so the owning StateMachineInstance can
-/// preserve selection and call order.
+/// Selection projection for the semantic-manager boundary. Internal selection
+/// owns `RuntimeSemanticTree`; external selection remains identity-only until
+/// the shared external-manager boundary is integrated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RuntimeSemanticManagerSelection {
     None,
     InternalRecorded,
     ExternalRecorded(u64),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct RuntimeSemanticOccurrenceKey {
+    pub(crate) owner_identity: u64,
+    pub(crate) data_local_id: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RuntimeSemanticRoute {
+    pub(crate) owner_identity: u64,
+    pub(crate) target_local_id: usize,
+    pub(crate) data_local_id: usize,
+}
+
+
+
+pub(crate) fn closest_semantic_node(
+    artboard: &ArtboardInstance,
+    mut local_id: usize,
+    nodes_by_target: &BTreeMap<usize, SemanticNodeHandle>,
+) -> Option<SemanticNodeHandle> {
+    loop {
+        if let Some(node) = nodes_by_target.get(&local_id) {
+            return Some(node.clone());
+        }
+        local_id = artboard.component_parent_local(local_id)?;
+    }
 }
 
 /// C++ aggregate fields have no header initializers. These constructors force
@@ -1484,13 +1512,17 @@ pub struct StateMachineInstance {
     owns_focus_domain: bool,
     #[cfg(test)]
     focus_manager_phase_trace: Vec<&'static str>,
-    /// Instance-owned selection state only. Semantic manager/tree/node
-    /// internals remain the RECORDED `src/semantic/semantic_manager.cpp`
-    /// dependency owned by absent manifest row B6-0329.
+    /// Whether the instance-owned retained semantic manager is enabled.
     internal_semantic_manager_enabled: bool,
+    /// Retained semantic domain. It is created by `enable_semantics` and
+    /// populated from live Artboard occurrences at the first semantic
+    /// operation, mirroring C++'s lazy opt-in without retaining an Artboard
+    /// borrow across calls.
+    semantic_tree: Option<RuntimeSemanticTree>,
     external_semantic_manager_identity: Option<u64>,
-    /// RECORDED seam: the deferred semantic-manager row supplies this hook.
-    /// Production defaults to absent; FL-C5 must not fabricate manager IDs.
+    /// Compatibility resolver for the recorded external-manager seam.
+    /// Production internal routing uses `semantic_tree`; this defaults to
+    /// absent and is injected only by focused boundary tests.
     semantic_node_resolver: Option<Rc<dyn SemanticNodeResolver>>,
     #[cfg(test)]
     semantic_manager_phase_trace: Vec<&'static str>,
@@ -2153,6 +2185,12 @@ impl Clone for StateMachineInstance {
             #[cfg(test)]
             focus_manager_phase_trace: self.focus_manager_phase_trace.clone(),
             internal_semantic_manager_enabled: self.internal_semantic_manager_enabled,
+            // A Rust snapshot owns a fresh semantic domain. The next
+            // Artboard-backed semantic operation repopulates it from the
+            // cloned occurrence rather than aliasing retained node handles.
+            semantic_tree: self
+                .internal_semantic_manager_enabled
+                .then(RuntimeSemanticTree::default),
             external_semantic_manager_identity: self.external_semantic_manager_identity,
             semantic_node_resolver: self.semantic_node_resolver.clone(),
             #[cfg(test)]
@@ -3028,6 +3066,7 @@ impl StateMachineInstance {
             #[cfg(test)]
             focus_manager_phase_trace: Vec::new(),
             internal_semantic_manager_enabled: false,
+            semantic_tree: None,
             external_semantic_manager_identity: None,
             semantic_node_resolver: None,
             #[cfg(test)]
@@ -5416,7 +5455,8 @@ impl StateMachineInstance {
     /// Owner-safe availability projection of C++ `semanticManager()`.
     ///
     /// The selected manager pointer and its internals remain at the RECORDED
-    /// absent-manifest-row B6-0329 boundary.
+    /// absent-manifest-row B6-0329 boundary against upstream
+    /// `src/semantic/semantic_manager.cpp`.
     pub fn semantic_manager(&self) -> bool {
         self.semantic_manager_selection() != RuntimeSemanticManagerSelection::None
     }
@@ -5428,21 +5468,73 @@ impl StateMachineInstance {
             return false;
         }
 
-        // RECORDED seam: absent manifest row B6-0329,
-        // `src/semantic/semantic_manager.cpp`, owns manager construction and
-        // all tree/node internals.
         self.internal_semantic_manager_enabled = true;
+        self.semantic_tree = Some(RuntimeSemanticTree::default());
         self.record_semantic_manager_phase("create-internal-recorded-seam");
+        // Rust cannot retain an Artboard borrow on the instance. The exact
+        // build is deferred to the first Artboard-backed semantic operation.
         self.record_semantic_manager_phase("build-tree-recorded-seam");
+        true
+    }
+
+    /// Drain the selected internal semantic manager after synchronizing every
+    /// retained mounted Artboard occurrence. This is the owner-safe Rust
+    /// projection of `semanticManager()->drainDiff()`.
+    pub fn drain_semantics_diff(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+    ) -> Result<SemanticsDiff, SemanticDrainError> {
+        if self.external_semantic_manager_identity.is_some() {
+            return Err(SemanticDrainError::NotEnabled);
+        }
+        let Some(tree) = self.semantic_tree.as_mut() else {
+            return Err(SemanticDrainError::NotEnabled);
+        };
+        tree.synchronize(artboard, &self.semantic_listener_groups);
+        tree.manager.drain_diff()
+    }
+
+    /// Route one semantic node through the retained RB-2 focus domain.
+    pub fn request_semantic_focus(&mut self, semantic_node_id: u32) -> bool {
+        let Some(tree) = self.semantic_tree.as_mut() else {
+            return false;
+        };
+        let Some(route) = tree.routes.get(&semantic_node_id).copied() else {
+            return false;
+        };
+        let changed = self
+            .focus
+            .set_focus_target_for_owner(route.owner_identity, route.target_local_id);
+        if !changed {
+            return false;
+        }
+        for (key, data) in &mut tree.data {
+            let focused = key.owner_identity == route.owner_identity
+                && key.data_local_id == route.data_local_id;
+            data.set_focused_state(focused, Some(&mut tree.manager));
+        }
+        tree.pending_focus_scroll = Some(route);
+        true
+    }
+
+    pub fn clear_semantic_focus(&mut self) -> bool {
+        let changed = self.change_focus(RuntimeFocusTree::clear_focus);
+        if !changed {
+            return false;
+        }
+        if let Some(tree) = self.semantic_tree.as_mut() {
+            for data in tree.data.values_mut() {
+                data.set_focused_state(false, Some(&mut tree.manager));
+            }
+        }
         true
     }
 
     /// Owner-safe form of C++ `setExternalSemanticManager`.
     ///
-    /// Only manager identity and clean/assign/rebuild order are represented
-    /// here. `parent_node_id` is carried to the RECORDED tree-building seam;
-    /// the owning implementation remains absent manifest row B6-0329,
-    /// `src/semantic/semantic_manager.cpp`.
+    /// Only external manager identity and clean/assign/rebuild order are
+    /// represented here. Concrete external tree ownership and parent-node
+    /// attachment remain a shared integration item.
     pub fn set_external_semantic_manager(
         &mut self,
         manager_identity: Option<u64>,
@@ -5462,17 +5554,27 @@ impl StateMachineInstance {
         true
     }
 
-    /// Dispatch through the instance-owned recorded manager/data boundary.
-    ///
-    /// RECORDED seam: absent manifest row B6-0329,
-    /// `src/semantic/semantic_manager.cpp`, owns `nodeById`.
-    /// RECORDED seam: absent manifest row B6-0327,
-    /// `src/semantic/semantic_data.cpp`, owns action validation and
-    /// `fireSemanticTap`/`fireSemanticIncrease`/`fireSemanticDecrease`.
-    /// Missing resolver, node, or data and out-of-range actions are silent
-    /// no-ops, matching C++'s missing-manager branch. The deferred semantic
-    /// manager row installs the production resolver.
+    /// Dispatch through the retained internal manager/data boundary. The
+    /// compatibility resolver below preserves the recorded external-manager
+    /// seam. Missing manager, node, or data and out-of-range actions are
+    /// silent no-ops, matching C++'s missing-manager branch.
     pub fn fire_semantic_action(&mut self, semantic_node_id: u32, action_type: u32) -> bool {
+        let retained_route = if let Some(tree) = self.semantic_tree.as_mut()
+            && let Some(action) = SemanticActionType::from_raw(action_type)
+            && let Some(route) = tree.routes.get(&semantic_node_id).copied()
+            && let Some(data) = tree.data.get(&RuntimeSemanticOccurrenceKey {
+                owner_identity: route.owner_identity,
+                data_local_id: route.data_local_id,
+            }) {
+            data.fire(action);
+            Some(route)
+        } else {
+            None
+        };
+        if let Some(route) = retained_route {
+            self.capture_registered_semantic_callbacks(route.data_local_id);
+            return true;
+        }
         let Some(resolver) = self.semantic_node_resolver.clone() else {
             return false;
         };
@@ -5503,6 +5605,30 @@ impl StateMachineInstance {
         self.record_semantic_manager_phase(phase);
         self.semantic_action_for_target(target_local_id, action_type);
         true
+    }
+
+    fn capture_registered_semantic_callbacks(&mut self, semantic_data_local_id: usize) {
+        let mut captured = Vec::new();
+        for group in &self.semantic_listener_groups {
+            if group.semantic_data_local_id != semantic_data_local_id {
+                continue;
+            }
+            let Some(listener) = self.listener_definitions.get(group.listener_index) else {
+                continue;
+            };
+            captured.extend(
+                group
+                    .drain_registered_invocations(listener)
+                    .into_iter()
+                    .map(|invocation| {
+                        RuntimeQueuedSemanticEvent::from_invocation(invocation)
+                            .expect("semantic group creates a semantic invocation")
+                    }),
+            );
+        }
+        for event in captured {
+            self.queue_semantic_event(event.listener_index, event.action_type);
+        }
     }
 
     #[cfg(test)]
@@ -12627,6 +12753,13 @@ impl StateMachineInstance {
         new_frame: bool,
         mut owned_context: Option<&mut RuntimeOwnedViewModelInstance>,
     ) -> bool {
+        let semantic_scroll_changed = self
+            .semantic_tree
+            .as_mut()
+            .and_then(|tree| tree.pending_focus_scroll.take())
+            .is_some_and(|route| {
+                artboard.scroll_focus_target_into_view(route.owner_identity, route.target_local_id)
+            });
         let definitions = artboard.state_machine_definition_owner(self);
         let Some(state_machine) = definitions.get(self.state_machine_index) else {
             return false;
@@ -12648,7 +12781,7 @@ impl StateMachineInstance {
         {
             total_order.borrow_mut().push(phase);
         }
-        advanced
+        advanced | semantic_scroll_changed
     }
 
     pub(crate) fn advance(
@@ -17558,6 +17691,22 @@ mod scripted_listener_action_tests {
             machine.semantic_listener_groups[0].semantic_data_local_id,
             2
         );
+        let semantic_id = machine
+            .drain_semantics_diff(&mut artboard)
+            .expect("production retained semantic tree drains")
+            .added
+            .into_iter()
+            .find(|node| node.id != 0)
+            .expect("retained SemanticData emits a node")
+            .id;
+        assert!(machine.fire_semantic_action(semantic_id, 1));
+        assert!(
+            machine.queued_semantic_events.is_empty(),
+            "the retained listener applies its authored tap-only constraint"
+        );
+        assert!(machine.fire_semantic_action(semantic_id, 0));
+        assert_eq!(machine.queued_semantic_events.len(), 1);
+        machine.queued_semantic_events.clear();
         assert!(
             !machine.fire_semantic_action(77, 0),
             "W41's recorded-seam contract makes the production-default absent resolver a silent no-op"

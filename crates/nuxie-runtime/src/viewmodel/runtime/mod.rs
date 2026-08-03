@@ -8,6 +8,7 @@ use super::*;
 pub use super::{RuntimeBindableArtboard, RuntimeViewModelImage};
 
 include!("viewmodel_instance_value_runtime.rs");
+include!("viewmodel_instance_asset_blob_runtime.rs");
 include!("viewmodel_instance_number_runtime.rs");
 include!("viewmodel_instance_string_runtime.rs");
 include!("viewmodel_instance_boolean_runtime.rs");

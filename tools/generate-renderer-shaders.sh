@@ -12,7 +12,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 # Python sets. Fix the hash seed so its compiler-input headers are byte-stable.
 export PYTHONHASHSEED=0
 
-expected_runtime_revision="d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+expected_runtime_revision="4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 expected_overlay_digest="9a6e72367d2e30f0c7572c28f3babf8600a80f3a7ecef80f376efac72a409b89"
 expected_naga_version="30.0.0"
 expected_glslang_version="Glslang Version: 11:16.2.0"

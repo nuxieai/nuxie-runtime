@@ -163,7 +163,7 @@ Sole resume state for the C++-corresponding frame-loop performance closeout.
   `0eb48976755d759c078f1f1a032bd88590e223f7` and its exact mapped rows are
   promoted.
 - Active production branch: `levi/fl-e7`. There is no PR.
-- Pinned C++: `d788e8ec6e8b598526607d6a1e8818e8b637b60c`.
+- Pinned C++: `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
 - FL-B scope correction restores the frozen 45th owner,
   `src/importers/keyed_property_importer.cpp`, to the executable FL-B ledger.
   `src/animation/scripted_listener_action.cpp` remains deliberately assigned

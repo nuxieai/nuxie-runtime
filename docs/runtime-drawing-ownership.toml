@@ -1,6 +1,6 @@
 version = 1
 title = "C++ runtime drawing port ownership ledger"
-upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 porting_rules_file = "docs/PORTING.md"
 phase = "closed"
 

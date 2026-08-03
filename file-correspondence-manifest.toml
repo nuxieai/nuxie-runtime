@@ -7,10 +7,10 @@
 schema = "nuxie-file-correspondence/v1"
 schema_version = 1
 upstream_repository = "rive-app/rive-runtime"
-upstream_ref = "d788e8ec6e8b598526607d6a1e8818e8b637b60c"
+upstream_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 source_glob = "src/**/*.cpp"
 exclude_glob = "src/generated/**"
-row_count = 448
+row_count = 456
 status_values = ["faithful", "divergent-by-decision", "pending"]
 verification_values = ["pending-verification", "orchestrator-verified"]
 seed_manifest = "port-manifest.toml"
@@ -493,6 +493,14 @@ b6_verdict = "ADAPTED"
 b6_cluster = "animation"
 audit_record = "docs/b6-audit/results/animation.md"
 note = "Direct FL-B correspondence independently reaccepted at 14b18765 after eleven joint review rounds; acceptance and final verdicts are indexed by docs/runtime-frame-loop-fl-c5-evidence/."
+
+[[file]]
+upstream = "src/animation/keyframe_int.cpp"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/animation/keyframe_int.rs"
+legacy_port_status = "ported"
+note = "Cycle S4 direct KeyFrameInt correspondence added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet."
 
 [[file]]
 upstream = "src/animation/keyframe_string.cpp"
@@ -1507,6 +1515,14 @@ audit_record = "docs/b6-audit/results/bones-math-components.md"
 note = "Consolidated component runtime port. MR-2b/C04 justified exception: the Artboard root is itself the retained Component, so dirt, collapse, and update traversal are inseparable from B6-0094 without changing internal call boundaries."
 
 [[file]]
+upstream = "src/component_origin.cpp"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/component_origin.rs"
+legacy_port_status = "ported"
+note = "Cycle S4 direct ComponentOrigin correspondence supersedes the removed nested_artboard_origin.cpp owner and is accepted by the 4ac7b327 pin-advance ratchet."
+
+[[file]]
 upstream = "src/constraints/constrainable_list.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
@@ -1879,16 +1895,12 @@ audit_record = "docs/b6-audit/results/binary-core.md"
 note = "P1-a direct owner split at d788e8ec: pinned length-prefixed string deserialize is at src/core/field_types/core_string_type.cpp:6-9; the moved raw-byte-preserving string decode is at crates/nuxie-binary/src/core/field_types/core_string_type.rs:4-6 and its immutable schema dispatch is at crates/nuxie-binary/src/core/field_types/mod.rs:13-22,24-37."
 
 [[file]]
-upstream = "src/core/field_types/core_uint64_type.cpp"
+upstream = "src/core/field_types/core_int_type.cpp"
 status = "faithful"
-verification = "pending-verification"
-rust_module = "crates/nuxie-binary/src/core/field_types/core_uint64_type.rs"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-binary/src/core/field_types/core_int_type.rs"
 legacy_port_status = "ported"
-b6_row_id = "B6-0448"
-b6_verdict = "ADAPTED"
-b6_cluster = "binary-core"
-audit_record = "docs/b6-audit/results/binary-core.md"
-note = "Pinned d788 compatibility owner retained until the S4 pin advance. S4-3 removes every runtime schema dispatch to this decoder; remove this row and compatibility file together when the correspondence pin advances past b73bc675."
+note = "Cycle S4 direct signed zigzag integer correspondence replaces the pre-S4 uint64 compatibility owner and is accepted by the 4ac7b327 pin-advance ratchet."
 
 [[file]]
 upstream = "src/core/field_types/core_uint_type.cpp"
@@ -1973,6 +1985,14 @@ b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
 note = "Consolidated Rust port for data_bind."
+
+[[file]]
+upstream = "src/data_bind/context/context_value_asset_blob.cpp"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/data_bind/context/context_value_asset_blob.rs"
+legacy_port_status = "ported"
+note = "Cycle S4 direct blob conversion/type-compatibility owner added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet; the centralized exhaustive graph dispatcher consumes this owner through the ordinary closed-enum mapping."
 
 [[file]]
 upstream = "src/data_bind/context/context_value_asset_image.cpp"
@@ -3055,6 +3075,22 @@ audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
 note = "Direct authored-order Y-axis registration port."
 
 [[file]]
+upstream = "src/layout/grid_item_placement.cpp"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/draw.rs"
+legacy_port_status = "ported"
+note = "Cycle S4 faithful grid-item placement owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet."
+
+[[file]]
+upstream = "src/layout/grid_track.cpp"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/draw.rs"
+legacy_port_status = "ported"
+note = "Cycle S4 faithful grid-track owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet."
+
+[[file]]
 upstream = "src/layout/layout_component_style.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
@@ -3065,6 +3101,22 @@ b6_verdict = "DIVERGENT"
 b6_cluster = "layout-shapes-paint"
 audit_record = "docs/b6-audit/results/layout-shapes-paint.md"
 note = "MR-3 justification: FL-E5 direct owner ports node/style dirt, scale, absolute-position, flex-direction, direction, padding/unit, and corner callbacks through the retained parent LayoutComponent; all 13 direct layout assertion bodies and callback tests pass."
+
+[[file]]
+upstream = "src/layout/layout_participant.cpp"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/draw.rs"
+legacy_port_status = "ported"
+note = "Cycle S4 faithful layout-participant owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet."
+
+[[file]]
+upstream = "src/layout/layout_sizing_style.cpp"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/draw.rs"
+legacy_port_status = "ported"
+note = "Cycle S4 faithful layout-sizing owner semantics under the separately recorded D3 layout-engine substitution, added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet."
 
 [[file]]
 upstream = "src/layout/layout_node_provider.cpp"
@@ -3701,18 +3753,6 @@ b6_verdict = "ADAPTED"
 b6_cluster = "misc-core"
 audit_record = "docs/b6-audit/results/misc-core.md"
 note = "FL-D5 filename-corresponding NestedArtboardLeaf occurrence classification plus direct fit/alignment world-transform update; renderer code supplies only resolved frame/content bounds. MR-2b/C04 justified exception: remaining leaf transform application shares the nested Artboard bounds pass with B6-0304. MR-2b/C05 justified exception: leaf fit/frame settlement is consumed inside the shared nested draw recursion for siblings B6-0303 NestedArtboard and B6-0304 NestedArtboardLayout."
-
-[[file]]
-upstream = "src/nested_artboard_origin.cpp"
-status = "faithful"
-verification = "orchestrator-verified"
-rust_module = "crates/nuxie-runtime/src/nested_artboard_origin.rs"
-legacy_port_status = "ported"
-b6_row_id = "B6-0306"
-b6_verdict = "ADAPTED"
-b6_cluster = "misc-core"
-audit_record = "docs/b6-audit/results/misc-core.md"
-note = "FL-D5 filename-corresponding nested origin override owner."
 
 [[file]]
 upstream = "src/node.cpp"
@@ -5001,6 +5041,14 @@ audit_record = "docs/b6-audit/results/data-bind-view-model.md"
 note = "Direct Rust runtime wrapper owner over the retained font property cell."
 
 [[file]]
+upstream = "src/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.cpp"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/viewmodel/runtime/viewmodel_instance_asset_blob_runtime.rs"
+legacy_port_status = "ported"
+note = "Cycle S4 direct blob runtime correspondence added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet."
+
+[[file]]
 upstream = "src/viewmodel/runtime/viewmodel_instance_asset_image_runtime.cpp"
 status = "faithful"
 verification = "orchestrator-verified"
@@ -5203,6 +5251,14 @@ b6_verdict = "DIVERGENT"
 b6_cluster = "data-bind-view-model"
 audit_record = "docs/b6-audit/results/data-bind-view-model.md"
 note = "MR-3 justification: Consolidated Rust port for viewmodel. Schema-derived binary object surface and runtime behavior intentionally remain split across crate boundaries."
+
+[[file]]
+upstream = "src/viewmodel/viewmodel_instance_asset_blob.cpp"
+status = "faithful"
+verification = "orchestrator-verified"
+rust_module = "crates/nuxie-runtime/src/viewmodel/viewmodel_instance_asset_blob.rs"
+legacy_port_status = "ported"
+note = "Cycle S4 direct blob asset correspondence added after the pinned B-6 audit and accepted by the 4ac7b327 pin-advance ratchet."
 
 [[file]]
 upstream = "src/viewmodel/viewmodel_instance_asset_image.cpp"

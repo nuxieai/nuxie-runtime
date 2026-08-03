@@ -157,7 +157,7 @@ class ParityScorecardCliTests(unittest.TestCase):
         )
         self.assertIn(
             "RIVE_SAME_RUNNER_RUNTIME_REF: "
-            "d788e8ec6e8b598526607d6a1e8818e8b637b60c",
+            "4ac7b32798da0482e441ef09304dc3b480ed3ee5",
             workflow,
         )
         self.assertIn("make renderer-dawn-reference-bootstrap", workflow)

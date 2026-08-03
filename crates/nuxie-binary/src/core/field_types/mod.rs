@@ -4,7 +4,6 @@ mod core_color_type;
 mod core_double_type;
 mod core_int_type;
 mod core_string_type;
-mod core_uint64_type;
 mod core_uint_type;
 
 use crate::{FieldValue, core::binary_reader::BinaryReader};

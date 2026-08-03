@@ -2568,10 +2568,16 @@ impl<'a> StaticTextSlice<'a> {
         let skrifa_font =
             SkrifaFontRef::new(font_bytes).context("failed to parse font for metrics")?;
         let disable_legacy_kern = disable_legacy_kern_for_advances(&skrifa_font);
+        // Yoga's measure constraint is only the maximum size offered to
+        // `Text::measure`; C++ does not retain it as m_layoutWidth/Height until
+        // `controlSize` runs. In particular, fit-font-size must stay at its
+        // authored size while an auto-width text is being measured.
+        let controlled_constraint =
+            (purpose == StaticTextLayoutBoundsPurpose::Controlled).then_some(layout_constraint);
         let font_scale = self.fit_font_scale(
             runtime,
             instance,
-            Some(layout_constraint),
+            controlled_constraint,
             &resolved_runs,
             &text,
             &shaper,

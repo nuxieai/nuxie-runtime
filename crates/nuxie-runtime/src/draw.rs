@@ -6902,36 +6902,12 @@ impl ArtboardInstance {
         }
         let style_local = self.runtime_layout_component_style_local(parent_local)?;
         let bounds = layout_bounds.and_then(|bounds| bounds.get(&parent_local).copied())?;
-        // `LayoutComponent::propagateSizeToChildren` passes its solved content
-        // box to `Text::controlSize`; the retained layout bounds are the border
-        // box, so remove authored padding before mirroring m_layoutWidth/Height.
-        let padding_left = self.runtime_layout_style_length(
-            style_local,
-            RuntimeLayoutStyleProperty::PaddingLeft,
-            RuntimeLayoutStyleProperty::PaddingLeftUnitsValue,
-            bounds.width,
-        )?;
-        let padding_right = self.runtime_layout_style_length(
-            style_local,
-            RuntimeLayoutStyleProperty::PaddingRight,
-            RuntimeLayoutStyleProperty::PaddingRightUnitsValue,
-            bounds.width,
-        )?;
-        let padding_top = self.runtime_layout_style_length(
-            style_local,
-            RuntimeLayoutStyleProperty::PaddingTop,
-            RuntimeLayoutStyleProperty::PaddingTopUnitsValue,
-            bounds.height,
-        )?;
-        let padding_bottom = self.runtime_layout_style_length(
-            style_local,
-            RuntimeLayoutStyleProperty::PaddingBottom,
-            RuntimeLayoutStyleProperty::PaddingBottomUnitsValue,
-            bounds.height,
-        )?;
+        // `LayoutComponent::propagateSizeToChildren` passes m_layout.width()
+        // and m_layout.height() directly to `Text::controlSize`. Those are the
+        // solved border-box dimensions; padding is not removed.
         Some(RuntimeTextLayoutConstraint {
-            width: (bounds.width - padding_left - padding_right).max(0.0),
-            height: (bounds.height - padding_top - padding_bottom).max(0.0),
+            width: bounds.width,
+            height: bounds.height,
             width_scale_type: self.runtime_layout_axis_scale(style_local, true),
             height_scale_type: self.runtime_layout_axis_scale(style_local, false),
             layout_direction: self

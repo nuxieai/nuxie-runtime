@@ -15,6 +15,7 @@ include!("viewmodel.rs");
 include!("viewmodel_instance.rs");
 include!("viewmodel_instance_artboard.rs");
 include!("viewmodel_instance_asset.rs");
+include!("viewmodel_instance_asset_blob.rs");
 include!("viewmodel_instance_asset_font.rs");
 include!("viewmodel_instance_asset_image.rs");
 include!("viewmodel_instance_boolean.rs");

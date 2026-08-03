@@ -19,10 +19,6 @@ path = "crates/nuxie-binary/src/core/field_types/mod.rs"
 category = "codegen"
 
 [[addition]]
-path = "crates/nuxie-binary/src/core/field_types/core_int_type.rs"
-category = "codegen"
-
-[[addition]]
 path = "crates/nuxie-binary/src/core/mod.rs"
 category = "codegen"
 
@@ -33,10 +29,6 @@ category = "retained-render"
 [[addition]]
 path = "crates/nuxie-render-api/src/serializing.rs"
 category = "retained-render"
-
-[[addition]]
-path = "crates/nuxie-runtime/src/animation/keyframe_int.rs"
-category = "codegen"
 
 [[addition]]
 path = "crates/nuxie-runtime/src/data_bind_container.rs"

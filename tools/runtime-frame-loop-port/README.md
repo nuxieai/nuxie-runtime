@@ -15,7 +15,7 @@ make runtime-frame-loop-trace-runners
 The target:
 
 - refuses any C++ checkout except
-  `d788e8ec6e8b598526607d6a1e8818e8b637b60c`;
+  `4ac7b32798da0482e441ef09304dc3b480ed3ee5`;
 - builds the C++ runtime into the dedicated
   `out/rive-frame-loop-coverage-debug` directory;
 - records the LLVM flags in

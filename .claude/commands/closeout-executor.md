@@ -32,7 +32,7 @@ as history; they are not authority to run a family- or wave-level benchmark.
 ## Session start ritual (every session, no exceptions)
 
 1. `git -C /Users/levi/dev/oss/rive-runtime rev-parse HEAD` MUST print
-   `d788e8ec6e8b598526607d6a1e8818e8b637b60c`. If not: checkout that pin
+   `4ac7b32798da0482e441ef09304dc3b480ed3ee5`. If not: checkout that pin
    and rebuild `make cpp-probe` + `librive` before trusting ANY gate.
    Unpinned checkouts have poisoned this project twice — never skip this.
 2. Read docs/parity-closeout-status.md end to end.

@@ -5,7 +5,7 @@ claim "a verifiable, better-performing replacement for the Rive runtime."
 Compiled 2026-07-20 from a six-way evidence sweep of both codebases (typeKey
 diff, C++ source provenance, embedder API surface, verification blind spots,
 renderer/perf status, known-backlog sweep). Upstream reference pin:
-`d788e8ec`; renderer pixel-oracle pin: `7c778d13`.
+`4ac7b327`; renderer pixel-oracle pin: `7c778d13`.
 
 **How to read this.** The golden ratchet (317 exact files / 647 segments /
 zero divergences, plus 1,468/1,468 contract-exact renderer pixels) proves

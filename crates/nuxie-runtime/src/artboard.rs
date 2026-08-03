@@ -719,7 +719,7 @@ include!("artboard_referencer.rs");
 include!("bindable_artboard.rs");
 include!("nested_artboard_layout.rs");
 include!("nested_artboard_leaf.rs");
-include!("nested_artboard_origin.rs");
+include!("component_origin.rs");
 include!("bones/weight.rs");
 include!("profiler/rive_profile.rs");
 
@@ -10044,6 +10044,14 @@ impl ArtboardInstance {
                     )
                 })
                 .or_else(|| {
+                    component_origin_double_property_changed(
+                        self,
+                        local_id,
+                        type_name,
+                        property_key,
+                    )
+                })
+                .or_else(|| {
                     (type_name == Some("TextInput")
                         && property_key_for_name("TextInput", "selectionRadius")
                             == Some(property_key))
@@ -10192,56 +10200,6 @@ impl ArtboardInstance {
                     ComponentDirt::PATH | ComponentDirt::COMPONENTS,
                     false,
                 )
-            }
-            Some("ComponentOrigin")
-                if property_key_for_name("ComponentOrigin", "originX") == Some(property_key)
-                    || property_key_for_name("ComponentOrigin", "originY")
-                        == Some(property_key) =>
-            {
-                let Some(host_local_id) = self.component_parent_local(local_id) else {
-                    return false;
-                };
-                if self
-                    .component(host_local_id)
-                    .is_some_and(|host| host.type_name == "LayoutComponent")
-                {
-                    self.add_dirt(
-                        host_local_id,
-                        ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH,
-                        true,
-                    );
-                    return true;
-                }
-                let Some(origin_x_key) = property_key_for_name("Artboard", "originX") else {
-                    return false;
-                };
-                let Some(origin_y_key) = property_key_for_name("Artboard", "originY") else {
-                    return false;
-                };
-                let Some(origin_x) = property_key_for_name("ComponentOrigin", "originX")
-                    .and_then(|key| self.double_property(local_id, key))
-                else {
-                    return false;
-                };
-                let Some(origin_y) = property_key_for_name("ComponentOrigin", "originY")
-                    .and_then(|key| self.double_property(local_id, key))
-                else {
-                    return false;
-                };
-                let changed = self
-                    .nested_artboards
-                    .get_mut(&host_local_id)
-                    .is_some_and(|nested| {
-                        let mut changed =
-                            nested.child.set_double_property(0, origin_x_key, origin_x);
-                        changed |= nested.child.set_double_property(0, origin_y_key, origin_y);
-                        changed
-                    });
-                if changed {
-                    self.add_dirt(host_local_id, ComponentDirt::TRANSFORM, false);
-                    self.add_dirt(host_local_id, ComponentDirt::WORLD_TRANSFORM, true);
-                }
-                changed
             }
             Some("NestedArtboard")
                 if property_key_for_name("NestedArtboard", "speed") == Some(property_key) =>

@@ -16197,8 +16197,13 @@ mod tests {
 
         let mut child_root = typed_component(0, 0, "Artboard");
         child_root.transform.render_opacity = 1.0;
-        let mut child = synthetic_instance(vec![child_root], vec![0]);
+        let mut child_content = typed_component(1, 1, "Shape");
+        child_content.transform.render_opacity = 1.0;
+        let mut child = synthetic_instance(vec![child_root, child_content], vec![0, 1]);
+        synthetic_link_parent(&mut child, 1, 0);
+        synthetic_add_dependent(&mut child, 0, 1);
         child.clear_component_dirt(0);
+        child.clear_component_dirt(1);
         child.set_artboard_dirt_for_test(ComponentDirt::NONE);
 
         let root = typed_component(0, 0, "Artboard");
@@ -16220,8 +16225,17 @@ mod tests {
         ));
 
         let child = &parent.nested_artboards.get(&1).unwrap().child;
-        assert_eq!(child.component(0).unwrap().transform.render_opacity, 0.5);
+        assert_eq!(child.component(0).unwrap().transform.render_opacity, 1.0);
+        assert_eq!(child.host_opacity, 0.5);
+        assert_eq!(child.child_opacity(), 0.5);
+        assert_eq!(child.component(1).unwrap().transform.render_opacity, 0.5);
         assert!(!child.has_dirt(ComponentDirt::COMPONENTS));
+        assert!(
+            child
+                .components()
+                .iter()
+                .all(|component| !component.dirt.contains(ComponentDirt::RENDER_OPACITY))
+        );
     }
 
     #[test]

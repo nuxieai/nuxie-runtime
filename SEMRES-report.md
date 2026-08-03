@@ -114,8 +114,11 @@ why the data, manager, and provider correspondence rows remain partial.
 
 ## Commit status
 
-No commits could be created in this managed workspace. Git needs to create
-`/Users/levi/dev/nuxie-runtime/.git/worktrees/nuxie-mr-c14/index.lock`, but the
-shared Git metadata is read-only under the active sandbox policy (`Operation
-not permitted`). The coherent changes are preserved in the worktree for the
-caller to commit once Git metadata is writable.
+- `8a9b5474` (`[SEMRES] Capture lane finalization`) records the semantic runtime,
+  corpus promotion, manifests, documentation, and this report.
+- `bb422201` merges the updated `origin/main` into the lane after that commit.
+
+Git metadata was read-only during implementation, so the runtime changes could
+not be split into the originally requested coherent-step commits before lane
+finalization. The history records one semantic finalization commit plus the
+upstream merge rather than pretending that split occurred.

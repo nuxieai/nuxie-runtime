@@ -1338,10 +1338,12 @@ fn collect_component_focus_descriptors(
                 inherited_eligible
                     && component_and_ancestors_allow_focus(artboard, local_id)
                     && !nested_host_is_paused(artboard, local_id),
-                root_transform.multiply(
-                    artboard
-                        .component(local_id)
-                        .map_or(Mat2D::IDENTITY, |host| host.transform.world_transform),
+                nested.child.mounted_root_transform(
+                    root_transform.multiply(
+                        artboard
+                            .component(local_id)
+                            .map_or(Mat2D::IDENTITY, |host| host.transform.world_transform),
+                    ),
                 ),
                 descriptors,
             );
@@ -1400,11 +1402,13 @@ fn collect_component_focus_descriptors(
                     Some(row_key),
                     Some(item.child.instance_identity()),
                     inherited_eligible && component_and_ancestors_allow_focus(artboard, local_id),
-                    root_transform.multiply(host_world).multiply(
-                        item_transforms
-                            .and_then(|transforms| transforms.get(item_index))
-                            .copied()
-                            .unwrap_or(item.transform),
+                    item.child.mounted_root_transform(
+                        root_transform.multiply(host_world).multiply(
+                            item_transforms
+                                .and_then(|transforms| transforms.get(item_index))
+                                .copied()
+                                .unwrap_or(item.transform),
+                        ),
                     ),
                     descriptors,
                 );

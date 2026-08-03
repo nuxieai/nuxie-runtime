@@ -343,6 +343,9 @@ pub struct ArtboardInstance {
     pub(crate) origin_x: f32,
     pub(crate) origin_y: f32,
     pub(crate) clip: bool,
+    /// C++ `Artboard::m_hostOpacity`: opacity imposed by a mounted
+    /// `NestedArtboard`, kept separate from the artboard's authored opacity.
+    pub(crate) host_opacity: f32,
     /// C++ `Artboard::m_FrameOrigin`: clone-owned draw state. Root artboards
     /// default true; mounted nested/scripted/component-list occurrences set it
     /// false at the same ownership boundary as C++.
@@ -525,6 +528,7 @@ impl Clone for ArtboardInstance {
             origin_x: self.origin_x,
             origin_y: self.origin_y,
             clip: self.clip,
+            host_opacity: self.host_opacity,
             frame_origin: self.frame_origin.clone(),
             frame_id: self.frame_id.clone(),
             slots: self.slots.clone(),
@@ -2277,6 +2281,7 @@ impl ArtboardInstance {
             origin_x: dimensions.origin_x,
             origin_y: dimensions.origin_y,
             clip: dimensions.clip,
+            host_opacity: 1.0,
             frame_origin: Cell::new(true),
             frame_id: Cell::new(0),
             slots,
@@ -7315,6 +7320,37 @@ impl ArtboardInstance {
         self.frame_origin.set(frame_origin);
     }
 
+    pub(crate) fn has_self_transform(&self) -> bool {
+        let authored = self.authored_transform(0);
+        authored.rotation != 0.0 || authored.scale_x != 1.0 || authored.scale_y != 1.0
+    }
+
+    pub(crate) fn self_transform(&self) -> Mat2D {
+        let authored = self.authored_transform(0);
+        let mut transform = Mat2D::from_rotation(authored.rotation);
+        transform.scale_by_values(authored.scale_x, authored.scale_y);
+        transform
+    }
+
+    pub(crate) fn mounted_root_transform(&self, host_transform: Mat2D) -> Mat2D {
+        host_transform.multiply(self.self_transform())
+    }
+
+    pub(crate) fn child_opacity(&self) -> f32 {
+        self.component(0)
+            .map(|component| component.transform.render_opacity * self.host_opacity)
+            .unwrap_or(self.host_opacity)
+    }
+
+    pub(crate) fn set_host_opacity(&mut self, opacity: f32) -> bool {
+        if self.host_opacity == opacity {
+            return false;
+        }
+        self.host_opacity = opacity;
+        self.add_dirt(0, ComponentDirt::RENDER_OPACITY, true);
+        true
+    }
+
     pub fn frame_id(&self) -> u64 {
         self.frame_id.get()
     }
@@ -8629,12 +8665,14 @@ impl ArtboardInstance {
             {
                 return changed;
             }
-            let child_root_transform = root_transform.multiply(
-                self.component(host_local_id)
-                    .map(|component| component.transform.world_transform)
-                    .unwrap_or(Mat2D::IDENTITY),
-            );
+            let host_world = self
+                .component(host_local_id)
+                .map(|component| component.transform.world_transform)
+                .unwrap_or(Mat2D::IDENTITY);
             if let Some(nested) = self.nested_artboards.get_mut(&host_local_id) {
+                let child_root_transform = nested
+                    .child
+                    .mounted_root_transform(root_transform.multiply(host_world));
                 changed |= nested
                     .child
                     .update_pass_with_script_mode(script_mode, child_root_transform);
@@ -9130,7 +9168,11 @@ impl ArtboardInstance {
                         .objects
                         .double_property(component.local_id, key)
                         .unwrap_or(1.0);
-                    Some(component.child_opacity(authored_opacity))
+                    Some(if component.type_name == "Artboard" {
+                        component.child_opacity(authored_opacity) * self.host_opacity
+                    } else {
+                        component.child_opacity(authored_opacity)
+                    })
                 })
                 .unwrap_or(1.0);
             self.objects
@@ -10880,10 +10922,7 @@ impl RuntimeNestedArtboardInstance {
     }
 
     fn set_root_opacity(&mut self, opacity: f32) -> bool {
-        let Some(opacity_key) = property_key_for_name("Artboard", "opacity") else {
-            return false;
-        };
-        self.child.set_double_property(0, opacity_key, opacity)
+        self.child.set_host_opacity(opacity)
     }
 
     fn set_remap_time(&mut self, remap_local_id: usize, time: f32) -> bool {
@@ -12090,6 +12129,7 @@ mod tests {
             origin_x: 0.0,
             origin_y: 0.0,
             clip: true,
+            host_opacity: 1.0,
             frame_origin: Cell::new(true),
             frame_id: Cell::new(0),
             slots,
@@ -15863,7 +15903,7 @@ mod tests {
     }
 
     #[test]
-    fn state_machine_outer_settlement_clears_deep_nested_render_opacity_dirt() {
+    fn state_machine_outer_settlement_preserves_deep_nested_artboard_opacity() {
         let typed_component = |local_id: usize, graph_order: usize, type_name: &'static str| {
             let mut component = synthetic_component(local_id, graph_order);
             component.type_name = type_name;
@@ -15919,7 +15959,9 @@ mod tests {
             .expect("leaf occurrence");
         let leaf_root = leaf.child.component(0).expect("leaf root component");
         assert_eq!(leaf_root.transform.render_opacity, 0.0);
-        assert!(leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
+        assert_eq!(leaf.child.host_opacity, 1.0);
+        assert_eq!(leaf.child.child_opacity(), 0.0);
+        assert!(!leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
 
         root.settle_state_machine_update_passes();
 
@@ -15935,7 +15977,9 @@ mod tests {
             .next()
             .expect("leaf occurrence");
         let leaf_root = leaf.child.component(0).expect("leaf root component");
-        assert_eq!(leaf_root.transform.render_opacity, 1.0);
+        assert_eq!(leaf_root.transform.render_opacity, 0.0);
+        assert_eq!(leaf.child.host_opacity, 1.0);
+        assert_eq!(leaf.child.child_opacity(), 0.0);
         assert!(!leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
     }
 
@@ -18713,6 +18757,65 @@ mod tests {
         );
         assert!(root.dirt.contains(ComponentDirt::RENDER_OPACITY));
         assert!(!root.dirt.contains(ComponentDirt::TRANSFORM));
+    }
+
+    #[test]
+    fn host_opacity_multiplies_without_overwriting_artboard_opacity() {
+        let artboard_opacity_key =
+            property_key_for_name("Artboard", "opacity").expect("Artboard.opacity key");
+        let mut root = synthetic_component_for_type(0, "Artboard");
+        root.dirt = ComponentDirt::NONE;
+        let mut instance = synthetic_instance(vec![root], vec![0]);
+
+        assert!(instance.set_double_property(0, artboard_opacity_key, 0.4));
+        instance.update_components();
+        instance.clear_component_dirt(0);
+        instance.set_artboard_dirt_for_test(ComponentDirt::NONE);
+
+        assert!(instance.set_host_opacity(0.5));
+        assert_eq!(instance.double_property(0, artboard_opacity_key), Some(0.4));
+        assert_eq!(instance.child_opacity(), 0.2);
+        assert!(
+            instance
+                .component(0)
+                .unwrap()
+                .dirt
+                .contains(ComponentDirt::RENDER_OPACITY)
+        );
+    }
+
+    #[test]
+    fn artboard_self_transform_combines_rotation_and_scale() {
+        let root = synthetic_component_for_type(0, "Artboard");
+        let mut instance = synthetic_instance(vec![root], vec![0]);
+
+        assert!(!instance.has_self_transform());
+        assert!(instance.set_transform_property(
+            0,
+            TransformProperty::Rotation,
+            std::f32::consts::FRAC_PI_2,
+        ));
+        assert!(instance.set_transform_property(0, TransformProperty::ScaleX, 2.0));
+        assert!(instance.set_transform_property(0, TransformProperty::ScaleY, 3.0));
+
+        assert!(instance.has_self_transform());
+        let transform = instance.self_transform().0;
+        assert!(transform[0].abs() < 1e-6);
+        assert!((transform[1] - 2.0).abs() < 1e-6);
+        assert!((transform[2] + 3.0).abs() < 1e-6);
+        assert!(transform[3].abs() < 1e-6);
+        assert_eq!(&transform[4..], &[0.0, 0.0]);
+        assert_eq!(
+            instance.mounted_root_transform(Mat2D([1.0, 0.0, 0.0, 1.0, 4.0, 5.0])),
+            Mat2D([
+                transform[0],
+                transform[1],
+                transform[2],
+                transform[3],
+                4.0,
+                5.0,
+            ])
+        );
     }
 
     #[test]
@@ -21637,7 +21740,7 @@ mod tests {
     }
 
     #[test]
-    fn state_machine_frame_settles_deep_nested_render_opacity() {
+    fn state_machine_frame_preserves_deep_nested_artboard_opacity() {
         let typed_component = |local_id: usize, graph_order: usize, type_name: &'static str| {
             let mut component = synthetic_component(local_id, graph_order);
             component.type_name = type_name;
@@ -21693,7 +21796,9 @@ mod tests {
             .expect("leaf occurrence");
         let leaf_root = leaf.child.component(0).expect("leaf root component");
         assert_eq!(leaf_root.transform.render_opacity, 0.0);
-        assert!(leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
+        assert_eq!(leaf.child.host_opacity, 1.0);
+        assert_eq!(leaf.child.child_opacity(), 0.0);
+        assert!(!leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
 
         root.settle_state_machine_update_passes();
 
@@ -21709,7 +21814,9 @@ mod tests {
             .next()
             .expect("leaf occurrence");
         let leaf_root = leaf.child.component(0).expect("leaf root component");
-        assert_eq!(leaf_root.transform.render_opacity, 1.0);
+        assert_eq!(leaf_root.transform.render_opacity, 0.0);
+        assert_eq!(leaf.child.host_opacity, 1.0);
+        assert_eq!(leaf.child.child_opacity(), 0.0);
         assert!(!leaf_root.dirt.contains(ComponentDirt::RENDER_OPACITY));
     }
 

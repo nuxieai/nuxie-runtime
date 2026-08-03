@@ -155,6 +155,26 @@ public:
                        float x,
                        float y,
                        int pointerId);
+    void addSetInputBoolean(float seconds,
+                            const std::string& name,
+                            bool value);
+    void addSetInputNumber(float seconds,
+                           const std::string& name,
+                           float value);
+    void addSetInputTrigger(float seconds, const std::string& name);
+    void addViewModelBoolean(float seconds,
+                             const std::string& property,
+                             bool value);
+    void addViewModelNumber(float seconds,
+                            const std::string& property,
+                            float value);
+    void addViewModelTrigger(float seconds, const std::string& property);
+    void addResize(float seconds,
+                   float width,
+                   float height,
+                   float dpr,
+                   uint32_t pixelWidth,
+                   uint32_t pixelHeight);
     void addAdvance(float seconds, bool settled);
     void addAdvanceWithStates(float seconds, bool settled, size_t statesChanged);
     void addSideChannelEvent(const SideChannelEvent& event);

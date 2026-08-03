@@ -959,6 +959,83 @@ void RecordingFactory::addInputEvent(const std::string& kind,
     m_stream.line(out.str());
 }
 
+void RecordingFactory::addSetInputBoolean(float seconds,
+                                          const std::string& name,
+                                          bool value)
+{
+    std::ostringstream out;
+    out << "setInput seconds=" << floatToString(seconds)
+        << " name=" << quotedString(name)
+        << " type=bool value=" << (value ? "true" : "false");
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addSetInputNumber(float seconds,
+                                         const std::string& name,
+                                         float value)
+{
+    std::ostringstream out;
+    out << "setInput seconds=" << floatToString(seconds)
+        << " name=" << quotedString(name)
+        << " type=number value=" << floatToString(value);
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addSetInputTrigger(float seconds,
+                                          const std::string& name)
+{
+    std::ostringstream out;
+    out << "setInput seconds=" << floatToString(seconds)
+        << " name=" << quotedString(name) << " type=trigger";
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addViewModelBoolean(float seconds,
+                                           const std::string& property,
+                                           bool value)
+{
+    std::ostringstream out;
+    out << "viewModel seconds=" << floatToString(seconds)
+        << " property=" << quotedString(property)
+        << " type=bool value=" << (value ? "true" : "false");
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addViewModelNumber(float seconds,
+                                          const std::string& property,
+                                          float value)
+{
+    std::ostringstream out;
+    out << "viewModel seconds=" << floatToString(seconds)
+        << " property=" << quotedString(property)
+        << " type=number value=" << floatToString(value);
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addViewModelTrigger(float seconds,
+                                           const std::string& property)
+{
+    std::ostringstream out;
+    out << "viewModel seconds=" << floatToString(seconds)
+        << " property=" << quotedString(property) << " type=trigger";
+    m_stream.line(out.str());
+}
+
+void RecordingFactory::addResize(float seconds,
+                                 float width,
+                                 float height,
+                                 float dpr,
+                                 uint32_t pixelWidth,
+                                 uint32_t pixelHeight)
+{
+    std::ostringstream out;
+    out << "resize seconds=" << floatToString(seconds) << " logical=("
+        << floatToString(width) << ',' << floatToString(height)
+        << ") dpr=" << floatToString(dpr) << " pixels=(" << pixelWidth
+        << ',' << pixelHeight << ')';
+    m_stream.line(out.str());
+}
+
 void RecordingFactory::addAdvance(float seconds, bool settled)
 {
     std::ostringstream out;

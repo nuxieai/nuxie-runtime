@@ -3,6 +3,7 @@
 #include "recording_renderer.hpp"
 
 #include "rive/animation/state_machine_instance.hpp"
+#include "rive/animation/state_machine_input_instance.hpp"
 #include "rive/animation/semantic_listener_group.hpp"
 #include "rive/artboard.hpp"
 #include "rive/custom_property_boolean.hpp"
@@ -33,6 +34,10 @@
 #include "rive/semantic/semantic_manager.hpp"
 #include "rive/semantic/semantic_node.hpp"
 #include "rive/static_scene.hpp"
+#include "rive/viewmodel/viewmodel_instance.hpp"
+#include "rive/viewmodel/viewmodel_instance_boolean.hpp"
+#include "rive/viewmodel/viewmodel_instance_number.hpp"
+#include "rive/viewmodel/viewmodel_instance_trigger.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -153,6 +158,22 @@ enum class InputKind
     pointerExit,
     semanticAction,
     semanticFocus,
+    setInput,
+    resize,
+};
+
+enum class ScriptValueKind
+{
+    boolean,
+    number,
+    trigger,
+};
+
+enum class ViewModelKind
+{
+    setBoolean,
+    setNumber,
+    fireTrigger,
 };
 
 struct InputEvent
@@ -164,6 +185,23 @@ struct InputEvent
     int pointerId = 0;
     uint32_t semanticNodeId = 0;
     rive::SemanticActionType semanticAction = rive::SemanticActionType::tap;
+    std::string name;
+    ScriptValueKind valueKind = ScriptValueKind::boolean;
+    bool boolValue = false;
+    float numberValue = 0.0f;
+    float width = 0.0f;
+    float height = 0.0f;
+    float dpr = 1.0f;
+    size_t order = 0;
+};
+
+struct ViewModelEvent
+{
+    float seconds = 0.0f;
+    ViewModelKind kind = ViewModelKind::setNumber;
+    std::string property;
+    bool boolValue = false;
+    float numberValue = 0.0f;
     size_t order = 0;
 };
 
@@ -234,7 +272,8 @@ void validateTraceOptions(const Options& options)
     }
     if (steadyOnly &&
         (!frameOnly || options.samples.size() != 1 ||
-         options.benchmarkRepeat != 1 || !options.inputScript.empty()))
+         options.benchmarkRepeat != 1 || !options.inputScript.empty() ||
+         !options.viewModelScript.empty()))
     {
         throw CliError(
             "steady-only coverage requires frame-only coverage, one sample, "
@@ -248,7 +287,8 @@ std::string usage()
            "       rive_golden_runner --file <path> [--artboard <name>]\n"
            "           [--state-machine <name> | --animation <name>]\n"
            "           [--samples <t0,t1,...>]\n"
-           "           [--input-script <path>] [--side-channel]\n"
+           "           [--input-script <path>]\n"
+           "           [--view-model-script <path>] [--side-channel]\n"
            "           [--semantic-default-view-model]\n"
            "           [--semantic-side-channel-only]\n"
            "           [--benchmark] [--benchmark-repeat N]\n"
@@ -259,7 +299,16 @@ std::string usage()
            "  <seconds> pointerUp <x> <y> [pointerId]\n"
            "  <seconds> pointerExit <x> <y> [pointerId]\n"
            "  <seconds> semanticAction <nodeId> <tap|increase|decrease>\n"
-           "  <seconds> semanticFocus <nodeId>\n";
+           "  <seconds> semanticFocus <nodeId>\n"
+           "  <seconds> setInput <name> bool <true|false>\n"
+           "  <seconds> setInput <name> number <value>\n"
+           "  <seconds> setInput <name> trigger\n"
+           "  <seconds> resize <width> <height> <dpr>\n"
+           "\n"
+           "view-model script lines:\n"
+           "  <seconds> setBoolean <property> <true|false>\n"
+           "  <seconds> setNumber <property> <value>\n"
+           "  <seconds> fireTrigger <property>\n";
 }
 
 std::string trim(const std::string& value)
@@ -291,6 +340,29 @@ float parseFloat(const std::string& value, const std::string& context)
         throw CliError("invalid float for " + context + ": " + value);
     }
     return parsed;
+}
+
+float parseFiniteFloat(const std::string& value, const std::string& context)
+{
+    const float parsed = parseFloat(value, context);
+    if (!std::isfinite(parsed))
+    {
+        throw CliError(context + " must be finite");
+    }
+    return parsed;
+}
+
+bool parseBool(const std::string& value, const std::string& context)
+{
+    if (value == "true")
+    {
+        return true;
+    }
+    if (value == "false")
+    {
+        return false;
+    }
+    throw CliError("invalid boolean for " + context + ": " + value);
 }
 
 int parseInt(const std::string& value, const std::string& context)
@@ -390,6 +462,14 @@ InputKind parseInputKind(const std::string& value, size_t lineNumber)
     {
         return InputKind::semanticFocus;
     }
+    if (value == "setInput")
+    {
+        return InputKind::setInput;
+    }
+    if (value == "resize")
+    {
+        return InputKind::resize;
+    }
     throw CliError("unknown input event on line " + std::to_string(lineNumber) +
                    ": " + value);
 }
@@ -410,6 +490,10 @@ std::string inputKindName(InputKind kind)
             return "semanticAction";
         case InputKind::semanticFocus:
             return "semanticFocus";
+        case InputKind::setInput:
+            return "setInput";
+        case InputKind::resize:
+            return "resize";
     }
     return "unknown";
 }
@@ -497,6 +581,14 @@ std::vector<InputEvent> loadInputScript(const std::string& path)
                            " has a negative time");
         }
         event.kind = parseInputKind(tokens[1], lineNumber);
+        if ((event.kind == InputKind::setInput ||
+             event.kind == InputKind::resize) &&
+            !std::isfinite(event.seconds))
+        {
+            throw CliError("input script line " +
+                           std::to_string(lineNumber) +
+                           " seconds must be finite");
+        }
         const std::string lineContext =
             "input script line " + std::to_string(lineNumber);
         if (event.kind == InputKind::semanticAction)
@@ -518,6 +610,72 @@ std::vector<InputEvent> loadInputScript(const std::string& path)
                                " must be: <seconds> semanticFocus <nodeId>");
             }
             event.semanticNodeId = parseUint32(tokens[2], lineContext + " nodeId");
+        }
+        else if (event.kind == InputKind::setInput)
+        {
+            if (tokens.size() < 4)
+            {
+                throw CliError(
+                    lineContext +
+                    " must be: <seconds> setInput <name> "
+                    "<bool|number|trigger> [value]");
+            }
+            event.name = tokens[2];
+            if (tokens[3] == "bool")
+            {
+                if (tokens.size() != 5)
+                {
+                    throw CliError(lineContext +
+                                   " bool input requires one value");
+                }
+                event.valueKind = ScriptValueKind::boolean;
+                event.boolValue = parseBool(tokens[4], lineContext + " value");
+            }
+            else if (tokens[3] == "number")
+            {
+                if (tokens.size() != 5)
+                {
+                    throw CliError(lineContext +
+                                   " number input requires one value");
+                }
+                event.valueKind = ScriptValueKind::number;
+                event.numberValue =
+                    parseFiniteFloat(tokens[4], lineContext + " value");
+            }
+            else if (tokens[3] == "trigger")
+            {
+                if (tokens.size() != 4)
+                {
+                    throw CliError(lineContext +
+                                   " trigger input takes no value");
+                }
+                event.valueKind = ScriptValueKind::trigger;
+            }
+            else
+            {
+                throw CliError("unknown setInput type on line " +
+                               std::to_string(lineNumber) + ": " + tokens[3]);
+            }
+        }
+        else if (event.kind == InputKind::resize)
+        {
+            if (tokens.size() != 5)
+            {
+                throw CliError(lineContext +
+                               " must be: <seconds> resize <width> <height> "
+                               "<dpr>");
+            }
+            event.width = parseFiniteFloat(tokens[2], lineContext + " width");
+            event.height =
+                parseFiniteFloat(tokens[3], lineContext + " height");
+            event.dpr = parseFiniteFloat(tokens[4], lineContext + " dpr");
+            if (event.width <= 0.0f || event.height <= 0.0f ||
+                event.dpr <= 0.0f)
+            {
+                throw CliError(lineContext +
+                               " resize width, height, and dpr must be greater "
+                               "than 0");
+            }
         }
         else
         {
@@ -547,6 +705,111 @@ std::vector<InputEvent> loadInputScript(const std::string& path)
         return a.seconds < b.seconds;
     });
 
+    return events;
+}
+
+ViewModelKind parseViewModelKind(const std::string& value, size_t lineNumber)
+{
+    if (value == "setBoolean")
+    {
+        return ViewModelKind::setBoolean;
+    }
+    if (value == "setNumber")
+    {
+        return ViewModelKind::setNumber;
+    }
+    if (value == "fireTrigger")
+    {
+        return ViewModelKind::fireTrigger;
+    }
+    throw CliError("unknown view-model event on line " +
+                   std::to_string(lineNumber) + ": " + value);
+}
+
+std::vector<ViewModelEvent> loadViewModelScript(const std::string& path)
+{
+    std::ifstream stream(path);
+    if (!stream.good())
+    {
+        throw std::runtime_error("unable to read view-model script: " + path);
+    }
+
+    std::vector<ViewModelEvent> events;
+    std::string line;
+    size_t lineNumber = 0;
+    while (std::getline(stream, line))
+    {
+        lineNumber++;
+        const auto commentStart = line.find('#');
+        if (commentStart != std::string::npos)
+        {
+            line = line.substr(0, commentStart);
+        }
+        line = trim(line);
+        if (line.empty())
+        {
+            continue;
+        }
+
+        std::istringstream words(line);
+        std::vector<std::string> tokens;
+        std::string token;
+        while (words >> token)
+        {
+            tokens.push_back(token);
+        }
+        if (tokens.size() < 2)
+        {
+            throw CliError("view-model script line " +
+                           std::to_string(lineNumber) +
+                           " must start with: <seconds> <event>");
+        }
+
+        const std::string lineContext =
+            "view-model script line " + std::to_string(lineNumber);
+        ViewModelEvent event;
+        event.seconds = parseFiniteFloat(tokens[0], lineContext + " seconds");
+        if (event.seconds < 0.0f)
+        {
+            throw CliError(lineContext + " has a negative time");
+        }
+        event.kind = parseViewModelKind(tokens[1], lineNumber);
+        if (event.kind == ViewModelKind::fireTrigger)
+        {
+            if (tokens.size() != 3)
+            {
+                throw CliError(lineContext +
+                               " must be: <seconds> fireTrigger <property>");
+            }
+        }
+        else if (tokens.size() != 4)
+        {
+            throw CliError(lineContext +
+                           " must be: <seconds> <setBoolean|setNumber> "
+                           "<property> <value>");
+        }
+        event.property = tokens[2];
+        if (event.kind == ViewModelKind::setBoolean)
+        {
+            event.boolValue = parseBool(tokens[3], lineContext + " value");
+        }
+        else if (event.kind == ViewModelKind::setNumber)
+        {
+            event.numberValue =
+                parseFiniteFloat(tokens[3], lineContext + " value");
+        }
+        event.order = events.size();
+        events.push_back(std::move(event));
+    }
+
+    std::stable_sort(events.begin(), events.end(), [](const auto& a,
+                                                      const auto& b) {
+        if (std::abs(a.seconds - b.seconds) <= kTimeEpsilon)
+        {
+            return a.order < b.order;
+        }
+        return a.seconds < b.seconds;
+    });
     return events;
 }
 
@@ -686,10 +949,10 @@ Options parseOptions(int argc, char** argv)
         {
             throw CliError("--benchmark-repeat requires --benchmark");
         }
-        if (!options.inputScript.empty())
+        if (!options.inputScript.empty() || !options.viewModelScript.empty())
         {
             throw CliError(
-                "--benchmark-repeat cannot be combined with --input-script");
+                "--benchmark-repeat cannot be combined with scripts");
         }
         if (options.samples.size() != 1)
         {
@@ -966,6 +1229,11 @@ public:
     // Non-null only when the selected scene is a state machine; the no-RTTI
     // reference build cannot recover this via dynamic_cast at emit time.
     rive::StateMachineInstance* stateMachine() const { return m_stateMachine; }
+    rive::ArtboardInstance* artboard() const { return m_artboard.get(); }
+    rive::ViewModelInstance* viewModelInstance() const
+    {
+        return m_viewModelInstance.get();
+    }
     const std::string& artboardName() const { return m_artboard->name(); }
 
 private:
@@ -1010,9 +1278,165 @@ rive::HitResult applyInput(rive::Scene* scene, const InputEvent& event)
             return scene->pointerExit(position, event.pointerId);
         case InputKind::semanticAction:
         case InputKind::semanticFocus:
+        case InputKind::setInput:
+        case InputKind::resize:
             return rive::HitResult::none;
     }
     return rive::HitResult::none;
+}
+
+uint32_t resizePixelDimension(float logical, float dpr)
+{
+    const double pixels =
+        std::ceil(static_cast<double>(logical) * static_cast<double>(dpr));
+    if (!std::isfinite(pixels) || pixels < 1.0 ||
+        pixels > std::numeric_limits<uint32_t>::max())
+    {
+        throw CliError("resize physical extent is outside the u32 range");
+    }
+    return static_cast<uint32_t>(pixels);
+}
+
+void applySetInput(rive_rust::golden::RecordingFactory& factory,
+                   rive::StateMachineInstance* stateMachine,
+                   const InputEvent& event,
+                   bool record)
+{
+    if (stateMachine == nullptr)
+    {
+        throw CliError("setInput requires a state-machine scene");
+    }
+    switch (event.valueKind)
+    {
+        case ScriptValueKind::boolean:
+        {
+            auto* input = stateMachine->getBool(event.name);
+            if (input == nullptr)
+            {
+                throw CliError("state-machine input '" + event.name +
+                               "' was not found as bool");
+            }
+            input->value(event.boolValue);
+            if (record)
+            {
+                factory.addSetInputBoolean(event.seconds,
+                                           event.name,
+                                           event.boolValue);
+            }
+            return;
+        }
+        case ScriptValueKind::number:
+        {
+            auto* input = stateMachine->getNumber(event.name);
+            if (input == nullptr)
+            {
+                throw CliError("state-machine input '" + event.name +
+                               "' was not found as number");
+            }
+            input->value(event.numberValue);
+            if (record)
+            {
+                factory.addSetInputNumber(event.seconds,
+                                          event.name,
+                                          event.numberValue);
+            }
+            return;
+        }
+        case ScriptValueKind::trigger:
+        {
+            auto* input = stateMachine->getTrigger(event.name);
+            if (input == nullptr)
+            {
+                throw CliError("state-machine input '" + event.name +
+                               "' was not found as trigger");
+            }
+            input->fire();
+            if (record)
+            {
+                factory.addSetInputTrigger(event.seconds, event.name);
+            }
+            return;
+        }
+    }
+}
+
+void applyViewModelEvent(rive_rust::golden::RecordingFactory& factory,
+                         rive::ViewModelInstance* viewModel,
+                         const ViewModelEvent& event,
+                         bool record)
+{
+    if (viewModel == nullptr)
+    {
+        throw CliError("view-model script requires a bound main view model");
+    }
+    rive::ViewModelInstanceValue* property =
+        viewModel->propertyValue(event.property);
+    switch (event.kind)
+    {
+        case ViewModelKind::setBoolean:
+            if (property == nullptr ||
+                !property->is<rive::ViewModelInstanceBoolean>())
+            {
+                throw CliError("view-model property '" + event.property +
+                               "' was not found as bool");
+            }
+            property->as<rive::ViewModelInstanceBoolean>()->propertyValue(
+                event.boolValue);
+            if (record)
+            {
+                factory.addViewModelBoolean(event.seconds,
+                                            event.property,
+                                            event.boolValue);
+            }
+            return;
+        case ViewModelKind::setNumber:
+            if (property == nullptr ||
+                !property->is<rive::ViewModelInstanceNumber>())
+            {
+                throw CliError("view-model property '" + event.property +
+                               "' was not found as number");
+            }
+            property->as<rive::ViewModelInstanceNumber>()->propertyValue(
+                event.numberValue);
+            if (record)
+            {
+                factory.addViewModelNumber(event.seconds,
+                                           event.property,
+                                           event.numberValue);
+            }
+            return;
+        case ViewModelKind::fireTrigger:
+            if (property == nullptr ||
+                !property->is<rive::ViewModelInstanceTrigger>())
+            {
+                throw CliError("view-model property '" + event.property +
+                               "' was not found as trigger");
+            }
+            property->as<rive::ViewModelInstanceTrigger>()->trigger();
+            if (record)
+            {
+                factory.addViewModelTrigger(event.seconds, event.property);
+            }
+            return;
+    }
+}
+
+void applyResize(rive_rust::golden::RecordingFactory& factory,
+                 rive::ArtboardInstance* artboard,
+                 const InputEvent& event,
+                 bool record)
+{
+    artboard->width(event.width);
+    artboard->height(event.height);
+    if (record)
+    {
+        factory.addResize(event.seconds,
+                          event.width,
+                          event.height,
+                          event.dpr,
+                          resizePixelDimension(event.width, event.dpr),
+                          resizePixelDimension(event.height, event.dpr));
+    }
 }
 
 std::string hitResultName(rive::HitResult result)
@@ -1274,12 +1698,6 @@ int runSmoke()
 int runFile(const Options& options)
 {
     validateTraceOptions(options);
-    if (!options.viewModelScript.empty())
-    {
-        throw CliError(
-            "unsupported: view-model scripts are not implemented in "
-            "golden-runner yet");
-    }
     if (options.file.empty())
     {
         throw CliError("missing --file <path>");
@@ -1289,6 +1707,11 @@ int runFile(const Options& options)
     if (!options.inputScript.empty())
     {
         inputEvents = loadInputScript(options.inputScript);
+    }
+    std::vector<ViewModelEvent> viewModelEvents;
+    if (!options.viewModelScript.empty())
+    {
+        viewModelEvents = loadViewModelScript(options.viewModelScript);
     }
 
     rive::File::deterministicMode = true;
@@ -1338,6 +1761,8 @@ int runFile(const Options& options)
                      factory);
     rive::Scene* scene = loader.scene();
     rive::StateMachineInstance* sceneStateMachine = loader.stateMachine();
+    rive::ArtboardInstance* sceneArtboard = loader.artboard();
+    rive::ViewModelInstance* sceneViewModel = loader.viewModelInstance();
     if (options.sideChannel && sceneStateMachine != nullptr)
     {
         sceneStateMachine->enableSemantics();
@@ -1385,27 +1810,54 @@ int runFile(const Options& options)
         elapsed += std::chrono::steady_clock::now() - stageStart;
     };
     size_t nextInput = 0;
+    size_t nextViewModel = 0;
     for (size_t repeat = 0; repeat < options.benchmarkRepeat; repeat++)
     {
         for (float sampleSeconds : options.samples)
         {
-            while (nextInput < inputEvents.size() &&
-                   inputEvents[nextInput].seconds <=
-                       sampleSeconds + kTimeEpsilon)
+            while (true)
             {
-                const auto& event = inputEvents[nextInput];
+                const bool inputDue =
+                    nextInput < inputEvents.size() &&
+                    inputEvents[nextInput].seconds <=
+                        sampleSeconds + kTimeEpsilon;
+                const bool viewModelDue =
+                    nextViewModel < viewModelEvents.size() &&
+                    viewModelEvents[nextViewModel].seconds <=
+                        sampleSeconds + kTimeEpsilon;
+                if (!inputDue && !viewModelDue)
+                {
+                    break;
+                }
+                const bool useInput =
+                    inputDue &&
+                    (!viewModelDue ||
+                     inputEvents[nextInput].seconds <=
+                         viewModelEvents[nextViewModel].seconds);
+                const float eventSeconds =
+                    useInput ? inputEvents[nextInput].seconds
+                             : viewModelEvents[nextViewModel].seconds;
                 timedStage(advanceElapsed, [&] {
                     const bool keepGoing =
-                        advanceTo(scene, event.seconds, currentSeconds);
+                        advanceTo(scene, eventSeconds, currentSeconds);
                     if (options.sideChannel && !options.benchmark)
                     {
                         recordAdvanceSideChannel(recordingFactory,
                                                  sceneStateMachine,
-                                                 event.seconds,
+                                                 eventSeconds,
                                                  keepGoing);
                     }
                 });
                 timedStage(inputElapsed, [&] {
+                    if (!useInput)
+                    {
+                        applyViewModelEvent(recordingFactory,
+                                            sceneViewModel,
+                                            viewModelEvents[nextViewModel],
+                                            !options.benchmark);
+                        return;
+                    }
+                    const auto& event = inputEvents[nextInput];
                     if (event.kind == InputKind::semanticAction ||
                         event.kind == InputKind::semanticFocus)
                     {
@@ -1413,6 +1865,22 @@ int runFile(const Options& options)
                                            sceneStateMachine,
                                            event,
                                            options.sideChannel);
+                        return;
+                    }
+                    if (event.kind == InputKind::setInput)
+                    {
+                        applySetInput(recordingFactory,
+                                      sceneStateMachine,
+                                      event,
+                                      !options.benchmark);
+                        return;
+                    }
+                    if (event.kind == InputKind::resize)
+                    {
+                        applyResize(recordingFactory,
+                                    sceneArtboard,
+                                    event,
+                                    !options.benchmark);
                         return;
                     }
                     const rive::HitResult hitResult = applyInput(scene, event);
@@ -1431,7 +1899,14 @@ int runFile(const Options& options)
                         }
                     }
                 });
-                nextInput++;
+                if (useInput)
+                {
+                    nextInput++;
+                }
+                else
+                {
+                    nextViewModel++;
+                }
             }
 
             timedStage(advanceElapsed, [&] {

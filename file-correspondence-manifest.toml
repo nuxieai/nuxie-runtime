@@ -3451,8 +3451,8 @@ legacy_port_status = "partial"
 b6_row_id = "B6-0280"
 b6_verdict = "ADAPTED"
 b6_cluster = "lua-scripting"
-audit_record = "P3E-report.md"
-note = "P3E adapted candidate, pinned d788e8ec: every GPU-prefixed Lua name in src/lua/renderer/lua_gpu.cpp is owned by Rust userdata and a typed plan executed by wgpu, including buffers, textures/views/uploads, samplers, layouts/groups, pipelines, dynamic pass state, draw/drawIndexed, and GPUCanvas resize/presentation. Focused authored-fixture and adapter-aware wgpu test evidence, plus the semantic combinations still pending, are recorded in P3E-report.md. Status remains pending until those combinations are implemented and the orchestrator lands the already-approved adapted-contract D-row with atomic decision/ceiling fields; the non-GPU-prefixed Canvas 2D and Image:view portions of this mixed upstream file remain outside P3-e. MR exception (crate boundary): the Lua GPU surface is architecturally three-crate — scripting binding, render-api contract, wgpu implementation — and cannot consolidate without merging crates."
+audit_record = "GPUCEIL-report.md"
+note = "GPUCEIL implementation candidate at pinned 4ac7b327: authored fixtures prove distinct pipeline/resource snapshots in one submission, explicit empty finish plus orphan rejection, and stable external texture identity from attachment store to a later sampled submission. The typed plan indexes immutable pipeline snapshots and wgpu retains occurrence-lifetime physical textures per resource id across submissions; focused checks and adapter-aware tests are cited in GPUCEIL-report.md. Status remains pending because this host exposed no adapter for green execution/pixel evidence, the mixed-file Canvas 2D/Image:view members remain open under RF-33, and the proposed adapted-contract D-row is not registered. MR exception (crate boundary): the Lua GPU surface is architecturally three-crate — scripting binding, render-api contract, wgpu implementation — and cannot consolidate without merging crates."
 
 [[file]]
 upstream = "src/lua/renderer/lua_gradient.cpp"

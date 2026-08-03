@@ -9,6 +9,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use luaur_rt::{
     AnyUserData, Buffer as LuaBuffer, Function, MultiValue, Table, UserData, UserDataFields,
@@ -19,10 +20,12 @@ use nuxie_render_api::{
     GpuCanvasShaderEntrySelection, GpuCanvasShaderStage, RenderGpuCanvasShader, RenderImage,
 };
 pub use nuxie_render_api::{
-    GpuCanvasBlendState, GpuCanvasColorTarget, GpuCanvasDepthStencilState, GpuCanvasIndexBuffer,
-    GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelineState, GpuCanvasSamplerBinding,
-    GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload, GpuCanvasUniformBuffer,
-    GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+    GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
+    GpuCanvasDepthStencilAttachment, GpuCanvasDepthStencilState, GpuCanvasDrawCommand,
+    GpuCanvasIndexBuffer, GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelineState,
+    GpuCanvasRenderPass, GpuCanvasSamplerBinding, GpuCanvasStencilFace, GpuCanvasTextureBinding,
+    GpuCanvasTextureUpload, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute,
+    GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 
 use crate::shader_asset::ShaderAsset;
@@ -45,6 +48,7 @@ pub const MAX_GPU_CANVAS_VERTEX_ATTRIBUTES: usize = 16;
 pub const MAX_GPU_CANVAS_BIND_GROUPS: u32 = 4;
 pub const MAX_GPU_CANVAS_UNIFORM_BINDINGS_PER_GROUP: usize = 8;
 pub const MAX_GPU_CANVAS_BINDING_INDEX: u32 = 7;
+static NEXT_GPU_TEXTURE_RESOURCE_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Default)]
 struct GpuCanvasResourceBudget {
@@ -144,6 +148,7 @@ impl UserData for GpuBuffer {
 
 #[derive(Debug, Clone)]
 struct GpuTexture {
+    resource_id: u64,
     width: u32,
     height: u32,
     depth_or_array_layers: u32,
@@ -180,6 +185,7 @@ impl GpuTextureView {
             .as_ref()
             .ok_or_else(|| Error::runtime("the GPU canvas presentation view cannot be sampled"))?;
         Ok(GpuCanvasTextureBinding {
+            resource_id: texture.resource_id,
             group,
             binding,
             width: texture.width,
@@ -198,12 +204,70 @@ impl GpuTextureView {
             uploads: texture.uploads.borrow().clone(),
         })
     }
+
+    fn to_attachment_view(&self) -> Result<GpuCanvasAttachmentView> {
+        if self.canvas.is_some() {
+            Ok(GpuCanvasAttachmentView::Canvas)
+        } else {
+            self.to_binding(0, 0).map(GpuCanvasAttachmentView::Texture)
+        }
+    }
+
+    fn sample_count(&self) -> u32 {
+        self.texture
+            .as_ref()
+            .map_or(1, |texture| texture.sample_count)
+    }
 }
 
 impl UserData for GpuTextureView {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("format", |_, this| Ok(this.format()));
     }
+}
+
+fn validate_attachment_canvas(
+    view: &GpuTextureView,
+    canvas_state: &Rc<RefCell<GpuCanvasState>>,
+) -> Result<()> {
+    if let Some(state) = &view.canvas {
+        if !Rc::ptr_eq(state, canvas_state) {
+            return Err(Error::runtime(
+                "GPU render-pass canvas view belongs to another GPUCanvas",
+            ));
+        }
+    } else if view
+        .texture
+        .as_ref()
+        .is_none_or(|texture| !texture.render_target)
+    {
+        return Err(Error::runtime(
+            "GPU render-pass external views require renderTarget=true",
+        ));
+    }
+    Ok(())
+}
+
+fn record_attachment_sample_count(current: &mut Option<u32>, sample_count: u32) -> Result<()> {
+    if current.is_some_and(|current| current != sample_count) {
+        return Err(Error::runtime(
+            "all GPU render-pass attachments must share one sampleCount",
+        ));
+    }
+    *current = Some(sample_count);
+    Ok(())
+}
+
+fn decode_clear_color(clear: Option<Table>) -> Result<[f64; 4]> {
+    let Some(clear) = clear else {
+        return Ok([0.0; 4]);
+    };
+    if clear.raw_len() != 4 {
+        return Err(Error::runtime(
+            "GPU clearColor must contain exactly four components",
+        ));
+    }
+    Ok([clear.get(1)?, clear.get(2)?, clear.get(3)?, clear.get(4)?])
 }
 
 #[derive(Debug, Clone)]
@@ -481,9 +545,9 @@ impl UserData for GpuShader {}
 #[derive(Debug, Clone)]
 struct GpuPipeline {
     vertex_shader: GpuShader,
-    fragment_shader: GpuShader,
+    fragment_shader: Option<GpuShader>,
     vertex_entry: GpuCanvasShaderEntrySelection,
-    fragment_entry: GpuCanvasShaderEntrySelection,
+    fragment_entry: Option<GpuCanvasShaderEntrySelection>,
     vertex_layouts: Vec<GpuCanvasVertexLayout>,
     state: GpuCanvasPipelineState,
     bind_group_layouts: Vec<GpuBindGroupLayout>,
@@ -555,7 +619,7 @@ impl UserData for GpuBindGroup {}
 #[derive(Debug)]
 struct CompletedGpuCanvasPass {
     vertex_shader: GpuShader,
-    fragment_shader: GpuShader,
+    fragment_shader: Option<GpuShader>,
     plan: GpuCanvasDrawPlan,
 }
 
@@ -639,51 +703,124 @@ impl UserData for GpuCanvas {
                 &["color", "depthStencil", "label"],
                 "GPU render-pass descriptor",
             )?;
-            let colors: Table = descriptor.get("color")?;
-            if colors.raw_len() != 1 {
-                return Err(Error::runtime(
-                    "GPU-canvas product snapshots require exactly one color attachment",
-                ));
-            }
-            let color: Table = colors.get(1)?;
-            reject_unknown_fields(
-                &color,
-                &["view", "resolveTarget", "loadOp", "storeOp", "clearColor"],
-                "GPU color attachment",
-            )?;
-            let view: Option<AnyUserData> = color.get("view")?;
-            if let Some(view) = view {
-                let view = view.borrow::<GpuTextureView>()?;
-                if view.canvas.as_ref().is_none_or(|state| !Rc::ptr_eq(state, &this.state)) {
+            let mut sample_count = None;
+            let mut color_attachments = Vec::new();
+            if let Some(colors) = descriptor.get::<Option<Table>>("color")? {
+                if colors.raw_len() > 4 {
                     return Err(Error::runtime(
-                        "the adapted GPU-canvas contract currently presents through canvas:colorView()",
+                        "GPU render pass supports at most four color attachments",
                     ));
                 }
+                for color in colors.sequence_values::<Table>() {
+                    let color = color?;
+                    reject_unknown_fields(
+                        &color,
+                        &["view", "resolveTarget", "loadOp", "storeOp", "clearColor"],
+                        "GPU color attachment",
+                    )?;
+                    let view = match color.get::<Option<AnyUserData>>("view")? {
+                        Some(view) => view.borrow::<GpuTextureView>()?.clone(),
+                        None => GpuTextureView {
+                            texture: None,
+                            canvas: Some(Rc::clone(&this.state)),
+                            dimension: "2d".into(),
+                            base_mip_level: 0,
+                            mip_level_count: 1,
+                            base_array_layer: 0,
+                            array_layer_count: 1,
+                        },
+                    };
+                    validate_attachment_canvas(&view, &this.state)?;
+                    record_attachment_sample_count(&mut sample_count, view.sample_count())?;
+                    let resolve_target = color
+                        .get::<Option<AnyUserData>>("resolveTarget")?
+                        .map(|target| {
+                            let target = target.borrow::<GpuTextureView>()?;
+                            validate_attachment_canvas(&target, &this.state)?;
+                            if view.sample_count() == 1 {
+                                return Err(Error::runtime(
+                                    "GPU color resolveTarget requires a multisampled source view",
+                                ));
+                            }
+                            if target.sample_count() != 1 {
+                                return Err(Error::runtime(
+                                    "GPU color resolveTarget must have sampleCount=1",
+                                ));
+                            }
+                            if target.format() != view.format() {
+                                return Err(Error::runtime(
+                                    "GPU color resolveTarget format must match its source view",
+                                ));
+                            }
+                            target.to_attachment_view()
+                        })
+                        .transpose()?;
+                    let load_op = optional_enum(&color, "loadOp", "clear", &["clear", "load"])?;
+                    let store_op = optional_enum(&color, "storeOp", "", &["store", "discard"])?;
+                    let clear_color =
+                        decode_clear_color(color.get::<Option<Table>>("clearColor")?)?;
+                    color_attachments.push(GpuCanvasColorAttachment {
+                        view: view.to_attachment_view()?,
+                        resolve_target,
+                        load_op,
+                        store_op,
+                        clear_color,
+                    });
+                }
             }
-            let load_op = color
-                .get::<Option<String>>("loadOp")?
-                .unwrap_or_else(|| "clear".into());
-            let store_op: String = color.get("storeOp")?;
-            if load_op != "clear" || store_op != "store" {
+            let depth_stencil_attachment = descriptor
+                .get::<Option<Table>>("depthStencil")?
+                .map(|depth| {
+                    reject_unknown_fields(
+                        &depth,
+                        &["view", "depthLoadOp", "depthStoreOp", "depthClearValue"],
+                        "GPU depth/stencil attachment",
+                    )?;
+                    let view: AnyUserData = depth.get("view")?;
+                    let view = view.borrow::<GpuTextureView>()?;
+                    validate_attachment_canvas(&view, &this.state)?;
+                    if !view.format().starts_with("depth") {
+                        return Err(Error::runtime(
+                            "GPU depth/stencil attachment requires a depth texture view",
+                        ));
+                    }
+                    record_attachment_sample_count(&mut sample_count, view.sample_count())?;
+                    Ok(GpuCanvasDepthStencilAttachment {
+                        view: view.to_attachment_view()?,
+                        depth_load_op: optional_enum(
+                            &depth,
+                            "depthLoadOp",
+                            "clear",
+                            &["clear", "load"],
+                        )?,
+                        depth_store_op: optional_enum(
+                            &depth,
+                            "depthStoreOp",
+                            "",
+                            &["store", "discard"],
+                        )?,
+                        depth_clear_value: depth
+                            .get::<Option<f32>>("depthClearValue")?
+                            .unwrap_or(1.0),
+                    })
+                })
+                .transpose()?;
+            if color_attachments.is_empty() && depth_stencil_attachment.is_none() {
                 return Err(Error::runtime(
-                    "GPUCanvas render pass requires loadOp='clear' and storeOp='store'",
-                ));
-            }
-            let clear: Table = color.get("clearColor")?;
-            if clear.raw_len() != 4 {
-                return Err(Error::runtime(
-                    "GPU clearColor must contain exactly four components",
+                    "GPU render pass requires at least one color or depth/stencil attachment",
                 ));
             }
             lua.create_userdata(GpuRenderPass {
                 state: Rc::clone(&this.state),
-                clear_color: [clear.get(1)?, clear.get(2)?, clear.get(3)?, clear.get(4)?],
+                color_attachments,
+                depth_stencil_attachment,
+                sample_count: sample_count.unwrap_or(1),
                 pipeline: None,
                 bind_groups: BTreeMap::new(),
                 dynamic_offsets: BTreeMap::new(),
                 vertex_buffers: BTreeMap::new(),
                 index_buffer: None,
-                draw: None,
+                draws: Vec::new(),
                 pass_state: GpuCanvasPassState::default(),
                 finished: false,
             })
@@ -896,9 +1033,15 @@ impl ImportedGpuCanvasInstance {
         let vertex_shader = completed.vertex_shader.module.as_ref().ok_or_else(|| {
             Error::runtime("GPU-canvas vertex shader has no backend module occurrence")
         })?;
-        let fragment_shader = completed.fragment_shader.module.as_ref().ok_or_else(|| {
-            Error::runtime("GPU-canvas fragment shader has no backend module occurrence")
-        })?;
+        let fragment_shader = completed
+            .fragment_shader
+            .as_ref()
+            .unwrap_or(&completed.vertex_shader)
+            .module
+            .as_ref()
+            .ok_or_else(|| {
+                Error::runtime("GPU-canvas fragment shader has no backend module occurrence")
+            })?;
         let image = factory
             .make_gpu_canvas_image(vertex_shader, fragment_shader, &completed.plan)
             .map_err(|error| Error::runtime(format!("GPU-canvas render failed: {error}")))?;
@@ -939,13 +1082,15 @@ enum GpuDrawCall {
 #[derive(Debug)]
 struct GpuRenderPass {
     state: Rc<RefCell<GpuCanvasState>>,
-    clear_color: [f64; 4],
+    color_attachments: Vec<GpuCanvasColorAttachment>,
+    depth_stencil_attachment: Option<GpuCanvasDepthStencilAttachment>,
+    sample_count: u32,
     pipeline: Option<GpuPipeline>,
     bind_groups: BTreeMap<u32, GpuBindGroup>,
     dynamic_offsets: BTreeMap<u32, Vec<u32>>,
     vertex_buffers: BTreeMap<u32, GpuBuffer>,
     index_buffer: Option<(GpuBuffer, String)>,
-    draw: Option<GpuDrawCall>,
+    draws: Vec<(GpuDrawCall, GpuCanvasPassState)>,
     pass_state: GpuCanvasPassState,
     finished: bool,
 }
@@ -954,7 +1099,7 @@ impl UserData for GpuRenderPass {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method_mut("setPipeline", |_, this, pipeline: AnyUserData| {
             this.ensure_open()?;
-            if this.draw.is_some() {
+            if !this.draws.is_empty() {
                 return Err(Error::runtime(
                     "GPU render pass supports exactly one draw call",
                 ));
@@ -971,7 +1116,7 @@ impl UserData for GpuRenderPass {
             "setBindGroup",
             |_, this, (index, bind_group, dynamic_offsets): (u32, AnyUserData, Option<Table>)| {
                 this.ensure_open()?;
-                if this.draw.is_some() {
+                if !this.draws.is_empty() {
                     return Err(Error::runtime(
                         "GPU render pass supports exactly one draw call",
                     ));
@@ -1080,7 +1225,7 @@ impl UserData for GpuRenderPass {
             "setVertexBuffer",
             |_, this, (slot, buffer): (u32, AnyUserData)| {
                 this.ensure_open()?;
-                if this.draw.is_some() {
+                if !this.draws.is_empty() {
                     return Err(Error::runtime(
                         "GPU render pass supports exactly one draw call",
                     ));
@@ -1116,11 +1261,6 @@ impl UserData for GpuRenderPass {
                 Option<u32>,
             )| {
                 this.ensure_open()?;
-                if this.draw.is_some() {
-                    return Err(Error::runtime(
-                        "GPU render pass supports exactly one draw call",
-                    ));
-                }
                 if this.pipeline.is_none() {
                     return Err(Error::runtime(
                         "GPU render pass must set a pipeline before draw",
@@ -1151,12 +1291,15 @@ impl UserData for GpuRenderPass {
                         "GPU render pass draw ranges may cover at most {MAX_GPU_CANVAS_DRAW_INVOCATIONS} invocations"
                     )));
                 }
-                this.draw = Some(GpuDrawCall::NonIndexed {
-                    vertex_count,
-                    instance_count,
-                    first_vertex,
-                    first_instance,
-                });
+                this.draws.push((
+                    GpuDrawCall::NonIndexed {
+                        vertex_count,
+                        instance_count,
+                        first_vertex,
+                        first_instance,
+                    },
+                    this.pass_state.clone(),
+                ));
                 Ok(())
             },
         );
@@ -1172,11 +1315,6 @@ impl UserData for GpuRenderPass {
                 Option<u32>,
             )| {
                 this.ensure_open()?;
-                if this.draw.is_some() {
-                    return Err(Error::runtime(
-                        "GPU render pass supports exactly one draw call",
-                    ));
-                }
                 if this.pipeline.is_none() {
                     return Err(Error::runtime(
                         "GPU render pass must set a pipeline before drawIndexed",
@@ -1213,13 +1351,16 @@ impl UserData for GpuRenderPass {
                         "GPU render pass draw ranges may cover at most {MAX_GPU_CANVAS_DRAW_INVOCATIONS} invocations"
                     )));
                 }
-                this.draw = Some(GpuDrawCall::Indexed {
-                    index_count,
-                    instance_count,
-                    first_index,
-                    base_vertex,
-                    first_instance,
-                });
+                this.draws.push((
+                    GpuDrawCall::Indexed {
+                        index_count,
+                        instance_count,
+                        first_index,
+                        base_vertex,
+                        first_instance,
+                    },
+                    this.pass_state.clone(),
+                ));
                 Ok(())
             },
         );
@@ -1228,9 +1369,12 @@ impl UserData for GpuRenderPass {
             let pipeline = this.pipeline.as_ref().ok_or_else(|| {
                 Error::runtime("GPU render pass must set a pipeline before finish")
             })?;
-            let draw = this
-                .draw
-                .ok_or_else(|| Error::runtime("GPU render pass must issue a draw before finish"))?;
+            validate_pipeline_attachments(
+                pipeline,
+                &this.color_attachments,
+                this.depth_stencil_attachment.as_ref(),
+                this.sample_count,
+            )?;
             if pipeline.vertex_layouts.len() != this.vertex_buffers.len() {
                 return Err(Error::runtime(format!(
                     "GPU render pass has {} vertex layouts but {} bound vertex buffers",
@@ -1244,14 +1388,17 @@ impl UserData for GpuRenderPass {
                 let buffer = this.vertex_buffers.get(&slot).ok_or_else(|| {
                     Error::runtime(format!("GPU vertex buffer slot {slot} is not bound"))
                 })?;
-                if let GpuDrawCall::NonIndexed {
-                    vertex_count,
-                    first_vertex,
-                    ..
-                } = draw
-                {
-                    let vertex_end = u64::from(first_vertex)
-                        .checked_add(u64::from(vertex_count))
+                for (draw, _) in &this.draws {
+                    let GpuDrawCall::NonIndexed {
+                        vertex_count,
+                        first_vertex,
+                        ..
+                    } = draw
+                    else {
+                        continue;
+                    };
+                    let vertex_end = u64::from(*first_vertex)
+                        .checked_add(u64::from(*vertex_count))
                         .ok_or_else(|| Error::runtime("GPU vertex byte range overflow"))?;
                     let required_bytes = vertex_end
                         .checked_mul(layout.stride)
@@ -1263,15 +1410,10 @@ impl UserData for GpuRenderPass {
                     }
                 }
             }
-            let state = this.state.borrow();
+            let mut state = this.state.borrow_mut();
             if state.width == 0 || state.height == 0 {
                 return Err(Error::runtime(
                     "GPU canvas must be resized before its first render pass",
-                ));
-            }
-            if state.completed.is_some() {
-                return Err(Error::runtime(
-                    "gpu-canvas drawCanvas supports exactly one completed render pass",
                 ));
             }
             let mut uniform_buffers = Vec::new();
@@ -1332,40 +1474,49 @@ impl UserData for GpuRenderPass {
                     bytes: buffer.bytes.borrow().clone(),
                 })
                 .collect();
-            let (vertex_count, instance_count, first_vertex, first_instance, indexed_draw) =
-                match draw {
+            let draws = this
+                .draws
+                .iter()
+                .map(|(draw, pass_state)| match *draw {
                     GpuDrawCall::NonIndexed {
                         vertex_count,
                         instance_count,
                         first_vertex,
                         first_instance,
-                    } => (
+                    } => GpuCanvasDrawCommand {
                         vertex_count,
                         instance_count,
                         first_vertex,
                         first_instance,
-                        None,
-                    ),
+                        indexed_draw: None,
+                        pass_state: pass_state.clone(),
+                    },
                     GpuDrawCall::Indexed {
                         index_count,
                         instance_count,
                         first_index,
                         base_vertex,
                         first_instance,
-                    } => (
-                        0,
+                    } => GpuCanvasDrawCommand {
+                        vertex_count: 0,
                         instance_count,
-                        0,
+                        first_vertex: 0,
                         first_instance,
-                        Some(GpuCanvasIndexedDraw {
+                        indexed_draw: Some(GpuCanvasIndexedDraw {
                             index_count,
                             instance_count,
                             first_index,
                             base_vertex,
                             first_instance,
                         }),
-                    ),
-                };
+                        pass_state: pass_state.clone(),
+                    },
+                })
+                .collect::<Vec<_>>();
+            let first_draw = draws
+                .first()
+                .cloned()
+                .ok_or_else(|| Error::runtime("GPU render pass must issue a draw before finish"))?;
             let index_buffer =
                 this.index_buffer
                     .as_ref()
@@ -1373,32 +1524,49 @@ impl UserData for GpuRenderPass {
                         bytes: buffer.bytes.borrow().clone(),
                         format: format.clone(),
                     });
+            let render_pass = GpuCanvasRenderPass {
+                color_attachments: this.color_attachments.clone(),
+                depth_stencil_attachment: this.depth_stencil_attachment.clone(),
+                draws,
+            };
+            let clear_color = this
+                .color_attachments
+                .first()
+                .map_or([0.0; 4], |attachment| attachment.clear_color);
             let plan = GpuCanvasDrawPlan {
                 vertex_entry: Some(pipeline.vertex_entry.clone()),
-                fragment_entry: Some(pipeline.fragment_entry.clone()),
+                fragment_entry: pipeline.fragment_entry.clone(),
                 width: state.width,
                 height: state.height,
-                clear_color: this.clear_color,
-                vertex_count,
-                instance_count,
-                first_vertex,
-                first_instance,
+                clear_color,
+                vertex_count: first_draw.vertex_count,
+                instance_count: first_draw.instance_count,
+                first_vertex: first_draw.first_vertex,
+                first_instance: first_draw.first_instance,
                 uniform_buffers,
                 vertex_layouts: pipeline.vertex_layouts.clone(),
                 vertex_buffers,
                 index_buffer,
-                indexed_draw,
+                indexed_draw: first_draw.indexed_draw.clone(),
                 texture_bindings,
                 sampler_bindings,
                 pipeline_state: pipeline.state.clone(),
-                pass_state: this.pass_state.clone(),
+                pass_state: first_draw.pass_state.clone(),
+                render_passes: vec![render_pass],
             };
-            drop(state);
-            this.state.borrow_mut().completed = Some(CompletedGpuCanvasPass {
-                vertex_shader: pipeline.vertex_shader.clone(),
-                fragment_shader: pipeline.fragment_shader.clone(),
-                plan,
-            });
+            if let Some(completed) = state.completed.as_mut() {
+                ensure_repeated_pass_compatible(completed, pipeline, &plan)?;
+                completed
+                    .plan
+                    .render_passes
+                    .extend(plan.render_passes.into_iter());
+            } else {
+                state.completed = Some(CompletedGpuCanvasPass {
+                    vertex_shader: pipeline.vertex_shader.clone(),
+                    fragment_shader: pipeline.fragment_shader.clone(),
+                    plan,
+                });
+            }
             this.finished = true;
             Ok(())
         });
@@ -1413,6 +1581,108 @@ impl GpuRenderPass {
             Ok(())
         }
     }
+}
+
+fn attachment_format(view: &GpuCanvasAttachmentView) -> &str {
+    match view {
+        GpuCanvasAttachmentView::Canvas => "rgba8unorm",
+        GpuCanvasAttachmentView::Texture(texture) => &texture.format,
+    }
+}
+
+fn validate_pipeline_attachments(
+    pipeline: &GpuPipeline,
+    colors: &[GpuCanvasColorAttachment],
+    depth: Option<&GpuCanvasDepthStencilAttachment>,
+    sample_count: u32,
+) -> Result<()> {
+    if pipeline.state.sample_count != sample_count {
+        return Err(Error::runtime(format!(
+            "pipeline sampleCount ({}) does not match render pass sampleCount ({sample_count})",
+            pipeline.state.sample_count
+        )));
+    }
+    if pipeline.state.color_targets.len() != colors.len() {
+        return Err(Error::runtime(format!(
+            "pipeline has {} color targets but render pass has {} attachments",
+            pipeline.state.color_targets.len(),
+            colors.len()
+        )));
+    }
+    for (index, (target, attachment)) in pipeline.state.color_targets.iter().zip(colors).enumerate()
+    {
+        if target.format != attachment_format(&attachment.view) {
+            return Err(Error::runtime(format!(
+                "pipeline color target {} format '{}' does not match attachment format '{}'",
+                index + 1,
+                target.format,
+                attachment_format(&attachment.view)
+            )));
+        }
+    }
+    match (&pipeline.state.depth_stencil, depth) {
+        (None, None) => {}
+        (Some(pipeline_depth), Some(attachment))
+            if pipeline_depth.format == attachment_format(&attachment.view) => {}
+        (Some(pipeline_depth), Some(attachment)) => {
+            return Err(Error::runtime(format!(
+                "pipeline depth format '{}' does not match attachment format '{}'",
+                pipeline_depth.format,
+                attachment_format(&attachment.view)
+            )));
+        }
+        (Some(_), None) => {
+            return Err(Error::runtime(
+                "pipeline depth/stencil state requires a render-pass depth attachment",
+            ));
+        }
+        (None, Some(_)) => {
+            return Err(Error::runtime(
+                "render-pass depth attachment requires pipeline depth/stencil state",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn same_shader(left: &GpuShader, right: &GpuShader) -> bool {
+    left.name == right.name
+        && left.entries == right.entries
+        && match (&left.module, &right.module) {
+            (Some(left), Some(right)) => Arc::ptr_eq(left, right),
+            (None, None) => true,
+            _ => false,
+        }
+}
+
+fn ensure_repeated_pass_compatible(
+    completed: &CompletedGpuCanvasPass,
+    pipeline: &GpuPipeline,
+    plan: &GpuCanvasPlan,
+) -> Result<()> {
+    let same_fragment = match (&completed.fragment_shader, &pipeline.fragment_shader) {
+        (Some(left), Some(right)) => same_shader(left, right),
+        (None, None) => true,
+        _ => false,
+    };
+    let existing = &completed.plan;
+    if !same_shader(&completed.vertex_shader, &pipeline.vertex_shader)
+        || !same_fragment
+        || existing.vertex_entry != plan.vertex_entry
+        || existing.fragment_entry != plan.fragment_entry
+        || existing.uniform_buffers != plan.uniform_buffers
+        || existing.vertex_layouts != plan.vertex_layouts
+        || existing.vertex_buffers != plan.vertex_buffers
+        || existing.index_buffer != plan.index_buffer
+        || existing.texture_bindings != plan.texture_bindings
+        || existing.sampler_bindings != plan.sampler_bindings
+        || existing.pipeline_state != plan.pipeline_state
+    {
+        return Err(Error::runtime(
+            "repeated GPU render passes must retain one pipeline and resource set",
+        ));
+    }
+    Ok(())
 }
 
 /// Retained pure-Rust Luau program used for deterministic temporal sampling.
@@ -1776,6 +2046,7 @@ fn install_gpu_canvas_globals_with_budget(
             ));
         }
         lua.create_userdata(GpuTexture {
+            resource_id: NEXT_GPU_TEXTURE_RESOURCE_ID.fetch_add(1, Ordering::Relaxed),
             width,
             height,
             depth_or_array_layers,
@@ -1869,32 +2140,43 @@ fn install_gpu_canvas_globals_with_budget(
             GpuCanvasShaderStage::Vertex,
             "vertex",
         )?;
+        let targets = descriptor.get::<Option<Table>>("colorTargets")?;
+        let mut decoded_targets = Vec::new();
+        if let Some(targets) = targets {
+            if targets.raw_len() > 4 {
+                return Err(Error::runtime(
+                    "GPUPipeline colorTargets supports at most four entries",
+                ));
+            }
+            for target in targets.sequence_values::<Table>() {
+                let target = target?;
+                reject_unknown_fields(
+                    &target,
+                    &["format", "writeMask", "blend"],
+                    "GPU color target",
+                )?;
+                decoded_targets.push(decode_color_target(&target)?);
+            }
+        }
         let fragment_value: Value = descriptor.get("fragment")?;
         let (fragment, fragment_entry) = if matches!(fragment_value, Value::Nil) {
-            let fragment_entry =
-                resolve_shader_entry(&vertex, GpuCanvasShaderStage::Fragment, None, "fragment")?;
-            (vertex.clone(), fragment_entry)
+            if decoded_targets.is_empty() {
+                (None, None)
+            } else {
+                let fragment_entry = resolve_shader_entry(
+                    &vertex,
+                    GpuCanvasShaderStage::Fragment,
+                    None,
+                    "fragment",
+                )?;
+                (Some(vertex.clone()), Some(fragment_entry))
+            }
         } else {
-            decode_pipeline_stage(fragment_value, GpuCanvasShaderStage::Fragment, "fragment")?
+            let (fragment, fragment_entry) =
+                decode_pipeline_stage(fragment_value, GpuCanvasShaderStage::Fragment, "fragment")?;
+            (Some(fragment), Some(fragment_entry))
         };
-        let targets: Table = descriptor.get("colorTargets")?;
-        if targets.raw_len() != 1 {
-            return Err(Error::runtime(
-                "GPU-canvas product snapshots require exactly one color target",
-            ));
-        }
-        let target: Table = targets.get(1)?;
-        reject_unknown_fields(
-            &target,
-            &["format", "writeMask", "blend"],
-            "GPU color target",
-        )?;
-        if target.get::<String>("format")? != "rgba8unorm" {
-            return Err(Error::runtime(
-                "GPU-canvas product snapshots require rgba8unorm",
-            ));
-        }
-        let state = decode_pipeline_state(&descriptor, &target)?;
+        let state = decode_pipeline_state(&descriptor, decoded_targets)?;
         let explicit_layouts: Option<Table> = descriptor.get("bindGroupLayouts")?;
         let explicit_bind_group_layouts = explicit_layouts.is_some();
         let mut bind_group_layouts = Vec::new();
@@ -2170,8 +2452,10 @@ fn validate_compare(value: &str) -> Result<()> {
     }
 }
 
-fn decode_pipeline_state(descriptor: &Table, target: &Table) -> Result<GpuCanvasPipelineState> {
-    let format: String = target.get("format")?;
+fn decode_color_target(target: &Table) -> Result<GpuCanvasColorTarget> {
+    let format = target
+        .get::<Option<String>>("format")?
+        .unwrap_or_else(|| "rgba8unorm".into());
     validate_texture_format(&format)?;
     let write_mask = target
         .get::<Option<String>>("writeMask")?
@@ -2189,6 +2473,17 @@ fn decode_pipeline_state(descriptor: &Table, target: &Table) -> Result<GpuCanvas
         .get::<Option<Table>>("blend")?
         .map(|blend| decode_blend_state(&blend))
         .transpose()?;
+    Ok(GpuCanvasColorTarget {
+        format,
+        write_mask,
+        blend,
+    })
+}
+
+fn decode_pipeline_state(
+    descriptor: &Table,
+    color_targets: Vec<GpuCanvasColorTarget>,
+) -> Result<GpuCanvasPipelineState> {
     let depth_stencil = descriptor
         .get::<Option<Table>>("depthStencil")?
         .map(|depth| decode_depth_stencil(descriptor, &depth))
@@ -2214,11 +2509,7 @@ fn decode_pipeline_state(descriptor: &Table, target: &Table) -> Result<GpuCanvas
         ));
     }
     Ok(GpuCanvasPipelineState {
-        color_targets: vec![GpuCanvasColorTarget {
-            format,
-            write_mask,
-            blend,
-        }],
+        color_targets,
         depth_stencil,
         cull_mode,
         winding,

@@ -1061,6 +1061,9 @@ pub struct GpuCanvasTextureUpload {
 /// One sampled texture view bound by an authored GPU-canvas pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GpuCanvasTextureBinding {
+    /// Stable identity of the authored `GPUTexture` occurrence. Attachment
+    /// and sampled views with the same id must resolve to one backend texture.
+    pub resource_id: u64,
     pub group: u32,
     pub binding: u32,
     pub width: u32,
@@ -1198,6 +1201,56 @@ pub struct GpuCanvasIndexedDraw {
     pub first_instance: u32,
 }
 
+/// One texture view selected as a render-pass attachment. `Canvas` denotes
+/// the receiving GPUCanvas presentation texture; `Texture` retains an
+/// authored external texture view, including its stable resource identity.
+#[derive(Debug, Clone, PartialEq)]
+pub enum GpuCanvasAttachmentView {
+    Canvas,
+    Texture(GpuCanvasTextureBinding),
+}
+
+/// One authored render-pass color attachment.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GpuCanvasColorAttachment {
+    pub view: GpuCanvasAttachmentView,
+    pub resolve_target: Option<GpuCanvasAttachmentView>,
+    pub load_op: String,
+    pub store_op: String,
+    pub clear_color: [f64; 4],
+}
+
+/// One authored render-pass depth/stencil attachment.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GpuCanvasDepthStencilAttachment {
+    pub view: GpuCanvasAttachmentView,
+    pub depth_load_op: String,
+    pub depth_store_op: String,
+    pub depth_clear_value: f32,
+}
+
+/// One draw occurrence in an authored render pass. Dynamic state is captured
+/// at the draw site so repeated draws can change it independently.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GpuCanvasDrawCommand {
+    pub vertex_count: u32,
+    pub instance_count: u32,
+    pub first_vertex: u32,
+    pub first_instance: u32,
+    pub indexed_draw: Option<GpuCanvasIndexedDraw>,
+    pub pass_state: GpuCanvasPassState,
+}
+
+/// One authored render pass. Pipeline and resource state remains on
+/// [`GpuCanvasPlan`] because the adapted wgpu handoff currently materializes
+/// one pipeline/resource set for the complete canvas submission.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GpuCanvasRenderPass {
+    pub color_attachments: Vec<GpuCanvasColorAttachment>,
+    pub depth_stencil_attachment: Option<GpuCanvasDepthStencilAttachment>,
+    pub draws: Vec<GpuCanvasDrawCommand>,
+}
+
 /// Backend-neutral result of executing one imported script's `drawCanvas`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GpuCanvasPlan {
@@ -1219,6 +1272,9 @@ pub struct GpuCanvasPlan {
     pub sampler_bindings: Vec<GpuCanvasSamplerBinding>,
     pub pipeline_state: GpuCanvasPipelineState,
     pub pass_state: GpuCanvasPassState,
+    /// Explicit authored pass stream. An empty vector denotes the legacy
+    /// single-pass fields above for backwards-compatible callers.
+    pub render_passes: Vec<GpuCanvasRenderPass>,
 }
 
 /// A render factory cannot turn an authored GPU-canvas plan into an image.

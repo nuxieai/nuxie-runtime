@@ -1,6 +1,6 @@
-use std::cell::{RefCell, RefMut};
+use std::cell::{Cell, RefCell, RefMut};
 use std::collections::{BTreeMap, BTreeSet};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::{error::Error, fmt};
 
@@ -780,6 +780,59 @@ pub struct ScriptViewModel {
     view_model_index: usize,
     ancestors: Rc<Vec<usize>>,
     blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
+    change_callbacks: ScriptViewModelChangeCallbacks,
+}
+
+type ScriptViewModelChangeCallback = Rc<dyn Fn()>;
+type ScriptViewModelChangeCallbackEntry = (u64, ScriptViewModelChangeCallback);
+
+#[derive(Clone, Default)]
+struct ScriptViewModelChangeCallbacks {
+    callbacks: Rc<RefCell<BTreeMap<Vec<usize>, Vec<ScriptViewModelChangeCallbackEntry>>>>,
+    next_id: Rc<Cell<u64>>,
+    suppressed: Rc<Cell<usize>>,
+}
+
+impl std::fmt::Debug for ScriptViewModelChangeCallbacks {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ScriptViewModelChangeCallbacks")
+            .field("property_count", &self.callbacks.borrow().len())
+            .field("suppressed", &self.suppressed.get())
+            .finish()
+    }
+}
+
+struct ScriptViewModelChangeSuppression<'a>(&'a Cell<usize>);
+
+impl Drop for ScriptViewModelChangeSuppression<'_> {
+    fn drop(&mut self) {
+        self.0.set(self.0.get().saturating_sub(1));
+    }
+}
+
+/// Lifetime token for one scripting property observer.
+#[doc(hidden)]
+pub struct ScriptViewModelChangeRegistration {
+    callbacks: Weak<RefCell<BTreeMap<Vec<usize>, Vec<ScriptViewModelChangeCallbackEntry>>>>,
+    path: Vec<usize>,
+    id: u64,
+}
+
+impl Drop for ScriptViewModelChangeRegistration {
+    fn drop(&mut self) {
+        let Some(callbacks) = self.callbacks.upgrade() else {
+            return;
+        };
+        let mut callbacks = callbacks.borrow_mut();
+        let Some(entries) = callbacks.get_mut(&self.path) else {
+            return;
+        };
+        entries.retain(|(id, _)| *id != self.id);
+        if entries.is_empty() {
+            callbacks.remove(&self.path);
+        }
+    }
 }
 
 /// An image selected from the runtime file's dense asset registry.
@@ -881,6 +934,65 @@ impl ScriptViewModel {
         Some(sink)
     }
 
+    /// Register a scripting callback that is invoked after a mutation through
+    /// this facade has released the mutable runtime borrow.
+    #[doc(hidden)]
+    pub fn add_property_change_callback(
+        &self,
+        name: &str,
+        callback: Rc<dyn Fn()>,
+    ) -> Option<ScriptViewModelChangeRegistration> {
+        let Some(path) = self.scoped_property_path(name) else {
+            return None;
+        };
+        let id = self.change_callbacks.next_id.get();
+        self.change_callbacks.next_id.set(id.wrapping_add(1));
+        self.change_callbacks
+            .callbacks
+            .borrow_mut()
+            .entry(path.clone())
+            .or_default()
+            .push((id, callback));
+        Some(ScriptViewModelChangeRegistration {
+            callbacks: Rc::downgrade(&self.change_callbacks.callbacks),
+            path,
+            id,
+        })
+    }
+
+    /// Defer facade callbacks while a VM-owned userdata mutation is active;
+    /// the VM binding flushes them after its userdata borrow is released.
+    #[doc(hidden)]
+    pub fn defer_property_change_callbacks<R>(&self, callback: impl FnOnce() -> R) -> R {
+        let suppressed = &self.change_callbacks.suppressed;
+        suppressed.set(suppressed.get().saturating_add(1));
+        let _suppression = ScriptViewModelChangeSuppression(suppressed);
+        callback()
+    }
+
+    fn notify_property_change(&self, path: &[usize]) {
+        if self.change_callbacks.suppressed.get() != 0 {
+            return;
+        }
+        let callbacks = self
+            .change_callbacks
+            .callbacks
+            .borrow()
+            .get(path)
+            .cloned()
+            .unwrap_or_default();
+        for (_, callback) in callbacks {
+            callback();
+        }
+    }
+
+    fn finish_property_change(&self, path: &[usize], changed: bool) -> bool {
+        if changed {
+            self.notify_property_change(path);
+        }
+        changed
+    }
+
     pub fn named_instance(&self, name: Option<&str>) -> Option<Self> {
         let instance = match name {
             Some(name) => {
@@ -936,10 +1048,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        self.context
+        let changed = self
+            .context
             .root_handle()
             .borrow_mut()
-            .set_number_by_property_path(&path, value)
+            .set_number_by_property_path(&path, value);
+        self.finish_property_change(&path, changed)
     }
 
     pub fn color(&self, name: &str) -> Option<u32> {
@@ -954,10 +1068,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        self.context
+        let changed = self
+            .context
             .root_handle()
             .borrow_mut()
-            .set_color_by_property_path(&path, value)
+            .set_color_by_property_path(&path, value);
+        self.finish_property_change(&path, changed)
     }
 
     pub fn string(&self, name: &str) -> Option<String> {
@@ -973,10 +1089,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        self.context
+        let changed = self
+            .context
             .root_handle()
             .borrow_mut()
-            .set_string_by_property_path(&path, value.as_bytes())
+            .set_string_by_property_path(&path, value.as_bytes());
+        self.finish_property_change(&path, changed)
     }
 
     pub fn boolean(&self, name: &str) -> Option<bool> {
@@ -1052,10 +1170,12 @@ impl ScriptViewModel {
         else {
             return false;
         };
-        self.context
+        let changed = self
+            .context
             .root_handle()
             .borrow_mut()
-            .set_enum_by_property_path(&path, value_index as u64)
+            .set_enum_by_property_path(&path, value_index as u64);
+        self.finish_property_change(&path, changed)
     }
 
     pub fn image(&self, name: &str) -> Option<ScriptImage> {
@@ -1106,10 +1226,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        self.context
+        let changed = self
+            .context
             .root_handle()
             .borrow_mut()
-            .set_live_font_bytes_by_property_path(&path, font_bytes)
+            .set_live_font_bytes_by_property_path(&path, font_bytes);
+        self.finish_property_change(&path, changed)
     }
 
     pub fn render_image(&self, name: &str) -> Option<Rc<dyn nuxie_render_api::RenderImage>> {
@@ -1152,10 +1274,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        self.context
+        let changed = self
+            .context
             .root_handle()
             .borrow_mut()
-            .set_asset_by_property_path(&path, file_asset_index)
+            .set_asset_by_property_path(&path, file_asset_index);
+        self.finish_property_change(&path, changed)
     }
 
     pub fn set_render_image(
@@ -1169,13 +1293,15 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        self.context
+        let changed = self
+            .context
             .root_handle()
             .borrow_mut()
             .set_runtime_image_by_property_path(
                 &path,
                 image.map(RuntimeViewModelImage::from_render_image),
-            )
+            );
+        self.finish_property_change(&path, changed)
     }
 
     pub fn blob_asset(&self, name: &str) -> Option<Arc<RuntimeBlobAsset>> {
@@ -1234,7 +1360,8 @@ impl ScriptViewModel {
         else {
             return false;
         };
-        cell.set_live_blob_bytes(bytes)
+        let changed = cell.set_live_blob_bytes(bytes);
+        self.finish_property_change(&path, changed)
     }
 
     pub fn set_blob_asset(&self, name: &str, asset: Option<Arc<RuntimeBlobAsset>>) -> bool {
@@ -1252,7 +1379,8 @@ impl ScriptViewModel {
         else {
             return false;
         };
-        cell.set_live_blob_asset(asset)
+        let changed = cell.set_live_blob_asset(asset);
+        self.finish_property_change(&path, changed)
     }
 
     /// Mirrors C++ `ScriptedViewModel::pushIndex` for component-list rows.
@@ -1266,10 +1394,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        self.context
+        let changed = self
+            .context
             .root_handle()
             .borrow_mut()
-            .set_boolean_by_property_path(&path, value)
+            .set_boolean_by_property_path(&path, value);
+        self.finish_property_change(&path, changed)
     }
 
     pub fn trigger(&self, name: &str) -> Option<u64> {
@@ -1290,10 +1420,12 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        self.context
+        let changed = self
+            .context
             .root_handle()
             .borrow_mut()
-            .set_trigger_by_property_path(&path, value.wrapping_add(1))
+            .set_trigger_by_property_path(&path, value.wrapping_add(1));
+        self.finish_property_change(&path, changed)
     }
 
     /// Consume transient values at the end of a script host frame.
@@ -1342,12 +1474,13 @@ impl ScriptViewModel {
             .linked_view_model_by_property_path(&property_path);
         if let Some(concrete) = concrete {
             let view_model_index = concrete.borrow().view_model_index();
-            return build_script_view_model_shared_with_blob_assets(
+            return build_script_view_model_shared_with_blob_assets_and_callbacks(
                 Rc::clone(&self.file),
                 view_model_index,
                 concrete,
                 self.ancestors.as_slice(),
                 Rc::clone(&self.blob_assets),
+                self.change_callbacks.clone(),
             );
         }
         // Generated schema-only contexts are still represented inline by the
@@ -1372,10 +1505,12 @@ impl ScriptViewModel {
         }) else {
             return false;
         };
-        self.context
+        let changed = self
+            .context
             .root_handle()
             .link_view_model_by_property_path(&property_path, &value)
-            .unwrap_or(false)
+            .unwrap_or(false);
+        self.finish_property_change(&property_path, changed)
     }
 
     pub fn list_len(&self, name: &str) -> Option<usize> {
@@ -1397,12 +1532,13 @@ impl ScriptViewModel {
             .get(index)
             .cloned()?;
         let view_model_index = item.borrow().view_model_index();
-        build_script_view_model_shared_with_blob_assets(
+        build_script_view_model_shared_with_blob_assets_and_callbacks(
             Rc::clone(&self.file),
             view_model_index,
             item,
             self.ancestors.as_slice(),
             Rc::clone(&self.blob_assets),
+            self.change_callbacks.clone(),
         )
     }
 
@@ -1415,7 +1551,9 @@ impl ScriptViewModel {
             return false;
         }
         let root = self.context.root_handle();
-        root.push_list_item_by_property_path(&path, item_context.root_handle().shared())
+        let changed =
+            root.push_list_item_by_property_path(&path, item_context.root_handle().shared());
+        self.finish_property_change(&path, changed)
     }
 
     pub fn insert_list_item(&self, name: &str, index: usize, item: &ScriptViewModel) -> bool {
@@ -1427,7 +1565,12 @@ impl ScriptViewModel {
             return false;
         }
         let root = self.context.root_handle();
-        root.insert_list_item_by_property_path(&path, index, item_context.root_handle().shared())
+        let changed = root.insert_list_item_by_property_path(
+            &path,
+            index,
+            item_context.root_handle().shared(),
+        );
+        self.finish_property_change(&path, changed)
     }
 
     pub fn pop_list_item(&self, name: &str) -> Option<Self> {
@@ -1437,13 +1580,15 @@ impl ScriptViewModel {
             .root_handle()
             .borrow_mut()
             .pop_list_item_by_property_path(&path)?;
+        self.notify_property_change(&path);
         let view_model_index = item.borrow().view_model_index();
-        build_script_view_model_shared_with_blob_assets(
+        build_script_view_model_shared_with_blob_assets_and_callbacks(
             Rc::clone(&self.file),
             view_model_index,
             RuntimeOwnedViewModelHandle::from_shared(item),
             self.ancestors.as_slice(),
             Rc::clone(&self.blob_assets),
+            self.change_callbacks.clone(),
         )
     }
 
@@ -1454,13 +1599,15 @@ impl ScriptViewModel {
             .root_handle()
             .borrow_mut()
             .shift_list_item_by_property_path(&path)?;
+        self.notify_property_change(&path);
         let view_model_index = item.borrow().view_model_index();
-        build_script_view_model_shared_with_blob_assets(
+        build_script_view_model_shared_with_blob_assets_and_callbacks(
             Rc::clone(&self.file),
             view_model_index,
             RuntimeOwnedViewModelHandle::from_shared(item),
             self.ancestors.as_slice(),
             Rc::clone(&self.blob_assets),
+            self.change_callbacks.clone(),
         )
     }
 
@@ -1468,30 +1615,36 @@ impl ScriptViewModel {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        self.context
+        let changed = self
+            .context
             .root_handle()
             .borrow_mut()
-            .swap_list_items_by_property_path(&path, first, second)
+            .swap_list_items_by_property_path(&path, first, second);
+        self.finish_property_change(&path, changed)
     }
 
     pub fn clear_list_items(&self, name: &str) -> bool {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        self.context
+        let changed = self
+            .context
             .root_handle()
             .borrow_mut()
-            .clear_list_items_by_property_path(&path)
+            .clear_list_items_by_property_path(&path);
+        self.finish_property_change(&path, changed)
     }
 
     pub fn remove_list_item_at(&self, name: &str, index: usize) -> bool {
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        self.context
+        let changed = self
+            .context
             .root_handle()
             .borrow_mut()
-            .remove_list_item_at_by_property_path(&path, index)
+            .remove_list_item_at_by_property_path(&path, index);
+        self.finish_property_change(&path, changed)
     }
 
     pub fn remove_list_item(&self, name: &str, item: &ScriptViewModel, remove_all: bool) -> bool {
@@ -1503,10 +1656,12 @@ impl ScriptViewModel {
             return false;
         }
         let item = item_context.root_handle().shared();
-        self.context
+        let changed = self
+            .context
             .root_handle()
             .borrow_mut()
-            .remove_list_items_by_identity_at_property_path(&path, &item, remove_all)
+            .remove_list_items_by_identity_at_property_path(&path, &item, remove_all);
+        self.finish_property_change(&path, changed)
     }
 
     fn scoped_property_path(&self, name: &str) -> Option<Vec<usize>> {
@@ -1642,12 +1797,13 @@ fn build_script_view_model_with_blob_assets(
     ancestors: &[usize],
     blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
 ) -> Option<ScriptViewModel> {
-    build_script_view_model_shared_with_blob_assets(
+    build_script_view_model_shared_with_blob_assets_and_callbacks(
         file,
         view_model_index,
         RuntimeOwnedViewModelHandle::new(instance),
         ancestors,
         blob_assets,
+        ScriptViewModelChangeCallbacks::default(),
     )
 }
 
@@ -1673,13 +1829,32 @@ fn build_script_view_model_shared_with_blob_assets(
     ancestors: &[usize],
     blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
 ) -> Option<ScriptViewModel> {
+    build_script_view_model_shared_with_blob_assets_and_callbacks(
+        file,
+        view_model_index,
+        instance,
+        ancestors,
+        blob_assets,
+        ScriptViewModelChangeCallbacks::default(),
+    )
+}
+
+fn build_script_view_model_shared_with_blob_assets_and_callbacks(
+    file: Rc<RuntimeFile>,
+    view_model_index: usize,
+    instance: RuntimeOwnedViewModelHandle,
+    ancestors: &[usize],
+    blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
+    change_callbacks: ScriptViewModelChangeCallbacks,
+) -> Option<ScriptViewModel> {
     let context = RuntimeOwnedViewModelContextHandle::root(&file, instance);
-    build_script_view_model_scoped_with_blob_assets(
+    build_script_view_model_scoped_with_blob_assets_and_callbacks(
         file,
         view_model_index,
         context,
         ancestors,
         blob_assets,
+        change_callbacks,
     )
 }
 
@@ -1704,6 +1879,24 @@ fn build_script_view_model_scoped_with_blob_assets(
     context: RuntimeOwnedViewModelContextHandle,
     ancestors: &[usize],
     blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
+) -> Option<ScriptViewModel> {
+    build_script_view_model_scoped_with_blob_assets_and_callbacks(
+        file,
+        view_model_index,
+        context,
+        ancestors,
+        blob_assets,
+        ScriptViewModelChangeCallbacks::default(),
+    )
+}
+
+fn build_script_view_model_scoped_with_blob_assets_and_callbacks(
+    file: Rc<RuntimeFile>,
+    view_model_index: usize,
+    context: RuntimeOwnedViewModelContextHandle,
+    ancestors: &[usize],
+    blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
+    change_callbacks: ScriptViewModelChangeCallbacks,
 ) -> Option<ScriptViewModel> {
     let view_model = file.view_model(view_model_index)?;
     let properties = view_model
@@ -1748,12 +1941,13 @@ fn build_script_view_model_scoped_with_blob_assets(
             }
             Some((
                 name,
-                build_script_view_model_scoped_with_blob_assets(
+                build_script_view_model_scoped_with_blob_assets_and_callbacks(
                     Rc::clone(&file),
                     nested_index,
                     nested_context,
                     &child_ancestors,
                     Rc::clone(&blob_assets),
+                    change_callbacks.clone(),
                 )?,
             ))
         })
@@ -1766,6 +1960,7 @@ fn build_script_view_model_scoped_with_blob_assets(
         view_model_index,
         ancestors: Rc::new(ancestors.to_vec()),
         blob_assets,
+        change_callbacks,
     })
 }
 

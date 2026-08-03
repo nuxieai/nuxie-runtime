@@ -440,7 +440,8 @@ class PortManifestCliTest(unittest.TestCase):
             "src/animation/keyframe.cpp": "crates/nuxie-runtime/src/animation.rs",
             "src/constraints/constraint.cpp": "crates/nuxie-runtime/src/constraints.rs",
             "src/data_bind/data_bind.cpp": "crates/nuxie-runtime/src/data_bind/data_bind_context.rs",
-            "src/lua/lua_properties.cpp": "crates/nuxie-scripting/src/vm.rs",
+            "src/lua/lua_properties.cpp": "crates/nuxie-binary/src/lib.rs; crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/lua_font.rs; crates/nuxie-scripting/src/vm/view_model.rs",
+            "src/lua/rive_lua_libs.cpp": "crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs",
             "src/shapes/path.cpp": "crates/nuxie-runtime/src/draw.rs",
             "src/text/text.cpp": "crates/nuxie-runtime/src/text.rs",
             "src/viewmodel/viewmodel.cpp": "crates/nuxie-runtime/src/view_model.rs",
@@ -458,6 +459,29 @@ class PortManifestCliTest(unittest.TestCase):
             with self.subTest(upstream=upstream):
                 self.assertEqual(rows[upstream]["status"], "ported")
                 self.assertEqual(rows[upstream]["rust_module"], rust_module)
+
+    def test_generate_promotes_lt2_lua_binding_rows(self) -> None:
+        expected = {
+            "src/lua/lua_data_value.cpp": "crates/nuxie-scripting/src/vm/lua_data_value.rs",
+            "src/lua/lua_properties.cpp": "crates/nuxie-binary/src/lib.rs; crates/nuxie-runtime/src/scripting.rs; crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/lua_font.rs; crates/nuxie-scripting/src/vm/view_model.rs",
+            "src/lua/lua_state.cpp": "crates/nuxie-scripting/src/vm/view_model.rs",
+            "src/lua/renderer/lua_gradient.cpp": "crates/nuxie-scripting/src/vm/renderer.rs",
+            "src/lua/rive_lua_libs.cpp": "crates/nuxie-scripting/src/vm.rs; crates/nuxie-scripting/src/vm/view_model.rs",
+        }
+        self.write_upstream(*expected)
+        output = self.repo / "generated.toml"
+
+        result = self.run_generate(output)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = {
+            row["upstream"]: row for row in tomllib.loads(output.read_text())["file"]
+        }
+        for upstream, rust_module in expected.items():
+            with self.subTest(upstream=upstream):
+                self.assertEqual(rows[upstream]["status"], "ported")
+                self.assertEqual(rows[upstream]["rust_module"], rust_module)
+                self.assertIn("LT-2", rows[upstream]["note"])
 
     def test_generate_seeds_every_cpp_surface_named_by_the_feature_register(self) -> None:
         expected = {
@@ -505,16 +529,16 @@ class PortManifestCliTest(unittest.TestCase):
             "src/lua/lua_audio.cpp": ("ported", "P2F3"),
             "src/lua/lua_buffer_ext.cpp": ("absent", "F7"),
             "src/lua/lua_data_context.cpp": ("partial", "F7"),
-            "src/lua/lua_data_value.cpp": ("partial", "F7"),
+            "src/lua/lua_data_value.cpp": ("ported", "LT-2"),
             "src/lua/lua_image_decode.cpp": ("ported", "P2A"),
             "src/lua/lua_promise.cpp": ("ported", "P1-i"),
             "src/lua/lua_scripted_context.cpp": ("absent", "F7"),
-            "src/lua/lua_state.cpp": ("partial", "F7"),
+            "src/lua/lua_state.cpp": ("ported", "LT-2"),
             "src/lua/math/lua_color.cpp": ("ported", "F7"),
             "src/lua/math/lua_input.cpp": ("ported", "F7"),
             "src/lua/renderer/lua_blob.cpp": ("ported", "P2B"),
             "src/lua/renderer/lua_gpu.cpp": ("partial", "P3E"),
-            "src/lua/renderer/lua_gradient.cpp": ("partial", "F7"),
+            "src/lua/renderer/lua_gradient.cpp": ("ported", "LT-2"),
             "src/lua/renderer/lua_image.cpp": ("ported", "P2A/P2B"),
             "src/lua/renderer/lua_mesh.cpp": ("ported", "P2B"),
             "src/joystick.cpp": ("ported", "FL-E4"),

@@ -1525,6 +1525,7 @@ impl ScriptVm {
         lua_promise::install_promise_globals(&self.lua)?;
         lua_image_decode::install(&self.lua);
         lua_audio::install_audio_global(&self.lua)?;
+        view_model::install_property_binding_support(&self.lua)?;
 
         let late = self
             .lua

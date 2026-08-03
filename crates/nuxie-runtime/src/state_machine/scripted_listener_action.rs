@@ -294,7 +294,7 @@ pub(crate) fn runtime_scripted_object_binding_definition(
 ) -> Option<RuntimeScriptedListenerActionBindingDefinition> {
     if !matches!(
         object.type_name,
-        "ScriptedListenerAction" | "ScriptedTransitionCondition"
+        "ScriptedListenerAction" | "ScriptedTransitionCondition" | "ScriptedInterpolator"
     ) {
         return None;
     }

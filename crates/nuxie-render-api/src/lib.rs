@@ -1993,6 +1993,100 @@ impl RecordingFactory {
         ));
     }
 
+    pub fn add_set_input_boolean(&mut self, seconds: f32, name: &str, value: bool) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "setInput seconds={} name={} type=bool value={value}",
+            float_to_string(seconds),
+            quoted_string(name)
+        ));
+    }
+
+    pub fn add_set_input_number(&mut self, seconds: f32, name: &str, value: f32) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "setInput seconds={} name={} type=number value={}",
+            float_to_string(seconds),
+            quoted_string(name),
+            float_to_string(value)
+        ));
+    }
+
+    pub fn add_set_input_trigger(&mut self, seconds: f32, name: &str) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "setInput seconds={} name={} type=trigger",
+            float_to_string(seconds),
+            quoted_string(name)
+        ));
+    }
+
+    pub fn add_view_model_boolean(&mut self, seconds: f32, property: &str, value: bool) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "viewModel seconds={} path={} type=bool value={value}",
+            float_to_string(seconds),
+            quoted_string(property)
+        ));
+    }
+
+    pub fn add_view_model_number(&mut self, seconds: f32, property: &str, value: f32) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "viewModel seconds={} path={} type=number value={}",
+            float_to_string(seconds),
+            quoted_string(property),
+            float_to_string(value)
+        ));
+    }
+
+    pub fn add_view_model_string(&mut self, seconds: f32, property: &str, value: &str) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "viewModel seconds={} path={} type=string value={}",
+            float_to_string(seconds),
+            quoted_string(property),
+            quoted_string(value)
+        ));
+    }
+
+    pub fn add_view_model_enum(&mut self, seconds: f32, property: &str, value: u32) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "viewModel seconds={} path={} type=enum value={value}",
+            float_to_string(seconds),
+            quoted_string(property)
+        ));
+    }
+
+    pub fn add_view_model_color(&mut self, seconds: f32, property: &str, value: u32) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "viewModel seconds={} path={} type=color value=0x{value:08x}",
+            float_to_string(seconds),
+            quoted_string(property)
+        ));
+    }
+
+    pub fn add_view_model_trigger(&mut self, seconds: f32, property: &str) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "viewModel seconds={} path={} type=trigger",
+            float_to_string(seconds),
+            quoted_string(property)
+        ));
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_resize(
+        &mut self,
+        seconds: f32,
+        width: f32,
+        height: f32,
+        dpr: f32,
+        pixel_width: u32,
+        pixel_height: u32,
+    ) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "resize seconds={} logical=({},{}) dpr={} pixels=({pixel_width},{pixel_height})",
+            float_to_string(seconds),
+            float_to_string(width),
+            float_to_string(height),
+            float_to_string(dpr)
+        ));
+    }
+
     // Event/state side-channel lines (docs/side-channel-format.md). Formats
     // must stay byte-compatible with the C++ runner's RecordingFactory
     // emitters in tools/golden-runner/recording_renderer.cpp.

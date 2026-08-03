@@ -65,6 +65,59 @@ impl RuntimeScrollPhysicsState {
         self.speed = (0.0, 0.0);
     }
 
+    pub(in crate::constraints) fn target(&self, axis: RuntimeScrollAxis) -> Option<f32> {
+        if !self.is_running() {
+            return None;
+        }
+        match (&self.kind, axis) {
+            (
+                crate::components::RuntimeScrollPhysicsKind::Elastic { x, .. },
+                RuntimeScrollAxis::X,
+            ) => x.as_ref().map(|helper| helper.target),
+            (
+                crate::components::RuntimeScrollPhysicsKind::Elastic { y, .. },
+                RuntimeScrollAxis::Y,
+            ) => y.as_ref().map(|helper| helper.target),
+            (crate::components::RuntimeScrollPhysicsKind::Clamped { .. }, _) => None,
+        }
+    }
+
+    pub(in crate::constraints) fn scroll_to_position(
+        &mut self,
+        current: (f32, f32),
+        target: (f32, f32),
+        range_min: (f32, f32),
+        range_max: (f32, f32),
+        horizontal: bool,
+        vertical: bool,
+    ) {
+        let crate::components::RuntimeScrollPhysicsKind::Elastic { x, y } = &mut self.kind else {
+            // Pinned base ScrollPhysics and ClampedScrollPhysics do not
+            // override scrollToPosition.
+            return;
+        };
+        if horizontal {
+            let helper = x.get_or_insert_with(|| {
+                crate::components::RuntimeElasticScrollPhysicsHelper::new(
+                    self.friction,
+                    self.speed_multiplier,
+                    self.elastic_factor,
+                )
+            });
+            helper.scroll_to(current.0, target.0, range_min.0, range_max.0);
+        }
+        if vertical {
+            let helper = y.get_or_insert_with(|| {
+                crate::components::RuntimeElasticScrollPhysicsHelper::new(
+                    self.friction,
+                    self.speed_multiplier,
+                    self.elastic_factor,
+                )
+            });
+            helper.scroll_to(current.1, target.1, range_min.1, range_max.1);
+        }
+    }
+
     pub(in crate::constraints) fn accumulate(&mut self, delta: (f32, f32), timestamp: f32) {
         // Canonical runtime/probe execution uses C++ deterministicMode: the
         // pointer timestamp is the clock and reset seeds zero

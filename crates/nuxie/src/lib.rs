@@ -31,9 +31,9 @@ use nuxie_runtime::{
     StateMachineEventContext, embedded_fonts_are_parseable,
 };
 
-pub mod flow_session;
 pub mod command_queue;
 pub mod command_server;
+pub mod flow_session;
 mod raw_text;
 mod scene;
 #[cfg(feature = "scripting")]
@@ -58,16 +58,18 @@ enum ScriptExecutionAuthorization {
 }
 
 pub use nuxie_render_api::{
-    Aabb, BlendMode, ColorInt, Factory, FillRule, GpuCanvasBlendState, GpuCanvasColorTarget,
-    GpuCanvasDepthStencilState, GpuCanvasError, GpuCanvasIndexBuffer, GpuCanvasIndexedDraw,
-    GpuCanvasPassState, GpuCanvasPipelineState, GpuCanvasPlan, GpuCanvasSamplerBinding,
-    GpuCanvasShader, GpuCanvasShaderBinding, GpuCanvasShaderEntry, GpuCanvasShaderEntrySelection,
-    GpuCanvasShaderResourceKind, GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType,
-    GpuCanvasShaderTextureViewDimension, GpuCanvasStencilFace, GpuCanvasTextureBinding,
-    GpuCanvasTextureUpload, ImageDecodeError, ImageFilter, ImageSampler, ImageWrap, Mat2D,
-    PathVerb, PersistentFactory, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle,
-    RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
+    Aabb, BlendMode, ColorInt, Factory, FillRule, GpuCanvasAttachmentView, GpuCanvasBlendState,
+    GpuCanvasColorAttachment, GpuCanvasColorTarget, GpuCanvasDepthStencilAttachment,
+    GpuCanvasDepthStencilState, GpuCanvasDrawCommand, GpuCanvasError, GpuCanvasIndexBuffer,
+    GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelineState, GpuCanvasPlan,
+    GpuCanvasRenderPass, GpuCanvasSamplerBinding, GpuCanvasShader, GpuCanvasShaderBinding,
+    GpuCanvasShaderEntry, GpuCanvasShaderEntrySelection, GpuCanvasShaderResourceKind,
+    GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension,
+    GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload, ImageDecodeError,
+    ImageFilter, ImageSampler, ImageWrap, Mat2D, PathVerb, PersistentFactory, RawPath,
+    RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader,
+    RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap,
+    StrokeJoin, Vec2D,
 };
 #[cfg(all(feature = "renderer", any(target_os = "ios", target_os = "macos")))]
 pub use nuxie_renderer::{

@@ -6,8 +6,8 @@
 #![cfg(feature = "luau")]
 
 use nuxie_scripting::gpu_canvas::{
-    GpuCanvasProgram, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer,
-    GpuCanvasVertexLayout, MAX_CPU_BUFFER_BYTES, MAX_GPU_CANVAS_DIMENSION,
+    GpuCanvasAttachmentView, GpuCanvasProgram, GpuCanvasUniformBuffer, GpuCanvasVertexAttribute,
+    GpuCanvasVertexBuffer, GpuCanvasVertexLayout, MAX_CPU_BUFFER_BYTES, MAX_GPU_CANVAS_DIMENSION,
     MAX_GPU_CANVAS_DRAW_INVOCATIONS, MAX_UNIFORM_BUFFER_BYTES,
 };
 
@@ -65,6 +65,68 @@ end
 "#;
 
 const LUA_GPU_FULL_SURFACE: &str = include_str!("fixtures/lua-gpu-full-surface.luau");
+// Authored oracle: crates/nuxie-scripting/tests/fixtures/lua-gpu-semantic-combinations.luau
+const LUA_GPU_SEMANTIC_COMBINATIONS: &str =
+    include_str!("fixtures/lua-gpu-semantic-combinations.luau");
+
+#[test]
+fn authored_lua_gpu_semantic_combinations_retain_exact_pass_structure() {
+    let mut program = GpuCanvasProgram::compile(LUA_GPU_SEMANTIC_COMBINATIONS)
+        .expect("semantic combinations fixture compiles");
+
+    let repeated = program.draw().expect("repeated passes produce a plan");
+    assert_eq!(repeated.render_passes.len(), 2);
+    assert_eq!(repeated.render_passes[0].draws.len(), 2);
+    assert_eq!(repeated.render_passes[1].draws.len(), 1);
+    assert_eq!(
+        repeated.render_passes[0].draws[1].pass_state.viewport,
+        Some([0.0, 0.0, 8.0, 8.0])
+    );
+    assert_eq!(
+        repeated.render_passes[1].color_attachments[0].load_op,
+        "load"
+    );
+
+    program.advance(0.0).expect("select MSAA resolves");
+    let resolves = program.draw().expect("external resolves produce a plan");
+    let colors = &resolves.render_passes[0].color_attachments;
+    assert_eq!(colors.len(), 2);
+    assert!(matches!(
+        colors[0].view,
+        GpuCanvasAttachmentView::Texture(_)
+    ));
+    assert!(matches!(
+        colors[0].resolve_target,
+        Some(GpuCanvasAttachmentView::Canvas)
+    ));
+    let source_id = match &colors[1].view {
+        GpuCanvasAttachmentView::Texture(texture) => texture.resource_id,
+        GpuCanvasAttachmentView::Canvas => panic!("second source must be external"),
+    };
+    let resolve_id = match colors[1].resolve_target.as_ref().unwrap() {
+        GpuCanvasAttachmentView::Texture(texture) => texture.resource_id,
+        GpuCanvasAttachmentView::Canvas => panic!("second resolve must be external"),
+    };
+    assert_ne!(source_id, resolve_id);
+
+    program.advance(0.0).expect("select four targets");
+    let four = program.draw().expect("four targets produce a plan");
+    assert_eq!(four.pipeline_state.color_targets.len(), 4);
+    assert_eq!(four.render_passes[0].color_attachments.len(), 4);
+
+    program.advance(0.0).expect("select three targets");
+    let three = program.draw().expect("three targets produce a plan");
+    assert_eq!(three.pipeline_state.color_targets.len(), 3);
+    assert_eq!(three.render_passes[0].color_attachments.len(), 3);
+    assert_eq!(three.pipeline_state.color_targets[1].format, "rg32float");
+
+    program.advance(0.0).expect("select depth only");
+    let depth = program.draw().expect("depth-only pipeline produces a plan");
+    assert!(depth.fragment_entry.is_none());
+    assert!(depth.pipeline_state.color_targets.is_empty());
+    assert!(depth.render_passes[0].color_attachments.is_empty());
+    assert!(depth.render_passes[0].depth_stencil_attachment.is_some());
+}
 
 #[test]
 fn authored_lua_gpu_full_surface_reaches_the_wgpu_plan() {
@@ -268,7 +330,7 @@ end
 }
 
 #[test]
-fn rejects_excessive_draw_counts_and_duplicate_pass_slots() {
+fn rejects_excessive_draw_counts_and_duplicate_resource_slots() {
     let excessive_draw = minimal_draw_script(&format!(
         "pass:draw({}, 2)",
         MAX_GPU_CANVAS_DRAW_INVOCATIONS
@@ -279,8 +341,8 @@ fn rejects_excessive_draw_counts_and_duplicate_pass_slots() {
 
     let duplicate_draw = minimal_draw_script("pass:draw(3)\n            pass:draw(3)");
     let mut program = GpuCanvasProgram::compile(&duplicate_draw).expect("shape compiles");
-    let error = program.draw().unwrap_err();
-    assert!(error.to_string().contains("exactly one draw"), "{error}");
+    let plan = program.draw().expect("repeated draws are retained");
+    assert_eq!(plan.render_passes[0].draws.len(), 2);
 
     let draw_before_pipeline = minimal_draw_script("pass:draw(3)").replace(
         "pass:setPipeline(pipeline)",

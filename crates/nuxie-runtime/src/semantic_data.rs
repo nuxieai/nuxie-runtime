@@ -5,6 +5,7 @@
 use std::rc::Rc;
 
 use crate::ArtboardInstance;
+use crate::components::Mat2D;
 use crate::semantic_manager::SemanticManager;
 use crate::semantic_provider::{
     ResolvedSemanticData, SemanticProvider, semantic_string_property, semantic_uint_property,
@@ -87,6 +88,46 @@ impl RuntimeSemanticData {
         data
     }
 
+    /// Refresh authored and provider-derived state on the retained node.
+    ///
+    /// The Focused bit is manager/focus-runtime state rather than an authored
+    /// property, so a generated `stateFlags` refresh must preserve it. The
+    /// Focusable trait is likewise projected from a retained sibling
+    /// `FocusData` on every refresh instead of being snapshotted once.
+    pub(crate) fn synchronize_from_artboard(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        manager: &mut SemanticManager,
+        root_transform: Mat2D,
+    ) {
+        let role = semantic_uint_property(artboard, self.local_id, "role");
+        let label = semantic_string_property(artboard, self.local_id, "label");
+        let value = semantic_string_property(artboard, self.local_id, "value");
+        let hint = semantic_string_property(artboard, self.local_id, "hint");
+        let heading_level = semantic_uint_property(artboard, self.local_id, "headingLevel");
+        let authored_traits = semantic_uint_property(artboard, self.local_id, "traitFlags");
+        let trait_flags = if self.parent_has_focus_data(artboard) {
+            authored_traits | SemanticTrait::FOCUSABLE.0
+        } else {
+            authored_traits
+        };
+        let authored_states = semantic_uint_property(artboard, self.local_id, "stateFlags");
+        let retained_focus = self.semantic_node.as_ref().map_or(0, |node| {
+            node.borrow().state_flags() & SemanticState::FOCUSED.0
+        });
+        let state_flags = authored_states | retained_focus;
+
+        self.set_role(role, Some(manager));
+        self.set_label(label, Some(manager));
+        self.set_value(value, Some(manager));
+        self.set_hint(hint, Some(manager));
+        self.set_heading_level(heading_level, Some(manager));
+        self.set_trait_flags(trait_flags, Some(manager));
+        self.set_state_flags(state_flags, Some(manager), artboard);
+        self.apply_inferred_semantics_if_needed(artboard, Some(manager));
+        self.update_world_bounds_with_root_transform(artboard, Some(manager), root_transform);
+    }
+
     pub fn has_semantic_node(&self) -> bool {
         self.semantic_node.is_some()
     }
@@ -125,6 +166,11 @@ impl RuntimeSemanticData {
         node
     }
 
+    pub(crate) fn prepare_for_tree(&mut self, artboard: &mut ArtboardInstance) {
+        self.semantic_node(artboard);
+        self.excluded_from_tree = self.should_exclude_from_tree(artboard);
+    }
+
     pub fn node_handle(&self) -> Option<SemanticNodeHandle> {
         self.semantic_node.clone()
     }
@@ -160,6 +206,41 @@ impl RuntimeSemanticData {
         id
     }
 
+    /// Reconcile live exclusion and parentage for an already retained node.
+    /// Collapsed layout state can change without touching `stateFlags`, and a
+    /// mounted occurrence can acquire a different closest semantic ancestor,
+    /// so both decisions must be revisited on every tree synchronization.
+    pub(crate) fn reconcile_tree_membership(
+        &mut self,
+        manager: &mut SemanticManager,
+        parent: Option<&SemanticNodeHandle>,
+        artboard: &mut ArtboardInstance,
+        root_transform: Mat2D,
+    ) {
+        let Some(node) = self.semantic_node.clone() else {
+            return;
+        };
+        let exclude = self.should_exclude_from_tree(artboard);
+        let attached = node.borrow().manager_identity() == Some(manager.identity());
+        let current_parent_id = node.borrow().parent_id();
+        let desired_parent_id = parent.map(|parent| parent.borrow().id());
+        let parent_changed = current_parent_id != desired_parent_id;
+
+        if attached && (exclude || parent_changed) {
+            manager.remove_child(&node);
+        }
+
+        self.tree_parent = parent.cloned();
+        self.excluded_from_tree = exclude;
+        self.semantic_manager_identity = Some(manager.identity());
+        if !exclude && node.borrow().manager_identity().is_none() {
+            manager.add_child(parent, node);
+            self.bounds_retry_pending = true;
+            self.update_world_bounds_with_root_transform(artboard, Some(manager), root_transform);
+            self.apply_inferred_semantics_if_needed(artboard, Some(manager));
+        }
+    }
+
     pub fn detach(&mut self, manager: &mut SemanticManager) {
         let Some(node) = &self.semantic_node else {
             return;
@@ -180,6 +261,9 @@ impl RuntimeSemanticData {
             flags |= SemanticState::FOCUSED.0;
         } else {
             flags &= !SemanticState::FOCUSED.0;
+        }
+        if node.borrow().state_flags() == flags {
+            return;
         }
         node.borrow_mut().set_state_flags(flags);
         if let Some(manager) = manager {
@@ -324,10 +408,23 @@ impl RuntimeSemanticData {
         artboard: &mut ArtboardInstance,
         manager: Option<&mut SemanticManager>,
     ) {
+        self.update_world_bounds_with_root_transform(artboard, manager, Mat2D::IDENTITY);
+    }
+
+    pub(crate) fn update_world_bounds_with_root_transform(
+        &mut self,
+        artboard: &mut ArtboardInstance,
+        manager: Option<&mut SemanticManager>,
+        root_transform: Mat2D,
+    ) {
         let (Some(node), Some(parent_local)) = (&self.semantic_node, self.parent_local_id) else {
             return;
         };
-        let bounds = SemanticProvider::semantic_bounds(artboard, parent_local);
+        let bounds = SemanticProvider::semantic_bounds_with_root_transform(
+            artboard,
+            parent_local,
+            root_transform,
+        );
         if bounds.is_empty_or_nan() && self.bounds_retry_pending {
             artboard.add_dirt(
                 self.local_id,
@@ -849,6 +946,31 @@ mod tests {
     use std::cell::Cell;
 
     use super::*;
+    use nuxie_binary::read_runtime_file;
+    use nuxie_graph::GraphFile;
+
+    fn fixture_data() -> (ArtboardInstance, RuntimeSemanticData) {
+        let file = read_runtime_file(include_bytes!(
+            "../../../fixtures/semantic/semantic_list_scroll_focus_fixed.riv"
+        ))
+        .expect("semantic fixture imports");
+        let graphs = GraphFile::from_runtime_file(&file).expect("semantic fixture graph builds");
+        let graph = graphs
+            .artboards
+            .iter()
+            .find(|graph| graph.name.as_deref() == Some("Element"))
+            .expect("Element artboard graph");
+        let artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+            .expect("Element artboard instantiates");
+        let local_id = artboard
+            .components()
+            .iter()
+            .find(|component| component.type_name == "SemanticData")
+            .expect("Element SemanticData")
+            .local_id;
+        let data = RuntimeSemanticData::from_artboard(&artboard, local_id);
+        (artboard, data)
+    }
 
     #[derive(Debug, Default)]
     struct CountingListener {
@@ -914,5 +1036,149 @@ mod tests {
         assert!(!data.set_label("hello", None));
         assert!(data.node_handle().is_some_and(|same| same.ptr_eq(&node)));
         assert_eq!(node.borrow().label(), "hello");
+    }
+
+    #[test]
+    fn semantic_node_is_lazy_stable_and_retains_its_owner_back_reference() {
+        let (mut artboard, mut data) = fixture_data();
+        assert!(!data.has_semantic_node());
+        let first = data.semantic_node(&mut artboard);
+        assert!(data.has_semantic_node());
+        let second = data.semantic_node(&mut artboard);
+        assert!(first.ptr_eq(&second));
+        assert_eq!(first.borrow().semantic_data_local_id(), Some(data.local_id));
+    }
+
+    #[test]
+    fn semantic_node_snapshots_every_authored_property() {
+        let (mut artboard, mut data) = fixture_data();
+        data.role = SemanticRole::Button as u32;
+        data.label = "Submit".into();
+        data.value = "$".into();
+        data.hint = "Tap to send".into();
+        data.heading_level = 2;
+        data.trait_flags = SemanticTrait::ENABLABLE.0;
+        data.state_flags = SemanticState::SELECTED.0;
+        let node = data.semantic_node(&mut artboard);
+        let node = node.borrow();
+        assert_eq!(node.role(), SemanticRole::Button as u32);
+        assert_eq!(node.label(), "Submit");
+        assert_eq!(node.value(), "$");
+        assert_eq!(node.hint(), "Tap to send");
+        assert_eq!(node.heading_level(), 2);
+        assert!(has_semantic_trait(
+            node.trait_flags(),
+            SemanticTrait::ENABLABLE
+        ));
+        assert!(has_semantic_state(
+            node.state_flags(),
+            SemanticState::SELECTED
+        ));
+    }
+
+    #[test]
+    fn setters_after_creation_update_the_same_semantic_node() {
+        let (mut artboard, mut data) = fixture_data();
+        let node = data.semantic_node(&mut artboard);
+        assert!(data.set_role(SemanticRole::Link as u32, None));
+        assert!(data.set_label("Learn more", None));
+        assert!(data.set_value("value", None));
+        assert!(data.set_hint("External link", None));
+        assert!(data.set_heading_level(2, None));
+        assert!(data.set_trait_flags(SemanticTrait::EXPANDABLE.0, None));
+        assert!(data.set_state_flags(SemanticState::SELECTED.0, None, &mut artboard));
+        let same = data.semantic_node(&mut artboard);
+        assert!(same.ptr_eq(&node));
+        let node = node.borrow();
+        assert_eq!(node.role(), SemanticRole::Link as u32);
+        assert_eq!(node.label(), "Learn more");
+        assert_eq!(node.value(), "value");
+        assert_eq!(node.hint(), "External link");
+        assert_eq!(node.heading_level(), 2);
+        assert_eq!(node.trait_flags(), SemanticTrait::EXPANDABLE.0);
+        assert_eq!(node.state_flags(), SemanticState::SELECTED.0);
+    }
+
+    #[test]
+    fn retained_data_removal_drops_manager_lookup_and_emits_removed_id() {
+        let (mut artboard, mut data) = fixture_data();
+        let mut manager = SemanticManager::new();
+        let id = data.attach(&mut manager, None, &mut artboard);
+        assert!(manager.node_by_id(id).is_some());
+        manager.drain_diff().expect("initial semantic diff");
+        data.detach(&mut manager);
+        assert!(manager.node_by_id(id).is_none());
+        assert_eq!(
+            manager.drain_diff().expect("removal semantic diff").removed,
+            [id]
+        );
+    }
+
+    #[test]
+    fn retained_tree_reconciles_collapsed_visibility_without_a_state_flag_change() {
+        let (mut artboard, mut data) = fixture_data();
+        let parent_local = data.parent_local_id.expect("SemanticData parent");
+        let mut manager = SemanticManager::new();
+        data.prepare_for_tree(&mut artboard);
+        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY);
+        let id = data.semantic_id();
+        manager.drain_diff().expect("initial semantic diff");
+
+        assert!(artboard.collapse_component(parent_local, true));
+        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY);
+        assert_eq!(
+            manager
+                .drain_diff()
+                .expect("collapsed semantic diff")
+                .removed,
+            [id]
+        );
+
+        assert!(artboard.collapse_component(parent_local, false));
+        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY);
+        assert_eq!(
+            manager
+                .drain_diff()
+                .expect("uncollapsed semantic diff")
+                .added
+                .iter()
+                .map(|node| node.id)
+                .collect::<Vec<_>>(),
+            [id]
+        );
+    }
+
+    #[test]
+    fn repeated_focused_state_is_an_incremental_no_op() {
+        let (mut artboard, mut data) = fixture_data();
+        let mut manager = SemanticManager::new();
+        data.prepare_for_tree(&mut artboard);
+        data.reconcile_tree_membership(&mut manager, None, &mut artboard, Mat2D::IDENTITY);
+        manager.drain_diff().expect("initial semantic diff");
+
+        data.set_focused_state(false, Some(&mut manager));
+        assert!(
+            manager
+                .drain_diff()
+                .expect("repeated focus semantic diff")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn listener_removal_unregistered_removal_and_empty_dispatch_are_noops() {
+        let mut data = RuntimeSemanticData::new(1, Some(0));
+        let registered = Rc::new(CountingListener::default());
+        let erased: Rc<dyn SemanticListener> = registered.clone();
+        let ghost: Rc<dyn SemanticListener> = Rc::new(CountingListener::default());
+        data.add_semantic_listener(erased.clone());
+        data.remove_semantic_listener(&ghost);
+        data.fire(SemanticActionType::Tap);
+        assert_eq!(registered.tap.get(), 1);
+        data.remove_semantic_listener(&erased);
+        data.fire(SemanticActionType::Tap);
+        assert_eq!(registered.tap.get(), 1);
+        data.fire(SemanticActionType::Increase);
+        data.fire(SemanticActionType::Decrease);
     }
 }

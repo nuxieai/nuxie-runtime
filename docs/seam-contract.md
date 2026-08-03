@@ -1,3 +1,5 @@
+> **DRAFT — pending Levi review.** The guard runs grandfathered/report-only until the migration decisions below are ratified.
+
 # Parity, C ABI, and product seam contract (draft)
 
 Status: P3-h architecture-review draft. This document records the intended

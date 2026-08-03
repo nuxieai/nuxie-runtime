@@ -1,5 +1,6 @@
 //! Direct retained-tree manager port of pinned src/input/focus_manager.cpp (B6-0238).
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::focus_node::{
@@ -15,6 +16,9 @@ pub struct FocusManager {
     roots: Vec<FocusNodeId>,
     primary_focus: Option<FocusNodeId>,
     pub(crate) pending_events: Vec<FocusEvent>,
+    // High-level runtimes poll this every frame. Recompute the retained-tree
+    // predicate only after an input to it changes, matching pinned C++.
+    focusable_content_cache: Cell<Option<bool>>,
 }
 
 impl FocusManager {
@@ -44,6 +48,19 @@ impl FocusManager {
         {
             return false;
         }
+
+        let siblings = parent
+            .and_then(|parent| self.nodes.get(&parent).map(|node| &node.children))
+            .unwrap_or(&self.roots);
+        if self.nodes.get(&child).and_then(|node| node.parent) == parent
+            && siblings
+                .iter()
+                .position(|node| *node == child)
+                .is_some_and(|position| position == index.min(siblings.len().saturating_sub(1)))
+        {
+            return true;
+        }
+
         self.unlink(child);
         self.nodes
             .get_mut(&child)
@@ -57,6 +74,7 @@ impl FocusManager {
         } else {
             self.roots.insert(index.min(self.roots.len()), child);
         }
+        self.mark_focusable_content_dirty();
         true
     }
 
@@ -207,7 +225,60 @@ impl FocusManager {
     }
 
     pub fn node_mut(&mut self, node_id: FocusNodeId) -> Option<&mut FocusNode> {
+        // Unrestricted mutation can change can_focus or focusable backing.
+        // Retained hot paths use update_node/set_node_focusable below, which
+        // invalidate only when the cached predicate can actually change.
+        self.mark_focusable_content_dirty();
         self.nodes.get_mut(&node_id)
+    }
+
+    pub fn set_node_can_focus(&mut self, node_id: FocusNodeId, value: bool) -> bool {
+        let Some(node) = self.nodes.get_mut(&node_id) else {
+            return false;
+        };
+        if node.can_focus() == value {
+            return false;
+        }
+        node.set_can_focus(value);
+        self.mark_focusable_content_dirty();
+        true
+    }
+
+    pub(crate) fn set_node_focusable(
+        &mut self,
+        node_id: FocusNodeId,
+        value: Option<RuntimeFocusable>,
+    ) -> bool {
+        let Some(node) = self.nodes.get_mut(&node_id) else {
+            return false;
+        };
+        let backing_changed = node.focusable.is_some() != value.is_some();
+        let changed = node.focusable != value;
+        node.focusable = value;
+        if backing_changed {
+            self.mark_focusable_content_dirty();
+        }
+        changed
+    }
+
+    pub(crate) fn update_node(&mut self, node_id: FocusNodeId, replacement: &FocusNode) -> bool {
+        let Some(node) = self.nodes.get_mut(&node_id) else {
+            return false;
+        };
+        let predicate_changed = node.can_focus() != replacement.can_focus();
+        node.set_can_focus(replacement.can_focus());
+        node.set_can_touch(replacement.can_touch());
+        node.set_can_traverse(replacement.can_traverse());
+        node.set_eligible(replacement.is_eligible());
+        node.set_tab_index(replacement.tab_index());
+        node.set_name(replacement.name());
+        node.set_edge_behavior(replacement.edge_behavior());
+        node.set_bounds(replacement.bounds());
+        node.set_position(replacement.position());
+        if predicate_changed {
+            self.mark_focusable_content_dirty();
+        }
+        true
     }
 
     pub fn has_focus(&self, node_id: FocusNodeId) -> bool {
@@ -242,10 +313,21 @@ impl FocusManager {
     }
 
     pub fn has_focusable_content(&self) -> bool {
-        self.roots
+        if let Some(cached) = self.focusable_content_cache.get() {
+            return cached;
+        }
+        let has_focusable_content = self
+            .roots
             .iter()
             .copied()
-            .any(|root| self.subtree_has_focusable_content(root))
+            .any(|root| self.subtree_has_focusable_content(root));
+        self.focusable_content_cache
+            .set(Some(has_focusable_content));
+        has_focusable_content
+    }
+
+    pub fn mark_focusable_content_dirty(&self) {
+        self.focusable_content_cache.set(None);
     }
 
     pub fn take_events(&mut self) -> Vec<FocusEvent> {
@@ -258,12 +340,20 @@ impl FocusManager {
 
     fn unlink(&mut self, node_id: FocusNodeId) {
         let parent = self.nodes.get(&node_id).and_then(|node| node.parent);
+        let mut removed = false;
         if let Some(parent) = parent {
             if let Some(parent) = self.nodes.get_mut(&parent) {
+                let previous_len = parent.children.len();
                 parent.remove_child(node_id);
+                removed = parent.children.len() != previous_len;
             }
         } else {
+            let previous_len = self.roots.len();
             self.roots.retain(|root| *root != node_id);
+            removed = self.roots.len() != previous_len;
+        }
+        if removed {
+            self.mark_focusable_content_dirty();
         }
     }
 
@@ -651,4 +741,92 @@ fn score_directional_points(
 
 fn axis_overlap(a_min: f32, a_max: f32, b_min: f32, b_max: f32) -> f32 {
     (a_max.min(b_max) - a_min.max(b_min)).max(0.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn focusable_content_cache_invalidates_when_can_focus_toggles_after_caching() {
+        let mut manager = FocusManager::new();
+        let scope = manager.create_node(FocusNode::structural_scope());
+        let child = manager.create_node(FocusNode::structural_scope());
+        manager.add_child(None, scope);
+        manager.add_child(Some(scope), child);
+
+        assert!(!manager.has_focusable_content());
+        assert_eq!(manager.focusable_content_cache.get(), Some(false));
+
+        assert!(manager.set_node_can_focus(child, true));
+        assert_eq!(manager.focusable_content_cache.get(), None);
+        assert!(manager.has_focusable_content());
+
+        assert!(manager.set_node_can_focus(child, false));
+        assert!(!manager.has_focusable_content());
+    }
+
+    #[test]
+    fn focusable_content_cache_invalidates_when_backing_toggles_after_caching() {
+        let mut manager = FocusManager::new();
+        let scope = manager.create_node(FocusNode::structural_scope());
+        let child = manager.create_node(FocusNode::structural_scope());
+        manager.add_child(None, scope);
+        manager.add_child(Some(scope), child);
+
+        assert!(!manager.has_focusable_content());
+
+        assert!(manager.set_node_focusable(child, Some(RuntimeFocusable::new(1, 2, 3))));
+        assert!(manager.has_focusable_content());
+
+        assert!(manager.set_node_focusable(child, None));
+        assert!(!manager.has_focusable_content());
+    }
+
+    #[test]
+    fn focusable_content_cache_invalidates_when_a_backed_node_is_added_then_removed() {
+        let mut manager = FocusManager::new();
+        let scope = manager.create_node(FocusNode::structural_scope());
+        manager.add_child(None, scope);
+
+        assert!(!manager.has_focusable_content());
+
+        let mut backed = FocusNode::structural_scope();
+        backed.set_focusable(RuntimeFocusable::new(1, 2, 3));
+        let backed = manager.create_node(backed);
+        manager.add_child(Some(scope), backed);
+        assert!(manager.has_focusable_content());
+
+        manager.remove_subtree(backed);
+        assert!(!manager.has_focusable_content());
+    }
+
+    #[test]
+    fn focusable_content_cache_invalidates_when_the_last_root_migrates() {
+        let mut first = FocusManager::new();
+        let node = first.create_node(FocusNode::new());
+        first.add_child(None, node);
+        assert!(first.has_focusable_content());
+
+        let mut second = FocusManager::new();
+        assert!(second.migrate_subtree_from(&mut first, node, None, 0));
+
+        assert!(!first.has_focusable_content());
+        assert!(second.has_focusable_content());
+    }
+
+    #[test]
+    fn unchanged_retained_updates_preserve_the_focusable_content_cache() {
+        let mut manager = FocusManager::new();
+        let root = manager.create_node(FocusNode::new());
+        manager.add_child(None, root);
+        assert!(manager.has_focusable_content());
+
+        let mut replacement = manager.node(root).expect("root").clone();
+        replacement.set_bounds(Some(FocusBounds::from_xywh(1.0, 2.0, 3.0, 4.0)));
+        assert!(manager.update_node(root, &replacement));
+        assert!(manager.insert_child(None, root, 0));
+
+        assert_eq!(manager.focusable_content_cache.get(), Some(true));
+    }
 }

@@ -9,7 +9,7 @@ use crate::input::{
     FocusPoint, RuntimeFocusable,
 };
 #[cfg(test)]
-use crate::input::{FocusDirection, FocusEvent};
+use crate::input::FocusEvent;
 use crate::parent_traversal::{ParentTraversal, ParentTraversalFrame};
 use crate::properties::property_key_for_name;
 use crate::{ArtboardInstance, Mat2D};
@@ -92,9 +92,7 @@ fn replace_focusable(
             .focus_targets
             .remove(&(previous.owner_identity, previous.target_local));
     }
-    if let Some(node) = domain.manager.node_mut(node_id) {
-        node.focusable = next;
-    }
+    domain.manager.set_node_focusable(node_id, next);
     if let Some(next) = next {
         domain
             .focus_nodes
@@ -356,14 +354,21 @@ impl RuntimeFocusTree {
         let mut domain = self.domain.borrow_mut();
         domain.retained_nodes.retain(|key, _| !keys.contains(key));
         domain.retained_parents.retain(|key, _| !keys.contains(key));
-        let live_nodes = domain.manager.nodes.keys().copied().collect::<BTreeSet<_>>();
-        domain.focus_nodes.retain(|_, node| live_nodes.contains(node));
+        let live_nodes = domain
+            .manager
+            .nodes
+            .keys()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        domain
+            .focus_nodes
+            .retain(|_, node| live_nodes.contains(node));
         domain
             .focus_targets
             .retain(|_, node| live_nodes.contains(node));
-        domain.mounts.retain(|_, candidate| {
-            !candidate.occurrence_key.is_within(&mount.occurrence_key)
-        });
+        domain
+            .mounts
+            .retain(|_, candidate| !candidate.occurrence_key.is_within(&mount.occurrence_key));
     }
 
     fn place_retained_node(
@@ -378,17 +383,7 @@ impl RuntimeFocusTree {
         let retained_node = self.domain.borrow().retained_nodes.get(&key).copied();
         let node_id = match retained_node {
             Some(node_id) => {
-                if let Some(retained) = self.domain.borrow_mut().manager.node_mut(node_id) {
-                    retained.set_can_focus(node.can_focus());
-                    retained.set_can_touch(node.can_touch());
-                    retained.set_can_traverse(node.can_traverse());
-                    retained.set_eligible(node.is_eligible());
-                    retained.set_tab_index(node.tab_index());
-                    retained.set_name(node.name());
-                    retained.set_edge_behavior(node.edge_behavior());
-                    retained.set_bounds(node.bounds());
-                    retained.set_position(node.position());
-                }
+                self.domain.borrow_mut().manager.update_node(node_id, &node);
                 replace_focusable(&mut self.domain.borrow_mut(), node_id, node.focusable());
                 node_id
             }
@@ -1073,16 +1068,7 @@ fn refresh_focus_data_node(
     else {
         return;
     };
-    if let Some(node) = domain.manager.node_mut(node_id) {
-        node.set_can_focus(refreshed.can_focus());
-        node.set_can_touch(refreshed.can_touch());
-        node.set_can_traverse(refreshed.can_traverse());
-        node.set_eligible(refreshed.is_eligible());
-        node.set_name(refreshed.name());
-        node.set_edge_behavior(refreshed.edge_behavior());
-        node.set_bounds(refreshed.bounds());
-        node.set_position(refreshed.position());
-    }
+    domain.manager.update_node(node_id, &refreshed);
     replace_focusable(&mut domain, node_id, Some(focusable));
 }
 

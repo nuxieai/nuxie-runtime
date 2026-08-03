@@ -21162,7 +21162,7 @@ mod scripted_listener_action_tests {
 
     #[test]
     fn fl_c5_focus_semantic_focus_state_and_owner_safe_focus_accessors() {
-        let (artboard, mut machine, _) =
+        let (_artboard, mut machine, _) =
             scripted_drawable_input_artboard_and_machine(Box::new(RecordingDrawableInputScript {
                 label: "focus state",
                 methods: Vec::new(),
@@ -21213,7 +21213,7 @@ mod scripted_listener_action_tests {
 
     #[test]
     fn fl_c5_focus_semantic_manager_switch_is_identity_noop_and_restores_internal() {
-        let (_artboard, mut machine, _) =
+        let (artboard, mut machine, _) =
             scripted_drawable_input_artboard_and_machine(Box::new(RecordingDrawableInputScript {
                 label: "internal",
                 methods: Vec::new(),

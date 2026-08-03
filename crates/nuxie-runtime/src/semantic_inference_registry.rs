@@ -1,4 +1,4 @@
-// Pinned C++ correspondence (d788e8ec):
+// Pinned C++ correspondence (4ac7b327):
 // src/semantic/semantic_inference_registry.cpp:1-97.
 
 use crate::ArtboardInstance;

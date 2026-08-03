@@ -1,5 +1,8 @@
 //! Retained semantic domain state shared by mounted artboard occurrences
 //! beneath a state-machine instance; interface stays on `StateMachineInstance`.
+//! Pinned C++ correspondence (4ac7b327): `src/artboard.cpp:2155-2269` and
+//! `src/artboard_component_list.cpp:683-688` build structural boundary nodes
+//! and share the enclosing semantic manager across nested/list occurrences.
 
 use std::collections::{BTreeMap, BTreeSet};
 

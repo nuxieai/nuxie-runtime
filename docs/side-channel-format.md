@@ -213,8 +213,9 @@ Within one sample-loop iteration, with the side channel ON:
 equality rules are unchanged (the channel is ordinary lines). The summary
 gains `side-channel-segments=<n>`: equal to `exact-segments` when the flag is
 on, `0` when off. `make golden-compare` and `make scripted-golden-compare`
-run with the flag ON; the corpus-wide gate is 317/317 entries with the
-channel enabled, or each divergence localized and filed as a register row.
+run with the flag ON; every exact entry and segment must match with the
+channel enabled, while every non-exact entry remains explicitly parked or
+has its divergence localized and filed as a register row.
 Corpus entries set `semantic_default_view_model = true` when they need the
 pinned semantic-test fixture setup; the comparator forwards
 `--semantic-default-view-model` to both runners only for those entries.
@@ -225,7 +226,7 @@ mode or a side-channel-divergence feature.
 
 ## Sampling caveat (register V2)
 
-237 of 317 corpus entries sample `t=0` only, where `settled` is forced
+Most corpus entries sample `t=0` only, where `settled` is forced
 `false` by the zero-second rule — settling is unobservable there. Settling
 behavior is exercised by the dedicated `settle_*` corpus entries (same
 fixtures, post-first-frame samples: one-shot animations sampled past their

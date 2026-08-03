@@ -1,4 +1,4 @@
-// Pinned C++ correspondence (d788e8ec):
+// Pinned C++ correspondence (4ac7b327):
 // src/semantic/semantic_provider.cpp:1-148 and
 // include/rive/semantic/semantic_provider.hpp:1-36.
 

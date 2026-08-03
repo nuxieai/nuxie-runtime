@@ -17,7 +17,21 @@ fn reference_runtime_dir() -> PathBuf {
 
 #[test]
 fn generated_schema_exposes_current_runtime_definition_set() {
-    assert_eq!(DEFINITIONS.len(), 348);
+    assert_eq!(DEFINITIONS.len(), 350);
+    assert_eq!(
+        definition_by_name("ViewModelPropertyAssetBlob")
+            .expect("blob property definition")
+            .type_key
+            .int,
+        1043
+    );
+    assert_eq!(
+        definition_by_name("ViewModelInstanceAssetBlob")
+            .expect("blob instance definition")
+            .type_key
+            .int,
+        1044
+    );
 
     let runtime_property_count = DEFINITIONS
         .iter()

@@ -10,7 +10,7 @@ use nuxie_binary::{
     RuntimeViewModelInstanceReference,
 };
 
-pub use crate::view_model_cell::RuntimeFontAssetValue;
+pub use crate::view_model_cell::{RuntimeBlobAsset, RuntimeBlobAssetValue, RuntimeFontAssetValue};
 use crate::view_model_cell::{
     RuntimeCellDependent, RuntimeCellDirt, RuntimeCellDirtSink, RuntimeViewModelCell,
     RuntimeViewModelCellValue,
@@ -1601,12 +1601,13 @@ mod authored_viewmodel;
 
 pub use authored_viewmodel::runtime::{
     RuntimeBindableArtboard, RuntimeViewModelImage, ViewModelInstanceArtboardRuntime,
-    ViewModelInstanceAssetFontRuntime, ViewModelInstanceAssetImageRuntime,
-    ViewModelInstanceBooleanRuntime, ViewModelInstanceColorRuntime, ViewModelInstanceEnumRuntime,
-    ViewModelInstanceListIndexRuntime, ViewModelInstanceListRuntime,
-    ViewModelInstanceNumberRuntime, ViewModelInstanceRuntime, ViewModelInstanceRuntimeProperty,
-    ViewModelInstanceStringRuntime, ViewModelInstanceTriggerRuntime, ViewModelInstanceValueRuntime,
-    ViewModelRuntime, ViewModelRuntimeDataType, ViewModelRuntimeProperty,
+    ViewModelInstanceAssetBlobRuntime, ViewModelInstanceAssetFontRuntime,
+    ViewModelInstanceAssetImageRuntime, ViewModelInstanceBooleanRuntime,
+    ViewModelInstanceColorRuntime, ViewModelInstanceEnumRuntime, ViewModelInstanceListIndexRuntime,
+    ViewModelInstanceListRuntime, ViewModelInstanceNumberRuntime, ViewModelInstanceRuntime,
+    ViewModelInstanceRuntimeProperty, ViewModelInstanceStringRuntime,
+    ViewModelInstanceTriggerRuntime, ViewModelInstanceValueRuntime, ViewModelRuntime,
+    ViewModelRuntimeDataType, ViewModelRuntimeProperty,
 };
 pub(crate) use authored_viewmodel::*;
 pub use authored_viewmodel::{

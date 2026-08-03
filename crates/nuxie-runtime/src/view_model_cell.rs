@@ -319,6 +319,8 @@ pub enum RuntimeViewModelCellValue {
     /// the sole owner of both the serialized file-asset index and retained
     /// live Font identity, so every alias retains one exact source object.
     AssetFont(RuntimeFontAssetValue),
+    /// Complete id-or-live value stored by `ViewModelInstanceAssetBlob`.
+    AssetBlob(RuntimeBlobAssetValue),
     Artboard(u32),
     /// Dirt identity for a retained `ViewModelInstanceList` property. The
     /// data-bind source retains the list itself and reads its current items;
@@ -339,6 +341,155 @@ pub enum RuntimeViewModelCellValue {
 pub struct RuntimeFontAssetValue {
     file_asset_index: u64,
     live_font_bytes: Option<Arc<[u8]>>,
+}
+
+/// One retained runtime Blob asset.
+///
+/// C++ passes an `rcp<BlobAsset>` through scripting and data binding. Keep the
+/// asset metadata and payload behind one shared identity for the same reason.
+#[derive(Debug)]
+pub struct RuntimeBlobAsset {
+    name: Arc<str>,
+    bytes: Arc<[u8]>,
+}
+
+impl RuntimeBlobAsset {
+    pub fn new(name: impl Into<String>, bytes: Arc<[u8]>) -> Self {
+        Self {
+            name: Arc::from(name.into()),
+            bytes,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    pub fn bytes_arc(&self) -> Arc<[u8]> {
+        Arc::clone(&self.bytes)
+    }
+}
+
+/// Serialized asset id plus the optional directly-set Blob asset.
+///
+/// A non-null live value is distinct from an id-bound value even when its
+/// bytes are empty. Live identity follows retained-pointer identity.
+#[derive(Debug, Clone)]
+pub struct RuntimeBlobAssetValue {
+    file_asset_index: u64,
+    live_blob_asset: Option<Arc<RuntimeBlobAsset>>,
+}
+
+impl PartialEq for RuntimeBlobAssetValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.same_runtime_value(other)
+    }
+}
+
+impl RuntimeBlobAssetValue {
+    pub const MISSING_FILE_ASSET_INDEX: u64 = u32::MAX as u64;
+
+    pub fn from_file_asset_index(file_asset_index: u64) -> Self {
+        Self {
+            file_asset_index,
+            live_blob_asset: None,
+        }
+    }
+
+    pub fn from_live_bytes(bytes: Arc<[u8]>) -> Self {
+        Self::from_live_asset(Arc::new(RuntimeBlobAsset::new("", bytes)))
+    }
+
+    pub fn from_live_asset(asset: Arc<RuntimeBlobAsset>) -> Self {
+        Self {
+            file_asset_index: Self::MISSING_FILE_ASSET_INDEX,
+            live_blob_asset: Some(asset),
+        }
+    }
+
+    pub fn file_asset_index(&self) -> u64 {
+        self.file_asset_index
+    }
+
+    pub fn live_blob_bytes(&self) -> Option<&[u8]> {
+        self.live_blob_asset.as_deref().map(RuntimeBlobAsset::bytes)
+    }
+
+    pub fn live_blob_bytes_arc(&self) -> Option<Arc<[u8]>> {
+        self.live_blob_asset
+            .as_deref()
+            .map(RuntimeBlobAsset::bytes_arc)
+    }
+
+    pub fn live_blob_asset(&self) -> Option<&Arc<RuntimeBlobAsset>> {
+        self.live_blob_asset.as_ref()
+    }
+
+    fn same_runtime_value(&self, value: &Self) -> bool {
+        self.file_asset_index == value.file_asset_index
+            && match (&self.live_blob_asset, &value.live_blob_asset) {
+                (Some(current), Some(next)) => Arc::ptr_eq(current, next),
+                (None, None) => true,
+                _ => false,
+            }
+    }
+
+    pub(crate) fn set_file_asset_index(&mut self, file_asset_index: u64) -> bool {
+        if self.file_asset_index == file_asset_index {
+            return false;
+        }
+        self.file_asset_index = file_asset_index;
+        true
+    }
+
+    fn set_live_blob_bytes(&mut self, bytes: Option<Arc<[u8]>>) -> bool {
+        let same = match (&self.live_blob_asset, &bytes) {
+            (Some(current), Some(next)) => Arc::ptr_eq(&current.bytes, next),
+            (None, None) => true,
+            _ => false,
+        };
+        let was_missing = self.file_asset_index == Self::MISSING_FILE_ASSET_INDEX;
+        self.file_asset_index = Self::MISSING_FILE_ASSET_INDEX;
+        if same {
+            return !was_missing;
+        }
+        self.live_blob_asset = bytes.map(|bytes| Arc::new(RuntimeBlobAsset::new("", bytes)));
+        true
+    }
+
+    fn set_live_blob_asset(&mut self, asset: Option<Arc<RuntimeBlobAsset>>) -> bool {
+        let same = match (&self.live_blob_asset, &asset) {
+            (Some(current), Some(next)) => Arc::ptr_eq(current, next),
+            (None, None) => true,
+            _ => false,
+        };
+        let was_missing = self.file_asset_index == Self::MISSING_FILE_ASSET_INDEX;
+        self.file_asset_index = Self::MISSING_FILE_ASSET_INDEX;
+        if same {
+            return !was_missing;
+        }
+        self.live_blob_asset = asset;
+        true
+    }
+
+    pub(crate) fn apply_data_bind_value(&mut self, value: &Self) -> bool {
+        if self.same_runtime_value(value) {
+            return false;
+        }
+        self.file_asset_index = value.file_asset_index;
+        self.live_blob_asset = value.live_blob_asset.clone();
+        true
+    }
+}
+
+impl Default for RuntimeBlobAssetValue {
+    fn default() -> Self {
+        Self::from_file_asset_index(Self::MISSING_FILE_ASSET_INDEX)
+    }
 }
 
 impl PartialEq for RuntimeFontAssetValue {
@@ -690,6 +841,48 @@ impl RuntimeViewModelCell {
         changed
     }
 
+    pub(crate) fn set_blob_asset_index(&self, file_asset_index: u64) -> bool {
+        let RuntimeViewModelCellValue::AssetBlob(mut value) = self.value() else {
+            debug_assert!(false, "set_blob_asset_index on non-blob cell");
+            return false;
+        };
+        if !value.set_file_asset_index(file_asset_index) {
+            return false;
+        }
+        self.set_value(RuntimeViewModelCellValue::AssetBlob(value))
+    }
+
+    pub(crate) fn set_live_blob_bytes(&self, bytes: Option<Arc<[u8]>>) -> bool {
+        let RuntimeViewModelCellValue::AssetBlob(mut value) = self.value() else {
+            debug_assert!(false, "set_live_blob_bytes on non-blob cell");
+            return false;
+        };
+        if !value.set_live_blob_bytes(bytes) {
+            return false;
+        }
+        self.set_value(RuntimeViewModelCellValue::AssetBlob(value))
+    }
+
+    pub(crate) fn set_live_blob_asset(&self, asset: Option<Arc<RuntimeBlobAsset>>) -> bool {
+        let RuntimeViewModelCellValue::AssetBlob(mut value) = self.value() else {
+            debug_assert!(false, "set_live_blob_asset on non-blob cell");
+            return false;
+        };
+        if !value.set_live_blob_asset(asset) {
+            return false;
+        }
+        self.set_value(RuntimeViewModelCellValue::AssetBlob(value))
+    }
+
+    pub(crate) fn apply_blob_asset_data_bind_value(&self, value: &RuntimeBlobAssetValue) -> bool {
+        if let Some(asset) = value.live_blob_asset() {
+            return self.set_live_blob_asset(Some(Arc::clone(asset)));
+        }
+        let mut changed = self.set_live_blob_bytes(None);
+        changed |= self.set_blob_asset_index(value.file_asset_index());
+        changed
+    }
+
     /// C++ `ViewModelInstanceTrigger::trigger()` analog: increment the
     /// generated uint32 fire counter with native unsigned wrap. A wrap to zero
     /// is still a real property write/dirt cascade, while ScriptInputTrigger's
@@ -762,6 +955,7 @@ pub enum RuntimeViewModelCellKind {
     SymbolListIndex,
     AssetImage,
     AssetFont,
+    AssetBlob,
     Artboard,
     ViewModel,
     List,
@@ -781,6 +975,7 @@ impl RuntimeViewModelCellKind {
             "ViewModelPropertySymbolListIndex" => Self::SymbolListIndex,
             "ViewModelPropertyAsset" | "ViewModelPropertyAssetImage" => Self::AssetImage,
             "ViewModelPropertyAssetFont" => Self::AssetFont,
+            "ViewModelPropertyAssetBlob" => Self::AssetBlob,
             "ViewModelPropertyArtboard" => Self::Artboard,
             "ViewModelPropertyViewModel" => Self::ViewModel,
             "ViewModelPropertyList" => Self::List,
@@ -800,6 +995,9 @@ impl RuntimeViewModelCellKind {
             Self::AssetImage => RuntimeViewModelCellValue::AssetImage(0),
             Self::AssetFont => RuntimeViewModelCellValue::AssetFont(
                 RuntimeFontAssetValue::from_file_asset_index(0),
+            ),
+            Self::AssetBlob => RuntimeViewModelCellValue::AssetBlob(
+                RuntimeBlobAssetValue::from_file_asset_index(0),
             ),
             Self::Artboard => RuntimeViewModelCellValue::Artboard(0),
             Self::ViewModel | Self::List => return None,
@@ -1041,6 +1239,14 @@ impl RuntimeViewModelInstanceCells {
                         .map(|asset_index| {
                             RuntimeViewModelCellValue::AssetFont(
                                 RuntimeFontAssetValue::from_file_asset_index(asset_index.into()),
+                            )
+                        }),
+                    RuntimeViewModelCellKind::AssetBlob => file
+                        .view_model_instance_blob_asset_index_for_object(value)
+                        .and_then(|index| u32::try_from(index).ok())
+                        .map(|asset_index| {
+                            RuntimeViewModelCellValue::AssetBlob(
+                                RuntimeBlobAssetValue::from_file_asset_index(asset_index.into()),
                             )
                         }),
                     RuntimeViewModelCellKind::Artboard => file

@@ -262,7 +262,8 @@ fn object_imports_successfully(
         "ViewModelInstance"
         | "ViewModelInstanceAsset"
         | "ViewModelInstanceAssetImage"
-        | "ViewModelInstanceAssetFont" => {
+        | "ViewModelInstanceAssetFont"
+        | "ViewModelInstanceAssetBlob" => {
             return viewmodel_instance_importer::imports_successfully(object, definition, context)
                 .expect("view-model instance object is owned by ViewModelInstanceImporter");
         }

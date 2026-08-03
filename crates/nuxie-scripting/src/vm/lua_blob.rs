@@ -3,28 +3,34 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use luaur_rt::{Lua, Result, UserData, UserDataFields, Value};
-
-#[derive(Debug)]
-struct ScriptedBlobData {
-    name: String,
-    bytes: Rc<[u8]>,
-}
+use nuxie_runtime::RuntimeBlobAsset;
 
 #[derive(Debug, Clone)]
-pub(super) struct ScriptedBlob(Rc<ScriptedBlobData>);
+pub(super) struct ScriptedBlob(Arc<RuntimeBlobAsset>);
 
 impl UserData for ScriptedBlob {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("size", |_, this| Ok(this.0.bytes.len() as f64));
-        fields.add_field_method_get("name", |_, this| Ok(this.0.name.clone()));
+        fields.add_field_method_get("size", |_, this| Ok(this.0.bytes().len() as f64));
+        fields.add_field_method_get("name", |_, this| Ok(this.0.name().to_owned()));
         fields.add_field_method_get("data", |lua, this| {
-            if this.0.bytes.is_empty() {
+            if this.0.bytes().is_empty() {
                 return Ok(Value::Nil);
             }
-            lua.create_buffer(this.0.bytes.as_ref()).map(Value::Buffer)
+            lua.create_buffer(this.0.bytes()).map(Value::Buffer)
         });
+    }
+}
+
+impl ScriptedBlob {
+    pub(super) fn from_asset(asset: Arc<RuntimeBlobAsset>) -> Self {
+        Self(asset)
+    }
+
+    pub(super) fn asset(&self) -> Arc<RuntimeBlobAsset> {
+        Arc::clone(&self.0)
     }
 }
 
@@ -34,7 +40,7 @@ impl UserData for ScriptedBlob {
 /// `ScriptedBlob::asset` reference-counted FileAsset owner.
 #[derive(Clone, Default)]
 pub(super) struct ScriptedBlobAssets {
-    assets: Rc<RefCell<BTreeMap<String, Vec<Rc<ScriptedBlobData>>>>>,
+    assets: Rc<RefCell<BTreeMap<String, Vec<Arc<RuntimeBlobAsset>>>>>,
 }
 
 impl ScriptedBlobAssets {
@@ -49,10 +55,7 @@ impl ScriptedBlobAssets {
             .borrow_mut()
             .entry(name.to_owned())
             .or_default()
-            .push(Rc::new(ScriptedBlobData {
-                name: name.to_owned(),
-                bytes: Rc::from(bytes),
-            }));
+            .push(Arc::new(RuntimeBlobAsset::new(name, Arc::from(bytes))));
         Ok(())
     }
 
@@ -64,7 +67,7 @@ impl ScriptedBlobAssets {
             .assets
             .borrow()
             .get(name)
-            .and_then(|matches| matches.iter().find(|asset| !asset.bytes.is_empty()))
+            .and_then(|matches| matches.iter().find(|asset| !asset.bytes().is_empty()))
             .cloned();
         match asset {
             // Pinned Context:blob deliberately rejects zero-byte BlobAssets.

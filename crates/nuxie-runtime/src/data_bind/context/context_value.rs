@@ -23,7 +23,9 @@ use crate::scripting::{
     RuntimeScriptInstanceHandle, ScriptCoreString, ScriptDataConverterMethod, ScriptError,
     ScriptHost,
 };
-use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelStructuralSource};
+use crate::view_model::{
+    RuntimeBlobAssetValue, RuntimeFontAssetValue, RuntimeOwnedViewModelStructuralSource,
+};
 use crate::view_model_cell::{
     RuntimeCellDirt, RuntimeCellDirtSink, RuntimeViewModelCell, RuntimeViewModelCellValue,
     RuntimeViewModelInstanceCells,
@@ -418,6 +420,9 @@ pub(crate) fn runtime_graph_value_from_cell_value(
         (RuntimeViewModelCellValue::AssetFont(value), RuntimeDataBindGraphValue::Asset(_)) => {
             RuntimeDataBindGraphValue::Asset(value.file_asset_index())
         }
+        (RuntimeViewModelCellValue::AssetBlob(value), RuntimeDataBindGraphValue::AssetBlob(_)) => {
+            RuntimeDataBindGraphValue::AssetBlob(value.clone())
+        }
         (RuntimeViewModelCellValue::Artboard(value), RuntimeDataBindGraphValue::Artboard(_)) => {
             RuntimeDataBindGraphValue::Artboard(u64::from(*value))
         }
@@ -457,6 +462,9 @@ pub(crate) fn runtime_graph_value_from_bound_cell(
         RuntimeViewModelCellValue::AssetFont(value) => {
             RuntimeDataBindGraphValue::Asset(value.file_asset_index())
         }
+        RuntimeViewModelCellValue::AssetBlob(value) => {
+            RuntimeDataBindGraphValue::AssetBlob(value.clone())
+        }
         RuntimeViewModelCellValue::Artboard(value) => {
             RuntimeDataBindGraphValue::Artboard(u64::from(*value))
         }
@@ -494,6 +502,9 @@ pub(crate) fn runtime_cell_value_from_graph_value(
             }
             _ => RuntimeViewModelCellValue::AssetImage(u32_payload(*value)),
         },
+        RuntimeDataBindGraphValue::AssetBlob(value) => {
+            RuntimeViewModelCellValue::AssetBlob(value.clone())
+        }
         RuntimeDataBindGraphValue::Artboard(value) => {
             RuntimeViewModelCellValue::Artboard(u32_payload(*value))
         }
@@ -550,6 +561,17 @@ fn matching_graph_source_value(
         // when it is written back.
         RuntimeDataBindGraphValue::Asset(_) => crate::context_value_asset_font::matching(next)
             .or_else(|| crate::context_value_asset_image::matching(next)),
+        RuntimeDataBindGraphValue::AssetBlob(_) => match next {
+            RuntimeDataBindGraphValue::AssetBlob(value) => {
+                Some(RuntimeDataBindGraphValue::AssetBlob(value.clone()))
+            }
+            RuntimeDataBindGraphValue::Integer(value) => {
+                Some(RuntimeDataBindGraphValue::AssetBlob(
+                    RuntimeBlobAssetValue::from_file_asset_index(*value),
+                ))
+            }
+            _ => None,
+        },
         RuntimeDataBindGraphValue::Artboard(_) => crate::context_value_artboard::matching(next),
         RuntimeDataBindGraphValue::Trigger(_) => crate::context_value_trigger::matching(next),
         RuntimeDataBindGraphValue::ViewModel(_) => crate::context_value_viewmodel::matching(next),
@@ -2340,6 +2362,9 @@ fn runtime_data_bind_graph_value_to_project(
             ))
         }
         RuntimeDataBindGraphValue::Asset(value) => Ok(ProjectDataValue::Image(*value)),
+        RuntimeDataBindGraphValue::AssetBlob(_) => {
+            Err(RuntimeProjectDataBridgeError::ObjectHasNoRiveRepresentation)
+        }
         RuntimeDataBindGraphValue::ViewModel(value) => Ok(ProjectDataValue::ViewModel(
             project_view_model_reference_from_runtime(*value),
         )),
@@ -5207,6 +5232,7 @@ pub(crate) enum RuntimeDataBindGraphValue {
     },
     ListLength(usize),
     Asset(u64),
+    AssetBlob(RuntimeBlobAssetValue),
     Artboard(u64),
     Trigger(u64),
     ViewModel(RuntimeViewModelPointer),
@@ -5233,6 +5259,7 @@ impl RuntimeDataBindGraphValue {
                     | Self::SymbolListIndex(_)
                     | Self::List { .. }
                     | Self::Asset(_)
+                    | Self::AssetBlob(_)
                     | Self::Artboard(_)
                     | Self::Trigger(_)
                     | Self::ViewModel(_)
@@ -5333,7 +5360,21 @@ impl RuntimeDataBindGraphValue {
                             .font_asset_value_by_property_path(&property_path)
                             .map(|value| value.file_asset_index())
                     })
+                    .or_else(|| {
+                        context
+                            .blob_asset_value_by_property_path(&property_path)
+                            .map(|value| value.file_asset_index())
+                    })
                     .map(Self::Asset)
+            }
+            Self::AssetBlob(_) => {
+                let property_path = path[1..]
+                    .iter()
+                    .map(|property_index| usize::try_from(*property_index).ok())
+                    .collect::<Option<Vec<_>>>()?;
+                context
+                    .blob_asset_value_by_property_path(&property_path)
+                    .map(Self::AssetBlob)
             }
             Self::Artboard(_) => {
                 let property_path = path[1..]
@@ -5414,7 +5455,15 @@ impl RuntimeDataBindGraphValue {
                         .font_asset_value_by_context_source_path(file, context_path, path, false)
                         .map(|value| value.file_asset_index())
                 })
+                .or_else(|| {
+                    context
+                        .blob_asset_value_by_context_source_path(file, context_path, path, false)
+                        .map(|value| value.file_asset_index())
+                })
                 .map(Self::Asset),
+            Self::AssetBlob(_) => context
+                .blob_asset_value_by_context_source_path(file, context_path, path, false)
+                .map(Self::AssetBlob),
             Self::Artboard(_) => context
                 .artboard_value_by_context_source_path(file, context_path, path, false)
                 .map(Self::Artboard),
@@ -5467,6 +5516,9 @@ impl RuntimeDataBindGraphValue {
                 RuntimeDataValue::AssetImage(value) | RuntimeDataValue::AssetFont(value) => {
                     Some(Self::Asset(value))
                 }
+                RuntimeDataValue::AssetBlob(value) => Some(Self::AssetBlob(
+                    RuntimeBlobAssetValue::from_file_asset_index(value),
+                )),
                 RuntimeDataValue::Artboard(value) => Some(Self::Artboard(value)),
                 RuntimeDataValue::ViewModel(reference) => Some(Self::ViewModel(
                     reference
@@ -5510,6 +5562,11 @@ impl RuntimeDataBindGraphValue {
             .then(|| source.uint_property("propertyValue"))
             .flatten()
             .map(Self::Asset),
+            Self::AssetBlob(_) => (source.type_name == "ViewModelInstanceAssetBlob")
+                .then(|| source.uint_property("propertyValue"))
+                .flatten()
+                .map(RuntimeBlobAssetValue::from_file_asset_index)
+                .map(Self::AssetBlob),
             Self::Artboard(_) => (source.type_name == "ViewModelInstanceArtboard")
                 .then(|| source.uint_property("propertyValue"))
                 .flatten()
@@ -8871,6 +8928,75 @@ impl RuntimeDataBindGraph {
         true
     }
 
+    pub(crate) fn set_owned_view_model_context_blob_asset_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+        data_bind_index: usize,
+        value: &RuntimeBlobAssetValue,
+    ) -> bool {
+        if self.context_kind != RuntimeDataBindGraphContextKind::OwnedViewModel {
+            return false;
+        }
+        let Some(source) = self
+            .default_view_model_bindings
+            .iter()
+            .find(|binding| binding.data_bind_index == data_bind_index)
+            .map(|binding| binding.source)
+        else {
+            return false;
+        };
+        let Some(source) = self.sources.get(source.0) else {
+            return false;
+        };
+        if !matches!(&source.default_value, RuntimeDataBindGraphValue::Asset(_)) {
+            return false;
+        }
+        let path = source.path.clone();
+        let Some(property_path) =
+            runtime_owned_view_model_property_path_from_source_path(context, &path)
+        else {
+            return false;
+        };
+        let Some(current_context_value) = context.blob_asset_value_by_property_path(&property_path)
+        else {
+            return false;
+        };
+        let context_changed = current_context_value != *value;
+        let file_asset_index = value.file_asset_index();
+        let source_changed = self.sources.iter().any(|source| {
+            source.path == path
+                && matches!(source.default_value, RuntimeDataBindGraphValue::Asset(_))
+                && (!source.bound
+                    || !matches!(&source.value, RuntimeDataBindGraphValue::Asset(current) if *current == file_asset_index))
+        });
+
+        if !source_changed && !context_changed {
+            return false;
+        }
+
+        if context_changed
+            && !context.apply_blob_asset_data_bind_value_by_property_path(&property_path, value)
+        {
+            return false;
+        }
+
+        for source in self.sources.iter_mut().filter(|source| {
+            source.path == path
+                && matches!(source.default_value, RuntimeDataBindGraphValue::Asset(_))
+        }) {
+            let changed = !source.bound
+                || !matches!(&source.value, RuntimeDataBindGraphValue::Asset(current) if *current == file_asset_index);
+            source.value = RuntimeDataBindGraphValue::Asset(file_asset_index);
+            source.bound = true;
+            if changed {
+                source.reset_formula_random_state_for_source_change();
+            }
+        }
+
+        self.mark_default_view_model_bindings_dirty();
+        true
+    }
+
     pub(crate) fn set_owned_view_model_context_artboard_source_for_data_bind(
         &mut self,
         context: &mut RuntimeOwnedViewModelInstance,
@@ -11091,7 +11217,18 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
                 .assets
                 .iter()
                 .find(|target| target.global_id == global_id)
-                .map(|target| uint_value(target.value.asset_index())),
+                .map(|target| match source_value {
+                    RuntimeDataBindGraphValue::AssetBlob(_) => {
+                        RuntimeDataBindGraphValue::AssetBlob(
+                            target.value.blob_data_bind_value().unwrap_or_else(|| {
+                                RuntimeBlobAssetValue::from_file_asset_index(
+                                    target.value.asset_index(),
+                                )
+                            }),
+                        )
+                    }
+                    _ => uint_value(target.value.asset_index()),
+                }),
             RuntimeDataBindGraphTarget::Artboard { global_id } => self
                 .artboards
                 .iter()
@@ -11240,6 +11377,18 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
                     .find(|target| target.global_id == *global_id)
                 {
                     target.set_value(*value);
+                }
+            }
+            (
+                RuntimeDataBindGraphTarget::Asset { global_id },
+                RuntimeDataBindGraphValue::AssetBlob(value),
+            ) => {
+                if let Some(target) = self
+                    .assets
+                    .iter_mut()
+                    .find(|target| target.global_id == *global_id)
+                {
+                    target.apply_blob_value(value);
                 }
             }
             (
@@ -12354,8 +12503,10 @@ mod tests {
     }
 
     #[test]
-    fn retained_string_and_font_sources_refresh_from_complete_cell_payloads() {
-        use crate::view_model_cell::{RuntimeFontAssetValue, RuntimeViewModelCell};
+    fn retained_string_and_asset_sources_refresh_from_complete_cell_payloads() {
+        use crate::view_model_cell::{
+            RuntimeBlobAssetValue, RuntimeFontAssetValue, RuntimeViewModelCell,
+        };
 
         let mut string_graph = graph_with_number_binding(0);
         string_graph.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
@@ -12403,6 +12554,35 @@ mod tests {
             value.set_live_font_bytes(Some(live_font));
             value
         })));
+
+        let mut blob_graph = graph_with_number_binding(0);
+        blob_graph.context_kind = RuntimeDataBindGraphContextKind::OwnedViewModel;
+        blob_graph.sources[0].default_value =
+            RuntimeDataBindGraphValue::AssetBlob(RuntimeBlobAssetValue::from_file_asset_index(3));
+        blob_graph.sources[0].value =
+            RuntimeDataBindGraphValue::AssetBlob(RuntimeBlobAssetValue::from_file_asset_index(3));
+        let blob_cell = RuntimeViewModelCell::new(RuntimeViewModelCellValue::AssetBlob(
+            RuntimeBlobAssetValue::from_file_asset_index(3),
+        ));
+        blob_graph.sources[0]
+            .retained_bind
+            .set_source(blob_cell.clone());
+        blob_graph.sources[0].source_to_target_dirty_after_target_to_source = false;
+        blob_graph.sources[0].source_to_target_dirty_after_immediate = false;
+        blob_graph.sources[0].reconcile_pending = false;
+        let live_blob: Arc<[u8]> = Arc::from(&b""[..]);
+        let live_value = RuntimeBlobAssetValue::from_live_bytes(Arc::clone(&live_blob));
+        assert!(blob_cell.set_value(RuntimeViewModelCellValue::AssetBlob(live_value.clone(),)));
+        assert!(blob_graph.collect_retained_source_dirt());
+        assert_eq!(
+            blob_graph.sources[0].value,
+            RuntimeDataBindGraphValue::AssetBlob(live_value.clone())
+        );
+        assert!(
+            blob_cell
+                .value()
+                .eq(&RuntimeViewModelCellValue::AssetBlob(live_value,))
+        );
     }
 
     fn graph_with_trigger_binding(path: &[u32]) -> RuntimeDataBindGraph {

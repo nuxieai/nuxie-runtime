@@ -57,6 +57,7 @@ pub enum RuntimeDataType {
     AssetImage = 11,
     Artboard = 12,
     AssetFont = 13,
+    AssetBlob = 14,
     Input = 99,
     Any = 100,
 }
@@ -4563,6 +4564,24 @@ impl RuntimeFile {
         value.uint_property("propertyValue")
     }
 
+    pub fn view_model_instance_blob_asset_index(&self, value_id: usize) -> Option<u64> {
+        let value = self.object(value_id)?;
+        self.view_model_instance_blob_asset_index_for_object(value)
+    }
+
+    pub fn view_model_instance_blob_asset_index_for_object(
+        &self,
+        value: &RuntimeObject,
+    ) -> Option<u64> {
+        if self.view_model_instance_value_data_type_for_object(value)
+            != Some(RuntimeDataType::AssetBlob)
+        {
+            return None;
+        }
+
+        value.uint_property("propertyValue")
+    }
+
     pub fn view_model_instance_artboard_index(&self, value_id: usize) -> Option<u64> {
         let value = self.object(value_id)?;
         self.view_model_instance_artboard_index_for_object(value)
@@ -4634,6 +4653,9 @@ impl RuntimeFile {
                 value.uint_property("propertyValue")?,
             )),
             RuntimeDataType::AssetFont => Some(RuntimeDataValue::AssetFont(
+                value.uint_property("propertyValue")?,
+            )),
+            RuntimeDataType::AssetBlob => Some(RuntimeDataValue::AssetBlob(
                 value.uint_property("propertyValue")?,
             )),
             RuntimeDataType::Artboard => Some(RuntimeDataValue::Artboard(
@@ -6414,6 +6436,7 @@ pub enum RuntimeDataValue<'a> {
     SymbolListIndex(u64),
     AssetImage(u64),
     AssetFont(u64),
+    AssetBlob(u64),
     Artboard(u64),
     ViewModel(Option<RuntimeViewModelInstanceReference<'a>>),
 }
@@ -6432,6 +6455,7 @@ impl RuntimeDataValue<'_> {
             Self::SymbolListIndex(_) => RuntimeDataType::SymbolListIndex,
             Self::AssetImage(_) => RuntimeDataType::AssetImage,
             Self::AssetFont(_) => RuntimeDataType::AssetFont,
+            Self::AssetBlob(_) => RuntimeDataType::AssetBlob,
             Self::Artboard(_) => RuntimeDataType::Artboard,
             Self::ViewModel(_) => RuntimeDataType::ViewModel,
         }
@@ -6456,6 +6480,7 @@ pub enum RuntimeConvertedDataValue<'a> {
     SymbolListIndex(u64),
     AssetImage(u64),
     AssetFont(u64),
+    AssetBlob(u64),
     Artboard(u64),
     ViewModel(Option<RuntimeViewModelInstanceReference<'a>>),
 }
@@ -6857,6 +6882,7 @@ impl<'a> From<&RuntimeDataValue<'a>> for RuntimeConvertedDataValue<'a> {
             RuntimeDataValue::SymbolListIndex(value) => Self::SymbolListIndex(*value),
             RuntimeDataValue::AssetImage(value) => Self::AssetImage(*value),
             RuntimeDataValue::AssetFont(value) => Self::AssetFont(*value),
+            RuntimeDataValue::AssetBlob(value) => Self::AssetBlob(*value),
             RuntimeDataValue::Artboard(value) => Self::Artboard(*value),
             RuntimeDataValue::ViewModel(value) => Self::ViewModel(value.clone()),
         }
@@ -6878,6 +6904,7 @@ impl RuntimeConvertedDataValue<'_> {
             Self::SymbolListIndex(_) => RuntimeDataType::SymbolListIndex,
             Self::AssetImage(_) => RuntimeDataType::AssetImage,
             Self::AssetFont(_) => RuntimeDataType::AssetFont,
+            Self::AssetBlob(_) => RuntimeDataType::AssetBlob,
             Self::Artboard(_) => RuntimeDataType::Artboard,
             Self::ViewModel(_) => RuntimeDataType::ViewModel,
         }
@@ -6897,6 +6924,7 @@ impl RuntimeConvertedDataValue<'_> {
             | Self::Trigger(value)
             | Self::AssetImage(value)
             | Self::AssetFont(value)
+            | Self::AssetBlob(value)
             | Self::Artboard(value) => Some(*value as u32),
             _ => None,
         }
@@ -8353,6 +8381,7 @@ fn cpp_data_bind_context_value_type(output_type: RuntimeDataType) -> Option<Runt
         | RuntimeDataType::SymbolListIndex
         | RuntimeDataType::AssetImage
         | RuntimeDataType::AssetFont
+        | RuntimeDataType::AssetBlob
         | RuntimeDataType::Artboard
         | RuntimeDataType::ViewModel
         | RuntimeDataType::Any => Some(output_type),
@@ -9956,6 +9985,7 @@ fn cpp_view_model_instance_value_data_type(type_name: &str) -> RuntimeDataType {
         "ViewModelInstanceSymbolListIndex" => RuntimeDataType::SymbolListIndex,
         "ViewModelInstanceAssetImage" => RuntimeDataType::AssetImage,
         "ViewModelInstanceAssetFont" => RuntimeDataType::AssetFont,
+        "ViewModelInstanceAssetBlob" => RuntimeDataType::AssetBlob,
         "ViewModelInstanceArtboard" => RuntimeDataType::Artboard,
         _ => RuntimeDataType::None,
     }
@@ -9976,6 +10006,7 @@ fn cpp_view_model_property_instance_type_key(type_name: &str) -> Option<u16> {
         "ViewModelPropertySymbolListIndex" => "ViewModelInstanceSymbolListIndex",
         "ViewModelPropertyAssetImage" => "ViewModelInstanceAssetImage",
         "ViewModelPropertyAssetFont" => "ViewModelInstanceAssetFont",
+        "ViewModelPropertyAssetBlob" => "ViewModelInstanceAssetBlob",
         "ViewModelPropertyArtboard" => "ViewModelInstanceArtboard",
         _ => return None,
     };

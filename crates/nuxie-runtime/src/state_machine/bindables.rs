@@ -7,7 +7,7 @@ use crate::data_bind_graph::{
     runtime_data_bind_graph_group_operation_formula_accepts_non_number_source,
 };
 use crate::properties::property_key_for_name;
-use crate::view_model::RuntimeFontAssetValue;
+use crate::view_model::{RuntimeBlobAssetValue, RuntimeFontAssetValue};
 use crate::{RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue, RuntimeViewModelPointer};
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 use std::collections::BTreeMap;
@@ -113,13 +113,13 @@ pub(crate) struct RuntimeBindableAssetDefaultViewModelSource {
 
 /// The value retained by C++ `BindablePropertyAsset`.
 ///
-/// `asset_index` is the generated `propertyValue`. `font_value` models the
-/// separate private `FontAsset`: `Some` identifies a font binding and retains
-/// its live Font payload even when `propertyValue` is unchanged.
+/// `asset_index` is the generated `propertyValue`. The optional typed values
+/// model the separate private Font/Blob assets retained by C++.
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeBindableAssetValue {
     asset_index: u64,
     font_value: Option<RuntimeFontAssetValue>,
+    blob_value: Option<RuntimeBlobAssetValue>,
 }
 
 impl RuntimeBindableAssetValue {
@@ -127,6 +127,7 @@ impl RuntimeBindableAssetValue {
         Self {
             asset_index,
             font_value: None,
+            blob_value: None,
         }
     }
 
@@ -134,6 +135,15 @@ impl RuntimeBindableAssetValue {
         Self {
             asset_index: font_value.file_asset_index(),
             font_value: Some(font_value),
+            blob_value: None,
+        }
+    }
+
+    pub(crate) fn from_blob_value(blob_value: RuntimeBlobAssetValue) -> Self {
+        Self {
+            asset_index: blob_value.file_asset_index(),
+            font_value: None,
+            blob_value: Some(blob_value),
         }
     }
 
@@ -145,11 +155,21 @@ impl RuntimeBindableAssetValue {
         self.font_value.as_ref()
     }
 
+    pub(crate) fn blob_value(&self) -> Option<&RuntimeBlobAssetValue> {
+        self.blob_value.as_ref()
+    }
+
     pub(crate) fn data_bind_asset_index(&self) -> u64 {
         self.font_value
             .as_ref()
             .filter(|font_value| font_value.live_font_bytes_arc().is_some())
             .map(RuntimeFontAssetValue::file_asset_index)
+            .or_else(|| {
+                self.blob_value
+                    .as_ref()
+                    .filter(|blob_value| blob_value.live_blob_bytes_arc().is_some())
+                    .map(RuntimeBlobAssetValue::file_asset_index)
+            })
             .unwrap_or(self.asset_index)
     }
 
@@ -164,9 +184,28 @@ impl RuntimeBindableAssetValue {
         }
     }
 
+    pub(crate) fn blob_data_bind_value(&self) -> Option<RuntimeBlobAssetValue> {
+        let blob_value = self.blob_value.as_ref()?;
+        if blob_value.live_blob_bytes_arc().is_some() {
+            Some(blob_value.clone())
+        } else {
+            Some(RuntimeBlobAssetValue::from_file_asset_index(
+                self.asset_index,
+            ))
+        }
+    }
+
     pub(crate) fn mark_as_font(&mut self) {
         if self.font_value.is_none() {
             self.font_value = Some(RuntimeFontAssetValue::from_file_asset_index(
+                self.asset_index,
+            ));
+        }
+    }
+
+    pub(crate) fn mark_as_blob(&mut self) {
+        if self.blob_value.is_none() {
+            self.blob_value = Some(RuntimeBlobAssetValue::from_file_asset_index(
                 self.asset_index,
             ));
         }
@@ -185,6 +224,19 @@ impl RuntimeBindableAssetValue {
             Some(current) => changed |= current.apply_data_bind_value(font_value),
             None => {
                 self.font_value = Some(font_value.clone());
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    pub(crate) fn apply_blob_value(&mut self, blob_value: &RuntimeBlobAssetValue) -> bool {
+        let mut changed = self.asset_index != blob_value.file_asset_index();
+        self.asset_index = blob_value.file_asset_index();
+        match self.blob_value.as_mut() {
+            Some(current) => changed |= current.apply_data_bind_value(blob_value),
+            None => {
+                self.blob_value = Some(blob_value.clone());
                 changed = true;
             }
         }
@@ -512,6 +564,10 @@ impl StateMachineBindableAssetInstance {
 
     pub(crate) fn apply_font_value(&mut self, value: &RuntimeFontAssetValue) -> bool {
         self.value.apply_font_value(value)
+    }
+
+    pub(crate) fn apply_blob_value(&mut self, value: &RuntimeBlobAssetValue) -> bool {
+        self.value.apply_blob_value(value)
     }
 }
 
@@ -1457,6 +1513,9 @@ pub(crate) fn runtime_bindable_assets(
                 if source.value.font_value().is_some() {
                     bindable_asset.value.mark_as_font();
                 }
+                if source.value.blob_value().is_some() {
+                    bindable_asset.value.mark_as_blob();
+                }
                 bindable_asset.default_view_model_sources.push(source)
             });
         }
@@ -1487,6 +1546,9 @@ fn runtime_bindable_asset_default_view_model_source(
             "ViewModelInstanceAssetFont" => RuntimeBindableAssetValue::from_font_value(
                 RuntimeFontAssetValue::from_file_asset_index(asset_index),
             ),
+            "ViewModelInstanceAssetBlob" => RuntimeBindableAssetValue::from_blob_value(
+                RuntimeBlobAssetValue::from_file_asset_index(asset_index),
+            ),
             _ => return None,
         }
     } else {
@@ -1501,6 +1563,9 @@ fn runtime_bindable_asset_default_view_model_source(
             }
             "ViewModelPropertyAssetFont" => RuntimeBindableAssetValue::from_font_value(
                 RuntimeFontAssetValue::from_file_asset_index(asset_index),
+            ),
+            "ViewModelPropertyAssetBlob" => RuntimeBindableAssetValue::from_blob_value(
+                RuntimeBlobAssetValue::from_file_asset_index(asset_index),
             ),
             _ => return None,
         }
@@ -2212,5 +2277,44 @@ mod tests {
             .expect("font bindable has a font channel");
         assert_eq!(copied_file.file_asset_index(), 5);
         assert_eq!(copied_file.live_font_bytes(), None);
+    }
+
+    #[test]
+    fn bindable_blob_retains_live_empty_payload_and_replaces_it_for_id_binds() {
+        let live: Arc<[u8]> = Arc::from(&b""[..]);
+        let mut bindable = RuntimeBindableAssetValue::from_blob_value(
+            RuntimeBlobAssetValue::from_live_bytes(Arc::clone(&live)),
+        );
+
+        assert!(bindable.set_asset_index(3));
+        assert_eq!(bindable.asset_index(), 3);
+        assert!(
+            bindable
+                .blob_value()
+                .and_then(RuntimeBlobAssetValue::live_blob_bytes_arc)
+                .is_some_and(|value| Arc::ptr_eq(&value, &live)),
+            "a generated propertyValue write preserves BindablePropertyAsset::blobValue"
+        );
+        assert_eq!(
+            bindable.data_bind_asset_index(),
+            RuntimeBlobAssetValue::MISSING_FILE_ASSET_INDEX,
+            "a live Blob wins over the independent generated propertyValue"
+        );
+
+        let file_blob = RuntimeBlobAssetValue::from_file_asset_index(1);
+        assert!(bindable.apply_blob_value(&file_blob));
+        assert_eq!(bindable.asset_index(), 1);
+        assert_eq!(
+            bindable
+                .blob_value()
+                .and_then(RuntimeBlobAssetValue::live_blob_bytes),
+            None
+        );
+        assert!(bindable.set_asset_index(5));
+        let copied_file = bindable
+            .blob_data_bind_value()
+            .expect("blob bindable has a blob channel");
+        assert_eq!(copied_file.file_asset_index(), 5);
+        assert_eq!(copied_file.live_blob_bytes(), None);
     }
 }

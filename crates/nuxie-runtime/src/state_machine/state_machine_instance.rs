@@ -23,7 +23,9 @@ use crate::listener_group::{ListenerGroup, ListenerGroupKind, select_listener_ac
 use crate::properties::property_key_for_name;
 use crate::script_asset::RuntimeScriptImplementedMethods;
 use crate::scripting::RuntimeScriptInstanceHandle;
-use crate::view_model::{RuntimeFontAssetValue, RuntimeOwnedViewModelAdvanceContext};
+use crate::view_model::{
+    RuntimeBlobAssetValue, RuntimeFontAssetValue, RuntimeOwnedViewModelAdvanceContext,
+};
 use crate::view_model_cell::{
     RuntimeCellDirt, RuntimeCellDirtSink, RuntimeCellNotificationQueue,
     RuntimeFileViewModelInstanceCatalog, RuntimeViewModelCell, RuntimeViewModelCellValue,
@@ -1953,13 +1955,30 @@ impl RuntimeStateMachineListenerActionExecutor<'_> {
                     data_bind_index,
                     *value,
                 ),
-            RuntimeListenerViewModelChangeValue::Asset(value) => self
-                .data_bind_graph
-                .set_owned_view_model_context_asset_source_for_data_bind(
-                    context,
-                    data_bind_index,
-                    value.data_bind_asset_index(),
-                ),
+            RuntimeListenerViewModelChangeValue::Asset(value) => {
+                if let Some(blob_value) = value.blob_data_bind_value() {
+                    self.data_bind_graph
+                        .set_owned_view_model_context_blob_asset_source_for_data_bind(
+                            context,
+                            data_bind_index,
+                            &blob_value,
+                        )
+                } else if let Some(font_value) = value.font_data_bind_value() {
+                    self.data_bind_graph
+                        .set_owned_view_model_context_font_asset_source_for_data_bind(
+                            context,
+                            data_bind_index,
+                            &font_value,
+                        )
+                } else {
+                    self.data_bind_graph
+                        .set_owned_view_model_context_asset_source_for_data_bind(
+                            context,
+                            data_bind_index,
+                            value.data_bind_asset_index(),
+                        )
+                }
+            }
             RuntimeListenerViewModelChangeValue::Artboard(value) => self
                 .data_bind_graph
                 .set_owned_view_model_context_artboard_source_for_data_bind(
@@ -8042,20 +8061,27 @@ impl StateMachineInstance {
                     .listener_asset_value_for_data_bind(data_bind_index, value)
                     .clone();
                 let font_value = value.font_data_bind_value();
-                match (owned_context, font_value.as_ref()) {
-                    (Some(context), Some(font_value)) => self
+                let blob_value = value.blob_data_bind_value();
+                match (owned_context, font_value.as_ref(), blob_value.as_ref()) {
+                    (Some(context), Some(font_value), _) => self
                         .set_owned_view_model_context_font_asset_source_for_data_bind(
                             context,
                             data_bind_index,
                             font_value,
                         ),
-                    (Some(context), None) => self
+                    (Some(context), _, Some(blob_value)) => self
+                        .set_owned_view_model_context_blob_asset_source_for_data_bind(
+                            context,
+                            data_bind_index,
+                            blob_value,
+                        ),
+                    (Some(context), None, None) => self
                         .set_owned_view_model_context_asset_source_for_data_bind(
                             context,
                             data_bind_index,
                             value.asset_index(),
                         ),
-                    (None, _) => self.set_default_view_model_asset_source_for_data_bind(
+                    (None, _, _) => self.set_default_view_model_asset_source_for_data_bind(
                         data_bind_index,
                         value.data_bind_asset_index(),
                     ),
@@ -8200,6 +8226,20 @@ impl StateMachineInstance {
         // carries the generated propertyValue index.
         self.sync_bindable_font_assets_from_owned_context(context);
         true
+    }
+
+    fn set_owned_view_model_context_blob_asset_source_for_data_bind(
+        &mut self,
+        context: &mut RuntimeOwnedViewModelInstance,
+        data_bind_index: usize,
+        value: &RuntimeBlobAssetValue,
+    ) -> bool {
+        self.data_bind_graph
+            .set_owned_view_model_context_blob_asset_source_for_data_bind(
+                context,
+                data_bind_index,
+                value,
+            )
     }
 
     pub fn set_bindable_number_for_data_bind(
@@ -11378,6 +11418,18 @@ impl StateMachineInstance {
                     return Some(context.apply_font_asset_data_bind_value_by_property_path(
                         property_path,
                         &font_value,
+                    ));
+                }
+                if context
+                    .blob_asset_value_by_property_path(property_path)
+                    .is_some()
+                {
+                    let blob_value = asset_value.blob_data_bind_value().unwrap_or_else(|| {
+                        RuntimeBlobAssetValue::from_file_asset_index(asset_value.asset_index())
+                    });
+                    return Some(context.apply_blob_asset_data_bind_value_by_property_path(
+                        property_path,
+                        &blob_value,
                     ));
                 }
                 context.asset_value_by_property_path(property_path)?;

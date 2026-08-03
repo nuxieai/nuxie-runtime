@@ -36,6 +36,8 @@ assets=(
   "sync/stack_participant.riv|4eb82cadc6fcefa1c33f33e68c16fda1ea1ee1b1b3fa6a95acb6a1849e8e8194|3de78b0d61202b67805af012dfe69a4894b62f92|layout/stack_participant.riv"
   "sync/styled_flex.riv|cdafcd4b12649afb379b7eccbb6f287723d9ad30c1123347f075a2fd62969671|3de78b0d61202b67805af012dfe69a4894b62f92|layout/styled_flex.riv"
   "sync/layout_grid_stack.riv|21275c1cb9946e1c93ba3b5063e003db0b5f3e647f60359c8b14ae2b2ed9d6d3|3de78b0d61202b67805af012dfe69a4894b62f92|layout_grid_stack.riv"
+  "sync/data_bind_blob_test.riv|46b47578e6dd6e70ecffac35449498275fd2ee8773efbc5cb04d22cad5fb7e58|36aabf60d771a91a6e32b453409add2b5831b3c5"
+  "sync/data_enum_roundtrip.rml|edceb37578a7684ba3816db43ab12bd73ee75a4a911b5ee1ee32db534d22fd24|36aabf60d771a91a6e32b453409add2b5831b3c5"
 )
 
 sha256() {
@@ -68,11 +70,29 @@ for entry in "${assets[@]}"; do
     exit 1
   fi
 
-  for target in fuzz_import fuzz_runtime fuzz_pointer; do
-    seed_dir="$repo_root/fuzz/seeds/$target"
-    mkdir -p "$seed_dir"
-    cp "$destination" "$seed_dir/$name"
-  done
+  # Keep S4-42's as-yet-unpinned assets out of the active fuzz seed sets.
+  if [[ "$relative" != "sync/data_bind_blob_test.riv" && "$relative" != "sync/data_enum_roundtrip.rml" ]]; then
+    for target in fuzz_import fuzz_runtime fuzz_pointer; do
+      seed_dir="$repo_root/fuzz/seeds/$target"
+      mkdir -p "$seed_dir"
+      cp "$destination" "$seed_dir/$name"
+    done
+  fi
 done
+
+silver_destination="$repo_root/fixtures/sync/data_bind_blob_test.sriv"
+silver_expected="e3fc7bfbb227bd57c77c63589607616e81f7c7223239eb0d56efebf1d90ce079"
+if [[ -n "$runtime_dir" && -f "$runtime_dir/tests/unit_tests/silvers/data_bind_blob_test.sriv" ]]; then
+  cp "$runtime_dir/tests/unit_tests/silvers/data_bind_blob_test.sriv" "$silver_destination"
+elif [[ ! -f "$silver_destination" || "$(sha256 "$silver_destination")" != "$silver_expected" ]]; then
+  curl --fail --location --silent --show-error \
+    "$base_url/36aabf60d771a91a6e32b453409add2b5831b3c5/tests/unit_tests/silvers/data_bind_blob_test.sriv" \
+    --output "$silver_destination"
+fi
+silver_actual=$(sha256 "$silver_destination")
+if [[ "$silver_actual" != "$silver_expected" ]]; then
+  echo "fixture checksum mismatch: sync/data_bind_blob_test.sriv (expected $silver_expected, got $silver_actual)" >&2
+  exit 1
+fi
 
 echo "test assets ready (rive-runtime@$ref)"

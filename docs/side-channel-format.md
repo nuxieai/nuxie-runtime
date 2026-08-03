@@ -19,6 +19,15 @@ positions defined here. `golden-compare --side-channel` passes the flag to
 BOTH runners; enabling it for only one side must fail every segment (the
 stub-baseline check). `--side-channel` is rejected in `--benchmark` mode.
 
+Semantic fixture differentials may additionally pass
+`--semantic-default-view-model`. This selector is valid only with
+`--side-channel` and makes both runners create and bind the artboard's authored
+default view-model instance before constructing/draining the semantic tree.
+It mirrors the setup used by the pinned semantic runtime tests; without it,
+the runners retain the ordinary golden-runner behavior of binding a fresh
+view-model instance. The selector adds no stream line of its own: its effects
+must appear in the complete semantic diff and subsequent action/focus diffs.
+
 ## Oracle contract
 
 Every value records what the **pinned C++ embedder surface** returns
@@ -196,6 +205,9 @@ gains `side-channel-segments=<n>`: equal to `exact-segments` when the flag is
 on, `0` when off. `make golden-compare` and `make scripted-golden-compare`
 run with the flag ON; the corpus-wide gate is 317/317 entries with the
 channel enabled, or each divergence localized and filed as a register row.
+Corpus entries set `semantic_default_view_model = true` when they need the
+pinned semantic-test fixture setup; the comparator forwards
+`--semantic-default-view-model` to both runners only for those entries.
 
 ## Sampling caveat (register V2)
 

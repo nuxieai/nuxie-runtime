@@ -32,6 +32,8 @@ use nuxie_runtime::{
 };
 
 pub mod flow_session;
+pub mod command_queue;
+pub mod command_server;
 mod raw_text;
 mod scene;
 #[cfg(feature = "scripting")]

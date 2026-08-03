@@ -1065,7 +1065,21 @@ def validate_file_rows(
 
         manifest = manifest_files.get(path, {})
         mapped = set(manifest_rust_modules(manifest))
-        if mapped and mapped != set(rust_modules):
+        correspondence_scope = str(
+            row.get("correspondence_scope", "whole-file")
+        )
+        if correspondence_scope not in {"whole-file", "verified-fragment"}:
+            errors.append(
+                f"file {path} has invalid correspondence_scope "
+                f"{correspondence_scope!r}"
+            )
+        verified_fragment = correspondence_scope == "verified-fragment"
+        if verified_fragment and not set(rust_modules) < mapped:
+            errors.append(
+                f"file {path} verified fragment must map to a strict subset of "
+                "the whole-file correspondence modules"
+            )
+        elif not verified_fragment and mapped and mapped != set(rust_modules):
             errors.append(
                 f"file {path} maps to {sorted(rust_modules)}, "
                 f"but file correspondence maps it to {sorted(mapped)}"
@@ -1084,7 +1098,21 @@ def validate_file_rows(
 
         verification = str(manifest.get("verification", ""))
         manifest_status = str(manifest.get("status", ""))
-        if status in CLOSED_STATUSES:
+        if verified_fragment:
+            if status != "faithful":
+                errors.append(
+                    f"file {path} verified fragment must be faithful, got "
+                    f"{status!r}"
+                )
+            if (
+                manifest_status != "pending"
+                or verification != "pending-verification"
+            ):
+                errors.append(
+                    f"file {path} verified fragment requires pending whole-file "
+                    "correspondence"
+                )
+        elif status in CLOSED_STATUSES:
             verification_is_accepted = verification == "orchestrator-verified" or (
                 path in pending_verification_paths
                 and verification == "pending-verification"

@@ -727,15 +727,15 @@ note = "Consolidated Rust port for bones."
 
 [[file]]
 upstream = "src/command_queue.cpp"
-status = "absent"
-rust_module = ""
-note = "F3: command queue is absent."
+status = "partial"
+rust_module = "crates/nuxie/src/command_queue.rs"
+note = "P3F: typed queued transport, callbacks, resources, view models, draw coalescing, and lifecycle commands are present; semantics and unexecuted fixture-specific parity rows remain pending."
 
 [[file]]
 upstream = "src/command_server.cpp"
-status = "absent"
-rust_module = ""
-note = "F3: command server is absent."
+status = "partial"
+rust_module = "crates/nuxie/src/command_server.rs"
+note = "P3F: the server-thread owner, handle maps, command loop, dependency cleanup, callbacks, draw scheduling, and resource/list/view-model structure are present; full 79-case promotion awaits remaining evidence and F6."
 
 [[file]]
 upstream = "src/component.cpp"

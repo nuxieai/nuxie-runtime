@@ -149,6 +149,22 @@ fn authored_lua_gpu_ceiling_fixture_keeps_external_identity_across_submissions()
 }
 
 #[test]
+fn authored_lua_gpu_ceiling_fixture_rejects_an_orphan_before_a_finished_pass() {
+    let mut program =
+        GpuCanvasProgram::compile(LUA_GPU_CEILINGS).expect("GPU ceiling fixture compiles");
+    for step in 0..4 {
+        program
+            .advance(0.0)
+            .unwrap_or_else(|error| panic!("advance {step} selects orphan lifecycle: {error}"));
+    }
+
+    let error = program
+        .draw()
+        .expect_err("a later finished pass must not hide an earlier orphan");
+    assert!(error.to_string().contains("left open"), "{error}");
+}
+
+#[test]
 fn authored_lua_gpu_semantic_combinations_retain_exact_pass_structure() {
     let mut program = GpuCanvasProgram::compile(LUA_GPU_SEMANTIC_COMBINATIONS)
         .expect("semantic combinations fixture compiles");

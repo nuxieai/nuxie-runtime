@@ -612,7 +612,8 @@ pub use gpu_canvas::{
     GpuCanvasDepthStencilAttachment, GpuCanvasDepthStencilState, GpuCanvasDrawCommand,
     GpuCanvasIndexBuffer, GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelinePlan,
     GpuCanvasPipelineState, GpuCanvasRenderPass, GpuCanvasRenderPlan, GpuCanvasSamplerBinding,
-    GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload, GpuCanvasUniformBuffer,
+    GpuCanvasResourceLifetime, GpuCanvasStencilFace, GpuCanvasTextureBinding,
+    GpuCanvasTextureUpload, GpuCanvasUniformBuffer,
     GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 #[cfg(any(target_os = "ios", target_os = "macos"))]

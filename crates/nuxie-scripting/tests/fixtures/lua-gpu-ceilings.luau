@@ -80,7 +80,7 @@ return function(context)
                     loadOp = "clear", storeOp = "store", clearColor = { 1, 0, 0, 1 },
                 } } }
                 seed:finish()
-            else
+            elseif mode == 4 then
                 local sample = canvas:beginRenderPass { color = { {
                     loadOp = "clear", storeOp = "store", clearColor = { 0, 0, 0, 1 },
                 } } }
@@ -88,6 +88,14 @@ return function(context)
                 sample:setBindGroup(0, externalGroup)
                 sample:draw(3)
                 sample:finish()
+            else
+                canvas:beginRenderPass { color = { {
+                    loadOp = "clear", storeOp = "store", clearColor = { 0, 0, 1, 1 },
+                } } }
+                local completed = canvas:beginRenderPass { color = { {
+                    loadOp = "clear", storeOp = "store", clearColor = { 0, 1, 0, 1 },
+                } } }
+                completed:finish()
             end
         end,
     }

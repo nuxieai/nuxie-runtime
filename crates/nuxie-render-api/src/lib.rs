@@ -1075,12 +1075,42 @@ pub struct GpuCanvasTextureUpload {
     pub rows_per_image: u32,
 }
 
+/// Cloneable occurrence token that ties a backend texture sidecar to the Lua
+/// `GPUTexture` that owns it.
+#[derive(Clone, Default)]
+pub struct GpuCanvasResourceLifetime(Arc<()>);
+
+impl GpuCanvasResourceLifetime {
+    pub fn new() -> Self {
+        Self(Arc::new(()))
+    }
+
+    pub fn downgrade(&self) -> std::sync::Weak<()> {
+        Arc::downgrade(&self.0)
+    }
+}
+
+impl std::fmt::Debug for GpuCanvasResourceLifetime {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("GpuCanvasResourceLifetime(..)")
+    }
+}
+
+impl PartialEq for GpuCanvasResourceLifetime {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for GpuCanvasResourceLifetime {}
+
 /// One sampled texture view bound by an authored GPU-canvas pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GpuCanvasTextureBinding {
     /// Stable identity of the authored `GPUTexture` occurrence. Attachment
     /// and sampled views with the same id must resolve to one backend texture.
     pub resource_id: u64,
+    pub lifetime: GpuCanvasResourceLifetime,
     pub group: u32,
     pub binding: u32,
     pub width: u32,

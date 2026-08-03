@@ -24,9 +24,9 @@ pub use nuxie_render_api::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
     GpuCanvasDepthStencilAttachment, GpuCanvasDepthStencilState, GpuCanvasDrawCommand,
     GpuCanvasIndexBuffer, GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelinePlan,
-    GpuCanvasPipelineState, GpuCanvasRenderPass, GpuCanvasSamplerBinding, GpuCanvasStencilFace,
-    GpuCanvasTextureBinding, GpuCanvasTextureUpload, GpuCanvasUniformBuffer,
-    GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+    GpuCanvasPipelineState, GpuCanvasRenderPass, GpuCanvasResourceLifetime,
+    GpuCanvasSamplerBinding, GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload,
+    GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 
 use crate::shader_asset::ShaderAsset;
@@ -150,6 +150,7 @@ impl UserData for GpuBuffer {
 #[derive(Debug, Clone)]
 struct GpuTexture {
     resource_id: u64,
+    lifetime: GpuCanvasResourceLifetime,
     width: u32,
     height: u32,
     depth_or_array_layers: u32,
@@ -187,6 +188,7 @@ impl GpuTextureView {
             .ok_or_else(|| Error::runtime("the GPU canvas presentation view cannot be sampled"))?;
         Ok(GpuCanvasTextureBinding {
             resource_id: texture.resource_id,
+            lifetime: texture.lifetime.clone(),
             group,
             binding,
             width: texture.width,
@@ -636,6 +638,7 @@ struct CompletedGpuCanvasPipeline {
 struct GpuCanvasState {
     width: u32,
     height: u32,
+    unfinished_passes: usize,
     completed: Option<CompletedGpuCanvasPass>,
     image: Option<Box<dyn RenderImage>>,
 }
@@ -646,6 +649,7 @@ impl std::fmt::Debug for GpuCanvasState {
             .debug_struct("GpuCanvasState")
             .field("width", &self.width)
             .field("height", &self.height)
+            .field("unfinished_passes", &self.unfinished_passes)
             .field("completed", &self.completed)
             .field("has_image", &self.image.is_some())
             .finish()
@@ -818,6 +822,13 @@ impl UserData for GpuCanvas {
                 return Err(Error::runtime(
                     "GPU render pass requires at least one color or depth/stencil attachment",
                 ));
+            }
+            {
+                let mut state = this.state.borrow_mut();
+                state.unfinished_passes = state
+                    .unfinished_passes
+                    .checked_add(1)
+                    .ok_or_else(|| Error::runtime("GPU render-pass count overflow"))?;
             }
             lua.create_userdata(GpuRenderPass {
                 state: Rc::clone(&this.state),
@@ -1032,9 +1043,16 @@ impl ImportedGpuCanvasInstance {
             let mut state = self.state.borrow_mut();
             state.completed = None;
             state.image = None;
+            state.unfinished_passes = 0;
         }
         self.renderer_bindings.verify_render_context(factory)?;
         function.call::<()>((table.clone(),))?;
+        if self.state.borrow().unfinished_passes != 0 {
+            self.state.borrow_mut().completed = None;
+            return Err(Error::runtime(
+                "GPU render pass left open at script return; call finish() on every pass",
+            ));
+        }
         let completed =
             self.state.borrow_mut().completed.take().ok_or_else(|| {
                 Error::runtime("gpu-canvas drawCanvas did not finish a render pass")
@@ -1430,6 +1448,7 @@ impl UserData for GpuRenderPass {
                         },
                     });
                 }
+                state.unfinished_passes = state.unfinished_passes.saturating_sub(1);
                 this.finished = true;
                 return Ok(());
             }
@@ -1696,6 +1715,7 @@ impl UserData for GpuRenderPass {
                     plan,
                 });
             }
+            state.unfinished_passes = state.unfinished_passes.saturating_sub(1);
             this.finished = true;
             Ok(())
         });
@@ -1892,7 +1912,11 @@ impl GpuCanvasProgram {
 
     /// Execute `drawCanvas` and return the exact Rust-owned completed pass.
     pub fn draw(&mut self) -> Result<GpuCanvasDrawPlan> {
-        self.state.borrow_mut().completed = None;
+        {
+            let mut state = self.state.borrow_mut();
+            state.completed = None;
+            state.unfinished_passes = 0;
+        }
         let method: Value = self.instance.get("drawCanvas")?;
         let Value::Function(method) = method else {
             return Err(Error::runtime(
@@ -1901,6 +1925,12 @@ impl GpuCanvasProgram {
         };
         self.execution_budget.set(MAX_LUAU_INTERRUPTS_PER_CALL);
         method.call::<()>((self.instance.clone(),))?;
+        if self.state.borrow().unfinished_passes != 0 {
+            self.state.borrow_mut().completed = None;
+            return Err(Error::runtime(
+                "GPU render pass left open at script return; call finish() on every pass",
+            ));
+        }
         self.state
             .borrow_mut()
             .completed
@@ -2154,6 +2184,7 @@ fn install_gpu_canvas_globals_with_budget(
         }
         lua.create_userdata(GpuTexture {
             resource_id: NEXT_GPU_TEXTURE_RESOURCE_ID.fetch_add(1, Ordering::Relaxed),
+            lifetime: GpuCanvasResourceLifetime::new(),
             width,
             height,
             depth_or_array_layers,

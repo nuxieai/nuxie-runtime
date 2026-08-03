@@ -12,9 +12,9 @@ pub use nuxie_render_api::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
     GpuCanvasDepthStencilAttachment, GpuCanvasDepthStencilState, GpuCanvasDrawCommand,
     GpuCanvasIndexBuffer, GpuCanvasIndexedDraw, GpuCanvasPassState, GpuCanvasPipelinePlan,
-    GpuCanvasPipelineState, GpuCanvasRenderPass, GpuCanvasSamplerBinding, GpuCanvasStencilFace,
-    GpuCanvasTextureBinding, GpuCanvasTextureUpload, GpuCanvasUniformBuffer,
-    GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
+    GpuCanvasPipelineState, GpuCanvasRenderPass, GpuCanvasResourceLifetime,
+    GpuCanvasSamplerBinding, GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload,
+    GpuCanvasUniformBuffer, GpuCanvasVertexAttribute, GpuCanvasVertexBuffer, GpuCanvasVertexLayout,
 };
 use nuxie_render_api::{
     GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShader, GpuCanvasShaderEntry,
@@ -232,6 +232,35 @@ struct ImportedTextureBindingKey {
     array_layer_count: u32,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ImportedTextureResourceDescriptor {
+    resource_id: u64,
+    width: u32,
+    height: u32,
+    depth_or_array_layers: u32,
+    format: String,
+    texture_type: String,
+    render_target: bool,
+    sample_count: u32,
+    mip_level_count: u32,
+}
+
+impl From<&GpuCanvasTextureBinding> for ImportedTextureResourceDescriptor {
+    fn from(texture: &GpuCanvasTextureBinding) -> Self {
+        Self {
+            resource_id: texture.resource_id,
+            width: texture.width,
+            height: texture.height,
+            depth_or_array_layers: texture.depth_or_array_layers,
+            format: texture.format.clone(),
+            texture_type: texture.texture_type.clone(),
+            render_target: texture.render_target,
+            sample_count: texture.sample_count,
+            mip_level_count: texture.mip_level_count,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct ImportedAttachmentViewKey {
     resource_id: u64,
@@ -257,6 +286,7 @@ impl ImportedAttachmentViewKey {
 
 fn same_texture_resource(left: &GpuCanvasTextureBinding, right: &GpuCanvasTextureBinding) -> bool {
     left.resource_id == right.resource_id
+        && left.lifetime == right.lifetime
         && left.width == right.width
         && left.height == right.height
         && left.depth_or_array_layers == right.depth_or_array_layers
@@ -273,6 +303,7 @@ fn same_texture_descriptor(
     right: &GpuCanvasTextureBinding,
 ) -> bool {
     left.resource_id == right.resource_id
+        && left.lifetime == right.lifetime
         && left.width == right.width
         && left.height == right.height
         && left.depth_or_array_layers == right.depth_or_array_layers
@@ -483,14 +514,15 @@ fn retain_imported_textures(
     queue: &wgpu::Queue,
     specs: &BTreeMap<u64, GpuCanvasTextureBinding>,
 ) -> Result<BTreeMap<u64, wgpu::Texture>, GpuCanvasError> {
+    cache.purge_dead_textures();
     for binding in specs.values() {
         if let Some(retained) = cache
             .textures
             .iter_mut()
-            .find(|retained| retained.binding.resource_id == binding.resource_id)
+            .find(|retained| retained.descriptor.resource_id == binding.resource_id)
         {
-            if !same_texture_descriptor(&retained.binding, binding)
-                || !binding.uploads.starts_with(&retained.binding.uploads)
+            if retained.descriptor != ImportedTextureResourceDescriptor::from(binding)
+                || !binding.uploads.starts_with(&retained.uploads)
             {
                 return Err(GpuCanvasError::new(format!(
                     "GPU texture resource {} changed after backend allocation",
@@ -503,19 +535,21 @@ fn retain_imported_textures(
                 &retained.texture,
                 retained.applied_uploads,
             )?;
-            retained.binding = binding.clone();
+            retained.uploads = binding.uploads.clone();
             retained.applied_uploads = binding.uploads.len();
             continue;
         }
         if cache.textures.len() >= MAX_IMPORTED_GPU_CANVAS_CACHE_ENTRIES {
             return Err(GpuCanvasError::new(format!(
-                "GPU-canvas factory retains at most {MAX_IMPORTED_GPU_CANVAS_CACHE_ENTRIES} external texture resources"
+                "GPU-canvas factory retains at most {MAX_IMPORTED_GPU_CANVAS_CACHE_ENTRIES} live external texture resources"
             )));
         }
         let texture = create_imported_texture(device, binding)?;
         write_imported_texture_uploads(queue, binding, &texture, 0)?;
         cache.textures.push(ImportedWgpuGpuCanvasTexture {
-            binding: binding.clone(),
+            descriptor: ImportedTextureResourceDescriptor::from(binding),
+            uploads: binding.uploads.clone(),
+            owner: binding.lifetime.downgrade(),
             texture,
             applied_uploads: binding.uploads.len(),
         });
@@ -523,8 +557,8 @@ fn retain_imported_textures(
     Ok(cache
         .textures
         .iter()
-        .filter(|retained| specs.contains_key(&retained.binding.resource_id))
-        .map(|retained| (retained.binding.resource_id, retained.texture.clone()))
+        .filter(|retained| specs.contains_key(&retained.descriptor.resource_id))
+        .map(|retained| (retained.descriptor.resource_id, retained.texture.clone()))
         .collect())
 }
 
@@ -694,26 +728,90 @@ impl Default for ImportedWgpuGpuCanvasCache {
 }
 
 struct ImportedWgpuGpuCanvasTexture {
-    binding: GpuCanvasTextureBinding,
+    descriptor: ImportedTextureResourceDescriptor,
+    uploads: Vec<GpuCanvasTextureUpload>,
+    owner: std::sync::Weak<()>,
     texture: wgpu::Texture,
     applied_uploads: usize,
 }
 
 impl ImportedWgpuGpuCanvasCache {
+    fn purge_dead_textures(&mut self) {
+        let expired = self
+            .textures
+            .iter()
+            .filter(|texture| texture.owner.upgrade().is_none())
+            .map(|texture| texture.descriptor.resource_id)
+            .collect::<BTreeSet<_>>();
+        if expired.is_empty() {
+            return;
+        }
+        self.textures
+            .retain(|texture| !expired.contains(&texture.descriptor.resource_id));
+        self.pipelines.retain(|pipeline| {
+            pipeline
+                .key
+                .texture_bindings
+                .iter()
+                .all(|texture| !expired.contains(&texture.resource_id))
+        });
+        self.buffer_bytes = self
+            .pipelines
+            .iter()
+            .map(|pipeline| pipeline.key.buffer_bytes())
+            .fold(0, usize::saturating_add);
+    }
+
     fn insert(&mut self, pipeline: ImportedWgpuGpuCanvasPipeline) -> usize {
+        self.insert_protected(pipeline, &[])
+    }
+
+    fn insert_protected(
+        &mut self,
+        pipeline: ImportedWgpuGpuCanvasPipeline,
+        protected: &[ImportedGpuCanvasPipelineKey],
+    ) -> usize {
         let buffer_bytes = pipeline.key.buffer_bytes();
         while !self.pipelines.is_empty()
             && (self.pipelines.len() >= MAX_IMPORTED_GPU_CANVAS_CACHE_ENTRIES
                 || self.buffer_bytes.saturating_add(buffer_bytes)
                     > MAX_IMPORTED_GPU_CANVAS_CACHE_BYTES)
         {
-            let evicted = self.pipelines.remove(0);
+            let Some(index) = first_unprotected_pipeline_index(
+                self.pipelines.iter().map(|candidate| &candidate.key),
+                protected,
+            ) else {
+                break;
+            };
+            let evicted = self.pipelines.remove(index);
             self.buffer_bytes = self.buffer_bytes.saturating_sub(evicted.key.buffer_bytes());
         }
         self.buffer_bytes = self.buffer_bytes.saturating_add(buffer_bytes);
         self.pipelines.push(pipeline);
         self.pipelines.len() - 1
     }
+
+    fn trim_unprotected(&mut self, protected: &[ImportedGpuCanvasPipelineKey]) {
+        while self.pipelines.len() > MAX_IMPORTED_GPU_CANVAS_CACHE_ENTRIES
+            || self.buffer_bytes > MAX_IMPORTED_GPU_CANVAS_CACHE_BYTES
+        {
+            let Some(index) = first_unprotected_pipeline_index(
+                self.pipelines.iter().map(|candidate| &candidate.key),
+                protected,
+            ) else {
+                break;
+            };
+            let evicted = self.pipelines.remove(index);
+            self.buffer_bytes = self.buffer_bytes.saturating_sub(evicted.key.buffer_bytes());
+        }
+    }
+}
+
+fn first_unprotected_pipeline_index<'a>(
+    mut candidates: impl Iterator<Item = &'a ImportedGpuCanvasPipelineKey>,
+    protected: &[ImportedGpuCanvasPipelineKey],
+) -> Option<usize> {
+    candidates.position(|candidate| !protected.contains(candidate))
 }
 
 struct ImportedWgpuGpuCanvasPipeline {
@@ -1905,11 +2003,6 @@ impl WgpuFactory {
                 "GPU-canvas shader and pipeline snapshot counts differ",
             ));
         }
-        if pipelines.len() > MAX_IMPORTED_GPU_CANVAS_CACHE_ENTRIES {
-            return Err(GpuCanvasError::new(format!(
-                "GPU-canvas submission supports at most {MAX_IMPORTED_GPU_CANVAS_CACHE_ENTRIES} pipeline snapshots"
-            )));
-        }
         if plan.width == 0
             || plan.height == 0
             || plan.width > MAX_GPU_CANVAS_DIMENSION
@@ -1963,12 +2056,13 @@ impl WgpuFactory {
                     key.clone(),
                     &retained_textures,
                 )?;
-                self.imported_gpu_canvas.insert(built);
+                self.imported_gpu_canvas.insert_protected(built, &keys);
                 self.imported_gpu_canvas.pipeline_builds =
                     self.imported_gpu_canvas.pipeline_builds.saturating_add(1);
             }
             keys.push(key);
         }
+        self.imported_gpu_canvas.trim_unprotected(&keys);
         for (key, pipeline) in keys.iter().zip(&plan.pipelines) {
             let cached = self
                 .imported_gpu_canvas
@@ -2148,6 +2242,7 @@ impl WgpuFactory {
                 "wgpu rejected imported GPU-canvas submission: {error}"
             )));
         }
+        self.imported_gpu_canvas.trim_unprotected(&[]);
         let image = Box::new(WgpuImage {
             width: plan.width,
             height: plan.height,
@@ -4283,6 +4378,7 @@ fn fs_main() -> @location(0) vec4<f32> {
     ) -> GpuCanvasTextureBinding {
         GpuCanvasTextureBinding {
             resource_id,
+            lifetime: nuxie_render_api::GpuCanvasResourceLifetime::new(),
             group: 0,
             binding: 0,
             width: 8,
@@ -5185,6 +5281,31 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
     }
 
     #[test]
+    fn pipeline_cache_eviction_skips_submission_selected_keys() {
+        let first = ImportedGpuCanvasPipelineKey::from_occurrence_ids(1, 1, &imported_plan());
+        let second = ImportedGpuCanvasPipelineKey::from_occurrence_ids(2, 2, &imported_plan());
+        let third = ImportedGpuCanvasPipelineKey::from_occurrence_ids(3, 3, &imported_plan());
+        let candidates = [first.clone(), second, third];
+
+        assert_eq!(
+            first_unprotected_pipeline_index(candidates.iter(), &[first]),
+            Some(1),
+            "a warm-cache hit selected by this submission must be pinned during insertion"
+        );
+    }
+
+    #[test]
+    fn gpu_texture_sidecar_token_dies_with_its_logical_occurrence() {
+        let occurrence = GpuCanvasResourceLifetime::new();
+        let physical_owner = occurrence.downgrade();
+        let snapshot = occurrence.clone();
+        drop(occurrence);
+        assert!(physical_owner.upgrade().is_some());
+        drop(snapshot);
+        assert!(physical_owner.upgrade().is_none());
+    }
+
+    #[test]
     fn imported_pipeline_key_orders_occurrences_and_distinguishes_entry_pairs() {
         let mut first = imported_plan();
         first.vertex_entry = Some(GpuCanvasShaderEntrySelection {
@@ -5321,6 +5442,7 @@ fn fs_main() -> @location(0) vec4<f32> {
         });
         plan.texture_bindings = vec![nuxie_render_api::GpuCanvasTextureBinding {
             resource_id: 1,
+            lifetime: nuxie_render_api::GpuCanvasResourceLifetime::new(),
             group: 0,
             binding: 0,
             width: 1,

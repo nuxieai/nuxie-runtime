@@ -3,6 +3,7 @@
 // include/rive/semantic/semantic_provider.hpp:1-36.
 
 use crate::ArtboardInstance;
+use crate::components::Mat2D;
 use crate::semantic_data::{SemanticBounds, SemanticNodeHandle};
 use crate::semantic_inference_registry::{resolve_inferred_semantics, supports_inferred_semantics};
 use nuxie_schema::definition_by_name;
@@ -60,11 +61,27 @@ impl SemanticProvider {
         artboard: &mut ArtboardInstance,
         component_local_id: usize,
     ) -> SemanticBounds {
+        Self::semantic_bounds_with_root_transform(artboard, component_local_id, Mat2D::IDENTITY)
+    }
+
+    /// Compute semantic bounds in the outermost artboard's coordinate space.
+    ///
+    /// Pinned C++ maps all four corners through `Artboard::rootTransform`, so
+    /// nested rotation and shear must be re-enclosed rather than represented
+    /// by translating only the local bounds origin.
+    pub(crate) fn semantic_bounds_with_root_transform(
+        artboard: &mut ArtboardInstance,
+        component_local_id: usize,
+        root_transform: Mat2D,
+    ) -> SemanticBounds {
         if !component_is_a(artboard, component_local_id, "Node") {
             return SemanticBounds::default();
         }
         if let Some(bounds) = artboard.object_world_bounds(component_local_id) {
-            return SemanticBounds::new(bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y);
+            return root_transform_bounds(
+                root_transform,
+                SemanticBounds::new(bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y),
+            );
         }
 
         // Pinned containers merge all visual descendants. The retained arena
@@ -98,19 +115,15 @@ impl SemanticProvider {
                 }
             }
             if has_descendant_bounds {
-                return merged;
+                return root_transform_bounds(root_transform, merged);
             }
         }
 
         let Some(transform) = artboard.object_world_transform(component_local_id) else {
             return SemanticBounds::default();
         };
-        SemanticBounds::new(
-            transform.0[4],
-            transform.0[5],
-            transform.0[4],
-            transform.0[5],
-        )
+        let (x, y) = root_transform.transform_point(transform.0[4], transform.0[5]);
+        SemanticBounds::new(x, y, x, y)
     }
 
     pub(crate) fn direct_semantic_data_child(
@@ -140,6 +153,24 @@ impl SemanticProvider {
             component_local_id = parent;
         }
     }
+}
+
+fn root_transform_bounds(transform: Mat2D, bounds: SemanticBounds) -> SemanticBounds {
+    let corners = [
+        transform.transform_point(bounds.min_x, bounds.min_y),
+        transform.transform_point(bounds.max_x, bounds.min_y),
+        transform.transform_point(bounds.max_x, bounds.max_y),
+        transform.transform_point(bounds.min_x, bounds.max_y),
+    ];
+    let (mut min_x, mut min_y) = corners[0];
+    let (mut max_x, mut max_y) = corners[0];
+    for (x, y) in corners.into_iter().skip(1) {
+        min_x = min_x.min(x);
+        min_y = min_y.min(y);
+        max_x = max_x.max(x);
+        max_y = max_y.max(y);
+    }
+    SemanticBounds::new(min_x, min_y, max_x, max_y)
 }
 
 pub(crate) fn semantic_uint_property(

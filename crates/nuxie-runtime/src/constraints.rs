@@ -642,6 +642,16 @@ const LIST_FOLLOW_PATH_DISTANCE_END_PROPERTY_KEY: u16 = 888;
 const LIST_FOLLOW_PATH_DISTANCE_OFFSET_PROPERTY_KEY: u16 = 889;
 
 impl crate::components::RuntimeElasticScrollPhysicsHelper {
+    fn scroll_to(&mut self, current: f32, target: f32, range_min: f32, range_max: f32) {
+        self.is_running = true;
+        self.run_range_min = range_min;
+        self.run_range_max = range_max;
+        self.current = current;
+        self.target = target;
+        self.speed = 0.0;
+        self.snap_target = f32::NAN;
+    }
+
     fn advance(&mut self, elapsed_seconds: f32) -> f32 {
         if self.speed != 0.0 {
             self.current += self.speed * elapsed_seconds;
@@ -755,6 +765,145 @@ impl crate::components::RuntimeElasticScrollPhysicsHelper {
         self.speed = -(snap_target + self.current) * self.friction;
         self.snap_target = -snap_target;
     }
+}
+
+/// Port of `FocusData::scrollConstraintToShowBounds` for one retained
+/// ScrollConstraint occurrence.
+pub(crate) fn scroll_constraint_to_show_bounds(
+    artboard: &mut ArtboardInstance,
+    constraint: ComponentHandle,
+    element_bounds: (f32, f32, f32, f32),
+) -> bool {
+    let Some(scroll) = artboard
+        .objects
+        .component(constraint)
+        .and_then(|component| component.concrete.scroll.as_ref())
+    else {
+        return false;
+    };
+    let metrics =
+        runtime_scroll_layout_metrics(artboard, constraint, scroll, true).unwrap_or_else(|| {
+            build_runtime_scroll_layout_metrics(artboard, constraint, scroll, None, true)
+        });
+    let Some(content) = scroll.content else {
+        return false;
+    };
+    let Some(viewport_local) = artboard
+        .objects
+        .component(content)
+        .and_then(|component| component.parent)
+        .and_then(|viewport| artboard.objects.component_local_id(viewport))
+    else {
+        return false;
+    };
+    let viewport_world = artboard
+        .runtime_graph()
+        .map(|graph| artboard.runtime_component_world_transform(viewport_local, graph))
+        .unwrap_or(Mat2D::IDENTITY);
+    let viewport_left = element_bounds.0 - viewport_world.0[4];
+    let viewport_top = element_bounds.1 - viewport_world.0[5];
+    let viewport_right = element_bounds.2 - viewport_world.0[4];
+    let viewport_bottom = element_bounds.3 - viewport_world.0[5];
+    let effective_x = scroll
+        .physics
+        .as_ref()
+        .and_then(|physics| physics.target(RuntimeScrollAxis::X))
+        .unwrap_or(scroll.offset_x);
+    let effective_y = scroll
+        .physics
+        .as_ref()
+        .and_then(|physics| physics.target(RuntimeScrollAxis::Y))
+        .unwrap_or(scroll.offset_y);
+    let delta_x = if metrics.constrains_horizontal() {
+        if viewport_right - viewport_left > metrics.viewport_width || viewport_left < 0.0 {
+            -viewport_left
+        } else if viewport_right > metrics.viewport_width {
+            -(viewport_right - metrics.viewport_width)
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+    let delta_y = if metrics.constrains_vertical() {
+        if viewport_bottom - viewport_top > metrics.viewport_height || viewport_top < 0.0 {
+            -viewport_top
+        } else if viewport_bottom > metrics.viewport_height {
+            -(viewport_bottom - metrics.viewport_height)
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+    if delta_x == 0.0 && delta_y == 0.0 {
+        return false;
+    }
+
+    let current = (effective_x, effective_y);
+    let mut target = (effective_x + delta_x, effective_y + delta_y);
+    let local = artboard.component_at(constraint).local_id;
+    if constraint_bool(artboard, local, "ScrollConstraint", "snap", false) {
+        target.0 = nearest_snap_offset(current.0, target.0, &metrics.item_bounds, true);
+        target.1 = nearest_snap_offset(current.1, target.1, &metrics.item_bounds, false);
+    }
+    let range_min = (
+        metrics.max_offset(RuntimeScrollAxis::X),
+        metrics.max_offset(RuntimeScrollAxis::Y),
+    );
+    let horizontal = metrics.constrains_horizontal();
+    let vertical = metrics.constrains_vertical();
+    let has_physics = artboard
+        .objects
+        .component(constraint)
+        .and_then(|component| component.concrete.scroll.as_ref())
+        .is_some_and(|scroll| scroll.physics.is_some());
+    if has_physics {
+        let scroll = artboard
+            .objects
+            .component_mut(constraint)
+            .and_then(|component| component.concrete.scroll.as_mut())
+            .expect("retained ScrollConstraint remains live");
+        scroll.intent_x = None;
+        scroll.intent_y = None;
+        scroll
+            .physics
+            .as_mut()
+            .expect("physics presence was checked")
+            .scroll_to_position(current, target, range_min, (0.0, 0.0), horizontal, vertical);
+    } else {
+        set_scroll_offset(artboard, constraint, RuntimeScrollAxis::X, target.0);
+        set_scroll_offset(artboard, constraint, RuntimeScrollAxis::Y, target.1);
+    }
+    true
+}
+
+fn nearest_snap_offset(
+    current: f32,
+    target: f32,
+    points: &[RuntimeLayoutBounds],
+    use_x: bool,
+) -> f32 {
+    if current == target {
+        return target;
+    }
+    let scrolling_negative = target < current;
+    points
+        .iter()
+        .map(|bounds| -(if use_x { bounds.x } else { bounds.y }))
+        .filter(|candidate| {
+            if scrolling_negative {
+                *candidate <= target
+            } else {
+                *candidate >= target
+            }
+        })
+        .min_by(|left, right| {
+            let left_distance = (left - target).abs();
+            let right_distance = (right - target).abs();
+            left_distance.total_cmp(&right_distance)
+        })
+        .unwrap_or(target)
 }
 
 pub(crate) fn follow_path_orient_property_key() -> u16 {

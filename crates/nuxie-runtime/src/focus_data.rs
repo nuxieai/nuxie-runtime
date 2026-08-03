@@ -570,10 +570,22 @@ impl RuntimeFocusTree {
     }
 
     pub(crate) fn set_focus_target(&mut self, target_local: usize) -> bool {
+        self.set_focus_target_for_owner(self.owner_identity, target_local)
+    }
+
+    /// Select a target in any mounted occurrence sharing this retained
+    /// domain. SemanticManager node ids are domain-wide, so semantic focus
+    /// routing must retain the Artboard occurrence identity as well as the
+    /// owner-local target id.
+    pub(crate) fn set_focus_target_for_owner(
+        &mut self,
+        owner_identity: u64,
+        target_local: usize,
+    ) -> bool {
         let mut domain = self.domain.borrow_mut();
         domain
             .focus_targets
-            .get(&(self.owner_identity, target_local))
+            .get(&(owner_identity, target_local))
             .copied()
             .is_some_and(|node_id| domain.manager.set_focus(node_id))
     }

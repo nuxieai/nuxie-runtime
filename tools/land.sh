@@ -1,45 +1,78 @@
 #!/bin/bash
-# Strict landing gate: runs the full battery fail-fast, then pushes and
-# opens/merges the PR. No output-parsing, no chains — bare exit codes only.
+# Parallel landing gate with per-gate memoization.
+# - All gates run concurrently as background jobs (cargo-based gates serialize
+#   naturally on cargo's own target-dir lock; C++ and python gates overlap).
+# - NOT fail-fast: every gate runs to completion and all failures report at
+#   once, with per-gate logs under .land-cache/.
+# - Memoized: a gate that passed for this exact tree (git tree hash) is
+#   skipped on retry, so a single red gate never costs a full re-run.
 # Usage: tools/land.sh <branch> <pr-title-file> [extra-gate ...]
-set -euo pipefail
+set -uo pipefail
 branch="$1"; body="$2"; shift 2
 [[ -f "$body" ]] || { echo "land.sh: body file $body missing" >&2; exit 1; }
-# merge-guard: never run the battery on a stale or dirty tree
 if ! git diff --quiet || ! git diff --cached --quiet; then
     echo "land.sh: dirty tree — commit or stash before landing" >&2; exit 1
 fi
 git fetch origin main
 git merge origin/main --no-edit || { echo "land.sh: merge with origin/main failed" >&2; exit 1; }
-# Invalidate any cargo artifacts whose sources changed without a fresh mtime
-# (regenerated codegen racing a concurrent build) so every step below builds
-# from the sources being landed, not a poisoned cache.
-# LIGHT LANDING: ledger/docs/tooling-only diffs skip the build+test battery
-# and run only the mechanical checkers. Any touch of crates/, fixtures/, or
-# probe/golden config takes the full battery.
-git fetch origin main --quiet
-if ! git diff --name-only origin/main...HEAD | grep -qEv '^(docs/|(file-correspondence-manifest|port-manifest|test-correspondence-manifest|rust-additions)\.toml$|.*\.md$|tools/(port-manifest|runtime-frame-loop-port|parity-scorecard)/)'; then
-    echo "land.sh: light landing (no runtime sources in diff)"
-    make runtime-frame-loop-port-check
-    make rust-attribution-check
-    make port-manifest-check
-    for extra in "$@"; do make "$extra"; done
-    git push -u origin "$branch"
-    gh pr create --base main --head "$branch" --title "$(head -1 "$body")" --body "$(tail -n +2 "$body")"
-    gh pr merge --merge
-    echo "LANDED: $branch (light)"
-    exit 0
+
+tree=$(git rev-parse 'HEAD^{tree}')
+cache=".land-cache/$tree"
+mkdir -p "$cache"
+echo "land.sh: gate cache $cache"
+
+# Sources must be fresh before anything builds; cheap, always run.
+make rust-sources-fresh || exit 1
+
+gates=(cpp-probe runtime-frame-loop-port-check rust-attribution-check
+       cargo-test-runtime cargo-test-scripting scripted-golden-compare
+       silver-corpus-test)
+for extra in "$@"; do gates+=("$extra"); done
+
+run_gate() {
+    local g="$1"
+    if [[ -f "$cache/$g.ok" ]]; then
+        echo "gate $g: cached pass"
+        return 0
+    fi
+    local rc
+    case "$g" in
+        cargo-test-runtime)  cargo test -p nuxie-runtime > "$cache/$g.log" 2>&1; rc=$? ;;
+        cargo-test-scripting) cargo test -p nuxie --features scripting > "$cache/$g.log" 2>&1; rc=$? ;;
+        *)                   make "$g" > "$cache/$g.log" 2>&1; rc=$? ;;
+    esac
+    if [[ $rc -eq 0 ]]; then
+        touch "$cache/$g.ok"
+        echo "gate $g: PASS"
+    else
+        echo "gate $g: FAIL (log: $cache/$g.log)"
+    fi
+    return $rc
+}
+
+# scripted-golden-compare and silver need cpp-probe's oracle; run probe first
+# if not cached, everything else fully parallel.
+if [[ ! -f "$cache/cpp-probe.ok" ]]; then
+    run_gate cpp-probe || { echo "land.sh: cpp-probe failed — aborting (oracle prerequisite)"; exit 1; }
 fi
-make rust-sources-fresh
-make cpp-probe
-cargo test -p nuxie-runtime
-cargo test -p nuxie --features scripting
-make runtime-frame-loop-port-check
-make rust-attribution-check
-make scripted-golden-compare
-make silver-corpus-test
-for extra in "$@"; do make "$extra"; done
-git push -u origin "$branch"
-gh pr create --base main --head "$branch" --title "$(head -1 "$body")" --body "$(tail -n +2 "$body")"
-gh pr merge --merge
+
+pids=(); names=()
+for g in "${gates[@]}"; do
+    [[ "$g" == "cpp-probe" ]] && continue
+    run_gate "$g" &
+    pids+=($!); names+=("$g")
+done
+failed=()
+for i in "${!pids[@]}"; do
+    wait "${pids[$i]}" || failed+=("${names[$i]}")
+done
+if [[ ${#failed[@]} -gt 0 ]]; then
+    echo "land.sh: FAILED gates: ${failed[*]}" >&2
+    for g in "${failed[@]}"; do echo "--- $g (last 15 lines) ---"; tail -15 "$cache/$g.log"; done >&2
+    exit 1
+fi
+
+git push -u origin "$branch" || exit 1
+gh pr create --base main --head "$branch" --title "$(head -1 "$body")" --body "$(tail -n +2 "$body")" || exit 1
+gh pr merge --merge || exit 1
 echo "LANDED: $branch"

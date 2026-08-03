@@ -230,6 +230,7 @@ struct Options
     bool sideChannel = false;
     bool semanticDefaultViewModel = false;
     bool semanticSideChannelOnly = false;
+    bool scriptVerbsSelfTest = false;
 };
 
 void validateTraceOptions(const Options& options)
@@ -301,6 +302,7 @@ std::string usage()
            "           [--semantic-default-view-model]\n"
            "           [--semantic-side-channel-only]\n"
            "           [--benchmark] [--benchmark-repeat N]\n"
+           "           [--script-verbs-self-test]\n"
            "\n"
            "input script lines:\n"
            "  <seconds> pointerDown <x> <y> [pointerId]\n"
@@ -560,14 +562,8 @@ std::string semanticActionName(rive::SemanticActionType action)
     return "tap";
 }
 
-std::vector<InputEvent> loadInputScript(const std::string& path)
+std::vector<InputEvent> parseInputScript(std::istream& stream)
 {
-    std::ifstream stream(path);
-    if (!stream.good())
-    {
-        throw std::runtime_error("unable to read input script: " + path);
-    }
-
     std::vector<InputEvent> events;
     std::string line;
     size_t lineNumber = 0;
@@ -733,6 +729,16 @@ std::vector<InputEvent> loadInputScript(const std::string& path)
     return events;
 }
 
+std::vector<InputEvent> loadInputScript(const std::string& path)
+{
+    std::ifstream stream(path);
+    if (!stream.good())
+    {
+        throw std::runtime_error("unable to read input script: " + path);
+    }
+    return parseInputScript(stream);
+}
+
 ViewModelKind parseViewModelKind(const std::string& value, size_t lineNumber)
 {
     if (value == "setVmBool")
@@ -763,14 +769,8 @@ ViewModelKind parseViewModelKind(const std::string& value, size_t lineNumber)
                    std::to_string(lineNumber) + ": " + value);
 }
 
-std::vector<ViewModelEvent> loadViewModelScript(const std::string& path)
+std::vector<ViewModelEvent> parseViewModelScript(std::istream& stream)
 {
-    std::ifstream stream(path);
-    if (!stream.good())
-    {
-        throw std::runtime_error("unable to read view-model script: " + path);
-    }
-
     std::vector<ViewModelEvent> events;
     std::string line;
     size_t lineNumber = 0;
@@ -863,6 +863,16 @@ std::vector<ViewModelEvent> loadViewModelScript(const std::string& path)
     return events;
 }
 
+std::vector<ViewModelEvent> loadViewModelScript(const std::string& path)
+{
+    std::ifstream stream(path);
+    if (!stream.good())
+    {
+        throw std::runtime_error("unable to read view-model script: " + path);
+    }
+    return parseViewModelScript(stream);
+}
+
 Options parseOptions(int argc, char** argv)
 {
     Options options;
@@ -947,6 +957,10 @@ Options parseOptions(int argc, char** argv)
         else if (arg == "--semantic-side-channel-only")
         {
             options.semanticSideChannelOnly = true;
+        }
+        else if (arg == "--script-verbs-self-test")
+        {
+            options.scriptVerbsSelfTest = true;
         }
         else if (!arg.empty() && arg[0] == '-')
         {
@@ -2098,6 +2112,84 @@ int runFile(const Options& options)
 #endif
     return 0;
 }
+
+int runScriptVerbsSelfTest()
+{
+    auto require = [](bool condition, const std::string& message) {
+        if (!condition)
+        {
+            throw std::runtime_error("script verb self-test failed: " + message);
+        }
+    };
+    auto rejectsViewModel = [](const std::string& script) {
+        std::istringstream stream(script);
+        try
+        {
+            parseViewModelScript(stream);
+        }
+        catch (const CliError&)
+        {
+            return true;
+        }
+        return false;
+    };
+
+    std::istringstream inputStream(
+        "0 setInput enabled bool true\n"
+        "0 setInput amount number 12.5\n"
+        "0 setInput launch trigger\n"
+        "0 resize 320 180 2\n");
+    const auto input = parseInputScript(inputStream);
+    require(input.size() == 4, "input verb count");
+    require(input[0].valueKind == ScriptValueKind::boolean &&
+                input[0].boolValue,
+            "bool input value");
+    require(input[1].valueKind == ScriptValueKind::number &&
+                input[1].numberValue == 12.5f,
+            "number input value");
+    require(input[2].valueKind == ScriptValueKind::trigger,
+            "trigger input type");
+    require(input[3].kind == InputKind::resize && input[3].width == 320.0f &&
+                input[3].height == 180.0f && input[3].dpr == 2.0f,
+            "resize dimensions");
+
+    std::istringstream viewModelStream(
+        "0.0000005 setVmBool later true\n"
+        "0 setVmNumber earlier 0.5\n"
+        "0 setVmString child/label ready\n"
+        "0 setVmEnum status 2\n"
+        "0 setVmColor tint 0xff123456\n"
+        "0 fireVmTrigger go\n");
+    const auto viewModel = parseViewModelScript(viewModelStream);
+    require(viewModel.size() == 6, "view-model verb count");
+    require(viewModel[0].property == "earlier" &&
+                viewModel[0].kind == ViewModelKind::setNumber,
+            "distinct timestamps sort exactly");
+    require(viewModel[1].kind == ViewModelKind::setString &&
+                viewModel[1].property == "child/label" &&
+                viewModel[1].stringValue == "ready",
+            "nested string value");
+    require(viewModel[2].kind == ViewModelKind::setEnum &&
+                viewModel[2].uintValue == 2,
+            "enum value");
+    require(viewModel[3].kind == ViewModelKind::setColor &&
+                viewModel[3].uintValue == 0xff123456u,
+            "color value");
+    require(viewModel[4].kind == ViewModelKind::fireTrigger,
+            "trigger verb");
+    require(viewModel[5].property == "later" &&
+                viewModel[5].kind == ViewModelKind::setBoolean,
+            "nearby later timestamp remains later");
+    require(rejectsViewModel("0 setVmBool visible yes\n"),
+            "invalid boolean rejected");
+    require(rejectsViewModel("0 setVmColor tint ff123456\n"),
+            "invalid color rejected");
+    require(rejectsViewModel("0 setVmString child//label value\n"),
+            "invalid nested path rejected");
+
+    std::cout << "script verb parser self-test passed\n";
+    return 0;
+}
 } // namespace
 
 int main(int argc, char** argv)
@@ -2113,6 +2205,10 @@ int main(int argc, char** argv)
         if (options.smoke)
         {
             return runSmoke();
+        }
+        if (options.scriptVerbsSelfTest)
+        {
+            return runScriptVerbsSelfTest();
         }
         return runFile(options);
     }
